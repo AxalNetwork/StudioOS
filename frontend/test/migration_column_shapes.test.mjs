@@ -211,12 +211,19 @@ test('no migration carries a transaction statement or a foreign_keys toggle D1 c
   // transaction, and inside that transaction SQLite ignores
   // `PRAGMA foreign_keys`. 141 hit the first on 2026-07-08 and 200 hit it
   // again on 2026-09-03 (deploy run 33738772717), holding 201–207 out of
-  // production behind it. 039 predates the rule and is ledger-recorded, so it
-  // is never re-run (GOTCHAS); everything else has to be clean, and a rebuild
-  // that needs foreign keys out of the way defers them to commit instead.
-  const LEGACY = new Set(['039_project_cascade.sql']);
+  // production behind it. Everything has to be clean, and a rebuild that needs
+  // foreign keys out of the way defers them to commit instead.
+  //
+  // 039 USED TO BE EXEMPT HERE and no longer is. The exemption read "predates
+  // the rule and is ledger-recorded, so it is never re-run" — true of
+  // production and irrelevant to a database built from scratch, which is
+  // exactly where its transaction statements aborted the run. The file has
+  // since been cut back to the two statements that actually landed in May 2026
+  // (DECISIONS D60), so it passes on its own terms and there is nothing left to
+  // exempt. A second exemption list in `scripts/check-sql-migrations.mjs` named
+  // the same file and is likewise gone.
   const offenders = [];
-  for (const f of readdirSync(M).filter((f) => /^\d+_.*\.sql$/.test(f) && !LEGACY.has(f))) {
+  for (const f of readdirSync(M).filter((f) => /^\d+_.*\.sql$/.test(f))) {
     const raw = read(`${M}/${f}`);
     // Wrangler's own pre-flight (src/d1/trimmer.ts) reads the RAW file,
     // comments included: it strips one "BEGIN TRANSACTION;" / "COMMIT;" pair
@@ -234,4 +241,35 @@ test('no migration carries a transaction statement or a foreign_keys toggle D1 c
     'D1 rejects transaction statements and ignores PRAGMA foreign_keys inside the batch — use PRAGMA defer_foreign_keys = TRUE');
   assert.match(codeOf(M200), /PRAGMA\s+defer_foreign_keys\s*=\s*TRUE/i,
     '200 drops and renames a table other tables reference; the check has to wait for commit');
+});
+
+test('the sibling guard permits exactly one pragma, and refuses the rest', async () => {
+  // `scripts/check-sql-migrations.mjs` used to ban every PRAGMA outright, which
+  // is why 200 needed a named exemption there. The ban now carves out
+  // `defer_foreign_keys` — the one D1 honours and a table rebuild needs — and a
+  // carve-out nothing exercises is a carve-out that can be widened to "any
+  // pragma" without a single test going red. It escaped exactly that mutation
+  // before this existed, so the predicate is called directly rather than
+  // inferred from the migrations that happen to be on disk.
+  const { bannedIn } = await import('../../scripts/check-sql-migrations.mjs');
+
+  assert.deepEqual(bannedIn('PRAGMA defer_foreign_keys = TRUE;\nSELECT 1;'), [],
+    'the one pragma D1 honours has to get through, or 200 cannot rebuild its table');
+
+  for (const p of [
+    'PRAGMA foreign_keys = OFF;',        // ignored inside the batch — the 2026-09-03 bug
+    'PRAGMA foreign_keys = ON;',
+    'PRAGMA journal_mode = WAL;',
+    'PRAGMA defer_foreign_keys_but_not_really = TRUE;', // prefix must not be enough
+    'PRAGMA writable_schema = ON;',
+  ]) {
+    assert.deepEqual(bannedIn(p), ['PRAGMA'], `${p} must still be refused`);
+  }
+
+  // And the transaction rules the same predicate carries, since one import now
+  // reaches them: the statements that aborted 039 in May and 200 in September.
+  assert.deepEqual(bannedIn('BEGIN;\nCREATE TABLE t (id INTEGER);\nCOMMIT;'),
+    ['BEGIN', 'COMMIT']);
+  // Prose may name them; only statements count.
+  assert.deepEqual(bannedIn('-- this file used to open with BEGIN; and close with COMMIT;\nSELECT 1;'), []);
 });

@@ -3061,3 +3061,230 @@ raised here, not built around, and not approximated from the nearest table.
 touched.** Both are mounted from routes outside Research, so a row-shape change
 there reaches surfaces this task never looked at — and neither has the store its
 table needs anyway.
+
+## D59 — An IC decision belongs to a firm, and a NULL firm is not a public firm
+
+Task #106 was titled "scope `/api/ic` to the caller's own firm" and `ic_decisions`
+had no firm column. Recording what it turned out to be, because the shape is not
+obvious and the wrong version of it is a leak rather than a bug.
+
+**What was open.** Every read on `/api/ic` ran with no caller predicate at all.
+`GET /api/ic` was literally `SELECT * FROM ic_decisions WHERE 1=1`; `GET
+/api/ic/:uid` matched on the uid alone and returns the memo, the proposed terms
+and every member's vote WITH its written rationale; `POST /api/ic/:uid/vote`
+looked the decision up the same way before writing into its tally. Only `PUT
+/:uid` was scoped, by `created_by`-or-admin. So any account holding the IC
+licence — admin, partner, or a professional-tier investor — could read any other
+firm's investment committee and vote in it.
+
+**Nothing leaked.** `ic_decisions` and `ic_votes` are both empty on production
+(checked 2026-09-08, before the fix was written). The surface shipped ahead of
+its first user. That is why this is migration 219 and not an incident, and why
+the backfill has nothing to do.
+
+**Why the column was missing.** `ic_decisions` is migration 123. The company
+rollout that put `company_id` on every table holding a firm's private data is
+189–198. The Commit stage was built between the schema that had no tenancy
+dimension and the one that did, and nothing swept back over it.
+
+**What a decision belongs to — the three ways, and why not fewer.**
+`icDecisionScope` in `services/tenancyScope.ts` admits a row three ways:
+`created_by`, an existing `ic_votes` row for the caller, or a `company_id` the
+caller is linked to. Scoping to `created_by` alone is the plausible wrong fix:
+it passes every cross-tenant test and silently breaks the feature, because an
+investment committee whose members cannot read the memo is not a committee. The
+votes branch cannot bootstrap access — a vote row only exists because the vote
+endpoint ran, and that endpoint is behind this same scope — so it grants nothing
+new and keeps a member's own participation readable afterwards.
+
+**`company_id IS NULL` DENIES here, and admits everywhere else.** This is the
+one place in `tenancyScope.ts` where a NULL company narrows rather than widens,
+and the inversion is deliberate. In `companyScope` and `projectInActiveCompany`,
+company is laid over an ownership predicate that has already decided, so an
+unassigned row stays visible under every company and hides nobody's data. Here
+the firm IS what makes a colleague a colleague — there is no outer predicate —
+so the familiar `IS NULL OR = ?` would hand every unassigned decision to every
+licence holder, which is the leak being closed. A decision whose author has no
+company is readable by its author and by whoever has voted on it, and by nobody
+else.
+
+**Membership is read from `user_company_links`, not from the switcher header.**
+The `X-Company-Id` header answers "which of my firms am I looking at" — a filter
+the reader controls. Authorisation may not depend on it, or a caller who has
+never touched the switcher would lose their own firm's docket. The header is
+used for one thing only: stamping `company_id` on a NEW decision, and there it
+goes through `activeCompanyFor`, which verifies the claim against
+`user_company_links` and returns null for a firm the caller does not belong to.
+A forged header therefore files a row under nobody, never under the firm named.
+
+**404, not 403, for a row outside the scope.** The predicate lives in the WHERE
+clause, so "no such decision" and "not yours" are the same code path and there
+is nothing to forget. `requireOwnEngagement` and `requireOwnQuote` answer the
+same way for the same reason: a 403 confirms to a non-owner that the row exists.
+The 403 on `PUT /:uid` stays, because by then the caller has been established as
+entitled to READ the row, and "somebody else's to edit" is an authorship rule
+inside a firm rather than a tenancy boundary.
+
+**`deal_id` was the one foreign key nothing checked**, and the vote handler
+copies it into `decision_journal_entries.deal_id`. It is now existence-checked
+exactly as `project_id` already was. It is deliberately not narrowed further:
+`deals` carries no company column on purpose (migration 194 — browsing deals is
+a marketplace), so which deals a caller may see is a different surface's
+question.
+
+## D60 — Migration 039 never ran, and `schema.sql` was edited as though it had
+
+Task #112 was "rewrite migration 039 so a fresh D1 build can apply it", and it
+was written believing 039 had been applied. It had not, and what turned up while
+checking is bigger than the file.
+
+**Section 1 landed by hand; sections 2–6 have never run anywhere.** Read off
+live D1 on 2026-09-08 with `SELECT sql FROM sqlite_master` — not off
+`schema.sql`, which is the whole point of this entry:
+
+| Table | Live `project_id` |
+| --- | --- |
+| `deals` | `REFERENCES projects(id)` — no CASCADE |
+| `score_snapshots` | `REFERENCES projects(id)` — no CASCADE |
+| `documents` | `REFERENCES projects(id)` — no CASCADE |
+| `discovery_interviews` | `INTEGER NOT NULL` — no REFERENCES at all |
+| `roadmap_okrs` | `INTEGER NOT NULL` — no REFERENCES at all |
+
+`projects.deleted_at` and `idx_projects_deleted_at` are present. The file's own
+marker row records exactly this, deliberately renamed on 2026-05-11 to
+`_migrations_applied.name = '039_project_cascade_partial_deleted_at_only'` — it
+is still the only row in that table. `CHANGELOG.md` has carried the same note
+since. `schema_migrations` has the file marked applied (baselined, so recorded
+without executing), which is why production is settled and only a fresh build
+was ever affected.
+
+Measured on the local workerd D1 that GOTCHAS names as the reproduction, the
+old file fails with *"To execute a transaction, please use the
+state.storage.transaction() … APIs instead of the SQL BEGIN TRANSACTION or
+SAVEPOINT statements"* — the same rejection it hit in May. The rewritten file
+applies both statements and produces `projects.deleted_at TIMESTAMP` plus the
+index, which is what production has.
+
+**The file now says what it did, not what it intended.** Sections 2–6 are
+deleted rather than repaired, for three reasons in order of weight:
+
+1. A fresh database must land where production is. Keeping the rebuild would
+   give every new build a cascade production does not have, and every later
+   migration would be written against a schema only one of the two carries.
+2. Nothing depends on the cascade. `services/projectTrash.ts::hardDeleteProject`
+   deletes from twenty-four child tables by hand and then detaches
+   `activity_logs` by nulling `project_id`, because that history is deliberately
+   KEPT — which a cascade would have dropped. That loop is the only cascade
+   production has ever had and it works. Its header claimed the opposite ("on a
+   migrated DB the manual deletes are redundant"), which is how a working
+   safeguard gets deleted as vestigial; corrected in the same commit.
+3. The rebuild had gone stale where it would have hurt most. Three of its five
+   sections copied rows with `INSERT INTO <t>_new SELECT * FROM <t>`, which maps
+   by POSITION, and the live column order no longer matches the declarations —
+   `score_snapshots` has since gained `official_week`, `deals` sixteen columns
+   including the whole pass taxonomy. Empty database: copies nothing. Populated
+   one: writes values into the wrong columns.
+
+**THE PART THAT MATTERS MORE THAN 039.** `schema.sql` — the snapshot every new
+environment is provisioned from — had been edited to carry the cascade, with
+five `-- Task #7 (AM) — ON DELETE CASCADE so admin hard-delete drops X too.`
+comments marking the exact sites. So the intent was written into the snapshot
+while the migration that would have realised it never ran, and for four months
+a new database and production disagreed about five foreign keys with nothing
+checking. All five now match production, including the two that carry no
+reference at all: matching exactly beats adding a constraint only new databases
+would have, because an insert that succeeds on production and fails in dev is
+the divergence in its most confusing form. If the key is wanted it is a
+migration applied to both.
+
+`cloudflare-worker/test/migrations_fresh_build.test.ts` pins that agreement, and
+is the assertion that would have caught this in May.
+
+**A related finding, recorded and NOT fixed here: this repo cannot build a
+database from its migrations alone.** Replaying every numbered migration on top
+of `schema.sql` fails 55 times out of 221 — `schema.sql` is a current-state
+snapshot, not the base the deltas were written against, so it is already past
+what most of them add (11 `duplicate column name`, 41 `no such table`, 3 other).
+That is what `migrate-d1.mjs --baseline` exists to paper over. Closing it means
+reconstructing the original base schema, which is separate work; the test above
+records the current failure classes so a migration that fails for a NEW reason —
+referencing something nothing creates — fails the build.
+
+**Both exemption lists are gone.** `scripts/check-sql-migrations.mjs` named 039
+and 200; `frontend/test/migration_column_shapes.test.mjs` named 039 again, in a
+second list nobody had connected to the first. 039 needed no exemption once
+trimmed. 200 needed none once the blanket `^PRAGMA` ban carved out
+`defer_foreign_keys` — the one pragma D1 honours and a table rebuild requires,
+evidenced by 200 having applied to production carrying it. That carve-out is
+itself tested: with no migration carrying any other pragma, widening it to
+"any pragma" passed the whole suite until an assertion called the predicate
+directly.
+
+## D61 — The admin docs were orphaned by a fix for a problem already fixed
+
+Task #113 was "decide the orphaned admin docs: restore or retire", with the
+instruction not to simply re-add the import — that would reverse someone's
+decision — and to prefer retiring if the reason for the removal could not be
+recovered from git history. **The reason is recoverable, and it argues for
+restoring.** Nine days separate two commits:
+
+- **2026-05-13, `88e6d1f97`** — *"Task #2 (DD) — Hide Admin docs from
+  non-admins"*. It built the whole apparatus the docs surface still carries:
+  `roles: ['admin']` on `sections/admin.js`, `filterSectionsForRole` and
+  `adminOnlyAnchors()` in the manifest, a role-scoped fuse index in
+  `lib/docs/search.js`, and `AdminDocsPathGuard` in `App.jsx` mounted on both
+  `/docs/admin/*` and `/help/admin/*`.
+- **2026-05-22, `2c38e60b3`** — *"Remove administrative sections from user
+  documentation"*, whose body says it removes the Admin section "from the
+  StudioOS documentation navigation and search index". That is exactly what the
+  previous week's work already did, per viewer. It deleted the import and the
+  `SECTIONS` entry.
+
+So the second commit was a blunter second fix for a problem that was already
+solved, and it left the first one guarding nothing: `adminOnlyAnchors()`
+returned no admin anchor, `AdminDocsPathGuard` redirected admins to
+`/help#admin/<sub>` where no such anchor existed, and 179 lines of written
+admin documentation were unreachable by anyone including an admin.
+
+**Restoring honours that decision rather than reversing it.** The decision was
+"admin content must not appear in user documentation". `admin.js` is still
+tagged `roles: ['admin']`, and the filter is live in both places that matter —
+`DocsLayout` (rail, body, "on this page") and `lib/docs/search.js`. Every
+non-admin viewer sees precisely what they saw yesterday. What changes is that an
+admin can read the docs the path guard has been pointing at for four months.
+
+**Re-registering it made a latent hole live, which is why "don't simply re-add
+the import" was the right instruction.** `buildDocsRecords(role)` excluded
+admin-tagged sections "when a role is provided" and returned the FULL corpus when
+`role` was `undefined` — stated as back-compat for callers passing nothing.
+`DocsLayout` passes `role` straight from `useAuth()`, which is `undefined` for an
+anonymous visitor. With the section unregistered that leaked nothing; with it
+registered, the Help Center search box would have served the admin corpus to
+anyone while the rail beside it correctly showed nothing (the rail's filter
+compares against `''` and drops the section). The filter is now unconditional:
+an unknown role is a non-admin, which is the only safe reading of "unknown", and
+it makes the two surfaces agree. No caller loses anything — nothing in the repo
+calls it with no argument.
+
+**Two branches had never been exercised by any data.** `filterSectionsForRole`
+and `adminOnlyAnchors` each handle a tagged SUBSECTION inside a public section —
+the shape `88e6d1f97` created in `portals.js` ("Admin Console (overview)") and
+`2cf22e3ea` deleted nine days later. Mutations that removed those branches
+entirely passed the whole suite. They are not deleted as dead code: an
+admin-only subsection is a shape this manifest is designed to carry and the next
+one would leak in silence. They are now tested against a fixture built in the
+test, so the contract holds regardless of what the corpus happens to contain.
+`adminOnlyAnchors` gained an optional sections argument to make that possible —
+its sibling already had that shape.
+
+**The persona line stays refused, for a reason that survived the change.**
+`help_center_contract.test.mjs` asserted that NO section carried a `roles` array,
+explicitly so that "if a section ever grows one, this fails and the refusal gets
+revisited rather than quietly outliving its reason". It fired, and the refusal
+was revisited: the only `roles` array in the corpus is `['admin']`, and admin
+content is already invisible to every viewer it would exclude, so "Applies to
+<persona>" would read "Everyone" on all 98 articles a non-admin can see. A label
+that is a constant everywhere it is read labels nothing. The guard now watches
+for a roles array that would actually discriminate between viewers who share the
+corpus — `['founder']`, `['investor', 'partner']` — which is the day the line
+starts carrying information.

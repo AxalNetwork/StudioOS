@@ -277,7 +277,10 @@ export async function createAndSendEnvelope(
   // (investor_nda_axal, mentor_nda_axal, partner_services, …) so the
   // admin wizard sends real legal templates rather than the legacy
   // `buildTemplateBody` placeholder fallback.
-  const { templateKeyForDocType, renderLegalTemplate, applyMergeFields } = await import('../services/legalTemplates');
+  const {
+    templateKeyForDocType, renderLegalTemplate, applyMergeFields,
+    getLegalTemplateBody, mergeTokensIn,
+  } = await import('../services/legalTemplates');
   const { getActiveTemplateBody } = await import('../services/legalTemplateStore');
   const tplKey = templateKeyForDocType(opts.documentType);
   // Task #8 — prefer the canonical D1 store body (active, non-stub) keyed by
@@ -356,19 +359,35 @@ export async function createAndSendEnvelope(
       counterparty,
       ...(opts.mergeFields || {}),
     };
+    // `merge_keys_applied` is a claim about the DOCUMENT, so it is read off the
+    // document. This used to be `Object.keys(opts.mergeFields)` — every key the
+    // caller sent, recorded as applied whether or not the body had a slot for
+    // it — which put a false statement in an audit row that a signature dispute
+    // would later be read against.
+    const tokens = mergeTokensIn(d1Body || getLegalTemplateBody(tplKey!));
     const body = d1Body ? applyMergeFields(d1Body, merge) : await renderLegalTemplate(tplKey!, merge);
     tpl = { title: opts.documentType, body };
-    if (opts.mergeFields) appliedMergeKeys.push(...Object.keys(opts.mergeFields));
+    if (opts.mergeFields) {
+      appliedMergeKeys.push(...Object.keys(opts.mergeFields).filter((k) => tokens.has(k)));
+    }
   } else {
     tpl = buildTemplateBody(opts.documentType, opts.recipientName, opts.recipientEmail);
+    // ONE SHARED RESOLVER, NOT A REGEX PER KEY. This branch used to compile
+    // `new RegExp('\\{\\{\\s*' + escape(key) + '\\s*\\}\\}')` for every
+    // submitted key, and the escape was mis-nested — its character class closed
+    // fifteen characters in, so it matched almost nothing and returned
+    // `company.name` unchanged. Nothing exploited it: the request validator
+    // above restricts keys to `[A-Za-z0-9_\-.]` before they reach here, and
+    // `buildTemplateBody` emits no `{{token}}` at all today, so the loop could
+    // not fire. But an escaper whose only defence is a validator in one caller
+    // is a trap, and this was the repo's last open `detect-non-literal-regexp`
+    // finding. `applyMergeFields` is the same resolver the D1 branch above
+    // uses, over one literal pattern, and it does the right thing the day a
+    // legacy body does gain a token.
     if (opts.mergeFields) {
-      for (const [k, v] of Object.entries(opts.mergeFields)) {
-        const re = new RegExp(`\\{\\{\\s*${k.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\s*\\}\\}`, 'g');
-        if (re.test(tpl.body)) {
-          tpl.body = tpl.body.replace(re, v);
-          appliedMergeKeys.push(k);
-        }
-      }
+      const tokens = mergeTokensIn(tpl.body);
+      tpl.body = applyMergeFields(tpl.body, opts.mergeFields);
+      appliedMergeKeys.push(...Object.keys(opts.mergeFields).filter((k) => tokens.has(k)));
     }
   }
   const envelopeUuid = crypto.randomUUID();

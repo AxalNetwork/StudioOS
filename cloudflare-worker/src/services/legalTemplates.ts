@@ -59,7 +59,7 @@ export function getLegalTemplateBody(key: LegalTemplateKey): string {
 // Pure resolver lives in `./mergeFields.ts` so node-test can import it
 // without dragging in Wrangler-only `?raw` markdown imports.
 import { applyMergeFields } from './mergeFields';
-export { applyMergeFields } from './mergeFields';
+export { applyMergeFields, mergeTokensIn } from './mergeFields';
 
 export async function renderLegalTemplate(
   key: LegalTemplateKey,

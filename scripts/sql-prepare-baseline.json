@@ -179,7 +179,7 @@
     "where @ routes/compliance.ts": 1,
     "where @ routes/consultations.ts": 1,
     "where @ routes/contacts.ts": 2,
-    "where @ routes/ic.ts": 1,
+    "where @ routes/ic.ts": 2,
     "where @ routes/journal.ts": 1,
     "where @ routes/lp_reports.ts": 1,
     "where @ routes/market_intel.ts": 1,

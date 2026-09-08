@@ -8,10 +8,27 @@
  * Mounted at /api/ic. Readers/writers are admin/partner/investor. Investor
  * callers are professional-tier gated in index.ts (INVESTOR_PRO_PREFIXES),
  * matching Deal Flow / Pipeline.
+ *
+ * THE LICENCE IS NOT THE SCOPE, and for a while this file behaved as though it
+ * were. `canUseIc` says whether an account may use the Commit stage at all;
+ * until migration 219 nothing said WHOSE decisions it may use it on, so every
+ * read here ran unfiltered — `GET /` was `WHERE 1=1`, `GET /:uid` matched on
+ * the uid alone, and `POST /:uid/vote` let an outsider vote into another
+ * committee's tally. `icDecisionScope` is now on every query that touches
+ * `ic_decisions`, read and write, and it is the ONLY thing standing between one
+ * firm's memo and another's.
+ *
+ * A ROW OUTSIDE THE SCOPE IS 404, NEVER 403 — because the scope lives in the
+ * WHERE clause rather than in a branch after the load, the two answers are
+ * literally the same code path and there is nothing to forget. That matches
+ * `requireOwnEngagement` and `requireOwnQuote`, whose own comment says it: a
+ * 403 confirms to a non-owner that the row exists.
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
+import { icDecisionScope } from '../services/tenancyScope';
+import { activeCompanyFor } from '../middleware/activeCompany';
 import { isAdmin, isInvestor, isPartner, mapError, nowIso, newUid, jload } from './_t13t14t15_helpers';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -27,6 +44,29 @@ type DecisionRow = {
 
 function canUseIc(user: User): boolean {
   return isAdmin(user) || isInvestor(user) || isPartner(user);
+}
+
+/**
+ * The decision at `uid`, if this caller may see it at all. `null` otherwise,
+ * and every caller turns that into the same 404 it already returned for a uid
+ * that does not exist.
+ *
+ * ONE LOADER FOR ALL THREE SINGLE-ROW ENDPOINTS. Detail, update and vote each
+ * used to run their own `SELECT * FROM ic_decisions WHERE uid = ?`; three
+ * copies of a query is three chances for the next one to be written without the
+ * predicate, which is exactly how the vote endpoint came to be the most open of
+ * the five. There is now one place to get this right and one place to read it.
+ *
+ * The scope fragment reaches the query TEXT through `where`, the interpolation
+ * this file already carries in `scripts/sql-prepare-baseline.json`. It is
+ * literal SQL from `services/tenancyScope.ts` with every value bound as `?` —
+ * nothing from the request is in it.
+ */
+async function loadDecision(env: Env, user: User, uid: string): Promise<DecisionRow | null> {
+  const scope = icDecisionScope(user);
+  const where = `d.uid = ? AND ${scope.sql}`;
+  return env.DB.prepare(`SELECT d.* FROM ic_decisions d WHERE ${where}`)
+    .bind(uid, ...scope.binds).first<DecisionRow>();
 }
 
 async function tally(env: Env, decisionId: number): Promise<{ yes: number; no: number; abstain: number }> {
@@ -78,12 +118,20 @@ r.get('/', async (c) => {
     if (!canUseIc(user)) return c.json({ detail: 'Forbidden' }, 403);
     const status = c.req.query('status');
     const projectId = c.req.query('project_id');
-    let where = '1=1';
-    const params: any[] = [];
-    if (status) { where += ' AND status = ?'; params.push(status); }
-    if (projectId) { where += ' AND project_id = ?'; params.push(Number(projectId)); }
+    // The scope OPENS the clause rather than being appended after the reader's
+    // filters. Same rows either way; the ordering is so that the one condition
+    // that must never be absent is the first thing in the string, not the last
+    // of a run of conditional `+=`s where the next filter could be added below
+    // it and the predicate quietly left behind. `1=1` is gone with it — a base
+    // that matches everything is only ever one deleted line away from being the
+    // whole clause, which is what this endpoint shipped as.
+    const scope = icDecisionScope(user);
+    const params: any[] = [...scope.binds];
+    let where = scope.sql;
+    if (status) { where += ' AND d.status = ?'; params.push(status); }
+    if (projectId) { where += ' AND d.project_id = ?'; params.push(Number(projectId)); }
     const rows = await c.env.DB.prepare(
-      `SELECT * FROM ic_decisions WHERE ${where} ORDER BY updated_at DESC LIMIT 500`
+      `SELECT d.* FROM ic_decisions d WHERE ${where} ORDER BY d.updated_at DESC LIMIT 500`
     ).bind(...params).all<DecisionRow>();
     const items: any[] = [];
     for (const d of (rows.results || []) as DecisionRow[]) items.push(await dto(c.env, d));
@@ -104,7 +152,18 @@ r.post('/', async (c) => {
       const proj = await c.env.DB.prepare('SELECT id FROM projects WHERE id = ? AND deleted_at IS NULL').bind(projectId).first<{ id: number }>();
       if (!proj) return c.json({ detail: 'Project not found' }, 404);
     }
+    // `deal_id` was the one foreign key on this row that nothing checked, so a
+    // create could point a decision at any integer — and that id is copied
+    // straight into `decision_journal_entries.deal_id` by the vote handler
+    // below. Checked the same way `project_id` is, one line above: existence
+    // only. Which deals a caller may see is the Deal Flow surface's question
+    // and `deals` carries no company column by design (migration 194 says why);
+    // what this closes is a decision that references a row that is not there.
     const dealId = body.deal_id != null ? Number(body.deal_id) : null;
+    if (dealId != null && Number.isFinite(dealId)) {
+      const deal = await c.env.DB.prepare('SELECT id FROM deals WHERE id = ?').bind(dealId).first<{ id: number }>();
+      if (!deal) return c.json({ detail: 'Deal not found' }, 404);
+    }
     let memo = body.memo ? String(body.memo).slice(0, 20000) : null;
     // Optional: seed the memo from the latest stored scoring deal-memo. Main
     // stores deal memos as structured columns in `deal_memos` (not a single
@@ -131,11 +190,19 @@ r.post('/', async (c) => {
       const cs = await c.env.DB.prepare('SELECT id FROM dd_cases WHERE id = ?').bind(Number(body.dd_case_id)).first<{ id: number }>();
       if (cs) ddCaseId = Number(cs.id);
     }
+    // The firm this decision belongs to (migration 219), taken from the
+    // creator's VERIFIED active company — `activeCompanyFor` checks the header
+    // against `user_company_links` and returns null for any claim that does not
+    // hold, so a forged `X-Company-Id` files the row under nobody rather than
+    // under someone else. Null is a real state: the creator has no company, or
+    // has not chosen one, and `icDecisionScope` then shows the row to them and
+    // to whoever votes on it — never to a firm at large.
+    const companyId = await activeCompanyFor(c, user);
     const uid = newUid();
     const ins = await c.env.DB.prepare(
-      `INSERT INTO ic_decisions (uid, project_id, deal_id, dd_case_id, title, memo, terms_json, status, created_by, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?)`
-    ).bind(uid, projectId, dealId, ddCaseId, title, memo, termsJson, user.id, nowIso(), nowIso()).run();
+      `INSERT INTO ic_decisions (uid, project_id, deal_id, dd_case_id, title, memo, terms_json, status, created_by, company_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`
+    ).bind(uid, projectId, dealId, ddCaseId, title, memo, termsJson, user.id, companyId, nowIso(), nowIso()).run();
     const d = await c.env.DB.prepare('SELECT * FROM ic_decisions WHERE id = ?')
       .bind((ins as any).meta?.last_row_id).first<DecisionRow>();
     return c.json(await dto(c.env, d!, { votes: true }), 201);
@@ -147,7 +214,7 @@ r.get('/:uid', async (c) => {
   try {
     const user = await requireAuth(c);
     if (!canUseIc(user)) return c.json({ detail: 'Forbidden' }, 403);
-    const d = await c.env.DB.prepare('SELECT * FROM ic_decisions WHERE uid = ?').bind(c.req.param('uid')).first<DecisionRow>();
+    const d = await loadDecision(c.env, user, c.req.param('uid'));
     if (!d) return c.json({ detail: 'Not found' }, 404);
     return c.json(await dto(c.env, d, { votes: true }));
   } catch (e) { return mapError(c, e); }
@@ -158,8 +225,13 @@ r.put('/:uid', async (c) => {
   try {
     const user = await requireAuth(c);
     if (!canUseIc(user)) return c.json({ detail: 'Forbidden' }, 403);
-    const d = await c.env.DB.prepare('SELECT * FROM ic_decisions WHERE uid = ?').bind(c.req.param('uid')).first<DecisionRow>();
+    const d = await loadDecision(c.env, user, c.req.param('uid'));
     if (!d) return c.json({ detail: 'Not found' }, 404);
+    // 403 here and 404 above, deliberately. The load has already established
+    // the caller is entitled to SEE this decision — they wrote it, they are on
+    // its committee, or it is their firm's — so "you may not edit this one" is
+    // a rule about authorship inside a firm, not a tenancy boundary, and
+    // telling a colleague the row exists gives away nothing they cannot read.
     if (d.created_by !== user.id && !isAdmin(user)) return c.json({ detail: 'Forbidden' }, 403);
     const body = await c.req.json().catch(() => ({} as any));
     const title = body.title !== undefined ? (body.title ? String(body.title).slice(0, 300) : d.title) : d.title;
@@ -198,7 +270,7 @@ r.post('/:uid/vote', async (c) => {
   try {
     const user = await requireAuth(c);
     if (!canUseIc(user)) return c.json({ detail: 'Forbidden' }, 403);
-    const d = await c.env.DB.prepare('SELECT * FROM ic_decisions WHERE uid = ?').bind(c.req.param('uid')).first<DecisionRow>();
+    const d = await loadDecision(c.env, user, c.req.param('uid'));
     if (!d) return c.json({ detail: 'Not found' }, 404);
     const body = await c.req.json().catch(() => ({} as any));
     const vote = String(body.vote || '').toLowerCase();

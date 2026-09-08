@@ -297,8 +297,13 @@ CREATE INDEX IF NOT EXISTS idx_projects_deleted_at ON projects(deleted_at);
 CREATE TABLE IF NOT EXISTS score_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
-    -- Task #7 (AM) — ON DELETE CASCADE so admin hard-delete drops scores too.
-    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    -- Task #7 (AM) asked for ON DELETE CASCADE here and it never arrived:
+    -- migration 039's rebuild aborted on a transaction statement D1 rejects
+    -- and has never run. Production carries the plain reference below, so
+    -- this snapshot does too — a new database that cascades where production
+    -- does not is the drift this file has been burned by before. The delete
+    -- order in `services/projectTrash.ts` is the cascade. (DECISIONS D60.)
+    project_id INTEGER NOT NULL REFERENCES projects(id),
     total_score REAL NOT NULL,
     tier TEXT NOT NULL,
     market_size REAL DEFAULT 0,
@@ -350,8 +355,13 @@ CREATE INDEX IF NOT EXISTS idx_scores_locked_until ON score_snapshots(project_id
 CREATE TABLE IF NOT EXISTS documents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
-    -- Task #7 (AM) — ON DELETE CASCADE so admin hard-delete drops docs too.
-    project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+    -- Task #7 (AM) asked for ON DELETE CASCADE here and it never arrived:
+    -- migration 039's rebuild aborted on a transaction statement D1 rejects
+    -- and has never run. Production carries the plain reference below, so
+    -- this snapshot does too — a new database that cascades where production
+    -- does not is the drift this file has been burned by before. The delete
+    -- order in `services/projectTrash.ts` is the cascade. (DECISIONS D60.)
+    project_id INTEGER REFERENCES projects(id),
     title TEXT NOT NULL,
     doc_type TEXT NOT NULL DEFAULT 'other',
     status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'generated', 'sent', 'signed')),
@@ -399,8 +409,13 @@ CREATE INDEX IF NOT EXISTS idx_memos_project ON deal_memos(project_id);
 CREATE TABLE IF NOT EXISTS deals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
-    -- Task #7 (AM) — ON DELETE CASCADE so admin hard-delete drops deals too.
-    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    -- Task #7 (AM) asked for ON DELETE CASCADE here and it never arrived:
+    -- migration 039's rebuild aborted on a transaction statement D1 rejects
+    -- and has never run. Production carries the plain reference below, so
+    -- this snapshot does too — a new database that cascades where production
+    -- does not is the drift this file has been burned by before. The delete
+    -- order in `services/projectTrash.ts` is the cascade. (DECISIONS D60.)
+    project_id INTEGER NOT NULL REFERENCES projects(id),
     partner_id INTEGER REFERENCES partners(id),
     status TEXT NOT NULL DEFAULT 'applied' CHECK (status IN ('applied', 'scored', 'active', 'funded', 'rejected')),
     notes TEXT,
@@ -580,8 +595,13 @@ CREATE INDEX IF NOT EXISTS idx_activity_user ON activity_logs(user_id);
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS discovery_interviews (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    -- Task #7 (AM) — ON DELETE CASCADE so admin hard-delete drops interviews too.
-    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    -- Task #7 (AM) asked for a cascading reference here. Migration 039 never
+    -- ran, so production has NO foreign key on this column at all — not a
+    -- cascading one and not a plain one. Matching that exactly, rather than
+    -- adding the constraint only new databases would have: an insert that
+    -- succeeds on production and fails in dev is the divergence in its most
+    -- confusing form. If the key is wanted it is a migration applied to both.
+    project_id INTEGER NOT NULL,
     interviewee_name TEXT NOT NULL,
     interviewee_role TEXT,
     interview_date TEXT,
@@ -629,8 +649,10 @@ CREATE INDEX IF NOT EXISTS idx_pain_group_aliases_group
 
 CREATE TABLE IF NOT EXISTS roadmap_okrs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    -- Task #7 (AM) — ON DELETE CASCADE so admin hard-delete drops OKRs too.
-    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    -- Task #7 (AM) asked for a cascading reference here. Migration 039 never
+    -- ran, so production has NO foreign key on this column at all. Matched
+    -- exactly, for the reason spelled out on `discovery_interviews` above.
+    project_id INTEGER NOT NULL,
     objective TEXT NOT NULL,
     key_results_json TEXT,
     kanban_status TEXT NOT NULL DEFAULT 'now',
