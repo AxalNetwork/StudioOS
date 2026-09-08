@@ -421,7 +421,7 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
             )}
             {!projects.length && (
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                No startup yet — using custom mode. <Link to="/projects" className="text-violet-600 dark:text-violet-400 underline font-medium">Create one</Link> to pull your context.
+                No startup yet — using custom mode. <Link to="/build?new=1" className="text-violet-600 dark:text-violet-400 underline font-medium">Create one</Link> to pull your context.
               </p>
             )}
           </div>

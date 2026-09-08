@@ -41,7 +41,7 @@ const QUICK_ACTIONS = [
     label: 'Create startup',
     hint: 'New venture-studio project',
     roles: ['admin', 'founder', 'partner'],
-    run: (nav) => nav('/projects?new=1'),
+    run: (nav) => nav('/build?new=1'),
   },
   {
     id: 'qa.send-nda',

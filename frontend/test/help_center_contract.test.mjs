@@ -35,9 +35,19 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync, readdirSync } from 'node:fs';
+import { resolve, join } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+
+/** Every `.js`/`.jsx` under `frontend/src`, so a sweep cannot miss a file. */
+function allSources(dir = resolve(process.cwd(), 'frontend/src'), out = []) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) allSources(full, out);
+    else if (/\.jsx?$/.test(entry.name)) out.push(full);
+  }
+  return out;
+}
 import { SECTIONS, filterSectionsForRole, adminOnlyAnchors } from '../src/pages/docs/sections/index.js';
 import { createDocsFuse } from '../src/lib/docs/search.js';
 import {
@@ -221,17 +231,18 @@ test('the support deep link carries its topic into the search box', () => {
 test('nothing deep-links through the redirect any more', () => {
   // `/docs#anchor` still works — that is what the redirect is for — but a
   // live link should address the page directly rather than take a hop.
-  const files = [
-    'frontend/src/components/EmptyState.jsx',
-    'frontend/src/components/CommandPalette.jsx',
-    'frontend/src/components/PageExplainer.jsx',
-    'frontend/src/components/advisor/PersonalAdvisor.jsx',
-    'frontend/src/components/advisor/AdvisorProgressWidget.jsx',
-    'frontend/src/pages/ProjectsPage.jsx',
-  ];
-  for (const f of files) {
-    assert.ok(!read(f).includes('/docs#'), `${f} still deep-links at the old address`);
-  }
+  //
+  // WAS A HARDCODED LIST OF SIX FILES, and one of them (ProjectsPage.jsx) was
+  // deleted when /projects retired — so the rule crashed on ENOENT rather than
+  // reporting anything. A list of files is a rule about those files: it cannot
+  // see a seventh that arrives, and it breaks when a sixth leaves. The sweep
+  // reads everything instead, which is both stronger and one less thing to
+  // maintain. It passes with zero offenders today.
+  const offenders = allSources()
+    .filter((f) => readFileSync(f, 'utf8').includes('/docs#'))
+    .map((f) => f.replace(`${process.cwd()}/`, ''));
+  assert.deepEqual(offenders, [],
+    'these still deep-link at the old address — link the page directly');
 });
 
 test('the ticket flow stays open to an investor waiting on KYC', () => {

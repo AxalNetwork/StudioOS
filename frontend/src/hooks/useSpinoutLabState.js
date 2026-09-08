@@ -10,12 +10,18 @@ import { reportError } from '../lib/log';
 // /build/discovery, /incorporate/wizard, etc.
 const MILESTONE_ROUTE_PREFIXES = [
   '/spinout-lab',
+  // KEPT after task #101 retired /projects: /projects/:id is still live
+  // (ProjectDetail is deep-linked from six surfaces), and this is a pathname
+  // PREFIX, so dropping it would stop refreshing lab state on the detail route
+  // that survived.
   '/projects',
-  '/build/discovery',
-  '/build/roadmap',
-  '/build/brand',
-  '/build/deck',
-  '/build/captable',
+  // WAS five separate /build/* entries. /projects redirected to /build, which
+  // was NOT among them — so creating a startup on the Build desk, where task
+  // #101 moved the form, would have marked the `project_created` milestone and
+  // then not refreshed the lab state that milestone advances. The bucket root
+  // covers the desk and every zone under it, which is the same thing the five
+  // entries were reaching for one route at a time.
+  '/build',
   '/scoring',
   '/advisors',
   // /office-hours is retired and redirects to /practice/opportunities, which

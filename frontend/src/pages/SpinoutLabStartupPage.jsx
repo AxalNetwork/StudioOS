@@ -493,7 +493,7 @@ export default function SpinoutLabStartupPage() {
                   Creating your startup record is the first Week 1 deliverable — it becomes your company profile, data room, and investor snapshot.
                 </p>
                 <Link
-                  to="/projects"
+                  to="/build?new=1"
                   data-testid="link-create-record"
                   className="inline-flex h-10 items-center px-5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold"
                 >

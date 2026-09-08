@@ -1,32 +1,46 @@
+/**
+ * The startups list, which outlived the page that used to hold it.
+ *
+ * `/projects` retired in task #101, but `ProjectsPage` was never only a route:
+ * `ExecutionPage` renders it as `<ProjectsPage embedded />`, so deleting the
+ * file broke the build — the one check that reads the tree as a module graph
+ * rather than as text (`check-frontend-builds.mjs`) is what caught it.
+ *
+ * So the page became a component, and only the parts that were about being a
+ * page were dropped: the `<h1>`, the PageExplainer, the "New Startup" button
+ * and the create form. The form did not disappear — it moved to
+ * `components/CreateStartupForm.jsx`, because it held the SPA's only
+ * `api.createProject` call. `hideCreate` went with it: every remaining caller
+ * embeds this list, and a prop whose only value is now the default is a prop
+ * that will be read as a live switch by the next person.
+ *
+ * What stayed is everything that makes it a list: the fetch, the filter box,
+ * the virtualised rows, the status and week badges, delete with its role
+ * gating, and the empty and error states.
+ */
 import React, { useEffect, useState } from 'react';
-import PageExplainer from '../components/PageExplainer';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Trash2, Database } from 'lucide-react';
-import SectorSelect from '../components/SectorSelect';
+import { Search, Trash2, Database } from 'lucide-react';
 import { api } from '../lib/api';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
-import { markMilestone } from '../lib/spinoutLabHooks';
-import { StatusBadge, WeekBadge } from './Dashboard';
-import VirtualList from '../components/VirtualList';
-import { useToast } from '../components/useToast';
-import { getPitchCopyLengthStatus } from '../lib/pitchCopyLength';
-import EmptyState from '../components/EmptyState';
-import ErrorState from '../components/ErrorState';
-import Skeleton from '../components/Skeleton';
+import { StatusBadge, WeekBadge } from '../pages/Dashboard';
+import VirtualList from './VirtualList';
+import { useToast } from './useToast';
+import EmptyState from './EmptyState';
+import ErrorState from './ErrorState';
+import Skeleton from './Skeleton';
 import { Rocket } from 'lucide-react';
 
 // T24 — Single line per row with py-3.
 const PROJECT_ROW_HEIGHT = 52;
 const PROJECT_GRID = 'minmax(0, 2fr) minmax(0, 1fr) 110px 120px minmax(0, 1fr) 96px';
 
-export default function ProjectsPage({ embedded = false, statusFilter = null, hideCreate = false, onNewStartup = null }) {
-  const { user, refresh } = useAuth();
+export default function StartupList({ statusFilter = null, onNewStartup = null }) {
+  const { user } = useAuth();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const [filter, setFilter] = useState('');
   const [form, setForm] = useState({ name: '', description: '', sector: '', founder_email: '', founder_name: '', problem_statement: '', solution: '' });
   const { toast, showToast } = useToast();
@@ -47,31 +61,6 @@ export default function ProjectsPage({ embedded = false, statusFilter = null, hi
 
   useEffect(load, []);
 
-  const submit = async () => {
-    if (!form.name.trim()) {
-      showToast({ kind: 'error', msg: 'Startup name is required' });
-      return;
-    }
-    setSubmitting(true);
-    try {
-      await api.createProject({ ...form, name: form.name.trim() });
-      setShowForm(false);
-      setForm({ name: '', description: '', sector: '', founder_email: '', founder_name: '', problem_statement: '', solution: '' });
-      // Worker's resolveFounderIdForCreate may have just back-filled
-      // users.founder_id for a first-time founder. Force-refresh /auth/me
-      // (bypassing the 5-min throttle in useAuthSync) so canEdit/canDelete
-      // gating reflects the new founder_id immediately — otherwise the
-      // founder can't see edit/delete on the project they just created.
-      try { if (typeof refresh === 'function') await refresh({ force: true }); } catch {}
-      load();
-      showToast({ kind: 'success', msg: 'Startup created' });
-      await markMilestone(currentUser, 'project_created');
-    } catch (e) {
-      showToast({ kind: 'error', msg: e?.message || 'Failed to create startup' });
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const handleDelete = async (project) => {
     if (!project?.id) return;
@@ -116,49 +105,9 @@ export default function ProjectsPage({ embedded = false, statusFilter = null, hi
   );
 
   return (
+    // The testid stays `projects-page`: it is an address other code holds, and
+    // renaming it would break the e2e spec for no gain the reader can see.
     <div data-testid="projects-page">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          {!embedded && (
-            <>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Startups</h1>
-              <PageExplainer pageKey="projects" />
-              <p className="text-sm text-gray-600">Venture pipeline & 4-week playbook tracking</p>
-            </>
-          )}
-        </div>
-        {!hideCreate && (
-          <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm font-medium text-white transition-colors">
-            <Plus size={14} /> New Startup
-          </button>
-        )}
-      </div>
-
-      {showForm && (
-        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 dark:bg-gray-900 dark:border-gray-800">
-          <h2 className="font-semibold text-gray-900 text-sm mb-4 dark:text-gray-100">Add New Startup</h2>
-          <div className="grid md:grid-cols-2 gap-4">
-            <Input label="Startup Name" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} />
-            <SectorSelect value={form.sector} onChange={v => setForm(f => ({ ...f, sector: v }))} />
-            {canPickFounder && (
-              <>
-                <Input label="Founder Name" value={form.founder_name} onChange={v => setForm(f => ({ ...f, founder_name: v }))} />
-                <Input label="Founder Email" value={form.founder_email} onChange={v => setForm(f => ({ ...f, founder_email: v }))} />
-              </>
-            )}
-            <div className="md:col-span-2">
-              <Input label="Description" value={form.description} onChange={v => setForm(f => ({ ...f, description: v }))} />
-            </div>
-            <PitchInput label="Problem Statement" fieldType="problem" value={form.problem_statement} onChange={v => setForm(f => ({ ...f, problem_statement: v }))} />
-            <PitchInput label="Solution" fieldType="solution" value={form.solution} onChange={v => setForm(f => ({ ...f, solution: v }))} />
-          </div>
-          <div className="flex gap-3 mt-4">
-            <button onClick={submit} disabled={submitting} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm text-white font-medium transition-colors">{submitting ? 'Creating…' : 'Create'}</button>
-            <button onClick={() => setShowForm(false)} disabled={submitting} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm text-gray-900 disabled:opacity-50 dark:text-gray-100">Cancel</button>
-          </div>
-        </div>
-      )}
-
       <div className="mb-4">
         <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
@@ -292,49 +241,6 @@ export default function ProjectsPage({ embedded = false, statusFilter = null, hi
           {toast.msg || (typeof toast === 'string' ? toast : '')}
         </div>
       )}
-    </div>
-  );
-}
-
-function Input({ label, value, onChange }) {
-  return (
-    <div>
-      <label className="block text-xs text-gray-600 mb-1">{label}</label>
-      <input
-        type="text" value={value} onChange={e => onChange(e.target.value)}
-        className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:border-gray-700 dark:text-gray-100"
-      />
-    </div>
-  );
-}
-
-function PitchInput({ label, fieldType, value, onChange }) {
-  const status = getPitchCopyLengthStatus(value, fieldType);
-  const toneColors = {
-    neutral: { bar: 'bg-gray-300 dark:bg-gray-600', text: 'text-gray-500 dark:text-gray-400' },
-    amber:   { bar: 'bg-amber-500',                 text: 'text-amber-600 dark:text-amber-400' },
-    green:   { bar: 'bg-emerald-500',               text: 'text-emerald-600 dark:text-emerald-400' },
-    red:     { bar: 'bg-red-500',                   text: 'text-red-600 dark:text-red-400' },
-  };
-  const c = toneColors[status.tone] || toneColors.neutral;
-  return (
-    <div>
-      <label className="block text-xs text-gray-600 mb-1">{label}</label>
-      <textarea
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        rows={3}
-        className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:border-gray-700 dark:text-gray-100"
-      />
-      <div className="mt-1.5">
-        <div className="h-1 w-full rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
-          <div className={`h-full ${c.bar} transition-all duration-200`} style={{ width: `${status.progressPercent}%` }} />
-        </div>
-        <div className="mt-1 flex items-center justify-between text-[11px]">
-          <span className={c.text}>{status.label}</span>
-          <span className="text-gray-400 dark:text-gray-500 font-mono">{status.wordCount} {status.wordCount === 1 ? 'word' : 'words'}</span>
-        </div>
-      </div>
     </div>
   );
 }

@@ -17,7 +17,7 @@
 
 import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
-  Ticket, Zap, Handshake, Rocket, UserCircle,
+  Ticket, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, Shield, ShieldCheck,
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale,
   MessageSquare, Package, Calendar, Heart, Bookmark, Megaphone, Send,
@@ -148,7 +148,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin/my-licence', icon: Map, label: 'My Licence' },
     ]},
     { key: 'studio', label: 'Studio', items: [
-      { to: '/projects', icon: Zap, label: 'Startups' },
       { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },
       { to: '/scoring', icon: Target, label: 'Scoring Engine' },
       { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
@@ -171,7 +170,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/compliance', icon: Calendar, label: 'Compliance Calendar' },
     ]},
     { key: 'network', label: 'Network & Growth', items: [
-      { to: '/partners', icon: Users, label: 'Partners' },
       // Task #4 — "Referrals" moved into Settings (/settings/referrals); the
       // /refer route redirects there. Removed from the admin nav.
       // Task #1 — "Contacts" merged into this "Network" page (Contacts +
@@ -281,7 +279,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/validate', icon: MessageSquare, label: 'Validate',
         match: ['/validate', '/build/discovery', '/build/marketplace', '/needs', '/services', '/advisory'] },
       { to: '/build', icon: Briefcase, label: 'Build',
-        match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/build/metrics', '/execution', '/projects'] },
+        match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/build/metrics', '/execution'] },
       { to: '/raise', icon: Sparkles, label: 'Raise', match: ['/raise', '/liquidity'] },
       { to: '/grow', icon: TrendingUp, label: 'Grow',
         match: ['/grow', '/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications', '/spinout-lab/brand', '/build/brand', '/comarketing', '/perks', '/network-effects'] },

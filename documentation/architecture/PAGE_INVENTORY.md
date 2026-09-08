@@ -59,7 +59,7 @@ canvas behind it still shows up here.
 | Headerless | Network | `/network` | Partner Operator Canvas |
 | Headerless | Research | `/research` | — (no canvas; shipped ahead of the design corpus) |
 
-## `admin` — 48 destinations in 6 groups
+## `admin` — 46 destinations in 6 groups
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
@@ -79,7 +79,6 @@ canvas behind it still shows up here.
 | Admin | Telegram Channels | `/admin/telegram` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Content Queue | `/admin/articles` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | My Licence | `/admin/my-licence` | — (no canvas; shipped ahead of the design corpus) |
-| Studio | Startups | `/projects` | — (no canvas; shipped ahead of the design corpus) |
 | Studio | Pipeline Board | `/pipeline` | — (no canvas; shipped ahead of the design corpus) |
 | Studio | Scoring Engine | `/scoring` | Scoring Engine v2 |
 | Studio | Risk Matrix | `/portfolio/risk-matrix` | — (no canvas; shipped ahead of the design corpus) |
@@ -98,7 +97,6 @@ canvas behind it still shows up here.
 | Capital & Legal | Legal & Capital | `/legal-capital` | Legal & Capital Engine |
 | Capital & Legal | Incorporate | `/incorporate` | — (no canvas; shipped ahead of the design corpus) |
 | Capital & Legal | Compliance Calendar | `/compliance` | — (no canvas; shipped ahead of the design corpus) |
-| Network & Growth | Partners | `/partners` | — (no canvas; shipped ahead of the design corpus) |
 | Network & Growth | Network | `/network` | — (no canvas; shipped ahead of the design corpus) |
 | Network & Growth | Network Effects | `/network-effects` | — (no canvas; shipped ahead of the design corpus) |
 | Network & Growth | Jobs | `/my/jobs` | — (no canvas; shipped ahead of the design corpus) |
@@ -136,7 +134,7 @@ canvas behind it still shows up here.
 
 ## Destinations with no canvas
 
-59 of the 91 sidebar rows above are not claimed
+57 of the 89 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
@@ -166,7 +164,6 @@ rather than merely absent.
 - admin · Admin · Telegram Channels (`/admin/telegram`)
 - admin · Admin · Content Queue (`/admin/articles`)
 - admin · Admin · My Licence (`/admin/my-licence`)
-- admin · Studio · Startups (`/projects`)
 - admin · Studio · Pipeline Board (`/pipeline`)
 - admin · Studio · Risk Matrix (`/portfolio/risk-matrix`)
 - admin · Studio · Market Intelligence (`/market-intel`)
@@ -183,7 +180,6 @@ rather than merely absent.
 - admin · Capital & Legal · Watchlist & Journal (`/watchlist`)
 - admin · Capital & Legal · Incorporate (`/incorporate`)
 - admin · Capital & Legal · Compliance Calendar (`/compliance`)
-- admin · Network & Growth · Partners (`/partners`)
 - admin · Network & Growth · Network (`/network`)
 - admin · Network & Growth · Network Effects (`/network-effects`)
 - admin · Network & Growth · Jobs (`/my/jobs`)

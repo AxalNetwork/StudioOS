@@ -332,7 +332,7 @@ export default function SpinoutLabRoadmapPage() {
         <div className={`${CARD} text-center py-10`} data-testid="roadmap-no-project">
           <div className="text-base font-bold text-gray-900 dark:text-gray-50">Create your startup record first</div>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-4">OKRs and MVP scope attach to your company record.</p>
-          <Link to="/projects" className="inline-flex h-10 items-center px-5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold">Create your startup record</Link>
+          <Link to="/build?new=1" className="inline-flex h-10 items-center px-5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold">Create your startup record</Link>
         </div>
       ) : (
         <>

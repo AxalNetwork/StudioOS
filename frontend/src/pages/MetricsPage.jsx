@@ -236,7 +236,7 @@ export default function MetricsPage() {
             Metrics snapshots are scoped to a startup. Create or join one first, then come back here to start tracking MRR, CAC, LTV and churn.
           </p>
           <Link
-            to="/projects"
+            to="/build?new=1"
             className="inline-flex items-center gap-2 mt-4 bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-4 py-2 text-sm font-medium"
           >
             <Plus size={14} /> Go to Startups
