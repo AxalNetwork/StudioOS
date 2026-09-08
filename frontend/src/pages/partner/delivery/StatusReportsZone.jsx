@@ -4,7 +4,7 @@ import { api } from '../../../lib/api';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Pill, Unrecorded,
   StatCard, Section, Field, SaveNote,
-  NoPartnerProfile, isNoPartnerProfile,
+  UnlinkedZone, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
@@ -339,18 +339,18 @@ export default function PartnerStatusReportsZone() {
   const items = Array.isArray(d?.items) ? d.items : [];
   const engagements = state.engagements || [];
 
+  // Hoisted so the gate branch below and the live row draw the SAME row.
+  // With nothing loaded the export renders disabled and says so itself,
+  // which is what makes a header row over an unreadable store honest.
+  const rowActions = partnerZoneActions('delivery/status-reports', { view: { header: ['Period', 'Founder', 'Shipped', 'Next up'], rows: items, cells: (r) => [r.period, r.founder_name, r.shipped, r.next_up] } });
+
   if (isNoPartnerProfile(state.error)) {
-    return (
-      <>
-        <ZoneHeading title="Status reports" />
-        <NoPartnerProfile />
-      </>
-    );
+    return <UnlinkedZone title="Status reports" actions={rowActions} />;
   }
 
   return (
     <ZoneBody
-      actions={partnerZoneActions('delivery/status-reports', { view: { header: ['Period', 'Founder', 'Shipped', 'Next up'], rows: items, cells: (r) => [r.period, r.founder_name, r.shipped, r.next_up] } })}
+      actions={rowActions}
       loading={state.loading}
       error={state.error}
       onRetry={load}

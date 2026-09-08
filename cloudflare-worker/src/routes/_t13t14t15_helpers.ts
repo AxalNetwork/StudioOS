@@ -103,8 +103,37 @@ export function mapError(c: Context<{ Bindings: Env }>, e: any) {
   return c.json({ detail: msg }, status as any);
 }
 
-/** Resolve a partner row attached to the user (admin can act as a partner only
- *  if `user.partner_id` is set). Mirrors `_require_partner` in FastAPI. */
+/**
+ * Resolve the firm attached to this account — through `users.partner_id` and
+ * through nothing else.
+ *
+ * ONE KEY, BECAUSE THE SECOND ONE COULD NOT FAIL CLOSED. This used to fall back
+ * to `SELECT * FROM partners WHERE email = ?` whenever `partner_id` did not
+ * resolve, and that fallback was both useless and dangerous:
+ *
+ *   USELESS, MEASURED. Of 26 `role='partner'` accounts in production, 8 resolve
+ *   by `partner_id`, 18 resolve to nothing, and 0 resolved only by email. It
+ *   could not have been otherwise: `ensureRoleProfile` runs the SAME email
+ *   lookup on every `/auth/me` and writes `partner_id` from it, so any row the
+ *   fallback could have matched was already linked before it was reached.
+ *
+ *   DANGEROUS, BY SHAPE. `partners.email` is a person's address and `users`
+ *   holds another copy of one; matching two tables on a mutable string is a
+ *   link nobody records making. Change an account's email to one a firm happens
+ *   to carry and the account silently acquires that firm's quotes, engagements
+ *   and clients, with a 200 and no audit row. It is the same failure
+ *   `partner_user_firm_link.test.mjs` was written to keep migration 210 from
+ *   causing — "a row matched too broadly does not fail closed" — reached by a
+ *   different route.
+ *
+ * So a `partner_id` that resolves is the only way in, and everything else —
+ * unset, or pointing at a firm that no longer exists — gets the gap card.
+ * That card already tells the reader exactly what happened and that an admin
+ * can attach the account, which is a better answer than a guess.
+ *
+ * An admin acts as a partner only when their own `users.partner_id` is set;
+ * previewing the role attaches them to nobody, on purpose.
+ */
 export async function requirePartnerProfile(env: Env, user: User) {
   if (!(isPartner(user) || isAdmin(user))) {
     throw new Error('Forbidden');
@@ -114,8 +143,5 @@ export async function requirePartnerProfile(env: Env, user: User) {
       .bind(user.partner_id).first<any>();
     if (row) return row;
   }
-  const byEmail = await env.DB.prepare('SELECT * FROM partners WHERE email = ?')
-    .bind(user.email).first<any>();
-  if (byEmail) return byEmail;
   throw new Error('No partner profile attached to your account');
 }

@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  StatCard, Section, Field, SaveNote, NotComputable, NoPartnerProfile,
+  StatCard, Section, Field, SaveNote, NotComputable, UnlinkedZone,
   isNoPartnerProfile, inputClass, buttonClass, ghostButtonClass, moneyDollars,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
+import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
+import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 
 /**
  * Offers · Visibility — `/offers/visibility`.
@@ -194,200 +196,240 @@ export default function PartnerVisibilityZone() {
   const attribution = state.attribution || [];
   const active = items.filter((s) => s.is_active);
 
+  /**
+   * `By engagements` is the one label on this artboard with a source, and it is
+   * an ORDERING rather than a subset — which is why there is no view state
+   * below: a control whose value can never change would look selectable and
+   * select nothing.
+   *
+   * THE PAGE APPLIES IT RATHER THAN INHERITING IT. `GET /partner-offers/
+   * surfaces` already ends `ORDER BY COUNT(es.id) DESC, s.name`, so the rows
+   * arrive in this order — but the heading below CLAIMS the ordering in prose
+   * ("ranked by engagements rather than by reach"), and a claim this file makes
+   * should not rest on a clause in a query this file cannot see. Sorting here
+   * makes the chip, the heading and the exported file say the same thing for
+   * the same reason.
+   */
+  const ORDERINGS = {
+    engagements: (a, b) => (Number(b.engagement_count) || 0) - (Number(a.engagement_count) || 0)
+      || String(a.name || '').localeCompare(String(b.name || '')),
+  };
+  const view = 'engagements';
+  const visible = [...items].sort(ORDERINGS[view]);
+
+  // Hoisted so the gate branch below and the live row draw the SAME row.
+  // With nothing loaded the export renders disabled and says so itself,
+  // which is what makes a header row over an unreadable store honest.
+  const rowActions = partnerZoneActions('offers/visibility', { view: { header: ['Service', 'Kind', 'Price', 'Active', 'Engagements', 'Won value'], rows: visible, cells: (r) => [r.name, r.kind, r.price, r.is_active, r.engagement_count, r.won_value] } });
+
   if (isNoPartnerProfile(state.error)) {
-    return (
-      <>
-        <ZoneHeading title="Visibility" />
-        <NoPartnerProfile />
-      </>
-    );
+    return <UnlinkedZone title="Visibility" actions={rowActions} />;
   }
 
   return (
-    <ZoneBody
-      actions={partnerZoneActions('offers/visibility', { view: { header: ['Service', 'Kind', 'Price', 'Active', 'Engagements', 'Won value'], rows: items, cells: (r) => [r.name, r.kind, r.price, r.is_active, r.engagement_count, r.won_value] } })}
-      loading={state.loading}
-      error={state.error}
-      onRetry={load}
-      isEmpty={items.length === 0}
-      empty={(
-        <NothingYet
-          title="No surface is recorded yet"
-          body={
-            'A surface is anywhere the firm appears and work can come from — a '
-            + 'directory listing, a referral partner, an event, a piece of '
-            + 'writing. Record one and every engagement can then name where it '
-            + 'came from, which is the only way this zone can compare them.'
-          }
-          action={(
-            <button type="button" className={buttonClass} onClick={() => setAdding(true)}>
-              Add a surface
-            </button>
-          )}
-        />
-      )}
-    >
-      <div className="space-y-6">
-        <ZoneHeading
-          title="Where the firm appears, and what each produced"
-          blurb={
-            'Ranked by engagements rather than by reach. A listing with a large '
-            + 'audience and no work is below a referral with one — that ordering '
-            + 'is the point of the zone.'
-          }
-          action={(
-            <button type="button" className={ghostButtonClass} onClick={() => setAdding((v) => !v)}>
-              {adding ? 'Cancel' : 'Add a surface'}
-            </button>
-          )}
-        />
+    <>
+      {/* THE ROW IS HOISTED OUT OF `ZoneBody`, as `RelationshipsZone` does it
+          and for the reason written there: `ZoneBody` renders `actions` above
+          all four of its states, which is the right guarantee, and this keeps
+          it one level up rather than teaching a component a dozen other zones
+          mount about filters.
 
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <StatCard label="Surfaces" value={items.length} hint={`${active.length} still in use`} />
-          <StatCard
-            label="Engagements"
-            value={d?.engagement_total ?? 0}
-            hint={d?.unattributed_count ? `${d.unattributed_count} name no surface` : 'all attributed'}
+          NO VIEW STATE, AND THAT IS NOT A SHORTCUT. `By engagements` is the
+          only label on this artboard with a source, and it is not a subset —
+          it is the ordering the server already returns (`ORDER BY
+          COUNT(es.id) DESC, s.name`) and the heading below already claims.
+          A state whose value can never change would be a control that looks
+          selectable and selects nothing. */}
+      <ZoneToolbar
+        className="mb-3"
+        role="partner"
+        filters={partnerZoneFilters('offers/visibility', { value: view })}
+        actions={rowActions}
+      />
+      <ZoneBody
+        loading={state.loading}
+        error={state.error}
+        onRetry={load}
+        isEmpty={items.length === 0}
+        empty={(
+          <NothingYet
+            title="No surface is recorded yet"
+            body={
+              'A surface is anywhere the firm appears and work can come from — a '
+              + 'directory listing, a referral partner, an event, a piece of '
+              + 'writing. Record one and every engagement can then name where it '
+              + 'came from, which is the only way this zone can compare them.'
+            }
+            action={(
+              <button type="button" className={buttonClass} onClick={() => setAdding(true)}>
+                Add a surface
+              </button>
+            )}
           />
-          <StatCard label="Views" value="—" hint="not recorded — see below" />
-          <StatCard label="Leads per surface" value="—" hint="no store — see below" />
-        </div>
-
-        {d?.unattributed_note && (
-          <p className="text-[12.5px] leading-relaxed text-axal-ink-2">
-            {d.unattributed_note}{' '}
-            <span className="text-axal-ink-3">
-              They are not shared out across the surfaces below — a count that
-              guessed would make the largest row the least true.
-            </span>
-          </p>
         )}
+      >
+        <div className="space-y-6">
+          <ZoneHeading
+            title="Where the firm appears, and what each produced"
+            blurb={
+              'Ranked by engagements rather than by reach. A listing with a large '
+              + 'audience and no work is below a referral with one — that ordering '
+              + 'is the point of the zone.'
+            }
+            action={(
+              <button type="button" className={ghostButtonClass} onClick={() => setAdding((v) => !v)}>
+                {adding ? 'Cancel' : 'Add a surface'}
+              </button>
+            )}
+          />
 
-        {adding && (
-          <div className="rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
-            <div className="grid gap-3 md:grid-cols-3">
-              <Field label="Name" hint="What a person would call it — “Axal directory”, “Acme referral”.">
-                <input className={inputClass} value={newSurface.name} maxLength={160}
-                  onChange={(e) => setNewSurface({ ...newSurface, name: e.target.value })} />
-              </Field>
-              <Field label="Kind">
-                <select className={inputClass} value={newSurface.kind}
-                  onChange={(e) => setNewSurface({ ...newSurface, kind: e.target.value })}>
-                  {KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-              </Field>
-              <div className="flex items-end">
-                <button
-                  type="button" className={buttonClass}
-                  disabled={busy || !newSurface.name.trim()}
-                  onClick={async () => {
-                    await run(() => api.createPartnerSurface(newSurface), 'Surface added.', 'new');
-                    setNewSurface({ name: '', kind: 'directory' });
-                    setAdding(false);
-                  }}
-                >
-                  Add surface
-                </button>
-              </div>
-            </div>
-            <SaveNote note={note?.scope === 'new' ? note : null} />
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <StatCard label="Surfaces" value={items.length} hint={`${active.length} still in use`} />
+            <StatCard
+              label="Engagements"
+              value={d?.engagement_total ?? 0}
+              hint={d?.unattributed_count ? `${d.unattributed_count} name no surface` : 'all attributed'}
+            />
+            <StatCard label="Views" value="—" hint="not recorded — see below" />
+            <StatCard label="Leads per surface" value="—" hint="no store — see below" />
           </div>
-        )}
 
-        <Section title="Surfaces">
-          <div>
-            {items.map((row) => (
-              <SurfaceRow
-                key={row.id}
-                row={row}
-                busy={busy}
-                note={note}
-                onSave={(r, draft) => run(
-                  () => api.updatePartnerSurface(r.id, {
-                    name: draft.name, kind: draft.kind, is_active: draft.is_active,
-                  }),
-                  'Saved.', `surface:${r.id}`,
-                )}
-                onDelete={(r) => run(
-                  () => api.deletePartnerSurface(r.id),
-                  'Surface deleted.', `surface:${r.id}`,
-                )}
-              />
-            ))}
-          </div>
-        </Section>
-
-        <Section title="Where each engagement came from">
-          {attribution.length === 0 ? (
+          {d?.unattributed_note && (
             <p className="text-[12.5px] leading-relaxed text-axal-ink-2">
-              No engagement yet. Win work and it appears here to be attributed —
-              until it is, it counts toward no surface.
+              {d.unattributed_note}{' '}
+              <span className="text-axal-ink-3">
+                They are not shared out across the surfaces below — a count that
+                guessed would make the largest row the least true.
+              </span>
             </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-[12.5px]">
-                <thead className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
-                  <tr>
-                    <th className="pb-1 pr-3">Engagement</th>
-                    <th className="pb-1 pr-3">Value</th>
-                    <th className="pb-1 pr-3">Came from</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {attribution.map((row) => (
-                    <AttributionRow
-                      key={row.engagement_id}
-                      row={row}
-                      surfaces={active}
-                      busy={busy}
-                      onSet={(r, surfaceId) => run(
-                        () => api.setPartnerEngagementSource(r.engagement_id, { surface_id: surfaceId }),
-                        'Attributed.', `attr:${r.engagement_id}`,
-                      )}
-                      onClear={(r) => run(
-                        () => api.clearPartnerEngagementSource(r.engagement_id),
-                        'Attribution cleared.', `attr:${r.engagement_id}`,
-                      )}
-                    />
-                  ))}
-                </tbody>
-              </table>
+          )}
+
+          {adding && (
+            <div className="rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
+              <div className="grid gap-3 md:grid-cols-3">
+                <Field label="Name" hint="What a person would call it — “Axal directory”, “Acme referral”.">
+                  <input className={inputClass} value={newSurface.name} maxLength={160}
+                    onChange={(e) => setNewSurface({ ...newSurface, name: e.target.value })} />
+                </Field>
+                <Field label="Kind">
+                  <select className={inputClass} value={newSurface.kind}
+                    onChange={(e) => setNewSurface({ ...newSurface, kind: e.target.value })}>
+                    {KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </Field>
+                <div className="flex items-end">
+                  <button
+                    type="button" className={buttonClass}
+                    disabled={busy || !newSurface.name.trim()}
+                    onClick={async () => {
+                      await run(() => api.createPartnerSurface(newSurface), 'Surface added.', 'new');
+                      setNewSurface({ name: '', kind: 'directory' });
+                      setAdding(false);
+                    }}
+                  >
+                    Add surface
+                  </button>
+                </div>
+              </div>
+              <SaveNote note={note?.scope === 'new' ? note : null} />
             </div>
           )}
-          {/* Scoped by a PREFIXED key, not a bare id. A surface id and an
-              engagement id are both small integers drawn from different
-              sequences, so `scope === row.id` would eventually show a surface's
-              "Saved." under an unrelated engagement row — a message about a
-              write that did not happen there. */}
-          <SaveNote note={String(note?.scope || '').startsWith('attr:') ? note : null} />
-        </Section>
 
-        <StatedLimit title="What this zone does not claim">
-          <p>
-            <strong>No view count.</strong> {items[0]?.views_note
-              || 'No impression is recorded anywhere in the product, so a view count would be invented rather than measured.'}{' '}
-            The column stays on the page as a stated absence rather than being
-            removed, because a reader who came for reach deserves to be told it
-            is not measured rather than left to assume it is zero.
-          </p>
-          <p className="mt-2">
-            <strong>No leads-per-surface ratio.</strong> {d?.lead_ratio_note
-              || 'Leads per surface is not recorded anywhere, so the ratio has an absent denominator.'}
-          </p>
-          <p className="mt-2">
-            <strong>Attribution is what somebody recorded.</strong> Nothing infers
-            a source, so a surface that produced work nobody attributed reads as
-            producing none. The unattributed count above is how large that gap
-            currently is — and it is shown rather than shared out, so no row is
-            credited with work it may not have produced.
-          </p>
-        </StatedLimit>
+          <Section title="Surfaces">
+            <div>
+              {visible.map((row) => (
+                <SurfaceRow
+                  key={row.id}
+                  row={row}
+                  busy={busy}
+                  note={note}
+                  onSave={(r, draft) => run(
+                    () => api.updatePartnerSurface(r.id, {
+                      name: draft.name, kind: draft.kind, is_active: draft.is_active,
+                    }),
+                    'Saved.', `surface:${r.id}`,
+                  )}
+                  onDelete={(r) => run(
+                    () => api.deletePartnerSurface(r.id),
+                    'Surface deleted.', `surface:${r.id}`,
+                  )}
+                />
+              ))}
+            </div>
+          </Section>
 
-        <p className="text-[12px] text-axal-ink-3">
-          Passing on a lead with a named reason lives on{' '}
-          <Link to="/offers/audience-fit" className="text-amber-700 underline">Audience fit</Link>.
-        </p>
-      </div>
-    </ZoneBody>
+          <Section title="Where each engagement came from">
+            {attribution.length === 0 ? (
+              <p className="text-[12.5px] leading-relaxed text-axal-ink-2">
+                No engagement yet. Win work and it appears here to be attributed —
+                until it is, it counts toward no surface.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-[12.5px]">
+                  <thead className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+                    <tr>
+                      <th className="pb-1 pr-3">Engagement</th>
+                      <th className="pb-1 pr-3">Value</th>
+                      <th className="pb-1 pr-3">Came from</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {attribution.map((row) => (
+                      <AttributionRow
+                        key={row.engagement_id}
+                        row={row}
+                        surfaces={active}
+                        busy={busy}
+                        onSet={(r, surfaceId) => run(
+                          () => api.setPartnerEngagementSource(r.engagement_id, { surface_id: surfaceId }),
+                          'Attributed.', `attr:${r.engagement_id}`,
+                        )}
+                        onClear={(r) => run(
+                          () => api.clearPartnerEngagementSource(r.engagement_id),
+                          'Attribution cleared.', `attr:${r.engagement_id}`,
+                        )}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {/* Scoped by a PREFIXED key, not a bare id. A surface id and an
+                engagement id are both small integers drawn from different
+                sequences, so `scope === row.id` would eventually show a surface's
+                "Saved." under an unrelated engagement row — a message about a
+                write that did not happen there. */}
+            <SaveNote note={String(note?.scope || '').startsWith('attr:') ? note : null} />
+          </Section>
+
+          <StatedLimit title="What this zone does not claim">
+            <p>
+              <strong>No view count.</strong> {items[0]?.views_note
+                || 'No impression is recorded anywhere in the product, so a view count would be invented rather than measured.'}{' '}
+              The column stays on the page as a stated absence rather than being
+              removed, because a reader who came for reach deserves to be told it
+              is not measured rather than left to assume it is zero.
+            </p>
+            <p className="mt-2">
+              <strong>No leads-per-surface ratio.</strong> {d?.lead_ratio_note
+                || 'Leads per surface is not recorded anywhere, so the ratio has an absent denominator.'}
+            </p>
+            <p className="mt-2">
+              <strong>Attribution is what somebody recorded.</strong> Nothing infers
+              a source, so a surface that produced work nobody attributed reads as
+              producing none. The unattributed count above is how large that gap
+              currently is — and it is shown rather than shared out, so no row is
+              credited with work it may not have produced.
+            </p>
+          </StatedLimit>
+
+          <p className="text-[12px] text-axal-ink-3">
+            Passing on a lead with a named reason lives on{' '}
+            <Link to="/offers/audience-fit" className="text-amber-700 underline">Audience fit</Link>.
+          </p>
+        </div>
+      </ZoneBody>
+    </>
   );
 }

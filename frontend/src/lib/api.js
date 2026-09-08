@@ -902,6 +902,18 @@ export const api = {
     },
     dealRedemptions: (id) =>
       request(`/admin/partners/deals/${encodeURIComponent(id)}/redemptions`),
+    // The firm link. Every partner surface resolves through `users.partner_id`
+    // and nothing else (D57), so an account without one gets a card saying an
+    // admin can attach it — and this is the admin who can.
+    listFirmLinks: () => request('/admin/partners/links'),
+    // `partnerId: null` detaches. Both ids are explicit: there is no
+    // search-and-guess here, because matching accounts to firms on a mutable
+    // string is exactly the hole D57 closed on the read side.
+    setFirmLink: (userId, partnerId) =>
+      request('/admin/partners/links', {
+        method: 'POST',
+        body: JSON.stringify({ user_id: userId, partner_id: partnerId ?? null }),
+      }),
   },
   // Task #9 (X-2) — Public token-gated partner onboarding flow.
   partnerOnboard: {

@@ -109,13 +109,52 @@ const PROFILES = {
     zones: 26,
     mounted: 26,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.founder },
-    // EMPTY, AND THAT IS THE POINT OF THE LIST. Every canvas route on all five
-    // founder artboards now has a filter table. `research/{ask,library}` left
-    // when all four licences gained them in one commit; `network/organizations`
-    // left when the two licences that HAVE a body for it gained it — advisor
-    // and partner keep it excluded for a reason that is theirs and is stated in
-    // their own profiles, not because founder is waiting on them.
-    excluded: [],
+    // FOUR, AND THEY ARRIVED BY THE READER LEARNING TO SEE THEM. This note used
+    // to read "EMPTY … every canvas route on all five founder artboards now has
+    // a filter table", and the count was the parser's rather than the
+    // directory's: `/^Pages · Founder /` matches SIX files, and the sixth —
+    // `Pages · Founder Validate` — is a single artboard looped over a `boards`
+    // array, so a reader that only understood `route:'…'` found nothing in it
+    // and the list stayed empty by accident rather than by achievement.
+    //
+    // It specifies sixteen chips across its four zones and none of them is on
+    // screen: `FounderValidateWorkspace.jsx` imports `ZoneActions` and no
+    // `ZoneToolbar`, so all four zones ship an action row over an unfiltered
+    // list. That is a real gap, recorded here by name so it is re-checked on
+    // every run.
+    //
+    // WHAT ACTUALLY BLOCKS IT, WHICH IS NOT THE FOUR FILTER TABLES. This note
+    // first said the work was "four filter tables and four narrowed row sets".
+    // It is not, and the correction is worth keeping because the wrong version
+    // makes the job look like an afternoon.
+    //
+    // The test below requires every zone with a filter table to have an ACTION
+    // table for the same zone, and `founderZoneActions.js` has no `validate/*`
+    // key — that workspace builds its own row, in a local `ACTIONS` map. It has
+    // to: three of its ops open a modal (`setLogOpen`, `setHypOpen`,
+    // `setLinkOpen`) and its three exports are SERVER-side calls with a busy
+    // spinner and a shared error line. `zoneActionBuilder.js` can express
+    // exactly three things — `kind: 'export'` over rows the page has loaded,
+    // `to:` a route, and `unbuilt:` — and across all four profiles' 218 entries
+    // there is not one page-supplied handler. So bringing Validate into the
+    // table means giving the SHARED builder a fourth kind, and giving the guard
+    // a way to check it (the page must actually supply the handler its table
+    // declares, the same shape as the live-filter-key assertion above).
+    //
+    // That is a defensible change and probably the right one — a fourth kind
+    // for "the page performs this, because it owns state a table cannot" is a
+    // real gap in the builder's vocabulary, not a workaround. But it is a
+    // change to a builder four profiles depend on, and it is not a prerequisite
+    // anyone would guess from the words "add a filter row".
+    //
+    // The three that LEFT this list are still gone for their own reasons:
+    // `research/{ask,library}` when all four licences gained them in one
+    // commit; `network/organizations` when the two licences that HAVE a body
+    // for it gained it — advisor and partner keep it excluded for a reason that
+    // is theirs and is stated in their own profiles.
+    excluded: [
+      'validate/interviews', 'validate/pain-map', 'validate/hypotheses', 'validate/verdict',
+    ],
     // Counts welded onto a real filter — `All 14`, `All 14 mo`, `Aug 2026`.
     samples: /\b(14|2026)\b/,
     // Founder canvas routes are the live routes.
@@ -218,12 +257,38 @@ const PROFILES = {
     build: partnerZoneFilters,
     call: 'partnerZoneFilters',
     canvasDirs: ['design/incoming'],
-    canvas: /^Pages · Partner (Network|Research)\.dc\.html$/,
-    pages: ['frontend/src/pages/partner', 'frontend/src/pages/research', 'frontend/src/workspaces'],
+    // `Offers` JOINS THE REGEX, and `canvasDirs` needs no change for it:
+    // `design/incoming/Pages · Partner Offers.dc.html` is already in the
+    // directory this profile opens, and it is byte-identical on the nineteen
+    // labels to the copy in `design/canvases/integrated/` — checked rather than
+    // assumed, both name the same five routes in the same order.
+    canvas: /^Pages · Partner (Network|Offers|Research)\.dc\.html$/,
+    // `pages/partner/offers` IS ITS OWN ENTRY BECAUSE `mountingFile` DOES NOT
+    // RECURSE. Three of the five Offers zones have their own file in there and
+    // are found by the ordinary search once the directory is listed — which
+    // matters beyond convenience: a zone located by search is NOT `shared`, so
+    // it is held to naming its own licence (`role="partner"`), where a zone
+    // declared in `bodies` is allowed the `role={role}` variable. Putting these
+    // three in the map to save a line would have handed them that exemption
+    // and stopped this file checking the thing it exists to check.
+    pages: ['frontend/src/pages/partner', 'frontend/src/pages/partner/offers',
+      'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/partnerZoneActions.js',
-    zones: 6,
-    mounted: 6,
-    bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.partner },
+    zones: 11,
+    mounted: 11,
+    // The two that ARE genuinely shared. `ServiceCatalogPage` is mounted for
+    // admin, founder, partner and investor and `PerksPage` for those four plus
+    // advisor and exploring, both from `frontend/src/pages/` — a directory this
+    // profile does not list and could not list, since it holds a hundred
+    // unrelated files. Neither page names a zone: the bucket router hands each
+    // a bound builder as a render prop, exactly as it already hands them their
+    // actions, so the search has no needle to find and the map is the only way.
+    bodies: {
+      ...RESEARCH_BODIES,
+      ...NETWORK_BODIES.partner,
+      'offers/catalog': 'frontend/src/pages/ServiceCatalogPage.jsx',
+      'offers/perk-deals': 'frontend/src/pages/PerksPage.jsx',
+    },
     // Same as advisor's, one step further: there is not even a card. This
     // licence has no organizations panel at all — `NetworkPage`'s
     // `unservedAlone` suppresses it — so a row here would attach to nothing.
@@ -256,18 +321,72 @@ function canvasFilters(profile) {
   for (const dir of profile.canvasDirs || ['design/canvases/integrated']) {
     for (const file of readdirSync(resolve(root, dir)).filter((f) => profile.canvas.test(f))) {
       const src = read(`${dir}/${file}`);
-      for (const chunk of src.split(/route:\s*'/).slice(1)) {
-        const route = chunk.slice(0, chunk.indexOf("'"));
-        const filters = chunk.match(/filters:\s*fil\(\[([^\]]*)\]/);
-        if (!filters) continue;
-        out[profile.live(route)] = filters[1]
-          .split(',')
-          .map((one) => one.trim().replace(/^'|'$/g, ''))
-          .filter(Boolean);
-      }
+      const found = artboardFilters(src);
+      // PER FILE, THE WAY `profile_zone_actions.test.mjs` DOES IT, and for the
+      // reason found there: a canvas whose NAME matched and whose contents this
+      // reader could not parse contributed nothing and said nothing. Founder's
+      // regex is `/^Pages · Founder /`, which matches SIX files; the note beside
+      // its empty `excluded` list said "all five founder artboards", and the
+      // sixth — `Pages · Founder Validate` — was the one this reader could not
+      // open. A comment counted what the parser could see rather than what the
+      // directory holds, which is exactly the failure the count now forbids.
+      assert.ok(Object.keys(found).length,
+        `${dir}/${file} matched ${profile.canvas} and yielded no artboard — ` +
+        'it is in neither known shape, or one of them has changed');
+      for (const [route, labels] of Object.entries(found)) out[profile.live(route)] = labels;
     }
   }
   return out;
+}
+
+/**
+ * The two canvas shapes that declare filter chips.
+ *
+ * SHAPE A — a `PAGES` array: `route:'/research/library'` … `filters: fil([…])`.
+ * Every canvas this reader has ever opened uses it.
+ *
+ * SHAPE C — one templated artboard looped over a `boards` array in the canvas's
+ * own data block, where the route hides inside `sub:'violet · /validate/pain-map'`
+ * and the chips are `views(['All','Deck-eligible',…])`. `Pages · Founder
+ * Validate` is the only one, and until the assertion above it was invisible
+ * here: no `route:'…'` anywhere in the file, so the loop simply never ran.
+ *
+ * The pair is read PER BOARD rather than by zipping two whole-file matches, so
+ * a board that gains a `sub` and no `views` drops out instead of shifting every
+ * later board's chips onto the wrong route.
+ *
+ * `profile_zone_actions.test.mjs` knows a third shape — `sc-` markup with
+ * `class="vm"` ops, which is how `Pages · Partner Pipeline` states its actions.
+ * It is deliberately not here: no canvas in any filter profile's scope uses it,
+ * and a branch nothing exercises is a branch nobody notices breaking. A canvas
+ * in that shape entering scope trips the assertion above, which is the intended
+ * way to find out.
+ */
+function artboardFilters(src) {
+  const out = {};
+  if (/route:\s*'/.test(src)) {
+    for (const chunk of src.split(/route:\s*'/).slice(1)) {
+      const route = chunk.slice(0, chunk.indexOf("'"));
+      const filters = chunk.match(/filters:\s*fil\(\[([^\]]*)\]/);
+      if (!filters) continue;
+      out[route] = chips(filters[1]);
+    }
+    return out;
+  }
+  const boardsAt = src.search(/\bboards:\s*\[/);
+  if (boardsAt < 0) return out;
+  for (const board of src.slice(boardsAt).split(/\{ id:\s*'/).slice(1)) {
+    const route = board.match(/sub:\s*'[^']*?(\/[a-z0-9/-]+)'/);
+    const views = board.match(/views\(\[([^\]]*)\]\)/);
+    if (!route || !views) continue;
+    out[route[1]] = chips(views[1]);
+  }
+  return out;
+}
+
+/** `'All','Deck-eligible','Strong fit'` → the three labels. */
+function chips(list) {
+  return list.split(',').map((one) => one.trim().replace(/^'|'$/g, '')).filter(Boolean);
 }
 
 /**
@@ -715,6 +834,105 @@ test('canvasFilters maps a canvas route onto the route the router mounts', () =>
   assert.ok(!mapped['build/this-week'], 'the unmapped route survived');
   assert.deepEqual(mapped['x/build-this-week'], ['This week', 'Last 4', 'All 14', 'Carried only'],
     'remapping changed the labels it carries');
+});
+
+test('a zone whose row can narrow hands the export the narrowed rows', () => {
+  /**
+   * THE HALF OF "· THIS VIEW" NOTHING WAS CHECKING.
+   *
+   * `zoneActionBuilder.js` labels every export `<canvas label> · this view`,
+   * and `profile_zone_actions.test.mjs` asserts that label is still there. The
+   * label is a claim about the FILE, and nothing proved the page kept it: a
+   * body can narrow what it renders and still hand `zoneActions` the whole
+   * loaded list, and the button then writes rows the reader cannot see under a
+   * label promising it wrote the ones they can. Worse in the other direction
+   * than the first: a reader who filters to `Blocked` and exports gets every
+   * item, and nothing on screen says so.
+   *
+   * ONLY ZONES THAT CAN ACTUALLY NARROW ARE HELD TO THIS. `offers/catalog` and
+   * `offers/visibility` each have ONE live label, so there is no second view
+   * for the export to disagree with — `visibility` sorts rather than subsets,
+   * and its export takes the sorted list for the tidier reason that a file
+   * should come out in the order on screen.
+   *
+   * Written as named cases rather than derived, because the two shapes genuinely
+   * differ: a zone with its own file makes the call itself, and a shared page
+   * receives `zoneActions` as a render prop and calls it with its own narrowed
+   * list. A regex general enough to cover both would be loose enough to pass
+   * the thing this is here to catch.
+   */
+  const cases = [
+    {
+      zone: 'offers/proof',
+      file: 'frontend/src/pages/partner/offers/ProofZone.jsx',
+      call: /partnerZoneActions\('offers\/proof'[\s\S]*?rows: (\w+)/,
+    },
+    {
+      zone: 'offers/audience-fit',
+      file: 'frontend/src/pages/partner/offers/AudienceFitZone.jsx',
+      call: /partnerZoneActions\('offers\/audience-fit'[\s\S]*?rows: (\w+)/,
+    },
+    {
+      // The render-prop shape: `PartnerBucketRoutes` supplies the columns and
+      // this page supplies the rows, so the call site here is the argument.
+      zone: 'offers/perk-deals',
+      file: 'frontend/src/pages/PerksPage.jsx',
+      call: /zoneActions\((\w+)\)/,
+    },
+  ];
+
+  for (const one of cases) {
+    const rows = (PARTNER_ZONE_FILTERS[one.zone] || []).filter((r) => r.key);
+    assert.ok(rows.length >= 2,
+      `${one.zone} no longer has two live views, so this case guards nothing — drop it or fix the table`);
+
+    const src = codeOnly(read(one.file));
+    const named = src.match(one.call);
+    assert.ok(named, `${one.file} no longer hands ${one.zone} any rows`);
+
+    // The identifier must be DERIVED from the loaded list, not be it. A
+    // `const visible = items.filter(…)` passes; handing over `items` does not.
+    const derived = new RegExp(`const ${named[1]} = [^;]*\\.(filter|sort)\\(`);
+    assert.match(src, derived,
+      `${one.file} exports "${named[1]}", which is not narrowed — the file would not match the chips on screen`);
+
+    // And the same identifier is what the body draws, so the two cannot drift.
+    assert.match(src, new RegExp(`\\b${named[1]}\\.map\\(`),
+      `${one.file} narrows "${named[1]}" for the export but renders something else`);
+  }
+});
+
+test('a matched canvas that yields no artboard fails the run', () => {
+  // The reader's own failure mode, exercised directly because nothing else can
+  // reach it: with both shapes understood, every canvas in every profile's
+  // scope parses, so the assertion inside `canvasFilters` has nothing left to
+  // catch and a mutation that deletes it passes the whole file. It had
+  // something to catch until this commit — `Pages · Founder Validate` matched
+  // founder's regex and contributed nothing — and it is what will catch the
+  // next canvas in a shape this reader does not know.
+  //
+  // The stand-in is a file in this very directory rather than a canvas,
+  // chosen because it can never drift into looking like one.
+  assert.throws(() => canvasFilters({
+    canvasDirs: ['frontend/test'],
+    canvas: /^_codeOnly\.mjs$/,
+    live: (route) => route,
+  }), /yielded no artboard/);
+});
+
+test('a looped canvas pairs each board with its own chips', () => {
+  // `Pages · Founder Validate` is one artboard drawn four times over a `boards`
+  // array, so its routes hide in `sub:` and its chips in `views([…])`. All four
+  // zones are in founder's `excluded` list, which means no table compares their
+  // labels to anything — the reader could hand every route the FIRST board's
+  // chips and every other assertion in this file would still pass. So the
+  // pairing is asserted here, on two boards, or it is not asserted at all.
+  const found = artboardFilters(read('design/canvases/integrated/Pages · Founder Validate.dc.html'));
+  assert.deepEqual(Object.keys(found).sort(),
+    ['/validate/hypotheses', '/validate/interviews', '/validate/pain-map', '/validate/verdict']);
+  assert.deepEqual(found['/validate/interviews'], ['All', 'Deck-eligible', 'Strong fit', 'Not ICP']);
+  assert.deepEqual(found['/validate/verdict'],
+    ['Current', 'As of last week', 'Changed this month', 'Retired claims']);
 });
 
 /**

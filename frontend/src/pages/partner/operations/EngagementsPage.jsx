@@ -160,14 +160,29 @@ export default function EngagementsPage({ view: initialView = DEFAULT_VIEW }) {
     <div className="space-y-5">
       {/* This page is two zones: `/delivery/board` renders it with
           view="engagements" and `/pipeline/proposals` with view="proposals".
-          Only the first has canvas actions — `Pages · Partner Pipeline`
-          specifies none — and the reader can switch views without changing
-          route, so the row follows what is on screen rather than the URL. */}
+          The reader can switch views without changing route, so each row
+          follows what is on screen rather than the URL.
+          BOTH HAVE CANVAS ACTIONS NOW. This comment used to end "Only the first
+          has canvas actions — `Pages · Partner Pipeline` specifies none", which
+          was never true of the canvas: that file carries all seven of its ops as
+          `class="vm"`, and the guard that reported it empty simply could not
+          read its shape. Proposals' `Export win/loss CSV` writes the quotes
+          loaded here — the record the Analytics zone aggregates a win rate from
+          — so the file matches what is on screen. Its other op,
+          `Bulk: nudge unopened`, is unbuilt and draws nothing: nothing in this
+          product sends mail, and `opened_at` is the client's column to set. */}
       {view === 'engagements' && (
         <ZoneActions items={partnerZoneActions('delivery/board', { view: {
           header: ['Engagement', 'Founder', 'Project', 'Category', 'Status', 'Price'],
           rows: engagements,
           cells: (e) => [e.need_title, e.founder_name, e.project_name, e.need_category, e.status, e.price],
+        } })} />
+      )}
+      {view === 'proposals' && (
+        <ZoneActions items={partnerZoneActions('pipeline/proposals', { view: {
+          header: ['Request', 'Category', 'Price', 'Timeline (weeks)', 'Status', 'Sent'],
+          rows: quotes,
+          cells: (q) => [q.need_title, q.need_category, q.price, q.timeline_weeks, q.status, q.created_at],
         } })} />
       )}
       {error && (

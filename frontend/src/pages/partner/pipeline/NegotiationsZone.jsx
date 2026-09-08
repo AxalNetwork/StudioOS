@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  StatCard, Section, Field, SaveNote, NotComputable, NoPartnerProfile,
+  StatCard, Section, Field, SaveNote, NotComputable, UnlinkedZone,
   isNoPartnerProfile, inputClass, buttonClass, ghostButtonClass, moneyDollars,
 } from '../kit';
 
@@ -370,17 +371,28 @@ export default function PartnerNegotiationsZone() {
     [tracked],
   );
 
+  // Hoisted so the gate branch below and the live row draw the SAME row.
+  // With nothing loaded the export renders disabled and says so itself,
+  // which is what makes a header row over an unreadable store honest.
+  const rowActions = partnerZoneActions('pipeline/negotiations', { view: {
+        header: ['Client', 'Shape', 'Value', 'Stage', 'Ball', 'Open question'],
+        rows: items,
+        cells: (r) => [r.founder_name, r.shape, r.value_cents, r.stage, r.ball_in_court, r.open_question],
+      } });
+
   if (isNoPartnerProfile(state.error)) {
-    return (
-      <>
-        <ZoneHeading title="Negotiations" />
-        <NoPartnerProfile />
-      </>
-    );
+    return <UnlinkedZone title="Negotiations" actions={rowActions} />;
   }
 
   return (
     <ZoneBody
+      // THIS ROW RENDERS NOTHING TODAY, ON PURPOSE, and the call is here anyway.
+      // The canvas gives this zone one op — `WIP limit: 5 per stage` — and no
+      // per-stage limit is stored, so the table marks it `unbuilt` and the
+      // builder drops it. What survives is an empty array and no row. The call
+      // stays because it is the seam: the day a limit is stored, the control
+      // appears here without this file changing.
+      actions={rowActions}
       loading={state.loading}
       error={state.error}
       onRetry={load}

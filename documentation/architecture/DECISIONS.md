@@ -2960,3 +2960,104 @@ decision rather than a layout one. Same for Ask's advisor/partner `.meter`, the
 `.askbar` cost line, `.thread`, and the `scope` chip — `ZoneHeading` has no prop
 for it. A session store for Ask is a migration, and a migration is a decision:
 it is raised here, not built around.
+
+## D57 — An account reaches a firm through `users.partner_id` and through nothing else
+
+`requirePartnerProfile` (`cloudflare-worker/src/routes/_t13t14t15_helpers.ts`)
+had two ways to resolve the caller's firm. It now has one, and the second is
+recorded here rather than deleted quietly, because a removed authorization path
+is exactly the kind of change a later reader will want the reasoning for.
+
+**What it was.** When `users.partner_id` did not resolve, the helper ran
+`SELECT * FROM partners WHERE email = ?` against the caller's own address and
+returned whatever came back.
+
+**Why it was useless, measured rather than argued.** Against production D1 on
+2026-09-07: of 26 `role='partner'` accounts, **8** resolve by `partner_id`,
+**18** resolve to nothing, and **0** resolved only by email. That is not a
+coincidence of the current data — it is structural. `ensureRoleProfile`
+(`services/ensureRoleProfile.ts`) runs the SAME email lookup on every
+`/auth/me`, and writes `partner_id` from it. Any row the fallback could have
+matched had already been linked before the fallback was reached. It was
+unreachable by construction.
+
+**Why it was dangerous.** `partners.email` is a person's address and `users`
+holds another copy of one. Joining two tables on a mutable string is a link
+nobody records making: change an account's email to one a firm happens to carry
+and the account acquires that firm's quotes, engagements and clients, with a
+200 and no audit row. `partner_user_firm_link.test.mjs` was written to stop
+migration 210 doing precisely this from the write side — *"a row matched too
+broadly does not fail closed"* — and the read side had the same hole open the
+whole time.
+
+**What the unmatched get instead.** The gap card, in both directions. An
+account with no `partner_id`, and an account whose `partner_id` points at a
+firm that no longer exists (the column carries no foreign key, so a deleted
+firm leaves a dangling pointer, and that case used to fall through to the email
+match — the worse of the two, since the account had once been attached to
+something else). The card states that the account is not linked to a firm and
+that an admin can attach it, which is a better answer than a guess.
+
+**What this does NOT require.** A backfill for the 18. `ensureRoleProfile`
+already creates a `partners` row and sets `users.partner_id` on every
+`/auth/me`, which the SPA calls on session boot — so those accounts link
+themselves at next sign-in, and the 18 are dormant rather than broken. What is
+still missing is the admin surface the gap card promises, which is its own
+piece of work.
+
+**Where it is checked.** `cloudflare-worker/test/partner_user_firm_link.test.mjs`
+exercises the resolver against real SQLite: a linked account gets its firm; an
+account whose email IS a firm's does not; an admin previewing the role does not;
+a dangling `partner_id` does not; a founder is refused before any lookup. A
+source assertion sits beside them so an edit reintroducing the fallback has to
+delete a line that says why it went.
+
+## D58 — Three of the five Research tables describe objects this product does not store
+
+`Pages · Founder Research` draws a `head`/`rows` table per zone with status
+pills. Task #109 was to make the subpages match it. Four of the five zones
+needed no code at all, and the reason is worth recording once here rather than
+being rediscovered per zone.
+
+**Funds was a re-layout and is done.** Every column and every pill the artboard
+asks for was already rendered by `FundsZone.jsx`, and rendered correctly —
+`stage_fit` NULL as `Stage not assessed`, a missing cheque end as unrecorded,
+the thesis quoted in the fund's own words. Only the shape was a card list rather
+than the canvas's four columns. `research_zones.test.mjs` now pins the columns
+and both honesty rules, because a re-layout is exactly where a three-way pill
+quietly becomes two-way.
+
+**Library was already right, and is righter than the canvas.** The artboard
+draws `Document · Kind · Year · Questions · State`; the zone draws
+`Document · Kind · Added · Passages · State`. Two headings are deliberate
+relabels and must stay that way:
+
+- `Year` would be read off `created_at`, which is when the document was
+  UPLOADED. The canvas's own sample row is a 2023 report indexed today, so the
+  two are visibly different things and the column would state a publication
+  year nobody recorded.
+- `Questions` would be read off `chunk_count`, which counts passages. Nothing
+  counts questions asked against a document — Ask keeps no session record at
+  all (below) — so there is no number anywhere that means what the heading says.
+
+This is the same rule the filter tables use when a canvas word would mislead: a
+`label:` that says what the store holds, over a `canvas:` that says what the
+artboard drew.
+
+**Markets, Ask and Companies are blocked on stores, not on layout.** Each was
+already recorded from the filter side; this is the same fact from the table
+side, and it is why no table was drawn:
+
+| Zone | The table the canvas draws | What it needs |
+| --- | --- | --- |
+| markets | Analysis · Method · Run · State · Note | a saved market deep-dive: an analysis with a method, a run date, a lifecycle and its sources. `founderZoneFilters.js` states it — *"nothing saves a market deep-dive… this page is the signals feed, gathered on a schedule"*. The signals feed is a real and different object; drawing it under these headings would relabel one thing as another. |
+| ask | Question · Drew on · Cost · What you did with it | a session record. Nothing saves a question, an answer, its cost or what was done with it. |
+| companies | Company · Relation · State · What changed | a competitor lifecycle (`Tracking`/`Archived` — `origin` is provenance, not state) and a change log (`summary` describes a competitor; nothing records change over time, and every canvas sample row is a change narrative). There is also a level mismatch: the table is per-COMPANY while the zone lists saved ANALYSES, and the list endpoint deliberately omits candidates. |
+
+Each of those is a migration and a product decision about what the object is —
+raised here, not built around, and not approximated from the nearest table.
+
+**`SignalsPage.jsx` and `CompetitorAnalysisPage.jsx` were deliberately not
+touched.** Both are mounted from routes outside Research, so a row-shape change
+there reaches surfaces this task never looked at — and neither has the store its
+table needs anyway.

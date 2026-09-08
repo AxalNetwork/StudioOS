@@ -2,10 +2,12 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  StatCard, Section, Field, SaveNote, NoPartnerProfile, isNoPartnerProfile,
+  StatCard, Section, Field, SaveNote, UnlinkedZone, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
+import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
+import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 
 /**
  * Offers · Proof — `/offers/proof`.
@@ -272,6 +274,7 @@ export default function PartnerProofZone() {
   const [issued, setIssued] = useState(null);
   const [adding, setAdding] = useState(false);
   const [newItem, setNewItem] = useState({ title: '', kind: 'case_study', detail: '', outcome_note: '' });
+  const [view, setView] = useState('all');
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: '' }));
@@ -317,155 +320,200 @@ export default function PartnerProofZone() {
   const d = state.data;
   const items = Array.isArray(d?.items) ? d.items : [];
 
+  /**
+   * The canvas's three states, derived from the same `consents[]` array the row
+   * above already reads — `consent_given && !withdrawn_at` is "agreed", a
+   * `withdrawn_at` is "withdrawn", and neither is "not answered". Nothing new
+   * is stored for this row; it selects on what is already drawn per consenter.
+   *
+   * THE FOURTH STATE HAS NO CHIP, AND MUST NOT BORROW ONE. An unpublished item
+   * with an EMPTY `consents` array is one nobody has been asked about — which
+   * is not the same as one where somebody was asked and has not replied. It
+   * falls under `All` and only `All`. Sweeping it into `Awaiting consent` would
+   * have the zone claim a request was made, and this is the zone whose whole
+   * argument is the difference between what a firm can show and what it is
+   * only claiming.
+   */
+  const visible = items.filter((item) => {
+    const consents = Array.isArray(item.consents) ? item.consents : [];
+    if (view === 'published') return Boolean(item.is_published);
+    if (view === 'blocked') return consents.some((k) => k.withdrawn_at);
+    if (view === 'awaiting') {
+      return !item.is_published && consents.some((k) => !k.consent_given && !k.withdrawn_at);
+    }
+    return true;
+  });
+
+  // Hoisted so the gate branch below and the live row draw the SAME row.
+  // With nothing loaded the export renders disabled and says so itself,
+  // which is what makes a header row over an unreadable store honest.
+  const rowActions = partnerZoneActions('offers/proof', { view: { header: ['Proof', 'Kind', 'Need', 'Founder', 'Published', 'Outcome'], rows: visible, cells: (r) => [r.title, r.kind, r.need_title, r.founder_name, r.is_published, r.outcome_note] } });
+
   if (isNoPartnerProfile(state.error)) {
-    return (
-      <>
-        <ZoneHeading title="Proof" />
-        <NoPartnerProfile />
-      </>
-    );
+    return <UnlinkedZone title="Proof" actions={rowActions} />;
   }
 
   return (
-    <ZoneBody
-      actions={partnerZoneActions('offers/proof', { view: { header: ['Proof', 'Kind', 'Need', 'Founder', 'Published', 'Outcome'], rows: items, cells: (r) => [r.title, r.kind, r.need_title, r.founder_name, r.is_published, r.outcome_note] } })}
-      loading={state.loading}
-      error={state.error}
-      onRetry={load}
-      isEmpty={items.length === 0}
-      empty={(
-        <NothingYet
-          title="No proof is recorded yet"
-          body={
-            'A case study or an outcome starts as your own account of the work. '
-            + 'It becomes proof when the client agrees to it being shown — and '
-            + 'until they do, this page will say which of the two it is.'
-          }
-          action={(
-            <button type="button" className={buttonClass} onClick={() => setAdding(true)}>
-              Add a case study
-            </button>
-          )}
-        />
-      )}
-    >
-      <div className="space-y-6">
-        <ZoneHeading
-          title="What the firm can show, and what it is only claiming"
-          blurb={
-            'Every item carries the engagement it came from and the client’s own '
-            + 'answer about publishing it. Consent is a gate rather than a '
-            + 'warning: an unconsented outcome has no published form to suppress.'
-          }
-          action={(
-            <button type="button" className={ghostButtonClass} onClick={() => setAdding((v) => !v)}>
-              {adding ? 'Cancel' : 'Add an item'}
-            </button>
-          )}
-        />
-
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-          <StatCard label="Items" value={items.length} hint="case studies, outcomes, testimonials" />
-          <StatCard
-            label="Published with consent"
-            value={d?.published_count ?? 0}
-            hint="a client agreed, and has not withdrawn"
+    <>
+      {/* Hoisted out of `ZoneBody` exactly as `RelationshipsZone` does it, so a
+          component a dozen other zones mount does not have to learn about
+          filters. The export takes `visible` rather than `items`: a file that
+          did not match the chips on screen would be the same untruth as a chip
+          that narrows nothing. */}
+      <ZoneToolbar
+        className="mb-3"
+        role="partner"
+        filters={partnerZoneFilters('offers/proof', { value: view, onChange: setView })}
+        actions={rowActions}
+      />
+      <ZoneBody
+        loading={state.loading}
+        error={state.error}
+        onRetry={load}
+        isEmpty={items.length === 0}
+        empty={(
+          <NothingYet
+            title="No proof is recorded yet"
+            body={
+              'A case study or an outcome starts as your own account of the work. '
+              + 'It becomes proof when the client agrees to it being shown — and '
+              + 'until they do, this page will say which of the two it is.'
+            }
+            action={(
+              <button type="button" className={buttonClass} onClick={() => setAdding(true)}>
+                Add a case study
+              </button>
+            )}
           />
-          <StatCard
-            label="Self-stated"
-            value={d?.self_stated_count ?? 0}
-            hint="the firm’s own account, unconfirmed"
-          />
-        </div>
-
-        {adding && (
-          <div className="rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
-            <div className="grid gap-3 md:grid-cols-2">
-              <Field label="Title">
-                <input className={inputClass} value={newItem.title} maxLength={200}
-                  onChange={(e) => setNewItem({ ...newItem, title: e.target.value })} />
-              </Field>
-              <Field label="Kind">
-                <select className={inputClass} value={newItem.kind}
-                  onChange={(e) => setNewItem({ ...newItem, kind: e.target.value })}>
-                  {KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-              </Field>
-            </div>
-            <div className="mt-3">
-              <Field label="What the work was">
-                <textarea className={inputClass} rows={3} value={newItem.detail} maxLength={4000}
-                  onChange={(e) => setNewItem({ ...newItem, detail: e.target.value })} />
-              </Field>
-            </div>
-            <button
-              type="button" className={`${buttonClass} mt-3`}
-              disabled={busy || !newItem.title.trim()}
-              onClick={async () => {
-                await run(() => api.createPartnerProof(newItem), 'Added.', 'new');
-                setNewItem({ title: '', kind: 'case_study', detail: '', outcome_note: '' });
-                setAdding(false);
-              }}
-            >
-              Add item
-            </button>
-            <SaveNote note={note?.scope === 'new' ? note : null} />
-          </div>
         )}
+      >
+        <div className="space-y-6">
+          <ZoneHeading
+            title="What the firm can show, and what it is only claiming"
+            blurb={
+              'Every item carries the engagement it came from and the client’s own '
+              + 'answer about publishing it. Consent is a gate rather than a '
+              + 'warning: an unconsented outcome has no published form to suppress.'
+            }
+            action={(
+              <button type="button" className={ghostButtonClass} onClick={() => setAdding((v) => !v)}>
+                {adding ? 'Cancel' : 'Add an item'}
+              </button>
+            )}
+          />
 
-        <Section title="Proof">
-          <div className="space-y-3">
-            {items.map((item) => (
-              <ProofCard
-                key={item.id}
-                item={item}
-                busy={busy}
-                note={note}
-                issued={issued}
-                onSave={(it, draft) => run(
-                  () => api.updatePartnerProof(it.id, {
-                    title: draft.title, kind: draft.kind,
-                    detail: draft.detail, outcome_note: draft.outcome_note,
-                  }),
-                  'Saved.', `proof:${it.id}`,
-                )}
-                onDelete={(it) => run(
-                  () => api.deletePartnerProof(it.id),
-                  'Deleted.', `proof:${it.id}`,
-                )}
-                onAsk={ask}
-                onWithdraw={(it, k) => run(
-                  () => api.withdrawPartnerProofConsent(it.id, k.id),
-                  'Withdrawal recorded.', `proof:${it.id}`,
-                )}
-              />
-            ))}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+            <StatCard label="Items" value={items.length} hint="case studies, outcomes, testimonials" />
+            <StatCard
+              label="Published with consent"
+              value={d?.published_count ?? 0}
+              hint="a client agreed, and has not withdrawn"
+            />
+            <StatCard
+              label="Self-stated"
+              value={d?.self_stated_count ?? 0}
+              hint="the firm’s own account, unconfirmed"
+            />
           </div>
-        </Section>
 
-        <StatedLimit title="What this zone does not claim, and what it will not let you do">
-          <p>
-            <strong>Nothing here can mark its own evidence as confirmed.</strong>{' '}
-            Published is computed from the consent rows at read time — a live
-            consent is one that was given and not withdrawn, both checked — and
-            there is no field, form or API call on this page that sets it. A
-            storefront able to confirm its own claims would have no evidence in
-            it at all.
-          </p>
-          <p className="mt-2">
-            <strong>Withdrawing is yours; agreeing is not.</strong> You can record
-            that a client has taken their consent back, and it takes effect at
-            once. You cannot record that one agreed — only the person holding the
-            link can, which is what makes the record mean anything.
-          </p>
-          <p className="mt-2">
-            <strong>The ask is recorded, not sent.</strong> Nothing here emails
-            your client. The link is yours to pass on however you already talk to
-            them, and it is shown once because it is their credential rather than
-            yours.
-          </p>
-        </StatedLimit>
-      </div>
-    </ZoneBody>
+          {adding && (
+            <div className="rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label="Title">
+                  <input className={inputClass} value={newItem.title} maxLength={200}
+                    onChange={(e) => setNewItem({ ...newItem, title: e.target.value })} />
+                </Field>
+                <Field label="Kind">
+                  <select className={inputClass} value={newItem.kind}
+                    onChange={(e) => setNewItem({ ...newItem, kind: e.target.value })}>
+                    {KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </Field>
+              </div>
+              <div className="mt-3">
+                <Field label="What the work was">
+                  <textarea className={inputClass} rows={3} value={newItem.detail} maxLength={4000}
+                    onChange={(e) => setNewItem({ ...newItem, detail: e.target.value })} />
+                </Field>
+              </div>
+              <button
+                type="button" className={`${buttonClass} mt-3`}
+                disabled={busy || !newItem.title.trim()}
+                onClick={async () => {
+                  await run(() => api.createPartnerProof(newItem), 'Added.', 'new');
+                  setNewItem({ title: '', kind: 'case_study', detail: '', outcome_note: '' });
+                  setAdding(false);
+                }}
+              >
+                Add item
+              </button>
+              <SaveNote note={note?.scope === 'new' ? note : null} />
+            </div>
+          )}
+
+          <Section title="Proof">
+            {/* A narrowed view that finds nothing says which view it is, the way
+                `LibraryZone` does: a bare empty list under a selected chip reads
+                as "you have no proof", which is a different and much worse
+                claim than "none of it is in this state". */}
+            {items.length > 0 && visible.length === 0 && (
+              <p className="mb-3 text-[12px] text-axal-ink-2">
+                No item is in this state. {items.length} recorded in total.
+              </p>
+            )}
+            <div className="space-y-3">
+              {visible.map((item) => (
+                <ProofCard
+                  key={item.id}
+                  item={item}
+                  busy={busy}
+                  note={note}
+                  issued={issued}
+                  onSave={(it, draft) => run(
+                    () => api.updatePartnerProof(it.id, {
+                      title: draft.title, kind: draft.kind,
+                      detail: draft.detail, outcome_note: draft.outcome_note,
+                    }),
+                    'Saved.', `proof:${it.id}`,
+                  )}
+                  onDelete={(it) => run(
+                    () => api.deletePartnerProof(it.id),
+                    'Deleted.', `proof:${it.id}`,
+                  )}
+                  onAsk={ask}
+                  onWithdraw={(it, k) => run(
+                    () => api.withdrawPartnerProofConsent(it.id, k.id),
+                    'Withdrawal recorded.', `proof:${it.id}`,
+                  )}
+                />
+              ))}
+            </div>
+          </Section>
+
+          <StatedLimit title="What this zone does not claim, and what it will not let you do">
+            <p>
+              <strong>Nothing here can mark its own evidence as confirmed.</strong>{' '}
+              Published is computed from the consent rows at read time — a live
+              consent is one that was given and not withdrawn, both checked — and
+              there is no field, form or API call on this page that sets it. A
+              storefront able to confirm its own claims would have no evidence in
+              it at all.
+            </p>
+            <p className="mt-2">
+              <strong>Withdrawing is yours; agreeing is not.</strong> You can record
+              that a client has taken their consent back, and it takes effect at
+              once. You cannot record that one agreed — only the person holding the
+              link can, which is what makes the record mean anything.
+            </p>
+            <p className="mt-2">
+              <strong>The ask is recorded, not sent.</strong> Nothing here emails
+              your client. The link is yours to pass on however you already talk to
+              them, and it is shown once because it is their credential rather than
+              yours.
+            </p>
+          </StatedLimit>
+        </div>
+      </ZoneBody>
+    </>
   );
 }

@@ -103,17 +103,19 @@ const PROFILES = {
     // silently drop out of this check.
     canvasDirs: ['design/canvases/integrated', 'design/incoming'],
     canvas: /^Pages · Partner /,
-    // `/pipeline` is absent on purpose — `Pages · Partner Pipeline` carries no
-    // `ops:` on any artboard, so `canvasOps` finds nothing there and this
-    // pattern must not claim it does. `/network` and `/research` ARE in scope:
-    // their canvases live in `design/incoming/`, which `canvasDirs` above
-    // opens. (This comment used to end "which this reader does not open" — it
-    // contradicted the line three above it, and `zones` only adds up if the
-    // reader does open it.)
-    buckets: /^(delivery|offers|network|research)\//,
-    zones: 16,
+    // `/pipeline` IS IN SCOPE NOW, and the comment that used to sit here is the
+    // reason it was not: it said `Pages · Partner Pipeline` "carries no `ops:`
+    // on any artboard, so `canvasOps` finds nothing there and this pattern must
+    // not claim it does". The premise was this reader's, not the canvas's. That
+    // file has carried all seven ops as `class="vm"` since it was committed —
+    // `artboardOps` above reads them now — so the five Pipeline zones are held
+    // to their artboard like every other zone. `/network` and `/research` are
+    // in scope for the ordinary reason: their canvases live in
+    // `design/incoming/`, which `canvasDirs` above opens.
+    buckets: /^(delivery|offers|network|pipeline|research)\//,
+    zones: 21,
     links: 0,
-    exports: 16,
+    exports: 19,
     // `network/organizations`: `NetworkPage` catches a slug it has no tab for and
     // suppresses every body, so that route already renders its own heading above
     // a card stating the gap — there is nothing for a row to sit over. Checked
@@ -126,6 +128,11 @@ const PROFILES = {
     // nothing, exactly as the investor Research pair did.
     excluded: ['network/organizations'],
     embeddedGuards: 0,
+    // The nine partner bodies that take the "no firm attached" branch —
+    // `offers/{visibility,proof,audience-fit}`, `pipeline/{negotiations,
+    // retainers}` and all four of `delivery/*`. Only this profile has the
+    // branch at all: it is `requirePartnerProfile` that throws.
+    gateBranches: 9,
     // `Pages · Partner Research` names /research/market; the router and
     // shellConfig.js both say `markets`.
     live: (route) => (route === '/research/market' ? 'research/markets' : route.replace(/^\//, '')),
@@ -178,25 +185,178 @@ function tableLabels(src) {
   return out;
 }
 
+/**
+ * A canvas declares its artboards in one of THREE shapes, and this reader
+ * understands all three.
+ *
+ * SHAPE A — a `PAGES` array. `route:'/offers/catalog'` … `ops:['New service',…]`.
+ * Research, Offers, Expertise, Delivery and every canvas this file has ever
+ * read use it, and until now it was the only shape it knew.
+ *
+ * SHAPE B — `sc-` markup. `Pages · Partner Pipeline` carries NO `route:` and NO
+ * `ops:` anywhere. Its artboards are:
+ *
+ *     <div class="crumb"><span …>Pipeline</span><span>‹</span><span …>Leads</span></div>
+ *     …
+ *     <span class="vm" style="cursor:pointer">Edit capability weights</span>
+ *
+ * — the crumb naming the bucket and the zone, and each op carrying `class="vm"`
+ * inside its own artboard's segment.
+ *
+ * SHAPE C — one templated artboard looped over a `boards` array in the canvas's
+ * own `<script type="text/x-dc">` block. `Pages · Founder Validate` is the only
+ * one, and it is the reason the emptiness assert below exists. Its markup holds
+ * a single crumb reading `{{ b.zone }}` and a single op reading `{{ t }}`, so
+ * shape B "parsed" it into one artboard named `/validate/{{-b.zone-}}` carrying
+ * the op `{{ t }}` — junk that satisfied every count and was then dropped by
+ * founder's bucket filter, which is why nobody noticed. Its real routes and ops
+ * are in the data: `sub:'violet · /validate/interviews'` and
+ * `tools:['Log an interview','Export transcripts']`, four boards of each.
+ *
+ * WHY THIS MATTERS MORE THAN A PARSER DETAIL. `partnerZoneActions.js` carried a
+ * paragraph asserting that "`Pages · Partner Pipeline` specifies NO zone-header
+ * actions", and the profile below repeated it. Both were reasoning from THIS
+ * reader's blind spot rather than from the canvas: the file in
+ * `design/canvases/integrated/` has carried all seven ops — `Edit capability
+ * weights`, `Bulk: nudge unopened`, `Export win/loss CSV`, `WIP limit: 5 per
+ * stage`, `Export MRR schedule`, `Export chart`, `Save benchmark` — the whole
+ * time, byte-identical to the newer export in `design/incoming/`. A guard that
+ * cannot read a canvas reported that the canvas was empty, and five zones went
+ * without a header row on the strength of it.
+ *
+ * The three shapes cannot be confused: A has `route:'…'`; C has a `boards: [`
+ * array and no `route:`; B has neither and is the `class="vm"` markup.
+ */
+function artboardOps(src) {
+  const out = {};
+  // Shape A.
+  if (/route:\s*'/.test(src)) {
+    for (const chunk of src.split(/route:\s*'/).slice(1)) {
+      const route = chunk.slice(0, chunk.indexOf("'"));
+      const ops = chunk.match(/ops:\s*\[([^\]]*)\]/);
+      if (!ops) continue;
+      out[route] = [...ops[1].matchAll(/'([^']*)'/g)].map((m) => m[1]);
+    }
+    return literal(out);
+  }
+  // Shape C. Each board carries its own route inside `sub:` and its own ops in
+  // `tools:`, so the pair is read per board object rather than by zipping two
+  // whole-file matches — a board that gains a `sub` and no `tools` must drop
+  // out, not shift every later board's ops onto the wrong route.
+  const boardsAt = src.search(/\bboards:\s*\[/);
+  if (boardsAt >= 0) {
+    for (const board of src.slice(boardsAt).split(/\{ id:\s*'/).slice(1)) {
+      const route = board.match(/sub:\s*'[^']*?(\/[a-z0-9/-]+)'/);
+      const tools = board.match(/tools:\s*\[([^\]]*)\]/);
+      if (!route || !tools) continue;
+      out[route[1]] = [...tools[1].matchAll(/'([^']*)'/g)].map((m) => m[1]);
+    }
+    return literal(out);
+  }
+  // Shape B. The route comes from the crumb rather than a hardcoded map, so a
+  // canvas for another bucket parses without this reader learning its names.
+  const slug = (s) => s.trim().toLowerCase().replace(/\s+/g, '-');
+  const crumbs = [...src.matchAll(
+    /<div class="crumb">\s*<span[^>]*>([^<]+)<\/span>\s*<span[^>]*>[^<]*<\/span>\s*<span[^>]*>([^<]+)<\/span>/g,
+  )];
+  for (let i = 0; i < crumbs.length; i += 1) {
+    // Bounded at the NEXT crumb, so an op can never be read into the artboard
+    // above or below its own.
+    const from = crumbs[i].index;
+    const to = i + 1 < crumbs.length ? crumbs[i + 1].index : src.length;
+    const segment = src.slice(from, to);
+    out[`/${slug(crumbs[i][1])}/${slug(crumbs[i][2])}`] =
+      [...segment.matchAll(/class="vm"[^>]*>([^<]+)</g)].map((m) => m[1].trim());
+  }
+  return literal(out);
+}
+
+/**
+ * Nothing a shape reader emits may be an unexpanded `{{ … }}` binding.
+ *
+ * This is the second half of the emptiness assert, and it is the half that had
+ * something to catch: a canvas read in the WRONG shape does not usually come
+ * back empty, it comes back full of the template's own placeholders. Shape C
+ * exists because shape B did exactly that to `Pages · Founder Validate` — a
+ * route and an op that were both bindings, counted as a parsed artboard. An
+ * emptiness check alone would have passed it.
+ */
+function literal(out) {
+  for (const [route, ops] of Object.entries(out)) {
+    for (const text of [route, ...ops]) {
+      assert.ok(!text.includes('{{'),
+        `"${text}" is an unexpanded template binding, not a route or an op — ` +
+        'this canvas was read in the wrong shape');
+    }
+  }
+  return out;
+}
+
 /** Every matching artboard's `route` and its `ops` array, from the canvases. */
 function canvasOps(profile) {
   const out = {};
-  let seen = 0;
+  let routes = 0;
   for (const dir of profile.canvasDirs || ['design/canvases/integrated']) {
     const files = readdirSync(resolve(root, dir)).filter((f) => profile.canvas.test(f));
-    seen += files.length;
     for (const f of files) {
-      const src = read(`${dir}/${f}`);
-      for (const chunk of src.split(/route:\s*'/).slice(1)) {
-        const route = chunk.slice(0, chunk.indexOf("'"));
-        const ops = chunk.match(/ops:\s*\[([^\]]*)\]/);
-        if (!ops) continue;
-        out[profile.live(route)] = [...ops[1].matchAll(/'([^']*)'/g)].map((m) => m[1]);
-      }
+      const found = artboardOps(read(`${dir}/${f}`));
+      // PER FILE, AND COUNTING ROUTES RATHER THAN FILES. The old assertion was
+      // `seen += files.length` — a canvas whose NAME matched but which yielded
+      // nothing left `seen` truthy and quietly shrank the covered set, which is
+      // exactly how a shape this reader could not parse passed for an empty
+      // one. A canvas that stops parsing now breaks the build.
+      //
+      // This is one of two ways a canvas fails to be read, and on its own it is
+      // the weaker one. The other — a canvas read in the WRONG shape, coming
+      // back full of the template's own `{{ … }}` bindings — is refused inside
+      // `literal()`, because it is not empty and this assert would wave it
+      // through. Both are exercised directly at the foot of this file.
+      assert.ok(Object.keys(found).length,
+        `${dir}/${f} matched ${profile.canvas} and yielded no artboard — ` +
+        'it is in none of the three known shapes, or one of them has changed');
+      for (const [route, ops] of Object.entries(found)) out[profile.live(route)] = ops;
+      routes += Object.keys(found).length;
     }
   }
-  assert.ok(seen, `no canvases matched ${profile.canvas}`);
+  assert.ok(routes, `no canvases matched ${profile.canvas}`);
   return out;
+}
+
+/**
+ * One builder call, from its name through its own closing paren.
+ *
+ * REPLACES A TERMINATOR THAT ASSUMED ONE SHAPE. This used to be
+ * `src.slice(at, src.indexOf('})}', at) + 3)` — the end of a call sitting
+ * directly inside a JSX prop. Nine partner zones now HOIST the call to a
+ * `const` above the branch that renders the gap card, so the row survives an
+ * account with no firm attached, and `})}` then landed somewhere in the next
+ * statement: the extractor below read an `if` as a name the page had failed to
+ * declare. Balancing the call's own parens reads both shapes and stops
+ * depending on what follows the call at all.
+ *
+ * Quoted spans are skipped, because a heading is allowed to contain a paren —
+ * `'Price (USD)'` in the catalog export is exactly that, and a naive count
+ * closes the call in the middle of a string.
+ */
+function callText(src, at) {
+  const open = src.indexOf('(', at);
+  let depth = 0;
+  let quote = null;
+  for (let i = open; i < src.length; i += 1) {
+    const c = src[i];
+    if (quote) {
+      if (c === '\\') i += 1;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === "'" || c === '"' || c === '`') { quote = c; continue; }
+    if (c === '(') depth += 1;
+    else if (c === ')') {
+      depth -= 1;
+      if (depth === 0) return src.slice(at, i + 1);
+    }
+  }
+  throw new Error(`unbalanced builder call at ${at}`);
 }
 
 /** The inside of `[ … ]` starting at index 0, brackets balanced. */
@@ -326,7 +486,7 @@ for (const [name, profile] of Object.entries(PROFILES)) {
       const src = read(f);
       let at = src.indexOf(`${profile.call}('`);
       while (at >= 0) {
-        const call = src.slice(at, src.indexOf('})}', at) + 3);
+        const call = callText(src, at);
         const bare = call
           // A template literal is text plus real expressions: keep the `${…}`
           // bodies, drop the rest, or `?project_id=${id}` contributes a bare `$`.
@@ -392,6 +552,62 @@ for (const [name, profile] of Object.entries(PROFILES)) {
       `${name} checked ${guarded} embedded-guarded blocks, expected at least ${profile.embeddedGuards}`);
   });
 
+  test(`${name}: a zone the account cannot read still draws its header row`, () => {
+    /**
+     * THE STATE MOST READERS ARE IN, AND THE ONE THE ROW USED TO SKIP.
+     *
+     * `requirePartnerProfile` resolves a caller only through
+     * `users.partner_id`, and `ensureRoleProfile` backfills that column for
+     * `role = 'partner'` alone — so every ADMIN reading this workspace, which
+     * includes anyone checking whether a design was built, gets
+     * `No partner profile attached to your account` on every zone. All nine
+     * partner zone bodies used to `return` a heading and the gap card there and
+     * nothing else, so the canvas's actions shipped and then rendered nowhere
+     * the reviewer looked. Measured on production the same day: 18 of 26
+     * partner accounts resolve to nothing, and no admin account ever resolves.
+     *
+     * `ZoneBody` has argued the general form of this since it was written — "a
+     * zone's header row is as true while the store is loading, or failed, or
+     * empty, as it is when rows are on screen". This was the one state carved
+     * out of that rule, and it was the state that mattered most.
+     *
+     * ACTIONS AND NOT FILTERS, asserted in both directions below. An export
+     * with nothing loaded already renders disabled and says so; a filter chip
+     * is a claim about ROWS, and drawing a selectable one over a store this
+     * account cannot read is the "an empty set reads as an answer" failure
+     * `zoneFilterBuilder.js` exists to prevent, reached from a new direction.
+     */
+    const kit = codeOnly(read('frontend/src/pages/partner/kit.jsx'));
+    if (!kit.includes('export function UnlinkedZone')) {
+      assert.fail('partner/kit.jsx no longer exports UnlinkedZone');
+    }
+    const helper = kit.slice(kit.indexOf('export function UnlinkedZone'));
+    assert.match(helper, /<ZoneActions[^>]*items=\{actions\}/,
+      'UnlinkedZone stopped drawing the zone\'s actions above the gap card');
+    assert.doesNotMatch(helper, /ZoneToolbar|filters=/,
+      'UnlinkedZone draws a filter over rows this account cannot read');
+
+    let checked = 0;
+    for (const f of pageFiles(profile)) {
+      const src = codeOnly(read(f));
+      // The CALL, not the import and not the definition — exactly the files
+      // that take this branch.
+      if (!src.includes('isNoPartnerProfile(state.error)')) continue;
+      checked += 1;
+      assert.match(src, /<UnlinkedZone[\s\S]{0,120}?actions=\{/,
+        `${f} takes the no-firm branch without handing over its header row`);
+      assert.doesNotMatch(src, /<NoPartnerProfile\s*\/>/,
+        `${f} renders the gap card directly again, which drops the row above it`);
+    }
+    // A floor rather than an exact count: the per-file assertion above is the
+    // real one and runs on a tenth zone the day it appears. This only stops a
+    // needle that has stopped matching from passing as "nothing to check".
+    if (profile.gateBranches) {
+      assert.ok(checked >= profile.gateBranches,
+        `${name} checked ${checked} no-firm branches, expected at least ${profile.gateBranches}`);
+    }
+  });
+
   test(`${name}: every zone is mounted, exactly once`, () => {
     const table = tableLabels(SRC);
     const seen = new Map();
@@ -414,9 +630,32 @@ for (const [name, profile] of Object.entries(PROFILES)) {
         // CALLING the builder is not mounting it. Renaming the prop from
         // `actions=` to anything else leaves the call in the file and the row
         // off the screen, and every other assertion here still passes — so the
-        // call has to be the value of a prop something actually renders.
+        // call has to reach a prop something actually renders.
+        //
+        // TWO SHAPES REACH ONE, AND THE SECOND IS NEW. A call may sit directly
+        // inside the prop, or be HOISTED to a `const` first — which the nine
+        // partner zones now do, because the same row has to be drawn in two
+        // places: over the loaded body, and over the card shown when the
+        // account is attached to no firm. Naming it once is what stops those
+        // two rows drifting apart. The hoist is only accepted when the name is
+        // then handed to a rendered prop, so it buys no exemption: a `const`
+        // nothing mounts fails here exactly as an unmounted call did.
+        //
+        // THE GAP BRANCH MAY NOT VOUCH FOR THE LIVE ONE. `<UnlinkedZone
+        // actions={rowActions} />` also spells `actions={…}`, so searching the
+        // whole file let a row that renders ONLY over the no-firm card pass as
+        // mounted — the zone would draw its header for an unattached account
+        // and for nobody else, which is the original defect inverted. Found by
+        // mutation: deleting the live mount left this assertion green. The
+        // `UnlinkedZone` elements are removed before the search; the branch has
+        // its own assertion above.
         const before = src.slice(Math.max(0, m.index - 220), m.index);
-        assert.match(before, /(?:^|\s)(?:actions|items|zoneActions)=\{[^}]*$/,
+        const live = src.replace(/<UnlinkedZone[\s\S]*?\/>/g, '');
+        const inProp = /(?:^|\s)(?:actions|items|zoneActions)=\{[^}]*$/.test(before);
+        const hoisted = before.match(/\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*$/);
+        const handed = hoisted
+          && new RegExp(`(?:actions|items|zoneActions)=\\{${hoisted[1]}[\\s}]`).test(live);
+        assert.ok(inProp || handed,
           `${f} calls the builder for ${m[1]} but does not hand the result to anything`);
         seen.set(m[1], f);
       }
@@ -636,4 +875,53 @@ test('the label says the export is of this view, because it is', () => {
   // label and renders disabled rather than vanishing like an unbuilt op.
   assert.match(builder, /disabled: true, title: 'nothing loaded to export yet'/,
     'an export with no rows is offered as a live button');
+});
+
+/*
+ * The reader's own two failure modes, exercised directly.
+ *
+ * Every assertion above reads a canvas through `artboardOps`, so a reader that
+ * quietly returns nothing — or returns the template rather than the design —
+ * takes the whole file's coverage with it and reports a clean run. These two
+ * tests are the only ones here that do not care what any zone says; they care
+ * that a canvas this reader cannot read is loud about it.
+ */
+test('a matched canvas that yields no artboard fails the run', () => {
+  // Not a hypothetical: `canvasOps` used to count MATCHED FILES, so a canvas
+  // whose name matched and whose contents it could not parse left the count
+  // truthy and shrank the covered set in silence. The stand-in is a file in
+  // this very directory, chosen because it can never drift into looking like a
+  // canvas — `design/incoming/README.md` was the first candidate and it PARSED,
+  // as shape A, off one `route:'…'` quoted in its own prose. That is the shape
+  // of the original bug in miniature: what a reader matches is not what a
+  // person means by the name.
+  assert.throws(() => canvasOps({
+    canvasDirs: ['frontend/test'],
+    canvas: /^_codeOnly\.mjs$/,
+    live: (route) => route,
+  }), /yielded no artboard/);
+});
+
+test('a canvas read in the wrong shape is refused, not counted', () => {
+  // `Pages · Founder Validate` is the file that proved emptiness was not the
+  // whole test. It is shape C — one artboard looped over a `boards` array — and
+  // the shape-B branch below it reads its markup into a single artboard called
+  // `/validate/{{-b.zone-}}` whose one op is `{{ t }}`. That is a parsed-looking
+  // result with a non-zero count, so only `literal()` catches it.
+  const src = read('design/canvases/integrated/Pages · Founder Validate.dc.html');
+  assert.match(src, /\bboards:\s*\[/, 'the canvas this test is built on is no longer shape C');
+  assert.throws(() => artboardOps(src.replace(/\bboards:\s*\[/, 'notboards: [')),
+    /unexpanded template binding/,
+    'the shape-B fallback read a template as a design and nothing objected');
+
+  // And read in its own shape it yields the four real routes, with the ops
+  // paired to the board that declares them rather than to their position.
+  const found = artboardOps(src);
+  assert.deepEqual(Object.keys(found).sort(),
+    ['/validate/hypotheses', '/validate/interviews', '/validate/pain-map', '/validate/verdict']);
+  // Two boards, not one: reading `tools:` from the whole array rather than from
+  // the board that declares it gives every route the FIRST board's ops, and a
+  // single-board check cannot tell the difference.
+  assert.deepEqual(found['/validate/interviews'], ['Log an interview', 'Export transcripts']);
+  assert.deepEqual(found['/validate/verdict'], ['Export summary', 'Send to Problem slide']);
 });

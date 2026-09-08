@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { reportError } from '../lib/log';
-import ZoneActions from '../workspaces/ZoneActions';
+import ZoneToolbar from '../workspaces/ZoneToolbar';
 
 /**
  * Perks & Products — /perks. One route, three audiences.
@@ -402,8 +402,9 @@ function MyPerks() {
  * Partner: submissions                                                *
  * ------------------------------------------------------------------ */
 
-function PartnerConsole({ zoneActions }) {
+function PartnerConsole({ zoneActions, zoneFilters, role }) {
   const [items, setItems] = useState(null);
+  const [view, setView] = useState('all');
   const [form, setForm] = useState({
     partner_name: '', offer: '', category: '', blurb: '', detail: '',
     kind: 'credits', credits: '', required_tier: 'growth', price_cents: '',
@@ -441,9 +442,25 @@ function PartnerConsole({ zoneActions }) {
     } finally { setBusy(false); }
   }
 
+  // `Live` IS `perks.status`, the store's own word — a CHECK over `draft`,
+  // `in_review`, `live`, `paused` and `rejected`. The canvas's other two chips
+  // are about time, and a perk listing carries no date at all.
+  const rows = items || [];
+  const visible = view === 'live' ? rows.filter((p) => p.status === 'live') : rows;
+
   return (
     <div className="space-y-6">
-      {zoneActions && <ZoneActions items={zoneActions(items || [])} />}
+      {/* `role` is the SHELL's licence rather than the viewer's: this console is
+          reached through `PartnerWorkspaceTabs`, so an admin reading it is
+          still in the amber shell. The caller supplies it beside the actions it
+          already supplies, and this page learns nothing about roles. */}
+      {(zoneActions || zoneFilters) && (
+        <ZoneToolbar
+          role={role}
+          filters={zoneFilters ? zoneFilters({ value: view, onChange: setView }) : []}
+          actions={zoneActions ? zoneActions(visible) : []}
+        />
+      )}
       {/* Canvas stats strip — computed from submissions, not asserted. */}
       {items && items.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -527,10 +544,17 @@ function PartnerConsole({ zoneActions }) {
       <section>
         <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Your listings</h3>
         {items === null ? <p className="mt-2 text-sm text-gray-500">Loading…</p>
-          : items.length === 0 ? <p className="mt-2 text-sm text-gray-600">Nothing submitted yet.</p>
-          : (
+          : rows.length === 0 ? <p className="mt-2 text-sm text-gray-600">Nothing submitted yet.</p>
+          : visible.length === 0 ? (
+            // Which view found nothing, rather than a blank list under a
+            // selected chip — that reads as "you have submitted nothing", and
+            // the count says otherwise.
+            <p className="mt-2 text-sm text-gray-600">
+              No listing is live. {rows.length} submitted in total.
+            </p>
+          ) : (
             <div className="mt-2 space-y-2">
-              {items.map((p) => (
+              {visible.map((p) => (
                 <div key={p.uid} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -625,7 +649,7 @@ function ReviewQueue() {
  * zone's header actions; `/perks` mounts it for five other licences and wants
  * none. The caller decides; this page learns nothing about roles.
  */
-export default function PerksPage({ user, embedded = false, zoneActions }) {
+export default function PerksPage({ user, embedded = false, zoneActions, zoneFilters, role: shellRole }) {
   const role = String(user?.role || '').toLowerCase();
   const isPartner = role === 'partner';
   const isAdmin = role === 'admin';
@@ -670,7 +694,7 @@ export default function PerksPage({ user, embedded = false, zoneActions }) {
       <div className="mt-5">
         {tab === 'browse' && <Catalogue />}
         {tab === 'mine' && <MyPerks />}
-        {tab === 'partner' && <PartnerConsole zoneActions={zoneActions} />}
+        {tab === 'partner' && <PartnerConsole zoneActions={zoneActions} zoneFilters={zoneFilters} role={shellRole} />}
         {tab === 'review' && <ReviewQueue />}
       </div>
     </div>

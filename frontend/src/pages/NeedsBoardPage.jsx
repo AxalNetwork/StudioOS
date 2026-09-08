@@ -6,6 +6,7 @@ import {
   Play, Package, Star, Receipt, XCircle,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import ZoneActions from '../workspaces/ZoneActions';
 import { useEscapeClose } from '../components/useEscapeClose';
 
 const CATEGORIES = ['legal', 'accounting', 'design', 'recruiting', 'fractional_cfo', 'gtm', 'engineering', 'marketing'];
@@ -53,7 +54,7 @@ const QUOTE_TONE = {
  * caught by a `||` default that turns the absence into a confident answer.
  * `frontend/test/needs_envelope.test.mjs` now pins all four.
  */
-export default function NeedsBoardPage({ user, embedded = false }) {
+export default function NeedsBoardPage({ user, embedded = false, zoneActions }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const isFounder = user?.role === 'founder';
   const isPartner = user?.role === 'partner';
@@ -89,7 +90,7 @@ export default function NeedsBoardPage({ user, embedded = false }) {
         })}
       </div>
 
-      {tab === 'browse' && <BrowseTab user={user} />}
+      {tab === 'browse' && <BrowseTab user={user} zoneActions={zoneActions} />}
       {tab === 'mine' && isFounder && <MyNeedsTab user={user} />}
       {tab === 'quotes' && isPartner && <MyQuotesTab />}
       {tab === 'engagements' && <EngagementsTab user={user} />}
@@ -100,7 +101,7 @@ export default function NeedsBoardPage({ user, embedded = false }) {
 // ---------------------------------------------------------------------------
 // Browse — public open needs (partners + investors + admins)
 // ---------------------------------------------------------------------------
-export function BrowseTab({ user }) {
+export function BrowseTab({ user, zoneActions }) {
   const [filters, setFilters] = useState({ category: '', q: '' });
   const [needs, setNeeds] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -154,6 +155,12 @@ export function BrowseTab({ user }) {
       {loading && <div className="text-sm text-gray-500">Loading…</div>}
       {!loading && needs.length === 0 && <Empty icon={Briefcase} text="No open needs right now." />}
 
+      {/* PIPELINE · LEADS' HEADER ROW, WHICH DRAWS NOTHING TODAY.
+          `Pages · Partner Pipeline` gives this zone one op — `Edit capability
+          weights` — and no capability register is stored, so the table marks it
+          unbuilt and the builder drops it. The call stays because it is the
+          seam: store a register and the control appears here unchanged. */}
+      {zoneActions && <ZoneActions className="mb-3" items={zoneActions(needs)} />}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {needs.map((n) => <NeedCard key={n.id} n={n} onClick={() => setSelected(n)} />)}
       </div>

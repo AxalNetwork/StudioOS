@@ -4,7 +4,7 @@ import {
   Trash2, AlertCircle, X, Check, ExternalLink, Package, ToggleLeft, ToggleRight,
 } from 'lucide-react';
 import { api } from '../lib/api';
-import ZoneActions from '../workspaces/ZoneActions';
+import ZoneToolbar from '../workspaces/ZoneToolbar';
 
 const CATEGORIES = ['legal', 'accounting', 'design', 'recruiting', 'fractional_cfo', 'gtm', 'engineering', 'marketing'];
 const CAT_LABEL = {
@@ -29,7 +29,7 @@ const CAT_LABEL = {
  * this shared page learns nothing about licences. It is called with the rows
  * the tab has loaded, because an export of "this view" needs the view.
  */
-export default function ServiceCatalogPage({ user, embedded = false, zoneActions }) {
+export default function ServiceCatalogPage({ user, embedded = false, zoneActions, zoneFilters, role }) {
   const isPartner = user?.role === 'partner';
   const isFounder = user?.role === 'founder';
   const isAdmin = user?.role === 'admin';
@@ -66,7 +66,7 @@ export default function ServiceCatalogPage({ user, embedded = false, zoneActions
       </div>
 
       {tab === 'browse' && <BrowseTab user={user} isFounder={isFounder} />}
-      {tab === 'mine' && (isPartner || isAdmin) && <MineTab user={user} zoneActions={zoneActions} />}
+      {tab === 'mine' && (isPartner || isAdmin) && <MineTab user={user} zoneActions={zoneActions} zoneFilters={zoneFilters} role={role} />}
       {tab === 'stripe' && isPartner && <StripeTab />}
     </div>
   );
@@ -259,7 +259,7 @@ function OfferingDetailModal({ offering, user, isFounder, onClose }) {
 // ---------------------------------------------------------------------------
 // Mine — partner manages their own offerings
 // ---------------------------------------------------------------------------
-export function MineTab({ user, zoneActions }) {
+export function MineTab({ user, zoneActions, zoneFilters, role }) {
   const [rows, setRows] = useState([]);
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
@@ -308,7 +308,27 @@ export function MineTab({ user, zoneActions }) {
 
   return (
     <div className="space-y-4">
-      {zoneActions && <ZoneActions items={zoneActions(rows)} />}
+      {/* `role` IS THE SHELL'S LICENCE, NOT THE VIEWER'S, and the distinction
+          matters here more than on a page that serves one licence. This
+          component is mounted at `/services` and at `/offers/catalog`, and both
+          sit inside `PartnerWorkspaceTabs` — so an admin reading a partner's
+          catalogue is still in the amber shell, and chips painted from
+          `user.role` would put founder violet inside it. The caller says which
+          shell it is, the same way it already supplies the actions: this page
+          learns nothing about roles, which is what its docblock above promises.
+
+          ONE LIVE CHIP AND NO STATE. `All` is the only label on this artboard
+          with a source; `Fixed`, `Retainer` and `Seat` need a pricing-model
+          column `service_offerings` does not have. A `useState` whose value can
+          never change would be a control that looks selectable and selects
+          nothing, so the row reports the one view it has. */}
+      {(zoneActions || zoneFilters) && (
+        <ZoneToolbar
+          role={role}
+          filters={zoneFilters ? zoneFilters({ value: 'all' }) : []}
+          actions={zoneActions ? zoneActions(rows) : []}
+        />
+      )}
       <div className="flex items-center justify-between">
         <div className="text-sm text-gray-500">{rows.length} offering{rows.length === 1 ? '' : 's'}</div>
         <button onClick={() => { setEditing(null); setShowForm(true); }}

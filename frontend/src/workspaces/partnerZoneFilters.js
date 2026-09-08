@@ -67,6 +67,20 @@ const NO_INTERACTION_DATE =
 const NO_CONNECTED_STATE =
   'accepting is recorded per side, so this page knows that you accepted and not whether they did; no connected state exists to mark an introduction as made';
 
+// `/offers/catalog`. `service_offerings` holds one `price_usd` and nothing
+// saying HOW it is charged, so a fixed fee, a monthly retainer and a per-seat
+// licence are the same row to this store. The canvas's three pricing chips are
+// one absent column between them, so they share one reason.
+const NO_PRICING_MODEL =
+  'a service stores one price and nothing saying whether it is charged once, monthly or per seat, so these three cannot be told apart';
+
+// `/offers/perk-deals`. Two chips about time on a table that keeps none. The
+// second half matters as much as the first: `perk_claims.expires_at` DOES
+// exist, so a reader could reasonably assume the listing expires too — it is a
+// deadline on one founder's issued code, not on the offer.
+const NO_PERK_EXPIRY =
+  'a perk listing carries no date at all; the only expiry in this store is on a claim already issued to one founder, which says nothing about the offer';
+
 export const PARTNER_ZONE_FILTERS = {
   // ── Network ──────────────────────────────────────────────────────────────
   // One live chip out of four, the same as advisor's and for the same reason:
@@ -85,6 +99,93 @@ export const PARTNER_ZONE_FILTERS = {
     { canvas: 'Gated', key: 'pending', label: 'Awaiting you' },
     { canvas: 'Made', unbuilt: NO_CONNECTED_STATE },
     { canvas: 'Declined', key: 'declined' },
+  ],
+
+  // ── Offers ───────────────────────────────────────────────────────────────
+  // Ten of nineteen labels run. The canvas is the same in
+  // `design/canvases/integrated/` and `design/incoming/`, checked rather than
+  // assumed — both name these nineteen in this order.
+
+  // ONE LIVE CHIP, AND IT IS THE HONEST NUMBER RATHER THAN A THIN ONE. The
+  // catalogue's own axis is `is_active`, which the row toggle already writes,
+  // but the canvas does not ask for it — it asks how the work is priced. So
+  // `All` is what this row can offer, and the other three wait on a column.
+  'offers/catalog': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Fixed', unbuilt: NO_PRICING_MODEL },
+    { canvas: 'Retainer', unbuilt: NO_PRICING_MODEL },
+    { canvas: 'Seat', unbuilt: NO_PRICING_MODEL },
+  ],
+
+  // `Live` IS THE STORE'S OWN WORD. `perks.status` is a CHECK over `draft`,
+  // `in_review`, `live`, `paused` and `rejected`, so the canvas's chip and the
+  // column agree exactly and no relabel is needed.
+  'offers/perk-deals': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Live', key: 'live' },
+    { canvas: 'Expiring', unbuilt: NO_PERK_EXPIRY },
+    { canvas: 'Expired', unbuilt: NO_PERK_EXPIRY },
+  ],
+
+  // FOUR ORDERINGS, ONE OF WHICH IS THE ONE THE SERVER ALREADY RETURNS.
+  // `GET /partner-offers/surfaces` ends `ORDER BY COUNT(es.id) DESC, s.name`,
+  // and the zone's own blurb says so — "ranked by engagements rather than by
+  // reach". So this chip names the ordering on screen rather than holding a
+  // state, the way `network/relationships`'s lone `All` does.
+  //
+  // The other three are the two columns the zone's docblock refuses to draw
+  // plus a word for something nothing records. Their reasons are separate
+  // because the absences are: a ratio with no denominator, a count with no
+  // pipeline, and a judgement with no input.
+  'offers/visibility': [
+    { canvas: 'By engagements', key: 'engagements' },
+    {
+      canvas: 'By leads',
+      unbuilt: 'nothing records which surface a founder arrived through, so the lead half of the ratio has no source and the zone reports it absent rather than partial',
+    },
+    {
+      canvas: 'By views',
+      unbuilt: 'a view count needs an impression pipeline rather than a table, and the product records no impressions at all',
+    },
+    {
+      canvas: 'Weak intent',
+      unbuilt: 'nothing scores or records intent against a surface; what is stored per surface is engagements and the value they carried',
+    },
+  ],
+
+  // THE ONE OFFERS ZONE WHERE EVERY LABEL RUNS, out of one array rather than
+  // one column: each item carries `consents[]`, and the row already draws the
+  // same three states per consenter — `Agreed`, `Withdrawn`, `Not answered`.
+  //
+  // THERE IS A FOURTH REAL STATE THE CANVAS HAS NO WORD FOR: an unpublished
+  // item with NO consent row at all, where nobody has been asked. It falls
+  // under `All` and only `All`. Sweeping it into `Awaiting consent` would be
+  // the zone claiming a request was made, which is the same class of untruth
+  // as a filter that returns an empty set and calls it an answer.
+  'offers/proof': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Published', key: 'published' },
+    { canvas: 'Awaiting consent', key: 'awaiting' },
+    { canvas: 'Blocked', key: 'blocked' },
+  ],
+
+  // `Best fit` IS A STORED KIND, not a score. `audience_fit_rules.kind` is a
+  // CHECK over `budget_floor`, `sector_declined`, `capability_absent` and
+  // `best_fit`, so the chip selects the rules the firm wrote about who it is
+  // for. `Qualified` and `Weak` are the other thing entirely — words about a
+  // LEAD rather than about a rule — and the worker settles it in its own
+  // response: `enforcement: 'none'`, nothing here scores anybody.
+  'offers/audience-fit': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Best fit', key: 'best_fit' },
+    {
+      canvas: 'Qualified',
+      unbuilt: 'no lead is scored against these rules — the worker answers `enforcement: \'none\'` — so nothing here is qualified or not',
+    },
+    {
+      canvas: 'Weak',
+      unbuilt: 'the same absent score from the other end; a rule records who the firm is for, and no row anywhere marks a lead as weak against one',
+    },
   ],
 
   // ── Research ─────────────────────────────────────────────────────────────
