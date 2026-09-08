@@ -1,12 +1,16 @@
 import { test, expect } from '@playwright/test';
 import { requirePreview, loginAs } from './_helpers.js';
 
-test.describe('Projects > founder DELETE (post-AO verification)', () => {
+// `/projects` retired in task #101. The startups LIST did not — it is now
+// `components/StartupList.jsx`, embedded in the execution workspace, which is
+// where this spec now finds it. The `projects-page` testid was kept precisely
+// so this file only had to change address, not assertions.
+test.describe('Startups list > founder DELETE (post-AO verification)', () => {
   test.beforeEach(() => requirePreview(test));
 
   test('founder can soft-delete an owned project', async ({ page }) => {
     await loginAs(page, 'founder');
-    await page.goto('/projects');
+    await page.goto('/execution');
     await expect(page.getByTestId('projects-page')).toBeVisible();
     const firstLink = page.locator('a[href^="/projects/"]').first();
     await expect(firstLink).toBeVisible();
@@ -24,9 +28,11 @@ test.describe('Projects > founder DELETE (post-AO verification)', () => {
     const r = await delResp;
     expect([200, 204]).toContain(r.status());
 
-    // After delete the SPA navigates back to /projects; verify the row is gone
-    // (soft-delete: Active projects list excludes deleted rows by default).
-    await page.waitForURL(/\/projects(\?|$)/, { timeout: 10_000 });
+    // After delete ProjectDetail navigates to /build; walk back to the list to
+    // verify the row is gone (soft-delete: the Active list excludes deleted
+    // rows by default).
+    await page.waitForURL(/\/build(\?|$)/, { timeout: 10_000 });
+    await page.goto('/execution');
     await expect(page.getByTestId('projects-page')).toBeVisible();
     if (projectName) {
       await expect(page.locator('a[href^="/projects/"]', { hasText: projectName })).toHaveCount(0);

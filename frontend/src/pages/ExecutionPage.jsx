@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Zap, Layers, Target } from 'lucide-react';
-import ProjectsPage from './ProjectsPage';
+import StartupList from '../components/StartupList';
 import PipelinePage from './PipelinePage';
 import RoadmapPage from './RoadmapPage';
 
@@ -67,7 +67,7 @@ export default function ExecutionPage({ embedded = false }) {
 
       <section id="execution-projects" aria-label="Startups" className="scroll-mt-6">
         <SectionHeader icon={Zap} title="Startups" description="Venture pipeline & 4-week playbook tracking" />
-        <ProjectsPage embedded />
+        <StartupList />
       </section>
 
       <section id="execution-board" aria-label="Pipeline Board" className="scroll-mt-6 border-t border-gray-200 dark:border-gray-800 pt-8">

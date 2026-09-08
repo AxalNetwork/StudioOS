@@ -76,3 +76,22 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx --no-install wrangler deploy --config ../wrangler.toml --env production
+
+      # Can the repo still rebuild the database it operates? The invariant is
+      # `schema_baseline.sql` + every migration above the cutoff == production —
+      # not equality with the baseline alone, which would go red on the first
+      # migration anyone shipped and then get switched off. `schema.sql` drifted
+      # from production for four months with nothing able to notice it
+      # (DECISIONS D60); this is what notices.
+      #
+      # AFTER the deploy, and deliberately not `continue-on-error`. A
+      # disagreement does not make the worker that just shipped unsafe, so it
+      # must not hold the release — but it does mean a fresh environment would
+      # come up wrong, which is worth a red workflow. GOTCHAS records what
+      # `continue-on-error` did to the Semgrep job: a green check that means only
+      # that the scan ran.
+      - name: Repo can still rebuild production's schema
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/check-baseline-drift.mjs

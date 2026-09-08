@@ -309,17 +309,35 @@ test('an absent value says the platform has none, not that the user withheld one
     'a field claims the user did not provide a value the platform simply does not hold');
 });
 
-test('the Entity tab states the KYB model instead of drawing a selector over it', () => {
-  // The canvas draws a per-company KYB selector. `corporate_profiles` upserts
-  // ON CONFLICT(user_id) and no /trust route takes a company, so one user has
-  // one KYB and the selector would change nothing when clicked (task #108).
-  assert.match(PAGE, /recorded once per account, not per company/,
-    'the Entity tab no longer says KYB is per-account');
-  assert.doesNotMatch(CODE, /useActiveCompany|COMPANIES|selCompanyName/,
-    'a company selector landed on a page whose data has no company dimension');
+test('the Entity tab draws the per-company card, and keeps the two entities apart', () => {
+  // THIS TEST HELD THE OPPOSITE LINE UNTIL TASK #108 ANSWERED IT. It used to
+  // require the sentence "recorded once per account, not per company" and refuse
+  // any company dimension on the page, because `corporate_profiles` upserts
+  // ON CONFLICT(user_id) and no /trust route accepted a company — so a selector
+  // over three companies would have changed nothing when clicked, which is worse
+  // than not offering it. Migration 220 gave the page something real to draw.
+  //
+  // It is rewritten rather than deleted, because the thing worth guarding did
+  // not go away, it moved: D40 and D42 say the account's entity and the
+  // company's are DIFFERENT OBJECTS that must not drift into each other. So the
+  // assertions now pin that both are present and distinct.
+  assert.match(CODE, /<CompanyKybCard \/>/, 'the per-company card is drawn');
+  assert.match(CODE, /Your companies/, 'and named as the canvas names it');
+  assert.match(CODE, /api\.companyKybList\(\)/, 'from the company endpoint, not the account one');
+
+  // The account's own record is still here and still says which it is.
+  assert.match(CODE, /separate from your account/i,
+    'the card must say the account entity is a different record');
+
   const worker = read('cloudflare-worker/src/routes/trust.ts');
   assert.match(worker, /ON CONFLICT\(user_id\)/,
-    'corporate_profiles is no longer keyed on user_id — recheck whether KYB is now per-company');
+    'corporate_profiles must stay keyed on user_id — the account entity is not the company entity');
+  assert.match(worker, /ON CONFLICT \(company_id\)/,
+    'and the company record is keyed on the company');
+  // The write must never take a company from the body: `resolveActiveCompany`
+  // verifies membership, a body field is a self-made ownership claim.
+  assert.match(worker, /resolveActiveCompany\(c\.env, user, c\.req\.header\(ACTIVE_COMPANY_HEADER\)\)/,
+    'the company must come from the verified header');
 });
 
 test('the pending-agreement label reads the column the worker actually selects', () => {

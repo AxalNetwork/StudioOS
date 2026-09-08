@@ -20,7 +20,7 @@ export const EXISTING_FOUNDER_BANK = [
     type: 'short',
     explainer: 'We’ll use this on every dashboard, deck merge-field, and contract.',
     doc_anchor: 'build/projects',
-    page_target: '/projects',
+    page_target: '/build',
     validate: all(required, minChars(2), maxChars(80)),
   },
   {
@@ -29,7 +29,7 @@ export const EXISTING_FOUNDER_BANK = [
     type: 'long',
     explainer: 'Replaces the startup description on your portfolio card.',
     doc_anchor: 'build/projects',
-    page_target: '/projects',
+    page_target: '/build',
     validate: all(required, minChars(40)),
   },
   {
@@ -39,7 +39,7 @@ export const EXISTING_FOUNDER_BANK = [
     options: SECTORS,
     explainer: 'Drives sector-specific dashboards and investor matching.',
     doc_anchor: 'build/projects',
-    page_target: '/projects',
+    page_target: '/build',
     validate: all(required, oneOf(SECTORS)),
   },
   {
@@ -49,7 +49,7 @@ export const EXISTING_FOUNDER_BANK = [
     options: STAGES,
     explainer: 'Stage gates the milestones and capital tools we surface.',
     doc_anchor: 'build/projects',
-    page_target: '/projects',
+    page_target: '/build',
     validate: all(required, oneOf(STAGES)),
   },
   {

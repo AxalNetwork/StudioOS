@@ -5,8 +5,8 @@ import { api } from '../lib/api';
 
 const TYPE_FILTERS = [
   { key: '', label: 'All', path: null },
-  { key: 'project', label: 'Startups', path: '/projects' },
-  { key: 'partner', label: 'Partners', path: '/partners' },
+  { key: 'project', label: 'Startups', path: '/build' },
+  { key: 'partner', label: 'Partners', path: '/directory' },
   { key: 'document', label: 'Documents', path: '/legal-capital' },
 ];
 

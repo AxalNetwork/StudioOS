@@ -9,7 +9,7 @@ import { Link } from 'react-router-dom';
  *     icon={Sparkles}
  *     title="No projects yet"
  *     body="Create your first venture project to get started."
- *     cta={{ label: 'New project', to: '/projects' }}
+ *     cta={{ label: 'New project', to: '/build?new=1' }}
  *     secondary={{ label: 'Learn more', to: '/help#core/projects' }}
  *   />
  *

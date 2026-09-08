@@ -29,7 +29,16 @@ test('A7 has honest handoffs and excludes fixture claims', () => {
   assert.doesNotMatch(desk, /Ran 6s ago|3 sources agree|4 saved|11 tracked|9 documents|340 pages|62,400|1,240|\$0\.440|\$0\.014|\$0\.0291|\$0\.0025|\$0\.031|\$4\.08|50 questions/i);
   assert.match(desk, /id="a7-companies"[\s\S]*?title="Company profiles"/);
   assert.match(desk, /data\.headlines\[0\] \|\| data\.signals\[0\] \|\| data\.markets\[0\]/);
-  assert.match(desk, /pulseLoaded \? `\$\{data\.headlines\.length\} stored headlines` : 'Headlines unavailable'/);
+  // WAS `pulseLoaded ? … : 'Headlines unavailable'`. The count half is what this
+  // test is about — a real number from the store, never a fixture — and it is
+  // unchanged. The fallback half moved into `sourceMeta`, because
+  // `pulseLoaded` is only `Object.hasOwn(records, 'pulse')`, which is false
+  // BOTH while the request is in flight and after it fails: the card claimed
+  // the source was unavailable every time the page was merely still loading
+  // (task #107's batch, D66).
+  assert.match(desk, /sourceMeta\('pulse', `\$\{data\.headlines\.length\} stored headlines`\)/);
+  assert.match(desk, /if \(failedKeys\.has\(key\)\) return 'Source unavailable';/,
+    'only a source that actually failed may say so');
   assert.match(desk, /founderResearchSeed: \{ records, projects, projectId \}/);
   assert.match(desk, /Not recorded \/ unavailable/);
 });

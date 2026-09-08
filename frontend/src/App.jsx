@@ -35,7 +35,6 @@ import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 import NotFoundPage from './pages/NotFoundPage';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const ScoringPage = lazy(() => import('./pages/ScoringPage'));
-const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
 
 // The four workspace shells, rebuilt from the design canvases. The IA itself
 // lives in src/workspaces/shellConfig.js — the sidebar, the zone nav and a
@@ -63,7 +62,6 @@ const CompliancePage = lazy(() => import('./pages/CompliancePage'));
 const WellbeingPage = lazy(() => import('./pages/WellbeingPage'));
 const ExpertProfilePage = lazy(() => import('./pages/ExpertProfilePage'));
 const ExpertEditorPage = lazy(() => import('./pages/ExpertEditorPage'));
-const PartnersPage = lazy(() => import('./pages/PartnersPage'));
 const CapitalPage = lazy(() => import('./pages/CapitalPage'));
 const TicketsPage = lazy(() => import('./pages/TicketsPage'));
 const DealsPage = lazy(() => import('./pages/DealsPage'));
@@ -1881,7 +1879,28 @@ function AppInner() {
       <Route path="/due-diligence/requests" element={guard(['founder', 'admin', 'partner', 'investor', 'advisor'], <DueDiligenceRequestsPage />)} />
       <Route path="/due-diligence/:uid" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligenceCasePage />)} />
       <Route path="/scoring" element={guard(labRoles(['admin', 'partner', 'investor']), <ScoringPage />)} />
-      <Route path="/projects" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), founderWorkspace('build', <ProjectsPage />))} />
+      {/* /projects is RETIRED (task #101). It was the "Startups" list: a table
+          of projects, a filter box, and the create form.
+
+          The list is what /build already is — sidebarConfig has matched
+          /projects into the Build bucket for as long as that bucket has
+          existed, so the nav has treated them as one place and only the URL
+          disagreed.
+
+          THE CREATE FORM MOVED FIRST, because it was the only one. This page
+          held the sole `api.createProject` caller in the whole SPA, with ten
+          empty states across the app pointing at it ("Create one →") and a
+          Command Palette entry addressing it as /projects?new=1. Deleting the
+          page without moving that would have removed the only way to make a
+          startup, and nothing in CI would have said so — check-api-drift reads
+          api.js -> worker and never the reverse. It now lives in
+          components/CreateStartupForm.jsx, mounted on FounderBuildDesk, which
+          honours ?new=1 because a redirect cannot carry a query string.
+
+          /projects/:id below is NOT retired: ProjectDetail is deep-linked from
+          the dashboard, the investor desk, the risk matrix, the slide editor
+          and the invite-accept flow. */}
+      <Route path="/projects" element={<Navigate to="/build" replace />} />
       <Route path="/projects/:id" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), founderWorkspace('build', <ProjectDetail />))} />
       {/* Task #12 — Founder Execution area: one deep-linkable shell wrapping the
           Projects / Board / Roadmap views. Standalone routes above stay intact
@@ -1952,7 +1971,26 @@ function AppInner() {
       <Route path="/wellbeing" element={guard(['admin', 'founder'], <WellbeingPage />)} />
       <Route path="/wellbeing/expert-dashboard" element={guard(['admin', 'founder', 'partner', 'advisor'], <ExpertEditorPage />)} />
       <Route path="/wellbeing/expert/:uid" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <ExpertProfilePage />)} />
-      <Route path="/partners" element={guard(['admin', 'partner', 'investor'], <PartnersPage />)} />
+      {/* /partners is RETIRED (task #101). It was "Partner Ecosystem": a list of
+          partner accounts, a create form, and two match buttons.
+
+          Both halves have a live home, which is what made this page outdated
+          rather than merely old. Browsing the ecosystem is /directory, the
+          public partner directory. Getting a partner INTO the system is
+          /admin/partners, the invitation flow, or /partners/onboard for
+          self-serve — both of which run the onboarding this page's four-field
+          `api.createPartner` skipped entirely.
+
+          So unlike /projects above, nothing had to move first.
+          `api.matchPartners` and `api.recommendPartners` lose their only caller
+          here and are left in api.js rather than deleted: they are the one
+          capability with no successor, and removing them would decide that
+          question silently.
+
+          This redirect keeps the route ahead of /partners/:slug, which the
+          comment on the public directory block relies on for path ranking, and
+          /partners/onboard and /partners/portal are untouched. */}
+      <Route path="/partners" element={<Navigate to="/directory" replace />} />
       <Route path="/capital" element={guard(['admin', 'investor'], <CapitalPage />)} />
       {/*
         /tickets -> /help. The redirects are PERMANENT, not a migration shim:

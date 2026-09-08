@@ -4,6 +4,23 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Fresh D1 builds now have a strict production baseline
+
+`cloudflare-worker/sql/schema_baseline.sql` is now the only schema input for a
+new database. The old loose SQL files, including `schema.sql`, remain under
+`cloudflare-worker/sql/historical/` for archaeology and are not build inputs.
+
+`cloudflare-worker/test/migrations_fresh_build.test.ts` now builds from that
+baseline and applies every migration above cutoff 219 with zero tolerated
+failures. The obsolete `KNOWN_UNAPPLIABLE` / `OTHER_ON_RECORD` findings lists
+and the old 55-failure explanation are deleted. The test retains the five
+production `project_id` clause checks that guard against migration 039 drift.
+
+The migration runner gained a local/preview-only `--bootstrap` mode. It refuses
+remote or populated targets, applies the baseline, and records migrations through
+219 without executing them; later migrations remain pending for the normal
+forward-only run.
+
 ## Migration 039 never ran, and `schema.sql` had been edited as though it had (#112)
 
 Task #112 was to rewrite 039 so a fresh D1 build could apply it. Checking first
@@ -16,7 +33,7 @@ Read off live D1 on 2026-09-08: `projects.deleted_at` and its index are present;
 no reference at all. The file's own marker row has said so since 2026-05-11 —
 `_migrations_applied.name = '039_project_cascade_partial_deleted_at_only'`, still
 the only row in that table — and this file recorded it at the time. What nobody
-connected is that `cloudflare-worker/sql/schema.sql` carried the CASCADE on all
+connected is that `cloudflare-worker/sql/schema_baseline.sql` carried the CASCADE on all
 five, tagged with five `-- Task #7 (AM)` comments. A new database and production
 have disagreed about five foreign keys for four months with nothing checking.
 
@@ -1292,7 +1309,7 @@ linkedin_picture_url, created_at, updated_at)`, following the existing
   `SETTINGS_USER_COLUMNS` and JOINs the side table for the profile preview.
   `routes/linkedin.ts` writes/clears `linkedin_picture_url` via best-effort
   UPSERT/UPDATE on the side table (OAuth callback + disconnect).
-- **Schema** — `sql/schema.sql` drops `users.linkedin_picture_url`, adds the
+- **Schema** — `sql/schema_baseline.sql` drops `users.linkedin_picture_url`, adds the
   `user_profile_ext` table. Dev FastAPI (`backend/`) left unchanged: SQLite has no
   column cap and the API contract is identical.
 - **Deploy** — migrations 131–135 applied via `scripts/migrate-d1.mjs --remote`
@@ -2531,7 +2548,7 @@ forward-only runner + ledger, replacing the per-file manual
 - **Safety guard**: a plain `--remote`/`--local` run against a DB that has app
   tables but no ledger aborts and points at `--baseline`. This prevents the
   catastrophic first-deploy replay — the migration set is NOT self-contained
-  (base tables live in `sql/schema.sql`; ~57 of 124 files carry non-idempotent
+  (base tables live in `sql/schema_baseline.sql`; ~57 of 124 files carry non-idempotent
   `ALTER ADD COLUMN` / bare `INSERT` that would fail `duplicate column` on
   replay against the canonical schema).
 - **One-time baseline**: `--baseline` applies the pending *idempotent* files
@@ -3572,7 +3589,7 @@ Full write-up in [`documentation/audits/SECURITY_AUDIT.md`](./SECURITY_AUDIT.md)
 - **L2 — safe article preview.** `pages/ArticleAuthorPage.jsx` preview now renders via
   `<ReactMarkdown>` instead of `dangerouslySetInnerHTML`.
 - **L4 — LinkedIn schema off the request path.** LinkedIn identity columns added to
-  `sql/schema.sql`; removed the lazy `ensureColumns()` ALTER (swallowed DDL errors) from
+  `sql/schema_baseline.sql`; removed the lazy `ensureColumns()` ALTER (swallowed DDL errors) from
   `routes/linkedin.ts`. Existing D1 migrated manually via `sql/linkedin_alter.sql`.
 - **L5 — logging hygiene.** Reviewed OAuth/Stripe/Telegram/auth error paths; no PII/token
   leakage found, no change required.
@@ -3808,7 +3825,7 @@ Backend-only half of Conversational Profiling + Best-Fit Matching (PR #92). All 
 - Dedicated non-gateway task class for onboarding chat; the bypass-on-failure fallback always fires; nested AI response shapes (`r.result?.response`) are parsed; the stale `[PROFILING]` failure-log label is corrected.
 - Test: `test/aiRouter.bugfix.test.ts` (bypass-retry + shape parse).
 
-### Data model + scoring — `sql/migrations/115_axal_fit.sql`, `sql/schema.sql`, `services/axalFit.ts`
+### Data model + scoring — `sql/migrations/115_axal_fit.sql`, `sql/schema_baseline.sql`, `services/axalFit.ts`
 - Migration 115 (mirrored idempotently in `schema.sql`): `axal_values`, `axal_fit_scores` (per-persona), `admin_consultation_bookings`, `axal_fit_reports`.
 - `axalFit.ts`: per-persona weighted rubrics, 5 Axal behavioral values, `computeFit` (0–100; bands strong_yes/yes_caution/hold/no; red flags; signal quality; narrative), reusing `assessmentScoring.ts`.
 
@@ -4289,7 +4306,7 @@ Replaces the free-text "Use of Funds" box on founder intake (FounderPortal step 
 ## Spin-Out deck Slide 2 ("PAIN FREQUENCY ACROSS INTERVIEWS") binds to the founder's real logged discovery pains, grouped into curated themes (Task #29)
 
 - **What:** Slide 2's pain-frequency bars previously came from an exact-string match over `discovery_interviews.pains_json`, so paraphrases ("slow onboarding" vs "onboarding is slow") never merged and the slide read as noise. The bars now reflect the founder's REAL logged pains grouped into a few curated themes — deterministic normalized-match + founder curation, NO AI. Each theme's frequency is the count of DISTINCT interviews mentioning it, over total interviews. Empty real data → honest neutral placeholders (never a sample).
-- **Data model (new) — `cloudflare-worker/sql/migrations/106_pain_groups.sql` + `cloudflare-worker/sql/schema.sql`:** `pain_groups(id, project_id, title, sort_order, …)` and `pain_group_aliases(id, project_id, group_id, phrase_norm, display_phrase, …, UNIQUE(project_id, phrase_norm))`. `discovery_interviews.pains_json` is UNCHANGED — grouping is a curation layer on top, so editing themes never rewrites interviews.
+- **Data model (new) — `cloudflare-worker/sql/migrations/106_pain_groups.sql` + `cloudflare-worker/sql/schema_baseline.sql`:** `pain_groups(id, project_id, title, sort_order, …)` and `pain_group_aliases(id, project_id, group_id, phrase_norm, display_phrase, …, UNIQUE(project_id, phrase_norm))`. `discovery_interviews.pains_json` is UNCHANGED — grouping is a curation layer on top, so editing themes never rewrites interviews.
 - **Resolver — `cloudflare-worker/src/services/painGroups.ts` (new):** `normPhrase()` (lowercase/trim/collapse), `ensurePainGroupsSchema()` (PRAGMA-guarded, WeakMap-cached), `computePainThemes()` (ranked `[{theme, mentions}]` by distinct interviews), `getPainGroupsView()` (groups + ungrouped + total for the UI). A phrase resolves to a theme by (1) explicit alias, (2) group title-norm match, (3) implicit one-phrase theme.
 - **Endpoints — `cloudflare-worker/src/routes/progress.ts`:** `GET /pain-groups/:projectId`, `POST /pain-groups/:projectId/assign` (`{phrase, group_id|new_title|null}`), `PATCH /pain-groups/:groupId` (rename), `DELETE /pain-groups/:groupId` (aliases revert to implicit). Reuses `loadProject`/`ensureCanView`/`ensureCanEdit`; bounded string validation.
 - **Assembler swap — `cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts`:** the old exact-match pain map is replaced by `computePainThemes()`. `interviewN`, metrics, `spinoutDeckData.ts` mapper/flatten/export are untouched — only `problem.pain_themes` computation changes, so share/print/PPTX inherit it for free.
@@ -4797,7 +4814,7 @@ Replaces the free-text "Use of Funds" box on founder intake (FounderPortal step 
 
 - **What:** new opt-in test `cloudflare-worker/test/billing_webhook_fulfilment.test.mjs`
   boots the Worker via wrangler `unstable_dev` against a freshly seeded LOCAL D1
-  (`sql/schema.sql` + migrations `011_subscription_tiers`, `027_investor_paywall`,
+  (`sql/schema_baseline.sql` + migrations `011_subscription_tiers`, `027_investor_paywall`,
   `103_mi_pro_subscriptions`) with `ENVIRONMENT=test`, POSTs UNSIGNED Stripe events
   to `/api/billing/stripe/webhook`, then asserts the final `mi_pro_subscriptions` state.
 - **Covers four fulfilment invariants:** (1) `checkout.session.completed` grants the
@@ -5072,7 +5089,7 @@ Replaces the free-text "Use of Funds" box on founder intake (FounderPortal step 
 
 ## Investor Matching (Task #16)
 
-- `cloudflare-worker/sql/migrations/096_investor_thesis.sql`: adds `anti_thesis_sectors_json`, `anti_thesis_stages_json`, `value_weights_json` to `investor_profiles` (idempotent, SQLite/D1 safe). Also updated `cloudflare-worker/sql/schema.sql`.
+- `cloudflare-worker/sql/migrations/096_investor_thesis.sql`: adds `anti_thesis_sectors_json`, `anti_thesis_stages_json`, `value_weights_json` to `investor_profiles` (idempotent, SQLite/D1 safe). Also updated `cloudflare-worker/sql/schema_baseline.sql`.
 - `cloudflare-worker/src/routes/investor_signals.ts`: extended `ProfileRow` interface, `emptyProfile()`, `shapeProfile()`, and `PUT /me` to accept, persist, and return anti-thesis + value_weights. Lazy-bootstrap `ALTER TABLE ADD COLUMN` fallback in `ensureSchema` for tables created before migration 096.
 - `cloudflare-worker/src/routes/matches.ts`: new `POST /api/matches/investor-match` endpoint. Scores investors for a given project_id using weights: thesis_fit (0.45), traction_fit (0.20), values_alignment (0.20), network_warmth (0.15). Hard anti-thesis exclusion (sector/stage) before scoring. Check-size band gate using ticket_band midpoint or min/max bounds. Uses `user_values` for cosine-similarity values alignment and `investor_introductions` for network warmth. Returns ranked results + excluded list with per-component breakdown.
 - `backend/app/api/routes/investor_signals.py`: backend parity. `PUT /me` now parses and persists `anti_thesis_sectors`, `anti_thesis_stages`, and `value_weights` (clamped 0-1). `_empty_profile` returns default values for the new fields.
@@ -5084,7 +5101,7 @@ Replaces the free-text "Use of Funds" box on founder intake (FounderPortal step 
 
 ## Partner Matching (Task #15)
 
-- `cloudflare-worker/sql/migrations/095_partner_accepting_intros.sql`: adds `accepting_intros` column to `partners` (default 1) + composite index on `(accepting_intros, status)`. Also updated `cloudflare-worker/sql/schema.sql`.
+- `cloudflare-worker/sql/migrations/095_partner_accepting_intros.sql`: adds `accepting_intros` column to `partners` (default 1) + composite index on `(accepting_intros, status)`. Also updated `cloudflare-worker/sql/schema_baseline.sql`.
 - `cloudflare-worker/src/routes/partners.ts`: new `POST /api/partners/match` endpoint. Intent-scoped matching with weights: domain_fit (0.50), track_record (0.25), values_alignment (0.15), availability_capacity (0.10). Domain fit uses `computeRadar` for the requested axis when the partner has a linked user account; otherwise keyword fallback against `specialization`. Excludes partners with `accepting_intros = 0`. Also updated existing `GET /matchmaking/recommend` and `POST /matchPartners` to respect `accepting_intros`.
 - `backend/app/models/entities.py`: added `accepting_intros: int = 1` to `Partner` model.
 - `backend/app/schemas/scoring.py`: added `intent` field to `MatchPartnersRequest`.

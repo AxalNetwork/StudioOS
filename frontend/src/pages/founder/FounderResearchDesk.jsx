@@ -37,6 +37,13 @@ export default function FounderResearchDesk() {
   const [question, setQuestion] = useState('');
   const [loading, setLoading] = useState(!seed);
   const [error, setError] = useState('');
+  // WHICH sources failed, not just THAT some did. Task #107's batch: every card
+  // below printed "Source unavailable" whenever its key was absent from
+  // `records`, and a key is absent both while the request is in flight and
+  // after it fails. So a healthy page said "Source unavailable" on every card
+  // until the fetch resolved, and a store holding 196,956 rows said it too.
+  // Three states, three sentences.
+  const [failedKeys, setFailedKeys] = useState(() => new Set());
   const [retry, setRetry] = useState(0);
 
   useEffect(() => {
@@ -64,6 +71,7 @@ export default function FounderResearchDesk() {
         setProjects([{ id: requestedId, name: `Startup #${requestedId}` }]); setProjectId(requestedId);
       }
       if (Object.keys(next).length) setRecords((previous) => ({ ...previous, ...next }));
+      setFailedKeys(new Set(failed));
       setError(failed.length ? 'Some evidence sources are temporarily unavailable. Stored results remain visible.' : '');
     }).finally(() => alive && setLoading(false));
     return () => { alive = false; };
@@ -72,8 +80,15 @@ export default function FounderResearchDesk() {
   useEffect(() => {
     if (!projectId) return;
     let alive = true;
-    api.listDocuments(projectId).then((value) => alive && setRecords((previous) => ({ ...previous, documents: value })))
-      .catch(() => alive && setError('Some evidence sources are temporarily unavailable. Stored results remain visible.'));
+    api.listDocuments(projectId).then((value) => {
+      if (!alive) return;
+      setRecords((previous) => ({ ...previous, documents: value }));
+      setFailedKeys((previous) => { const next = new Set(previous); next.delete('documents'); return next; });
+    }).catch(() => {
+      if (!alive) return;
+      setFailedKeys((previous) => new Set(previous).add('documents'));
+      setError('Some evidence sources are temporarily unavailable. Stored results remain visible.');
+    });
     setParams((previous) => { const next = new URLSearchParams(previous); next.set('project_id', String(projectId)); return next; }, { replace: true });
     return () => { alive = false; };
   }, [projectId, setParams]);
@@ -94,11 +109,27 @@ export default function FounderResearchDesk() {
   const state = { founderResearchSeed: { records, projects, projectId } };
   const brief = data.headlines[0] || data.signals[0] || data.markets[0];
   const briefRecord = brief && typeof brief === 'object' ? brief : {};
-  const briefTitle = firstText(typeof brief === 'string' ? brief : null, briefRecord.title, briefRecord.name, briefRecord.headline, briefRecord.sector, 'No stored market evidence is available');
+  const briefTitle = firstText(typeof brief === 'string' ? brief : null, briefRecord.title, briefRecord.name, briefRecord.headline, briefRecord.sector,
+    Object.hasOwn(records, 'pulse') || Object.hasOwn(records, 'signals')
+      ? 'No market evidence is stored for this view yet'
+      : failedKeys.has('pulse') ? 'The market source is unavailable' : 'Loading\u2026');
   const briefBody = firstText(briefRecord.summary, briefRecord.description, briefRecord.reasoning, briefRecord.technographic_signal, 'The approved market sources have not returned a brief for this view.');
   const freshness = firstText(data.pulse.updated_at, records.pulse?.updated_at);
   const cached = data.pulse.headlines_cached ?? data.pulse.cached;
   const query = projectId ? `?project_id=${projectId}` : '';
+  /**
+   * The meta line for one source, distinguishing the three states it can be in.
+   *
+   * Loaded is the only one that can quote a number, and it quotes ZERO happily:
+   * an empty store is a fact about the store, not about the connection. The
+   * other two are different failures with different fixes, and conflating them
+   * is what made three live Research zones read as unbuilt.
+   */
+  const sourceMeta = (key, whenLoaded) => {
+    if (Object.hasOwn(records, key)) return whenLoaded;
+    if (failedKeys.has(key)) return 'Source unavailable';
+    return 'Loading\u2026';
+  };
   const pulseLoaded = Object.hasOwn(records, 'pulse');
   const roundsLoaded = Object.hasOwn(records, 'rounds');
   const companiesLoaded = Object.hasOwn(records, 'companies');
@@ -120,9 +151,11 @@ export default function FounderResearchDesk() {
         <section className="a7-card a7-mint" id="a7-markets"><SectionHead title="Source freshness & cache" meta="Read-only source status" /><div className="a7-cache-grid"><div><strong>{cached === true ? 'Cached input available' : cached === false ? 'Freshness flag: not cached' : 'Cache state not recorded'}</strong><p>Only returned source flags are shown here. No research run, model, rate, token, or savings estimate is inferred.</p></div><div className="a7-cache-facts"><span>Last returned update <b>{freshness ? prettyDate(freshness) : 'Not recorded'}</b></span><span>Headline cache <b>{cached === true ? 'Yes' : cached === false ? 'No' : 'Not recorded'}</b></span></div></div></section>
         <section className="a7-card" id="a7-funds"><SectionHead title="Fund research" meta="Founder-accessible external research" /><div className="a7-unavailable"><Landmark size={19} /><div><strong>Not recorded / unavailable</strong><p>No founder-accessible external fund-research contract exists here. Operational fund records are not shown.</p></div></div><Link className="a7-link" to="/raise/capital/pipeline" state={state}>Open capital pipeline <ArrowUpRight size={13} /></Link></section>
         <div className="a7-bottom">
-          <section className="a7-card"><SectionHead title="Market deep-dives" meta={pulseLoaded || roundsLoaded ? `${data.markets.length + data.rounds.length} stored market records` : 'Source unavailable'} /><p>Market signals and private-round records available for deeper inspection.</p><Link className="a7-link" to="/market-intel" state={state}>Open market intelligence <ArrowUpRight size={13} /></Link></section>
-          <section className="a7-card" id="a7-companies"><SectionHead title="Company profiles" meta={companiesLoaded ? `${data.companies.length} returned` : 'Source unavailable'} /><p>{data.companies.length ? 'Company records are available from the company directory.' : companiesLoaded ? 'No company records are available from the approved source.' : 'The company source is temporarily unavailable.'}</p><Link className="a7-link" to="/build/competitors" state={state}>Open competitor analysis <ArrowUpRight size={13} /></Link></section>
-          <section className="a7-card" id="a7-library"><SectionHead title="Document library" meta={documentsLoaded ? `${data.docs.length} stored document${data.docs.length === 1 ? '' : 's'}` : projectId ? 'Source unavailable' : 'Startup not selected'} /><p>{selectedProject ? `Legal documents for ${selectedProject.name || `Startup #${projectId}`}.` : 'Select a startup to read its legal documents.'}</p><Link className="a7-link" to={`/raise/data-room${query}`} state={state}>Open data room <ArrowUpRight size={13} /></Link></section>
+          <section className="a7-card"><SectionHead title="Market deep-dives" meta={pulseLoaded || roundsLoaded
+            ? `${data.markets.length + data.rounds.length} stored market records`
+            : sourceMeta('pulse', '')} /><p>Market signals and private-round records available for deeper inspection.</p><Link className="a7-link" to="/market-intel" state={state}>Open market intelligence <ArrowUpRight size={13} /></Link></section>
+          <section className="a7-card" id="a7-companies"><SectionHead title="Company profiles" meta={sourceMeta('companies', `${data.companies.length} returned`)} /><p>{data.companies.length ? 'Company records are available from the company directory.' : companiesLoaded ? 'No company records are available from the approved source.' : 'The company source is temporarily unavailable.'}</p><Link className="a7-link" to="/build/competitors" state={state}>Open competitor analysis <ArrowUpRight size={13} /></Link></section>
+          <section className="a7-card" id="a7-library"><SectionHead title="Document library" meta={!projectId ? 'Startup not selected' : sourceMeta('documents', `${data.docs.length} stored document${data.docs.length === 1 ? '' : 's'}`)} /><p>{selectedProject ? `Legal documents for ${selectedProject.name || `Startup #${projectId}`}.` : 'Select a startup to read its legal documents.'}</p><Link className="a7-link" to={`/raise/data-room${query}`} state={state}>Open data room <ArrowUpRight size={13} /></Link></section>
         </div>
       </div>
       <WorkerRail
@@ -132,7 +165,7 @@ export default function FounderResearchDesk() {
         note="This rail reports manual coverage for stored records. It does not run research, answer questions, or take actions."
         coverage={[
           data.sources.length ? `${data.sources.length} source records` : 'Source list not recorded',
-          pulseLoaded ? `${data.headlines.length} stored headlines` : 'Headlines unavailable',
+          sourceMeta('pulse', `${data.headlines.length} stored headlines`),
           signalsLoaded ? `${data.signals.length} stored signals` : 'Signals unavailable',
           `Selected startup · ${selectedProject?.name || (projectId ? `Startup #${projectId}` : 'Not selected')}`,
         ]}

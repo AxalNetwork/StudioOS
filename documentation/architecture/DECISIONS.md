@@ -2596,13 +2596,19 @@ The schema says only `UNIQUE(party_a_user_id, party_b_user_id)`,
 reader is symmetric. The convention is restated as *party_a is the founder,
 party_b is the counterparty*; no migration was needed.
 
-**D37 is narrowed, not retired.** A founder still cannot push a document to an
-advisor: `advisor_client_document_shares` has a reader — a shared document
-appears in the brief — and no writer, so `LibraryZone` still says nobody can
-send you a document. What changed is the reason, from "the mechanism cannot
-exist" to "the control has not been built". `searchSemantic` is never widened;
-a shared document is resolved by id, and `research_search_isolation.test.ts`
-stays green.
+**D37 is narrowed, not retired.** At the time of this decision a founder still
+could not push a document to an advisor: `advisor_client_document_shares` had a
+reader — a shared document appears in the brief — and no writer, so
+`LibraryZone` said nobody can send you a document. What changed then was the
+reason, from "the mechanism cannot exist" to "the control has not been built".
+`searchSemantic` is never widened; a shared document is resolved by id, and
+`research_search_isolation.test.ts` stays green.
+
+> **SUPERSEDED IN PART, 2026-09-08 (task #104, D64).** The control has now been
+> built, so the second sentence above is history rather than current state. The
+> isolation half stands exactly as written: the writer resolves a document by
+> id, adds nothing to any namespace, and its test asserts `routes/search.ts`
+> still never mentions the share table.
 
 ---
 
@@ -3308,3 +3314,257 @@ or preview database may be bootstrapped, the baseline is applied once, and every
 migration through 219 is recorded without being replayed. Later migrations remain
 pending for the normal forward-only runner. Remote bootstrap is refused because
 production adoption is a different operation with different safety guarantees.
+
+## D63 — The baseline is the same kind of artifact `schema.sql` was, so it gets the guard `schema.sql` never had
+
+`schema_baseline.sql` replaced `schema.sql` as the file every new database is
+built from (see the D60 work and the Replit pass that landed it). It is a
+production snapshot committed to the repo — which is **exactly what `schema.sql`
+was**, and exactly the artifact that drifted from production for four months
+while five `project_id` clauses promised an `ON DELETE CASCADE` migration 039
+never applied. Being freshly dumped makes a snapshot true on the day it is
+taken and says nothing about any day after.
+
+So the fix reproduced the original bug class with a fresher file, and nothing in
+the repo asserted otherwise. `scripts/check-baseline-drift.mjs` is that
+assertion.
+
+**The invariant is not `baseline == production`.** It is
+
+    baseline + every migration above the cutoff  ==  production
+
+and the difference is the whole design. A check demanding equality with the
+baseline alone would go red the first time anyone shipped a migration, and stay
+red until someone re-dumped the file by hand — a chore nobody does twice. It
+would be switched off within a month and the drift would come back. What is
+checked instead is the repo's whole schema story reproducing production, which
+is the property that was actually false, and which stays checkable as
+migrations land.
+
+**By name, in both directions, never by count.** The first gate written for the
+baseline was "the built database has 399 tables". `_cf_KV` (Cloudflare's own,
+which local workerd creates itself and refuses to let a file create) and
+`sqlite_sequence` are auto-created, so a dump missing two real tables while
+regaining those two still reports 399. The guard builds the story in the same
+SQLite engine D1 is and takes the set difference of object names — and the
+object's TYPE is part of its identity, so a missing table cannot be cancelled
+out by an index that happens to share its name.
+
+**It runs after the deploy, and it is not `continue-on-error`.** A disagreement
+does not make the worker that just shipped unsafe, so it must not stand between
+a good build and production; but it does mean a fresh environment would come up
+wrong, which is worth a red workflow. `GOTCHAS.md` already records what
+`continue-on-error` did to the Semgrep job — a green check that means only that
+the scan ran — and that is not a pattern to copy.
+
+**Two things found reviewing the pass that landed the baseline**, both fixed
+here rather than left:
+
+- `migrations_fresh_build.test.ts` replaced a test recording 55 real failures
+  with one that filters migrations to `> BASELINE_CUTOFF` — a set that is
+  **empty today** (221 files, highest prefix 219, three prefixes repeating:
+  011, 068, 118). It asserted `[] === []`. It is a forward guard that starts
+  working at migration 220, which is fine, but nothing said so and it read as
+  strong. `the cutoff explains the empty set` now makes the emptiness a checked
+  consequence of where the cutoff sits, and refuses a cutoff past the highest
+  migration — the dangerous direction, because every file at or below it is
+  recorded as applied without being run.
+- The guard's own `compareObjects` filtered nothing; both of its callers did.
+  Correct on the real path and wrong as an exported function, which is the shape
+  that breaks when a third caller arrives. It filters for itself now. That was
+  caught by its own test on the first run, which is the argument for writing the
+  test.
+
+## D64 — Task #104 named the grant table; the gap was the two beside it
+
+Task #104 read "give migration 218's grant table a writer". `advisor_client_grants`
+has had a complete writer since task #82 — an `INSERT … ON CONFLICT (project_id,
+advisor_user_id) DO UPDATE` at `routes/advisor_grants.ts:142`, a revoke beside it,
+both reachable through `POST`/`DELETE /api/advisor-grants/:projectUid` and driven by
+`AdvisorGrantSection`. Migration 218 ships **three** tables, and both of the others
+were half-wired in opposite directions:
+
+- **`advisor_client_document_shares` — a reader and no writer.** The client brief
+  resolves a shared document through it; nothing in the repo could create a row.
+  Three places said so in prose (`routes/research.ts`, D50, and `LibraryZone`,
+  which rendered the consequence to the user) and none fixed it.
+- **`advisor_client_access_log` — a writer and no reader.** The brief has been
+  inserting `open_brief` rows since #82 and nothing ever read them, so the
+  founder-facing record the migration describes did not exist: you could grant
+  access and had no way to see whether it was used.
+
+**The share's conditions come from the reader, not from taste.** The brief joins
+`s.advisor_user_id = ? AND s.status = 'active' AND d.owner_user_id IN (SELECT id
+FROM users WHERE founder_id = ?)`. A row missing any part of that can never be
+read, and writing one would show the founder a document as shared that the advisor
+cannot see. So a share requires the caller to own the project, the document to
+belong to the founder RECORD (through `users.founder_id`, the way the brief
+resolves it — not `owner_user_id = user.id`, which would disagree with the brief
+for a co-founder), and the advisor to be an advisor now.
+
+**One condition the reader cannot enforce, and the writer must: a live grant.** The
+brief is reached through the grant, so a share to an ungranted advisor is written
+and then invisible to everyone. The picker offers only granted advisors for the
+same reason — a control that offers what the API refuses teaches the wrong model.
+
+**Two scoping bugs found by mutation rather than by reading**, both of which passed
+the whole suite first:
+
+- Scoping the revoke to `shared_by_user_id = user.id` was untested AND wrong. Every
+  case that could reach the clause was already refused by `ownedProject`, and a
+  founder record can be held by more than one account — so a co-founder could see a
+  share in the list and be unable to revoke it, while the grant revoke beside it is
+  project-scoped. Both the list and the revoke are now scoped to the founder record.
+- Dropping the share's ownership clause entirely also passed, and that one is a
+  cross-tenant write: `advisor_client_document_shares` has no `project_id`, so an
+  attacker naming **their own** projectUid clears `ownedProject` and only the
+  share's own clause stands between them and another tenant's row. There is now a
+  test that does exactly that.
+
+**D37 is untouched.** The writer resolves a document by id and widens no namespace;
+adding `research_doc` to `ALL_ENTITY_TYPES` would still publish every user's private
+documents to every other user's search box, and the test asserts `routes/search.ts`
+never mentions the share table.
+
+Production is unaffected either way: `advisor_client_grants`,
+`advisor_client_document_shares`, `advisor_client_access_log` and
+`research_documents` are all empty, and there are zero advisor accounts. This was
+built for correctness, not to unblock a live user.
+
+## D65 — A company's KYB sits beside the account's, and `companies` does not exist
+
+Task #108 asked whether KYB should be per-company rather than per-user. The
+answer is **beside**, and D40 and D42 had already argued it twice before the
+question was put: *"The account's entity is who signs your contracts; the
+company's is who the workspace belongs to. They must not drift into each other."*
+
+**What was per-user, and stays.** `corporate_profiles.user_id` is not a column,
+it is the PRIMARY KEY — one row per account, structurally — and `trust.ts`
+upserts it `ON CONFLICT(user_id)`. That record is the account holder's own legal
+entity and it is correct as it stands. Migration 220 does not touch it, move a
+row out of it, or deprecate it, and a test asserts the company write never
+writes a `corporate_profiles` row: the moment it does, the two objects have
+started to drift.
+
+**What was missing.** `TrustCenterPage`'s Entity tab carried a comment saying
+Trust Center v2 draws a "Your companies" card, one row per company with its own
+KYB pill, and that the page states the model instead of drawing a selector that
+"would have changed nothing when clicked". `ROUTE_MAP` said the same and named
+#108 as carrying it. `company_kyb_records` is what makes that card honest, and it
+is drawn now.
+
+**`companies` DOES NOT EXIST ON PRODUCTION, AND THIS IS THE FINDING WORTH
+KEEPING.** Migration 034 creates it. `schema_migrations` records 034 as applied
+(2026-06-30 14:15:40). Measured 2026-09-08:
+
+```
+SELECT COUNT(*) FROM companies;   ->  no such table: companies
+```
+
+It is also absent from `schema_baseline.sql`, and there are **zero** references
+to it in `cloudflare-worker/src/` — no FROM, no JOIN, no REFERENCES. Company
+identity in this product is `company_profiles` joined through
+`user_company_links`, which is what `resolveActiveCompany` verifies. So
+`REFERENCES companies(id)` would have shipped a foreign key pointing at nothing,
+and neither SQLite nor D1 would have said so — a REFERENCES target is not
+verified until the constraint is enforced, and D1 does not enforce them by
+default. It would have looked correct for as long as nobody looked. Migration
+220 references `company_profiles(id)`, and a test fails the day `companies`
+appears in the baseline so the choice gets reconsidered rather than inherited.
+
+**`company_id` is NOT NULL, unlike migration 219's.** In 189/193/194 `company_id`
+narrows an ownership predicate that already holds, so NULL widens harmlessly.
+Here the company IS the ownership key, with no second owner to fall back on, so
+a row with no company would be a KYB record belonging to nobody and readable by
+whoever asked. The column refuses it at the schema, which is why
+`companyKybScope` is the simplest scope in the module: membership, and nothing
+else. There is deliberately **no `started_by_user_id` branch** — `esignEnvelopeScope`
+and `icDecisionScope` both admit their creator because those records are about a
+person's act; a KYB record is about the company, and someone who has left should
+not keep reading its registration number because they filled the form in once.
+
+**The company comes from the verified header, never from the body.** Mutation
+testing found that reading `company_id` from the request body passed every test,
+because no test sent one — a body field is an ownership claim the caller makes
+about itself, while `X-Company-Id` goes through `resolveActiveCompany`, which
+refuses anything that is not 1-15 digits and then checks `user_company_links`.
+There is now a test that sends another member's company id in the body and
+requires it to be ignored.
+
+**Zero rows migrate.** Production on 2026-09-08: `corporate_profiles` 0,
+`sanctions_screenings` 0, `kyc_partner_imports` 0, `company_profiles` 3,
+`user_company_links` 3 (all three belonging to one account). There is no
+per-user KYB row to reshape, and inventing a company KYB from an account's would
+assert something nobody entered. The cost of this change only goes up from here,
+which is the argument for making it while the tables are empty.
+
+**D42's guard is untouched and still valid.** It fails the day `company_profiles`
+gains `entity_id`, `jurisdiction` or `registered_address` — and this change adds
+none of them, because the company's entity lives in its own table rather than
+being bolted onto the profile. The guard was placed to force a reconsideration;
+the reconsideration happened and reached the same answer it encodes.
+
+## D66 — U11's guard already existed, pointed at the one directory that was clean
+
+Task #107 asked to close U11, "390 undeclared axal-* Tailwind classes". Two
+things were true that the item did not know.
+
+**The guard it asked for did not need writing.** U11's closing line names what
+would make the sweep safe to start: *"a guard that fails a NEW undeclared
+`axal-*` class, so the number can only go down."*
+`frontend/test/ui_design_tokens.test.mjs` had asserted exactly that invariant
+since the `ui/` primitives were built — and walked only `frontend/src/ui/`,
+which was the one directory with zero violations. The rule was right and the
+reach was wrong, which is the same shape `chunk_reload_loop.test.mjs` records
+about itself. It now walks `pages/` and `workspaces/` with a shrink-only
+allowlist, and it already runs under `test:drift`: no new `scripts/check-*.mjs`,
+no `package.json` change.
+
+**The number was wrong, and so was the table.** The census counted **397
+occurrences across 8 tokens in 50 files**, comments excluded. U11 lists six
+tokens and misses `axal-line` (8 uses, the whole HQ shell from PRs #417/#418)
+and `axal-blue` (2, `AdminPage.jsx:845`). Its `border-axal-border: 16`
+double-counts: a `\b`-terminated grep for `axal-border` also matches
+`axal-border-soft`, listed separately on the next row as 11. The bare count is
+5, so the honest 2026-09-07 total was ~379. Three sibling docblocks disagreed
+with it and with each other (~410, ~400, ~400) — what a number nobody can
+re-derive looks like.
+
+**The sweep stays open, and is bigger than U11 estimated.** Not one of the 397
+call sites has a `dark:` counterpart, so declaring eight light values would flip
+the entire workspace surface to light-only in dark mode. Either eight colours
+get chosen in BOTH themes under D2's palette rule, or 397 call sites move to
+Tailwind's own greys — a restyle across four licences needing its own render
+pass. `workspaces/bucketOverview.css:45,51,57` holds the only concrete values
+anyone has assigned to three of them (#4b5563 / #6b7280 / #e5e7eb).
+
+**The allowlist may only shrink, and the test enforces that too.** A token fixed
+everywhere would otherwise sit in the list forever, and the next one could be
+waved through by adding a line — which is how an allowlist becomes permission.
+
+### The same batch: Markets, Ask and Companies are live, and empty is not unbuilt
+
+Asked to record those three Research zones as "blocked on a store", the check
+found the opposite. All three sit in `ResearchWorkspace`'s `LIVE_ZONES` and each
+reads a real worker route over a real D1 table. Production, 2026-09-08:
+
+| Zone | Store | Rows |
+| --- | --- | --- |
+| Markets | `signals.ts` → `signals`, `market_intel_rows` | 10 and **196,956** |
+| Companies | `competitors.ts` → `competitor_analyses` | **0** |
+| Ask | `research.ts` → `research_documents` | **0** |
+
+Companies and Ask are **empty, not unbuilt**; Markets is genuinely populated.
+`NoStoreYet` renders "No store behind this yet", so recording the three would
+have put a false sentence on the page rather than merely a stale note in a doc —
+and `ROUTE_MAP.md:133` already records a version of that document calling Ask
+and Library unbuilt AFTER they shipped, which read as written would have sent
+someone to rebuild a shipped feature in the wrong place.
+
+**What was actually wrong sat one layer up.** `FounderResearchDesk` printed
+"Source unavailable" whenever a key was absent from `records` — and a key is
+absent both while the request is in flight and after it fails. So a healthy page
+said it on every card until the fetch resolved, and a store holding 196,956 rows
+said it too. The `failed` list existed and only ever set one page-wide banner,
+so no card could tell whether its own source had broken. It is three states now,
+with three sentences, and a later success clears the failure it recovered from.

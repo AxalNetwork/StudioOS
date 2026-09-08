@@ -22,16 +22,17 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
  * page keeps that distinction: "not indexed yet" and "indexed into nothing"
  * are different facts and only one of them means Ask has read the file.
  *
- * WHAT THIS PAGE CANNOT DO, stated rather than left as an empty list a reader
- * fills in wrongly: nobody can send you a document. That is still true, and
- * the reason has changed. The grant that would carry it now exists —
- * `advisor_client_grants` (migration 218) opens one project to one named
- * advisor, scope by scope — and `advisor_client_document_shares` is the table
- * a pushed document would live in. It has a reader, in the client brief, and
- * no writer: no surface in this product lets a founder pick a file and send
- * it. So an empty library still means you have uploaded nothing rather than
- * that nobody shared anything, and it says so for a narrower reason than
- * before.
+ * WHAT THIS PAGE CAN NOW DO, and could not until task #104: a client can send
+ * you a document. `advisor_client_grants` (migration 218) opens one project to
+ * one named advisor, and `advisor_client_document_shares` carries a single file
+ * inside that grant — a table that had a reader and no writer until the control
+ * beside `AdvisorGrantSection` was built.
+ *
+ * A pushed document does NOT appear here. It appears in that advisor's client
+ * brief for that startup, resolved by id, because this library is your own and
+ * the isolation D37 protects is the reason the whole grant is scoped by id
+ * rather than by namespace. So an empty library still means you have uploaded
+ * nothing — it just no longer also means nobody could have sent you anything.
  */
 
 const STATE_LABEL = {

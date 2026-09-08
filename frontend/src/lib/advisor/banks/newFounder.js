@@ -34,7 +34,7 @@ export const NEW_FOUNDER_BANK = [
     type: 'short',
     explainer: 'Your working name. You can rename it any time from the startup page.',
     doc_anchor: 'build/projects',
-    page_target: '/projects',
+    page_target: '/build',
     validate: all(required, minChars(2), maxChars(80)),
   },
   {
@@ -43,7 +43,7 @@ export const NEW_FOUNDER_BANK = [
     type: 'long',
     explainer: 'Two-to-four sentences. Aim for the “problem → solution → who it’s for” arc.',
     doc_anchor: 'build/projects',
-    page_target: '/projects',
+    page_target: '/build',
     validate: all(required, minChars(40), maxChars(800)),
   },
   {
@@ -53,7 +53,7 @@ export const NEW_FOUNDER_BANK = [
     options: SECTORS,
     explainer: 'Used to match you with sector-relevant investors and advisors.',
     doc_anchor: 'build/projects',
-    page_target: '/projects',
+    page_target: '/build',
     validate: all(required, oneOf(SECTORS)),
   },
   {
@@ -63,7 +63,7 @@ export const NEW_FOUNDER_BANK = [
     options: STAGES,
     explainer: 'Stage drives the dashboards and the milestones we surface.',
     doc_anchor: 'spin-out-lab/overview',
-    page_target: '/projects',
+    page_target: '/build',
     validate: all(required, oneOf(STAGES)),
   },
   {
@@ -72,7 +72,7 @@ export const NEW_FOUNDER_BANK = [
     type: 'long',
     explainer: 'Even a “none yet” is useful — it tells us to focus on discovery first.',
     doc_anchor: 'build/projects',
-    page_target: '/projects',
+    page_target: '/build',
     validate: maxChars(800),
   },
 

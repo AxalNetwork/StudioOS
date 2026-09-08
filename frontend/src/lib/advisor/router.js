@@ -114,7 +114,6 @@ export function pagesForBank(bankName) {
 export function pageLabel(path) {
   if (!path) return '';
   const map = {
-    '/projects': 'Startups',
     '/build/discovery': 'Discovery',
     '/build/roadmap': 'Roadmap',
     '/build/brand': 'Brand',
@@ -123,7 +122,6 @@ export function pageLabel(path) {
     '/matches': 'AI Matches',
     '/portfolio': 'Portfolio',
     '/advisorship': 'Advisorship',
-    '/partners': 'Partners',
   };
   if (map[path]) return map[path];
   // Fallback: last segment, title-cased.

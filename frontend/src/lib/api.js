@@ -2611,6 +2611,19 @@ export const api = {
   advisorClientsSharedWithMe: () => request('/advisor-grants/shared/list'),
   advisorClientBrief: (projectUid) => request(`/advisor-grants/shared/${encodeURIComponent(projectUid)}/brief`),
 
+  // Task #104 — the writer `advisor_client_document_shares` never had. The
+  // table shipped in migration 218 with a reader (the client brief resolves a
+  // shared document through it) and nothing that could create a row, so
+  // LibraryZone told the advisor nobody could send them a document. A share
+  // needs a live grant behind it: the brief is the only surface that reads
+  // these rows, so a share without one is written and then invisible.
+  advisorSharedDocuments: (projectUid) => request(`/advisor-grants/${encodeURIComponent(projectUid)}/documents`),
+  advisorShareDocument: (projectUid, data) => request(`/advisor-grants/${encodeURIComponent(projectUid)}/documents`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  advisorUnshareDocument: (projectUid, shareUid) => request(`/advisor-grants/${encodeURIComponent(projectUid)}/documents/${encodeURIComponent(shareUid)}`, { method: 'DELETE' }),
+  // `advisor_client_access_log` had the opposite gap: a writer since #82 and no
+  // reader, so the founder's record of what an advisor opened did not exist.
+  advisorClientAccessLog: (projectUid) => request(`/advisor-grants/${encodeURIComponent(projectUid)}/access-log`),
+
   // Messages (migration 185 + routes/messages.ts). Membership is the only key:
   // every one of these 404s for a thread the caller is not in.
   messageThreads: () => request('/messages'),
@@ -2962,6 +2975,14 @@ export const api = {
 
   getTrustSummary: () => request('/trust/summary'),
   startKyb: (payload) => request('/trust/kyb/start', { method: 'POST', body: JSON.stringify(payload) }),
+  // Task #108 — the COMPANY's entity record, beside the account's above, never
+  // instead of it (D40/D42: "the account's entity is who signs your contracts;
+  // the company's is who the workspace belongs to"). The write takes its
+  // company from the X-Company-Id header every request already carries, which
+  // `resolveActiveCompany` verifies against user_company_links — a company id
+  // in the body would be an ownership claim the caller makes about themselves.
+  companyKybList: () => request('/trust/companies/kyb'),
+  companyKybStart: (payload) => request('/trust/companies/kyb', { method: 'POST', body: JSON.stringify(payload || {}) }),
   getRequiredNdas: () => request('/trust/nda/required'),
 
   // ---------- Founder risk (Task #41, admin/partner/investor only) ----------

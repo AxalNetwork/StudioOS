@@ -105,7 +105,7 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog }) {
       <EmptyState
         title="No venture yet"
         description="Validate reads the interviews logged against a venture. Create one and the evidence stages fill from it."
-        action={<Link to="/projects" className="text-axal-violet underline">Go to projects</Link>}
+        action={<Link to="/build" className="text-axal-violet underline">Go to projects</Link>}
       />
     );
   }
@@ -364,7 +364,7 @@ function NoVenture({ what }) {
     <EmptyState
       title="No venture yet"
       description={`${what} reads the interviews logged against a venture. Create one and the evidence stages fill from it.`}
-      action={<Link to="/projects" className="text-axal-violet underline">Go to projects</Link>}
+      action={<Link to="/build" className="text-axal-violet underline">Go to projects</Link>}
     />
   );
 }

@@ -477,3 +477,42 @@ export function icDecisionScope(actor: Actor | null | undefined, alias = 'd'): S
     binds: [id, id, id],
   };
 }
+
+/**
+ * Which company KYB records are mine — task #108, migration 220.
+ *
+ * THE SIMPLEST SCOPE IN THIS MODULE, BECAUSE THE TABLE WAS DESIGNED FOR IT.
+ * `company_kyb_records.company_id` is NOT NULL and UNIQUE, so there is exactly
+ * one row per company and exactly one question to answer: is the caller a
+ * member of that company? There is no author fallback and no NULL branch,
+ * because there is no such row to have — the schema refuses one.
+ *
+ * That is the difference from `icDecisionScope` beside it, which needs three
+ * branches for a table that gained `company_id` late and nullable, and which
+ * therefore has to say out loud that `IS NULL` means "author and voters only"
+ * rather than "everyone". Here the column carried its meaning from the first
+ * row, so the predicate is just membership.
+ *
+ * MEMBERSHIP IS READ FROM `user_company_links` DIRECTLY, for the reason 219's
+ * docblock gives: the `X-Company-Id` header answers "which of my companies am I
+ * looking at", which is a filter the reader controls, and this answers "is this
+ * row mine at all". A forged header reaches nothing, because the subquery binds
+ * the caller's id and compares against the ROW's company.
+ *
+ * WHY THERE IS NO `started_by_user_id` BRANCH, though the column exists.
+ * `esignEnvelopeScope` and `icDecisionScope` both admit their creator, and both
+ * are records about a PERSON'S act. A KYB record is about the COMPANY: whoever
+ * typed it did so on the company's behalf, and someone who has left should not
+ * keep reading its registration number because they filled the form in once.
+ * The column says who to ask, not who may look.
+ */
+export function companyKybScope(actor: Actor | null | undefined, alias = 'k'): ScopeClause {
+  if (isUnscoped(actor)) return ALL_ROWS;
+  const id = actorId(actor);
+  if (id === null) return NO_ROWS;
+  return {
+    sql: `EXISTS (SELECT 1 FROM user_company_links ucl
+                   WHERE ucl.user_id = ? AND ucl.company_id = ${alias}.company_id)`,
+    binds: [id],
+  };
+}

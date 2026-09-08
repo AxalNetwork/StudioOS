@@ -53,8 +53,18 @@ interface GrantRow {
 async function ownedProject(c: any, user: any, projectUid: string) {
   const companyId = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
   const scope = companyScope(user, companyId, 'p');
+  // `founder_id` is selected because the document-share writer resolves
+  // ownership the way the BRIEF's join does — through `users.founder_id`, not
+  // `owner_user_id = user.id`. Without it that check compared against undefined
+  // and refused every document.
+  //
+  // THE COMMENT LIVES OUT HERE, NOT INSIDE `prepare(`. Putting it between the
+  // paren and the template literal made `check-sql-prepare.mjs` stop seeing
+  // this site at all: `--write` then dropped it from the baseline while the
+  // interpolation was still in the code. A scanner that silently loses a
+  // tracked site is worse than one that flags a new one.
   return c.env.DB.prepare(
-    `SELECT p.id, p.uid, p.name, p.sector, p.stage FROM projects p WHERE p.uid = ? AND ${scope.sql}`,
+    `SELECT p.id, p.uid, p.name, p.sector, p.stage, p.founder_id FROM projects p WHERE p.uid = ? AND ${scope.sql}`,
   ).bind(projectUid, ...scope.binds).first();
 }
 
@@ -174,6 +184,179 @@ grants.delete('/:projectUid/:grantUid', async (c) => {
   ).bind(nowIso(), c.req.param('grantUid'), project.id).run();
   if (!res.meta?.changes) return c.json({ detail: 'Not found' }, 404);
   return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Documents the founder pushes to one advisor — task #104
+// ---------------------------------------------------------------------------
+
+/**
+ * `advisor_client_document_shares` HAD A READER AND NO WRITER.
+ *
+ * Migration 218 shipped the table, the brief above resolves a shared document
+ * through it, and `routes/research.ts` and DECISIONS D50 both say in prose that
+ * nothing could write a row: "a founder still cannot push a document to an
+ * advisor". `LibraryZone` renders that sentence to the user. These three
+ * handlers are what makes it false.
+ *
+ * TASK #104 CALLED THIS "migration 218's grant table". It is not the grant
+ * table: `advisor_client_grants` has had a complete writer since #82 — the
+ * `INSERT … ON CONFLICT DO UPDATE` above and the revoke beside it, driven by
+ * `AdvisorGrantSection`. 218 ships THREE tables, and the share table is the one
+ * with the gap.
+ *
+ * FOUR CONDITIONS, AND THE READER DICTATES THREE OF THEM. The brief's join is
+ * `s.advisor_user_id = ? AND s.status = 'active' AND d.owner_user_id IN
+ * (SELECT id FROM users WHERE founder_id = ?)`, so a row that does not satisfy
+ * it is a row that can never be read — worse than useless, because the founder
+ * would see it listed as shared. So a share requires: the caller owns the
+ * project, the document belongs to the caller, the advisor holds a live grant
+ * on that project, and the advisor is an advisor NOW. The grant requirement is
+ * the one the reader does not enforce and this must: the brief is the only
+ * surface that reads these rows, so a share without a grant is invisible to
+ * everyone.
+ *
+ * NO SEARCH NAMESPACE IS WIDENED, and this is where that temptation lives. Per
+ * D37, adding `research_doc` to `ALL_ENTITY_TYPES` would publish every user's
+ * private documents to every other user's global search box "in one line that
+ * looks exactly like following the existing pattern".
+ * `advisor_client_grants.test.ts` fails the build if this file so much as
+ * mentions `searchSemantic`.
+ */
+grants.get('/:projectUid/documents', async (c) => {
+  const user = await requireAuth(c);
+  const project = await ownedProject(c, user, c.req.param('projectUid'));
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  const rows = await c.env.DB.prepare(
+    `SELECT s.uid, s.status, s.created_at, d.uid AS document_uid, d.title, d.kind,
+            u.email AS advisor_email, u.name AS advisor_name, u.role AS advisor_role
+       FROM advisor_client_document_shares s
+       JOIN research_documents d ON d.id = s.document_id
+       JOIN users u ON u.id = s.advisor_user_id
+      WHERE s.shared_by_user_id IN (SELECT id FROM users WHERE founder_id = ?)
+        AND s.status = 'active'
+      ORDER BY s.created_at DESC LIMIT 200`,
+  ).bind(project.founder_id).all<any>();
+  return c.json({
+    items: (rows.results || []).map((r: any) => ({
+      uid: r.uid, document_uid: r.document_uid, title: r.title, kind: r.kind,
+      created_at: r.created_at,
+      advisor_email: r.advisor_email, advisor_name: r.advisor_name,
+      // Same surfacing the grant list does: a share to someone who is no longer
+      // an advisor is inert, and the founder should see that rather than
+      // believe a document is being read.
+      advisor_is_advisor: r.advisor_role === 'advisor',
+    })),
+  });
+});
+
+grants.post('/:projectUid/documents', async (c) => {
+  const user = await requireAuth(c);
+  const project = await ownedProject(c, user, c.req.param('projectUid'));
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  const body = await c.req.json<any>().catch(() => ({}));
+  const email = String(body.email || '').trim().toLowerCase();
+  const documentUid = String(body.document_uid || '').trim();
+  if (!email) return c.json({ detail: 'An email address is required' }, 400);
+  if (!documentUid) return c.json({ detail: 'A document is required' }, 400);
+
+  const advisor = await c.env.DB.prepare(
+    'SELECT id, role FROM users WHERE LOWER(email) = ?',
+  ).bind(email).first<{ id: number; role: string }>();
+  if (!advisor) return c.json({ detail: 'No account with that address' }, 404);
+  if (!isAdvisorNow(advisor)) {
+    return c.json({
+      detail: 'That account is not an advisor. Every read of a shared document '
+        + 're-checks the role, so this share would never resolve.',
+    }, 400);
+  }
+
+  // The grant is the container; a document rides inside it. Without this the
+  // row would be written and then be unreadable, because the brief — the only
+  // reader — is reached through the grant.
+  const grant = await activeGrant(c.env, project.id, advisor.id);
+  if (!grant) {
+    return c.json({
+      detail: 'That advisor holds no live grant on this record. Grant access first; '
+        + 'a shared document is only ever read inside the client brief.',
+    }, 400);
+  }
+
+  // OWNERSHIP IS RESOLVED THE WAY THE READER RESOLVES IT — through
+  // `users.founder_id`, not through `owner_user_id = user.id`. A founder record
+  // can be held by more than one account, and the brief's join would show a
+  // document this check had refused, or refuse one it would show.
+  const doc = await c.env.DB.prepare(
+    `SELECT d.id FROM research_documents d
+      WHERE d.uid = ?
+        AND d.owner_user_id IN (SELECT id FROM users WHERE founder_id = ?)`,
+  ).bind(documentUid, project.founder_id).first<{ id: number }>();
+  if (!doc) return c.json({ detail: 'Document not found' }, 404);
+
+  const uid = newUid();
+  const now = nowIso();
+  await c.env.DB.prepare(
+    `INSERT INTO advisor_client_document_shares
+       (uid, document_id, advisor_user_id, shared_by_user_id, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'active', ?, ?)
+     ON CONFLICT (document_id, advisor_user_id) DO UPDATE SET
+       status = 'active',
+       shared_by_user_id = excluded.shared_by_user_id,
+       updated_at = excluded.updated_at`,
+  ).bind(uid, doc.id, advisor.id, user.id, now, now).run();
+
+  const row = await c.env.DB.prepare(
+    'SELECT uid, status, created_at FROM advisor_client_document_shares WHERE document_id = ? AND advisor_user_id = ?',
+  ).bind(doc.id, advisor.id).first<any>();
+  return c.json({ uid: row?.uid, document_uid: documentUid, status: row?.status, created_at: row?.created_at }, 201);
+});
+
+grants.delete('/:projectUid/documents/:shareUid', async (c) => {
+  const user = await requireAuth(c);
+  const project = await ownedProject(c, user, c.req.param('projectUid'));
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  // A STATE, NEVER A DELETE — the same reasoning the grant revoke gives: the
+  // access log points at what was read, and that record outlives the share.
+  //
+  // SCOPED TO THE FOUNDER RECORD, NOT THE ACCOUNT THAT SHARED. Found by
+  // mutation: scoping to `shared_by_user_id = user.id` passed every test,
+  // because the only caller who could reach it was already refused by
+  // `ownedProject`. It was also wrong. A founder record can be held by more
+  // than one account, the grant revoke beside this one is project-scoped, and
+  // the brief resolves ownership through `users.founder_id` — so a co-founder
+  // could see a share in the list and be unable to revoke it. One rule.
+  const res = await c.env.DB.prepare(
+    `UPDATE advisor_client_document_shares SET status = 'revoked', updated_at = ?
+      WHERE uid = ? AND status = 'active'
+        AND shared_by_user_id IN (SELECT id FROM users WHERE founder_id = ?)`,
+  ).bind(nowIso(), c.req.param('shareUid'), project.founder_id).run();
+  if (!res.meta?.changes) return c.json({ detail: 'Not found' }, 404);
+  return c.json({ ok: true });
+});
+
+/**
+ * The access log finally has a reader — the other half of task #104.
+ *
+ * Migration 218 built `advisor_client_access_log` as "the founder's own record
+ * of an advisor's reading", and the brief has been writing `open_brief` rows
+ * into it since #82. Nothing ever read them, so the record it was built to be
+ * did not exist: the founder could grant access and had no way to see whether
+ * it was used.
+ */
+grants.get('/:projectUid/access-log', async (c) => {
+  const user = await requireAuth(c);
+  const project = await ownedProject(c, user, c.req.param('projectUid'));
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  const rows = await c.env.DB.prepare(
+    `SELECT l.action, l.created_at, u.email AS advisor_email, u.name AS advisor_name,
+            d.uid AS document_uid, d.title AS document_title
+       FROM advisor_client_access_log l
+       JOIN users u ON u.id = l.advisor_user_id
+       LEFT JOIN research_documents d ON d.id = l.document_id
+      WHERE l.project_id = ?
+      ORDER BY l.created_at DESC LIMIT 200`,
+  ).bind(project.id).all<any>();
+  return c.json({ items: rows.results || [] });
 });
 
 // ---------------------------------------------------------------------------

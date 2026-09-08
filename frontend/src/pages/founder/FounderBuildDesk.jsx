@@ -5,6 +5,7 @@ import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import ExecutionPage from '../ExecutionPage';
 import { zonePillClass } from './deskZoneNav';
+import CreateStartupForm from '../../components/CreateStartupForm';
 import './founderBuildDesk.css';
 
 const clean = (value) => String(value || '').trim();
@@ -40,6 +41,11 @@ export default function FounderBuildDesk() {
   const [state, setState] = useState(() => seed ? 'ready' : 'loading');
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  // `/projects` is retired (task #101) and this desk inherited the one thing it
+  // could do that nothing else can: create a startup. `?new=1` opens the form,
+  // because that is how the Command Palette's "Create startup" entry addressed
+  // /projects and a <Navigate> redirect cannot carry a query string.
+  const [creating, setCreating] = useState(() => searchParams.get('new') === '1');
 
   useEffect(() => {
     if (workspace) return;
@@ -118,6 +124,20 @@ export default function FounderBuildDesk() {
               <Link data-testid="link-open-execution-workspace" className="build-open" to={executionLink} state={navigationState}>Open execution workspace <ArrowUpRight size={14} /></Link>
             </div>
           </div>
+          <CreateStartupForm
+            open={creating}
+            onOpenChange={(next) => {
+              setCreating(next);
+              // Drop ?new=1 once the form is closed, so a reload does not
+              // reopen it and the back button behaves.
+              if (!next && searchParams.get('new') === '1') {
+                const params = new URLSearchParams(searchParams);
+                params.delete('new');
+                setSearchParams(params, { replace: true });
+              }
+            }}
+            onCreated={() => setReloadKey((k) => k + 1)}
+          />
           <nav aria-label="Operating desk sections" className="build-anchors">
             {
               // Board was the one pill that never became a link: it fell

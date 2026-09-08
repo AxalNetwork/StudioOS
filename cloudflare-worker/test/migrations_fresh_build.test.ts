@@ -53,6 +53,21 @@ const CASCADE_TABLES = [
   'deals', 'score_snapshots', 'documents', 'discovery_interviews', 'roadmap_okrs',
 ];
 
+/**
+ * WHY THE NEXT TEST NEEDS THE ONE AFTER IT.
+ *
+ * The post-cutoff set is EMPTY today: 221 migration files, highest numeric
+ * prefix 219 (three prefixes repeat — 011, 068, 118), and the cutoff is 219. So
+ * "builds without failures" currently iterates nothing and asserts `[] === []`.
+ * It is a forward guard that starts doing work at migration 220, not a
+ * statement about anything today, and a test that reads as strong while
+ * checking nothing is worse than no test — this file replaced one that recorded
+ * 55 real failures, so the contrast matters.
+ *
+ * `the cutoff explains the empty set` below is what keeps that honest: it makes
+ * the emptiness a checked consequence of where the cutoff sits, rather than
+ * something a broken filter could also produce.
+ */
 test('a baseline plus every post-cutoff migration builds without failures', () => {
   const db = fromBaseline();
   const failures: Array<[string, string]> = [];
@@ -76,6 +91,37 @@ test('a baseline plus every post-cutoff migration builds without failures', () =
       failures.map(([name, message]) => `  ${name}: ${message}`).join('\n'),
   );
 });
+test('the cutoff explains the empty set, rather than a filter that matches nothing', () => {
+  const numbers = readdirSync(MIGRATIONS)
+    .filter((name) => /^\d+_.*\.sql$/.test(name))
+    .map(migrationNumber);
+  const highest = Math.max(...numbers);
+
+  // THE DANGEROUS DIRECTION IS A CUTOFF THAT IS TOO HIGH. Every file at or
+  // below it is recorded as already contained in the baseline and never run, so
+  // a cutoff past the real files would silently mark migrations as applied that
+  // the baseline does not carry — a fresh database missing them and a ledger
+  // claiming otherwise. Too LOW is merely redundant work.
+  assert.ok(
+    BASELINE_CUTOFF <= highest,
+    `BASELINE_CUTOFF ${BASELINE_CUTOFF} is past the highest migration ${highest} — `
+    + 'bootstrap would mark files the baseline does not contain',
+  );
+
+  // And if nothing sorts above the cutoff, that must be because the cutoff is
+  // at the top of the range, not because the filter stopped matching.
+  const newer = readdirSync(MIGRATIONS)
+    .filter((name) => /^\d+_.*\.sql$/.test(name))
+    .filter((name) => migrationNumber(name) > BASELINE_CUTOFF);
+  if (newer.length === 0) {
+    assert.equal(
+      BASELINE_CUTOFF, highest,
+      'no migration sorts above the cutoff, and the cutoff is not at the top either — '
+      + 'the filter is matching nothing for the wrong reason',
+    );
+  }
+});
+
 test('the baseline contains what 039 landed', () => {
   const cols = baseline.prepare("SELECT name FROM pragma_table_info('projects')")
     .all() as Array<{ name: string }>;

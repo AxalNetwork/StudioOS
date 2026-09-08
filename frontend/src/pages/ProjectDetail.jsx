@@ -112,7 +112,7 @@ export default function ProjectDetail() {
     if (!window.confirm(`Delete "${project.name}"? This cannot be undone.`)) return;
     try {
       await api.deleteProject(project.id);
-      navigate('/projects');
+      navigate('/build');
     } catch (e) { showToast({ kind: 'error', msg: e.message }); }
   };
 
@@ -146,7 +146,7 @@ export default function ProjectDetail() {
     return (
       <div className="text-center py-20">
         <div className="text-red-600 text-sm mb-3">{loadError}</div>
-        <Link to="/projects" className="text-violet-600 hover:underline text-sm">Back to Startups</Link>
+        <Link to="/build" className="text-violet-600 hover:underline text-sm">Back to Startups</Link>
       </div>
     );
   }
@@ -157,7 +157,7 @@ export default function ProjectDetail() {
 
   return (
     <div data-testid="project-detail">
-      <Link to="/projects" className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-4">
+      <Link to="/build" className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-4">
         <ArrowLeft size={14} /> Back to Startups
       </Link>
 

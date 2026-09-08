@@ -226,7 +226,7 @@ export default function DeckReviewerPage({ embedded = false }) {
       {!projects.length && (
         <div className={`${CARD} p-4 mb-4 text-center text-sm text-gray-700 dark:text-gray-300`}>
           You don&apos;t have a startup yet — reviews are sharper with one.{' '}
-          <Link to="/projects" className="text-orange-600 dark:text-orange-400 font-semibold">Create one →</Link>
+          <Link to="/build?new=1" className="text-orange-600 dark:text-orange-400 font-semibold">Create one →</Link>
           <span className="block text-xs text-gray-400 dark:text-gray-500 mt-1">You can still upload a deck below without a startup.</span>
         </div>
       )}
