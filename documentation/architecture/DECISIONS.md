@@ -3131,3 +3131,91 @@ exactly as `project_id` already was. It is deliberately not narrowed further:
 `deals` carries no company column on purpose (migration 194 — browsing deals is
 a marketplace), so which deals a caller may see is a different surface's
 question.
+
+## D60 — Migration 039 never ran, and `schema.sql` was edited as though it had
+
+Task #112 was "rewrite migration 039 so a fresh D1 build can apply it", and it
+was written believing 039 had been applied. It had not, and what turned up while
+checking is bigger than the file.
+
+**Section 1 landed by hand; sections 2–6 have never run anywhere.** Read off
+live D1 on 2026-09-08 with `SELECT sql FROM sqlite_master` — not off
+`schema.sql`, which is the whole point of this entry:
+
+| Table | Live `project_id` |
+| --- | --- |
+| `deals` | `REFERENCES projects(id)` — no CASCADE |
+| `score_snapshots` | `REFERENCES projects(id)` — no CASCADE |
+| `documents` | `REFERENCES projects(id)` — no CASCADE |
+| `discovery_interviews` | `INTEGER NOT NULL` — no REFERENCES at all |
+| `roadmap_okrs` | `INTEGER NOT NULL` — no REFERENCES at all |
+
+`projects.deleted_at` and `idx_projects_deleted_at` are present. The file's own
+marker row records exactly this, deliberately renamed on 2026-05-11 to
+`_migrations_applied.name = '039_project_cascade_partial_deleted_at_only'` — it
+is still the only row in that table. `CHANGELOG.md` has carried the same note
+since. `schema_migrations` has the file marked applied (baselined, so recorded
+without executing), which is why production is settled and only a fresh build
+was ever affected.
+
+Measured on the local workerd D1 that GOTCHAS names as the reproduction, the
+old file fails with *"To execute a transaction, please use the
+state.storage.transaction() … APIs instead of the SQL BEGIN TRANSACTION or
+SAVEPOINT statements"* — the same rejection it hit in May. The rewritten file
+applies both statements and produces `projects.deleted_at TIMESTAMP` plus the
+index, which is what production has.
+
+**The file now says what it did, not what it intended.** Sections 2–6 are
+deleted rather than repaired, for three reasons in order of weight:
+
+1. A fresh database must land where production is. Keeping the rebuild would
+   give every new build a cascade production does not have, and every later
+   migration would be written against a schema only one of the two carries.
+2. Nothing depends on the cascade. `services/projectTrash.ts::hardDeleteProject`
+   deletes from twenty-four child tables by hand and then detaches
+   `activity_logs` by nulling `project_id`, because that history is deliberately
+   KEPT — which a cascade would have dropped. That loop is the only cascade
+   production has ever had and it works. Its header claimed the opposite ("on a
+   migrated DB the manual deletes are redundant"), which is how a working
+   safeguard gets deleted as vestigial; corrected in the same commit.
+3. The rebuild had gone stale where it would have hurt most. Three of its five
+   sections copied rows with `INSERT INTO <t>_new SELECT * FROM <t>`, which maps
+   by POSITION, and the live column order no longer matches the declarations —
+   `score_snapshots` has since gained `official_week`, `deals` sixteen columns
+   including the whole pass taxonomy. Empty database: copies nothing. Populated
+   one: writes values into the wrong columns.
+
+**THE PART THAT MATTERS MORE THAN 039.** `schema.sql` — the snapshot every new
+environment is provisioned from — had been edited to carry the cascade, with
+five `-- Task #7 (AM) — ON DELETE CASCADE so admin hard-delete drops X too.`
+comments marking the exact sites. So the intent was written into the snapshot
+while the migration that would have realised it never ran, and for four months
+a new database and production disagreed about five foreign keys with nothing
+checking. All five now match production, including the two that carry no
+reference at all: matching exactly beats adding a constraint only new databases
+would have, because an insert that succeeds on production and fails in dev is
+the divergence in its most confusing form. If the key is wanted it is a
+migration applied to both.
+
+`cloudflare-worker/test/migrations_fresh_build.test.ts` pins that agreement, and
+is the assertion that would have caught this in May.
+
+**A related finding, recorded and NOT fixed here: this repo cannot build a
+database from its migrations alone.** Replaying every numbered migration on top
+of `schema.sql` fails 55 times out of 221 — `schema.sql` is a current-state
+snapshot, not the base the deltas were written against, so it is already past
+what most of them add (11 `duplicate column name`, 41 `no such table`, 3 other).
+That is what `migrate-d1.mjs --baseline` exists to paper over. Closing it means
+reconstructing the original base schema, which is separate work; the test above
+records the current failure classes so a migration that fails for a NEW reason —
+referencing something nothing creates — fails the build.
+
+**Both exemption lists are gone.** `scripts/check-sql-migrations.mjs` named 039
+and 200; `frontend/test/migration_column_shapes.test.mjs` named 039 again, in a
+second list nobody had connected to the first. 039 needed no exemption once
+trimmed. 200 needed none once the blanket `^PRAGMA` ban carved out
+`defer_foreign_keys` — the one pragma D1 honours and a table rebuild requires,
+evidenced by 200 having applied to production carrying it. That carve-out is
+itself tested: with no migration carrying any other pragma, widening it to
+"any pragma" passed the whole suite until an assertion called the predicate
+directly.

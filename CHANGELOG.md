@@ -4,6 +4,51 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Migration 039 never ran, and `schema.sql` had been edited as though it had (#112)
+
+Task #112 was to rewrite 039 so a fresh D1 build could apply it. Checking first
+showed the premise was wrong: **only its first section has ever run**, and the
+snapshot new databases are built from had been edited to reflect the rest.
+
+Read off live D1 on 2026-09-08: `projects.deleted_at` and its index are present;
+`deals`, `score_snapshots` and `documents` still carry a plain
+`REFERENCES projects(id)`, and `discovery_interviews` and `roadmap_okrs` carry
+no reference at all. The file's own marker row has said so since 2026-05-11 —
+`_migrations_applied.name = '039_project_cascade_partial_deleted_at_only'`, still
+the only row in that table — and this file recorded it at the time. What nobody
+connected is that `cloudflare-worker/sql/schema.sql` carried the CASCADE on all
+five, tagged with five `-- Task #7 (AM)` comments. A new database and production
+have disagreed about five foreign keys for four months with nothing checking.
+
+- **039 now contains what it did**: `ALTER TABLE projects ADD COLUMN deleted_at`
+  and its index. The five-table rebuild is deleted, not repaired — it would give
+  fresh builds a cascade production lacks, nothing depends on it
+  (`services/projectTrash.ts` deletes children by hand and deliberately KEEPS
+  `activity_logs` by nulling the FK, which a cascade would have dropped), and
+  three of its sections copied rows positionally with `SELECT *` against column
+  orders that have since changed.
+- **`schema.sql` now matches production** on all five, including the two with no
+  foreign key: an insert that succeeds on production and fails in dev is worse
+  than a missing constraint. If the key is wanted it is a migration applied to
+  both.
+- **`services/projectTrash.ts`'s header claimed the manual cascade was
+  "redundant on a migrated DB"**. It is the only cascade there is. Corrected.
+- **Both exemption lists are gone.** `scripts/check-sql-migrations.mjs` named 039
+  and 200; `frontend/test/migration_column_shapes.test.mjs` named 039 again in a
+  second list nobody had connected to the first. 039 needs no exemption once
+  trimmed; 200 needs none once the blanket `^PRAGMA` ban carves out
+  `defer_foreign_keys`, the one pragma D1 honours and a rebuild requires.
+- **`cloudflare-worker/test/migrations_fresh_build.test.ts`** pins the snapshot
+  against production's five `project_id` clauses — the assertion that would have
+  caught this in May — and records that replaying every migration on top of
+  `schema.sql` fails 55 times of 221, because the snapshot is a current-state
+  file rather than the base the deltas assume. That gap is named, not closed.
+
+Verified on the local workerd D1 that `GOTCHAS.md` names as the reproduction:
+the old file fails with D1's transaction rejection, the new one applies both
+statements and produces exactly production's shape. 12 mutations, all caught.
+DECISIONS D60 has the full reasoning.
+
 ## Help Center — the design and the address had never met (#103)
 
 `/help` was reported as not matching the Help Center design. It did not, and

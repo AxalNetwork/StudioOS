@@ -1,11 +1,22 @@
 // Task #7 (AM) — Project trash: hard-delete cascade + 30-day sweep.
 //
-// Hard-delete on a fully-migrated D1 (039_project_cascade.sql applied) is a
-// single `DELETE FROM projects WHERE id = ?` because every child FK now has
-// ON DELETE CASCADE. We still run the legacy manual cascade BEFORE the
-// final DELETE so stale installs (where 039 hasn't run yet) don't trip a
-// FOREIGN KEY error. On a migrated DB the manual deletes are redundant
-// but harmless (they target the same rows the cascade would).
+// THE LOOP BELOW IS THE CASCADE. Not a legacy fallback for stale installs —
+// the only one there is. This header used to say the opposite: that on "a
+// fully-migrated D1 (039_project_cascade.sql applied)" a hard delete is one
+// `DELETE FROM projects` because every child FK carries ON DELETE CASCADE, and
+// that the manual deletes were "redundant but harmless".
+//
+// 039's cascade half NEVER RAN — not on production, not anywhere. Its
+// transaction statements aborted the file in May 2026; the two statements that
+// landed (`projects.deleted_at` and its index) were applied by hand, and the
+// marker row says so. Read off live D1 on 2026-09-08: `deals`,
+// `score_snapshots` and `documents` still say plain `REFERENCES projects(id)`,
+// and `discovery_interviews` and `roadmap_okrs` carry no REFERENCES at all. The
+// file has since been cut back to what it actually did (DECISIONS D60).
+//
+// So deleting this loop on the strength of that old sentence would have left
+// hard-delete tripping a FOREIGN KEY error on the tables that do have the
+// constraint, and orphaning rows on the two that do not.
 //
 // `sweepTrashedProjects` is the cron-callable hard-sweep; the actual cron
 // schedule is wired in by Task #9 (AO) in worker/src/index.ts.
@@ -31,10 +42,12 @@ export async function hardDeleteProject(env: Env, projectId: number): Promise<vo
     try { await env.DB.prepare(`DELETE FROM ${t} WHERE project_id = ?`).bind(projectId).run(); }
     catch { /* table absent or different shape — fine */ }
   }
-  // activity_logs is preserved for audit history — null out the FK rather
-  // than delete. Migration 039 makes this redundant for the cascade path
-  // (CASCADE would drop these rows) but we want them KEPT, so we run it
-  // here BEFORE the final DELETE to detach them first.
+  // activity_logs is preserved for audit history — null out the FK rather than
+  // delete, before the final DELETE, so the rows are detached rather than
+  // removed. Worth stating why this is a DIFFERENT decision from the loop
+  // above: every other child of a project goes away with it, and this one does
+  // not. Had 039's cascade ever landed it would have taken these rows too,
+  // which is a second reason its absence is not a gap to close casually.
   try { await env.DB.prepare(`UPDATE activity_logs SET project_id = NULL WHERE project_id = ?`).bind(projectId).run(); } catch {}
   await env.DB.prepare(`DELETE FROM projects WHERE id = ?`).bind(projectId).run();
 }
