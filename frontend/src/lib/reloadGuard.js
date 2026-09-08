@@ -57,6 +57,12 @@ export const RELOAD_GUARD_KEYS = [
   'axal:chunk-reload-boundary',
   // The service-worker update reload in `lib/pwa.js`.
   'axal:sw-reload-attempts',
+  // The dev service-worker KILLER in `frontend/index.html` — a different reload
+  // from `pwa.js`'s update above, and the sixth this module had to learn about.
+  // It is un-bundled so it cannot import from here; the key is listed anyway so
+  // `preserveReloadGuards` carries it through `clearSession`'s sweep, and so
+  // `chunk_reload_loop.test.mjs` can hold it to the same bar as the rest.
+  'axal:sw-kill-attempts',
   // `PitchDeckPage`'s stale deck-registry recovery.
   'deck_registry_recover',
 ];

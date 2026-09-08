@@ -285,3 +285,77 @@ test('every guard key the module lists is one a caller actually uses', () => {
   assert.match(codeOnly(read('frontend/src/pages/PitchDeckPage.jsx')), /deck_registry_recover/,
     'the deck recovery guard must still be the key the list names');
 });
+
+/**
+ * The direction nothing checked: every automatic reload has a bound.
+ *
+ * The tests above go keys -> callers ("the list names nothing invented") and
+ * pin the three reloads that were known when they were written. Neither
+ * direction stops a NEW reload arriving with no bound at all — and one had.
+ *
+ * `frontend/index.html`'s dev service-worker killer reloaded whenever it found
+ * a registration to unregister, guarded only by `window.__swKilled`: a property
+ * on `window`, which dies with the document, so it bounded one reload per page
+ * load. That is the same non-bound `reloadGuard.js`'s own docblock says `pwa.js`
+ * shipped, one layer up in HTML the module system cannot reach — which is
+ * exactly why the module could not stop it.
+ *
+ * The rule is scoped to `index.html` on purpose. `frontend/src` is full of
+ * `onClick={() => window.location.reload()}` — a person pressing Reload is not
+ * a loop and needs no budget. `index.html` has no UI, so every reload in it is
+ * automatic, and automatic is what has to be bounded.
+ */
+test('every automatic reload in index.html is bounded by a listed guard key', () => {
+  const blocks = read('frontend/index.html').match(/<script\b[\s\S]*?<\/script>/g) || [];
+  assert.ok(blocks.length >= 3, `expected the inline boot scripts, saw ${blocks.length}`);
+
+  const reloading = blocks
+    .map((b) => codeOnly(b))
+    .filter((b) => /\blocation\.(reload\(\)|replace\()/.test(b));
+  // If this drops to zero the rule has stopped reading anything, which is the
+  // silent way for it to pass forever.
+  assert.ok(reloading.length >= 2,
+    `expected the watchdog and the service-worker killer, saw ${reloading.length}`);
+
+  for (const block of reloading) {
+    const bounded = RELOAD_GUARD_KEYS.some((key) => block.includes(key));
+    assert.ok(bounded,
+      'a <script> in index.html reloads without naming a key from RELOAD_GUARD_KEYS.\n'
+      + 'Give it a sessionStorage bound AND a URL marker (storage throws in the\n'
+      + 'browsers this bug is reported from), and add the key to the list so\n'
+      + "clearSession's sweep cannot drop it. Block:\n" + block.slice(0, 400));
+
+    // Both halves, or the bound is missing in exactly the browser that reports
+    // this bug: `sessionStorage.setItem` THROWS in Safari Private Browsing and
+    // wherever site data is blocked, and a swallowed write followed by a reload
+    // is the original defect. The marker rides in the URL, which no storage
+    // policy can refuse.
+    assert.match(block, /searchParams\.set\(/,
+      'a bounded reload must carry its count in the URL too — storage can throw');
+    assert.match(block, /\[\?&\][_a-z]+=/,
+      'and must read that marker back before reloading again');
+  }
+});
+
+test('dev is detected once, and never from the host or the port', () => {
+  const html = codeOnly(read('frontend/index.html'));
+
+  // Two scripts branch on this in OPPOSITE directions — the killer runs when
+  // dev, the watchdog returns when dev — so two copies that drift put both on
+  // the wrong side at once.
+  assert.equal((html.match(/window\.__axalIsDev\s*=/g) || []).length, 1,
+    'there must be exactly one definition of __axalIsDev');
+
+  // The clauses that armed a dev-only reload on a deployed build: `.replit`
+  // maps localPort 5000 to externalPort 80 and run-deploy.sh serves the BUILT
+  // SPA there, so a production bundle answered "yes, dev".
+  assert.doesNotMatch(html, /replit\\?\.(dev|app)|repl\\?\.co/,
+    'dev detection must not sniff the hostname — a hosted production build matches');
+  assert.doesNotMatch(html, /location\.port\s*===/,
+    'dev detection must not sniff the port — the built SPA is served on 5000');
+
+  // What is left is the signal that actually means dev: Vite injects this tag
+  // into the HTML it serves, and a built bundle never has it.
+  assert.match(html, /querySelector\('script\[src="\/@vite\/client"\]'\)/,
+    'dev detection must be the /@vite/client tag Vite injects');
+});
