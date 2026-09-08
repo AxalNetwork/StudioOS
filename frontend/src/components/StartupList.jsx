@@ -42,12 +42,11 @@ export default function StartupList({ statusFilter = null, onNewStartup = null }
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [filter, setFilter] = useState('');
-  const [form, setForm] = useState({ name: '', description: '', sector: '', founder_email: '', founder_name: '', problem_statement: '', solution: '' });
   const { toast, showToast } = useToast();
-  // Founder/investor users always submit projects under their own identity —
-  // hide the founder name/email inputs (worker forces founder_id from JWT).
+  // `form`/`setForm` and `canPickFounder` lived here until the create form moved
+  // to components/CreateStartupForm.jsx; they went with it. `isAdmin` stays —
+  // the delete gating below still reads it.
   const currentUser = user || safeReadJSON('user', null);
-  const canPickFounder = currentUser?.role === 'admin' || currentUser?.role === 'partner';
   const isAdmin = currentUser?.role === 'admin';
 
   const load = () => {
