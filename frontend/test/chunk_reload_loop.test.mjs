@@ -305,19 +305,42 @@ test('every guard key the module lists is one a caller actually uses', () => {
  * a loop and needs no budget. `index.html` has no UI, so every reload in it is
  * automatic, and automatic is what has to be bounded.
  */
+/**
+ * The inline script bodies of an HTML file, found WITHOUT a regex.
+ *
+ * CodeQL's "Bad HTML filtering regexp" query flagged three different versions of
+ * a `/<script…<\/script>/` pattern on PR #484 — `<SCRIPT>` did not match, then
+ * `</script >`, then `</script\t\n bar>`. Every report was correct: a reload
+ * inside a block the splitter cannot see escapes the check in SILENCE, which is
+ * exactly the failure this file exists to prevent. Patching the pattern a
+ * fourth time would be waiting for the fifth report, and the query is right to
+ * keep firing — a regex is the wrong tool for finding a tag.
+ *
+ * Index scanning has no such blind spots: `</script` followed by anything at
+ * all up to the next `>` closes the block, whatever its case, whitespace or
+ * stray attributes.
+ */
+function inlineScriptBodies(html) {
+  const lower = html.toLowerCase();
+  const bodies = [];
+  let at = 0;
+  for (;;) {
+    const open = lower.indexOf('<script', at);
+    if (open === -1) break;
+    const openEnd = lower.indexOf('>', open);
+    if (openEnd === -1) break;
+    const close = lower.indexOf('</script', openEnd);
+    if (close === -1) break;
+    const closeEnd = lower.indexOf('>', close);
+    bodies.push(html.slice(openEnd + 1, close));
+    at = closeEnd === -1 ? close + '</script'.length : closeEnd + 1;
+  }
+  return bodies;
+}
+
 test('every automatic reload in index.html is bounded by a listed guard key', () => {
-  // SPLITTING HTML WITH A REGEX IS THE WEAK PART OF THIS RULE, and CodeQL was
-  // right about it twice on PR #484 — first that `<SCRIPT>` did not match, then
-  // that `</script >` did not either. Both were real: a reload inside a block
-  // the splitter misses escapes the check in silence, which is the exact
-  // failure this test exists to prevent.
-  //
-  // The pattern is tolerant now (case-insensitive, whitespace before `>`), but
-  // the guarantee does not rest on it. The accounting check below compares the
-  // reloads found INSIDE blocks against the reloads in the whole file, so any
-  // block the splitter fails to see fails the test instead of being skipped.
   const html = read('frontend/index.html');
-  const blocks = html.match(/<script\b[\s\S]*?<\/script\s*>/gi) || [];
+  const blocks = inlineScriptBodies(html);
   assert.ok(blocks.length >= 3, `expected the inline boot scripts, saw ${blocks.length}`);
 
   const RELOAD = /\blocation\.(reload\(\)|replace\()/g;
@@ -328,10 +351,14 @@ test('every automatic reload in index.html is bounded by a listed guard key', ()
   const executable = (src) => codeOnly(src.replace(/<!--[\s\S]*?-->/g, ' '));
   const inFile = (executable(html).match(RELOAD) || []).length;
   const inBlocks = blocks.reduce((n, b) => n + (executable(b).match(RELOAD) || []).length, 0);
+  // BELT AND BRACES, kept even though the scanner above has no blind spots: if a
+  // reload is ever found in the file that no block accounts for, it is either
+  // parsing that has failed or a reload that escaped into markup. Both must
+  // fail rather than be skipped.
   assert.equal(inBlocks, inFile,
-    `${inFile - inBlocks} reload call(s) in index.html sit outside every <script> block this `
-    + 'rule could parse. Either the splitter missed a block — in which case the reload inside '
-    + 'it is unchecked — or a reload escaped into markup. Both must fail.');
+    `${inFile - inBlocks} reload call(s) in index.html sit outside every inline script `
+    + 'block. Either the scan missed one — in which case the reload inside it is '
+    + 'unchecked — or a reload escaped into markup. Both must fail.');
 
   const reloading = blocks
     .map((b) => codeOnly(b))
