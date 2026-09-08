@@ -3309,7 +3309,7 @@ migration through 219 is recorded without being replayed. Later migrations remai
 pending for the normal forward-only runner. Remote bootstrap is refused because
 production adoption is a different operation with different safety guarantees.
 
-## D62 — The baseline is the same kind of artifact `schema.sql` was, so it gets the guard `schema.sql` never had
+## D63 — The baseline is the same kind of artifact `schema.sql` was, so it gets the guard `schema.sql` never had
 
 `schema_baseline.sql` replaced `schema.sql` as the file every new database is
 built from (see the D60 work and the Replit pass that landed it). It is a
