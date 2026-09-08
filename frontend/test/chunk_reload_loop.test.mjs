@@ -306,11 +306,32 @@ test('every guard key the module lists is one a caller actually uses', () => {
  * automatic, and automatic is what has to be bounded.
  */
 test('every automatic reload in index.html is bounded by a listed guard key', () => {
-  // Case-insensitive: HTML tag names are, and a reload inside a `<SCRIPT>`
-  // block would otherwise slip past this rule in silence. CodeQL flagged the
-  // case-sensitive version on PR #484 and was right about the consequence.
-  const blocks = read('frontend/index.html').match(/<script\b[\s\S]*?<\/script>/gi) || [];
+  // SPLITTING HTML WITH A REGEX IS THE WEAK PART OF THIS RULE, and CodeQL was
+  // right about it twice on PR #484 — first that `<SCRIPT>` did not match, then
+  // that `</script >` did not either. Both were real: a reload inside a block
+  // the splitter misses escapes the check in silence, which is the exact
+  // failure this test exists to prevent.
+  //
+  // The pattern is tolerant now (case-insensitive, whitespace before `>`), but
+  // the guarantee does not rest on it. The accounting check below compares the
+  // reloads found INSIDE blocks against the reloads in the whole file, so any
+  // block the splitter fails to see fails the test instead of being skipped.
+  const html = read('frontend/index.html');
+  const blocks = html.match(/<script\b[\s\S]*?<\/script\s*>/gi) || [];
   assert.ok(blocks.length >= 3, `expected the inline boot scripts, saw ${blocks.length}`);
+
+  const RELOAD = /\blocation\.(reload\(\)|replace\()/g;
+  // HTML comments stripped as well as JS ones. `codeOnly` knows `//` and
+  // `/* */`; `<!-- … -->` is neither, and a reload quoted inside one is prose,
+  // not code. Failing the build on a comment is how a guard earns a reputation
+  // for crying wolf and then gets deleted.
+  const executable = (src) => codeOnly(src.replace(/<!--[\s\S]*?-->/g, ' '));
+  const inFile = (executable(html).match(RELOAD) || []).length;
+  const inBlocks = blocks.reduce((n, b) => n + (executable(b).match(RELOAD) || []).length, 0);
+  assert.equal(inBlocks, inFile,
+    `${inFile - inBlocks} reload call(s) in index.html sit outside every <script> block this `
+    + 'rule could parse. Either the splitter missed a block — in which case the reload inside '
+    + 'it is unchecked — or a reload escaped into markup. Both must fail.');
 
   const reloading = blocks
     .map((b) => codeOnly(b))
