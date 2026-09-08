@@ -3503,3 +3503,68 @@ gains `entity_id`, `jurisdiction` or `registered_address` — and this change ad
 none of them, because the company's entity lives in its own table rather than
 being bolted onto the profile. The guard was placed to force a reconsideration;
 the reconsideration happened and reached the same answer it encodes.
+
+## D66 — U11's guard already existed, pointed at the one directory that was clean
+
+Task #107 asked to close U11, "390 undeclared axal-* Tailwind classes". Two
+things were true that the item did not know.
+
+**The guard it asked for did not need writing.** U11's closing line names what
+would make the sweep safe to start: *"a guard that fails a NEW undeclared
+`axal-*` class, so the number can only go down."*
+`frontend/test/ui_design_tokens.test.mjs` had asserted exactly that invariant
+since the `ui/` primitives were built — and walked only `frontend/src/ui/`,
+which was the one directory with zero violations. The rule was right and the
+reach was wrong, which is the same shape `chunk_reload_loop.test.mjs` records
+about itself. It now walks `pages/` and `workspaces/` with a shrink-only
+allowlist, and it already runs under `test:drift`: no new `scripts/check-*.mjs`,
+no `package.json` change.
+
+**The number was wrong, and so was the table.** The census counted **397
+occurrences across 8 tokens in 50 files**, comments excluded. U11 lists six
+tokens and misses `axal-line` (8 uses, the whole HQ shell from PRs #417/#418)
+and `axal-blue` (2, `AdminPage.jsx:845`). Its `border-axal-border: 16`
+double-counts: a `\b`-terminated grep for `axal-border` also matches
+`axal-border-soft`, listed separately on the next row as 11. The bare count is
+5, so the honest 2026-09-07 total was ~379. Three sibling docblocks disagreed
+with it and with each other (~410, ~400, ~400) — what a number nobody can
+re-derive looks like.
+
+**The sweep stays open, and is bigger than U11 estimated.** Not one of the 397
+call sites has a `dark:` counterpart, so declaring eight light values would flip
+the entire workspace surface to light-only in dark mode. Either eight colours
+get chosen in BOTH themes under D2's palette rule, or 397 call sites move to
+Tailwind's own greys — a restyle across four licences needing its own render
+pass. `workspaces/bucketOverview.css:45,51,57` holds the only concrete values
+anyone has assigned to three of them (#4b5563 / #6b7280 / #e5e7eb).
+
+**The allowlist may only shrink, and the test enforces that too.** A token fixed
+everywhere would otherwise sit in the list forever, and the next one could be
+waved through by adding a line — which is how an allowlist becomes permission.
+
+### The same batch: Markets, Ask and Companies are live, and empty is not unbuilt
+
+Asked to record those three Research zones as "blocked on a store", the check
+found the opposite. All three sit in `ResearchWorkspace`'s `LIVE_ZONES` and each
+reads a real worker route over a real D1 table. Production, 2026-09-08:
+
+| Zone | Store | Rows |
+| --- | --- | --- |
+| Markets | `signals.ts` → `signals`, `market_intel_rows` | 10 and **196,956** |
+| Companies | `competitors.ts` → `competitor_analyses` | **0** |
+| Ask | `research.ts` → `research_documents` | **0** |
+
+Companies and Ask are **empty, not unbuilt**; Markets is genuinely populated.
+`NoStoreYet` renders "No store behind this yet", so recording the three would
+have put a false sentence on the page rather than merely a stale note in a doc —
+and `ROUTE_MAP.md:133` already records a version of that document calling Ask
+and Library unbuilt AFTER they shipped, which read as written would have sent
+someone to rebuild a shipped feature in the wrong place.
+
+**What was actually wrong sat one layer up.** `FounderResearchDesk` printed
+"Source unavailable" whenever a key was absent from `records` — and a key is
+absent both while the request is in flight and after it fails. So a healthy page
+said it on every card until the fetch resolved, and a store holding 196,956 rows
+said it too. The `failed` list existed and only ever set one page-wide banner,
+so no card could tell whether its own source had broken. It is three states now,
+with three sentences, and a later success clears the failure it recovered from.

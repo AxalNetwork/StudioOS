@@ -7,7 +7,7 @@ structural damage across multiple workspaces?"* Everything that cleared that bar
 is below; everything that did not was decided and written down in
 `ASSUMPTIONS_LOG.md` instead.
 
-Ten items. Each names the evidence, what is actually blocked, and what a wrong
+Eleven items. Each names the evidence, what is actually blocked, and what a wrong
 guess would cost — because "blocked" without a cost is just a to-do. U9 and
 U10 are operations questions rather than routing ones — who serves `axal.vc`
 is settled (`DECISIONS.md` D34). Both were resolved on 2026-09-03: U9 (the
@@ -377,7 +377,53 @@ something actually made that request.
 
 ---
 
-## U11 — 390 Tailwind classes name tokens that are declared nowhere
+## U11 — Tailwind classes naming tokens that are declared nowhere
+
+**STATUS 2026-09-08 (task #107, `DECISIONS.md` D66) — the guard half is done;
+the sweep half is open.** The guard this item asked for, in its own words — "a
+guard that fails a NEW undeclared `axal-*` class, so the number can only go
+down" — now exists. It was not a new script: `frontend/test/ui_design_tokens.test.mjs`
+already asserted exactly this invariant and walked only `frontend/src/ui/`,
+which was the one directory that did not need it. It walks `pages/` and
+`workspaces/` too, with a shrink-only allowlist of the eight tokens in use
+today, and it runs under `test:drift` already.
+
+**THE NUMBER IN THIS ITEM'S TITLE WAS WRONG, AND SO WAS ITS TABLE.** The census
+for #107 counted **397 occurrences across 8 tokens in 50 files**, comments
+excluded. Two corrections:
+
+- The table below lists six tokens; there are eight. `axal-line` (8 uses — the
+  entire HQ shell added by PRs #417/#418) and `axal-blue` (2 —
+  `pages/AdminPage.jsx:845`) were missed, because the grep behind this item ran
+  before that shell existed.
+- `border-axal-border: 16` **double-counts**. A `\b`-terminated grep for
+  `axal-border` also matches `axal-border-soft`, which the next row lists
+  separately as 11. The bare count is 5, so the honest 2026-09-07 total was
+  ~379 rather than 390.
+
+The three sibling docblocks disagreed with it and with each other too
+(`BucketBoard.jsx` said ~410, `ZoneToolbar.jsx` and `ZoneActions.jsx` ~400),
+which is what a number nobody could re-derive looks like.
+
+**WHY THE SWEEP IS STILL OPEN, and it is a bigger job than this item estimated.**
+Not one of the 397 call sites has a `dark:` counterpart — `grep
+"dark:text-axal|dark:bg-axal|dark:border-axal"` returns zero. So declaring the
+eight tokens is not sufficient: eight light values would flip the whole
+workspace surface to light-only in dark mode. The two branches are (a) declare
+eight colours in BOTH themes, obeying D2's palette rule, or (b) move 397 call
+sites to Tailwind's own greys — a restyle across four licences needing its own
+render pass. `frontend/src/workspaces/bucketOverview.css:45,51,57` is the only
+place in the tree that assigns concrete values to `ink-2`/`ink-3`/`border`
+(#4b5563 / #6b7280 / #e5e7eb), and is the anchor either way.
+
+**Blocks:** nothing ships wrong today — this is a visual-fidelity debt, not a
+correctness one. It blocks trusting the workspace layer's colour in dark mode,
+and it blocks any claim that the `@theme` block is the single source of truth
+for colour, which D2 and `theme_token_census.test.mjs` otherwise enforce.
+
+---
+
+### The original finding, 2026-09-07
 
 **Found 2026-09-07, closing out the C series.** `frontend/src/index.css`'s
 `@theme` block declares ten `--color-axal-*` tokens: `amber`, `amber-deep`,

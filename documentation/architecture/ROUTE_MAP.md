@@ -486,6 +486,39 @@ exclusion cannot grow by accident):
 | `network/organizations` (advisor) | a card: nothing links a person an advisor knows to an organisation |
 | `network/organizations` (partner) | `NetworkPage` catches a slug it has no tab for (`unservedZone`) and suppresses every body (`unservedAlone`), so the route renders its own heading above a card stating the gap — there is nothing for a row to sit over |
 
+**MARKETS, ASK AND COMPANIES ARE NOT ON THAT LIST, AND MUST NOT BE ADDED TO IT.**
+Asked on 2026-09-08 to record the three as "blocked on a store", the check found
+the opposite: all three sit inside `ResearchWorkspace`'s `LIVE_ZONES`, each
+reads a real worker route over a real D1 table, and several guards already
+enforce that. Measured against production the same day:
+
+| Zone | Store | Rows on production |
+| --- | --- | --- |
+| Markets | `routes/signals.ts` → `signals`, `market_intel_rows` | 10 and **196,956** |
+| Companies | `routes/competitors.ts` → `competitor_analyses` | **0** |
+| Ask | `routes/research.ts` → `research_documents` | **0** |
+
+So Companies and Ask are **empty, not unbuilt** — a different fact with a
+different fix — and Markets is genuinely populated. `NoStoreYet` says "No store
+behind this yet", and putting that over a live signals feed reading 197k rows
+would be a false sentence on the page rather than merely a stale note in a doc.
+`noStoreCopy.js` is the registry for zones with no store; an empty store does
+not belong in it.
+
+This is the third time this shape has come up, which is why it is written down
+rather than just declined: an earlier version of this document said Ask and
+Library "remain unbuilt" AFTER they shipped, and read as written would have sent
+someone to rebuild a shipped feature in the wrong place. The lesson is the same
+each time — check the store before recording the gap.
+
+**What DOES read as a gap, and is a real one:**
+`pages/founder/FounderResearchDesk.jsx` (the founder `/research` root) prints
+"No stored market evidence is available" and "Source unavailable" over stores
+that exist, and for Markets over one holding 197k rows. Those two strings
+conflate three different states — the source failed, the store is empty, and
+nothing matched — and only one of them can be true at a time. Task #107's batch
+separates them; the zones themselves were never the problem.
+
 **Two corrections to an earlier version of this section**, both made after
 re-checking rather than re-reading. It said the partner organizations route
 "lands on contacts" — it does not, and a partner has no contacts tab either; the
