@@ -3430,3 +3430,76 @@ Production is unaffected either way: `advisor_client_grants`,
 `advisor_client_document_shares`, `advisor_client_access_log` and
 `research_documents` are all empty, and there are zero advisor accounts. This was
 built for correctness, not to unblock a live user.
+
+## D65 — A company's KYB sits beside the account's, and `companies` does not exist
+
+Task #108 asked whether KYB should be per-company rather than per-user. The
+answer is **beside**, and D40 and D42 had already argued it twice before the
+question was put: *"The account's entity is who signs your contracts; the
+company's is who the workspace belongs to. They must not drift into each other."*
+
+**What was per-user, and stays.** `corporate_profiles.user_id` is not a column,
+it is the PRIMARY KEY — one row per account, structurally — and `trust.ts`
+upserts it `ON CONFLICT(user_id)`. That record is the account holder's own legal
+entity and it is correct as it stands. Migration 220 does not touch it, move a
+row out of it, or deprecate it, and a test asserts the company write never
+writes a `corporate_profiles` row: the moment it does, the two objects have
+started to drift.
+
+**What was missing.** `TrustCenterPage`'s Entity tab carried a comment saying
+Trust Center v2 draws a "Your companies" card, one row per company with its own
+KYB pill, and that the page states the model instead of drawing a selector that
+"would have changed nothing when clicked". `ROUTE_MAP` said the same and named
+#108 as carrying it. `company_kyb_records` is what makes that card honest, and it
+is drawn now.
+
+**`companies` DOES NOT EXIST ON PRODUCTION, AND THIS IS THE FINDING WORTH
+KEEPING.** Migration 034 creates it. `schema_migrations` records 034 as applied
+(2026-06-30 14:15:40). Measured 2026-09-08:
+
+```
+SELECT COUNT(*) FROM companies;   ->  no such table: companies
+```
+
+It is also absent from `schema_baseline.sql`, and there are **zero** references
+to it in `cloudflare-worker/src/` — no FROM, no JOIN, no REFERENCES. Company
+identity in this product is `company_profiles` joined through
+`user_company_links`, which is what `resolveActiveCompany` verifies. So
+`REFERENCES companies(id)` would have shipped a foreign key pointing at nothing,
+and neither SQLite nor D1 would have said so — a REFERENCES target is not
+verified until the constraint is enforced, and D1 does not enforce them by
+default. It would have looked correct for as long as nobody looked. Migration
+220 references `company_profiles(id)`, and a test fails the day `companies`
+appears in the baseline so the choice gets reconsidered rather than inherited.
+
+**`company_id` is NOT NULL, unlike migration 219's.** In 189/193/194 `company_id`
+narrows an ownership predicate that already holds, so NULL widens harmlessly.
+Here the company IS the ownership key, with no second owner to fall back on, so
+a row with no company would be a KYB record belonging to nobody and readable by
+whoever asked. The column refuses it at the schema, which is why
+`companyKybScope` is the simplest scope in the module: membership, and nothing
+else. There is deliberately **no `started_by_user_id` branch** — `esignEnvelopeScope`
+and `icDecisionScope` both admit their creator because those records are about a
+person's act; a KYB record is about the company, and someone who has left should
+not keep reading its registration number because they filled the form in once.
+
+**The company comes from the verified header, never from the body.** Mutation
+testing found that reading `company_id` from the request body passed every test,
+because no test sent one — a body field is an ownership claim the caller makes
+about itself, while `X-Company-Id` goes through `resolveActiveCompany`, which
+refuses anything that is not 1-15 digits and then checks `user_company_links`.
+There is now a test that sends another member's company id in the body and
+requires it to be ignored.
+
+**Zero rows migrate.** Production on 2026-09-08: `corporate_profiles` 0,
+`sanctions_screenings` 0, `kyc_partner_imports` 0, `company_profiles` 3,
+`user_company_links` 3 (all three belonging to one account). There is no
+per-user KYB row to reshape, and inventing a company KYB from an account's would
+assert something nobody entered. The cost of this change only goes up from here,
+which is the argument for making it while the tables are empty.
+
+**D42's guard is untouched and still valid.** It fails the day `company_profiles`
+gains `entity_id`, `jurisdiction` or `registered_address` — and this change adds
+none of them, because the company's entity lives in its own table rather than
+being bolted onto the profile. The guard was placed to force a reconsideration;
+the reconsideration happened and reached the same answer it encodes.

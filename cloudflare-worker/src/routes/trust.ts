@@ -29,6 +29,8 @@ import {
   type ObligationKey,
 } from '../services/trust';
 import { getSQL } from '../db';
+import { companyKybScope } from '../services/tenancyScope';
+import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
 
 const trust = new Hono<{ Bindings: Env }>();
 
@@ -817,6 +819,125 @@ trust.post('/kyb/start', async (c) => {
       WHERE user_id = ? AND obligation_key = 'kyb_v1'`,
   ).bind(user.id).run();
   return c.json({ ok: true, status: 'in_review' });
+});
+
+// ---------------------------------------------------------------------------
+// The company's own KYB — task #108, migration 220.
+//
+// `POST /kyb/start` above is the ACCOUNT's entity and it is untouched:
+// `corporate_profiles.user_id` is the primary key, one row per account, and
+// D40/D42 argue twice that the account's entity and the company's are different
+// objects that "must not drift into each other". These two endpoints are the
+// second object, not a replacement for the first.
+//
+// WHAT THEY MAKE POSSIBLE. `TrustCenterPage`'s Entity tab carries a comment
+// saying the v2 canvas draws a "Your companies" card, one row per company with
+// its own KYB pill, and that the page states the model instead of drawing a
+// selector that "would have changed nothing when clicked". It can be drawn now.
+//
+// THE COMPANY COMES FROM THE VERIFIED HEADER, NOT FROM THE BODY OR THE PATH.
+// `resolveActiveCompany` rejects anything that is not 1-15 digits and then
+// checks `user_company_links` for a real membership, returning null for every
+// uncertain case. Taking a company id from the request body would be an
+// ownership claim the caller makes about themselves.
+// ---------------------------------------------------------------------------
+
+/** Every company the caller belongs to, each with its KYB record or null. */
+trust.get('/companies/kyb', async (c) => {
+  const user = await requireAuth(c);
+  // `companyKybScope` is NOT used here, and the reason is the LEFT JOIN. The
+  // scope reads `EXISTS(... ucl.company_id = k.company_id)`, and for a company
+  // with no KYB row `k.company_id` is NULL — so applying it would silently drop
+  // exactly the companies this card exists to show as "not started". The
+  // membership predicate is therefore expressed once, directly, on the links
+  // table that is the query's own root. Every read that touches a KYB ROW —
+  // the write's read-back below — goes through the scope.
+  //
+  // LEFT JOIN, because a company with no KYB row is the common case and the
+  // card has to show it rather than omit the company.
+  const rows = await c.env.DB.prepare(
+    `SELECT cp.id AS company_id, cp.uid AS company_uid, cp.company_name,
+            ucl.role_in_company, ucl.is_primary_admin,
+            k.uid AS kyb_uid, k.status, k.entity_name, k.entity_type,
+            k.jurisdiction, k.registration_number, k.submitted_at, k.reviewed_at
+       FROM user_company_links ucl
+       JOIN company_profiles cp ON cp.id = ucl.company_id
+       LEFT JOIN company_kyb_records k ON k.company_id = ucl.company_id
+      WHERE ucl.user_id = ?
+      ORDER BY cp.company_name`,
+  ).bind(user.id).all<any>().catch(() => ({ results: [] as any[] }));
+
+  return c.json({
+    items: (rows.results || []).map((r: any) => ({
+      company_id: r.company_id,
+      company_uid: r.company_uid,
+      company_name: r.company_name,
+      role_in_company: r.role_in_company,
+      is_primary_admin: !!r.is_primary_admin,
+      kyb: r.kyb_uid ? {
+        uid: r.kyb_uid, status: r.status, entity_name: r.entity_name,
+        entity_type: r.entity_type, jurisdiction: r.jurisdiction,
+        registration_number: r.registration_number,
+        submitted_at: r.submitted_at, reviewed_at: r.reviewed_at,
+      } : null,
+    })),
+    // Said out loud so a reader of the card knows which entity they are looking
+    // at. The account's own KYB is a different record on a different tab.
+    note: 'This is each company\u2019s own entity record. Your account\u2019s entity is separate '
+      + 'and lives under Settings \u2192 Corporate.',
+  });
+});
+
+/** Start or update the ACTIVE company's KYB record. */
+trust.post('/companies/kyb', async (c) => {
+  const user = await requireAuth(c);
+  const companyId = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
+  if (companyId === null) {
+    return c.json({
+      detail: 'No company selected. A company KYB record belongs to one company, so the '
+        + 'request must name which — send X-Company-Id for a company you belong to.',
+    }, 400);
+  }
+  const body = await c.req.json<any>().catch(() => ({}));
+  const str = (v: unknown, max: number) => {
+    const out = String(v ?? '').trim().slice(0, max);
+    return out || null;
+  };
+  const uid = crypto.randomUUID().replace(/-/g, '');
+  await c.env.DB.prepare(
+    `INSERT INTO company_kyb_records
+       (uid, company_id, started_by_user_id, status, entity_name, entity_type,
+        jurisdiction, registration_number, registered_address, submitted_at, updated_at)
+     VALUES (?, ?, ?, 'in_review', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+     ON CONFLICT (company_id) DO UPDATE SET
+       status = 'in_review',
+       entity_name = COALESCE(excluded.entity_name, company_kyb_records.entity_name),
+       entity_type = COALESCE(excluded.entity_type, company_kyb_records.entity_type),
+       jurisdiction = COALESCE(excluded.jurisdiction, company_kyb_records.jurisdiction),
+       registration_number = COALESCE(excluded.registration_number, company_kyb_records.registration_number),
+       registered_address = COALESCE(excluded.registered_address, company_kyb_records.registered_address),
+       submitted_at = CURRENT_TIMESTAMP,
+       updated_at = CURRENT_TIMESTAMP`,
+  ).bind(
+    uid, companyId, user.id,
+    str(body.entity_name ?? body.legal_name, 255),
+    str(body.entity_type, 64),
+    str(body.jurisdiction ?? body.country ?? body.country_code, 64),
+    str(body.registration_number ?? body.business_id, 120),
+    str(body.registered_address, 500),
+  ).run();
+
+  const scope = companyKybScope(user, 'k');
+  // Read back THROUGH the scope rather than by the id we just wrote. If the two
+  // ever disagree the write was reachable and the read is not, which is a bug
+  // worth finding here rather than in a support ticket.
+  const row = await c.env.DB.prepare(
+    `SELECT k.uid, k.status, k.entity_name, k.entity_type, k.jurisdiction,
+            k.registration_number, k.submitted_at
+       FROM company_kyb_records k
+      WHERE k.company_id = ? AND ${scope.sql}`,
+  ).bind(companyId, ...scope.binds).first<any>();
+  return c.json({ ok: true, company_id: companyId, kyb: row }, 201);
 });
 
 // Ensure obligations exist for a list of role-defaults exposed for

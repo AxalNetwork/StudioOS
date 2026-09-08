@@ -2975,6 +2975,14 @@ export const api = {
 
   getTrustSummary: () => request('/trust/summary'),
   startKyb: (payload) => request('/trust/kyb/start', { method: 'POST', body: JSON.stringify(payload) }),
+  // Task #108 — the COMPANY's entity record, beside the account's above, never
+  // instead of it (D40/D42: "the account's entity is who signs your contracts;
+  // the company's is who the workspace belongs to"). The write takes its
+  // company from the X-Company-Id header every request already carries, which
+  // `resolveActiveCompany` verifies against user_company_links — a company id
+  // in the body would be an ownership claim the caller makes about themselves.
+  companyKybList: () => request('/trust/companies/kyb'),
+  companyKybStart: (payload) => request('/trust/companies/kyb', { method: 'POST', body: JSON.stringify(payload || {}) }),
   getRequiredNdas: () => request('/trust/nda/required'),
 
   // ---------- Founder risk (Task #41, admin/partner/investor only) ----------

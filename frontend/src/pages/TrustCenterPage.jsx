@@ -1021,30 +1021,71 @@ export default function TrustCenterPage({ chromeless = false }) {
         onStart={startObligation}
       />
       {/*
-        THE ONE THING THIS TAB DELIBERATELY DOES NOT DRAW, and why.
+        THE "YOUR COMPANIES" CARD, WHICH THIS TAB REFUSED TO DRAW UNTIL NOW.
 
-        Trust Center v2 puts a "Your companies" card here — a row per company,
-        each with its own KYB pill, under the line "Each company has its own KYB
-        state and its own sidebar workspace."
+        Trust Center v2 put a row per company here, each with its own KYB pill,
+        and this tab used to explain in its place that the platform did not work
+        that way: `corporate_profiles` upserts `ON CONFLICT(user_id)`, the
+        obligation was updated `WHERE user_id = ? AND obligation_key = 'kyb_v1'`,
+        and none of the eighteen `/trust/*` routes accepted a company. One user
+        had one KYB, so a selector over three companies would have changed
+        nothing when clicked — which is worse than not offering it. Task #108
+        carried the product question; migration 220 answered it.
 
-        This platform does not work that way, and the difference is in the
-        schema, not the styling. `corporate_profiles` upserts
-        `ON CONFLICT(user_id)` and the KYB obligation is updated
-        `WHERE user_id = ? AND obligation_key = 'kyb_v1'` (`trust.ts:791-819`);
-        none of the eighteen `/trust/*` routes accepts a company at all. One
-        user has one KYB. A selector over three companies would have changed
-        nothing when clicked, which is worse than not offering it — so the
-        sentence below says what is true instead, and task #108 carries the
-        product question of whether it SHOULD be per-company, with the migration
-        that would take.
+        THE ACCOUNT'S RECORD ABOVE IS STILL THE ACCOUNT'S. D40 and D42 both say
+        these are different objects — "the account's entity is who signs your
+        contracts; the company's is who the workspace belongs to. They must not
+        drift into each other" — so this card is placed BESIDE the obligation
+        list, never over it, and says which is which.
       */}
-      <p className="mt-4 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-        Entity verification is recorded once per account, not per company. If you belong to more than one
-        company, this status covers you as a verified person behind all of them — the platform does not
-        hold a separate KYB record per company, so there is nothing here to switch between.
-      </p>
+      <CompanyKybCard />
     </Section>
   );
+
+  function CompanyKybCard() {
+    const [items, setItems] = useState([]);
+    const [loaded, setLoaded] = useState(false);
+
+    useEffect(() => {
+      let alive = true;
+      api.companyKybList()
+        .then((r) => { if (alive) { setItems(r?.items || []); setLoaded(true); } })
+        .catch(() => { if (alive) setLoaded(true); });
+      return () => { alive = false; };
+    }, []);
+
+    if (!loaded) return null;
+    // NOT an empty card. Someone who belongs to no company has no company
+    // entity to verify, and a row of zeroes would imply they are missing a step
+    // they cannot take.
+    if (!items.length) return null;
+
+    return (
+      <div className="mt-4">
+        <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">Your companies</h4>
+        <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+          Each company has its own entity record. This is separate from your account&rsquo;s own
+          entity above — that one is who signs your contracts, these are who the workspaces
+          belong to.
+        </p>
+        {items.map((row) => (
+          <div key={row.company_id} className="mt-2 flex items-start gap-3 border-t border-slate-100 py-2 dark:border-slate-800">
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm text-slate-900 dark:text-slate-100">{row.company_name}</div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                {row.kyb
+                  ? `${row.kyb.status.replace(/_/g, ' ')}${row.kyb.entity_name ? ` \u00b7 ${row.kyb.entity_name}` : ''}`
+                  : 'Not started'}
+              </div>
+            </div>
+            {row.is_primary_admin
+              ? <span className="text-[11px] text-slate-500 dark:text-slate-400">You administer this company</span>
+              : <span className="text-[11px] text-slate-400">{row.role_in_company}</span>}
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   const accreditation = role === 'investor' && (
     <Section icon={BadgeCheck} title="Accredited investor verification" subtitle="Your accreditation obligation and its current status.">

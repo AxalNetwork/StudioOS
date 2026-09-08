@@ -53,11 +53,17 @@ interface GrantRow {
 async function ownedProject(c: any, user: any, projectUid: string) {
   const companyId = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
   const scope = companyScope(user, companyId, 'p');
+  // `founder_id` is selected because the document-share writer resolves
+  // ownership the way the BRIEF's join does — through `users.founder_id`, not
+  // `owner_user_id = user.id`. Without it that check compared against undefined
+  // and refused every document.
+  //
+  // THE COMMENT LIVES OUT HERE, NOT INSIDE `prepare(`. Putting it between the
+  // paren and the template literal made `check-sql-prepare.mjs` stop seeing
+  // this site at all: `--write` then dropped it from the baseline while the
+  // interpolation was still in the code. A scanner that silently loses a
+  // tracked site is worse than one that flags a new one.
   return c.env.DB.prepare(
-    // `founder_id` is selected because the document-share writer resolves
-    // ownership the way the BRIEF's join does — through `users.founder_id`,
-    // not `owner_user_id = user.id`. Without it that check compared against
-    // undefined and refused every document.
     `SELECT p.id, p.uid, p.name, p.sector, p.stage, p.founder_id FROM projects p WHERE p.uid = ? AND ${scope.sql}`,
   ).bind(projectUid, ...scope.binds).first();
 }
