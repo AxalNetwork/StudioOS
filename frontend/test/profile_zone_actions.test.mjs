@@ -41,13 +41,25 @@ const APP = read('frontend/src/App.jsx');
 const PROFILES = {
   founder: {
     table: 'frontend/src/workspaces/founderZoneActions.js',
+    // `workspaces/founder/FounderValidateWorkspace` mounts the four
+    // `/validate/*` rows and needs no entry of its own: `pageFiles` RECURSES, so
+    // naming the subdirectory here would walk that file twice and trip the
+    // mounted-exactly-once check against itself. Its sibling's `mountingFile`
+    // does not recurse and does name it — the two readers differ, and this
+    // comment is here because the symmetry is the tempting wrong guess.
     pages: ['frontend/src/pages/founder', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     call: 'founderZoneActions',
     canvas: /^Pages · Founder /,
-    buckets: /^(build|grow|network|raise|research)\//,
-    zones: 26,
+    buckets: /^(validate|build|grow|network|raise|research)\//,
+    zones: 30,
     links: 17,
     exports: 20,
+    // Six ops the WORKSPACE performs, all of them Validate's: three open a
+    // dialog it owns and three are server-side CSV downloads with a busy state.
+    // Every other profile is 0 — this is the first and so far only use of
+    // `kind: 'handler'`, and pinning it at 0 elsewhere is what makes a second
+    // one show up here as a change rather than as a silent spread.
+    handlers: 6,
     // NOTHING IS EXCLUDED ANY MORE. `research/funds` sat here as "a card in
     // `ResearchWorkspace`'s ZONE_COPY, not a body" — true when it was written
     // and untrue since `ZONE_COPY` became `{}` and `LIVE_ZONES` gained `funds`.
@@ -69,6 +81,10 @@ const PROFILES = {
     zones: 19,
     links: 1,
     exports: 13,
+    // No page-supplied op on this profile. Pinned at zero rather than left
+    // unstated: `kind: 'handler'` is one profile's answer today, and a second
+    // profile growing one should read as a change here.
+    handlers: 0,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -116,6 +132,10 @@ const PROFILES = {
     zones: 21,
     links: 0,
     exports: 19,
+    // No page-supplied op on this profile. Pinned at zero rather than left
+    // unstated: `kind: 'handler'` is one profile's answer today, and a second
+    // profile growing one should read as a change here.
+    handlers: 0,
     // `network/organizations`: `NetworkPage` catches a slug it has no tab for and
     // suppresses every body, so that route already renders its own heading above
     // a card stating the gap — there is nothing for a row to sit over. Checked
@@ -152,6 +172,10 @@ const PROFILES = {
     zones: 11,
     links: 1,
     exports: 11,
+    // No page-supplied op on this profile. Pinned at zero rather than left
+    // unstated: `kind: 'handler'` is one profile's answer today, and a second
+    // profile growing one should read as a change here.
+    handlers: 0,
     embeddedGuards: 0,
     // Both remaining exclusions are cards whose whole page IS the gap
     // statement, so there is nothing for a row to sit over. `expertise/
@@ -170,7 +194,18 @@ const PROFILES = {
   },
 };
 
-/** The zone → labels map, read out of a profile's own literal. */
+/**
+ * The zone → labels map, read out of a profile's own literal.
+ *
+ * `canvas:` WINS OVER `label:` WHERE BOTH ARE PRESENT, because this map is
+ * compared against the artboards: what it must yield is the string the CANVAS
+ * drew, not the string the product renders. They are the same for all but one
+ * entry across four profiles — `/validate/interviews` renders "Export
+ * interviews" where the canvas says "Export transcripts", because the CSV has
+ * no transcript column to give. The filters table has carried this split since
+ * it was written; without it here an op can only be labelled dishonestly or
+ * dropped, and dropping it would tell this guard the canvas never drew it.
+ */
 function tableLabels(src) {
   const start = src.search(/export const [A-Z_]+_ZONE_ACTIONS/);
   const body = src.slice(start, src.indexOf('\n};', start));
@@ -179,8 +214,8 @@ function tableLabels(src) {
   for (const line of body.split('\n')) {
     const z = line.match(/^ {2}'([a-z-]+\/[a-z-]+)':/);
     if (z) { zone = z[1]; out[zone] = []; continue; }
-    const l = line.match(/^ {4}\{ label: '([^']+)'/);
-    if (l && zone) out[zone].push(l[1]);
+    const l = line.match(/^ {4}\{ (?:canvas: '([^']+)', )?label: '([^']+)'/);
+    if (l && zone) out[zone].push(l[1] ?? l[2]);
   }
   return out;
 }
@@ -423,8 +458,15 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     // otherwise pass every other assertion in this file.
     assert.equal(links.length, profile.links,
       `${name} declares ${links.length} linked actions, expected ${profile.links}`);
-    assert.equal((SRC.match(/kind: 'export'/g) || []).length, profile.exports,
+    // COUNTED OVER THE CODE, NOT THE PROSE. A table's docblock explains the
+    // kinds it uses, so `kind: 'handler'` appears in `founderZoneActions.js`
+    // once as a sentence about the vocabulary and six times as a declaration —
+    // and this read seven. That is the case `_codeOnly.mjs` was written for.
+    const CODE = codeOnly(SRC);
+    assert.equal((CODE.match(/kind: 'export'/g) || []).length, profile.exports,
       `${name} declares a different number of exports than it did`);
+    assert.equal((CODE.match(/kind: 'handler'/g) || []).length, profile.handlers,
+      `${name} declares a different number of page-supplied ops than it did`);
     for (const link of new Set(links)) {
       const path = link.split('?')[0];
       const i = APP.indexOf(`path="${path}"`);
@@ -450,13 +492,17 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     // NOWHERE — the builder drops the entry — which makes an unchecked path in
     // it worse, not better: a reader of this file would act on a route that may
     // not exist, and no rendering would ever contradict them.
-    const notes = [...SRC.matchAll(/^ {4}\{ label: '[^']+', unbuilt: '([^']*)'/gm)].map((m) => m[1]);
-    // Exact rather than a floor: every action is a link, an export or a gap,
-    // and nothing is untyped. An entry that is none of the three would render
-    // as a dead button — which is the one thing this whole pass forbids.
-    const actions = [...SRC.matchAll(/^ {4}\{ label: '/gm)].length;
-    assert.equal(profile.links + profile.exports + notes.length, actions,
-      `${name} has ${actions} actions but ${profile.links} links, ${profile.exports} exports and ${notes.length} gaps`);
+    const notes = [...SRC.matchAll(/^ {4}\{ (?:canvas: '[^']+', )?label: '[^']+', unbuilt: '([^']*)'/gm)].map((m) => m[1]);
+    // Exact rather than a floor: every action is a link, an export, a
+    // page-supplied handler or a gap, and nothing is untyped. An entry that is
+    // none of the four would render as a dead button — which is the one thing
+    // this whole pass forbids. `handlers` joined this sum when Validate's ops
+    // came into the table; before that, a fourth kind could have been added and
+    // every count here would still have balanced by coincidence.
+    const actions = [...SRC.matchAll(/^ {4}\{ (?:canvas: '[^']+', )?label: '/gm)].length;
+    assert.equal(profile.links + profile.exports + profile.handlers + notes.length, actions,
+      `${name} has ${actions} actions but ${profile.links} links, ${profile.exports} exports, `
+      + `${profile.handlers} page-supplied and ${notes.length} gaps`);
     for (const note of notes) {
       assert.doesNotMatch(note, /(^|\s)\/[a-z]/, `an unbuilt reason carries an unchecked path: "${note}"`);
     }
@@ -466,7 +512,7 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     // The builder prefers `to`, so an `unbuilt` reason beside it would never be
     // read, and the entry would claim to be both built and not. `linkNote` is
     // the deliberate way to qualify a link, and it renders as the title.
-    const entries = [...SRC.matchAll(/^ {4}\{ label: '[^']+',([^\n]*)$/gm)].map((m) => m[1]);
+    const entries = [...SRC.matchAll(/^ {4}\{ (?:canvas: '[^']+', )?label: '[^']+',([^\n]*)$/gm)].map((m) => m[1]);
     assert.ok(entries.length >= profile.zones * 2, `expected every action, found ${entries.length}`);
     for (const rest of entries) {
       assert.ok(!(/\bto: /.test(rest) && /\bunbuilt: /.test(rest)),
@@ -786,7 +832,9 @@ test('one builder, so the rules cannot drift apart between profiles', () => {
     const src = read(profile.table);
     assert.match(src, /import \{ makeZoneActions \} from '\.\/zoneActionBuilder'/,
       `${name} does not use the shared builder`);
-    assert.doesNotMatch(src, /exportView|localStorage/,
+    // The ban is on the table CALLING these, and a table explaining why an op is
+    // a handler rather than an `exportView` has to name the thing it is not.
+    assert.doesNotMatch(codeOnly(src), /exportView|localStorage/,
       `${name}'s table reimplements what the builder does`);
   }
 });

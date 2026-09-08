@@ -1,15 +1,22 @@
 import { makeZoneActions } from './zoneActionBuilder';
 
 /**
- * The founder profile's twenty-one zones, and what each of their canvas actions
- * actually does. `zoneActionBuilder.js` states the three outcomes and the rules
+ * The founder profile's thirty zones, and what each of their canvas actions
+ * actually does. `zoneActionBuilder.js` states the four outcomes and the rules
  * they follow; this file is the founder's answers.
  *
  * WHERE THE LABELS COME FROM. Verbatim from the `ops:` array of the zone's
- * artboard in `design/canvases/integrated/Pages · Founder {Build,Grow,Network,
- * Raise}.dc.html`, in the canvas's own order. Nothing is invented and nothing is
- * dropped: a zone whose canvas asks for three actions lists three here, even
- * when all three are gaps, because the gap is the answer the reader needs.
+ * artboard in `design/canvases/integrated/Pages · Founder {Validate,Build,Grow,
+ * Network,Raise,Research}.dc.html`, in the canvas's own order. Nothing is
+ * invented and nothing is dropped: a zone whose canvas asks for three actions
+ * lists three here, even when all three are gaps, because the gap is the answer
+ * the reader needs. Validate states its ops as `tools:` on a `boards` array
+ * rather than `ops:` on a `PAGES` array; `artboardOps` in the guard reads both.
+ *
+ * `canvas:` IS PROVENANCE AND `label:` IS WHAT RENDERS, the same split the
+ * filters table uses, and for the same reason: exactly one op here would
+ * otherwise ship a word the product cannot honour. It is used once, and using it
+ * twice without the file saying why would be the drift it exists to prevent.
  *
  * EVERY `to` WAS CHECKED AGAINST THE ROUTER, NOT ASSUMED. Each one is a path
  * `App.jsx` mounts with a guard that admits `founder`, and lands on a component
@@ -29,6 +36,42 @@ import { makeZoneActions } from './zoneActionBuilder';
  */
 
 export const FOUNDER_ZONE_ACTIONS = {
+  // ── Validate ─────────────────────────────────────────────────────────────
+  // THE ZONE SET THAT NEEDED A FOURTH KIND. Every op here is performed by
+  // `FounderValidateWorkspace` itself: three open a dialog it owns, and the
+  // three exports are server-side CSV downloads with a busy spinner and a shared
+  // error line — not `exportView` over rows the page has already loaded. Before
+  // `kind: 'handler'` none of that could be said in a table, so the workspace
+  // kept its own local `ACTIONS` map and these four zones stayed outside every
+  // guard this file is checked by. See `zoneActionBuilder.js` and D67.
+  'validate/interviews': [
+    { label: 'Log an interview', kind: 'handler', handler: 'logInterview' },
+    // THE ONE LABEL HERE THAT IS NOT THE CANVAS'S. The artboard says "Export
+    // transcripts" and the file does not contain any: `INTERVIEWS_CSV_HEADER` is
+    // id, name, role, company, date, fit, consent, deck_eligible, rating,
+    // comment, pains, notes. Migration 215 DID add `transcript` and the
+    // recording columns — the two docblocks claiming the table has neither are
+    // stale and are corrected — but the export still does not select them, so
+    // the canvas's word would promise a column the download has not got.
+    { canvas: 'Export transcripts', label: 'Export interviews', kind: 'handler', handler: 'exportInterviews' },
+  ],
+  // "Send to Problem slide" is drawn on two artboards and performs nothing on
+  // either — not because the pipe is missing, but because it already runs
+  // without a button: `pain_groups` is curated for the deck's slide 2 (see
+  // progress.ts), so a control that "sends" would be theatre over a connection
+  // that is already live. What it should become is a link that says so.
+  'validate/pain-map': [
+    { label: 'Send to Problem slide', unbuilt: 'the curated pain themes already feed the deck’s Problem slide; there is nothing to send, and a button implying otherwise would claim credit for a pipe that runs on its own' },
+    { label: 'Export map', kind: 'handler', handler: 'exportPainMap' },
+  ],
+  'validate/hypotheses': [
+    { label: 'New hypothesis', kind: 'handler', handler: 'newHypothesis' },
+    { label: 'Link to a pain', kind: 'handler', handler: 'linkPain' },
+  ],
+  'validate/verdict': [
+    { label: 'Export summary', kind: 'handler', handler: 'exportSummary' },
+    { label: 'Send to Problem slide', unbuilt: 'the curated pain themes already feed the deck’s Problem slide; there is nothing to send, and a button implying otherwise would claim credit for a pipe that runs on its own' },
+  ],
   // ── Build ────────────────────────────────────────────────────────────────
   'build/this-week': [
     { label: 'Export CSV', kind: 'export' },
