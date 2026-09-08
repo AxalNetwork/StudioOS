@@ -166,8 +166,22 @@ export function NoPartnerProfile() {
         data, because there is no firm for it to be missing from yet.
       </p>
       <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-ink-2">
-        An admin can attach it. Until then every zone in this workspace will say
-        the same thing.
+        An admin can attach it, under Partners → Firm links. Until then every
+        zone in this workspace will say the same thing.
+      </p>
+      {/* THE SENTENCE FOR THE OTHER READER OF THIS CARD, and for a long time
+          the more common one. An admin previewing the Partner role resolves to
+          no firm and never will: `ensureRoleProfile` backfills
+          `users.partner_id` for `role = 'partner'` alone, so every zone shows
+          this card. Telling them "an admin can attach it" is useless — they
+          ARE the admin, and attaching their own sign-in to somebody's firm is
+          the one act with no subject and no audit trail. Impersonation is the
+          way in, which is the same answer `AdvisorPreviewNotice` gives on the
+          other half of the product. */}
+      <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-ink-3">
+        Reading this as an admin? Previewing the Partner role attaches you to
+        nobody. Impersonate one of a firm’s accounts to open its workspace —
+        that names whose book is being read and records it.
       </p>
     </div>
   );

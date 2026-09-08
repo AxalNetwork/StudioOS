@@ -142,6 +142,8 @@ export default function PartnerInvitations() {
         {[
           ['invitations', `Invitations (${invitations.length})`],
           ['deals', `Deals (${deals.length})`],
+          // Loads its own data, so it costs nothing until it is opened.
+          ['links', 'Firm links'],
         ].map(([k, label]) => (
           <button
             key={k}
@@ -441,11 +443,165 @@ export default function PartnerInvitations() {
         />
       )}
 
+      {tab === 'links' && <FirmLinks onToast={showToast} />}
+
       {toast && (
         <div className={`fixed bottom-6 right-6 z-[80] px-4 py-2 rounded-lg shadow-lg text-sm font-medium ${
           toast.kind === 'error' ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'
         }`}>
           {typeof toast === 'string' ? toast : toast.msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Attaching a partner sign-in to the firm record it belongs to.
+ *
+ * WHAT THIS IS FOR. Every partner surface resolves the caller through
+ * `users.partner_id` and nothing else (D57), so an account without one sees the
+ * same card on every zone: "this account is not linked to a firm yet — an admin
+ * can attach it." Nothing could, until this tab. Measured against production on
+ * 2026-09-07: 8 of 26 partner accounts were attached and 18 were not.
+ *
+ * MOST OF THE 18 WILL FIX THEMSELVES, and the copy says so rather than sending
+ * somebody down a list of 18 rows by hand. `ensureRoleProfile` creates a firm
+ * record and links it on every `/auth/me`, which the app calls on session boot,
+ * so an account that has simply not signed in since that shipped attaches on
+ * its next sign-in. This tab is for the ones that will not: a sign-in that
+ * belongs to a firm ALREADY in the table, under a different address.
+ *
+ * TWO IDS, NO MATCHING. The admin names the account and names the firm. There
+ * is deliberately no "find likely matches" here: joining accounts to firms on a
+ * mutable email string is the exact hole D57 closed on the read side, and doing
+ * it on the write side with an admin's name attached would be worse, since it
+ * would look deliberate.
+ */
+function FirmLinks({ onToast }) {
+  const [state, setState] = useState({ loading: true, error: '', data: null });
+  const [busyId, setBusyId] = useState(null);
+  const [onlyUnattached, setOnlyUnattached] = useState(true);
+
+  const load = useCallback(async () => {
+    setState((s) => ({ ...s, loading: true, error: '' }));
+    try {
+      const r = await api.adminPartners.listFirmLinks();
+      setState({ loading: false, error: '', data: r || {} });
+    } catch (e) {
+      setState({ loading: false, error: e?.message || 'The account list did not load.', data: null });
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const d = state.data;
+  const accounts = Array.isArray(d?.accounts) ? d.accounts : [];
+  const firms = Array.isArray(d?.firms) ? d.firms : [];
+  const rows = onlyUnattached ? accounts.filter((a) => a.partner_id == null) : accounts;
+
+  async function attach(userId, value) {
+    setBusyId(userId);
+    try {
+      const r = await api.adminPartners.setFirmLink(userId, value === '' ? null : Number(value));
+      onToast({
+        kind: 'success',
+        msg: r?.partner_id ? `Attached to ${r.firm_name}.` : 'Detached from its firm.',
+      });
+      await load();
+    } catch (e) {
+      onToast({ kind: 'error', msg: e?.message || 'That did not save.' });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (state.loading) {
+    return <div className="text-sm text-gray-500 dark:text-gray-400">Loading accounts…</div>;
+  }
+  if (state.error) {
+    return (
+      <div data-card className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5">
+        <p className="text-sm text-gray-700 dark:text-gray-300">{state.error}</p>
+        <button type="button" onClick={load}
+          className="mt-3 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-sm font-medium">
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div data-card className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
+      <div className="p-4 border-b border-gray-100 dark:border-gray-800">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="text-sm text-gray-700 dark:text-gray-300">
+            <strong className="tabular-nums">{d?.attached ?? 0}</strong> attached ·{' '}
+            <strong className="tabular-nums">{d?.unattached ?? 0}</strong> not ·{' '}
+            <strong className="tabular-nums">{firms.length}</strong> firms on record
+          </div>
+          <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+            <input type="checkbox" checked={onlyUnattached}
+              onChange={(e) => setOnlyUnattached(e.target.checked)} />
+            Only accounts with no firm
+          </label>
+        </div>
+        <p className="mt-2 max-w-3xl text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+          Most unattached accounts need nothing done here: a partner sign-in with no firm gets
+          one created and linked the next time it loads the app. What this is for is the account
+          that belongs to a firm already on this list under a different address — that one can
+          only be joined by hand, and it is recorded in the admin audit log when you do.
+        </p>
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="p-5 text-sm text-gray-600 dark:text-gray-400">
+          {onlyUnattached
+            ? 'Every partner account is attached to a firm.'
+            : 'No partner accounts on record.'}
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              <tr className="border-b border-gray-100 dark:border-gray-800">
+                <th className="px-4 py-2 font-semibold">Account</th>
+                <th className="px-4 py-2 font-semibold">Firm</th>
+                <th className="px-4 py-2 font-semibold">Attach to</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((a) => (
+                <tr key={a.id} className="border-b border-gray-50 dark:border-gray-800/60">
+                  <td className="px-4 py-2.5">
+                    <div className="font-medium text-gray-900 dark:text-gray-100">{a.name || a.email}</div>
+                    {a.name && <div className="text-xs text-gray-500">{a.email}</div>}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    {a.partner_id
+                      ? <span className="text-gray-700 dark:text-gray-300">{a.firm_company || a.firm_name}</span>
+                      : <span className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                          No firm
+                        </span>}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <select
+                      className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm"
+                      value={a.partner_id ?? ''}
+                      disabled={busyId === a.id}
+                      onChange={(e) => attach(a.id, e.target.value)}
+                    >
+                      <option value="">— no firm —</option>
+                      {firms.map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.company || f.name}{f.accounts ? ` · ${f.accounts} signed in` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

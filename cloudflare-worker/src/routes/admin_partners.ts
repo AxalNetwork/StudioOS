@@ -11,6 +11,8 @@
  *   POST   /invitations/:id/revoke — revoke an unsigned invitation
  *   GET    /deals                  — list active partner deals
  *   POST   /deals/:id/terminate    — terminate an active deal
+ *   GET    /links                  — partner accounts and firms, unattached first
+ *   POST   /links                  — attach (or detach) one account to one firm
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -514,6 +516,106 @@ admin_partners.post('/:id/directory', async (c) => {
       id, listed: !!nextListed, featured: !!nextFeatured,
     },
   });
+});
+
+// ---------- Firm links ----------
+//
+// THE THING THE GAP CARD HAS BEEN PROMISING. Every partner surface resolves
+// through `users.partner_id` and nothing else (D57), and an account without one
+// gets a card saying "an admin can attach it" — which, until these two
+// endpoints, nothing could do. Measured against production on 2026-09-07: 8 of
+// 26 partner accounts were attached and 18 were not.
+//
+// EXPLICIT IDS, NEVER A MATCH. There is no search-and-guess here on purpose:
+// the caller names a user and a firm, both are loaded and checked, and anything
+// unresolvable is a 4xx rather than a best effort. Matching accounts to firms on
+// a mutable string is the exact hole D57 closed on the read side, and rebuilding
+// it on the write side with an admin's name on it would be worse, not better.
+//
+// PARTNER ACCOUNTS ONLY. An admin cannot attach their OWN sign-in to a firm
+// here, and that is a boundary rather than an omission. Reading one firm's
+// clients, quotes and engagements as an admin is impersonation — it names whose
+// book is being opened and writes an `impersonation_sessions` row — which is
+// the same rule `AdvisorPreviewNotice` states for the advisor half. A silent
+// self-attach would be the one act with neither a subject nor an audit trail.
+
+admin_partners.get('/links', async (c) => {
+  const admin = await requireAdmin(c);
+  void admin;
+  // Unattached first: this list IS the work queue, so the rows that need a
+  // decision sort above the ones that already have one.
+  const accounts = await c.env.DB.prepare(
+    `SELECT u.id, u.email, u.name, u.partner_id,
+            p.name AS firm_name, p.company AS firm_company
+       FROM users u
+       LEFT JOIN partners p ON p.id = u.partner_id
+      WHERE lower(u.role) = 'partner'
+      ORDER BY (u.partner_id IS NOT NULL) ASC, lower(u.email) ASC
+      LIMIT 500`,
+  ).all();
+  // `accounts` per firm is a count and not a flag: `users.partner_id` is not
+  // unique, several sign-ins may belong to one firm, and a firm with none is
+  // recorded rather than deleted.
+  const firms = await c.env.DB.prepare(
+    `SELECT p.id, p.name, p.company, p.email,
+            (SELECT COUNT(*) FROM users u WHERE u.partner_id = p.id) AS accounts
+       FROM partners p
+      ORDER BY lower(p.name) ASC
+      LIMIT 500`,
+  ).all();
+  const rows = (accounts.results || []) as Array<{ partner_id: number | null }>;
+  return c.json({
+    accounts: rows,
+    firms: firms.results || [],
+    attached: rows.filter((r) => r.partner_id != null).length,
+    unattached: rows.filter((r) => r.partner_id == null).length,
+  });
+});
+
+admin_partners.post('/links', async (c) => {
+  const admin = await requireAdmin(c);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+
+  const userId = Number((body as { user_id?: unknown }).user_id);
+  if (!Number.isFinite(userId) || userId <= 0) {
+    return c.json({ error: 'invalid user id' }, 400);
+  }
+  // `null` detaches, which is a real answer: a firm record that turns out to
+  // belong to somebody else must be removable without inventing a replacement.
+  const raw = (body as { partner_id?: unknown }).partner_id;
+  const firmId = raw === null || raw === undefined || raw === '' ? null : Number(raw);
+  if (firmId !== null && (!Number.isFinite(firmId) || firmId <= 0)) {
+    return c.json({ error: 'invalid partner id' }, 400);
+  }
+
+  const user = await c.env.DB.prepare(
+    'SELECT id, email, role, partner_id FROM users WHERE id = ?',
+  ).bind(userId).first<{ id: number; email: string; role: string; partner_id: number | null }>();
+  if (!user) return c.json({ error: 'user not found' }, 404);
+  if (String(user.role || '').toLowerCase() !== 'partner') {
+    return c.json({
+      error: 'only a partner account can be attached to a firm; read a firm as an admin by impersonating one of its accounts',
+    }, 400);
+  }
+
+  let firm: { id: number; name: string } | null = null;
+  if (firmId !== null) {
+    firm = await c.env.DB.prepare('SELECT id, name FROM partners WHERE id = ?')
+      .bind(firmId).first<{ id: number; name: string }>();
+    if (!firm) return c.json({ error: 'firm not found' }, 404);
+  }
+
+  await c.env.DB.prepare('UPDATE users SET partner_id = ? WHERE id = ?')
+    .bind(firmId, userId).run();
+
+  await logAdminAction(c.env, admin.id, admin.email, 'partner_firm_link_set', {
+    user_id: userId,
+    from: user.partner_id ?? null,
+    to: firmId,
+    firm_name: firm?.name ?? null,
+  });
+
+  return c.json({ ok: true, user_id: userId, partner_id: firmId, firm_name: firm?.name ?? null });
 });
 
 function safeJsonArray(s: unknown): unknown[] {
