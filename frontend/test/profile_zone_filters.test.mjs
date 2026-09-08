@@ -121,8 +121,31 @@ const PROFILES = {
     // screen: `FounderValidateWorkspace.jsx` imports `ZoneActions` and no
     // `ZoneToolbar`, so all four zones ship an action row over an unfiltered
     // list. That is a real gap, recorded here by name so it is re-checked on
-    // every run, and it is the work of building four filter tables and four
-    // narrowed row sets — not of this reader.
+    // every run.
+    //
+    // WHAT ACTUALLY BLOCKS IT, WHICH IS NOT THE FOUR FILTER TABLES. This note
+    // first said the work was "four filter tables and four narrowed row sets".
+    // It is not, and the correction is worth keeping because the wrong version
+    // makes the job look like an afternoon.
+    //
+    // The test below requires every zone with a filter table to have an ACTION
+    // table for the same zone, and `founderZoneActions.js` has no `validate/*`
+    // key — that workspace builds its own row, in a local `ACTIONS` map. It has
+    // to: three of its ops open a modal (`setLogOpen`, `setHypOpen`,
+    // `setLinkOpen`) and its three exports are SERVER-side calls with a busy
+    // spinner and a shared error line. `zoneActionBuilder.js` can express
+    // exactly three things — `kind: 'export'` over rows the page has loaded,
+    // `to:` a route, and `unbuilt:` — and across all four profiles' 218 entries
+    // there is not one page-supplied handler. So bringing Validate into the
+    // table means giving the SHARED builder a fourth kind, and giving the guard
+    // a way to check it (the page must actually supply the handler its table
+    // declares, the same shape as the live-filter-key assertion above).
+    //
+    // That is a defensible change and probably the right one — a fourth kind
+    // for "the page performs this, because it owns state a table cannot" is a
+    // real gap in the builder's vocabulary, not a workaround. But it is a
+    // change to a builder four profiles depend on, and it is not a prerequisite
+    // anyone would guess from the words "add a filter row".
     //
     // The three that LEFT this list are still gone for their own reasons:
     // `research/{ask,library}` when all four licences gained them in one
