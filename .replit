@@ -81,6 +81,10 @@ isValidation = true
 localPort = 5000
 externalPort = 80
 
+[[ports]]
+localPort = 8000
+externalPort = 8000
+
 # Port 8000 (FastAPI dev backend) is NOT mapped externally.
 # Frontend Vite proxy forwards /api/* to localhost:8000 internally only.
 
