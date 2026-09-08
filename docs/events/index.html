@@ -47,16 +47,74 @@
     })();
   </script>
   <script data-cfasync="false">
+    // ONE definition of "is this the dev server", because two scripts below
+    // branch on it in OPPOSITE directions and must never disagree.
+    //
+    // It used to be copy-pasted into both, and it sniffed the host and the
+    // port as well as the DOM:
+    //
+    //   /(localhost|replit\.dev|replit\.app|repl\.co)/.test(location.host)
+    //   || location.port === '5000'
+    //
+    // Those two clauses are true for a Replit-HOSTED PRODUCTION BUILD. `.replit`
+    // maps localPort 5000 to externalPort 80 and `run-deploy.sh` serves the
+    // built SPA there, so a deployed bundle answered "yes, dev" — which armed
+    // the dev-only service-worker killer below AND switched off the production
+    // boot watchdog that follows it. The one unbounded reload on, the bounded
+    // one off, on the same page load.
+    //
+    // `/@vite/client` is the signal that actually means dev: Vite injects that
+    // script into the HTML it serves, and injects it above this block, so it is
+    // already in the DOM when this runs. A built bundle never has it. (The
+    // string appears three times in the built HTML — inside these scripts, as
+    // source text — but `querySelector` matches elements, not text, so it
+    // cannot match itself.)
+    window.__axalIsDev = (function () {
+      try { return !!document.querySelector('script[src="/@vite/client"]'); }
+      catch (e) { return false; }
+    })();
+  </script>
+  <script data-cfasync="false">
     // Dev-only: unregister any stale service worker + clear caches BEFORE any
     // module loads. The SW precaches '/' and serves stale HTML referencing old
     // Vite optimizer dep hashes, causing "Outdated Optimize Dep" 504s after
     // restarts. Runs only in dev (vite serves index.html with /@vite/client).
+    //
+    // ITS GUARD USED TO BE `window.__swKilled`, WHICH IS NOT A GUARD. A property
+    // on `window` dies with the document, so it bounded one reload per page
+    // load — and a reload starts a new page load. `lib/reloadGuard.js` exists
+    // because `pwa.js` shipped exactly this shape ("its guard was a module-local
+    // `let` that died with the document, so it bounded one reload PER PAGE LOAD,
+    // which is not a bound on a loop at all"); this block had the same bug one
+    // layer up, in HTML the module system cannot reach.
+    //
+    // So the bound is spelled out here rather than imported: this script is
+    // un-bundled on purpose, so it cannot `import`. It is the same two-part
+    // bound the watchdog below uses and for the same two reasons — a
+    // sessionStorage key, plus a URL marker for the browsers that refuse the
+    // storage write, which are precisely the browsers this bug is reported
+    // from. `RELOAD_GUARD_KEYS` in `lib/reloadGuard.js` names the key so
+    // `clearSession`'s sweep cannot drop it, and
+    // `frontend/test/chunk_reload_loop.test.mjs` fails the build if a reload in
+    // this file ever loses its bound again.
     (function () {
       try {
-        var isDev = !!document.querySelector('script[src="/@vite/client"]') ||
-                    /(localhost|replit\.dev|replit\.app|repl\.co)/.test(window.location.host) ||
-                    window.location.port === '5000';
-        if (!isDev || !('serviceWorker' in navigator)) return;
+        if (!window.__axalIsDev || !('serviceWorker' in navigator)) return;
+        var KILL_KEY = 'axal:sw-kill-attempts';
+        var killOnce = function () {
+          try {
+            if (/[?&]__swkill=/.test(window.location.search)) return;
+          } catch (e) { /* location unreadable — fall through to the storage guard */ }
+          try {
+            if (sessionStorage.getItem(KILL_KEY) === '1') return;
+            sessionStorage.setItem(KILL_KEY, '1');
+          } catch (e) { /* storage blocked — the ?__swkill guard above still bounds us */ }
+          try {
+            var u = new URL(window.location.href);
+            u.searchParams.set('__swkill', '1');
+            window.location.replace(u.toString());
+          } catch (e) { window.location.reload(); }
+        };
         navigator.serviceWorker.getRegistrations().then(function (regs) {
           var hadSW = regs && regs.length > 0;
           regs.forEach(function (r) { try { r.unregister(); } catch (e) {} });
@@ -64,10 +122,7 @@
             caches.keys().then(function (keys) {
               var pending = keys.map(function (k) { return caches.delete(k); });
               Promise.all(pending).then(function () {
-                if (hadSW && !window.__swKilled) {
-                  window.__swKilled = true;
-                  window.location.reload();
-                }
+                if (hadSW) killOnce();
               });
             });
           }
@@ -90,10 +145,11 @@
     // cached stale copy. A sessionStorage guard prevents any reload loop.
     (function () {
       try {
-        var isDev = !!document.querySelector('script[src="/@vite/client"]') ||
-                    /(localhost|replit\.dev|replit\.app|repl\.co)/.test(window.location.host) ||
-                    window.location.port === '5000';
-        if (isDev) return;
+        // Shared with the service-worker killer above — see the note there for
+        // why the host and port clauses are gone. Their removal RE-ARMS this
+        // watchdog on a Replit-hosted production build, which is the point:
+        // that build serves hashed assets and can skew exactly like any other.
+        if (window.__axalIsDev) return;
         var REBOOT_KEY = 'axal:boot-reboot';
         function rebootOnce() {
           // Storage-free loop guard: if we already rebooted (the URL carries
@@ -197,7 +253,7 @@
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" /></noscript>
   <!-- Turnstile is loaded on-demand (frontend/src/lib/turnstile.js) only by the
        few forms that render a widget, instead of globally on every page. -->
-  <script data-cfasync="false" type="module" crossorigin src="/assets/index-CpPALn59.js"></script>
+  <script data-cfasync="false" type="module" crossorigin src="/assets/index-c2t2iIqY.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-Dd_uD5pT.js">
   <link rel="modulepreload" crossorigin href="/assets/react-vendor-CGHMw-tA.js">
   <link rel="modulepreload" crossorigin href="/assets/createLucideIcon-UgJhqLpB.js">
