@@ -112,7 +112,7 @@ server-sanitized `body_html` (the worker renderer is escape-first).
 ## L4 — LinkedIn schema ALTER ran on the request path, swallowing DDL errors
 
 **Fix.** The LinkedIn identity columns (`linkedin_sub`, `linkedin_email`,
-`linkedin_name`, `linkedin_connected_at`) now ship in `sql/schema.sql` for
+`linkedin_name`, `linkedin_connected_at`) now ship in `sql/schema_baseline.sql` for
 fresh databases. The lazy request-path `ensureColumns()` ALTER (which swallowed
 DDL errors and masked schema drift) is removed from `routes/linkedin.ts`.
 Existing D1 databases are migrated **manually** via `sql/linkedin_alter.sql`

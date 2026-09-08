@@ -32,7 +32,7 @@
 -- exists so the float half of this schema stops growing.
 --
 -- NO INDEX ON THIS TABLE. `advisor_bookings` carries TWO definitions —
--- `sql/schema.sql:1002`'s six-column version and the live `t13_t14_t15.sql`
+-- `sql/schema_baseline.sql:1002`'s six-column version and the live `t13_t14_t15.sql`
 -- one, recorded in `scripts/sqlite-table-collisions-baseline.json` — and
 -- `advisor_id` exists only in the second. An index naming it would be a column
 -- that only one lineage has, which is precisely what

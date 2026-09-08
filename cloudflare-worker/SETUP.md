@@ -74,7 +74,7 @@ database_id = "<paste D1 database ID here>"
 npm run db:schema:remote
 ```
 
-This applies `sql/schema.sql` to the live D1 database.
+This applies `sql/schema_baseline.sql` to the live D1 database.
 
 ---
 

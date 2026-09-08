@@ -111,7 +111,7 @@ test('the COMPANY-scoped Legal entity card stays absent, and the blocker is the 
   // so the card can be reconsidered.
   assert.doesNotMatch(company, /Legal entity/i, 'if this shipped, delete this test');
 
-  const schema = read('cloudflare-worker/sql/t13_t14_t15.sql');
+  const schema = read('cloudflare-worker/sql/historical/t13_t14_t15.sql');
   const profiles = schema.slice(
     schema.indexOf('CREATE TABLE IF NOT EXISTS company_profiles'),
     schema.indexOf(');', schema.indexOf('CREATE TABLE IF NOT EXISTS company_profiles')),

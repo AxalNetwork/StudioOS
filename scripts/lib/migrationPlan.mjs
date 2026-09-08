@@ -22,6 +22,11 @@ export const LEDGER_DDL = `CREATE TABLE IF NOT EXISTS ${LEDGER_TABLE} (
   applied_at TEXT NOT NULL DEFAULT (datetime('now'))
 );`;
 
+// A production-derived schema baseline contains the effects of every migration
+// through this numeric cutoff. Bootstrap records those historical files without
+// replaying them, leaving any later migration pending for the normal runner.
+export const BASELINE_CUTOFF = 219;
+
 // Where a foreign-shaped ledger goes when the operator adopts it. Renamed, not
 // dropped: its rows are the only record of whatever wrote them.
 export const LEGACY_LEDGER_TABLE = 'schema_migrations_legacy';
@@ -70,6 +75,11 @@ export function compareMigrations(a, b) {
   return as < bs ? -1 : as > bs ? 1 : 0;
 }
 
+export function migrationNumber(name) {
+  const match = /^(\d+)/.exec(name);
+  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+}
+
 export function checksum(sql) {
   return crypto.createHash('sha256').update(sql, 'utf8').digest('hex');
 }
@@ -92,6 +102,24 @@ export function sqlQuote(value) {
 // previously-aborted run that left an empty ledger behind still trips the guard.
 export function needsBaseline({ mode, appliedCount, appTableCount }) {
   return mode !== 'baseline' && appliedCount === 0 && appTableCount > 0;
+}
+
+/**
+ * Bootstrap is only valid for a genuinely empty target. The baseline creates
+ * the schema, then the runner records the historical ledger rows without
+ * replaying those migrations.
+ */
+export function bootstrapStateProblem({ ledgerExists, ledgerCount, appTableCount }) {
+  if (ledgerCount > 0) {
+    return `${LEDGER_TABLE} already has ${ledgerCount} row(s)`;
+  }
+  if (appTableCount > 0) {
+    return `target already has ${appTableCount} application table(s)`;
+  }
+  if (ledgerExists && ledgerCount < 0) {
+    return `could not determine the ${LEDGER_TABLE} row count`;
+  }
+  return null;
 }
 
 // Read every *.sql in `dir`, sorted into apply order, with content + checksum.
@@ -184,6 +212,11 @@ export function planActions(files, appliedSet, { mode } = { mode: 'apply' }) {
     if (mode === 'baseline') {
       const { idempotent } = classifyIdempotency(f.sql);
       actions.push({ file: f, action: idempotent ? 'apply' : 'mark' });
+    } else if (mode === 'bootstrap') {
+      actions.push({
+        file: f,
+        action: migrationNumber(f.name) <= BASELINE_CUTOFF ? 'mark' : 'skip',
+      });
     } else {
       actions.push({ file: f, action: 'apply' });
     }

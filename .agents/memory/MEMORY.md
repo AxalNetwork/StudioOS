@@ -20,3 +20,4 @@
 - [Build cadence data honesty](build-cadence-data-honesty.md) — calendar events and roadmap changes are not operating rituals or review outcomes without explicit cadence records.
 - [Merge and rebase resolution](merge-rebase-resolution.md) — finish an active merge before rebasing; in rebase conflicts, stage 2 is upstream and stage 3 is the replayed commit.
 - [Preview workflow binding](preview-workflow-binding.md) — FastAPI must bind 0.0.0.0 for Replit to detect port 8000; keep that backend port internal to Vite.
+- [Local D1 system tables](d1-local-system-tables.md) — workerd owns `_cf_KV`/`_cf_METADATA`; exclude them from baselines and empty-target guards.

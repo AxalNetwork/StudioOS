@@ -110,7 +110,7 @@ test('the panel says SAFE conversion is absent, and why', () => {
   // And the premise: those columns really do not exist on a cap-table security.
   const sql = readdirSync(resolve(root, 'cloudflare-worker/sql/migrations'))
     .map((f) => readFileSync(resolve(root, 'cloudflare-worker/sql/migrations', f), 'utf8'))
-    .join('\n') + read('cloudflare-worker/sql/schema.sql');
+    .join('\n') + read('cloudflare-worker/sql/schema_baseline.sql');
   assert.ok(!/discount_rate/.test(sql), 'if discount_rate now exists, build the conversion detail');
 
   // Look for a COLUMN, not a mention. A bare /\bmfn\b/ matches

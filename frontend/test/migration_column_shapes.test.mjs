@@ -3,8 +3,8 @@
  *
  * 196 shipped naming `quotes.partner_id` and `service_offerings.owner_user_id`.
  * Both tables carry three `CREATE TABLE IF NOT EXISTS` definitions and those
- * two columns come from OPPOSITE lineages — `partner_id` only from
- * `t13_t14_t15.sql`, `owner_user_id` only from `schema.sql` / migration 034.
+  * two columns come from OPPOSITE lineages — `partner_id` only from
+  * `t13_t14_t15.sql`, `owner_user_id` only from `schema_baseline.sql` / migration 034.
  * D1 keeps one table per name, so the first file to run won and the rest were
  * no-ops: no ordering of them yields a database holding both columns. The file
  * could not apply anywhere, and did not — the production run failed and D1
@@ -56,7 +56,7 @@ test('196 no longer reads a column from a shape that may not be live', () => {
   const sql = read(`${M}/196_partner_company.sql`);
   const code = sql.replace(/--.*$/gm, '');
   assert.ok(!/\bquotes\.partner_id\b/.test(code),
-    '196 reads quotes.partner_id again — absent from the schema.sql shape');
+    '196 reads quotes.partner_id again — absent from the schema_baseline.sql shape');
   assert.ok(!/\bservice_offerings\.owner_user_id\b/.test(code),
     '196 reads service_offerings.owner_user_id again — absent from the t13 shape');
   assert.match(code, /CREATE INDEX IF NOT EXISTS idx_quotes_company ON quotes\(company_id\)/,
@@ -144,7 +144,7 @@ test('200 preserves the ids the service_engagements foreign key points at', () =
   assert.ok(insert, 'the copy INSERT must name its columns explicitly');
   assert.match(insert[1], /\bid\b/,
     'id must be copied, not regenerated — service_engagements.offering_id references it');
-  assert.match(read('cloudflare-worker/sql/schema.sql'),
+  assert.match(read('cloudflare-worker/sql/historical/schema.sql'),
     /offering_id INTEGER NOT NULL REFERENCES service_offerings\(id\)/,
     'if this reference ever moves, the id-preservation rule above moves with it');
 });

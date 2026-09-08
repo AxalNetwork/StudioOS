@@ -3288,3 +3288,23 @@ that is a constant everywhere it is read labels nothing. The guard now watches
 for a roles array that would actually discriminate between viewers who share the
 corpus — `['founder']`, `['investor', 'partner']` — which is the day the line
 starts carrying information.
+
+## D62 — The production baseline closes the fresh-build gap D60 recorded
+
+D60 correctly recorded that replaying every numbered migration on top of the old
+current-state snapshot was not a valid from-scratch build. That finding is now
+superseded: `cloudflare-worker/sql/schema_baseline.sql` is derived from production,
+and a new database starts there rather than from the retired loose schema files.
+
+The fresh-build contract is now strict. The test builds the baseline and applies
+every migration newer than cutoff 219; it tolerates no failure and carries no
+known-failure or "other reason" lists. It still checks the five `project_id`
+clauses that caught migration 039's cascade drift: `deals`, `score_snapshots`,
+`documents`, `discovery_interviews`, and `roadmap_okrs` must match production,
+with none carrying `ON DELETE CASCADE`.
+
+The one-time `--bootstrap` runner mode uses the same boundary: only an empty local
+or preview database may be bootstrapped, the baseline is applied once, and every
+migration through 219 is recorded without being replayed. Later migrations remain
+pending for the normal forward-only runner. Remote bootstrap is refused because
+production adoption is a different operation with different safety guarantees.

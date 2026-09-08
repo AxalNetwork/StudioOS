@@ -11,7 +11,7 @@
 -- `ALTER TABLE … ADD COLUMN` has no `IF NOT EXISTS` form and the
 -- migration runner aborts on the first duplicate-column error, which
 -- would brick re-runs and partial replays. Instead they are:
---   - Inlined in `cloudflare-worker/sql/schema.sql` so fresh provisions
+--   - Inlined in `cloudflare-worker/sql/schema_baseline.sql` so fresh provisions
 --     get them at table-creation time, AND
 --   - Lazily added by `ensureSanctionsSchema()` in
 --     `cloudflare-worker/src/services/sanctions.ts` on the first request

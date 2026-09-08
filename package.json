@@ -21,7 +21,7 @@
     "deploy:preview": "cd cloudflare-worker && npx wrangler deploy --config ../wrangler.toml --env preview",
     "tail": "cd cloudflare-worker && npx wrangler tail --config ../wrangler.toml",
     "tail:preview": "cd cloudflare-worker && npx wrangler tail --config ../wrangler.toml --env preview",
-    "d1:migrate": "cd cloudflare-worker && npx wrangler d1 execute studioos-db --config ../wrangler.toml --remote --file=sql/schema.sql",
+    "d1:migrate": "cd cloudflare-worker && npx wrangler d1 execute studioos-db --config ../wrangler.toml --remote --file=sql/schema_baseline.sql",
     "d1:migrate:remote": "node scripts/migrate-d1.mjs --remote",
     "d1:migrate:local": "node scripts/migrate-d1.mjs --local",
     "d1:migrate:preview": "node scripts/migrate-d1.mjs --preview",

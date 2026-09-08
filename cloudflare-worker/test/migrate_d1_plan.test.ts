@@ -38,6 +38,7 @@ import {
   planActions,
   applyPlan,
   needsBaseline,
+  bootstrapStateProblem,
   sqlQuote,
   verifyMarked,
 } from '../../scripts/lib/migrationPlan.mjs';
@@ -237,6 +238,51 @@ test('baseline records non-idempotent files WITHOUT executing them', () => {
   const applied = engine.appliedSet();
   assert.ok(applied.has('001_guarded.sql'));
   assert.ok(applied.has('002_alter.sql'));
+});
+
+test('bootstrap marks baseline-era migrations and leaves later files pending', () => {
+  const { files } = tmpMigrations({
+    '219_baseline_edge.sql': 'ALTER TABLE nonexistent ADD COLUMN c TEXT;',
+    '220_future.sql': 'CREATE TABLE future (id INTEGER);',
+  });
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
+  const engine = makeEngine(db);
+  const executed: string[] = [];
+
+  const actions = planActions(files, engine.appliedSet(), { mode: 'bootstrap' });
+  assert.deepEqual(actions.map((a) => [a.file.name, a.action]), [
+    ['219_baseline_edge.sql', 'mark'],
+    ['220_future.sql', 'skip'],
+  ]);
+
+  const result = applyPlan(actions, {
+    exec: (file: any) => executed.push(file.name),
+    record: engine.record,
+  });
+  assert.equal(result.failure, null);
+  assert.deepEqual(executed, [], 'bootstrap must not execute migrations');
+  assert.deepEqual([...engine.appliedSet().keys()], ['219_baseline_edge.sql']);
+  assert.equal(result.marked.length, 1);
+  assert.equal(result.skipped.length, 1);
+});
+
+test('bootstrap refuses populated targets and populated ledgers', () => {
+  assert.equal(
+    bootstrapStateProblem({ ledgerExists: false, ledgerCount: 0, appTableCount: 0 }),
+    null,
+  );
+  assert.match(
+    bootstrapStateProblem({ ledgerExists: true, ledgerCount: 1, appTableCount: 0 })!,
+    /schema_migrations already has 1 row/,
+  );
+  assert.match(
+    bootstrapStateProblem({ ledgerExists: false, ledgerCount: 0, appTableCount: 2 })!,
+    /target already has 2 application table/,
+  );
+  assert.equal(
+    bootstrapStateProblem({ ledgerExists: true, ledgerCount: 0, appTableCount: 0 }),
+    null,
+  );
 });
 
 test('needsBaseline trips on an existing DB with an empty ledger (apply mode)', () => {

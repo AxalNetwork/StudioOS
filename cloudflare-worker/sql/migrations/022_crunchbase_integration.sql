@@ -1,7 +1,7 @@
 -- Task #3 (2026-05-10) — Crunchbase integration
 -- Adds project-level cached Crunchbase snapshot columns + auto-filled
 -- enrichment fields populated by /api/crunchbase/projects/:id/apply.
--- Schema mirrored in cloudflare-worker/sql/schema.sql.
+-- Schema mirrored in cloudflare-worker/sql/schema_baseline.sql.
 
 ALTER TABLE projects ADD COLUMN crunchbase_uuid TEXT;
 ALTER TABLE projects ADD COLUMN crunchbase_data_json TEXT;

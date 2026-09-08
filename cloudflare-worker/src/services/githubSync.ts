@@ -192,7 +192,7 @@ export function assigneeLoginFor(env: Env, assignedTo: string | null | undefined
 /* Schema drift guard + sync-event dedup store                        */
 /* ------------------------------------------------------------------ */
 
-/** Idempotent runtime migrations for prod D1 drift (mirrors sql/schema.sql). */
+/** Idempotent runtime migrations for prod D1 drift (mirrors sql/schema_baseline.sql). */
 export async function ensureTicketSyncSchema(env: Env): Promise<void> {
   const db = env.DB;
   const alters = [

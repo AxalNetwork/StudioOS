@@ -38,7 +38,7 @@ const STATE_TTL_SECONDS = 600; // 10 minutes per task spec.
 
 // ---------------------------------------------------------------------------
 // LinkedIn identity columns (linkedin_sub / linkedin_email / linkedin_name /
-// linkedin_connected_at) live in the worker's main schema (sql/schema.sql).
+// linkedin_connected_at) live in the worker's main schema (sql/schema_baseline.sql).
 // Existing D1 databases are migrated MANUALLY via sql/linkedin_alter.sql
 // (audit L4). There is deliberately NO request-path lazy ALTER here: it
 // swallowed DDL errors and masked real schema drift. If a column is missing

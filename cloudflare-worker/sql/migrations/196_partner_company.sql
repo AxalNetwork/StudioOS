@@ -55,8 +55,8 @@
 -- OPPOSITE lineages of two multiply-defined tables:
 --
 --     quotes.partner_id        only in sql/t13_t14_t15.sql
---     quotes.provider_user_id  only in sql/schema.sql + migration 034
---     service_offerings.owner_user_id   only in sql/schema.sql + migration 034
+--     quotes.provider_user_id  only in sql/schema_baseline.sql + migration 034
+--     service_offerings.owner_user_id   only in sql/schema_baseline.sql + migration 034
 --     service_offerings.partner_id      only in sql/t13_t14_t15.sql
 --
 -- D1 holds one table per name and every one of those definitions is

@@ -8,7 +8,7 @@
 --     description, price_min, price_max, is_active, created_at
 --
 -- Every query in `routes/services.ts` is written against the OTHER shape, the
--- one `sql/schema.sql` and `sql/migrations/034_unmounted_routes.sql` declare
+-- one `sql/schema_baseline.sql` and `sql/migrations/034_unmounted_routes.sql` declare
 -- byte-identically to each other:
 --
 --     id, uid, owner_user_id NOT NULL, title, category, summary, price_usd,

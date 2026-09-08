@@ -16,6 +16,8 @@
 //   node scripts/migrate-d1.mjs --remote           # prod D1 (studioos-db)
 //   node scripts/migrate-d1.mjs --preview          # preview env D1
 //   node scripts/migrate-d1.mjs --remote --baseline  # one-time adoption (see below)
+//   node scripts/migrate-d1.mjs --local --bootstrap # build an empty DB from the baseline
+//   node scripts/migrate-d1.mjs --local --bootstrap --persist-to /tmp/d1-check
 //   node scripts/migrate-d1.mjs --audit            # idempotency audit only (no DB)
 //   node scripts/migrate-d1.mjs --remote --dry-run # show the plan, touch nothing
 //   node scripts/migrate-d1.mjs --remote --adopt-legacy-ledger --baseline
@@ -61,6 +63,8 @@ import {
   needsBaseline,
   sqlQuote,
   verifyMarked,
+  BASELINE_CUTOFF,
+  bootstrapStateProblem,
 } from './lib/migrationPlan.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -69,10 +73,13 @@ const MIGRATIONS_DIR = path.join(WORKER_DIR, 'sql', 'migrations');
 
 const argv = process.argv.slice(2);
 const has = (flag) => argv.includes(flag);
+const persistToIndex = argv.indexOf('--persist-to');
+const PERSIST_TO = persistToIndex === -1 ? null : argv[persistToIndex + 1];
 
 const MODE_AUDIT = has('--audit');
 const MODE_DRY_RUN = has('--dry-run');
 const MODE_BASELINE = has('--baseline');
+const MODE_BOOTSTRAP = has('--bootstrap');
 const MODE_VERIFY_MARKED = has('--verify-marked');
 const ADOPT_LEGACY = has('--adopt-legacy-ledger');
 
@@ -115,6 +122,7 @@ function wrangler(target, opts) {
   if (opts.json) args.push('--json');
   if (opts.command != null) args.push('--command', opts.command);
   if (opts.file != null) args.push('--file', opts.file);
+  if (PERSIST_TO != null) args.push('--persist-to', PERSIST_TO);
 
   const res = spawnSync('npx', args, {
     cwd: WORKER_DIR,
@@ -180,6 +188,27 @@ function adoptOrRefuseForeignLedger(target) {
   }
   console.log(`[migrate-d1] adopting: renaming ${LEDGER_TABLE} (${cols.join(', ')}) to ${LEGACY_LEDGER_TABLE}.`);
   wrangler(target, { command: `ALTER TABLE ${LEDGER_TABLE} RENAME TO ${LEGACY_LEDGER_TABLE}` });
+}
+
+function recordMigrations(target, files, { marked = false } = {}) {
+  if (files.length === 0) return;
+  wrangler(target, {
+    command:
+      `INSERT OR REPLACE INTO ${LEDGER_TABLE} (filename, checksum, applied_at) ` +
+      files
+        .map(
+          (file) =>
+            `VALUES (${sqlQuote(file.name)}, ${sqlQuote(file.checksum)}, datetime('now'))`,
+        )
+        .join(`; INSERT OR REPLACE INTO ${LEDGER_TABLE} (filename, checksum, applied_at) `),
+  });
+  for (const file of files) {
+    console.log(`[migrate-d1]   ${marked ? 'marked (not executed)' : 'applied'}: ${file.name}`);
+  }
+}
+
+function recordMigration(target, file, options) {
+  recordMigrations(target, [file], options);
 }
 
 // --verify-marked: check every ledgered file's tables and columns against the
@@ -251,6 +280,78 @@ function main() {
     );
   }
 
+  if (MODE_BOOTSTRAP) {
+    if (has('--remote')) {
+      fail('--bootstrap is for an empty local/preview target and cannot be combined with --remote.');
+    }
+    if (MODE_BASELINE || MODE_DRY_RUN || MODE_VERIFY_MARKED || ADOPT_LEGACY) {
+      fail('--bootstrap cannot be combined with --baseline, --dry-run, --verify-marked, or --adopt-legacy-ledger.');
+    }
+
+    const bootstrapAppTableRows = wrangler(target, {
+      json: true,
+      command:
+        "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' " +
+        `AND name NOT LIKE 'sqlite_%' AND name <> ${sqlQuote(LEDGER_TABLE)} ` +
+        "AND name NOT IN ('_cf_KV', '_cf_METADATA')",
+    });
+    const bootstrapAppTableCount = Number(bootstrapAppTableRows[0]?.n ?? 0);
+    const bootstrapLedgerTableRows = wrangler(target, {
+      json: true,
+      command:
+        `SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name = ${sqlQuote(LEDGER_TABLE)}`,
+    });
+    const bootstrapLedgerExists = Number(bootstrapLedgerTableRows[0]?.n ?? 0) > 0;
+    let bootstrapLedgerCount = 0;
+    if (bootstrapLedgerExists) {
+      const rows = wrangler(target, {
+        json: true,
+        command: `SELECT COUNT(*) AS n FROM ${LEDGER_TABLE}`,
+      });
+      bootstrapLedgerCount = Number(rows[0]?.n ?? -1);
+      const shapeProblem = ledgerShapeProblem(ledgerColumns(target));
+      if (shapeProblem) fail(shapeProblem);
+    }
+
+    const stateProblem = bootstrapStateProblem({
+      ledgerExists: bootstrapLedgerExists,
+      ledgerCount: bootstrapLedgerCount,
+      appTableCount: bootstrapAppTableCount,
+    });
+    if (stateProblem) {
+      fail(
+        `cannot bootstrap ${target.label}: ${stateProblem}. ` +
+        'Bootstrap is only for an empty target.',
+      );
+    }
+
+    console.log(`[migrate-d1] bootstrapping ${target.label} from sql/schema_baseline.sql ...`);
+    wrangler(target, { file: 'sql/schema_baseline.sql' });
+
+    const actions = planActions(files, new Map(), { mode: 'bootstrap' });
+    const markedFiles = [];
+    const result = applyPlan(actions, {
+      exec: () => {
+        throw new Error('bootstrap planner produced an executable migration');
+      },
+      record: (file) => markedFiles.push(file),
+    });
+    if (result.failure) {
+      const { file, error } = result.failure;
+      fail(`bootstrap ledger write failed for ${file.name}: ${(error && error.message) || error}`);
+    }
+    try {
+      recordMigrations(target, markedFiles, { marked: true });
+    } catch (error) {
+      fail(`bootstrap ledger write failed: ${(error && error.message) || error}`);
+    }
+    console.log(
+      `[migrate-d1] ✓ Bootstrap complete. baseline cutoff=${BASELINE_CUTOFF}, ` +
+      `marked=${result.marked.length}, pending=${files.length - result.marked.length}.`,
+    );
+    return;
+  }
+
   if (MODE_DRY_RUN) {
     // READS the live ledger. This used to plan against `new Map()` and print
     // "assuming an empty ledger", which listed every migration ever written no
@@ -271,7 +372,8 @@ function main() {
       json: true,
       command:
         "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' " +
-        `AND name NOT LIKE 'sqlite_%' AND name <> ${sqlQuote(LEDGER_TABLE)}`,
+        `AND name NOT LIKE 'sqlite_%' AND name <> ${sqlQuote(LEDGER_TABLE)} ` +
+        "AND name NOT IN ('_cf_KV', '_cf_METADATA')",
     });
     const dryTableCount = Number(dryTableRows[0]?.n ?? 0);
 
@@ -334,7 +436,8 @@ function main() {
     json: true,
     command:
       "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' " +
-      `AND name NOT LIKE 'sqlite_%' AND name <> ${sqlQuote(LEDGER_TABLE)}`,
+      `AND name NOT LIKE 'sqlite_%' AND name <> ${sqlQuote(LEDGER_TABLE)} ` +
+      "AND name NOT IN ('_cf_KV', '_cf_METADATA')",
   });
   const appTableCount = Number(appTableRows[0]?.n ?? 0);
 
@@ -412,13 +515,9 @@ function main() {
     wrangler(target, { file: `sql/migrations/${file.name}` });
   };
   const record = (file) => {
-    const action = MODE_BASELINE && !classifyIdempotency(file.sql).idempotent ? 'marked (not executed)' : 'applied';
-    wrangler(target, {
-      command:
-        `INSERT OR REPLACE INTO ${LEDGER_TABLE} (filename, checksum, applied_at) ` +
-        `VALUES (${sqlQuote(file.name)}, ${sqlQuote(file.checksum)}, datetime('now'))`,
+    recordMigration(target, file, {
+      marked: MODE_BASELINE && !classifyIdempotency(file.sql).idempotent,
     });
-    console.log(`[migrate-d1]   ${action}: ${file.name}`);
   };
 
   const result = applyPlan(actions, { exec, record });

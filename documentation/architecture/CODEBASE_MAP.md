@@ -305,7 +305,7 @@ Entry points:
 | `npm run d1:migrate:local` / `:preview` | same runner, other targets |
 | `npm run d1:baseline` | `--remote --baseline`, one-time per environment |
 | `npm run d1:audit` | `--audit`, idempotency audit, touches no DB |
-| `npm run d1:migrate` | **not** the ledger runner — raw `wrangler d1 execute --remote --file=sql/schema.sql` |
+| `npm run d1:migrate` | **not** the ledger runner — raw `wrangler d1 execute --remote --file=sql/schema_baseline.sql` |
 | `predeploy` hook | runs `migrate-d1.mjs --remote` automatically on every `npm run deploy` |
 
 So `d1:migrate:remote` is the canonical *manual* command, but migrations also

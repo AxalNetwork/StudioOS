@@ -89,7 +89,7 @@ test('no UI code reads a field D1 does not have', () => {
 });
 
 test('those columns really are absent from D1, which is why the reads were dead', () => {
-  const schema = read('cloudflare-worker/sql/t13_t14_t15.sql');
+  const schema = read('cloudflare-worker/sql/historical/t13_t14_t15.sql');
   const i = schema.indexOf('CREATE TABLE IF NOT EXISTS engagements');
   const body = schema.slice(i, schema.indexOf(');', i));
   assert.ok(body.includes('invoice_id'), 'invoice_id IS a real column');

@@ -6,9 +6,9 @@ and is not kept in sync.
 
 | Path | What it is |
 | --- | --- |
-| `schema.sql` | The full schema, for bootstrapping a fresh database. |
+| `schema_baseline.sql` | The production-derived schema for bootstrapping a fresh database. |
 | `migrations/` | **Forward-only, numbered, and the thing that actually runs.** |
-| everything else | Historical one-off scripts, kept for provenance. Not part of the ledger. |
+| `historical/` | Legacy one-off schema scripts, kept for archaeology only. Nothing builds from them. |
 
 ## Adding a change
 
@@ -19,7 +19,9 @@ and is not kept in sync.
    which files are safely re-runnable. `ALTER TABLE ... ADD COLUMN` is not (SQLite
    has no `IF NOT EXISTS` for columns) and that is fine — the ledger stops the
    replay — but it must be a deliberate choice.
-3. Mirror new tables into `schema.sql` so a fresh database matches a migrated one.
+3. Update the production-derived baseline when a fresh database must match the
+   migrated schema. The old one-off scripts live in `historical/` for archaeology
+   only and are not build inputs.
 4. Migrations apply automatically: `predeploy` runs `scripts/migrate-d1.mjs
    --remote` before `wrangler deploy`. This is why the deploy must go through
    `npm run deploy`.

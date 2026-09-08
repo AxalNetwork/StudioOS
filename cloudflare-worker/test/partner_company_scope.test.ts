@@ -26,7 +26,7 @@
  * Harness matches stages 1-7: real routers against real in-memory SQLite with
  * a real `user_company_links` table, so `resolveActiveCompany` is unmocked.
  * Every table is the canonical DDL copied verbatim — `service_offerings` from
- * sql/schema.sql (NOT the dead partner_id shape in t13_t14_t15.sql), the rest
+ * sql/schema_baseline.sql (NOT the dead partner_id shape in t13_t14_t15.sql), the rest
  * from sql/t13_t14_t15.sql.
  */
 import test from 'node:test';
@@ -150,7 +150,7 @@ function freshDb() {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       company_id INTEGER
     );
-    -- Verbatim from sql/schema.sql — the shape routes/services.ts reads.
+    -- Verbatim from sql/schema_baseline.sql — the shape routes/services.ts reads.
     CREATE TABLE service_offerings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),

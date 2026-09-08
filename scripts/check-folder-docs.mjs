@@ -50,6 +50,7 @@ const DOCUMENTED = new Map([
   ['cloudflare-worker/src/routes',    'the production API surface'],
   ['cloudflare-worker/src/services',  'logic the routes call; no HTTP in here'],
   ['cloudflare-worker/sql',           'the canonical D1 schema and its migrations'],
+  ['cloudflare-worker/sql/historical', 'retired schema scripts preserved for archaeology'],
   ['cloudflare-worker/test',          'what the worker guarantees'],
   ['scripts',                         'build, deploy and the CI guards'],
   ['documentation',                   'every hand-written document'],

@@ -22,7 +22,7 @@
 --       three new admin_audit_log transcript-view columns
 --       (viewed_user_id, conversation_id, viewed_at).
 --
--- The CANONICAL schema baseline lives in cloudflare-worker/sql/schema.sql,
+-- The CANONICAL schema baseline lives in cloudflare-worker/sql/schema_baseline.sql,
 -- which DOES declare the new columns inline on `CREATE TABLE users` so
 -- a fresh `wrangler d1 execute --file=schema.sql` bootstrap produces
 -- the correct shape without any runtime side effects. This migration

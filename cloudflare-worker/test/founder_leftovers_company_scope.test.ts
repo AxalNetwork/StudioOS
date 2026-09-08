@@ -95,7 +95,7 @@ function freshDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, partner_id INTEGER,
       status TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
-    -- Verbatim from sql/schema.sql (FK clause dropped: the fixture has no
+    -- Verbatim from sql/schema_baseline.sql (FK clause dropped: the fixture has no
     -- ON DELETE behaviour to exercise). private-data's founder branch reads
     -- it through getVerifiedLatestSnapshot, so without it the handler 500s
     -- and the narrowing under test cannot be observed at all.

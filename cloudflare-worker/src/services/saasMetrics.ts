@@ -4,7 +4,7 @@
  * Pure functions over `metrics_snapshots` rows. No I/O, no clock.
  *
  * SCHEMA NOTE. `metrics_snapshots` has two incompatible definitions in
- * this repo — the legacy `sql/schema.sql` shape (project_id,
+ * this repo — the production `sql/schema_baseline.sql` shape (project_id,
  * snapshot_date, mrr, active_users, …) and an unused
  * `scope`/`metric_name`/`value` shape from `sql/infrastructure.sql` +
  * migration 034. The LIVE one is the legacy lineage: it is what

@@ -2,7 +2,7 @@
  * Task #12 — Stripe payment fulfilment regression (gated, opt-in).
  *
  * Boots the REAL Worker via wrangler `unstable_dev` against a freshly
- * seeded LOCAL D1 (schema.sql + the tier / investor / MI Pro migrations)
+ * seeded LOCAL D1 (schema_baseline.sql + the tier / investor / MI Pro migrations)
  * with `ENVIRONMENT="test"` so `POST /api/billing/stripe/webhook`
  * soft-accepts UNSIGNED JSON events (STRIPE_WEBHOOK_SECRET is left unset,
  * which is the only configuration the route soft-accepts — see the
@@ -47,11 +47,11 @@ const DB_NAME = 'studioos-test-db';
 // (via the d1Databases option) resolve to the SAME local sqlite under persistTo.
 const DB_ID = '00000000-0000-4000-8000-0000000000c0';
 
-// schema.sql first (base tables incl. users + subscription_plans), then the
+// schema_baseline.sql first (base tables incl. users + subscription_plans), then the
 // migrations that add the founder-tier / investor columns and the MI Pro side
-// table. schema.sql predates these columns so the ALTERs apply cleanly.
+// table. schema_baseline.sql predates these columns so the ALTERs apply cleanly.
 const SEED_FILES = [
-  resolve(SQL_DIR, 'schema.sql'),
+  resolve(SQL_DIR, 'schema_baseline.sql'),
   resolve(SQL_DIR, 'migrations', '011_subscription_tiers.sql'),
   resolve(SQL_DIR, 'migrations', '027_investor_paywall.sql'),
   resolve(SQL_DIR, 'migrations', '103_mi_pro_subscriptions.sql'),

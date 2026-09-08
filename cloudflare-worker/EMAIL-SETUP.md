@@ -145,4 +145,4 @@ GMAIL_REFRESH_TOKEN=your-refresh-token
 | `src/services/turnstile.ts` | Cloudflare Turnstile verification |
 | `src/routes/auth.ts` | Registration, verification, TOTP setup, login |
 | `src/types.ts` | TypeScript env interface with GMAIL_* secrets |
-| `sql/schema.sql` | D1 database schema |
+| `sql/schema_baseline.sql` | D1 database schema |

@@ -1,15 +1,14 @@
 -- Production D1 schema baseline for studioos-db, extracted on 2026-09-08.
--- This replaces cloudflare-worker/sql/schema.sql as the starting schema for a new database.
--- Regenerate from the live sqlite_master metadata query; do not hand-edit this file.
+-- This is the production-derived starting schema for a new database.
+-- Regenerate from the live sqlite_master metadata query; omit D1-owned system
+-- tables, and do not hand-edit the application definitions below.
 CREATE TABLE _capital_migrations (
     name TEXT PRIMARY KEY,
     applied_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE _cf_KV (
-        key TEXT PRIMARY KEY,
-        value BLOB
-      ) WITHOUT ROWID;
+-- `_cf_KV` is created by the D1 runtime itself and cannot be created by a
+-- user migration (`SQLITE_AUTH`); it is present in the resulting local schema.
 
 CREATE TABLE _migrations (
     name TEXT PRIMARY KEY,
