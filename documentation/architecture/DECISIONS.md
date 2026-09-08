@@ -3219,3 +3219,72 @@ evidenced by 200 having applied to production carrying it. That carve-out is
 itself tested: with no migration carrying any other pragma, widening it to
 "any pragma" passed the whole suite until an assertion called the predicate
 directly.
+
+## D61 — The admin docs were orphaned by a fix for a problem already fixed
+
+Task #113 was "decide the orphaned admin docs: restore or retire", with the
+instruction not to simply re-add the import — that would reverse someone's
+decision — and to prefer retiring if the reason for the removal could not be
+recovered from git history. **The reason is recoverable, and it argues for
+restoring.** Nine days separate two commits:
+
+- **2026-05-13, `88e6d1f97`** — *"Task #2 (DD) — Hide Admin docs from
+  non-admins"*. It built the whole apparatus the docs surface still carries:
+  `roles: ['admin']` on `sections/admin.js`, `filterSectionsForRole` and
+  `adminOnlyAnchors()` in the manifest, a role-scoped fuse index in
+  `lib/docs/search.js`, and `AdminDocsPathGuard` in `App.jsx` mounted on both
+  `/docs/admin/*` and `/help/admin/*`.
+- **2026-05-22, `2c38e60b3`** — *"Remove administrative sections from user
+  documentation"*, whose body says it removes the Admin section "from the
+  StudioOS documentation navigation and search index". That is exactly what the
+  previous week's work already did, per viewer. It deleted the import and the
+  `SECTIONS` entry.
+
+So the second commit was a blunter second fix for a problem that was already
+solved, and it left the first one guarding nothing: `adminOnlyAnchors()`
+returned no admin anchor, `AdminDocsPathGuard` redirected admins to
+`/help#admin/<sub>` where no such anchor existed, and 179 lines of written
+admin documentation were unreachable by anyone including an admin.
+
+**Restoring honours that decision rather than reversing it.** The decision was
+"admin content must not appear in user documentation". `admin.js` is still
+tagged `roles: ['admin']`, and the filter is live in both places that matter —
+`DocsLayout` (rail, body, "on this page") and `lib/docs/search.js`. Every
+non-admin viewer sees precisely what they saw yesterday. What changes is that an
+admin can read the docs the path guard has been pointing at for four months.
+
+**Re-registering it made a latent hole live, which is why "don't simply re-add
+the import" was the right instruction.** `buildDocsRecords(role)` excluded
+admin-tagged sections "when a role is provided" and returned the FULL corpus when
+`role` was `undefined` — stated as back-compat for callers passing nothing.
+`DocsLayout` passes `role` straight from `useAuth()`, which is `undefined` for an
+anonymous visitor. With the section unregistered that leaked nothing; with it
+registered, the Help Center search box would have served the admin corpus to
+anyone while the rail beside it correctly showed nothing (the rail's filter
+compares against `''` and drops the section). The filter is now unconditional:
+an unknown role is a non-admin, which is the only safe reading of "unknown", and
+it makes the two surfaces agree. No caller loses anything — nothing in the repo
+calls it with no argument.
+
+**Two branches had never been exercised by any data.** `filterSectionsForRole`
+and `adminOnlyAnchors` each handle a tagged SUBSECTION inside a public section —
+the shape `88e6d1f97` created in `portals.js` ("Admin Console (overview)") and
+`2cf22e3ea` deleted nine days later. Mutations that removed those branches
+entirely passed the whole suite. They are not deleted as dead code: an
+admin-only subsection is a shape this manifest is designed to carry and the next
+one would leak in silence. They are now tested against a fixture built in the
+test, so the contract holds regardless of what the corpus happens to contain.
+`adminOnlyAnchors` gained an optional sections argument to make that possible —
+its sibling already had that shape.
+
+**The persona line stays refused, for a reason that survived the change.**
+`help_center_contract.test.mjs` asserted that NO section carried a `roles` array,
+explicitly so that "if a section ever grows one, this fails and the refusal gets
+revisited rather than quietly outliving its reason". It fired, and the refusal
+was revisited: the only `roles` array in the corpus is `['admin']`, and admin
+content is already invisible to every viewer it would exclude, so "Applies to
+<persona>" would read "Everyone" on all 98 articles a non-admin can see. A label
+that is a constant everywhere it is read labels nothing. The guard now watches
+for a roles array that would actually discriminate between viewers who share the
+corpus — `['founder']`, `['investor', 'partner']` — which is the day the line
+starts carrying information.

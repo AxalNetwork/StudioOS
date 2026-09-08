@@ -4,6 +4,31 @@
 // Anchors are formed as `#${section.id}/${subsection.id}` and stay
 // stable across copy edits — never renumber existing ids.
 
+// `./admin` is registered here again, and the nine days between two commits
+// are the whole reason.
+//
+// 2026-05-13, `88e6d1f97` "Task #2 (DD) — Hide Admin docs from non-admins",
+// built the machinery this file still carries: `roles: ['admin']` on the admin
+// section, `filterSectionsForRole` below, `adminOnlyAnchors()` for the URL
+// guard, a role-scoped search index, and `AdminDocsPathGuard` in `App.jsx` on
+// both `/docs/admin/*` and `/help/admin/*`.
+//
+// 2026-05-22, `2c38e60b3` "Remove administrative sections from user
+// documentation", deleted the import and the SECTIONS entry — "from the
+// StudioOS documentation navigation and search index", which is precisely what
+// the previous week's work already did, per viewer. It was a second, blunter
+// fix for a problem that was already solved, and it left the first one guarding
+// nothing: `adminOnlyAnchors()` returned no admin anchor, the path guard
+// redirected admins to `/help#admin/<sub>` where no such anchor existed, and
+// 179 lines of written admin documentation were unreachable by anyone.
+//
+// So this is not a reversal of that decision — the decision was "admin content
+// must not appear in user documentation", and it still holds: `admin.js` is
+// tagged `roles: ['admin']`, so every non-admin viewer sees exactly what they
+// saw yesterday, in the rail, the body, the "on this page" list and search.
+// What changes is that an ADMIN can now read the admin docs the path guard has
+// been pointing at for four months. DECISIONS D61.
+import admin from './admin';
 import gettingStarted from './getting-started';
 import spinOutLab from './spin-out-lab';
 import build from './build';
@@ -32,6 +57,9 @@ export const SECTIONS = [
   account,
   troubleshooting,
   changelog,
+  // Last, so an admin's rail keeps the order every other viewer sees and the
+  // operator content sits below the product content rather than above it.
+  admin,
 ];
 
 // Legacy in-manifest search index. Kept for backwards compatibility
@@ -62,9 +90,14 @@ export function filterSectionsForRole(sections, role) {
 // Set of every section/subsection anchor that is admin-only. Used by
 // DocsLayout to 404-style guard direct hash navigation by non-admin
 // viewers without leaking the page's existence.
-export function adminOnlyAnchors() {
+// Takes the manifest as an argument, defaulting to the real one, so the
+// subsection branch below can be tested. Its sibling `filterSectionsForRole`
+// already had that shape; this one read `SECTIONS` directly and so could only
+// ever be exercised by whatever the corpus happened to contain — which today is
+// tagged sections and no tagged subsections, leaving half of it unguarded.
+export function adminOnlyAnchors(sections = SECTIONS) {
   const anchors = new Set();
-  for (const section of SECTIONS) {
+  for (const section of sections) {
     const sectionAdmin = Array.isArray(section.roles) && section.roles.length === 1 && section.roles[0] === 'admin';
     for (const sub of section.subsections) {
       const subAdmin = Array.isArray(sub.roles) && sub.roles.length === 1 && sub.roles[0] === 'admin';

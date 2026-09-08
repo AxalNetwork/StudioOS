@@ -38,7 +38,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
-import { SECTIONS, filterSectionsForRole } from '../src/pages/docs/sections/index.js';
+import { SECTIONS, filterSectionsForRole, adminOnlyAnchors } from '../src/pages/docs/sections/index.js';
 import { createDocsFuse } from '../src/lib/docs/search.js';
 import {
   canUseCustomerChat,
@@ -340,15 +340,39 @@ test('no canvas element ships on top of a store that does not exist', () => {
 });
 
 test('the persona line is refused for a reason that is still true', () => {
-  // "Applies to <persona>" would read `roles` off each subsection. If a
-  // section ever grows one, this fails and the refusal gets revisited rather
-  // than quietly outliving its reason.
-  const withRoles = SECTIONS.filter((s) => Array.isArray(s.roles)
-    || s.subsections.some((sub) => Array.isArray(sub.roles)));
-  assert.equal(
-    withRoles.length, 0,
-    `${withRoles.map((s) => s.id).join(', ')} now carries a roles array — revisit the persona line`,
+  // "Applies to <persona>" would read `roles` off each subsection. This
+  // assertion used to require that NO section carried one, and it fired the
+  // moment `sections/admin.js` was re-registered (DECISIONS D61) — which is
+  // exactly what it was written to do: "if a section ever grows one, this fails
+  // and the refusal gets revisited rather than quietly outliving its reason".
+  //
+  // REVISITED, AND THE REFUSAL STANDS, for a reason that survived the change.
+  // The only `roles` array in the corpus is `['admin']`, and admin content is
+  // already invisible to every viewer it would exclude — so the line would read
+  // "Everyone" on all 98 articles a non-admin can see, and "Everyone" on 98 of
+  // the 99 an admin can. A persona label that is a constant everywhere it is
+  // read labels nothing.
+  //
+  // What the guard now watches for is a roles array that would actually
+  // DISCRIMINATE between viewers who share the corpus — `['founder']`,
+  // `['investor', 'partner']`. That is the day the line starts carrying
+  // information, and the day this fails again.
+  const tags = [];
+  for (const s of SECTIONS) {
+    if (Array.isArray(s.roles)) tags.push([s.id, s.roles]);
+    for (const sub of s.subsections) {
+      if (Array.isArray(sub.roles)) tags.push([`${s.id}/${sub.id}`, sub.roles]);
+    }
+  }
+  const discriminating = tags.filter(([, roles]) =>
+    !(roles.length === 1 && roles[0] === 'admin'));
+  assert.deepEqual(
+    discriminating.map(([id, roles]) => `${id}: [${roles.join(', ')}]`), [],
+    'a roles array now distinguishes between viewers who share the corpus — revisit the persona line',
   );
+  // And the admin tagging is still there to be excluded by: if it vanished, the
+  // refusal above would be resting on a fact nobody had checked.
+  assert.ok(tags.length > 0, 'the admin roles tagging is what the reasoning above rests on');
 });
 
 // ---------------------------------------------------------------------------
@@ -417,4 +441,125 @@ test('the chat panel is offered only to viewers the worker would serve', () => {
   // And the worker still refuses regardless — the client gate is courtesy,
   // not enforcement.
   assert.match(CHAT_WORKER, /if \(!isEligible\(user\)\) return c\.json\(tierPaywall\(\), 402\)/);
+});
+
+// ---------------------------------------------------------------------------
+// The admin section is in the manifest again, and every viewer sees what they
+// saw before (DECISIONS D61)
+// ---------------------------------------------------------------------------
+
+/**
+ * `sections/admin.js` was written on 2026-05-13 with `roles: ['admin']` and the
+ * whole filtering apparatus around it, then dropped from the manifest nine days
+ * later by a commit whose stated aim — keep admin content out of USER
+ * documentation — the apparatus already achieved. For four months
+ * `AdminDocsPathGuard` redirected admins to `/help#admin/<sub>`, an anchor with
+ * nothing behind it.
+ *
+ * Re-registering it is only safe if the filtering it relies on actually holds,
+ * on every path and for every viewer. That is what the next four assertions
+ * are; without them this is a 179-line document put back on trust.
+ */
+const ADMIN_ANCHORS = SECTIONS.find((s) => s.id === 'admin');
+
+test('the admin section is registered and still tagged admin-only', () => {
+  assert.ok(ADMIN_ANCHORS, 'sections/admin.js must be in SECTIONS — the path guard points at it');
+  assert.deepEqual(ADMIN_ANCHORS.roles, ['admin'],
+    'the tag is the only thing keeping it away from other viewers');
+  assert.ok(ADMIN_ANCHORS.subsections.length > 0, 'and it must have content to point at');
+});
+
+test('no non-admin viewer sees it — rail, and search, and neither by omission', () => {
+  // `undefined` is in this list deliberately: `DocsLayout` passes `role`
+  // straight from `useAuth()`, which is undefined for an anonymous visitor, and
+  // `buildDocsRecords` used to return the FULL corpus for exactly that value.
+  // The rail dropped the section and the search box would have offered it.
+  for (const role of ['founder', 'investor', 'partner', 'advisor', 'mentor', '', undefined]) {
+    const visible = filterSectionsForRole(SECTIONS, role);
+    assert.equal(visible.some((s) => s.id === 'admin'), false,
+      `the rail must not show admin docs to ${String(role)}`);
+
+    const hits = createDocsFuse(role).search('admin console');
+    assert.equal(
+      hits.some((h) => h.item.sectionId === 'admin'), false,
+      `search must not return admin docs to ${String(role)}`,
+    );
+  }
+});
+
+test('an admin sees it, or the restoration achieved nothing', () => {
+  const visible = filterSectionsForRole(SECTIONS, 'admin');
+  assert.ok(visible.some((s) => s.id === 'admin'), 'an admin must reach the admin docs');
+  const hits = createDocsFuse('admin').search('admin console');
+  assert.ok(hits.some((h) => h.item.sectionId === 'admin'), 'and find them by search');
+});
+
+test('the path guard redirects to an anchor that now exists', () => {
+  // `AdminDocsPathGuard` sends `/docs/admin/<sub>` and `/help/admin/<sub>` to
+  // `/help#admin/<sub>`, defaulting to `overview`. Both halves of that have to
+  // be real, and for four months the right-hand side was not.
+  const app = codeOnly(read('frontend/src/App.jsx'));
+  assert.match(app, /\/help#admin\/\$\{encodeURIComponent\(sub\)\}/,
+    'the guard must still redirect into the hash surface');
+  const ids = new Set(ADMIN_ANCHORS.subsections.map((s) => s.id));
+  assert.ok(ids.has('overview'), "the guard's default subsection must resolve");
+});
+
+test('the role filter drops a tagged SUBSECTION, not just a tagged section', () => {
+  // NOTHING IN THE CORPUS EXERCISES THIS TODAY, which is why it is tested with
+  // a fixture rather than with real data. Commit `88e6d1f97` tagged an "Admin
+  // Console (overview)" subsection inside the public Portals section — the case
+  // this branch exists for — and `2cf22e3ea` deleted that subsection nine days
+  // later. So the branch has been live, unexercised code ever since: a mutation
+  // that removed it entirely passed the whole suite.
+  //
+  // Deleting the branch instead would be the wrong repair. An admin-only
+  // subsection inside a public section is a shape this manifest is designed to
+  // carry, and the next one added would leak in silence. So the contract is
+  // asserted directly, on a section built here.
+  const fixture = [{
+    id: 'fixture',
+    title: 'Fixture',
+    subsections: [
+      { id: 'public', title: 'Public one', overview: 'x' },
+      { id: 'secret', title: 'Admin one', overview: 'y', roles: ['admin'] },
+    ],
+  }];
+
+  for (const role of ['founder', 'investor', '', undefined]) {
+    const [out] = filterSectionsForRole(fixture, role);
+    assert.deepEqual(out.subsections.map((s) => s.id), ['public'],
+      `a tagged subsection must not reach ${String(role)}`);
+  }
+  const [asAdmin] = filterSectionsForRole(fixture, 'admin');
+  assert.deepEqual(asAdmin.subsections.map((s) => s.id), ['public', 'secret']);
+
+  // And a section left with nothing visible disappears rather than rendering an
+  // empty group in the rail.
+  const allSecret = [{
+    id: 'all-secret', title: 'All secret',
+    subsections: [{ id: 'a', title: 'A', roles: ['admin'] }],
+  }];
+  assert.deepEqual(filterSectionsForRole(allSecret, 'founder'), []);
+});
+
+test('adminOnlyAnchors covers both shapes, since the hash guard reads it', () => {
+  // `DocsLayout` guards direct hash navigation with this set. It has the same
+  // section/subsection duality as the filter above and the same blind spot: the
+  // corpus only exercises the section shape.
+  const fixture = [{
+    id: 'fixture', title: 'Fixture',
+    subsections: [
+      { id: 'public', title: 'P' },
+      { id: 'secret', title: 'S', roles: ['admin'] },
+    ],
+  }];
+  assert.deepEqual([...adminOnlyAnchors(fixture)], ['fixture/secret'],
+    'a tagged subsection inside a public section must still be guarded');
+
+  // The real corpus, through the real export: every admin anchor is present.
+  const live = adminOnlyAnchors();
+  for (const sub of ADMIN_ANCHORS.subsections) {
+    assert.ok(live.has(`admin/${sub.id}`), `admin/${sub.id} must be guarded against direct hash entry`);
+  }
 });

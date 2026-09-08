@@ -183,8 +183,13 @@ function SubsectionView({ section, sub }) {
 //     of ~98 subsections. That is content authoring, and a deep link to the
 //     wrong page is worse than no deep link.
 //   · "Applies to <persona>" reads a `roles` array. Exactly one section file
-//     carries one (`sections/admin.js`) and it is not in the manifest, so the
-//     line would render "Everyone" on 98 articles out of 98.
+//     carries one — `sections/admin.js`, which IS in the manifest again as of
+//     DECISIONS D61 — so the line would render "Everyone" on every article but
+//     that one, and "Admins" on articles no non-admin can reach anyway. A
+//     persona line that is a constant for 98 of 99 entries labels nothing.
+//     (The earlier version of this note said the file "is not in the manifest".
+//     It was true when written and stopped being true without the sentence
+//     moving, which is the failure mode a note about absent things has.)
 //
 // `frontend/test/help_center_contract.test.mjs` asserts they stay absent, the
 // way the Trust Center guard does — so that reinstating one is a decision

@@ -13,12 +13,24 @@ import { SECTIONS, filterSectionsForRole } from '../../pages/docs/sections';
 // only appears inside a how-to step.
 export function buildDocsRecords(role) {
   const records = [];
-  // Task #2 (DD) — when a role is provided, exclude admin-tagged
-  // sections/subsections from the search corpus so non-admins never
-  // see admin pages in results. When `role` is undefined, the full
-  // unfiltered index is returned (back-compat for callers that pass
-  // nothing).
-  const visible = role ? filterSectionsForRole(SECTIONS, role) : SECTIONS;
+  // Task #2 (DD) excluded admin-tagged sections from the corpus "when a role is
+  // provided", and returned the FULL index when `role` was undefined — stated
+  // as back-compat for callers that pass nothing.
+  //
+  // THAT FAILED OPEN, and the only reason it never leaked is that the admin
+  // section was not in the manifest at all (removed nine days later by
+  // `2c38e60b3`; see `pages/docs/sections/index.js`). Re-registering it makes
+  // the hole live: `DocsLayout` passes `role` straight from `useAuth()`, which
+  // is `undefined` for an anonymous visitor, so `createDocsFuse(undefined)`
+  // would have handed the admin corpus to anyone who typed in the Help Center
+  // search box — while the rail beside it correctly showed nothing, because
+  // `filterSectionsForRole(SECTIONS, undefined)` compares against '' and drops
+  // the section.
+  //
+  // So the filter is now unconditional. An unknown role is a NON-admin, which
+  // is the only safe reading of "unknown", and it makes the two surfaces agree.
+  // No caller loses anything: nothing in the repo calls this with no argument.
+  const visible = filterSectionsForRole(SECTIONS, role);
   for (const section of visible) {
     for (const sub of section.subsections) {
       const text = [
