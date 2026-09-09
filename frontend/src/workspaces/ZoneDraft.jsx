@@ -4,12 +4,13 @@ import { api } from '../lib/api';
 import { formatCost } from '../ui/assistCost';
 
 /**
- * The band every Partner Research and Network artboard closes with.
+ * The band every artboard with an AI proposal closes with.
  *
- * ONE COMPONENT, SEVEN ARTBOARDS. `Pages · Partner {Research,Network}.dc.html`
- * draw the same block on all seven pages — an accent label, a cost, a drafted
+ * ONE COMPONENT, EVERY ARTBOARD THAT HAS ONE. `Pages · Partner
+ * {Research,Network,Offers,Pipeline,Delivery}.dc.html` and `Founder Workspaces
+ * Canvas.dc.html` draw the same block — an accent label, a cost, a drafted
  * paragraph, then `Accept …` / `Edit first` / `Discard` and a footnote. Only
- * the words change, so only the words are props.
+ * the words and the accent change, so only those are props.
  *
  * NOTHING RUNS ON MOUNT. It reads whatever draft already exists and stops
  * there; the model is called when someone presses the run button.
@@ -41,10 +42,47 @@ const GHOST = 'inline-flex items-center gap-1.5 whitespace-nowrap rounded-[7px] 
 // and the accent appears exactly once per page, always on the button that
 // commits an AI draft — which is the convention `ValidateProposals` follows and
 // the canvases are consistent about.
-const ACCENT = 'inline-flex items-center gap-1.5 whitespace-nowrap rounded-[7px] border '
-  + 'border-amber-600 bg-amber-600 px-[11px] py-1.5 text-[11px] font-bold text-white '
-  + 'transition-colors hover:bg-amber-700 focus-visible:outline focus-visible:outline-2 '
-  + 'focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
+//
+// TWO PALETTES, ONE COMPONENT. The Partner canvases draw this band in amber and
+// the Founder canvases in violet — `Founder Workspaces Canvas.dc.html` uses
+// `#6d28d9` for every `prop` band on A2–A5, which is the accent
+// `ValidateProposals` already ships. Amber stays the default so that none of
+// the 23 existing mounts changes, and the whole palette moves together: a band
+// whose eyebrow was violet and whose button stayed amber would read as two
+// different things on one card. Tailwind needs the class names whole, so these
+// are complete strings per accent rather than an interpolated colour.
+const ACCENTS = {
+  amber: {
+    band: 'rounded-[10px] border border-amber-200 bg-amber-50/60 p-3.5 dark:border-amber-900 dark:bg-amber-950/25',
+    ink: 'text-axal-amber-deep dark:text-amber-300',
+    edit: 'mt-2 w-full rounded-[8px] border border-amber-200 bg-white p-2.5 text-[12px] leading-relaxed text-axal-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 dark:border-amber-900 dark:bg-gray-900 dark:text-gray-100',
+    button: 'inline-flex items-center gap-1.5 whitespace-nowrap rounded-[7px] border '
+      + 'border-amber-600 bg-amber-600 px-[11px] py-1.5 text-[11px] font-bold text-white '
+      + 'transition-colors hover:bg-amber-700 focus-visible:outline focus-visible:outline-2 '
+      + 'focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60',
+  },
+  violet: {
+    band: 'rounded-[10px] border border-violet-200 bg-violet-50/60 p-3.5 dark:border-violet-900 dark:bg-violet-950/25',
+    ink: 'text-violet-700 dark:text-violet-300',
+    edit: 'mt-2 w-full rounded-[8px] border border-violet-200 bg-white p-2.5 text-[12px] leading-relaxed text-axal-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 dark:border-violet-900 dark:bg-gray-900 dark:text-gray-100',
+    button: 'inline-flex items-center gap-1.5 whitespace-nowrap rounded-[7px] border '
+      + 'border-violet-600 bg-violet-600 px-[11px] py-1.5 text-[11px] font-bold text-white '
+      + 'transition-colors hover:bg-violet-700 focus-visible:outline focus-visible:outline-2 '
+      + 'focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60',
+  },
+};
+
+// A drafted body that carries a WARNING reads as one, and the canvases say so:
+// `Founder Workspaces Canvas.dc.html` draws the Legal engine's clause read in a
+// red box (`#fef2f2` on `#fecaca`) while every other band on the same artboard
+// uses plain body text. It is the same draft through the same surface — only
+// the reading changes — so it is a tone on the body rather than a second
+// component. `null` is the default and leaves the body exactly as it was.
+const BODY_TONES = {
+  warn: 'mt-2 whitespace-pre-wrap rounded-[8px] border border-red-200 bg-red-50 p-2.5 text-[11.5px] '
+    + 'leading-relaxed text-red-900 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200',
+};
+const BODY_PLAIN = 'mt-2 whitespace-pre-wrap text-[12px] leading-relaxed text-gray-700 dark:text-gray-300';
 
 export default function ZoneDraft({
   surface,
@@ -55,7 +93,11 @@ export default function ZoneDraft({
   run = 'Draft it',
   empty,
   nothingToDraft,
+  accent = 'amber',
+  tone,
 }) {
+  const skin = ACCENTS[accent] || ACCENTS.amber;
+  const bodyClass = BODY_TONES[tone] || BODY_PLAIN;
   const [item, setItem] = useState(null);
   const [busy, setBusy] = useState('');
   const [note, setNote] = useState('');
@@ -120,15 +162,15 @@ export default function ZoneDraft({
   return (
     <div
       data-testid={`zone-draft-${surface.replace(/[^a-z0-9]+/gi, '-')}`}
-      className="rounded-[10px] border border-amber-200 bg-amber-50/60 p-3.5 dark:border-amber-900 dark:bg-amber-950/25"
+      className={skin.band}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-amber-deep dark:text-amber-300">
+        <span className={`inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[.09em] ${skin.ink}`}>
           <Sparkles aria-hidden="true" className="h-3 w-3" />
           {label}
         </span>
         {item ? (
-          <span className="ml-auto whitespace-nowrap font-mono text-[10.5px] text-axal-amber-deep dark:text-amber-300">
+          <span className={`ml-auto whitespace-nowrap font-mono text-[10.5px] ${skin.ink}`}>
             {formatCost(item.cost_usd)}
           </span>
         ) : null}
@@ -142,13 +184,13 @@ export default function ZoneDraft({
               value={editing}
               onChange={(e) => setEditing(e.target.value)}
               aria-label={`${label} — edit before accepting`}
-              className="mt-2 w-full rounded-[8px] border border-amber-200 bg-white p-2.5 text-[12px] leading-relaxed text-axal-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 dark:border-amber-900 dark:bg-gray-900 dark:text-gray-100"
+              className={skin.edit}
             />
           ) : (
-            <p className="mt-2 whitespace-pre-wrap text-[12px] leading-relaxed text-gray-700 dark:text-gray-300">{item.body}</p>
+            <p className={bodyClass}>{item.body}</p>
           )}
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button type="button" className={ACCENT} onClick={doAccept} disabled={busy !== ''}>
+            <button type="button" className={skin.button} onClick={doAccept} disabled={busy !== ''}>
               {busy === 'accept' ? 'Saving…' : accept}
             </button>
             <button
@@ -172,7 +214,7 @@ export default function ZoneDraft({
         <>
           <p className="mt-2 text-[12px] leading-relaxed text-gray-700 dark:text-gray-300">{empty}</p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button type="button" className={ACCENT} onClick={doRun} disabled={busy !== ''}>
+            <button type="button" className={skin.button} onClick={doRun} disabled={busy !== ''}>
               {busy === 'run' ? 'Drafting…' : run}
             </button>
             {foot ? <span className="ml-auto text-[10px] text-gray-600 dark:text-gray-400">{foot}</span> : null}
