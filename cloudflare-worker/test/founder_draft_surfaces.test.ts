@@ -160,6 +160,41 @@ function freshDb() {
       user_id INTEGER NOT NULL, action TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE waitlist_signups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, landing_page_id INTEGER,
+      email TEXT NOT NULL, name TEXT, source TEXT, ip_hash TEXT,
+      created_at TEXT DEFAULT (datetime('now')), audience TEXT,
+      crm_status TEXT DEFAULT 'new', invited_at TEXT, followed_up_at TEXT,
+      promoted_at TEXT, promoted_interview_id INTEGER
+    );
+    CREATE TABLE pain_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, title TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE pain_group_aliases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, group_id INTEGER NOT NULL,
+      phrase_norm TEXT NOT NULL, display_phrase TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE job_postings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT NOT NULL UNIQUE, host_user_id INTEGER,
+      project_id INTEGER, title TEXT NOT NULL, employment_type TEXT NOT NULL DEFAULT 'full_time',
+      location_text TEXT, remote INTEGER NOT NULL DEFAULT 0, seniority TEXT NOT NULL DEFAULT 'mid',
+      summary TEXT, description TEXT, status TEXT NOT NULL DEFAULT 'draft',
+      admin_published INTEGER NOT NULL DEFAULT 0, review_notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE job_applications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, posting_id INTEGER NOT NULL, user_id INTEGER,
+      name TEXT, email TEXT NOT NULL, cover_note TEXT, linkedin_url TEXT, portfolio_url TEXT,
+      resume_key TEXT, resume_name TEXT, status TEXT NOT NULL DEFAULT 'submitted',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
     CREATE TABLE research_zone_drafts (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
       owner_user_id INTEGER NOT NULL, surface TEXT NOT NULL, scope_key TEXT,
@@ -202,6 +237,19 @@ function freshDb() {
                 VALUES (?, ?, ?, 'k', 'open')`).run(`rx${pid}`, pid, `File for ${pid}`);
     db.prepare(`INSERT INTO data_room_grants (uid, project_id, investor_user_id, granted_by_user_id, status)
                 VALUES (?, ?, 99, 1, 'active')`).run(`rg${pid}`, pid);
+    db.prepare(`INSERT INTO waitlist_signups (project_id, email, name, source, crm_status)
+                VALUES (?, ?, ?, ?, 'invited')`)
+      .run(pid, `signup${pid}@example.test`, `Signup for ${pid}`, `Source for ${pid}`);
+    db.prepare('INSERT INTO pain_groups (id, project_id, title) VALUES (?, ?, ?)')
+      .run(pid, pid, `Pain for ${pid}`);
+    db.prepare(`INSERT INTO pain_group_aliases (project_id, group_id, phrase_norm, display_phrase)
+                VALUES (?, ?, ?, ?)`).run(pid, pid, `phrase${pid}`, `Phrase for ${pid}`);
+    db.prepare(`INSERT INTO job_postings (id, slug, project_id, title, seniority, status)
+                VALUES (?, ?, ?, ?, 'senior', 'published')`)
+      .run(pid, `slug-${pid}`, pid, `Role for ${pid}`);
+    db.prepare(`INSERT INTO job_applications (posting_id, name, email, cover_note, resume_key)
+                VALUES (?, ?, ?, ?, 'k')`)
+      .run(pid, `Applicant for ${pid}`, `applicant${pid}@example.test`, `Cover note for ${pid}`);
   }
   return db;
 }
@@ -248,6 +296,7 @@ const statusOf = async (...a: Parameters<typeof draft>) => (await draft(...a)).s
 const SURFACES = [
   'build/this-week', 'build/roadmap', 'build/kpi',
   'raise/capital', 'raise/legal', 'raise/data-room', 'raise/liquidity',
+  'grow/customers', 'grow/talent',
 ];
 
 for (const surface of SURFACES) {
@@ -373,6 +422,42 @@ test('raise/legal reads the document body, not just its title', async () => {
   db.prepare('UPDATE documents SET content = NULL WHERE project_id = ?').run(MY_PROJECT);
   const empty = await draft(db, MINE, 'raise/legal', String(MY_PROJECT));
   assert.match(String(empty.prompt), /NO TEXT STORED/);
+});
+
+test('grow/talent never hands an applicant email to the model', async () => {
+  // The material is what a founder can check for themselves: a name, what the
+  // applicant wrote, and which attachments exist. An email address identifies a
+  // real person to a third-party model and adds nothing a ranking can use, so
+  // it is not in the SELECT at all — a rule that only holds while nobody
+  // widens the query to `SELECT *`.
+  const db = freshDb();
+  const { prompt } = await draft(db, MINE, 'grow/talent', String(MY_PROJECT));
+  assert.match(String(prompt), new RegExp(`Applicant for ${MY_PROJECT}`), 'the applicant is not in the material');
+  assert.match(String(prompt), new RegExp(`Cover note for ${MY_PROJECT}`), 'what they wrote is not in the material');
+  assert.doesNotMatch(String(prompt), /@example\.test/, 'an applicant email reached the model');
+  // A draft posting has no live applicants to rank.
+  db.prepare("UPDATE job_postings SET status = 'draft' WHERE project_id = ?").run(MY_PROJECT);
+  assert.equal(await statusOf(db, MINE, 'grow/talent', String(MY_PROJECT)), 409);
+});
+
+test('grow/customers carries the founder’s own pains, or says there are none', async () => {
+  // "Opens on the handoff-opacity pain THEIR OWN SEGMENT NAMED" is the whole
+  // reason this band is worth its tokens. Without the pains in the material a
+  // model writes a generic cold email and the band is a worse version of a
+  // template.
+  const db = freshDb();
+  const withPain = await draft(db, MINE, 'grow/customers', String(MY_PROJECT));
+  assert.match(String(withPain.prompt), new RegExp(`Pain for ${MY_PROJECT}`));
+  assert.doesNotMatch(String(withPain.prompt), /NO PAIN IS RECORDED/);
+
+  db.prepare('DELETE FROM pain_groups WHERE project_id = ?').run(MY_PROJECT);
+  const without = await draft(db, MINE, 'grow/customers', String(MY_PROJECT));
+  assert.match(String(without.prompt), /NO PAIN IS RECORDED for this startup/,
+    'with no pain map the model is left to invent an opener');
+
+  // And with no signups there is nobody to write to.
+  db.prepare('DELETE FROM waitlist_signups WHERE project_id = ?').run(MY_PROJECT);
+  assert.equal(await statusOf(db, MINE, 'grow/customers', String(MY_PROJECT)), 409);
 });
 
 test('a gather never reads a record belonging to another founder', async () => {

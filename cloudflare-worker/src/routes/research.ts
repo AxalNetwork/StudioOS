@@ -2467,6 +2467,115 @@ const DRAFT_SURFACES: Record<string, {
       return lines;
     },
   },
+
+  'grow/customers': {
+    // A5's band: "Segment: platform leads at 50-200 engineer orgs, cold, no
+    // reply in 14 days. + 3-touch sequence, each opening on the
+    // handoff-opacity pain THEIR OWN SEGMENT NAMED in your interviews."
+    //
+    // The italics are the artboard's and they are the whole instruction. A
+    // model asked for outreach copy writes a generic cold email; what makes
+    // this one worth the tokens is that it opens on something the recipient's
+    // own segment said. So the material carries the founder's recorded pains
+    // alongside the signups, and the instruction requires the opening line to
+    // come from one of them or to say that none applies.
+    //
+    // THE FUNNEL HAS FOUR STAGES, NOT THE ARTBOARD'S FIVE. `crm_status` is
+    // new / invited / followed_up / promoted (`routes/progress.ts`), and a
+    // model handed "Demo", "Trial" and "Paid" would place people in stages
+    // this product cannot record them in.
+    instruction: [
+      'Draft one outreach sequence for the signups below who have gone furthest without converting.',
+      'Open each touch on a pain the founder has actually recorded, quoting it. If no recorded pain fits the segment, say so and write no opener rather than inventing one.',
+      'Use only the four stages the record has — new, invited, followed up, promoted. Do not place anyone at a demo, a trial or a paid plan: none of those is recorded.',
+      'Name no company and no person the list below does not name.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const stages = await c.env.DB.prepare(
+        `SELECT COALESCE(crm_status, 'new') AS stage, COALESCE(source, 'source not recorded') AS source,
+                COUNT(*) AS n, MAX(created_at) AS latest
+           FROM waitlist_signups WHERE project_id = ?
+          GROUP BY COALESCE(crm_status, 'new'), COALESCE(source, 'source not recorded')
+          ORDER BY n DESC LIMIT 40`
+      ).bind(pid).all<{ stage: string; source: string; n: number; latest: string | null }>();
+      const lines = (stages.results || []).map((r) =>
+        `${r.n} signup${r.n === 1 ? '' : 's'} at stage "${r.stage.replace('_', ' ')}" from ${r.source}; `
+        + `most recent ${r.latest ? String(r.latest).slice(0, 10) : 'not recorded'}`);
+      if (!lines.length) return [];
+      // The founder's OWN pain map: a group's title plus how many distinct
+      // phrases they have filed under it. Grouping is the founder's act — the
+      // Validate desk never names a theme for them — so a title here is
+      // something they wrote, not something a model decided.
+      const pains = await c.env.DB.prepare(
+        `SELECT g.title,
+                (SELECT COUNT(*) FROM pain_group_aliases a WHERE a.group_id = g.id) AS phrases
+           FROM pain_groups g WHERE g.project_id = ?
+          ORDER BY phrases DESC, g.sort_order LIMIT 12`
+      ).bind(pid).all<{ title: string; phrases: number }>();
+      const painLines = (pains.results || []).map((r) =>
+        `Recorded pain: "${r.title}" — ${r.phrases} phrase${r.phrases === 1 ? '' : 's'} grouped under it`);
+      lines.push(painLines.length
+        ? painLines.join('\n')
+        : 'NO PAIN IS RECORDED for this startup — there is nothing a touch can open on.');
+      return lines;
+    },
+  },
+
+  'grow/talent': {
+    // A5's band: "Ranked first of 14 on three receipts you can check: shipped
+    // an event-sourced handoff system at Verwood, applied through your careers
+    // page rather than a board, and names async workflows in her own words."
+    //
+    // "RECEIPTS YOU CAN CHECK" is the instruction. An applicant record holds a
+    // cover note, a link and a resume key — no score, no skills breakdown, no
+    // inference. So a reason has to be a thing the founder can open and read
+    // for themselves, and anything the model would have to conclude on its own
+    // is exactly what must not appear as a ranking.
+    //
+    // AND MOVING SOMEONE TO SCREEN IS NOT AN ACTION HERE. Nothing writes
+    // `job_applications.status` through any route, so the band produces a
+    // reading and the founder acts on it in Talent.
+    instruction: [
+      'Rank the applicants below and give the reasons for the top one.',
+      'Every reason must be a receipt the founder can open and check for themselves — something written in the application. Do not infer seniority, culture fit or ability from anything not stated.',
+      'Where an application is thin, say what is missing rather than filling it in.',
+      'Do not say anyone has been moved to a screen or to any other stage. Nothing here changes an application.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const posts = await c.env.DB.prepare(
+        `SELECT id, title, seniority, status FROM job_postings
+          WHERE project_id = ? AND status <> 'draft' ORDER BY created_at DESC LIMIT 10`
+      ).bind(pid).all<{ id: number; title: string; seniority: string; status: string }>();
+      const lines: string[] = [];
+      for (const post of (posts.results || [])) {
+        const apps = await c.env.DB.prepare(
+          `SELECT name, cover_note, linkedin_url, portfolio_url, resume_key, status, created_at
+             FROM job_applications WHERE posting_id = ? ORDER BY created_at DESC LIMIT 40`
+        ).bind(post.id).all<{
+          name: string | null; cover_note: string | null; linkedin_url: string | null;
+          portfolio_url: string | null; resume_key: string | null; status: string; created_at: string;
+        }>();
+        const rows = apps.results || [];
+        lines.push(`Role: ${post.title} (${post.seniority}, ${post.status}) — `
+          + `${rows.length} applicant${rows.length === 1 ? '' : 's'}`);
+        for (const a of rows) {
+          // The APPLICANT'S EMAIL IS DELIBERATELY NOT HERE. It identifies a
+          // real person to a third-party model and adds nothing a ranking can
+          // use; the name and what they wrote are the material.
+          lines.push(`  Applicant ${a.name || 'name not given'} (${a.status}, applied ${String(a.created_at).slice(0, 10)}): `
+            + `${a.cover_note ? `wrote "${String(a.cover_note).slice(0, 600)}"` : 'NO COVER NOTE'}; `
+            + `${a.linkedin_url ? 'linkedin given' : 'no linkedin'}; `
+            + `${a.portfolio_url ? 'portfolio given' : 'no portfolio'}; `
+            + `${a.resume_key ? 'resume attached' : 'NO RESUME'}`);
+        }
+      }
+      return lines;
+    },
+  },
 };
 
 research.get('/drafts', async (c) => {

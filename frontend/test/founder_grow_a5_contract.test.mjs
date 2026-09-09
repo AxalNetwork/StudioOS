@@ -17,7 +17,8 @@ test('A5 Grow is founder-owned and workspace mode preserves Talent', () => {
 });
 
 test('A5 reads only documented sources and does not post investor matches', () => {
-  for (const call of ['listMetricsSnapshots', 'metricsSummary', 'listWaitlistCustomers', 'brandGetLanding', 'brandListPages', 'brandListWaitlist', 'raiseProspects', 'listMyCoMarketingPitches']) assert.ok(page.includes(`api.${call}`));
+  for (const call of ['listMetricsSnapshots', 'metricsSummary', 'listWaitlistCustomers', 'brandGetLanding', 'brandListPages', 'brandListWaitlist', 'raiseProspects', 'listMyCoMarketingPitches', 'listCalendarEvents']) assert.ok(page.includes(`api.${call}`), `the desk no longer reads api.${call}`);
+  assert.match(page, /jobsApi\.applications\(role\.id\)/, 'the desk no longer reads applicant counts');
   assert.ok(!page.includes('matchInvestors'));
   assert.match(page, /import \{ api, jobs as jobsApi \} from '\.\.\/\.\.\/lib\/api'/);
   assert.match(page, /jobsApi\.mine\(\)/);
@@ -66,5 +67,24 @@ test('every card hands off to the Grow page it summarises, and none to another b
 });
 
 test('A5 never turns canvas fixtures into product data or claims', () => {
-  assert.doesNotMatch(page, /14 of 25|38 in play|61 leads|37%|Nadia Okonkwo|Latitude Seed|Thornbury Capital|Verwood Ventures|Mistral|FLUX|GPT-OSS|BGE-M3|DeepSeek|Llama|QwQ|Granite|\$14\.20|Accept sequence|Move to screen|Generate 4 more/i);
+  // A FIXTURE AND A CONTROL LABEL WERE IN ONE REGEX, AND THEY ARE NOT THE SAME
+  // RULE. `Nadia Okonkwo`, `14 of 25` and `Latitude Seed` are the canvas's
+  // invented data and must never reach a page — that ban is right and stays
+  // whole. `Accept sequence`, `Move to screen` and `Generate 4 more` are the
+  // artboard's own BUTTON LABELS, and banning them meant the page could never
+  // match the artboard it was being checked against.
+  //
+  // The rule that replaces the merge: a control label is admitted exactly when
+  // the control does what it says. `Accept sequence` is admitted — accepting a
+  // drafted outreach sequence is what that button does. The other two are
+  // still banned, and each for its own reason, asserted in
+  // `founder_grow_overview_a5` beside the thing it is about: `Move to screen`
+  // is a write to `job_applications.status` that no route performs, and
+  // `Generate 4 more` needs an image model this build does not have.
+  assert.doesNotMatch(page, /14 of 25|38 in play|61 leads|37%|Nadia Okonkwo|Latitude Seed|Thornbury Capital|Verwood Ventures|Mistral|FLUX|GPT-OSS|BGE-M3|DeepSeek|Llama|QwQ|Granite|\$14\.20/i,
+    'a canvas fixture has been transcribed onto the page as data');
+  assert.doesNotMatch(page, /Move to screen|Generate 4 more|Edit touch 1|See all 14 ranked/i,
+    'a control promises something no route performs');
+  assert.match(page, /accept="Accept sequence"/,
+    'the artboard’s own accept label is gone from the band that does exactly that');
 });
