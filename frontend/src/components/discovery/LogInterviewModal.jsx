@@ -70,7 +70,23 @@ function todayIso() {
  * @param {object|null} interview  existing row to edit, or null to create
  * @param {(payload:object)=>Promise<any>} onSave  resolves on success
  */
-export default function LogInterviewModal({ open, interview, onClose, onSave }) {
+/**
+ * What the founder came here to do, when they arrived from the overview's
+ * `+ Record now` / `Upload audio` / `Type notes` row.
+ *
+ * AUDIO ATTACHES TO A ROW; it does not create one. Every interview on the
+ * interviews page carries its own recorder and uploader, and there is no
+ * create-from-a-clip path in this product. So the first step for all three of
+ * the artboard's ops is this form — and a founder who pressed `Record now` and
+ * landed on a name-and-date form deserves to be told why, rather than left
+ * hunting for a record button that is one save away.
+ */
+const INTENT_NOTE = {
+  record: 'Save the interview first — the recorder appears on its row, so the clip attaches to a person and a date.',
+  upload: 'Save the interview first — the uploader appears on its row, so the audio attaches to a person and a date.',
+};
+
+export default function LogInterviewModal({ open, interview, onClose, onSave, intent = null }) {
   const editing = Boolean(interview?.id);
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
@@ -170,6 +186,15 @@ export default function LogInterviewModal({ open, interview, onClose, onSave }) 
             <X size={18} />
           </button>
         </div>
+
+        {!editing && INTENT_NOTE[intent] ? (
+          <p
+            data-testid="note-log-intent"
+            className="mb-4 rounded-lg border border-violet-200 bg-violet-50/70 px-3 py-2 text-[11.5px] leading-relaxed text-violet-900 dark:border-violet-900 dark:bg-violet-950/30 dark:text-violet-200"
+          >
+            {INTENT_NOTE[intent]}
+          </p>
+        ) : null}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
           <div className="sm:col-span-2">

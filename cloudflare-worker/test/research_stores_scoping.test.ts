@@ -79,12 +79,31 @@ test('no research route takes an identity from the request', () => {
     'an owner is being taken from the request — or a SQL alias is spelled `b`; see the note above');
 });
 
+/**
+ * The `/diligence` handler alone.
+ *
+ * BOTH TESTS BELOW USED `touching(routes, table)[0]` — the first statement in
+ * the file naming the table — on the assumption that the diligence read was the
+ * only reader of the room. It stopped being: `raise/data-room` is a founder
+ * draft surface over the SAME tables from the other side, and it sorts earlier
+ * in the file, so the two assertions silently moved onto a statement whose
+ * safety is a different property. Bounding the slice is what keeps each rule on
+ * the statement it is a rule about.
+ */
+const DILIGENCE = routes.slice(
+  routes.indexOf("research.get('/diligence'"),
+  routes.indexOf("research.get('/funds'") > routes.indexOf("research.get('/diligence'")
+    ? routes.indexOf("research.get('/funds'")
+    : routes.length,
+);
+assert.ok(DILIGENCE.includes('data_room_grants'), 'the diligence handler could not be found');
+
 test('the diligence read is scoped to the caller as the grantee', () => {
   // This one reads ANOTHER user's project, which is the point of a grant. The
   // safety is that the row must name the caller as the investor the founder
   // granted to, and the grant must still be live.
-  const stmt = touching(routes, 'data_room_grants')[0];
-  assert.ok(stmt, 'no prepared statement reads data_room_grants');
+  const stmt = touching(DILIGENCE, 'data_room_grants')[0];
+  assert.ok(stmt, 'no prepared statement in /diligence reads data_room_grants');
   assert.match(stmt, /g\.investor_user_id = \?/);
   assert.match(stmt, /g\.status = 'active'/);
   assert.match(stmt, /expires_at IS NULL OR g\.expires_at > datetime\('now'\)/);
@@ -92,11 +111,31 @@ test('the diligence read is scoped to the caller as the grantee', () => {
 
 test('diligence counts withheld files and never names them', () => {
   // The data room's own rule, kept: "A count, never the names."
-  assert.match(routes, /withheld_behind_nda/);
-  const stmt = touching(routes, 'data_room_files')[0];
-  assert.ok(stmt, 'no prepared statement reads data_room_files');
+  assert.match(DILIGENCE, /withheld_behind_nda/);
+  const stmt = touching(DILIGENCE, 'data_room_files')[0];
+  assert.ok(stmt, 'no prepared statement in /diligence reads data_room_files');
   assert.match(stmt, /COUNT\(\*\) FROM data_room_files/);
   assert.doesNotMatch(stmt, /f\.name|f\.uid|f\.r2_key/);
+});
+
+test('every other room read in this file is bound to an owned project', () => {
+  // The other side of the same tables: a FOUNDER reading their own room to
+  // draft over it. There is no grant to check — they own it — so the property
+  // is that the project id was resolved by the ownership check and never taken
+  // from the request. This is the rule the two tests above were accidentally
+  // asserting against, and it needs saying in its own right.
+  for (const table of ['data_room_grants', 'data_room_files', 'data_room_folders', 'data_room_access_log']) {
+    for (const stmt of touching(routes, table)) {
+      if (DILIGENCE.includes(stmt)) continue;
+      assert.match(stmt, /project_id = \?|f\.project_id = \?/,
+        `a ${table} statement outside /diligence reads without narrowing to one project`);
+      // And the binding for it is `pid`, which only `founderProject` produces.
+      const tail = routes.slice(routes.indexOf(stmt) + stmt.length, routes.indexOf(stmt) + stmt.length + 200);
+      assert.match(tail, /\)\s*\.bind\(pid\)/,
+        `a ${table} statement binds something other than the ownership-checked project id`);
+    }
+  }
+  assert.match(routes, /async function founderProject\(/, 'the founder ownership check is gone');
 });
 
 test('the project read behind the cheque-overlap figure goes through companyScope', () => {

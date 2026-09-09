@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import { useLocation, useSearchParams, Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Card, EmptyState, ErrorState, WorkerRail, Skeleton } from '../../ui';
 import WorkspaceShell, { NotRecorded } from '../WorkspaceShell';
@@ -716,6 +716,7 @@ function ValidationSummary({ projectId, ready, board, zoneFilters, zoneActions }
 
 export default function FounderValidateWorkspace() {
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { projectId, ready } = useProjectId();
   const bucket = bucketForPath('founder', location.pathname);
   // The root opt-out every sibling route module carries — NetworkWorkspace,
@@ -736,9 +737,43 @@ export default function FounderValidateWorkspace() {
   const [boardKey, setBoardKey] = useState(0);
   const board = useBoard(projectId, ready, boardKey);
 
+  /**
+   * `?new=notes|record|upload` — the three ways in the A2 artboard draws on the
+   * overview's interview card, arriving here because this is where the form is.
+   *
+   * ALL THREE OPEN THE SAME FORM, and the reason is a real one about this
+   * product rather than a shortcut. Audio ATTACHES to an interview: every row
+   * on this page carries its own recorder and uploader (`InterviewRecording`),
+   * and there is no create-an-interview-from-a-clip path anywhere. So the first
+   * step for all three is the same row, and `intent` carries which one the
+   * founder chose so the form can say what happens next instead of leaving them
+   * looking for a record button that is one save away.
+   *
+   * WITHOUT THIS, THE THREE OPS WOULD BE THREE LINKS TO ONE PAGE. Naming three
+   * different things and doing the same nothing is the defect this workspace's
+   * own guards keep finding elsewhere; it is not worth shipping to add a row to
+   * an artboard checklist.
+   */
+  const [intent, setIntent] = useState(null);
+  const newParam = searchParams.get('new');
+  useEffect(() => {
+    if (!newParam) return;
+    if (!['notes', 'record', 'upload'].includes(newParam)) return;
+    setIntent(newParam);
+    setLogOpen(true);
+    // Consumed, so a reload or a back-navigation does not reopen the form over
+    // whatever the founder did next.
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('new');
+      return next;
+    }, { replace: true });
+  }, [newParam, setSearchParams]);
+
   const saveInterview = async (payload) => {
     await api.createInterview(projectId, payload);
     setLogOpen(false);
+    setIntent(null);
     setReloadKey((n) => n + 1);
   };
   const saveHypothesis = async (payload) => {
@@ -956,6 +991,7 @@ export default function FounderValidateWorkspace() {
       )}
       {body}
       <LogInterviewModal
+        intent={intent}
         open={logOpen}
         interview={null}
         onClose={() => setLogOpen(false)}

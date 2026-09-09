@@ -46,6 +46,11 @@ import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activ
 // a reader — so it imports the same helper the partner listing serves from
 // rather than repeating thirty days here.
 import { perkLifecycle } from './perks';
+// The snapshot table gains its board-reporting columns lazily rather than in a
+// migration (`progress.ts:1650`), so a reader that goes straight to SELECT can
+// hit a table that is one deploy behind the columns it names. Every consumer
+// calls this first; the KPI draft surface is a consumer.
+import { ensureMetricsSnapshotsSchema } from './progress';
 import { todayIso } from './_t13t14t15_helpers';
 
 const research = new Hono<{ Bindings: Env }>();
@@ -1090,6 +1095,67 @@ const draftDto = (r: ZoneDraftRow) => ({
  * is here is the part only the worker can hold: the instruction, and the reader
  * of the rows it is given.
  */
+/**
+ * The project a FOUNDER draft surface is allowed to read, or null.
+ *
+ * Every surface above this line belongs to a partner and scopes on
+ * `users.partner_id`. The founder surfaces below scope on a PROJECT, and the
+ * `gather` signature hands them a user id rather than the `User` row — so
+ * `ownedProjectScope` in `contacts.ts`, which keys off `user.founder_id`, is
+ * not reachable from here. This is the same check written for the id: the
+ * project must belong to a founder record that belongs to this user, and it
+ * must not be deleted.
+ *
+ * IT IS THE ONLY THING BETWEEN ONE FOUNDER'S DRAFT AND ANOTHER'S RECORDS.
+ * `/research/drafts` authorises on `requireAuth` alone and delegates the
+ * scoping to each surface, which is what makes the mechanism role-agnostic —
+ * and what makes a gather that forgets to scope a cross-account read rather
+ * than a bug on one page. `scope` is the caller's `scopeKey`, so it is
+ * attacker-controlled by construction; nothing here trusts it beyond using it
+ * as a candidate id.
+ *
+ * THE LINK IS `users.founder_id`, NOT A COLUMN ON `founders`. An earlier draft
+ * joined `founders f ON f.id = p.founder_id WHERE f.user_id = ?`, which reads
+ * plausibly and names a column that has never existed — `founders` carries
+ * `uid`, `name` and `email`, and the account behind it is found the other way
+ * round. `schema_guards` caught it; a unit test could not, because its harness
+ * had invented the column to match.
+ *
+ * OWNERSHIP, NOT ACTIVE COMPANY. `ownedProjectScope` in `contacts.ts` also
+ * narrows to the founder's active company, which needs the request headers and
+ * a full Hono context; `gather` is handed `{ env }` alone. Ownership is the
+ * security property and it is enforced here — the company facet only decides
+ * which of the founder's OWN startups is in view, and the desk passes the
+ * project id it is already showing.
+ *
+ * With no scope the founder's single project is used, and a founder with more
+ * than one gets null rather than an arbitrary pick: a draft written about the
+ * wrong startup is worse than no draft.
+ */
+async function founderProject(
+  c: { env: Env }, userId: number, scope: string,
+): Promise<number | null> {
+  const owned = await c.env.DB.prepare(
+    `SELECT p.id FROM projects p
+       JOIN users u ON u.founder_id = p.founder_id
+      WHERE u.id = ? AND p.deleted_at IS NULL
+      ORDER BY p.id`
+  ).bind(userId).all<{ id: number }>();
+  const ids = (owned.results || []).map((r) => Number(r.id));
+  if (!ids.length) return null;
+  // A SCOPE KEY THAT WAS SENT MUST RESOLVE OR REFUSE — it may never fall
+  // through to the lone-project branch below. An earlier draft tested
+  // `Number.isFinite(Number(scope))` first, so `scope_key: "null"`, or any
+  // other unparseable string, read as "no scope key was sent" and drafted over
+  // whatever single project the caller happened to own. That is a draft about
+  // a startup nobody asked about, produced by a request that named one.
+  if (scope !== '') {
+    const asked = Number(scope);
+    return Number.isInteger(asked) && ids.includes(asked) ? asked : null;
+  }
+  return ids.length === 1 ? ids[0] : null;
+}
+
 const DRAFT_SURFACES: Record<string, {
   instruction: string;
   gather: (c: { env: Env }, userId: number, scope: string) => Promise<string[]>;
@@ -2084,6 +2150,430 @@ const DRAFT_SURFACES: Record<string, {
       return (rows.results || []).map((r) =>
         `${r.org} — ${r.rel ? `recorded as a ${r.rel.replace('_', ' ')}` : 'relationship not recorded'}, `
         + `${r.people} contact${r.people === 1 ? '' : 's'} known`);
+    },
+  },
+
+  // ── FOUNDER SURFACES ────────────────────────────────────────────────────
+  //
+  // The first non-partner entries in this table. Everything above scopes on
+  // `users.partner_id`; each of these calls `founderProject` and returns []
+  // when it does not resolve, which the route answers as `nothing_to_draft`.
+  // A founder never sees another founder's material through here, and a
+  // founder with two startups and no `scopeKey` gets nothing rather than a
+  // draft about whichever one sorted first.
+
+  'build/this-week': {
+    // A3's band: "Proposal · Monday plan — drafted from what actually moved
+    // last week: two cards shipped, the pricing card slipped twice."
+    //
+    // The instruction that matters is the second one. The store records a key
+    // result's CURRENT and TARGET and nothing about who owns it or whether it
+    // is at risk, so a model asked for a Monday plan will otherwise assign
+    // names and hand out statuses it invented — which is exactly the shape of
+    // the artboard's own fixture ("+ Ship async digest v1 · Amara") and
+    // exactly what must not reach a real founder's week.
+    instruction: [
+      'Propose next week\'s commitments from the current objectives and open cards below.',
+      'Never name an owner and never call a commitment on track or at risk: neither is recorded, and inventing one puts a name against work nobody agreed to.',
+      'Where a key result has moved, say by how much using the figures given; where it has not, say it has not.',
+      'Propose at most five commitments and add nothing the material below does not support.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const okrs = await c.env.DB.prepare(
+        `SELECT objective, key_results_json, kanban_status, updated_at
+           FROM roadmap_okrs WHERE project_id = ? AND kanban_status = 'now'
+          ORDER BY sort_order, id LIMIT 50`
+      ).bind(pid).all<{ objective: string; key_results_json: string | null; kanban_status: string; updated_at: string | null }>();
+      const lines: string[] = [];
+      for (const o of (okrs.results || [])) {
+        let krs: any[] = [];
+        try { krs = JSON.parse(o.key_results_json || '[]'); } catch { krs = []; }
+        const parts = (Array.isArray(krs) ? krs : [])
+          .filter((k) => k && String(k.text || '').trim())
+          .map((k) => {
+            const unit = k.unit ? ` ${k.unit}` : '';
+            return k.target == null || k.target === ''
+              ? `${k.text} (NO TARGET RECORDED)`
+              : `${k.text} (${k.current ?? 'no current value recorded'} of ${k.target}${unit})`;
+          });
+        lines.push(`Objective now: ${o.objective}${parts.length ? ` — key results: ${parts.join('; ')}` : ' — no key results recorded'}`);
+      }
+      const cards = await c.env.DB.prepare(
+        `SELECT t.title, t.status, t.due_date, t.updated_at
+           FROM mvp_tasks t WHERE t.deal_id = ? AND t.status <> 'done'
+          ORDER BY t.updated_at DESC LIMIT 40`
+      ).bind(pid).all<{ title: string; status: string; due_date: string | null; updated_at: string | null }>();
+      for (const t of (cards.results || [])) {
+        lines.push(`Open card: ${t.title} — ${t.status.replace('_', ' ')}; `
+          + `${t.due_date ? `due ${String(t.due_date).slice(0, 10)}` : 'no due date recorded'}; `
+          + `last touched ${t.updated_at ? String(t.updated_at).slice(0, 10) : 'not recorded'}`);
+      }
+      return lines;
+    },
+  },
+
+  'build/roadmap': {
+    // A3's second band: "Proposal · tradeoff, reasoned — Slack integration and
+    // the permissions model both sit in Q4 … Asked to reason it out, the model
+    // argues for Slack first."
+    //
+    // This one is an ARGUMENT rather than a summary, and the artboard is
+    // explicit that it costs twenty times a Monday plan for that reason. What
+    // the instruction has to prevent is the argument being made from outside
+    // the record — the canvas's own fixture reasons from interview counts, and
+    // a roadmap gather has no interviews in it.
+    instruction: [
+      'Argue the ordering of the objectives below: name the one pair whose order is most worth changing, and give the reason.',
+      'Reason only from what is recorded here — the horizon, the quarter, the key results and their progress. Do not cite interviews, customers, headcount or cost; none of it is in front of you.',
+      'If nothing in the record argues for a different order, say so rather than manufacturing a tradeoff.',
+      'State plainly that the ordering is the founder\'s to change and that accepting this changes nothing on its own.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT objective, key_results_json, kanban_status, quarter
+           FROM roadmap_okrs WHERE project_id = ?
+          ORDER BY CASE kanban_status WHEN 'now' THEN 0 WHEN 'next' THEN 1 ELSE 2 END, sort_order, id
+          LIMIT 60`
+      ).bind(pid).all<{ objective: string; key_results_json: string | null; kanban_status: string; quarter: string | null }>();
+      return (rows.results || []).map((o) => {
+        let krs: any[] = [];
+        try { krs = JSON.parse(o.key_results_json || '[]'); } catch { krs = []; }
+        const n = (Array.isArray(krs) ? krs : []).filter((k) => k && String(k.text || '').trim()).length;
+        return `${o.objective} — horizon ${o.kanban_status}; `
+          + `${o.quarter ? `quarter ${o.quarter}` : 'NO QUARTER RECORDED'}; `
+          + `${n} key result${n === 1 ? '' : 's'}`;
+      });
+    },
+  },
+
+  'build/kpi': {
+    // A3's third band: "Out of range · explain this? — Burn jumped 31% on last
+    // month. Want a one-line annotation drafted … attached to this figure for
+    // investor updates?"
+    //
+    // An annotation on a figure a founder will paste into an investor update is
+    // the one place a confident invented cause does real damage, so the
+    // instruction refuses a cause outright. Two snapshots is also the minimum
+    // for the word "jumped" to mean anything: with one, there is no movement to
+    // explain and the gather says so rather than letting the model treat a
+    // single figure as a change.
+    instruction: [
+      'Draft one short annotation for the figure below that moved most between the two snapshots.',
+      'State the movement and its size from the figures given. Do NOT state a cause: nothing here records why anything moved, and an invented reason goes into an investor update as fact.',
+      'Where only one snapshot exists there is no movement — say that instead, and do not describe the single figure as a change.',
+      'Name any figure the summary could not compute, and its stated reason, rather than treating a missing value as zero.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      await ensureMetricsSnapshotsSchema(c.env);
+      const rows = await c.env.DB.prepare(
+        `SELECT snapshot_date, mrr, paying_accounts, net_burn, cash_balance
+           FROM metrics_snapshots WHERE project_id = ?
+          ORDER BY snapshot_date DESC, id DESC LIMIT 2`
+      ).bind(pid).all<{
+        snapshot_date: string | null; mrr: number | null; paying_accounts: number | null;
+        net_burn: number | null; cash_balance: number | null;
+      }>();
+      const snaps = rows.results || [];
+      if (!snaps.length) return [];
+      const fmt = (r: typeof snaps[number]) =>
+        `Snapshot ${r.snapshot_date || 'date not recorded'}: `
+        + `MRR ${r.mrr == null ? 'not recorded' : r.mrr}; `
+        + `paid accounts ${r.paying_accounts == null ? 'not recorded' : r.paying_accounts}; `
+        + `net burn ${r.net_burn == null ? 'not recorded' : r.net_burn}; `
+        + `cash ${r.cash_balance == null ? 'not recorded' : r.cash_balance}`;
+      const lines = snaps.map(fmt);
+      if (snaps.length === 1) lines.push('ONLY ONE SNAPSHOT EXISTS — there is no prior figure to compare against.');
+      return lines;
+    },
+  },
+
+  'raise/capital': {
+    // A4's band: "At $1.5M on a $12M post with a 12% pool top-up, you and Amara
+    // go from 89.5% to 66.1% combined. The pool top-up costs you more dilution
+    // than the round itself — 7.4 points against 16.0."
+    //
+    // The artboard is explicit that the reasoning is shown step by step
+    // "because you will be asked to defend this number", and that is the
+    // instruction that matters: a dilution figure a founder cannot reconstruct
+    // in a partner meeting is worse than none. The second is that a round with
+    // no pre-money recorded has no post-money and therefore no dilution at all
+    // — computing one from the target alone would put a number in front of
+    // someone who is about to defend it.
+    instruction: [
+      'Read the round below back in plain language, and show every step of the arithmetic.',
+      'Where a figure the arithmetic needs is not recorded, say which one and stop: do not assume a pre-money, a pool or a share count.',
+      'Name the largest single source of dilution and compare it against the others in points.',
+      'Add no benchmark and no market comparison. Nothing here records what other rounds look like.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const round = await c.env.DB.prepare(
+        `SELECT name, target_amount, pre_money, pro_rata_reserved, close_date, created_at
+           FROM raise_rounds WHERE project_id = ? AND status = 'active'`
+      ).bind(pid).first<{
+        name: string | null; target_amount: number | null; pre_money: number | null;
+        pro_rata_reserved: number | null; close_date: string | null; created_at: string | null;
+      }>();
+      const lines: string[] = [];
+      if (round) {
+        lines.push(`Round: ${round.name || 'unnamed'}; `
+          + `target ${round.target_amount == null ? 'NOT RECORDED' : round.target_amount}; `
+          + `pre-money ${round.pre_money == null ? 'NOT RECORDED' : round.pre_money}; `
+          + `pro-rata reserved ${round.pro_rata_reserved == null ? 'NOT RECORDED' : round.pro_rata_reserved}; `
+          + `close ${round.close_date || 'NOT RECORDED'}`);
+      }
+      const allocs = await c.env.DB.prepare(
+        `SELECT COALESCE(commit_status, 'signed') AS state, COUNT(*) AS n, COALESCE(SUM(amount), 0) AS total
+           FROM raise_prospects WHERE project_id = ? AND stage = 'committed' AND amount IS NOT NULL
+          GROUP BY COALESCE(commit_status, 'signed')`
+      ).bind(pid).all<{ state: string; n: number; total: number }>();
+      for (const a of (allocs.results || [])) {
+        lines.push(`Committed as ${a.state}: ${a.n} allocation${a.n === 1 ? '' : 's'} totalling ${a.total}`);
+      }
+      const scenario = await c.env.DB.prepare(
+        `SELECT name, inputs_json FROM cap_table_scenarios
+          WHERE project_id = ? AND is_variant = 0 ORDER BY updated_at DESC LIMIT 1`
+      ).bind(pid).first<{ name: string; inputs_json: string | null }>();
+      if (scenario) lines.push(`Cap table scenario "${scenario.name}": ${String(scenario.inputs_json || '').slice(0, 1200)}`);
+      else if (lines.length) lines.push('NO CAP TABLE SCENARIO IS RECORDED — there are no current ownership percentages to dilute.');
+      return lines;
+    },
+  },
+
+  'raise/legal': {
+    // A4's band: "'Full ratchet anti-dilution' — off market at seed. Broad-based
+    // weighted average is standard."
+    //
+    // THE DOCUMENT'S OWN TEXT IS THE MATERIAL, and it has to be: a clause read
+    // from a title is a guess about a document. Bounded per document and
+    // capped, because the point is the clauses and not the whole instrument.
+    //
+    // "Not legal advice. Counsel is on the Team page" is on the band's foot in
+    // the page, and the instruction carries the same limit, because a founder
+    // reading a confident paragraph about their own term sheet is exactly the
+    // reader who will act on it.
+    instruction: [
+      'Name the clauses in the documents below that a founder should look at again, and say plainly what each one does to them.',
+      'Quote the clause you are describing. Do not describe a clause that is not in the text.',
+      'You are not counsel and this is not advice: say what the clause does, never what to sign or refuse.',
+      'Where a document is a draft or unsigned, say so — its terms are not settled.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT title, doc_type, status, content FROM documents
+          WHERE project_id = ? ORDER BY updated_at DESC LIMIT 8`
+      ).bind(pid).all<{ title: string; doc_type: string; status: string; content: string | null }>();
+      return (rows.results || []).map((d) => {
+        const body = String(d.content || '').trim();
+        return `${d.title} (${d.doc_type}, ${d.status})\n`
+          + (body ? body.slice(0, 4000) : 'NO TEXT STORED — this document has a record but no body to read.');
+      });
+    },
+  },
+
+  'raise/data-room': {
+    // A4's band: "Seed investors in workflow software ask for three things you
+    // don't have staged … Two of the four investors already viewing have
+    // requested the first."
+    //
+    // The artboard's version reasons from what investors in a sector ask for,
+    // which nothing here records — so this one reasons from the room instead:
+    // what is staged, what is behind NDA, and what the people with access have
+    // actually opened. A model told to name gaps and handed only a file list
+    // will otherwise recite a generic diligence checklist as though it had read
+    // this founder's room.
+    instruction: [
+      'Describe what this data room does and does not hold, from the list below alone.',
+      'Do not produce a generic diligence checklist: name only gaps the room itself evidences — a folder with nothing in it, a document referred to by a file name that is not there, an artifact behind NDA that everyone with access already signed for.',
+      'Say what each investor with access has and has not opened, where that is recorded.',
+      'If the room looks complete for what it holds, say so rather than inventing something missing.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const folders = await c.env.DB.prepare(
+        `SELECT f.name, f.visibility,
+                (SELECT COUNT(*) FROM data_room_files x WHERE x.folder_id = f.id) AS files
+           FROM data_room_folders f WHERE f.project_id = ? ORDER BY f.display_order, f.name LIMIT 60`
+      ).bind(pid).all<{ name: string; visibility: string; files: number }>();
+      const files = await c.env.DB.prepare(
+        `SELECT f.name, f.visibility,
+                (SELECT COUNT(DISTINCT l.user_id) FROM data_room_access_log l WHERE l.file_id = f.id) AS viewers
+           FROM data_room_files f WHERE f.project_id = ? ORDER BY f.name LIMIT 120`
+      ).bind(pid).all<{ name: string; visibility: string; viewers: number }>();
+      const grants = await c.env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM data_room_grants WHERE project_id = ? AND status = 'active'`
+      ).bind(pid).first<{ n: number }>();
+      const lines: string[] = [];
+      for (const f of (folders.results || [])) {
+        lines.push(`Folder ${f.name} (${f.visibility}) — ${f.files} file${f.files === 1 ? '' : 's'}`);
+      }
+      for (const f of (files.results || [])) {
+        lines.push(`File ${f.name} (${f.visibility}) — `
+          + `${f.viewers ? `opened by ${f.viewers} investor${f.viewers === 1 ? '' : 's'}` : 'never opened'}`);
+      }
+      if (lines.length) {
+        lines.push(`${Number(grants?.n || 0)} investor${Number(grants?.n || 0) === 1 ? '' : 's'} currently have access.`);
+      }
+      return lines;
+    },
+  },
+
+  'raise/liquidity': {
+    // A4's band sits beside a waterfall the product cannot draw: no exit model
+    // and no preference terms are stored anywhere, so the page says so. What
+    // this band has is the cap table and the round — enough to answer the one
+    // question the zone exists for, which the artboard states outright: the
+    // waterfall should be understood BEFORE terms are signed, not after.
+    //
+    // So the instruction is mostly a set of refusals. A model asked about exits
+    // will supply a preference stack, a participation multiple and a comparable
+    // outcome, and each of those would be a term this founder has not agreed to
+    // presented as one they have.
+    instruction: [
+      'Explain who is paid what, and in what order, at an exit — using only the ownership and round figures below.',
+      'No preference multiple, participation right or liquidation term is recorded anywhere here. Do not assume one, and do not describe a standard one as though it applied to this company.',
+      'Name every input the answer would need that is missing, and say plainly that the order of payment cannot be settled without them.',
+      'Model no exit price that is not given. If none is given, describe the mechanism rather than inventing an outcome.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const scenario = await c.env.DB.prepare(
+        `SELECT name, inputs_json, result_json FROM cap_table_scenarios
+          WHERE project_id = ? AND is_variant = 0 ORDER BY updated_at DESC LIMIT 1`
+      ).bind(pid).first<{ name: string; inputs_json: string | null; result_json: string | null }>();
+      if (!scenario) return [];
+      const round = await c.env.DB.prepare(
+        `SELECT name, target_amount, pre_money FROM raise_rounds WHERE project_id = ? AND status = 'active'`
+      ).bind(pid).first<{ name: string | null; target_amount: number | null; pre_money: number | null }>();
+      const lines = [
+        `Cap table scenario "${scenario.name}" inputs: ${String(scenario.inputs_json || '').slice(0, 1500)}`,
+        `Computed ownership: ${String(scenario.result_json || 'NOT COMPUTED').slice(0, 1500)}`,
+      ];
+      lines.push(round
+        ? `Open round: ${round.name || 'unnamed'}; target ${round.target_amount ?? 'NOT RECORDED'}; pre-money ${round.pre_money ?? 'NOT RECORDED'}`
+        : 'NO OPEN ROUND IS RECORDED.');
+      lines.push('NO LIQUIDATION PREFERENCE, PARTICIPATION RIGHT OR EXIT MODEL IS RECORDED for this company.');
+      return lines;
+    },
+  },
+
+  'grow/customers': {
+    // A5's band: "Segment: platform leads at 50-200 engineer orgs, cold, no
+    // reply in 14 days. + 3-touch sequence, each opening on the
+    // handoff-opacity pain THEIR OWN SEGMENT NAMED in your interviews."
+    //
+    // The italics are the artboard's and they are the whole instruction. A
+    // model asked for outreach copy writes a generic cold email; what makes
+    // this one worth the tokens is that it opens on something the recipient's
+    // own segment said. So the material carries the founder's recorded pains
+    // alongside the signups, and the instruction requires the opening line to
+    // come from one of them or to say that none applies.
+    //
+    // THE FUNNEL HAS FOUR STAGES, NOT THE ARTBOARD'S FIVE. `crm_status` is
+    // new / invited / followed_up / promoted (`routes/progress.ts`), and a
+    // model handed "Demo", "Trial" and "Paid" would place people in stages
+    // this product cannot record them in.
+    instruction: [
+      'Draft one outreach sequence for the signups below who have gone furthest without converting.',
+      'Open each touch on a pain the founder has actually recorded, quoting it. If no recorded pain fits the segment, say so and write no opener rather than inventing one.',
+      'Use only the four stages the record has — new, invited, followed up, promoted. Do not place anyone at a demo, a trial or a paid plan: none of those is recorded.',
+      'Name no company and no person the list below does not name.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const stages = await c.env.DB.prepare(
+        `SELECT COALESCE(crm_status, 'new') AS stage, COALESCE(source, 'source not recorded') AS source,
+                COUNT(*) AS n, MAX(created_at) AS latest
+           FROM waitlist_signups WHERE project_id = ?
+          GROUP BY COALESCE(crm_status, 'new'), COALESCE(source, 'source not recorded')
+          ORDER BY n DESC LIMIT 40`
+      ).bind(pid).all<{ stage: string; source: string; n: number; latest: string | null }>();
+      const lines = (stages.results || []).map((r) =>
+        `${r.n} signup${r.n === 1 ? '' : 's'} at stage "${r.stage.replace('_', ' ')}" from ${r.source}; `
+        + `most recent ${r.latest ? String(r.latest).slice(0, 10) : 'not recorded'}`);
+      if (!lines.length) return [];
+      // The founder's OWN pain map: a group's title plus how many distinct
+      // phrases they have filed under it. Grouping is the founder's act — the
+      // Validate desk never names a theme for them — so a title here is
+      // something they wrote, not something a model decided.
+      const pains = await c.env.DB.prepare(
+        `SELECT g.title,
+                (SELECT COUNT(*) FROM pain_group_aliases a WHERE a.group_id = g.id) AS phrases
+           FROM pain_groups g WHERE g.project_id = ?
+          ORDER BY phrases DESC, g.sort_order LIMIT 12`
+      ).bind(pid).all<{ title: string; phrases: number }>();
+      const painLines = (pains.results || []).map((r) =>
+        `Recorded pain: "${r.title}" — ${r.phrases} phrase${r.phrases === 1 ? '' : 's'} grouped under it`);
+      lines.push(painLines.length
+        ? painLines.join('\n')
+        : 'NO PAIN IS RECORDED for this startup — there is nothing a touch can open on.');
+      return lines;
+    },
+  },
+
+  'grow/talent': {
+    // A5's band: "Ranked first of 14 on three receipts you can check: shipped
+    // an event-sourced handoff system at Verwood, applied through your careers
+    // page rather than a board, and names async workflows in her own words."
+    //
+    // "RECEIPTS YOU CAN CHECK" is the instruction. An applicant record holds a
+    // cover note, a link and a resume key — no score, no skills breakdown, no
+    // inference. So a reason has to be a thing the founder can open and read
+    // for themselves, and anything the model would have to conclude on its own
+    // is exactly what must not appear as a ranking.
+    //
+    // AND MOVING SOMEONE TO SCREEN IS NOT AN ACTION HERE. Nothing writes
+    // `job_applications.status` through any route, so the band produces a
+    // reading and the founder acts on it in Talent.
+    instruction: [
+      'Rank the applicants below and give the reasons for the top one.',
+      'Every reason must be a receipt the founder can open and check for themselves — something written in the application. Do not infer seniority, culture fit or ability from anything not stated.',
+      'Where an application is thin, say what is missing rather than filling it in.',
+      'Do not say anyone has been moved to a screen or to any other stage. Nothing here changes an application.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const posts = await c.env.DB.prepare(
+        `SELECT id, title, seniority, status FROM job_postings
+          WHERE project_id = ? AND status <> 'draft' ORDER BY created_at DESC LIMIT 10`
+      ).bind(pid).all<{ id: number; title: string; seniority: string; status: string }>();
+      const lines: string[] = [];
+      for (const post of (posts.results || [])) {
+        const apps = await c.env.DB.prepare(
+          `SELECT name, cover_note, linkedin_url, portfolio_url, resume_key, status, created_at
+             FROM job_applications WHERE posting_id = ? ORDER BY created_at DESC LIMIT 40`
+        ).bind(post.id).all<{
+          name: string | null; cover_note: string | null; linkedin_url: string | null;
+          portfolio_url: string | null; resume_key: string | null; status: string; created_at: string;
+        }>();
+        const rows = apps.results || [];
+        lines.push(`Role: ${post.title} (${post.seniority}, ${post.status}) — `
+          + `${rows.length} applicant${rows.length === 1 ? '' : 's'}`);
+        for (const a of rows) {
+          // The APPLICANT'S EMAIL IS DELIBERATELY NOT HERE. It identifies a
+          // real person to a third-party model and adds nothing a ranking can
+          // use; the name and what they wrote are the material.
+          lines.push(`  Applicant ${a.name || 'name not given'} (${a.status}, applied ${String(a.created_at).slice(0, 10)}): `
+            + `${a.cover_note ? `wrote "${String(a.cover_note).slice(0, 600)}"` : 'NO COVER NOTE'}; `
+            + `${a.linkedin_url ? 'linkedin given' : 'no linkedin'}; `
+            + `${a.portfolio_url ? 'portfolio given' : 'no portfolio'}; `
+            + `${a.resume_key ? 'resume attached' : 'NO RESUME'}`);
+        }
+      }
+      return lines;
     },
   },
 };
