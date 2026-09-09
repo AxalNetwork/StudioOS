@@ -25,6 +25,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { codeOnly } from './_codeOnly.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -264,13 +265,18 @@ test('every page-supplied op reaches a binder that actually passes handlers', ()
   }
   assert.ok(zones.size >= 8, `expected the handler kind to be in use; found ${zones.size} zones`);
 
-  // Every module that binds a zone action table, read as code so a call in a
-  // comment cannot satisfy the rule.
-  const BINDERS = [
-    'frontend/src/workspaces/ResearchWorkspace.jsx',
-    'frontend/src/workspaces/NetworkWorkspace.jsx',
-    'frontend/src/workspaces/founder/FounderValidateWorkspace.jsx',
-  ].map((p) => codeOnly(raw(p))).join('\n');
+  // EVERY MODULE THAT BINDS A ZONE ACTION TABLE, FOUND RATHER THAN LISTED. A
+  // hardcoded list is a second place to remember: this guard shipped with three
+  // files in it and went red the day a fourth binder (`PartnerBucketRoutes`)
+  // gained a handler op — not because the op was unwired, but because the list
+  // had not heard of the file. Read as code, so a call inside a comment cannot
+  // satisfy the rule.
+  const files = execFileSync(
+    'grep', ['-rl', '-E', 'zoneActionsFor\\(|[a-z]+ZoneActions\\(', 'frontend/src/workspaces'],
+    { encoding: 'utf8' },
+  ).split('\n').filter((f) => f && !/ZoneActions\.js$|zoneActionBuilder|zoneActionsByRole/.test(f));
+  assert.ok(files.length >= 4, `expected several binder modules; found ${files.length}`);
+  const BINDERS = files.map((p) => codeOnly(raw(p))).join('\n');
 
   /** The options object of a call, brace-balanced from the first `{` after the key. */
   const optsAfter = (src, at) => {

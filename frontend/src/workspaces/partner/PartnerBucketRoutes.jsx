@@ -92,6 +92,30 @@ const PartnerStatusReports = lazy(() => import('../../pages/partner/delivery/Sta
  *     completed engagement the client was party to, and carries their consent
  *     state. Consent is a gate, not a warning — an unconsented outcome has no
  *     published form to suppress. Nothing stores that consent today.
+ *
+ * `offers/catalog` TAKES `(rows, handlers)`, AND THE SECOND ARGUMENT MATTERS.
+ * `New service` is a page-supplied op (D67): the ops row IS the header on that
+ * artboard, so there is no `New offering` button beside the list any more and
+ * the op opens the form the page owns. A closure taking only `rows` drops the
+ * handlers, `makeZoneActions` finds no callable, and it returns null rather
+ * than a dead control — so the op disappears from the header with no error
+ * anywhere. `network_relationship_book.test.mjs` walks every handler-declaring
+ * zone to the module that binds it, for exactly this failure.
+ *
+ * Its export ships `price_cents` rather than the legacy `price_usd` REAL: a
+ * spreadsheet that divides late reads $47,999.99 where the page reads $48,000.
+ * There is no `State` column, because Draft is what an empty Price cell MEANS —
+ * adding one would either duplicate `catalogState` here, where the two copies
+ * could disagree, or force a static import of a page this router lazily loads.
+ *
+ * A NOTE ABOUT COMMENTS INSIDE THE ZONE MAPS BELOW. Three guards read this file
+ * as text and none of them strips an indented comment: `profile_zone_actions`
+ * scans for a balanced builder call and treats an apostrophe as opening a
+ * string; the same file reads bare identifiers out of the call and takes a
+ * capitalised word in a comment for a variable; and `partner_bucket_overview`
+ * reads depth-2 keys out of these maps, so a word followed by a colon becomes a
+ * zone slug that does not exist. Explanations go here, at column zero, where
+ * `codeOnly` removes them.
  */
 
 function Loading() {
@@ -185,10 +209,11 @@ const LIVE = {
     // and chips painted from `user.role` would put founder violet inside it.
     catalog: (user) => <ServiceCatalogPage user={user} embedded role="partner"
       zoneFilters={(opts) => partnerZoneFilters('offers/catalog', opts)}
-      zoneActions={(rows) => partnerZoneActions('offers/catalog', { view: {
-        header: ['Offering', 'Category', 'Summary', 'Price (USD)', 'Listed'],
+      zoneActions={(rows, handlers) => partnerZoneActions('offers/catalog', { handlers, view: {
+        header: ['Service', 'Model', 'Price (cents)', 'Sold', 'What’s included'],
         rows,
-        cells: (o) => [o.title, o.category, o.summary, o.price_usd, o.is_active ? 'yes' : 'no'],
+        cells: (o) => [o.title, o.engagement_model || '', o.price_cents ?? '',
+          o.sold || 0, o.summary],
       } })} />,
     'perk-deals': (user) => <PerksPage user={user} embedded role="partner"
       zoneFilters={(opts) => partnerZoneFilters('offers/perk-deals', opts)}

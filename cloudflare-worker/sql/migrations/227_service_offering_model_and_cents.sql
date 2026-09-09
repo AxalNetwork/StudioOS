@@ -75,12 +75,11 @@ ALTER TABLE service_offerings
 ALTER TABLE service_offerings
   ADD COLUMN price_cents INTEGER;
 
--- Every row that already has a price gets its integer form. A row with none
--- stays null on both, which is the Draft state the artboard draws.
-UPDATE service_offerings
-   SET price_cents = CAST(ROUND(price_usd * 100) AS INTEGER)
- WHERE price_usd IS NOT NULL AND price_cents IS NULL;
-
+-- NO BACKFILL STATEMENT HERE, for the reason the header gives above: it would
+-- read `price_usd`, and this table has more than one definition. A row priced
+-- before this migration keeps a null `price_cents` in the database and gets its
+-- integer form from `serialize()` on every read.
+--
 -- `All`, `Fixed`, `Retainer` and `Seat` narrow one firm's catalog by model.
 --
 -- THE INDEX LEADS WITH THE COLUMN THIS FILE ADDS, and not with

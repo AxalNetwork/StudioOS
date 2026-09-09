@@ -86,12 +86,11 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
 // says it did. Reading `accepted` as `Made` would have been the inference the
 // old reason correctly refused.
 
-// `/offers/catalog`. `service_offerings` holds one `price_usd` and nothing
-// saying HOW it is charged, so a fixed fee, a monthly retainer and a per-seat
-// licence are the same row to this store. The canvas's three pricing chips are
-// one absent column between them, so they share one reason.
-const NO_PRICING_MODEL =
-  'a service stores one price and nothing saying whether it is charged once, monthly or per seat, so these three cannot be told apart';
+// `NO_PRICING_MODEL` STOOD HERE AND IS GONE WITH THE GAP IT NAMED. It read: "a
+// service stores one price and nothing saying whether it is charged once,
+// monthly or per seat, so these three cannot be told apart" — one absent column
+// shared by `Fixed`, `Retainer` and `Seat`. Migration 227 added it, the offering
+// form writes it, and all three chips narrow on it.
 
 // `/offers/perk-deals`. Two chips about time on a table that keeps none. The
 // second half matters as much as the first: `perk_claims.expires_at` DOES
@@ -169,15 +168,22 @@ export const PARTNER_ZONE_FILTERS = {
   // `design/canvases/integrated/` and `design/incoming/`, checked rather than
   // assumed — both name these nineteen in this order.
 
-  // ONE LIVE CHIP, AND IT IS THE HONEST NUMBER RATHER THAN A THIN ONE. The
-  // catalogue's own axis is `is_active`, which the row toggle already writes,
-  // but the canvas does not ask for it — it asks how the work is priced. So
-  // `All` is what this row can offer, and the other three wait on a column.
+  // FOUR OF FOUR, AND THE COLUMN THEY WAITED ON IS MIGRATION 227's. The note
+  // here read: "the catalogue's own axis is `is_active` … the canvas does not
+  // ask for it — it asks how the work is priced. So `All` is what this row can
+  // offer, and the other three wait on a column." They waited; the column
+  // landed; `service_offerings.engagement_model` is CHECKed to exactly these
+  // three values and the offering form writes it.
+  //
+  // A SERVICE WITH NO MODEL RECORDED MATCHES NONE OF THE THREE, and reads `Not
+  // recorded` in the Model column. That is a firm that has not decided how it
+  // charges for something, which is a real state and not a fourth kind — a chip
+  // for it would be a control over an omission rather than over a choice.
   'offers/catalog': [
     { canvas: 'All', key: 'all' },
-    { canvas: 'Fixed', unbuilt: NO_PRICING_MODEL },
-    { canvas: 'Retainer', unbuilt: NO_PRICING_MODEL },
-    { canvas: 'Seat', unbuilt: NO_PRICING_MODEL },
+    { canvas: 'Fixed', key: 'fixed' },
+    { canvas: 'Retainer', key: 'retainer' },
+    { canvas: 'Seat', key: 'seat' },
   ],
 
   // `Live` IS THE STORE'S OWN WORD. `perks.status` is a CHECK over `draft`,

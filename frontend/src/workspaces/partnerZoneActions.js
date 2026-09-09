@@ -63,9 +63,19 @@ export const PARTNER_ZONE_ACTIONS = {
   ],
 
   // ── Offers ───────────────────────────────────────────────────────────────
+  // `New service` WAS PROSE AND THE REASON WAS TRUE OF THE OLD PAGE. It read
+  // "services are added from the catalogue's own form below", which was accurate
+  // when the body was a card grid with a `New offering` button sitting above it.
+  // The artboard's composition has no such button — the ops row IS the header —
+  // so the op opens the form the page already owns. `kind: 'handler'`, D67.
+  //
+  // `Pricing history` STAYS PROSE, and the reason is unchanged by migration 227:
+  // the column it added is a MODEL, not a series. `service_offerings` holds one
+  // price and overwrites it on edit, so there is no earlier figure to show and
+  // no table that ever held one.
   'offers/catalog': [
-    { label: 'New service', unbuilt: 'services are added from the catalogue’s own form below' },
-    { label: 'Pricing history', unbuilt: 'only the current price is stored; there is no history to open' },
+    { label: 'New service', kind: 'handler', handler: 'newService' },
+    { label: 'Pricing history', unbuilt: 'only the current price is stored and an edit overwrites it, so there is no earlier figure to open' },
     { label: 'Export', kind: 'export' },
   ],
   'offers/perk-deals': [

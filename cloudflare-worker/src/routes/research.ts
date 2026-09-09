@@ -1311,6 +1311,35 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  'offers/catalog': {
+    // The artboard: "revenue concentrates in two fixed services while both seat
+    // products sold once each. Points to the retainer draft as the gap." Two
+    // instructions come out of that — read the concentration, and name the
+    // unpriced entries as a SCORING gap rather than a tidying one, because
+    // Pipeline scores leads against exactly these rows.
+    instruction: [
+      'Say where revenue concentrates across this catalog and which entries have sold nothing.',
+      'Name any entry with no price as a gap in lead scoring, not as a cosmetic one: an unpriced service scores as a capability and not as a fit.',
+      'Use only the figures below. Do not estimate a price for anything that has none.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const rows = await c.env.DB.prepare(
+        `SELECT o.title AS title, o.engagement_model AS model, o.price_cents AS cents,
+                o.summary AS summary,
+                (SELECT COUNT(*) FROM service_engagements se
+                  WHERE se.offering_id = o.id AND se.status <> 'cancelled') AS sold
+           FROM service_offerings o WHERE o.owner_user_id = ? ORDER BY o.id ASC LIMIT 100`
+      ).bind(userId).all<{
+        title: string; model: string | null; cents: number | null; summary: string | null; sold: number;
+      }>();
+      const money = (cents: number) => `$${Math.round(cents / 100).toLocaleString('en-US')}`;
+      return (rows.results || []).map((r) =>
+        `${r.title} — ${r.model || 'engagement model not recorded'}; `
+        + `${r.cents == null ? 'NO PRICE RECORDED' : money(r.cents)}; sold ${r.sold} time${r.sold === 1 ? '' : 's'}`
+        + `${r.summary ? `; includes ${r.summary}` : ''}`);
+    },
+  },
+
   'network/organizations': {
     // The artboard: "Points to every client resting on one known contact … Names
     // the exposure; the second contact is a person's job to make." The last

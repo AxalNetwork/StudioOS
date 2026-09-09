@@ -1,10 +1,17 @@
 import React, { useEffect, useState } from 'react';
+// FIVE ICONS WENT WITH THE CARD GRID. `Plus`, `Edit3`, `Trash2`, `ToggleLeft`
+// and `ToggleRight` labelled the New offering button and the four per-card
+// controls; the artboard's instrument carries those controls as text links
+// inside the cell whose subject they act on, and its ops row supplies the fifth.
+// `check-unused-imports` is CodeQL-backed and would have reported all five.
 import {
-  Plus, Search, Filter, Briefcase, ShieldCheck, Edit3,
-  Trash2, AlertCircle, X, Check, ExternalLink, Package, ToggleLeft, ToggleRight,
+  Search, Filter, Briefcase, ShieldCheck,
+  AlertCircle, X, Check, ExternalLink, Package,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
+import ZoneDraft from '../workspaces/ZoneDraft';
+import { Eyebrow, Instrument, NotRecorded } from '../workspaces/canvasKit';
 
 const CATEGORIES = ['legal', 'accounting', 'design', 'recruiting', 'fractional_cfo', 'gtm', 'engineering', 'marketing'];
 const CAT_LABEL = {
@@ -259,12 +266,57 @@ function OfferingDetailModal({ offering, user, isFounder, onClose }) {
 // ---------------------------------------------------------------------------
 // Mine — partner manages their own offerings
 // ---------------------------------------------------------------------------
+/**
+ * How each service is charged — migration 227's `engagement_model`.
+ *
+ * THE `po1` ARTBOARD'S `Model` COLUMN, AND ITS FOUR CHIPS. `All`, `Fixed`,
+ * `Retainer` and `Seat` narrow on this and on nothing else; before the column
+ * existed, three of the four selected every row and the tab reported "the one
+ * view it has" — which was honest and is no longer necessary.
+ */
+const MODELS = [['fixed', 'Fixed'], ['retainer', 'Retainer'], ['seat', 'Seat']];
+const MODEL_LABEL = Object.fromEntries(MODELS);
+const MODEL_TONE = { Fixed: 'info', Retainer: 'warn', Seat: 'seam' };
+
+/** The chips, as predicates. `all` is absent and falls through to every row. */
+const NARROW = {
+  fixed: (o) => o.engagement_model === 'fixed',
+  retainer: (o) => o.engagement_model === 'retainer',
+  seat: (o) => o.engagement_model === 'seat',
+};
+
+/**
+ * Cents to a dollar figure, formatted ONCE — the artboard's own instMeta.
+ *
+ * `priceLabel` above still reads `price_usd` because the marketplace cards it
+ * serves are shared with the founder-facing browse tab. This is the catalog's
+ * own edge, and it takes the integer: a REAL that came back as 47999.999999
+ * renders as $48,000 here and as $47,999.99 anywhere that divides it late.
+ */
+const usd = (cents) => `$${Math.round(cents / 100).toLocaleString('en-US')}`;
+
+/**
+ * A service with no price is a DRAFT, and that is derived rather than stored.
+ *
+ * The artboard's sixth row is the unpriced retainer, and its whole argument is
+ * that the absence must show: "an invented number here would propagate straight
+ * into lead scoring and into every proposal generated from the catalog." A
+ * service that cannot be quoted is not live, whatever its listing flag says —
+ * so the state follows the price, and `is_active` keeps meaning what it always
+ * meant, which is whether the marketplace shows it.
+ */
+export function catalogState(o) {
+  if (o.price_cents == null) return 'Draft';
+  return o.is_active ? 'Live' : 'Unlisted';
+}
+
 export function MineTab({ user, zoneActions, zoneFilters, role }) {
   const [rows, setRows] = useState([]);
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState('all');
 
   async function load() {
     setLoading(true); setError(null);
@@ -306,6 +358,31 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
     return <Empty icon={Briefcase} text="Only partner accounts can publish offerings." />;
   }
 
+  const visible = NARROW[filter] ? rows.filter(NARROW[filter]) : rows;
+  const choose = (key) => setFilter((current) => (current === key ? 'all' : key));
+
+  // COUNTED OVER THE WHOLE CATALOG, NEVER OVER THE CHIP-NARROWED LIST.
+  const priced = rows.filter((o) => o.price_cents != null);
+  const drafts = rows.filter((o) => o.price_cents == null);
+  const live = rows.filter((o) => catalogState(o) === 'Live');
+  const units = rows.reduce((a, o) => a + (o.sold || 0), 0);
+  const booked = rows.reduce((a, o) => a + (o.price_cents || 0) * (o.sold || 0), 0);
+  const dearest = priced.reduce((best, o) => (best && best.price_cents >= o.price_cents ? best : o), null);
+  // The artboard's fourth tile is the RETAINER's price, and it is `Not
+  // recorded` there because that is the row sitting in draft. Here it is the
+  // firm's own retainer if they have priced one, and the absence if they have
+  // not — which is the same tile reporting the same thing about this reader's
+  // catalog rather than about the sample one.
+  const retainer = rows.find((o) => o.engagement_model === 'retainer' && o.price_cents != null);
+  const retainerDraft = rows.find((o) => o.engagement_model === 'retainer');
+
+  const handlers = {
+    newService: {
+      onClick: () => { setEditing(null); setShowForm(true); },
+      title: 'add a service to the catalog',
+    },
+  };
+
   return (
     <div className="space-y-4">
       {/* `role` IS THE SHELL'S LICENCE, NOT THE VIEWER'S, and the distinction
@@ -317,52 +394,126 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
           shell it is, the same way it already supplies the actions: this page
           learns nothing about roles, which is what its docblock above promises.
 
-          ONE LIVE CHIP AND NO STATE. `All` is the only label on this artboard
-          with a source; `Fixed`, `Retainer` and `Seat` need a pricing-model
+          FOUR LIVE CHIPS NOW, WHERE THERE WAS ONE AND NO STATE. The note that
+          stood here read: "`Fixed`, `Retainer` and `Seat` need a pricing-model
           column `service_offerings` does not have. A `useState` whose value can
           never change would be a control that looks selectable and selects
-          nothing, so the row reports the one view it has. */}
+          nothing." Migration 227 added the column; the state is real. */}
       {(zoneActions || zoneFilters) && (
         <ZoneToolbar
           role={role}
-          filters={zoneFilters ? zoneFilters({ value: 'all' }) : []}
-          actions={zoneActions ? zoneActions(rows) : []}
+          filters={zoneFilters ? zoneFilters({ value: filter, onChange: choose }) : []}
+          actions={zoneActions ? zoneActions(visible, handlers) : []}
         />
       )}
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-gray-500">{rows.length} offering{rows.length === 1 ? '' : 's'}</div>
-        <button onClick={() => { setEditing(null); setShowForm(true); }}
-          className="bg-violet-600 hover:bg-violet-700 text-white rounded-md px-4 py-1.5 text-sm font-medium flex items-center gap-2">
-          <Plus size={14} /> New offering
-        </button>
+
+      <div>
+        <h2 className="text-lg font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Service catalog</h2>
+        <p className="mt-1 text-[12px] text-gray-600 dark:text-gray-400">
+          Productised services with engagement model and price.
+        </p>
       </div>
+
       {error && <ErrorBox message={error} />}
       {loading && <div className="text-sm text-gray-500">Loading…</div>}
-      {!loading && rows.length === 0 && <Empty icon={Package} text="No offerings yet. Publish your first package to appear in the catalogue." />}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {rows.map((o) => (
-          <div key={o.id} className="bg-white border border-gray-200 rounded-xl p-4 space-y-2 dark:bg-gray-900 dark:border-gray-800">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{o.title}</div>
-                <div className="text-xs text-gray-500 mt-0.5">{CAT_LABEL[o.category] || o.category} · {priceLabel(o)}</div>
-              </div>
-              <span className={`text-xs px-2 py-0.5 rounded-full border ${o.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
-                {o.is_active ? 'Listed' : 'Unlisted'}
-              </span>
-            </div>
-            <p className="text-sm text-gray-700 line-clamp-2 dark:text-gray-300">{o.summary}</p>
-            <div className="flex items-center gap-2 pt-1">
-              <button onClick={() => { setEditing(o); setShowForm(true); }} className="text-xs flex items-center gap-1 text-violet-700 hover:text-violet-900"><Edit3 size={12} /> Edit</button>
-              <button onClick={() => toggleListed(o)} className="text-xs flex items-center gap-1 text-gray-600 hover:text-gray-900">
-                {o.is_active ? <ToggleRight size={14} /> : <ToggleLeft size={14} />} {o.is_active ? 'Unlist' : 'List'}
-              </button>
-              <button onClick={() => remove(o)} className="text-xs flex items-center gap-1 text-rose-600 hover:text-rose-800 ml-auto"><Trash2 size={12} /> Delete</button>
-            </div>
-          </div>
-        ))}
+      {/* THE ARTBOARD'S FOUR TILES. */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <CatalogTile
+          label="Live services" value={String(live.length)}
+          note={drafts.length ? `${drafts.length} draft, unpriced` : 'none unpriced'}
+        />
+        <CatalogTile label="Booked to date" value={usd(booked)} note={`from ${units} unit${units === 1 ? '' : 's'}`} />
+        {dearest
+          ? <CatalogTile label="Highest price" value={usd(dearest.price_cents)} note={dearest.title} />
+          : <CatalogTile label="Highest price" nr note="nothing in the catalog carries a price yet" />}
+        {retainer
+          ? <CatalogTile label="Retainer price" value={`${usd(retainer.price_cents)} / mo`} note={retainer.title} />
+          : (
+            <CatalogTile
+              label="Retainer price" nr
+              note={retainerDraft ? 'the one draft — scope not final' : 'no retainer is in the catalog'}
+            />
+          )}
       </div>
+
+      {/* READS THROUGH TO PIPELINE, in the artboard's own words and its own
+          cyan. This is not decoration: an unpriced entry is a SCORING gap, and
+          a reader who does not know that reads the draft row as cosmetic. */}
+      <div className="rounded-[10px] border border-cyan-200 bg-cyan-50/50 p-3 text-[11.5px] leading-relaxed text-gray-700 dark:border-cyan-900 dark:bg-cyan-950/20 dark:text-gray-300">
+        <strong className="text-cyan-700 dark:text-cyan-300">Reads through to Pipeline:</strong>{' '}
+        Pipeline · Leads computes each lead’s match score against these entries.
+        {drafts.length
+          ? ` The ${drafts.length === 1 ? 'unpriced entry scores' : `${drafts.length} unpriced entries score`} as a capability but not as a fit, so leads shaped like ${drafts.length === 1 ? 'it' : 'them'} currently read lower than they should — a pricing decision, surfacing as a pipeline symptom.`
+          : ' Every entry carries a price, so every one of them can be scored as a fit rather than only as a capability.'}
+      </div>
+
+      {!loading && rows.length === 0 ? (
+        <Empty icon={Package} text="No offerings yet. Publish your first package to appear in the catalogue." />
+      ) : (
+        <Instrument
+          testid="service-catalog"
+          title="Services"
+          meta="Prices stored as integers, formatted once"
+          cols="1.5fr .8fr 1fr .6fr 2fr"
+          head={['Service', 'Model', 'Price', 'Sold', 'What’s included']}
+          rows={visible.map((o) => {
+            const state = catalogState(o);
+            return {
+              key: o.id,
+              rowClass: state === 'Draft' ? 'bg-amber-50/40 dark:bg-amber-950/15' : '',
+              cells: [
+                {
+                  text: o.title,
+                  ...(state === 'Live' ? {} : { pill: state, pillTone: state === 'Draft' ? 'warn' : 'neutral' }),
+                  sub: CAT_LABEL[o.category] || o.category,
+                  node: (
+                    <>
+                      <button type="button" onClick={() => { setEditing(o); setShowForm(true); }}
+                        className="text-[11px] text-gray-500 underline hover:text-gray-700 dark:text-gray-400">Edit</button>
+                      <button type="button" onClick={() => toggleListed(o)}
+                        className="text-[11px] text-gray-500 underline hover:text-gray-700 dark:text-gray-400">
+                        {o.is_active ? 'Unlist' : 'List'}
+                      </button>
+                      <button type="button" onClick={() => remove(o)}
+                        className="text-[11px] text-rose-600 underline hover:text-rose-800">Delete</button>
+                    </>
+                  ),
+                },
+                o.engagement_model
+                  ? { pill: MODEL_LABEL[o.engagement_model], pillTone: MODEL_TONE[MODEL_LABEL[o.engagement_model]] }
+                  : { nr: true },
+                // PER MONTH ON THE TWO MODELS THAT RECUR, which is the artboard's
+                // own rule and the instNote's point: a seat and a retainer price
+                // monthly, a fixed service prices once, and a figure without that
+                // suffix beside one that has it reads as the same kind of number.
+                o.price_cents == null
+                  ? { nr: true }
+                  : { text: usd(o.price_cents) + (o.engagement_model === 'retainer' || o.engagement_model === 'seat' ? ' / mo' : '') },
+                { text: o.sold ? String(o.sold) : '—' },
+                { text: o.summary },
+              ],
+            };
+          })}
+          note={`${drafts.length ? `${drafts.length === 1 ? 'One entry sits' : `${drafts.length} entries sit`} in draft with ${drafts.length === 1 ? 'its price' : 'their prices'} reading "Not recorded" rather than a placeholder figure — an invented number here would propagate straight into lead scoring and into every proposal generated from the catalog.` : 'Every entry carries a price, so none of them reads as a placeholder.'} Seat services price monthly and carry a granted scope; fixed services price once. That distinction is the same one Delivery reports progress against. Sold is counted from engagements booked against each entry, so a service nobody has linked reads "—" rather than zero.`}
+        />
+      )}
+
+      {!visible.length && rows.length > 0 && (
+        <p className="text-[12px] text-gray-600 dark:text-gray-300">
+          Nothing in the catalog is charged this way. The engagement model is set on the service itself.
+        </p>
+      )}
+
+      <ZoneDraft
+        surface="offers/catalog"
+        label="Draft · catalog read"
+        accept="Accept draft"
+        run="Read the catalog"
+        foot="Figures read from catalog rows."
+        empty="Where revenue concentrates across the catalog, and which entries have sold nothing. Points to any unpriced draft as the gap: demand shaped like it appears in the lead feed with nothing priced to match against."
+        nothingToDraft="The catalog is empty, so there is nothing to read across."
+      />
 
       {showForm && (
         <OfferingFormModal
@@ -370,6 +521,20 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
           onClose={() => { setShowForm(false); setEditing(null); load(); }}
         />
       )}
+    </div>
+  );
+}
+
+function CatalogTile({ label, value, note, nr = false }) {
+  return (
+    <div className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+      <Eyebrow>{label}</Eyebrow>
+      <div className="mt-1.5">
+        {nr ? <NotRecorded /> : (
+          <span className="font-mono text-[16px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{value}</span>
+        )}
+      </div>
+      <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
     </div>
   );
 }
@@ -398,7 +563,12 @@ function OfferingFormModal({ offering, onClose }) {
     title: offering?.title || '',
     summary: offering?.summary || '',
     category: offering?.category || 'legal',
-    price_usd: offering?.price_usd ?? '',
+    // The form's price field stays in dollars because that is what a person
+    // types; the worker turns it into the integer the row stores. An existing
+    // row is read back from `price_cents` rather than from the REAL, so editing
+    // and saving cannot round a price a fraction away from itself.
+    price_usd: offering?.price_cents != null ? String(offering.price_cents / 100) : '',
+    engagement_model: offering?.engagement_model || '',
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -411,6 +581,10 @@ function OfferingFormModal({ offering, onClose }) {
       const payload = {
         ...form,
         price_usd: form.price_usd === '' ? null : Number(form.price_usd),
+        // Empty means unset, and unset is what the Model column draws as `Not
+        // recorded`. Sending '' would be refused by the column's CHECK; sending
+        // a default would be this form deciding how a firm charges.
+        engagement_model: form.engagement_model || null,
       };
       if (offering) await api.updateServiceOffering(offering.id, payload);
       else await api.createServiceOffering(payload);
@@ -434,6 +608,16 @@ function OfferingFormModal({ offering, onClose }) {
             <input type="number" value={form.price_usd} onChange={(e) => setForm({ ...form, price_usd: e.target.value })} placeholder="Leave blank for “on enquiry”" className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
           </Field>
         </div>
+        {/* MIGRATION 227's COLUMN, AND THE ARTBOARD'S `Model`. Blank is a real
+            choice: a firm that has not decided how a service is charged should
+            not have this form decide for it, and the catalog draws the absence
+            rather than guessing "Fixed". */}
+        <Field label="Engagement model">
+          <select value={form.engagement_model} onChange={(e) => setForm({ ...form, engagement_model: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full bg-white dark:border-gray-700 dark:bg-gray-900">
+            <option value="">Not recorded</option>
+            {MODELS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </Field>
         <Field label="Summary (what the founder gets)">
           <textarea rows={3} value={form.summary} onChange={(e) => setForm({ ...form, summary: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
         </Field>

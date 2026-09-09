@@ -164,8 +164,12 @@ const PROFILES = {
     // migration 226 gave the book a place for. It does not create an
     // organization record; there is no such table, and that absence is the
     // subject of the whole page. None is a destination, which is why none is a
-    // `to:`. Was 0, then 5, then 7, then 8.
-    handlers: 9,
+    // `offers/catalog`: `New service`, which was prose reading "services are
+    // added from the catalogue's own form below" — true of a body with a New
+    // offering button above it, and the artboard's composition has no such
+    // button: the ops row IS the header. None is a destination, which is why
+    // none is a `to:`. Was 0, then 5, then 7, then 8, then 9.
+    handlers: 10,
     // NOTHING IS EXCLUDED ON THIS PROFILE ANY MORE. The entry that stood here
     // read: "`network/organizations`: `NetworkPage` catches a slug it has no tab
     // for and suppresses every body … there is nothing for a row to sit over.
@@ -578,8 +582,19 @@ for (const [name, profile] of Object.entries(PROFILES)) {
         // Including an ENCLOSING arrow's parameter: the partner bucket router
         // hands these pages `(rows) => partnerZoneActions(…)`, so `rows` is
         // declared just before the call rather than inside it.
+        //
+        // EVERY PARAMETER, NOT THE FIRST. This read one name per arrow, which
+        // was right while every render prop took only its rows. A zone with a
+        // page-supplied op takes `(rows, handlers) =>` — the shape D67
+        // introduced and three workspaces now use — and a one-name pattern
+        // matches neither of them, so `handlers` read as an undeclared global
+        // on a page that declares it in the very arrow being scanned.
         const around = src.slice(Math.max(0, at - 160), at) + call;
-        const params = new Set([...around.matchAll(/\(\s*([A-Za-z_$][\w$]*)\s*\)\s*=>/g)].map((m) => m[1]));
+        const params = new Set(
+          [...around.matchAll(/\(\s*([A-Za-z_$][\w$,\s]*)\)\s*=>/g)]
+            .flatMap((m) => m[1].split(',').map((x) => x.trim()))
+            .filter(Boolean),
+        );
         for (const id of new Set([...bare.matchAll(/[A-Za-z_$][\w$]*/g)].map((m) => m[0]))) {
           if (KNOWN.has(id) || params.has(id)) continue;
           const declared = new RegExp(`(const|let|var|function|import)[^\\n;]*\\b${id}\\b`).test(src);
