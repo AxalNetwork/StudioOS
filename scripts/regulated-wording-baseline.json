@@ -8,11 +8,6 @@
   ],
   "onRecord": [
     {
-      "file": "frontend/src/components/advisor/PersonalAdvisor.jsx",
-      "text": "Personal Advisor",
-      "why": "Shipped product name. It is on the landing page, in the command palette and in support copy; renaming it is a product and marketing decision, not a lint fix. Tracked separately."
-    },
-    {
       "file": "frontend/src/components/advisor/AdvisorFilledBanner.jsx",
       "text": "1 field on this page was filled by your Personal Advisor",
       "why": "Same shipped product name, in the banner that tells a user the model filled their fields."

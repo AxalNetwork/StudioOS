@@ -1,5 +1,17 @@
 /**
- * Task #12 (AC-3) — Personal Advisor chatbot UI.
+ * Task #12 (AC-3) — the chatbot UI. Titled **Eadwyn AI**.
+ *
+ * THE FILENAME IS THE OLD NAME AND THE HEADER IS NOT. `ui/README.md` states the
+ * rule this now follows — "The assistant is called Eadwyn. Its copy must avoid
+ * regulated wording — 'advisor', 'advice', 'recommendation', 'fiduciary' are
+ * lint-enforced out of AI naming and surfaces" — and this header was the
+ * product naming the model in exactly the word the rule bans.
+ * `check-regulated-wording.mjs` has scanned this file all along; it stayed
+ * green only because the string was on record in its baseline, with the reason
+ * "renaming it is a product and marketing decision, not a lint fix. Tracked
+ * separately." That decision has now been made, and the baseline entry is gone
+ * with the string. The module path is unchanged: renaming the file moves every
+ * importer and is not part of the naming decision.
  *
  * Persistent dashboard chatbot that profiles every user via Q&A,
  * streams LLM-powered "explain this" answers via SSE, and shows
@@ -139,7 +151,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
   // Some environments (the dev FastAPI backend, older worker deploys)
   // don't expose /api/advisor at all. We hide the whole card on 404 so
   // the dashboard doesn't surface a scary "Not found" panel — the
-  // Personal Advisor is genuinely unavailable in those environments.
+  // The assistant is genuinely unavailable in those environments.
   const [unavailable, setUnavailable] = useState(false);
 
   // Task #9 — inline "Open a ticket" affordance. When open, a small
@@ -824,7 +836,7 @@ function Header({ persona, progress, onMaximize, onOpenTicket, ticketOpen }) {
           <Sparkles size={16} />
         </div>
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Personal Advisor</div>
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Eadwyn AI</div>
           <div className="text-[11px] text-gray-600 dark:text-gray-400 truncate">
             {persona ? `${persona} • ` : ''}{progress.answered}/{progress.total} answered{progress.percent > 0 ? ` (${progress.percent}%)` : ''}
           </div>
@@ -878,7 +890,7 @@ function FullscreenView({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Personal Advisor"
+      aria-label="Eadwyn AI"
       style={vvStyle || undefined}
       className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-gray-900 h-[100dvh] max-h-[100dvh] overflow-hidden"
     >
@@ -945,7 +957,7 @@ function FullscreenHeader({ persona, progress, onExit, onOpenTicket, ticketOpen 
           <Sparkles size={18} />
         </div>
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Personal Advisor</div>
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Eadwyn AI</div>
           <div className="text-[11px] text-gray-600 dark:text-gray-400 truncate">
             {persona ? `${persona} • ` : ''}{progress.answered}/{progress.total} answered{progress.percent > 0 ? ` (${progress.percent}%)` : ''}
           </div>

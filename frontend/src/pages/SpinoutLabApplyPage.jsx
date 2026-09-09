@@ -5,8 +5,13 @@ import { useAuth } from "../hooks/useAuthSync";
 import { spinoutLab } from "../lib/api";
 import { labJurisdiction, resolveOpenCohort } from "../lib/spinoutLab";
 
-// Apply to Cohort 4 — signed-in application form (reference design:
-// Spin-Out Lab.dc.html APPLY VIEW). No contact fields: the account is the
+// Apply to the open cohort — signed-in application form (reference design:
+// Spin-Out Lab.dc.html APPLY VIEW). The heading used to read "Apply to Cohort
+// 4" here, which is the artboard's sample label rather than a cohort: the page
+// asks `resolveOpenCohort()` and renders whatever is open. That same sample
+// number, read as fact, is what anchored the calendar five months early and
+// put "Apply to Cohort 6" on the first cohort ever offered.
+// No contact fields: the account is the
 // applicant, shown in the "Signed in" card. Submit → POST /spinout-lab/apply
 // → confirmation card + confirmation email (production Worker).
 
