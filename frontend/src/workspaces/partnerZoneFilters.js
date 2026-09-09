@@ -3,11 +3,11 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
 /**
  * The partner profile's filter tables — the left half of the zone header row.
  *
- * SEVEN PARTNER ZONES CARRY A `filters:` ARRAY ON A CANVAS. The four Research
- * ones are here and so is `network/relationships`; `network/introductions` is
- * listed in `profile_zone_filters.test.mjs`'s `excluded` set with a reason, and
- * `network/organizations` never will be (below). The table fills one surface at
- * a time.
+ * SEVEN PARTNER ZONES CARRY A `filters:` ARRAY ON A CANVAS, and all seven are
+ * here. The four Research ones, and all three of Network's — including
+ * `network/organizations`, which two earlier versions of this docblock said
+ * would never be. See the note on that row for what changed and why the old
+ * reasoning was right about the page it was written against.
  *
  * `/research/library` IS THE ONE ZONE WHERE THIS LICENCE GETS EVERYTHING THE
  * CANVAS DREW, out of the same component that gives founder one live chip out
@@ -23,10 +23,25 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  * `shellConfig.js` both say `markets`; the guard's `live()` hook does that
  * translation and already carries this exact mapping for the ops half.
  *
- * `network/organizations` will never be here. `NetworkPage` catches a slug it
- * has no tab for and suppresses every body, so that route already renders its
- * own heading above a card stating the gap — a filter row would be four
- * controls above a sentence explaining that there is nothing to filter.
+ * WHAT THIS DOCBLOCK USED TO SAY ABOUT `network/organizations`, AND WHY IT WAS
+ * REVERSED RATHER THAN DELETED. It read: "`network/organizations` will never be
+ * here. `NetworkPage` catches a slug it has no tab for and suppresses every
+ * body, so that route already renders its own heading above a card stating the
+ * gap — a filter row would be four controls above a sentence explaining that
+ * there is nothing to filter."
+ *
+ * That was a correct reading of a page that was one sentence, and the reasoning
+ * still holds: a chip row over nothing is four controls above a statement. What
+ * changed is the page. Migration 224 gave the book a company name per contact
+ * and 226 gave it a relationship, so the zone now groups real rows — and the
+ * `pn3` artboard is about exactly this state, a company as text with no
+ * organization record behind it, with the empty state as its primary
+ * composition and the table underneath as what the roll-up would look like.
+ * Give the route a body, and the chip row follows honestly.
+ *
+ * "Never" was the word to distrust. The note was written against a page, not
+ * against a possibility, and it read as a rule about the zone. This one is
+ * dated to what it observed.
  */
 // TWO STRINGS THAT USED TO LIVE HERE ARE GONE, and their absence is the point.
 // `ONE_ANSWER_ONLY` and `NO_ANSWER_RECORD` explained why all four of Ask's
@@ -129,6 +144,24 @@ export const PARTNER_ZONE_FILTERS = {
     { canvas: 'Gated', key: 'gated' },
     { canvas: 'Made', key: 'made' },
     { canvas: 'Declined', key: 'declined' },
+  ],
+
+  // THREE CHIPS OVER ONE COLUMN, AND THE COLUMN HAD TO BE BUILT FOR THEM.
+  // `Clients`, `Prospects` and `Referral sources` are the three values migration
+  // 226 added to a book contact, and without it all three would have selected
+  // nothing on every account — D51's canonical failure, which is why this row
+  // could not have been written before the store was.
+  //
+  // A COMPANY WHOSE CONTACTS DISAGREE MATCHES NONE OF THE THREE. The roll-up
+  // reads `Mixed` there rather than picking a value, so it is not a client and
+  // not a prospect; `All` shows it and the `Build records` board is where the
+  // firm settles it. A chip that swept `Mixed` into one side would be the
+  // tie-break the page refuses, moved into the filter.
+  'network/organizations': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Clients', key: 'clients' },
+    { canvas: 'Prospects', key: 'prospects' },
+    { canvas: 'Referral sources', key: 'referrals' },
   ],
 
   // ── Offers ───────────────────────────────────────────────────────────────

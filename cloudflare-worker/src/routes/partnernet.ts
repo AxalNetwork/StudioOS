@@ -379,9 +379,14 @@ partnernet.get('/activity/logs', async (c) => {
 // never a warmth number presented as fact" is the artboard's own rule and the
 // slider it replaces was exactly that number.
 
+// The three the `pn3` artboard's chips name, and the three the column's CHECK
+// accepts. One list, so a value the route lets through cannot be one the store
+// refuses.
+const RELATIONSHIPS = ['client', 'prospect', 'referral_source'];
+
 interface BookContactRow {
   id: number; uid: string; owner_user_id: number; name: string; email: string | null;
-  role_title: string | null; organization: string | null;
+  role_title: string | null; organization: string | null; relationship: string | null;
   firm_owner_user_id: number | null; source: string; source_label: string | null;
   created_at: string; updated_at: string;
   owner_name: string | null; owner_email: string | null;
@@ -394,6 +399,11 @@ const bookDto = (r: BookContactRow) => ({
   email: r.email,
   role_title: r.role_title,
   organization: r.organization,
+  // What that company is TO THE FIRM (migration 226). Null is "nobody has said"
+  // and is returned as null rather than coerced to a default — `pn3`'s three
+  // relationship chips narrow on this, and a defaulted value would make every
+  // legacy contact a prospect nobody chose.
+  relationship: r.relationship || null,
   // The whole point of the page: a name, or nothing at all. Never a placeholder
   // that reads as an assignment.
   firm_owner: r.firm_owner_user_id
@@ -431,18 +441,49 @@ partnernet.post('/book', async (c) => {
   if (!name) return c.json({ error: 'name_required' }, 400);
   const uid = crypto.randomUUID().replace(/-/g, '');
   await c.env.DB.prepare(
-    `INSERT INTO partner_book_contacts (uid, owner_user_id, name, email, role_title, organization)
-     VALUES (?, ?, ?, ?, ?, ?)`
+    `INSERT INTO partner_book_contacts (uid, owner_user_id, name, email, role_title, organization, relationship)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     uid, user.id, name,
     body?.email ? String(body.email).slice(0, 200) : null,
     body?.role_title ? String(body.role_title).slice(0, 120) : null,
     body?.organization ? String(body.organization).slice(0, 200) : null,
+    // Unset unless the form said so. The column's CHECK refuses anything else,
+    // and the page's Not recorded is the honest reading of "nobody has said".
+    RELATIONSHIPS.includes(String(body?.relationship || '')) ? String(body.relationship) : null,
   ).run();
   // NO OWNER ON CREATION, DELIBERATELY. A contact arrives unowned and sorts to
   // the top in red until someone takes it — which is the failure mode this page
   // exists to surface, and defaulting the creator into it would hide every one.
   return c.json({ ok: true, uid }, 201);
+});
+
+/**
+ * What that company is to the firm — `Build records` on the `pn3` artboard.
+ *
+ * IT IS SET PER CONTACT AND THE ROLL-UP GROUPS BY TEXT, which is the whole
+ * point of that page: there is no organization record, so there is nowhere else
+ * to put this. Two contacts at one company may therefore disagree, and the page
+ * reads `Mixed` and names both rather than picking one — a silent tie-break
+ * would be the roll-up inventing a relationship the firm never stated.
+ *
+ * `null` CLEARS IT, for the same reason `Assign owner` accepts a clear: a
+ * prospect that became a client and then went quiet is not still either, and a
+ * value that can only ever be set is one nobody can correct.
+ */
+partnernet.patch('/book/:uid/relationship', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const value = body?.relationship == null ? null : String(body.relationship);
+  if (value !== null && !RELATIONSHIPS.includes(value)) {
+    return c.json({ error: 'relationship_invalid' }, 400);
+  }
+  const res = await c.env.DB.prepare(
+    `UPDATE partner_book_contacts SET relationship = ?, updated_at = datetime('now')
+      WHERE uid = ? AND owner_user_id = ?`
+  ).bind(value, c.req.param('uid'), user.id).run();
+  if (!res.meta?.changes) return c.json({ error: 'Not found' }, 404);
+  return c.json({ ok: true });
 });
 
 /**

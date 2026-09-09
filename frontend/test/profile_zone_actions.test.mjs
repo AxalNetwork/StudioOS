@@ -134,9 +134,18 @@ const PROFILES = {
     // in scope for the ordinary reason: their canvases live in
     // `design/incoming/`, which `canvasDirs` above opens.
     buckets: /^(delivery|offers|network|pipeline|research)\//,
-    zones: 21,
+    // Twenty-two, and the twenty-second is `network/organizations`. It was the
+    // one zone whose canvas ops row had no table entry, on the reading that the
+    // route rendered a stated gap rather than a list — true of the page that
+    // then existed, and migrations 224 and 226 changed it. Was 21.
+    zones: 22,
     links: 0,
-    exports: 19,
+    // Twenty exports. Organizations exports the roll-up it is showing: the
+    // grouped companies, their relationship and how many people the firm knows
+    // inside each. The two absent columns ship as empty cells rather than as
+    // the words "Not recorded", which in a spreadsheet invite a formula over a
+    // fact that does not exist. Was 19.
+    exports: 20,
     // Eight page-supplied ops. `research/ask`: `New session` starts a thread,
     // `Saved answers` switches the view to the kept ones. `research/library`:
     // `Add document` opens the file picker, `Re-index` re-queues every document
@@ -150,19 +159,28 @@ const PROFILES = {
     // prose reading "consent is recorded per introduction, not as a log" — a
     // claim about the RESPONSE rather than the store, since both sides' answers
     // have been rows since migration 150 and only the DTO omitted the second.
-    // None is a destination, which is why none is a `to:`. Was 0, then 5, then 7.
-    handlers: 8,
-    // `network/organizations`: `NetworkPage` catches a slug it has no tab for and
-    // suppresses every body, so that route already renders its own heading above
-    // a card stating the gap — there is nothing for a row to sit over. Checked
-    // again rather than inherited: `ORG_BACKED` in `NetworkWorkspace.jsx` is
-    // still `['founder', 'investor']`, so this one is as true as it was.
+    // `network/organizations`: `Build records`, which opens the board where the
+    // firm says what each company IS to it — the one organization fact
+    // migration 226 gave the book a place for. It does not create an
+    // organization record; there is no such table, and that absence is the
+    // subject of the whole page. None is a destination, which is why none is a
+    // `to:`. Was 0, then 5, then 7, then 8.
+    handlers: 9,
+    // NOTHING IS EXCLUDED ON THIS PROFILE ANY MORE. The entry that stood here
+    // read: "`network/organizations`: `NetworkPage` catches a slug it has no tab
+    // for and suppresses every body … there is nothing for a row to sit over.
+    // Checked again rather than inherited: `ORG_BACKED` in
+    // `NetworkWorkspace.jsx` is still `['founder', 'investor']`, so this one is
+    // as true as it was." It was checked, it was true, and it stopped being
+    // true when `ORG_BACKED` gained `partner` and the zone got its own body.
+    // Re-checking an exclusion against the code is what makes it fall over on
+    // the commit that invalidates it rather than three months later.
     //
     // `research/client-prep` USED to be listed here as "a card, not a body". It
     // is a body — `ClientPrepZone.jsx` takes `zoneActions` and renders a row
     // from it — so the exclusion was hiding three specified ops that drew
     // nothing, exactly as the investor Research pair did.
-    excluded: ['network/organizations'],
+    excluded: [],
     embeddedGuards: 0,
     // The nine partner bodies that take the "no firm attached" branch —
     // `offers/{visibility,proof,audience-fit}`, `pipeline/{negotiations,

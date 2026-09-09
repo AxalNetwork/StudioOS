@@ -2228,6 +2228,12 @@ export const api = {
   partnerBookLogInteraction: (uid, data) => request(`/partnernet/book/${encodeURIComponent(uid)}/interactions`, {
     method: 'POST', body: JSON.stringify(data || {}),
   }),
+  // `client` | `prospect` | `referral_source`, or `null` to clear. Set per
+  // contact because there is no organization record to hang it on — which is
+  // the finding the Organizations zone is about.
+  partnerBookSetRelationship: (uid, relationship) => request(`/partnernet/book/${encodeURIComponent(uid)}/relationship`, {
+    method: 'PATCH', body: JSON.stringify({ relationship: relationship ?? null }),
+  }),
   createRelationship: (data) => request('/partnernet/relationships', { method: 'POST', body: JSON.stringify(data) }),
   updateRelationship: (id, data) => request(`/partnernet/relationships/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   relationshipEvents: (id) => request(`/partnernet/relationships/${id}/events`),

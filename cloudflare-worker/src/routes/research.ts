@@ -1310,6 +1310,30 @@ const DRAFT_SURFACES: Record<string, {
         `${r.name} at ${r.organization || 'no organization recorded'} — ${r.n} recorded interaction${r.n === 1 ? '' : 's'} with the firm`);
     },
   },
+
+  'network/organizations': {
+    // The artboard: "Points to every client resting on one known contact … Names
+    // the exposure; the second contact is a person's job to make." The last
+    // clause is the instruction that matters — a model asked about thin coverage
+    // will otherwise volunteer who to call, and it does not know anyone.
+    instruction: [
+      'Name every company below that the firm knows through exactly one person, and what that relationship is to the firm.',
+      'State the exposure and stop there: do not suggest who to contact, and do not estimate anything the rows do not state.',
+      'Where a company has more than one contact, say so rather than listing it as exposed.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const rows = await c.env.DB.prepare(
+        `SELECT bc.organization AS org, bc.relationship AS rel, COUNT(*) AS people
+           FROM partner_book_contacts bc
+          WHERE bc.owner_user_id = ? AND bc.organization IS NOT NULL AND TRIM(bc.organization) <> ''
+          GROUP BY LOWER(TRIM(bc.organization))
+          ORDER BY people ASC LIMIT 200`
+      ).bind(userId).all<{ org: string; rel: string | null; people: number }>();
+      return (rows.results || []).map((r) =>
+        `${r.org} — ${r.rel ? `recorded as a ${r.rel.replace('_', ' ')}` : 'relationship not recorded'}, `
+        + `${r.people} contact${r.people === 1 ? '' : 's'} known`);
+    },
+  },
 };
 
 research.get('/drafts', async (c) => {

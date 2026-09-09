@@ -112,8 +112,14 @@ test('the Network rail never claims read-only over a body that writes', () => {
   assert.match(code, /stance="Stored records only"/);
   assert.match(netWorkspace, /it writes on your click, never on the rail's/);
 
-  // Organizations is covered only where an organisation store is reachable.
-  assert.match(code, /const ORG_BACKED = new Set\(\['founder', 'investor'\]\)/);
+  // Organizations is covered only where a body renders. Partner joined the set
+  // with migration 224's `organization` column on a book contact and 226's
+  // relationship — a company name as text with no organization record behind
+  // it, which is precisely what the `pn3` artboard reports. Advisor is still
+  // out: 403'd from `/api/contacts`, with no book of its own.
+  assert.match(code, /const ORG_BACKED = new Set\(\['founder', 'investor', 'partner'\]\)/);
+  assert.ok(!/ORG_BACKED = new Set\(\[[^\]]*'advisor'/.test(code),
+    'an advisor has no store to roll up and must keep the gap card');
   assert.match(code, /orgGap\s*\?\s*'Organizations · no store behind it on this licence'/,
     'a licence with no organisation store must not be told the zone is covered');
 });

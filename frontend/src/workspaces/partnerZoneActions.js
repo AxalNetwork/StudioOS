@@ -14,13 +14,14 @@ import { makeZoneActions } from './zoneActionBuilder';
  * by denying its own contents. A note kept past the state it describes reads as
  * current, which is the same defect as a stale `unbuilt:` reason.
  *
- * ONE ZONE IS STILL ABSENT, for a reason the pass did not change:
- * `network/organizations` renders as a stated gap rather than as a list —
- * `NetworkPage`'s `unservedZone` catches a slug it has no tab for and
- * `unservedAlone` suppresses every body, so the reader gets the Organizations
- * heading above a card explaining the roll-up needs an edge from a person to an
- * organisation that nothing stores. A header row over a page that is entirely
- * that statement would add nothing to it.
+ * AND THE ONE THAT WAS STILL ABSENT IS HERE TOO. That paragraph read:
+ * "`network/organizations` renders as a stated gap rather than as a list …
+ * a header row over a page that is entirely that statement would add nothing to
+ * it." True of the page it described, and the page changed: migration 224 put a
+ * company name on every book contact and 226 said what that company is to the
+ * firm, so the zone has its own body — the `pn3` empty state with the roll-up's
+ * intended shape under it. All twenty-two zones with a canvas ops row are now
+ * in this table.
  *
  * WHAT THE TEN DELIVERY AND OFFERS ZONES LOOK LIKE. Ten of thirty run. Every zone can
  * export what it is showing, because migrations 208 and 209 gave these zones
@@ -177,6 +178,26 @@ export const PARTNER_ZONE_ACTIONS = {
   'network/introductions': [
     { label: 'New introduction', unbuilt: 'a proposition is an edge between two accounts and the firm’s book holds people who mostly have none, so there is nothing here to compose one from — and no write path that would accept it' },
     { label: 'Consent log', kind: 'handler', handler: 'consentLog' },
+    { label: 'Export', kind: 'export' },
+  ],
+
+  // `Build records` IS A HANDLER AND IT DOES NOT BUILD A RECORD, which needs
+  // saying plainly. There is no organization table and this op does not make
+  // one — that absence is the subject of the whole page. What it opens is the
+  // board where the firm says what each company IS to it, the single
+  // organization fact migration 226 gave the book a place for, written across
+  // every contact at that company. Naming it `Build records` is the canvas's
+  // word for the act, and the act is real; the record is still per contact,
+  // which the zone's empty state states in its own first sentence.
+  //
+  // `Import` STAYS PROSE. Nothing in this product ingests a contact list: there
+  // is no upload, no CSV parser and no route that would accept one, and the
+  // book's only writer is the form on `/network/relationships`. An op that
+  // opened a file picker onto nothing would be the dead control this table
+  // exists to refuse.
+  'network/organizations': [
+    { label: 'Build records', kind: 'handler', handler: 'buildRecords' },
+    { label: 'Import', unbuilt: 'nothing here ingests a contact list — there is no upload, no parser and no route that would take one, and the book is filled a contact at a time from its own form' },
     { label: 'Export', kind: 'export' },
   ],
 

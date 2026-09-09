@@ -18,6 +18,7 @@ const InvestorNetworkWorkspace = lazy(() => import('../pages/investor/InvestorNe
 const AdvisorNetworkRelationships = lazy(() => import('../pages/advisor/network/RelationshipsZone'));
 const AdvisorNetworkIntroductions = lazy(() => import('../pages/advisor/network/IntroductionsZone'));
 const AdvisorNetworkOrganizations = lazy(() => import('../pages/advisor/network/OrganizationsZone'));
+const PartnerNetworkOrganizations = lazy(() => import('../pages/partner/OrganizationsZone'));
 const NetworkPage = lazy(() => import('../pages/NetworkPage'));
 
 /**
@@ -92,11 +93,19 @@ const ADVISOR_ZONE = {
  * investor have one: a table, a stat block and prose that says plainly it found
  * nothing and refuses to infer membership from email domains. An advisor is
  * 403'd from `/api/contacts` — `'advisor'` is not even expressible in that
- * guard's parameter type — and an operator's `NetworkPage` has no organizations
- * tab, so on those two the zone is a card whose whole content is the gap. Both
- * are honest; they are honest in different shapes, and this set names which.
+ * guard's parameter type — so on that licence the zone is a card whose whole
+ * content is the gap. Both are honest; they are honest in different shapes, and
+ * this set names which.
+ *
+ * PARTNER JOINED THE SET, AND IT IS THE ONE LICENCE WHERE THE SECOND THING IS
+ * NOW TRUE TOO. Migration 224 put an `organization` column on every book
+ * contact — as text, with no organization record behind it, which is exactly
+ * what the `pn3` artboard is about — so a partner's zone groups real rows and
+ * says on its own face that the roll-up is not built. That is a body, and a
+ * fuller one than founder's: it has something to group. Nothing changes for the
+ * other three; `contacts` still has no organisation column at all (task #94).
  */
-const ORG_BACKED = new Set(['founder', 'investor']);
+const ORG_BACKED = new Set(['founder', 'investor', 'partner']);
 
 /**
  * One line per zone, shared by the overview cards and the zone headers below
@@ -192,16 +201,41 @@ export default function NetworkWorkspace({ role = 'founder' }) {
         </Suspense>
       );
     }
+    // ORGANIZATIONS IS THE PARTNER'S OWN ZONE NOW, and this is the paragraph
+    // that used to explain why it was not. It read: "`NetworkPage` catches a
+    // slug it has no tab for (`unservedZone`) and suppresses every body
+    // (`unservedAlone`), so that route already renders its own heading above a
+    // card saying the roll-up needs an edge from a person to an organisation
+    // that nothing stores. A header row would add nothing to a page that is
+    // entirely that statement." Every clause was true of the code and the middle
+    // one stopped being true of the data: migration 224 put a company name on
+    // every book contact. The `pn3` artboard is precisely about that state — a
+    // company name as text with no organization record behind it — so the zone
+    // gets a body that says so and groups the rows it does have. `NetworkPage`
+    // keeps serving the other two panels here and the gap card for every
+    // licence that still has no column at all.
+    if (role === 'partner' && slug === 'organizations') {
+      return (
+        <Suspense fallback={<Loading />}>
+          <PartnerNetworkOrganizations
+            role={role}
+            zoneFilters={zoneFilters}
+            zoneActions={(orgs, handlers) => zoneActionsFor(role, 'network/organizations', { handlers, view: {
+              header: ['Organization', 'Relationship', 'People known', 'Engagement sourced', 'Headcount'],
+              rows: orgs,
+              // The two absent columns ship as empty cells rather than as a
+              // word: a spreadsheet reading "Not recorded" invites a formula
+              // over it, and the whole point of both is that there is nothing
+              // to compute.
+              cells: (o) => [o.name, o.kind || '', o.people, '', ''],
+            } })}
+          />
+        </Suspense>
+      );
+    }
     // The partner (and operator) arm. `NetworkPage`'s panels are shared with
     // other licences, so the row comes in as a function of the tab and its rows
-    // rather than being wired inside them. Organizations is deliberately absent,
-    // and NOT because the route misbehaves: `NetworkPage` catches a slug it has
-    // no tab for (`unservedZone`) and suppresses every body (`unservedAlone`),
-    // so that route already renders its own heading above a card saying the
-    // roll-up needs an edge from a person to an organisation that nothing
-    // stores. A header row would add nothing to a page that is entirely that
-    // statement. (An earlier version of this comment said the route "lands on
-    // contacts". It does not, and a partner has no contacts tab either.)
+    // rather than being wired inside them.
     // THE TWO-ARGUMENT SIGNATURE STAYS, AND IT IS NOT AN INCONSISTENCY. Every
     // other arm can bind the zone key from `slug`, because the slug IS what
     // renders. This page decides for itself: `?tab=` wins over the path

@@ -77,6 +77,9 @@ const NETWORK_BODIES = {
   partner: {
     'network/relationships': 'frontend/src/pages/RelationshipsPage.jsx',
     'network/introductions': 'frontend/src/pages/IntroductionsPanel.jsx',
+    // The one Network zone this licence does NOT reach through `NetworkPage`:
+    // the workspace dispatches it directly, because the page has no tab for it.
+    'network/organizations': 'frontend/src/pages/partner/OrganizationsZone.jsx',
   },
 };
 
@@ -264,8 +267,14 @@ const PROFILES = {
     pages: ['frontend/src/pages/partner', 'frontend/src/pages/partner/offers',
       'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/partnerZoneActions.js',
-    zones: 11,
-    mounted: 11,
+    // Twelve, and the twelfth is `network/organizations` — the zone this
+    // profile's `excluded` list carried until migrations 224 and 226 gave the
+    // book a company name and a relationship to group it by. Was 11.
+    zones: 12,
+    // And all twelve mount their filters: `OrganizationsZone` takes the same
+    // bound builder its two Network siblings do. Was 11, when the twelfth zone
+    // had no body to mount anything in.
+    mounted: 12,
     // The two that ARE genuinely shared. `ServiceCatalogPage` is mounted for
     // admin, founder, partner and investor and `PerksPage` for those four plus
     // advisor and exploring, both from `frontend/src/pages/` — a directory this
@@ -279,12 +288,16 @@ const PROFILES = {
       'offers/catalog': 'frontend/src/pages/ServiceCatalogPage.jsx',
       'offers/perk-deals': 'frontend/src/pages/PerksPage.jsx',
     },
-    // Same as advisor's, one step further: there is not even a card. This
-    // licence has no organizations panel at all — `NetworkPage`'s
-    // `unservedAlone` suppresses it — so a row here would attach to nothing.
-    excluded: [
-      'network/organizations',
-    ],
+    // NOTHING IS EXCLUDED ON THIS LICENCE ANY MORE, and the entry that was
+    // here is the one this list existed to keep honest. It read: "Same as
+    // advisor's, one step further: there is not even a card. This licence has
+    // no organizations panel at all — `NetworkPage`'s `unservedAlone`
+    // suppresses it — so a row here would attach to nothing." Migrations 224
+    // and 226 gave the book a company name and a relationship, so the zone has
+    // its own body (`pages/partner/OrganizationsZone.jsx`) and its four chips
+    // narrow over it. An exclusion cannot grow by accident and a stale one
+    // cannot linger — this is the second half of that rule doing its work.
+    excluded: [],
     // `Pages · Partner Research` names /research/market; the router and
     // `shellConfig.js` both say `markets`. Same mapping the ops half carries.
     live: (route) => (route === '/research/market' ? 'research/markets' : route.replace(/^\//, '')),
