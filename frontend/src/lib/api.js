@@ -3302,10 +3302,19 @@ export const api = {
   deletePartnerDeliverable: (id) =>
     request(`/partner/delivery/deliverables/${id}`, { method: 'DELETE' }),
 
-  // Returns `people`, `seats`, and `cap_hours: null` with the reason — nothing
-  // in this product records the firm's capacity cap, so nothing is "over" it.
+  // Returns `people` (project, seat and internal hours split), `seats`, and
+  // `cap_hours` — the number THIS FIRM stated, or null with the reason. Nothing
+  // is "over" a cap nobody set, so an unconfigured firm still reads null here.
   getPartnerCapacity: (period) =>
     request(`/partner/delivery/capacity${period ? `?period=${encodeURIComponent(period)}` : ''}`),
+  // The firm's own number, or one person's. `weekly_hours: null` clears it —
+  // a cap that could be set and not unset would make the first one permanent.
+  setPartnerCapacityCap: (data) =>
+    request('/partner/delivery/capacity/cap', { method: 'PUT', body: JSON.stringify(data) }),
+  // Hours with no client to bill. `hours: null` removes the statement; zero is
+  // a different answer and stays one.
+  setPartnerInternalHours: (data) =>
+    request('/partner/delivery/capacity/internal-hours', { method: 'PUT', body: JSON.stringify(data) }),
   listPartnerPeople: () => request('/partner/delivery/people'),
   grantPartnerSeat: (engagementId, data) =>
     request(`/partner/delivery/engagements/${engagementId}/seats`, {

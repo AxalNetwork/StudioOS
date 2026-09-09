@@ -1440,6 +1440,82 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  'delivery/capacity': {
+    // The artboard: "Findings across N people: who is over cap, by how much, and
+    // which overage sits behind a granted seat. Separates schedulable overflow
+    // from seat commitments, since only one of them can be moved without going
+    // back to the founder."
+    //
+    // Two instructions carry the weight. The first is that a person nobody
+    // logged hours for is UNMEASURED, not idle — a model reading a sparse book
+    // will otherwise report a firm with capacity to spare. The second is the
+    // zone's whole argument: an overage behind a granted seat is not fixed by
+    // moving project work, because the seat is what the founder granted and
+    // only they can change it.
+    instruction: [
+      'Say which people below are over the cap their own row states, and by how much, using only the hours each row carries.',
+      'Never infer a cap: a person whose row states none is not over anything, and a person with no hours logged is unmeasured rather than idle or free.',
+      'Where a total is marked a floor because internal hours were not stated, treat it as a lower bound and say so rather than reporting it as the week.',
+      'Separate schedulable overflow from a granted seat: an overage behind a seat inside a client’s systems is a trust exposure and is renegotiated with the founder, never solved by reallocating project work.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      // The same three-table read the zone does, flattened per person: client
+      // hours, the seats that person holds, their internal statement and the
+      // cap that applies to them — their own if they have one, else the firm's.
+      const rows = await c.env.DB.prepare(
+        `SELECT u.id AS user_id, u.name AS name,
+                (SELECT COALESCE(SUM(h.hours), 0) FROM engagement_hours h
+                   JOIN engagements e ON e.id = h.engagement_id
+                  WHERE h.person_user_id = u.id AND e.partner_id = u.partner_id
+                    AND h.period = strftime('%Y-%m', 'now')) AS client_hours,
+                (SELECT COUNT(*) FROM engagement_hours h
+                   JOIN engagements e ON e.id = h.engagement_id
+                  WHERE h.person_user_id = u.id AND e.partner_id = u.partner_id
+                    AND h.period = strftime('%Y-%m', 'now')) AS hour_rows,
+                (SELECT i.hours FROM partner_internal_hours i
+                  WHERE i.partner_id = u.partner_id AND i.person_user_id = u.id
+                    AND i.period = strftime('%Y-%m', 'now')) AS internal_hours,
+                (SELECT COUNT(*) FROM engagement_seats s
+                   JOIN engagements e ON e.id = s.engagement_id
+                  WHERE s.holder_user_id = u.id AND e.partner_id = u.partner_id
+                    AND s.revoked_at IS NULL) AS live_seats,
+                (SELECT GROUP_CONCAT(s.scope, '; ') FROM engagement_seats s
+                   JOIN engagements e ON e.id = s.engagement_id
+                  WHERE s.holder_user_id = u.id AND e.partner_id = u.partner_id
+                    AND s.revoked_at IS NULL) AS seat_scopes,
+                COALESCE(
+                  (SELECT p.weekly_hours FROM partner_capacity p
+                    WHERE p.partner_id = u.partner_id AND p.person_user_id = u.id),
+                  (SELECT p.weekly_hours FROM partner_capacity p
+                    WHERE p.partner_id = u.partner_id AND p.person_user_id IS NULL)
+                ) AS cap_hours
+           FROM users u
+          WHERE u.partner_id = ? ORDER BY u.id LIMIT 100`
+      ).bind(me.partner_id).all<{
+        user_id: number; name: string | null; client_hours: number; hour_rows: number;
+        internal_hours: number | null; live_seats: number; seat_scopes: string | null;
+        cap_hours: number | null;
+      }>();
+      return (rows.results || []).map((r) => {
+        // UNMEASURED IS ITS OWN STATE, and it is not zero. A row with no hours
+        // and no internal statement says so before it says anything else.
+        if (!r.hour_rows && r.internal_hours == null) {
+          return `${r.name || 'name not recorded'} — NO HOURS RECORDED this period; unmeasured, not idle; `
+            + `${r.live_seats} live seat(s)${r.seat_scopes ? ` (${r.seat_scopes})` : ''}`;
+        }
+        const total = Number(r.client_hours || 0) + Number(r.internal_hours ?? 0);
+        return `${r.name || 'name not recorded'} — ${total} h`
+          + `${r.internal_hours == null ? ' (A FLOOR: internal hours not stated)' : ''}`
+          + `; ${r.cap_hours == null ? 'NO CAP STATED for them' : `cap ${r.cap_hours} h`}`
+          + `; ${r.client_hours} h on client work`
+          + `; ${r.live_seats} live seat(s)${r.seat_scopes ? ` (${r.seat_scopes})` : ''}`;
+      });
+    },
+  },
+
   'offers/audience-fit': {
     // The artboard: "For each stated exclusion, a short pass note a person can
     // send: the reason, and where relevant a named firm better suited. Points to

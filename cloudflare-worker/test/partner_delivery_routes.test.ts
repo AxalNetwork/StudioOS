@@ -123,6 +123,12 @@ function freshDb() {
     );
   `);
   db.exec(migration('208_partner_delivery_stores'));
+  // APPLIED, NOT MIRRORED. The two capacity stores are read by `/capacity` and
+  // written by its two `PUT`s, so the harness runs their migration files for
+  // the same reason it runs 208's: a hand-copied DDL that drifts from the file
+  // makes every assertion below true of a schema production does not have.
+  db.exec(migration('230_partner_capacity'));
+  db.exec(migration('231_partner_internal_hours'));
 
   const u = db.prepare('INSERT INTO users (id, role, partner_id, name, email) VALUES (?,?,?,?,?)');
   u.run(OURS_USER, 'partner', 1, 'Ours', 'ours@example.com');
@@ -339,24 +345,208 @@ test('an unopened deliverable moves health to at risk', async () => {
 // Capacity — the cap that does not exist, and the seat register
 // ---------------------------------------------------------------------------
 
-test('there is no capacity cap, and the response says so', async () => {
-  const e = env(freshDb());
+/**
+ * THE REFUSAL, AS IT STANDS AFTER MIGRATION 230.
+ *
+ * This test used to assert that NO FIELD in the response was named anything
+ * matching /over/, because on that build "over" was unsayable: nothing recorded
+ * a cap and the canvas's hardcoded 40 was the only number available. Migration
+ * 230 gives a firm somewhere to state its own, so the field now exists — and
+ * the assertion moves from the field's NAME to its VALUE, which is the thing
+ * that was ever actually at stake. A firm that has stated nothing still gets
+ * null everywhere and the same sentence, and no number anywhere is 40.
+ */
+test('with no cap stated, nothing is over anything and the response says why', async () => {
+  const db = freshDb();
+  const e = env(db);
+  // Hours exist, so the refusal is not simply an empty page: this person has a
+  // real week and is still not marked over, because there is no cap to be over.
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OUR_STAFF}/${nowPeriod()}`, ours, { hours: 62 });
   const r = (await call(e, 'GET', '/capacity', ours)).body;
-  // The canvas hardcodes 40. Adopting it would invent the firm's cap and then
-  // present the result as a finding.
   assert.equal(r.cap_hours, null);
+  assert.equal(r.cap_source, null);
   assert.match(r.cap_note, /no capacity cap is recorded/i);
-  // No FIELD claims it. Asserting over the whole JSON caught the cap_note
-  // itself, which uses the phrase to refuse the claim — the assertion has to
-  // look at what the response asserts, not at what it says.
-  const keys = new Set([
-    ...Object.keys(r),
-    ...r.people.flatMap((x: any) => Object.keys(x)),
-    ...r.seats.flatMap((x: any) => Object.keys(x)),
-  ]);
-  for (const k of keys) {
-    assert.doesNotMatch(k, /over/i, `the response carries a field named ${k}`);
+  assert.equal(r.over_committed_count, null);
+  assert.equal(r.people.length, 1);
+  assert.equal(r.people[0].hours, 62);
+  // NULL, NOT FALSE. "Not over" would be a judgement against a threshold
+  // nobody set; null is the absence of one.
+  assert.equal(r.people[0].over_committed, null);
+  assert.equal(r.people[0].cap_hours, null);
+  assert.equal(r.people[0].cap_source, null);
+  // THE CANVAS'S FORTY APPEARS NOWHERE. Adopting it would invent the firm's
+  // cap and then present the result as a finding — which is what the whole
+  // refusal is about, and what a value assertion catches that a name one
+  // cannot.
+  const numbers = JSON.stringify(r).match(/\d+(?:\.\d+)?/g) || [];
+  assert.ok(!numbers.includes('40'), 'the response carries the canvas fixture 40');
+});
+
+test('a stated cap is the firm’s number, and clearing it restores the refusal', async () => {
+  const db = freshDb();
+  const e = env(db);
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OUR_STAFF}/${nowPeriod()}`, ours, { hours: 44 });
+
+  const set = await call(e, 'PUT', '/capacity/cap', ours, { weekly_hours: 38, note: 'four days, one for internal' });
+  assert.equal(set.status, 200);
+  let r = (await call(e, 'GET', '/capacity', ours)).body;
+  assert.equal(r.cap_hours, 38);
+  assert.equal(r.cap_source, 'firm');
+  assert.equal(r.cap_note, 'four days, one for internal');
+  assert.equal(r.over_committed_count, 1);
+  assert.equal(r.people[0].over_committed, true);
+  assert.equal(r.people[0].cap_source, 'firm');
+
+  // A PERSON'S OWN NUMBER WINS over the firm's, and moves the same week back
+  // under the line — which is the whole reason the override exists.
+  await call(e, 'PUT', '/capacity/cap', ours, { person_user_id: OUR_STAFF, weekly_hours: 50 });
+  r = (await call(e, 'GET', '/capacity', ours)).body;
+  assert.equal(r.people[0].cap_hours, 50);
+  assert.equal(r.people[0].cap_source, 'person');
+  assert.equal(r.people[0].over_committed, false);
+  assert.equal(r.over_committed_count, 0);
+  // The firm's default is untouched by the override.
+  assert.equal(r.cap_hours, 38);
+
+  // CLEARING IS A DELETE, NOT A ZERO. A cap that could be set and not unset
+  // would make the first number typed permanent.
+  await call(e, 'PUT', '/capacity/cap', ours, { person_user_id: OUR_STAFF, weekly_hours: null });
+  await call(e, 'PUT', '/capacity/cap', ours, { weekly_hours: null });
+  r = (await call(e, 'GET', '/capacity', ours)).body;
+  assert.equal(r.cap_hours, null);
+  assert.equal(r.over_committed_count, null);
+  assert.equal(r.people[0].over_committed, null);
+  assert.match(r.cap_note, /no capacity cap is recorded/i);
+  assert.equal(
+    db.prepare('SELECT COUNT(*) AS c FROM partner_capacity').get().c, 0,
+    'clearing wrote a row instead of removing one',
+  );
+});
+
+test('a cap is refused for a person outside the firm, and for an impossible week', async () => {
+  const e = env(freshDb());
+  for (const outsider of [THEIR_STAFF, FOUNDER_USER]) {
+    const r = await call(e, 'PUT', '/capacity/cap', ours, { person_user_id: outsider, weekly_hours: 40 });
+    assert.equal(r.status, 404, `a cap was written against user ${outsider}`);
   }
+  for (const bad of [0, -1, 168, 900]) {
+    const r = await call(e, 'PUT', '/capacity/cap', ours, { weekly_hours: bad });
+    assert.equal(r.status, 400, `${bad} hours a week was accepted as a cap`);
+  }
+});
+
+/**
+ * THE THIRD COLUMN, AND WHY THE TOTAL IS A FLOOR WITHOUT IT.
+ *
+ * `engagement_hours.engagement_id` is NOT NULL, so the client book cannot hold
+ * admin, recruiting or the proposal that lost. A week assembled from it alone
+ * under-reports every person by exactly the part nobody is billed for — and in
+ * the reassuring direction, which is the failure this bucket is least allowed
+ * to have. Migration 231 holds the rest.
+ */
+test('internal hours are stated, not inferred, and they change who is over cap', async () => {
+  const db = freshDb();
+  const e = env(db);
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OUR_STAFF}/${nowPeriod()}`, ours, { hours: 36 });
+  await call(e, 'PUT', '/capacity/cap', ours, { weekly_hours: 40 });
+
+  let r = (await call(e, 'GET', '/capacity', ours)).body;
+  // NULL, NOT ZERO. Nobody has said, and a zero here would claim this person
+  // spends no time on the firm — the one thing that is certainly false.
+  assert.equal(r.people[0].internal_hours, null);
+  assert.equal(r.internal_hours_total, null);
+  assert.equal(r.people[0].total_hours, 36);
+  assert.equal(r.people[0].over_committed, false);
+
+  const put = await call(e, 'PUT', '/capacity/internal-hours', ours, {
+    person_user_id: OUR_STAFF, period: nowPeriod(), hours: 7, note: 'recruiting',
+  });
+  assert.equal(put.status, 200);
+  r = (await call(e, 'GET', '/capacity', ours)).body;
+  assert.equal(r.people[0].internal_hours, 7);
+  assert.equal(r.people[0].internal_note, 'recruiting');
+  assert.equal(r.internal_hours_total, 7);
+  // 36 + 7 crosses a cap 36 alone did not. The billable book called this week
+  // safe; the whole week is not.
+  assert.equal(r.people[0].total_hours, 43);
+  assert.equal(r.people[0].over_committed, true);
+
+  // ZERO IS A STATEMENT AND SURVIVES AS ONE.
+  await call(e, 'PUT', '/capacity/internal-hours', ours, {
+    person_user_id: OUR_STAFF, period: nowPeriod(), hours: 0,
+  });
+  r = (await call(e, 'GET', '/capacity', ours)).body;
+  assert.equal(r.people[0].internal_hours, 0);
+  assert.equal(r.internal_hours_total, 0);
+  assert.equal(r.people[0].over_committed, false);
+
+  // Clearing removes the row rather than writing a zero, so the read goes back
+  // to "nobody said" and not to "they said none".
+  await call(e, 'PUT', '/capacity/internal-hours', ours, {
+    person_user_id: OUR_STAFF, period: nowPeriod(), hours: null,
+  });
+  r = (await call(e, 'GET', '/capacity', ours)).body;
+  assert.equal(r.people[0].internal_hours, null);
+  assert.equal(
+    db.prepare('SELECT COUNT(*) AS c FROM partner_internal_hours').get().c, 0,
+    'clearing wrote a row instead of removing one',
+  );
+});
+
+test('internal hours are refused for outsiders and for a period that is not one', async () => {
+  const e = env(freshDb());
+  for (const outsider of [THEIR_STAFF, FOUNDER_USER]) {
+    const r = await call(e, 'PUT', '/capacity/internal-hours', ours, {
+      person_user_id: outsider, period: nowPeriod(), hours: 4,
+    });
+    assert.equal(r.status, 404, `internal hours were written against user ${outsider}`);
+  }
+  for (const bad of ['2026', '2026-13', 'last week', '']) {
+    const r = await call(e, 'PUT', '/capacity/internal-hours', ours, {
+      person_user_id: OUR_STAFF, period: bad, hours: 4,
+    });
+    assert.equal(r.status, 400, `"${bad}" was accepted as a period`);
+  }
+});
+
+/**
+ * SEAT HOURS ARE THE HOURS OF THE PERSON HOLDING THE SEAT, not of everyone on
+ * an embedded engagement. Two people can work one engagement while only one of
+ * them is inside the client's systems, and the one who is not did project work.
+ */
+test('hours split by whose seat it is, and a revoked seat keeps its hours', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const seat = await call(e, 'POST', `/engagements/${OUR_ENGAGEMENT}/seats`, ours, {
+    holder_user_id: OUR_STAFF, scope: 'Board, KPIs',
+  });
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OUR_STAFF}/${nowPeriod()}`, ours, { hours: 31 });
+  // The same engagement, a person with no seat on it.
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OURS_USER}/${nowPeriod()}`, ours, { hours: 12 });
+
+  let r = (await call(e, 'GET', '/capacity', ours)).body;
+  const holder = r.people.find((p: any) => p.user_id === OUR_STAFF);
+  const other = r.people.find((p: any) => p.user_id === OURS_USER);
+  assert.equal(holder.seat_hours, 31);
+  assert.equal(holder.project_hours, 0);
+  assert.equal(other.seat_hours, 0);
+  assert.equal(other.project_hours, 12);
+  assert.equal(r.seat_hours_total, 31);
+  assert.equal(r.project_hours_total, 12);
+  assert.equal(r.live_seats, 1);
+  assert.deepEqual(holder.seat_places.map((s: any) => [s.scope, s.revoked]), [['Board, KPIs', false]]);
+
+  // REVOKING DOES NOT REWRITE THE PAST. The access ended; the work done while
+  // it was open was still done inside the client's systems, so the hours stay
+  // seat hours rather than sliding into the project column.
+  await call(e, 'POST', `/seats/${seat.body.id}/revoke`, ours);
+  r = (await call(e, 'GET', '/capacity', ours)).body;
+  const after = r.people.find((p: any) => p.user_id === OUR_STAFF);
+  assert.equal(after.seat_hours, 31);
+  assert.equal(after.project_hours, 0);
+  assert.equal(r.seat_hours_total, 31);
+  assert.equal(r.live_seats, 0);
+  assert.equal(after.seat_places[0].revoked, true);
 });
 
 test('a seat cannot be granted to someone outside the firm', async () => {

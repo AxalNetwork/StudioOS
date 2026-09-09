@@ -774,8 +774,42 @@ partnerDelivery.get('/capacity', async (c) => {
         WHERE e.partner_id = ? AND h.period = ?`,
     ).bind(partnerId, period).all<any>();
 
-    // One row per person, assembled from both tables. A person appears if they
-    // hold a seat OR logged hours — neither table alone is the roster.
+    // HOURS THE FIRM OWES NOBODY (migration 231). Admin, recruiting, the
+    // proposal that lost — real hours of a real week with no client to bill.
+    // They are read here and NOT summed into the client totals: the artboard
+    // draws three columns because they answer three different questions, and
+    // only their sum is the week.
+    const internal = await c.env.DB.prepare(
+      `SELECT i.person_user_id, i.hours, i.note, u.name AS person_name
+         FROM partner_internal_hours i
+         LEFT JOIN users u ON u.id = i.person_user_id
+        WHERE i.partner_id = ? AND i.period = ?`,
+    ).bind(partnerId, period).all<any>();
+
+    // THE CAP THE FIRM SET FOR ITSELF (migration 230). A row with a NULL
+    // `person_user_id` is the firm's default; one naming somebody is theirs,
+    // and the read below prefers the specific. No rows at all is the commonest
+    // answer and stays a real one: `cap_hours` comes back null and nothing is
+    // marked over anything.
+    const caps = await c.env.DB.prepare(
+      `SELECT person_user_id, weekly_hours, note FROM partner_capacity WHERE partner_id = ?`,
+    ).bind(partnerId).all<any>();
+    let firmCap: number | null = null;
+    let firmCapNote: string | null = null;
+    const personCap = new Map<number, { hours: number; note: string | null }>();
+    for (const row of caps.results || []) {
+      if (row.person_user_id === null || row.person_user_id === undefined) {
+        firmCap = Number(row.weekly_hours);
+        firmCapNote = row.note ?? null;
+      } else {
+        personCap.set(Number(row.person_user_id), {
+          hours: Number(row.weekly_hours), note: row.note ?? null,
+        });
+      }
+    }
+
+    // One row per person, assembled from all three tables. A person appears if
+    // they hold a seat OR logged hours — no one table alone is the roster.
     const people = new Map<number, any>();
     const ensure = (id: number, name: string | null) => {
       if (!people.has(id)) {
@@ -784,8 +818,13 @@ partnerDelivery.get('/capacity', async (c) => {
           name: name ?? null,
           hours: 0,
           hours_recorded: false,
+          project_hours: 0,
+          seat_hours: 0,
+          internal_hours: null as number | null,
+          internal_note: null as string | null,
           live_seats: 0,
           revoked_seats: 0,
+          seat_places: [] as any[],
           engagements: new Set<number>(),
         });
       }
@@ -794,17 +833,56 @@ partnerDelivery.get('/capacity', async (c) => {
       return p;
     };
 
+    // WHOSE SEAT, ON WHICH ENGAGEMENT. An hour is a seat hour when the person
+    // who logged it holds a seat on the engagement they logged it against —
+    // their own grant, not the engagement's mode. Two people can work the same
+    // embedded engagement while only one of them is inside the client's
+    // systems, and the one who is not did project work.
+    const seatOf = new Set<string>();
     for (const s of seats.results || []) {
       const p = ensure(Number(s.holder_user_id), s.holder_name);
       if (s.revoked_at) p.revoked_seats += 1; else p.live_seats += 1;
       p.engagements.add(Number(s.engagement_id));
+      p.seat_places.push({
+        engagement_id: Number(s.engagement_id),
+        client: s.founder_name ?? s.need_title ?? s.engagement_uid,
+        scope: s.scope ?? null,
+        revoked: Boolean(s.revoked_at),
+      });
+      // A REVOKED SEAT STILL CLAIMS ITS HOURS. The access ended; the work done
+      // while it was open was still done inside the client's systems, and
+      // moving it into the project column afterwards would rewrite the past.
+      seatOf.add(`${s.holder_user_id}:${s.engagement_id}`);
     }
     for (const h of hours.results || []) {
       const p = ensure(Number(h.person_user_id), h.person_name);
-      p.hours += Number(h.hours || 0);
+      const n = Number(h.hours || 0);
+      p.hours += n;
+      if (seatOf.has(`${h.person_user_id}:${h.engagement_id}`)) p.seat_hours += n;
+      else p.project_hours += n;
       p.hours_recorded = true;
       p.engagements.add(Number(h.engagement_id));
     }
+    for (const row of internal.results || []) {
+      const p = ensure(Number(row.person_user_id), row.person_name);
+      p.internal_hours = Number(row.hours || 0);
+      p.internal_note = row.note ?? null;
+    }
+
+    // THE WEEK IS THE SUM OF THREE COLUMNS, and it exists only if at least one
+    // of them was stated. A total assembled from nothing at all is not zero
+    // hours; it is no answer, and the cap comparison below skips it.
+    const totalOf = (p: any) => (p.hours_recorded ? p.hours : 0) + (p.internal_hours ?? 0);
+    const measured = (p: any) => p.hours_recorded || p.internal_hours !== null;
+    const capOf = (p: any) => personCap.get(p.user_id)?.hours ?? firmCap;
+    const overOf = (p: any) => {
+      const cap = capOf(p);
+      // OVER-COMMITTED NEEDS BOTH SIDES. Unrecorded hours are not zero hours,
+      // so a person nobody logged against is not under cap either — they are
+      // unmeasured, and this stays null for them.
+      if (cap === null || !measured(p)) return null;
+      return totalOf(p) > cap;
+    };
 
     return c.json({
       period,
@@ -816,9 +894,29 @@ partnerDelivery.get('/capacity', async (c) => {
           // would say they did no work, which is a different claim.
           hours: p.hours_recorded ? p.hours : null,
           hours_note: p.hours_recorded ? null : 'No hours logged for this period.',
+          // THE THREE COLUMNS THE ARTBOARD DRAWS, split rather than averaged.
+          // Project and seat hours are both zero-able because their absence is
+          // read off a book that exists; internal hours are null until somebody
+          // states them, because no book records unbilled time by default.
+          project_hours: p.hours_recorded ? p.project_hours : null,
+          seat_hours: p.hours_recorded ? p.seat_hours : null,
+          internal_hours: p.internal_hours,
+          internal_note: p.internal_note,
+          total_hours: measured(p) ? totalOf(p) : null,
           live_seats: p.live_seats,
           revoked_seats: p.revoked_seats,
+          // WHERE THE SEAT IS, not just how many. A seat register that counted
+          // without naming would make the trust exposure unreadable: "two
+          // seats" is a number, "Halverton · Board, KPIs" is the exposure.
+          seat_places: p.seat_places,
           engagement_count: p.engagements.size,
+          // THEIR OWN CAP IF THEY HAVE ONE, otherwise the firm's, otherwise
+          // none — and none is not zero. A person with no cap is not over any
+          // threshold, because there is no threshold.
+          cap_hours: capOf(p),
+          cap_source: personCap.has(p.user_id) ? 'person' : (firmCap === null ? null : 'firm'),
+          cap_note: personCap.get(p.user_id)?.note ?? firmCapNote,
+          over_committed: overOf(p),
         }))
         .sort((a, b) => b.live_seats - a.live_seats || (b.hours ?? -1) - (a.hours ?? -1)),
       seats: (seats.results || []).map((s: any) => ({
@@ -837,9 +935,157 @@ partnerDelivery.get('/capacity', async (c) => {
         revoked_at: s.revoked_at ?? null,
         days_held: daysBetween(s.granted_at, s.revoked_at || undefined),
       })),
-      // The refusal, in the response so the page cannot quietly supply one.
-      cap_hours: null,
-      cap_note: 'No capacity cap is recorded anywhere in this product. Hours are real; a threshold to be over is not, so nothing here is marked over-committed.',
+      // WHAT THE FIRM SET, OR NULL — and null keeps the refusal that stood
+      // here, verbatim, because it is still what an unconfigured firm must be
+      // told. The canvas's hardcoded 40 is still refused: this number is
+      // whatever THIS firm wrote down, and until they write one there is no
+      // threshold to be over.
+      cap_hours: firmCap,
+      cap_source: firmCap === null ? null : 'firm',
+      cap_note: firmCap === null
+        ? 'No capacity cap is recorded anywhere in this product. Hours are real; a threshold to be over is not, so nothing here is marked over-committed.'
+        : firmCapNote,
+      over_committed_count: firmCap === null && personCap.size === 0
+        ? null
+        : [...people.values()].filter((p) => overOf(p) === true).length,
+      // THE STRIP'S THREE HOUR TILES, summed over the whole roster rather than
+      // over whatever the chips left visible — a firm's project hours do not
+      // change because the reader narrowed to seat-holders.
+      project_hours_total: [...people.values()].reduce((a, p) => a + p.project_hours, 0),
+      seat_hours_total: [...people.values()].reduce((a, p) => a + p.seat_hours, 0),
+      // NULL, NOT ZERO, when nobody has stated any internal time. Summing
+      // absent rows to zero would tell a firm its people spend no time on the
+      // firm, which is the one thing that is certainly false.
+      internal_hours_total: (internal.results || []).length === 0
+        ? null
+        : [...people.values()].reduce((a, p) => a + (p.internal_hours ?? 0), 0),
+      live_seats: (seats.results || []).filter((s: any) => !s.revoked_at).length,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Set or clear a capacity cap — the firm's default, or one person's.
+ *
+ * THE FIRM STATES ITS OWN NUMBER. Nothing here computes, infers or defaults a
+ * cap: `PUT` with `weekly_hours` writes what they typed, and `weekly_hours:
+ * null` removes the row so the answer goes back to "no cap recorded". That
+ * round trip matters — a cap that could be set and not unset would make the
+ * first typed number permanent.
+ *
+ * `person_user_id` OMITTED IS THE FIRM'S DEFAULT, which is the same convention
+ * migration 230's partial indexes enforce. A person named here must belong to
+ * this firm, for the reason `requireOwnHolder` exists on the seat register: a
+ * table referencing `users(id)` with no partner constraint would otherwise let
+ * a firm write a cap against anybody's account.
+ */
+partnerDelivery.put('/capacity/cap', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const b = await body<any>(c);
+    const personId = b.person_user_id === undefined || b.person_user_id === null
+      ? null : Number(b.person_user_id);
+    if (personId !== null) {
+      if (!Number.isFinite(personId)) return c.json({ detail: 'person_user_id must be a user id' }, 400);
+      const own = await c.env.DB.prepare(
+        'SELECT 1 AS ok FROM users WHERE id = ? AND partner_id = ?',
+      ).bind(personId, partnerId).first<{ ok: number }>();
+      // 404 rather than 403: whether an account exists elsewhere is not this
+      // firm's business to learn from an error code.
+      if (!own) return c.json({ detail: 'Person not found in this firm' }, 404);
+    }
+
+    if (b.weekly_hours === null) {
+      // CLEARING IS A DELETE, not a zero. Zero hours would say this person
+      // works no hours, which is a claim; no row says nobody has stated a cap.
+      if (personId === null) {
+        await c.env.DB.prepare(
+          'DELETE FROM partner_capacity WHERE partner_id = ? AND person_user_id IS NULL',
+        ).bind(partnerId).run();
+      } else {
+        await c.env.DB.prepare(
+          'DELETE FROM partner_capacity WHERE partner_id = ? AND person_user_id = ?',
+        ).bind(partnerId, personId).run();
+      }
+      return c.json({ ok: true, weekly_hours: null });
+    }
+
+    const hours = Number(b.weekly_hours);
+    if (!Number.isFinite(hours) || hours <= 0 || hours >= 168) {
+      return c.json({ detail: 'A weekly cap is a number of hours between 0 and 168' }, 400);
+    }
+    const note = trimOrNull(b.note, 300);
+    // Two literal statements rather than one with an interpolated predicate:
+    // `check-sql-prepare` refuses a `${}` inside `DB.prepare`, and the partial
+    // unique indexes migration 230 declares need the NULL case spelled out.
+    if (personId === null) {
+      await c.env.DB.prepare(
+        `INSERT INTO partner_capacity (partner_id, person_user_id, weekly_hours, note, created_at, updated_at)
+         VALUES (?, NULL, ?, ?, ?, ?)
+         ON CONFLICT (partner_id) WHERE person_user_id IS NULL
+         DO UPDATE SET weekly_hours = excluded.weekly_hours, note = excluded.note, updated_at = excluded.updated_at`,
+      ).bind(partnerId, hours, note, nowIso(), nowIso()).run();
+    } else {
+      await c.env.DB.prepare(
+        `INSERT INTO partner_capacity (partner_id, person_user_id, weekly_hours, note, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (partner_id, person_user_id) WHERE person_user_id IS NOT NULL
+         DO UPDATE SET weekly_hours = excluded.weekly_hours, note = excluded.note, updated_at = excluded.updated_at`,
+      ).bind(partnerId, personId, hours, note, nowIso(), nowIso()).run();
+    }
+    return c.json({ ok: true, weekly_hours: hours, person_user_id: personId, note });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * State a person's internal hours for a period — or clear the statement.
+ *
+ * THE HOURS NO CLIENT PAYS FOR ARE STILL HOURS. `engagement_hours` cannot hold
+ * them: its `engagement_id` is NOT NULL, so admin, recruiting and the losing
+ * proposal have nowhere to go, and a week assembled from client rows alone
+ * under-reports every person by exactly the part of it nobody is billed for.
+ * Migration 231's header has the rest of that argument.
+ *
+ * `hours: null` REMOVES THE ROW rather than writing a zero. Zero is a real
+ * answer — "none this period" — and it must stay distinguishable from nobody
+ * having said, which is what an absent row means and what the read returns.
+ */
+partnerDelivery.put('/capacity/internal-hours', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const b = await body<any>(c);
+    const personId = Number(b.person_user_id);
+    if (!Number.isFinite(personId)) return c.json({ detail: 'person_user_id must be a user id' }, 400);
+    const own = await c.env.DB.prepare(
+      'SELECT 1 AS ok FROM users WHERE id = ? AND partner_id = ?',
+    ).bind(personId, partnerId).first<{ ok: number }>();
+    // 404 rather than 403, for the reason the cap route gives: whether an
+    // account exists elsewhere is not this firm's business to learn.
+    if (!own) return c.json({ detail: 'Person not found in this firm' }, 404);
+
+    const parsed = parsePeriod(b.period, 'monthly');
+    if ('error' in parsed) return c.json({ detail: parsed.error }, 400);
+
+    if (b.hours === null) {
+      await c.env.DB.prepare(
+        'DELETE FROM partner_internal_hours WHERE partner_id = ? AND person_user_id = ? AND period = ?',
+      ).bind(partnerId, personId, parsed.period).run();
+      return c.json({ ok: true, hours: null, period: parsed.period });
+    }
+
+    const hours = Number(b.hours);
+    if (!Number.isFinite(hours) || hours < 0 || hours >= 744) {
+      return c.json({ detail: 'Internal hours are a number of hours in a month' }, 400);
+    }
+    const note = trimOrNull(b.note, 300);
+    await c.env.DB.prepare(
+      `INSERT INTO partner_internal_hours (partner_id, person_user_id, period, hours, note, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (partner_id, person_user_id, period)
+       DO UPDATE SET hours = excluded.hours, note = excluded.note, updated_at = excluded.updated_at`,
+    ).bind(partnerId, personId, parsed.period, hours, note, nowIso(), nowIso()).run();
+    return c.json({
+      ok: true, hours, note, period: parsed.period, person_user_id: personId,
     });
   } catch (e) { return mapError(c, e); }
 });
