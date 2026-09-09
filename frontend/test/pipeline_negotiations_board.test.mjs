@@ -99,7 +99,14 @@ test('the lanes are the board, and the count is a count', () => {
   // THE LIMIT IS NOT PRINTED. The artboard's `n / 5` is its own sample.
   assert.ok(flat(CANVAS).includes("count:String(cards.length) + ' / 5'"),
     'the artboard stopped drawing a per-stage limit');
-  const lane = between(zone, 'const cards = open.filter', '{/* ══ TERMS IN PLAY');
+  // `visible`, NOT `open`. The lanes filtered the unnarrowed list, so the four
+  // chips above them were inert — CodeQL surfaced it as an unused variable,
+  // which is what a computed-but-undrawn narrowing looks like from outside the
+  // React model. `profile_zone_filters.test.mjs` now holds that rule for every
+  // zone in every licence; this pins it for the board it was found on.
+  const lane = between(zone, 'const cards = visible.filter', '{/* ══ TERMS IN PLAY');
+  assert.ok(!/const cards = open\.filter/.test(zone),
+    'the lanes went back to drawing the unnarrowed board, so the chips select nothing');
   assert.ok(!/\/ 5|\/5/.test(lane), 'the zone prints the canvas’s own WIP limit as this firm’s');
   assert.ok(/\{cards\.length\}/.test(lane), 'the lane stopped counting its own cards');
   const opRow = between(actions, "'pipeline/negotiations': [", '],');
@@ -148,9 +155,15 @@ test('all four chips select, and the close-probability refusal is the current on
   const row = between(filters, "'pipeline/negotiations': [", '],');
   assert.deepEqual([...row.matchAll(/canvas: '([^']+)'/g)].map((m) => m[1]), chips);
   assert.ok(!/unbuilt/.test(row), 'a negotiations chip went back to being prose');
-  const narrowing = between(zone, 'const visible = useMemo(() => {', '}, [view, open, items]);');
+  const narrowing = between(zone, 'const visible = useMemo(() => {', '}, [view, open]);');
   assert.ok(/view === 'us'/.test(narrowing) && /view === 'them'/.test(narrowing)
     && /view === 'stalled'/.test(narrowing), 'a chip selects nothing');
+  // `All` IS THE BOARD, NOT EVERY ENGAGEMENT. It returned `items` — including
+  // the rows nobody is negotiating and the ones already closed — so the one
+  // chip meant to show the whole board would have shown more than the strip
+  // beside it counts.
+  assert.ok(/return open;/.test(narrowing) && !/return items;/.test(narrowing),
+    'the All chip shows rows that are not on the board');
 
   // THE REFUSAL SURVIVES ON THE ARGUMENT THAT SURVIVED. Migration 234 records
   // why a bid was LOST — a taxonomy — which is not a rate.

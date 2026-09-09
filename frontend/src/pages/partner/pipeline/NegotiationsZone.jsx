@@ -404,12 +404,28 @@ export default function PartnerNegotiationsZone() {
     () => tracked.filter((r) => r.negotiation.stage !== 'closed'),
     [tracked],
   );
+  /**
+   * The chip row's narrowing — WHICH NOTHING RENDERED.
+   *
+   * This was computed and then dropped: the lanes below filtered `open`
+   * directly, so all four chips were inert. Pressing `Stalled 7d+` moved the
+   * pill and left the board exactly as it was. CodeQL found it as an unused
+   * variable, which is what an unrendered narrowing looks like from outside —
+   * and it is the same defect this bucket already had twice, in
+   * `delivery/status-reports` (chips over fields the response never sent) and
+   * in `delivery/capacity` (a read that never re-ran).
+   *
+   * `All` RETURNS `open`, NOT `items`. It returned `items` — every engagement,
+   * including the ones nobody is negotiating and the ones already closed — so
+   * the one chip that was supposed to show the whole board would have shown
+   * more than the board, contradicting the strip counted right beside it.
+   */
   const visible = useMemo(() => {
     if (view === 'us') return open.filter((r) => r.negotiation.ball === 'us');
     if (view === 'them') return open.filter((r) => r.negotiation.ball === 'them');
     if (view === 'stalled') return open.filter((r) => (r.negotiation.days_stalled ?? 0) >= 7);
-    return items;
-  }, [view, open, items]);
+    return open;
+  }, [view, open]);
   const stalled = useMemo(
     () => tracked.filter((r) => (r.negotiation.days_stalled ?? 0) >= 7 && r.negotiation.stage !== 'closed'),
     [tracked],
@@ -515,7 +531,7 @@ export default function PartnerNegotiationsZone() {
             makes about the hardcoded forty it refuses to treat as a cap. */}
         <div className="grid gap-3 md:grid-cols-4">
           {LANES.map(([key, name]) => {
-            const cards = open.filter((r) => r.negotiation.stage === key);
+            const cards = visible.filter((r) => r.negotiation.stage === key);
             return (
               <div key={key} className="rounded-[10px] border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700 dark:bg-gray-900/40">
                 <div className="flex items-baseline justify-between gap-2">

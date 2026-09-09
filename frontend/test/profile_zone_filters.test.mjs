@@ -37,6 +37,18 @@ const root = resolve(__dirname, '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 
 /**
+ * A literal made safe to interpolate into a `RegExp`.
+ *
+ * Two patterns in this file are built from strings that come out of a CANVAS —
+ * a `sc-for` binding name and a filter key — and a canvas is an input the repo
+ * takes from outside. Escaping keeps a metacharacter in one of those from
+ * quietly changing what the pattern means, or from building one that
+ * backtracks. Semgrep's `detect-non-literal-regexp` flagged the unescaped form
+ * on PR #488 (finding 6048) and is right to.
+ */
+const escapeRe = (v) => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
  * Zone key → the file that renders that zone's toolbar, for the surfaces four
  * licences share.
  *
@@ -463,7 +475,15 @@ function artboardFilters(src) {
     // list is looked up rather than assumed from the section's id, because the
     // prefixes (`l_`, `pr_`, `n_`, `r_`, `a_`) are the canvas author's shorthand
     // and nothing makes them track the section ids.
-    const declared = src.match(new RegExp(`\\b${binding[1]}:\\s*views\\(\\[([^\\]]*)\\]\\)`));
+    // BUILT WITH `escapeRe`, NOT INTERPOLATED RAW. `binding[1]` comes out of a
+    // canvas file, and a canvas is an input this repo takes from outside — so a
+    // binding name carrying regex metacharacters would either build a pattern
+    // that means something else or, with the right nesting, one that
+    // backtracks. `\w+` in the match above already constrains it, which is why
+    // this is belt-and-braces rather than a live hole; escaping is still the
+    // right shape, and Semgrep's `detect-non-literal-regexp` is correct to
+    // insist on it (finding 6048).
+    const declared = src.match(new RegExp(`\\b${escapeRe(binding[1])}:\\s*views\\(\\[([^\\]]*)\\]\\)`));
     if (!declared) continue;
     out[route[1]] = chips(declared[1]);
   }
@@ -741,7 +761,7 @@ for (const [name, profile] of Object.entries(PROFILES)) {
       // page KNOWS the key, not that the predicate behind it is right. What it
         // does close is the hole mutation-checking found — declaring a filter
         // live without touching the page that would have to serve it.
-        const used = new RegExp(`(['"\`]${row.key}['"\`]|\\b${row.key}\\s*:)`);
+        const used = new RegExp(`(['"\`]${escapeRe(row.key)}['"\`]|\\b${escapeRe(row.key)}\\s*:)`);
         assert.ok(
           used.test(code),
           `${zone} declares the live filter '${row.key}' but ${page.path} never uses it`,
@@ -750,6 +770,45 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     }
     assert.equal(mounted, profile.mounted,
       `${mounted} ${name} zones mount their filters; the profile says ${profile.mounted}`);
+  });
+
+  /**
+   * A narrowing a page computes must be a narrowing the page DRAWS.
+   *
+   * `pipeline/negotiations` shipped with `const visible = useMemo(…)` deriving
+   * the chip row's four views — and then rendered its lanes from the unfiltered
+   * list. All four chips were inert: pressing `Stalled 7d+` moved the pill and
+   * left the board exactly as it was. The assertion above passed it, because
+   * naming a key is not using one; CodeQL found it as an unused variable, which
+   * is what an undrawn narrowing looks like from outside the React model.
+   *
+   * So the rule is written the way the defect presents: a binding assigned from
+   * a memo whose body reads the page's filter state, and then referenced
+   * nowhere else, is a chip row wired to nothing. One occurrence is the
+   * declaration; a real narrowing has at least two.
+   *
+   * WHAT THIS CANNOT DO, said plainly: it proves the narrowed list reaches
+   * something, not that the thing it reaches is the list the chips are about.
+   * A page could still draw `visible` in one card and the unfiltered rows in
+   * another. That is a narrower hole than the one this closes, and closing it
+   * would need to know which element each chip governs.
+   */
+  test(`${name}: a page that narrows on a chip renders what it narrowed`, () => {
+    for (const zone of Object.keys(profile.table)) {
+      const page = mountingFile(profile, zone);
+      if (!page) continue;
+      const code = codeOnly(page.src);
+      for (const m of code.matchAll(/const (\w+) = useMemo\(\(\) => \{([\s\S]*?)\n  \}, \[([^\]]*)\]\);/g)) {
+        const [, binding, body, deps] = m;
+        // A memo is a narrowing only if it reads the state a chip row sets —
+        // which every zone here holds as `view`.
+        if (!/\bview\b/.test(deps) && !/\bview ===/.test(body)) continue;
+        const uses = (code.match(new RegExp(`\\b${escapeRe(binding)}\\b`, 'g')) || []).length;
+        assert.ok(uses > 1,
+          `${page.path} narrows into '${binding}' on the chip row and never renders it — `
+          + `the chips on ${zone} select nothing`);
+      }
+    }
   });
 
   test(`${name}: every ZoneToolbar in this profile's pages names this licence`, () => {
