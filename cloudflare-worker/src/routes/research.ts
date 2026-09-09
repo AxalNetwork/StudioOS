@@ -1346,6 +1346,50 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  'offers/proof': {
+    // The artboard: "A consent request per held outcome, naming the engagement,
+    // the specific claim, and where it would appear — sent by a person from the
+    // account that did the work. The draft for Verwood notes the unopened
+    // deliverable, so the ask does not arrive before the review does."
+    //
+    // The last clause is the instruction that matters. A model drafting consent
+    // requests will otherwise write one for every held item at the same
+    // urgency, and the artboard's whole point is that some outcomes are not
+    // ready to be asked about yet.
+    instruction: [
+      'Draft one consent request per held outcome below, naming the specific claim it would publish.',
+      'Where the outcome came from no engagement, say the request has nothing on the client’s side to refer to, and do not invent one.',
+      'These are drafts for a person to send: never write as though a request has been sent or a consent obtained.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      // `partner_proof_items` keys on `partners.id`, so the caller's partner
+      // row is resolved first and an account with none has nothing to read.
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT p.title AS title, p.outcome_note AS outcome, n.title AS need_title,
+                (SELECT COUNT(*) FROM partner_proof_consents k
+                  WHERE k.proof_item_id = p.id AND k.consent_given = 1 AND k.withdrawn_at IS NULL) AS live,
+                (SELECT COUNT(*) FROM partner_proof_consents k
+                  WHERE k.proof_item_id = p.id AND k.consent_given = 0 AND k.withdrawn_at IS NULL) AS pending,
+                (SELECT COUNT(*) FROM partner_proof_consents k
+                  WHERE k.proof_item_id = p.id AND k.withdrawn_at IS NOT NULL) AS withdrawn
+           FROM partner_proof_items p
+           LEFT JOIN engagements e ON e.id = p.engagement_id
+           LEFT JOIN founder_needs n ON n.id = e.need_id
+          WHERE p.partner_id = ? ORDER BY p.created_at DESC LIMIT 100`
+      ).bind(me.partner_id).all<{
+        title: string; outcome: string | null; need_title: string | null;
+        live: number; pending: number; withdrawn: number;
+      }>();
+      return (rows.results || []).filter((r) => !r.live).map((r) =>
+        `${r.title} — ${r.need_title ? `from the engagement "${r.need_title}"` : 'NOT FROM ANY ENGAGEMENT'}; `
+        + `${r.outcome ? `claims: ${r.outcome}` : 'no result claimed'}; `
+        + `${r.withdrawn ? 'a consent was withdrawn' : r.pending ? 'asked, no answer yet' : 'nobody has been asked'}`);
+    },
+  },
+
   'offers/perk-deals': {
     // The artboard: "For each expiring perk, what its expiry revokes and from
     // whom … Points to which redeemers lose access, so a notice can go out

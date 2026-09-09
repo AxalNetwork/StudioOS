@@ -172,8 +172,12 @@ const PROFILES = {
     // is edited on the perk itself, not extended in bulk' — not a preference
     // but a description of a table with no expiry on it at all, and migration
     // 228 put one there. None is a destination, which is why none is a `to:`.
-    // Was 0, then 5, then 7, then 8, then 9, then 10.
-    handlers: 12,
+    // `offers/proof`: `Ask for consent`, whose reason described a page that no
+    // longer exists — "no founder-side surface exists to ask from here", and
+    // `/attest/partner/:token` is that surface, mounted in `App.jsx` since
+    // migration 209. None is a destination, which is why none is a `to:`.
+    // Was 0, then 5, then 7, then 8, then 9, then 10, then 12.
+    handlers: 13,
     // NOTHING IS EXCLUDED ON THIS PROFILE ANY MORE. The entry that stood here
     // read: "`network/organizations`: `NetworkPage` catches a slug it has no tab
     // for and suppresses every body … there is nothing for a row to sit over.

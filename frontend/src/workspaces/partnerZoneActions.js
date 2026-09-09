@@ -95,9 +95,19 @@ export const PARTNER_ZONE_ACTIONS = {
     { label: 'Attribution rules', unbuilt: 'attribution is counted from engagements, never configured' },
     { label: 'Export', kind: 'export' },
   ],
+  // THE FIRST REASON HERE DESCRIBED A PAGE THAT NO LONGER EXISTS, and it is
+  // worth recording rather than just replacing. It read: "consent is given by
+  // the founder, and no founder-side surface exists to ask from here." The
+  // surface is `/attest/partner/:token`, mounted in `App.jsx`, and
+  // `POST /proof/:id/consent-request` issues the credential for it — the ask
+  // has been real since migration 209 and only this row still said otherwise.
+  //
+  // The SECOND is still exact. Nothing in this product publishes a proof page:
+  // `is_published` is computed for the firm's own reading, and there is no
+  // public route that renders it, so there is nothing to preview.
   'offers/proof': [
-    { label: 'Ask for consent', unbuilt: 'consent is given by the founder, and no founder-side surface exists to ask from here' },
-    { label: 'Preview public page', unbuilt: 'no public proof page is published yet' },
+    { label: 'Ask for consent', kind: 'handler', handler: 'askConsent' },
+    { label: 'Preview public page', unbuilt: 'no public proof page is published yet, so there is nothing to preview' },
     { label: 'Export', kind: 'export' },
   ],
   'offers/audience-fit': [

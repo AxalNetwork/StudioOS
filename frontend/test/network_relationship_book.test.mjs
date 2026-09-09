@@ -271,11 +271,19 @@ test('every page-supplied op reaches a binder that actually passes handlers', ()
   // gained a handler op — not because the op was unwired, but because the list
   // had not heard of the file. Read as code, so a call inside a comment cannot
   // satisfy the rule.
+  //
+  // AND THE SEARCH ROOT WAS THE SAME MISTAKE ONE LEVEL UP. It was
+  // `frontend/src/workspaces`, which is where a SHARED page's row is bound —
+  // `PerksPage` receives `zoneActions` as a render prop from
+  // `PartnerBucketRoutes`. A zone with its OWN file calls the table directly
+  // from `frontend/src/pages`, so the first zone of that shape to declare a
+  // handler (`offers/proof`) reported as bound by nobody. Same defect, same
+  // fix: search the tree rather than a chosen corner of it.
   const files = execFileSync(
-    'grep', ['-rl', '-E', 'zoneActionsFor\\(|[a-z]+ZoneActions\\(', 'frontend/src/workspaces'],
+    'grep', ['-rl', '-E', 'zoneActionsFor\\(|[a-z]+ZoneActions\\(', 'frontend/src'],
     { encoding: 'utf8' },
   ).split('\n').filter((f) => f && !/ZoneActions\.js$|zoneActionBuilder|zoneActionsByRole/.test(f));
-  assert.ok(files.length >= 4, `expected several binder modules; found ${files.length}`);
+  assert.ok(files.length >= 20, `expected the binder modules across the tree; found ${files.length}`);
   const BINDERS = files.map((p) => codeOnly(raw(p))).join('\n');
 
   /** The options object of a call, brace-balanced from the first `{` after the key. */

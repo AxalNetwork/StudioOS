@@ -1,13 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import {
+  // `StatCard` went with the three tiles it drew: the strip is the artboard's
+  // own composition now, and `ProofTile` below is the tile that carries the
+  // artboard's note under each figure.
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  StatCard, Section, Field, SaveNote, UnlinkedZone, isNoPartnerProfile,
+  Section, Field, SaveNote, UnlinkedZone, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
+import ZoneDraft from '../../../workspaces/ZoneDraft';
+import { Eyebrow, Instrument } from '../../../workspaces/canvasKit';
 
 /**
  * Offers · Proof — `/offers/proof`.
@@ -47,6 +52,52 @@ const KINDS = [
   ['testimonial', 'Testimonial'],
 ];
 const KIND_LABEL = Object.fromEntries(KINDS);
+
+/**
+ * The one consent state of an item, and the ONLY place it is decided.
+ *
+ * THE CHIPS AND THE PILL READ THE SAME FUNCTION, which they did not before: the
+ * chip row asked `consents.some((k) => k.withdrawn_at)` for `Blocked` and the
+ * card asked `is_published` for its badge, so an item that was published AND
+ * carried an older withdrawal answered to both `Published` and `Blocked`. It is
+ * published; it is not blocked. One function, four answers, no row in two
+ * states at once.
+ *
+ * THE FOURTH STATE HAS NO CHIP AND MUST NOT BORROW ONE. An item with an EMPTY
+ * `consents` array is one nobody has been asked about, which is not the same as
+ * one where somebody was asked and has not replied. It falls under `All` and
+ * only `All` — sweeping it into `Awaiting consent` would have this zone claim a
+ * request was made, and this is the zone whose whole argument is the difference
+ * between what a firm can show and what it is only claiming.
+ */
+export function consentState(item) {
+  const consents = Array.isArray(item?.consents) ? item.consents : [];
+  if (item?.is_published) return 'published';
+  if (consents.some((k) => k.withdrawn_at)) return 'withdrawn';
+  if (consents.some((k) => !k.consent_given && !k.withdrawn_at)) return 'awaiting';
+  return 'not_asked';
+}
+
+const CONSENT_LABEL = {
+  published: 'Published',
+  awaiting: 'Awaiting consent',
+  withdrawn: 'Withdrawn',
+  not_asked: 'Nobody asked',
+};
+const CONSENT_TONE = {
+  published: 'ok', awaiting: 'warn', withdrawn: 'danger', not_asked: 'neutral',
+};
+
+/** The strip tile, in the anatomy the artboards share. */
+function ProofTile({ label, value, note }) {
+  return (
+    <div className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+      <Eyebrow>{label}</Eyebrow>
+      <div className="mt-1.5 font-mono text-[16px] font-extrabold tabular-nums tracking-tight text-axal-ink dark:text-gray-100">{value}</div>
+      <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
+    </div>
+  );
+}
 
 function ConsentRow({ consent, onWithdraw, busy }) {
   const live = consent.consent_given && !consent.withdrawn_at;
@@ -267,12 +318,71 @@ function ProofCard({ item, onSave, onDelete, onAsk, onWithdraw, busy, note, issu
   );
 }
 
+/**
+ * `Ask for consent`, the artboard's first op.
+ *
+ * ITS OLD REASON WAS TRUE OF A PAGE THAT NO LONGER EXISTS. It read "consent is
+ * given by the founder, and no founder-side surface exists to ask from here" —
+ * and `/attest/partner/:token` is that surface, mounted in `App.jsx`, with
+ * `POST /proof/:id/consent-request` issuing the credential. The ask has been
+ * real; only the header op was still describing its absence.
+ *
+ * IT PICKS AN OUTCOME FIRST, because a consent is about a specific claim.
+ * Consent to "a case study" and consent to "a case study naming our revenue"
+ * are different consents, which is why the store keeps the wording — so a
+ * header op that asked without naming what it was asking about would be
+ * issuing a credential against nothing in particular.
+ *
+ * PUBLISHED ITEMS ARE STILL IN THE LIST. A second consenter on an already-
+ * published outcome is a normal thing to want: two people at the client, or a
+ * replacement for one who withdrew.
+ */
+function AskModal({ items, busy, issued, onAsk, onClose }) {
+  const [pick, setPick] = useState(items[0]?.id ?? null);
+  const item = items.find((i) => i.id === pick) || null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
+      <div className="max-h-[80vh] w-full max-w-xl overflow-y-auto rounded-lg bg-white p-5 shadow-xl dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="text-sm font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Ask a client for consent</h3>
+          <button type="button" className={ghostButtonClass} onClick={onClose}>Close</button>
+        </div>
+        {items.length === 0 ? (
+          <p className="mt-3 text-[12.5px] leading-relaxed text-axal-ink-2">
+            There is nothing to ask about yet. Record a case study or an outcome first —
+            a consent is about a specific claim, so there has to be one.
+          </p>
+        ) : (
+          <>
+            <Field label="Which outcome" hint="The consent is recorded against this item and no other.">
+              <select className={inputClass} value={pick ?? ''} onChange={(e) => setPick(Number(e.target.value))}>
+                {items.map((i) => (
+                  <option key={i.id} value={i.id}>
+                    {i.title} — {CONSENT_LABEL[consentState(i)]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {item && (
+              <AskPanel
+                item={item} busy={busy} onAsk={onAsk}
+                issuedToken={issued?.itemId === item.id ? issued : null}
+              />
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function PartnerProofZone() {
   const [state, setState] = useState({ loading: true, error: '', data: null });
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
   const [issued, setIssued] = useState(null);
   const [adding, setAdding] = useState(false);
+  const [asking, setAsking] = useState(false);
   const [newItem, setNewItem] = useState({ title: '', kind: 'case_study', detail: '', outcome_note: '' });
   const [view, setView] = useState('all');
 
@@ -320,34 +430,46 @@ export default function PartnerProofZone() {
   const d = state.data;
   const items = Array.isArray(d?.items) ? d.items : [];
 
-  /**
-   * The canvas's three states, derived from the same `consents[]` array the row
-   * above already reads — `consent_given && !withdrawn_at` is "agreed", a
-   * `withdrawn_at` is "withdrawn", and neither is "not answered". Nothing new
-   * is stored for this row; it selects on what is already drawn per consenter.
-   *
-   * THE FOURTH STATE HAS NO CHIP, AND MUST NOT BORROW ONE. An unpublished item
-   * with an EMPTY `consents` array is one nobody has been asked about — which
-   * is not the same as one where somebody was asked and has not replied. It
-   * falls under `All` and only `All`. Sweeping it into `Awaiting consent` would
-   * have the zone claim a request was made, and this is the zone whose whole
-   * argument is the difference between what a firm can show and what it is
-   * only claiming.
-   */
+  // The chips select on `consentState` — the same function the pill and the
+  // instrument's Consent column read, so no row can answer to two chips at
+  // once. `Blocked` is `withdrawn` here rather than the artboard's "engagement
+  // not complete": nothing links a proof item to an engagement's completion,
+  // and a consent taken back is the one state in this store that blocks
+  // publication for a reason other than an unanswered ask.
   const visible = items.filter((item) => {
-    const consents = Array.isArray(item.consents) ? item.consents : [];
-    if (view === 'published') return Boolean(item.is_published);
-    if (view === 'blocked') return consents.some((k) => k.withdrawn_at);
-    if (view === 'awaiting') {
-      return !item.is_published && consents.some((k) => !k.consent_given && !k.withdrawn_at);
-    }
+    const state = consentState(item);
+    if (view === 'published') return state === 'published';
+    if (view === 'blocked') return state === 'withdrawn';
+    if (view === 'awaiting') return state === 'awaiting';
     return true;
   });
+
+  // ══ THE ARTBOARD'S FOUR TILES, COUNTED OVER THE WHOLE SHELF ══════════════
+  // Never over `visible`: a figure that changes because a chip was clicked is
+  // not reporting what its label claims.
+  const awaiting = items.filter((i) => consentState(i) === 'awaiting');
+  const blocked = items.filter((i) => consentState(i) === 'withdrawn');
+  // `Client-verified metrics` IS THE ZONE'S WHOLE ARGUMENT AS A NUMBER: a claim
+  // about a result that a client agreed to. A published item with no result
+  // claimed is not a verified metric, and a self-stated result is not one
+  // either — which is what the artboard's note "none self-reported" means.
+  const verified = items.filter((i) => i.is_published && i.outcome_note);
+  // The artboard's `aiFoot` is "Three requests; each needs a human send." The
+  // three is its own sample; the count here is this firm's held items, because
+  // transcribing a figure out of an artboard is how a page comes to state a
+  // number about somebody else's data.
+  const heldCount = awaiting.length + blocked.length
+    + items.filter((i) => consentState(i) === 'not_asked').length;
 
   // Hoisted so the gate branch below and the live row draw the SAME row.
   // With nothing loaded the export renders disabled and says so itself,
   // which is what makes a header row over an unreadable store honest.
-  const rowActions = partnerZoneActions('offers/proof', { view: { header: ['Proof', 'Kind', 'Need', 'Founder', 'Published', 'Outcome'], rows: visible, cells: (r) => [r.title, r.kind, r.need_title, r.founder_name, r.is_published, r.outcome_note] } });
+  // `Ask for consent` is supplied by this page: a handler the page does not
+  // supply renders nothing at all, which is the whole point of the kind.
+  const handlers = {
+    askConsent: () => { setNote(null); setAsking(true); },
+  };
+  const rowActions = partnerZoneActions('offers/proof', { handlers, view: { header: ['Outcome', 'Kind', 'Provenance', 'Founder', 'Consent', 'What it says'], rows: visible, cells: (r) => [r.title, r.kind, r.need_title, r.founder_name, CONSENT_LABEL[consentState(r)], r.outcome_note] } });
 
   if (isNoPartnerProfile(state.error)) {
     return <UnlinkedZone title="Proof" actions={rowActions} />;
@@ -402,19 +524,70 @@ export default function PartnerProofZone() {
             )}
           />
 
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-            <StatCard label="Items" value={items.length} hint="case studies, outcomes, testimonials" />
-            <StatCard
-              label="Published with consent"
-              value={d?.published_count ?? 0}
-              hint="a client agreed, and has not withdrawn"
+          {/* ══ THE `po4` STRIP ═════════════════════════════════════════════
+              `Published · Awaiting consent · Blocked · Client-verified
+              metrics`, all four counted from rows.
+
+              ONE NOTE IS NOT THE ARTBOARD'S, AND DELIBERATELY. Its `Published`
+              tile reads "live on the public profile" — there is no public
+              profile in this product, `Preview public page` is still prose for
+              exactly that reason, and repeating the artboard's note would have
+              the strip promise a page that does not exist. The note says what
+              published means here instead. */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <ProofTile
+              label="Published"
+              value={String(d?.published_count ?? 0)}
+              note="a client agreed, and has not withdrawn"
             />
-            <StatCard
-              label="Self-stated"
-              value={d?.self_stated_count ?? 0}
-              hint="the firm’s own account, unconfirmed"
+            <ProofTile label="Awaiting consent" value={String(awaiting.length)} note="asked, no answer" />
+            <ProofTile label="Blocked" value={String(blocked.length)} note="consent withdrawn" />
+            <ProofTile
+              label="Client-verified metrics"
+              value={String(verified.length)}
+              note="a result a client agreed to; self-stated ones are not counted"
             />
           </div>
+
+          <Instrument
+            testid="proof-shelf"
+            title="Outcome shelf"
+            meta="Seam-fed · consent gates publication"
+            cols="1.9fr 1.4fr 1.1fr 2fr"
+            head={['Outcome', 'Provenance', 'Consent', 'What it says']}
+            rows={visible.map((item) => {
+              const state = consentState(item);
+              return {
+                key: item.id,
+                cells: [
+                  { text: item.title, sub: KIND_LABEL[item.kind] || item.kind },
+                  // THE SEAM MARK IS EARNED PER ROW, not painted on every one.
+                  // The artboard's shelf is entirely seam-fed because every row
+                  // there came out of an engagement record; here an item can be
+                  // typed by hand, and one with nothing behind it is the single
+                  // most useful thing this column can say.
+                  item.need_title
+                    ? { text: item.need_title, sub: item.founder_name || undefined, seam: 'From engagement' }
+                    : { nr: true },
+                  { pill: CONSENT_LABEL[state], pillTone: CONSENT_TONE[state] },
+                  item.outcome_note
+                    ? { text: item.outcome_note, ...(state === 'published' ? {} : { gate: 'Not public' }) }
+                    : { nr: true },
+                ],
+              };
+            })}
+            note={'Consent is a gate rather than a warning: an unconsented outcome has no published form to suppress, so it simply is not one — and nothing on this page is a metric the firm reported about itself and marked confirmed. Two things this shelf says that the artboard\u2019s cannot. A row with no engagement behind it carries no seam mark and reads absent in Provenance: the artboard is entirely seam-fed because every row there came from an engagement record the client can see from their side, and an item typed by hand here has no such other side. And `Blocked` means a consent taken back rather than the artboard\u2019s incomplete engagement \u2014 nothing links a proof item to an engagement\u2019s completion, so a withdrawal is the one state in this store that blocks publication for a reason other than an unanswered ask.'}
+          />
+
+          <ZoneDraft
+            surface="offers/proof"
+            label="Draft · consent requests"
+            accept="Accept drafts"
+            run="Draft the requests"
+            foot={`${heldCount} request${heldCount === 1 ? '' : 's'}; each needs a human send.`}
+            empty="A consent request per held outcome, naming the engagement, the specific claim, and where it would appear — for a person to send from the account that did the work."
+            nothingToDraft="Every outcome is published, so there is nothing to ask for."
+          />
 
           {adding && (
             <div className="rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
@@ -489,6 +662,13 @@ export default function PartnerProofZone() {
               ))}
             </div>
           </Section>
+
+          {asking && (
+            <AskModal
+              items={items} busy={busy} issued={issued}
+              onAsk={ask} onClose={() => setAsking(false)}
+            />
+          )}
 
           <StatedLimit title="What this zone does not claim, and what it will not let you do">
             <p>
