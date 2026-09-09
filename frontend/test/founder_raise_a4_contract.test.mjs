@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { escapeRe } from './_escapeRe.mjs';
 
 const read = (path) => readFileSync(resolve(process.cwd(), path), 'utf8');
 test('A4 Raise desk uses selected-project source records and preserves the pitch workspace', () => {
@@ -33,7 +34,7 @@ test('A4 Raise desk uses selected-project source records and preserves the pitch
     ['link-open-pitch-workspace', '/raise/pitch'],
     ['link-open-liquidity', '/raise/liquidity'],
   ]) {
-    const link = desk.match(new RegExp(`testid="${testid}"\\s+to=\\{([^}]*)\\}`));
+    const link = desk.match(new RegExp(`testid="${escapeRe(testid)}"\\s+to=\\{([^}]*)\\}`));
     assert.ok(link, `the ${testid} link is gone from the Raise desk`);
     assert.ok(link[1].includes(path), `${testid} points at ${link[1]}, not ${path}`);
   }

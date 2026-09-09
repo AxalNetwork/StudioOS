@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { escapeRe } from './_escapeRe.mjs';
 
 const read = (path) => readFileSync(resolve(process.cwd(), path), 'utf8');
 const app = read('frontend/src/App.jsx');
@@ -68,7 +69,7 @@ test('A2 uses live discovery sources and retains the detailed editor', () => {
     ['link-open-verdict', 'stageLinks.verdict'],
     ['link-rail-open-workspace', 'stageLinks.interviews'],
   ]) {
-    const link = page.match(new RegExp(`testid="${testid}"[^>]*?to=\\{([^}]*)\\}`));
+    const link = page.match(new RegExp(`testid="${escapeRe(testid)}"[^>]*?to=\\{([^}]*)\\}`));
     assert.ok(link, `the ${testid} link is gone from the Validate desk`);
     assert.equal(link[1].trim(), path, `${testid} points at ${link[1]}, not ${path}`);
   }

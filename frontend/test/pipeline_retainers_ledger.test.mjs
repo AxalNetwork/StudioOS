@@ -32,6 +32,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { escapeRe } from './_escapeRe.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const read = (p) => codeOnly(raw(p));
@@ -181,7 +182,7 @@ test('all four chips select, and the ops row is the artboard’s one export', ()
   assert.ok(!/unbuilt/.test(row), 'a retainers chip went back to being prose');
   const narrowing = between(zone, 'const visible = useMemo(() => {', '}, [view, items,');
   for (const [key, list] of [['renewing', 'renewingSoon'], ['under', 'underConsuming'], ['over', 'overScope']]) {
-    assert.ok(new RegExp(`view === '${key}'\\) return ${list};`).test(narrowing),
+    assert.ok(new RegExp(`view === '${escapeRe(key)}'\\) return ${escapeRe(list)};`).test(narrowing),
       `the ${key} chip selects nothing, or selects a different list from its tile`);
   }
 
@@ -232,7 +233,7 @@ test('nothing on this page is zero because it is absent', () => {
   // logged hours used none; `amount_cents || 0` says an unpriced retainer is
   // free. Both are claims about the client, not about the record.
   for (const field of ['hours_used', 'amount_cents', 'retained_hours', 'utilisation_pct']) {
-    assert.ok(!new RegExp(`${field}\\s*(\\?\\?|\\|\\|)\\s*0\\b`).test(zoneRaw),
+    assert.ok(!new RegExp(`${escapeRe(field)}\\s*(\\?\\?|\\|\\|)\\s*0\\b`).test(zoneRaw),
       `${field} is being coerced to zero`);
   }
 

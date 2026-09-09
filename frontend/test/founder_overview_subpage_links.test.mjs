@@ -36,6 +36,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { escapeRe } from './_escapeRe.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const read = (p) => codeOnly(raw(p));
@@ -51,7 +52,7 @@ const DESKS = [
 
 /** Every `/bucket/slug` route App.jsx actually mounts. */
 function routesFor(bucket) {
-  return [...APP.matchAll(new RegExp(`path="/${bucket}/([a-z-]+)"`, 'g'))].map((m) => m[1]);
+  return [...APP.matchAll(new RegExp(`path="/${escapeRe(bucket)}/([a-z-]+)"`, 'g'))].map((m) => m[1]);
 }
 
 /**

@@ -26,6 +26,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { codeOnly } from './_codeOnly.mjs';
+import { escapeRe } from './_escapeRe.mjs';
 import { FOUNDER_ZONE_FILTERS, founderZoneFilters } from '../src/workspaces/founderZoneFilters.js';
 import { INVESTOR_ZONE_FILTERS, investorZoneFilters } from '../src/workspaces/investorZoneFilters.js';
 import { ADVISOR_ZONE_FILTERS, advisorZoneFilters } from '../src/workspaces/advisorZoneFilters.js';
@@ -36,17 +37,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 
-/**
- * A literal made safe to interpolate into a `RegExp`.
- *
- * Two patterns in this file are built from strings that come out of a CANVAS —
- * a `sc-for` binding name and a filter key — and a canvas is an input the repo
- * takes from outside. Escaping keeps a metacharacter in one of those from
- * quietly changing what the pattern means, or from building one that
- * backtracks. Semgrep's `detect-non-literal-regexp` flagged the unescaped form
- * on PR #488 (finding 6048) and is right to.
- */
-const escapeRe = (v) => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
  * Zone key → the file that renders that zone's toolbar, for the surfaces four

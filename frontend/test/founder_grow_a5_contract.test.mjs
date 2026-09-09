@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { escapeRe } from './_escapeRe.mjs';
 
 const read = (path) => codeOnly(readFileSync(resolve(process.cwd(), path), 'utf8'));
 const page = read('frontend/src/pages/founder/FounderGrowDesk.jsx');
@@ -45,7 +46,7 @@ test('every card hands off to the Grow page it summarises, and none to another b
   assert.match(page, /const GROW_PAGES = Object\.fromEntries\(SECTIONS\.map\(\(\[label, slug\]\) => \[slug, `\/grow\/\$\{slug\}`\]\)\);/,
     'the card targets are no longer derived from the section list the chips use');
   for (const slug of ['focus', 'customers', 'talent', 'brand', 'capital-match', 'partnerships', 'launch']) {
-    assert.ok(new RegExp(`GROW_PAGES(\\.${slug.replace('-', '\\-')}|\\['${slug}'\\])`).test(page),
+    assert.ok(new RegExp(`GROW_PAGES(\\.${escapeRe(slug)}|\\['${escapeRe(slug)}'\\])`).test(page),
       `the ${slug} card does not link to /grow/${slug}`);
   }
   for (const gone of ['/build/metrics', '/build/discovery', '/build/team?mode=workspace',
