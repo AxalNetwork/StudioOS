@@ -2292,6 +2292,181 @@ const DRAFT_SURFACES: Record<string, {
       return lines;
     },
   },
+
+  'raise/capital': {
+    // A4's band: "At $1.5M on a $12M post with a 12% pool top-up, you and Amara
+    // go from 89.5% to 66.1% combined. The pool top-up costs you more dilution
+    // than the round itself — 7.4 points against 16.0."
+    //
+    // The artboard is explicit that the reasoning is shown step by step
+    // "because you will be asked to defend this number", and that is the
+    // instruction that matters: a dilution figure a founder cannot reconstruct
+    // in a partner meeting is worse than none. The second is that a round with
+    // no pre-money recorded has no post-money and therefore no dilution at all
+    // — computing one from the target alone would put a number in front of
+    // someone who is about to defend it.
+    instruction: [
+      'Read the round below back in plain language, and show every step of the arithmetic.',
+      'Where a figure the arithmetic needs is not recorded, say which one and stop: do not assume a pre-money, a pool or a share count.',
+      'Name the largest single source of dilution and compare it against the others in points.',
+      'Add no benchmark and no market comparison. Nothing here records what other rounds look like.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const round = await c.env.DB.prepare(
+        `SELECT name, target_amount, pre_money, pro_rata_reserved, close_date, created_at
+           FROM raise_rounds WHERE project_id = ? AND status = 'active'`
+      ).bind(pid).first<{
+        name: string | null; target_amount: number | null; pre_money: number | null;
+        pro_rata_reserved: number | null; close_date: string | null; created_at: string | null;
+      }>();
+      const lines: string[] = [];
+      if (round) {
+        lines.push(`Round: ${round.name || 'unnamed'}; `
+          + `target ${round.target_amount == null ? 'NOT RECORDED' : round.target_amount}; `
+          + `pre-money ${round.pre_money == null ? 'NOT RECORDED' : round.pre_money}; `
+          + `pro-rata reserved ${round.pro_rata_reserved == null ? 'NOT RECORDED' : round.pro_rata_reserved}; `
+          + `close ${round.close_date || 'NOT RECORDED'}`);
+      }
+      const allocs = await c.env.DB.prepare(
+        `SELECT COALESCE(commit_status, 'signed') AS state, COUNT(*) AS n, COALESCE(SUM(amount), 0) AS total
+           FROM raise_prospects WHERE project_id = ? AND stage = 'committed' AND amount IS NOT NULL
+          GROUP BY COALESCE(commit_status, 'signed')`
+      ).bind(pid).all<{ state: string; n: number; total: number }>();
+      for (const a of (allocs.results || [])) {
+        lines.push(`Committed as ${a.state}: ${a.n} allocation${a.n === 1 ? '' : 's'} totalling ${a.total}`);
+      }
+      const scenario = await c.env.DB.prepare(
+        `SELECT name, inputs_json FROM cap_table_scenarios
+          WHERE project_id = ? AND is_variant = 0 ORDER BY updated_at DESC LIMIT 1`
+      ).bind(pid).first<{ name: string; inputs_json: string | null }>();
+      if (scenario) lines.push(`Cap table scenario "${scenario.name}": ${String(scenario.inputs_json || '').slice(0, 1200)}`);
+      else if (lines.length) lines.push('NO CAP TABLE SCENARIO IS RECORDED — there are no current ownership percentages to dilute.');
+      return lines;
+    },
+  },
+
+  'raise/legal': {
+    // A4's band: "'Full ratchet anti-dilution' — off market at seed. Broad-based
+    // weighted average is standard."
+    //
+    // THE DOCUMENT'S OWN TEXT IS THE MATERIAL, and it has to be: a clause read
+    // from a title is a guess about a document. Bounded per document and
+    // capped, because the point is the clauses and not the whole instrument.
+    //
+    // "Not legal advice. Counsel is on the Team page" is on the band's foot in
+    // the page, and the instruction carries the same limit, because a founder
+    // reading a confident paragraph about their own term sheet is exactly the
+    // reader who will act on it.
+    instruction: [
+      'Name the clauses in the documents below that a founder should look at again, and say plainly what each one does to them.',
+      'Quote the clause you are describing. Do not describe a clause that is not in the text.',
+      'You are not counsel and this is not advice: say what the clause does, never what to sign or refuse.',
+      'Where a document is a draft or unsigned, say so — its terms are not settled.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT title, doc_type, status, content FROM documents
+          WHERE project_id = ? ORDER BY updated_at DESC LIMIT 8`
+      ).bind(pid).all<{ title: string; doc_type: string; status: string; content: string | null }>();
+      return (rows.results || []).map((d) => {
+        const body = String(d.content || '').trim();
+        return `${d.title} (${d.doc_type}, ${d.status})\n`
+          + (body ? body.slice(0, 4000) : 'NO TEXT STORED — this document has a record but no body to read.');
+      });
+    },
+  },
+
+  'raise/data-room': {
+    // A4's band: "Seed investors in workflow software ask for three things you
+    // don't have staged … Two of the four investors already viewing have
+    // requested the first."
+    //
+    // The artboard's version reasons from what investors in a sector ask for,
+    // which nothing here records — so this one reasons from the room instead:
+    // what is staged, what is behind NDA, and what the people with access have
+    // actually opened. A model told to name gaps and handed only a file list
+    // will otherwise recite a generic diligence checklist as though it had read
+    // this founder's room.
+    instruction: [
+      'Describe what this data room does and does not hold, from the list below alone.',
+      'Do not produce a generic diligence checklist: name only gaps the room itself evidences — a folder with nothing in it, a document referred to by a file name that is not there, an artifact behind NDA that everyone with access already signed for.',
+      'Say what each investor with access has and has not opened, where that is recorded.',
+      'If the room looks complete for what it holds, say so rather than inventing something missing.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const folders = await c.env.DB.prepare(
+        `SELECT f.name, f.visibility,
+                (SELECT COUNT(*) FROM data_room_files x WHERE x.folder_id = f.id) AS files
+           FROM data_room_folders f WHERE f.project_id = ? ORDER BY f.display_order, f.name LIMIT 60`
+      ).bind(pid).all<{ name: string; visibility: string; files: number }>();
+      const files = await c.env.DB.prepare(
+        `SELECT f.name, f.visibility,
+                (SELECT COUNT(DISTINCT l.user_id) FROM data_room_access_log l WHERE l.file_id = f.id) AS viewers
+           FROM data_room_files f WHERE f.project_id = ? ORDER BY f.name LIMIT 120`
+      ).bind(pid).all<{ name: string; visibility: string; viewers: number }>();
+      const grants = await c.env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM data_room_grants WHERE project_id = ? AND status = 'active'`
+      ).bind(pid).first<{ n: number }>();
+      const lines: string[] = [];
+      for (const f of (folders.results || [])) {
+        lines.push(`Folder ${f.name} (${f.visibility}) — ${f.files} file${f.files === 1 ? '' : 's'}`);
+      }
+      for (const f of (files.results || [])) {
+        lines.push(`File ${f.name} (${f.visibility}) — `
+          + `${f.viewers ? `opened by ${f.viewers} investor${f.viewers === 1 ? '' : 's'}` : 'never opened'}`);
+      }
+      if (lines.length) {
+        lines.push(`${Number(grants?.n || 0)} investor${Number(grants?.n || 0) === 1 ? '' : 's'} currently have access.`);
+      }
+      return lines;
+    },
+  },
+
+  'raise/liquidity': {
+    // A4's band sits beside a waterfall the product cannot draw: no exit model
+    // and no preference terms are stored anywhere, so the page says so. What
+    // this band has is the cap table and the round — enough to answer the one
+    // question the zone exists for, which the artboard states outright: the
+    // waterfall should be understood BEFORE terms are signed, not after.
+    //
+    // So the instruction is mostly a set of refusals. A model asked about exits
+    // will supply a preference stack, a participation multiple and a comparable
+    // outcome, and each of those would be a term this founder has not agreed to
+    // presented as one they have.
+    instruction: [
+      'Explain who is paid what, and in what order, at an exit — using only the ownership and round figures below.',
+      'No preference multiple, participation right or liquidation term is recorded anywhere here. Do not assume one, and do not describe a standard one as though it applied to this company.',
+      'Name every input the answer would need that is missing, and say plainly that the order of payment cannot be settled without them.',
+      'Model no exit price that is not given. If none is given, describe the mechanism rather than inventing an outcome.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const scenario = await c.env.DB.prepare(
+        `SELECT name, inputs_json, result_json FROM cap_table_scenarios
+          WHERE project_id = ? AND is_variant = 0 ORDER BY updated_at DESC LIMIT 1`
+      ).bind(pid).first<{ name: string; inputs_json: string | null; result_json: string | null }>();
+      if (!scenario) return [];
+      const round = await c.env.DB.prepare(
+        `SELECT name, target_amount, pre_money FROM raise_rounds WHERE project_id = ? AND status = 'active'`
+      ).bind(pid).first<{ name: string | null; target_amount: number | null; pre_money: number | null }>();
+      const lines = [
+        `Cap table scenario "${scenario.name}" inputs: ${String(scenario.inputs_json || '').slice(0, 1500)}`,
+        `Computed ownership: ${String(scenario.result_json || 'NOT COMPUTED').slice(0, 1500)}`,
+      ];
+      lines.push(round
+        ? `Open round: ${round.name || 'unnamed'}; target ${round.target_amount ?? 'NOT RECORDED'}; pre-money ${round.pre_money ?? 'NOT RECORDED'}`
+        : 'NO OPEN ROUND IS RECORDED.');
+      lines.push('NO LIQUIDATION PREFERENCE, PARTICIPATION RIGHT OR EXIT MODEL IS RECORDED for this company.');
+      return lines;
+    },
+  },
 };
 
 research.get('/drafts', async (c) => {

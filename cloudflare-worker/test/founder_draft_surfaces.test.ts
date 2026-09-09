@@ -107,6 +107,59 @@ function freshDb() {
       notes TEXT, source TEXT, created_by INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE raise_rounds (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, project_id INTEGER NOT NULL,
+      name TEXT, target_amount REAL, close_date TEXT, status TEXT NOT NULL DEFAULT 'active',
+      notes TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')), pro_rata_reserved REAL, pre_money REAL
+    );
+    CREATE TABLE raise_prospects (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, project_id INTEGER NOT NULL,
+      contact_id INTEGER, name TEXT, email TEXT, firm TEXT,
+      stage TEXT NOT NULL DEFAULT 'to_contact', notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      amount REAL, close_id INTEGER, commit_status TEXT, instrument TEXT
+    );
+    CREATE TABLE cap_table_scenarios (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, owner_user_id INTEGER NOT NULL,
+      project_id INTEGER, name TEXT NOT NULL, inputs_json TEXT NOT NULL, result_json TEXT,
+      computed_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')), is_variant INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL, project_id INTEGER,
+      title TEXT NOT NULL, doc_type TEXT NOT NULL DEFAULT 'other',
+      status TEXT NOT NULL DEFAULT 'draft', content TEXT, template_name TEXT,
+      signed_by TEXT, signed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE data_room_folders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, project_id INTEGER NOT NULL,
+      name TEXT NOT NULL, parent_id INTEGER, visibility TEXT NOT NULL DEFAULT 'open',
+      display_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE data_room_files (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, project_id INTEGER NOT NULL,
+      folder_id INTEGER, name TEXT NOT NULL, r2_key TEXT NOT NULL, content_type TEXT,
+      size_bytes INTEGER, visibility TEXT NOT NULL DEFAULT 'open', uploaded_by_user_id INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE data_room_grants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, project_id INTEGER NOT NULL,
+      investor_user_id INTEGER NOT NULL, granted_by_user_id INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active', expires_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE data_room_access_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, file_id INTEGER,
+      user_id INTEGER NOT NULL, action TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
     CREATE TABLE research_zone_drafts (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
       owner_user_id INTEGER NOT NULL, surface TEXT NOT NULL, scope_key TEXT,
@@ -132,6 +185,23 @@ function freshDb() {
     db.prepare('INSERT INTO mvp_tasks (deal_id, title, status) VALUES (?, ?, ?)').run(pid, `Card for ${pid}`, 'todo');
     db.prepare('INSERT INTO metrics_snapshots (project_id, snapshot_date, mrr) VALUES (?, ?, ?)')
       .run(pid, '2026-09-01', 4200);
+    db.prepare(`INSERT INTO raise_rounds (uid, project_id, name, target_amount, pre_money, status)
+                VALUES (?, ?, ?, 1500000, 12000000, 'active')`).run(`r${pid}`, pid, `Round for ${pid}`);
+    db.prepare(`INSERT INTO raise_prospects (uid, project_id, name, firm, stage, amount, commit_status)
+                VALUES (?, ?, ?, ?, 'committed', 250000, 'signed')`)
+      .run(`p${pid}`, pid, `Prospect for ${pid}`, `Firm ${pid}`);
+    db.prepare(`INSERT INTO cap_table_scenarios (uid, owner_user_id, project_id, name, inputs_json, result_json, is_variant)
+                VALUES (?, 0, ?, ?, ?, ?, 0)`)
+      .run(`s${pid}`, pid, `Scenario for ${pid}`, '{"founders":89.5}', '{"post":66.1}');
+    db.prepare(`INSERT INTO documents (uid, project_id, title, doc_type, status, content)
+                VALUES (?, ?, ?, 'term_sheet', 'draft', ?)`)
+      .run(`d${pid}`, pid, `Term sheet for ${pid}`, `Clause body for ${pid}`);
+    db.prepare(`INSERT INTO data_room_folders (uid, project_id, name, visibility)
+                VALUES (?, ?, ?, 'open')`).run(`rf${pid}`, pid, `Folder for ${pid}`);
+    db.prepare(`INSERT INTO data_room_files (uid, project_id, name, r2_key, visibility)
+                VALUES (?, ?, ?, 'k', 'open')`).run(`rx${pid}`, pid, `File for ${pid}`);
+    db.prepare(`INSERT INTO data_room_grants (uid, project_id, investor_user_id, granted_by_user_id, status)
+                VALUES (?, ?, 99, 1, 'active')`).run(`rg${pid}`, pid);
   }
   return db;
 }
@@ -175,7 +245,10 @@ async function draft(
 /** The status alone, for the many cases where only the refusal matters. */
 const statusOf = async (...a: Parameters<typeof draft>) => (await draft(...a)).status;
 
-const SURFACES = ['build/this-week', 'build/roadmap', 'build/kpi'];
+const SURFACES = [
+  'build/this-week', 'build/roadmap', 'build/kpi',
+  'raise/capital', 'raise/legal', 'raise/data-room', 'raise/liquidity',
+];
 
 for (const surface of SURFACES) {
   test(`${surface} drafts over the caller's own project, and only that one`, async () => {
@@ -189,6 +262,9 @@ for (const surface of SURFACES) {
     // count that happens to match.
     assert.ok(String(prompt).includes(String(MY_PROJECT)) || surface === 'build/kpi',
       `${surface} handed over no material from the caller's own project`);
+    // Every fixture row names its own project id, so a gather that read every
+    // project's rows — the shape a dropped WHERE produces — shows up as another
+    // founder's id in the text rather than as a count that happens to match.
     assert.ok(!String(prompt).includes(String(THEIR_PROJECT)),
       `${surface} handed another founder's records to the model`);
   });
@@ -271,6 +347,32 @@ test('build/this-week hands over no owner and no status to invent one from', asy
     'an owner reached the model from a column the product does not show');
   assert.match(String(prompt), /Never name an owner and never call a commitment on track or at risk/,
     'the instruction no longer forbids the two fields nothing records');
+});
+
+test('raise/liquidity tells the model no preference term is recorded', async () => {
+  // A model asked about exits will supply a preference stack, a participation
+  // multiple and a comparable outcome. None of the three is recorded for any
+  // company in this product, so the absence has to be IN the material — an
+  // instruction alone leaves the model reasoning over a silent gap.
+  const db = freshDb();
+  const { prompt } = await draft(db, MINE, 'raise/liquidity', String(MY_PROJECT));
+  assert.match(String(prompt), /NO LIQUIDATION PREFERENCE, PARTICIPATION RIGHT OR EXIT MODEL IS RECORDED/);
+
+  // And with no cap table there is no ownership to pay out at all.
+  db.prepare('DELETE FROM cap_table_scenarios WHERE project_id = ?').run(MY_PROJECT);
+  assert.equal(await statusOf(db, MINE, 'raise/liquidity', String(MY_PROJECT)), 409);
+});
+
+test('raise/legal reads the document body, not just its title', async () => {
+  // A clause read from a title is a guess about a document. The body is the
+  // material — and a document with a record but no text says so, rather than
+  // letting the model treat the title as the terms.
+  const db = freshDb();
+  const { prompt } = await draft(db, MINE, 'raise/legal', String(MY_PROJECT));
+  assert.match(String(prompt), new RegExp(`Clause body for ${MY_PROJECT}`));
+  db.prepare('UPDATE documents SET content = NULL WHERE project_id = ?').run(MY_PROJECT);
+  const empty = await draft(db, MINE, 'raise/legal', String(MY_PROJECT));
+  assert.match(String(empty.prompt), /NO TEXT STORED/);
 });
 
 test('a gather never reads a record belonging to another founder', async () => {

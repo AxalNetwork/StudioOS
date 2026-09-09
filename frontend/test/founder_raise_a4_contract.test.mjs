@@ -45,9 +45,21 @@ test('A4 Raise desk uses selected-project source records and preserves the pitch
   assert.match(editor, /Number\(searchParams\.get\('project_id'\)\)/);
   assert.match(editor, /if \(!initialProjects\.length\)/,
     'a seeded Raise handoff must not immediately duplicate the project-list request');
-  assert.match(desk, /No dilution calculation is shown/);
-  assert.match(desk, /Clause analysis and term-sheet warnings: Not recorded/);
-  assert.match(desk, /No project-linked exit model or secondary is recorded/);
+  // THESE THREE WERE "NOTHING IS SHOWN BECAUSE NOTHING RESPONDS", AND TWO OF
+  // THEM STOPPED BEING TRUE. `No dilution calculation is shown because no
+  // current response provides one` and `Clause analysis and term-sheet
+  // warnings: Not recorded` both described a desk with no way to produce
+  // either; A4's `Proposal · plain-language read` and `Clause explained` bands
+  // now can, from the founder's own round and their own stored documents. What
+  // has to stay true is the rule underneath: the desk states what is NOT
+  // recorded rather than filling it in — and for liquidity nothing has changed
+  // at all, because no preference term is stored anywhere.
+  assert.match(desk, /No blocker is recorded against a round, so none is counted\./,
+    'the status card counts blockers nothing records');
+  assert.match(desk, /no liquidation preference, participation right or exit model is recorded for this company/,
+    'the liquidity zone no longer says why it draws no waterfall');
+  assert.match(desk, /no content review runs anywhere in this build/,
+    'the desk no longer says that nothing is screened before it is shared');
   assert.doesNotMatch(desk, /Kestrel|DeepSeek|Llama|FLUX|QwQ|Granite|\$620,000|\$1\.5M|\$435k|\$185k|Oct 14|22 days|9 investors|full ratchet|anti-dilution|2x participating|Slack|cohort retention|\$14\.20/i);
 });
 
