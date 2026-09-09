@@ -724,6 +724,88 @@ test('the reports read says nothing is delivered', async () => {
   assert.match(r.delivery_note, /no email, no notification/i);
 });
 
+/**
+ * THE THREE CHIPS THAT SELECTED NOTHING, AND THE TWO FIELDS THEY WAITED ON.
+ *
+ * `With blockers` filtered on `r.blockers`, `This cycle` and `Archive` on
+ * `d.period` — neither of which this listing returned. The compose endpoint had
+ * been reading blockers live since it was written; the listing simply never
+ * joined them, so on every build one chip showed everything and two showed
+ * nothing.
+ */
+test('the reports listing carries the cycle and each report’s live blockers', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const p = nowPeriod();
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { shipped: 'x' });
+
+  let r = (await call(e, 'GET', '/status-reports', ours)).body;
+  assert.equal(r.period, p, 'the listing does not say which cycle it is');
+  assert.deepEqual(r.items[0].blockers, [], 'a report with nothing open has no blockers array');
+  assert.equal(r.blocked_count, 0);
+  assert.equal(r.client_blocked_count, 0);
+  assert.equal(r.sent_this_cycle, 0);
+
+  const b = await call(e, 'POST', `/engagements/${OUR_ENGAGEMENT}/blockers`, ours, {
+    side: 'client', summary: 'Waiting on a direction',
+  });
+  r = (await call(e, 'GET', '/status-reports', ours)).body;
+  assert.equal(r.items[0].blockers.length, 1);
+  assert.equal(r.items[0].blockers[0].side, 'client');
+  assert.equal(r.items[0].blockers[0].summary, 'Waiting on a direction');
+  assert.equal(r.blocked_count, 1);
+  assert.equal(r.client_blocked_count, 1);
+
+  // CLEARED IS NOT BLOCKED. A blocker cleared since the report was written is
+  // what it USED to be blocked on; returning it would report a solved problem
+  // as a live one — and it is exactly what a prose copy on the report row
+  // would have done.
+  await call(e, 'PATCH', `/blockers/${b.body.id}`, ours, { cleared_at: new Date().toISOString() });
+  r = (await call(e, 'GET', '/status-reports', ours)).body;
+  assert.deepEqual(r.items[0].blockers, []);
+  assert.equal(r.blocked_count, 0);
+
+  // SENT THIS CYCLE COUNTS THE CYCLE, not every report ever sent — so an
+  // earlier period's sent report is in `sent_count` and out of this tile.
+  const older = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/2024-01`, ours, {
+    shipped: 'last year',
+  });
+  await call(e, 'POST', `/status-reports/${older.body.id}/send`, ours);
+  const thisCycle = (await call(e, 'GET', '/status-reports', ours)).body.items
+    .find((x: any) => x.period === p);
+  await call(e, 'POST', `/status-reports/${thisCycle.id}/send`, ours);
+  r = (await call(e, 'GET', '/status-reports', ours)).body;
+  assert.equal(r.sent_count, 2, 'both sent reports should be counted overall');
+  assert.equal(r.sent_this_cycle, 1, 'an earlier cycle’s report was counted as this cycle’s');
+  assert.equal(r.draft_count, 0);
+});
+
+test('a read time is refused rather than timed from our own send', async () => {
+  const e = env(freshDb());
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${nowPeriod()}`, ours, {
+    shipped: 'x',
+  });
+  const r = (await call(e, 'GET', '/status-reports', ours)).body;
+  // A read needs an open; an open is the client's act; no client-side surface
+  // exists to record one. Timing from the send would measure our own silence.
+  assert.equal(r.read_time_median_days, null);
+  assert.match(r.read_time_note, /no client-side surface to record it on/i);
+});
+
+test('another firm’s blockers never reach this firm’s report feed', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const p = nowPeriod();
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { shipped: 'x' });
+  await call(e, 'POST', `/engagements/${THEIR_ENGAGEMENT}/blockers`, theirs, {
+    side: 'client', summary: 'Theirs, not ours',
+  });
+  const r = (await call(e, 'GET', '/status-reports', ours)).body;
+  assert.equal(r.items.length, 1);
+  assert.deepEqual(r.items[0].blockers, [], 'a blocker crossed a firm boundary into the feed');
+  assert.equal(r.blocked_count, 0);
+});
+
 test('a quarterly period label is refused for a monthly report', async () => {
   const e = env(freshDb());
   const r = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/2026-Q3`, ours, {

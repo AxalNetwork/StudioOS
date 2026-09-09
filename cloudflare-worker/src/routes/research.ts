@@ -1440,6 +1440,65 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  'delivery/status-reports': {
+    // The artboard: "One report per client drafted from the week's real
+    // activity — shipped items from the deliverables log, next steps from
+    // milestones, blockers from where the work actually stopped … every draft
+    // waits for a person to send."
+    //
+    // The instruction that matters is the copy decision the zone is built
+    // around, and it cuts both ways: a client-side blocker must be NAMED, and
+    // must not be LEANED ON. A model told only the first writes an accusation;
+    // one told only the second writes a report that hides why the work stopped
+    // and makes the delay look like the firm's. The artboard's own instNote is
+    // the target — "not our delay, still our problem".
+    instruction: [
+      'Draft one short status report per engagement below: what shipped, what is next, and what it is blocked on.',
+      'Use only the rows given. Never write a shipped item, a milestone or a blocker that is not listed, and where a section has nothing, say so plainly rather than filling it.',
+      'Where a blocker is on the client’s side, name it plainly and say the deadline does not move because of it — not our delay, still our problem. Never phrase it as an accusation and never use it as an excuse.',
+      'A deliverable sent and not acknowledged means we have not heard, never that the client ignored it.',
+      'These are drafts. Never write as though the report has been sent.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      // One line per LIVE ENGAGEMENT, not per existing report: the batch drafts
+      // the reports that are owed, and an engagement with none written yet is
+      // exactly the one that needs drafting.
+      const rows = await c.env.DB.prepare(
+        `SELECT e.id AS engagement_id, f.name AS client, n.title AS scope,
+                (SELECT GROUP_CONCAT(d.title, '; ') FROM engagement_deliverables d
+                  WHERE d.engagement_id = e.id AND d.sent_at IS NOT NULL
+                    AND d.sent_at >= date('now', '-30 days')) AS shipped,
+                (SELECT COUNT(*) FROM engagement_deliverables d
+                  WHERE d.engagement_id = e.id AND d.sent_at IS NOT NULL AND d.opened_at IS NULL) AS unopened,
+                (SELECT GROUP_CONCAT(m.title, '; ') FROM engagement_milestones m
+                  WHERE m.engagement_id = e.id AND m.completed_at IS NULL) AS next_up,
+                (SELECT GROUP_CONCAT(b.summary, '; ') FROM engagement_blockers b
+                  WHERE b.engagement_id = e.id AND b.cleared_at IS NULL AND b.side = 'client') AS client_blocked,
+                (SELECT GROUP_CONCAT(b.summary, '; ') FROM engagement_blockers b
+                  WHERE b.engagement_id = e.id AND b.cleared_at IS NULL AND b.side <> 'client') AS our_blocked
+           FROM engagements e
+           LEFT JOIN founder_needs n ON n.id = e.need_id
+           LEFT JOIN users f ON f.id = e.founder_id
+          WHERE e.partner_id = ? AND e.cancelled_at IS NULL
+          ORDER BY e.created_at DESC LIMIT 50`
+      ).bind(me.partner_id).all<{
+        engagement_id: number; client: string | null; scope: string | null;
+        shipped: string | null; unopened: number; next_up: string | null;
+        client_blocked: string | null; our_blocked: string | null;
+      }>();
+      return (rows.results || []).map((r) =>
+        `${r.client || 'client not recorded'} — ${r.scope || 'scope not recorded'}; `
+        + `shipped in the last 30 days: ${r.shipped || 'NOTHING RECORDED'}; `
+        + `next: ${r.next_up || 'no open milestone recorded'}; `
+        + `blocked on the client's side: ${r.client_blocked || 'nothing'}; `
+        + `blocked on ours: ${r.our_blocked || 'nothing'}; `
+        + `${r.unopened} deliverable(s) sent and not acknowledged here`);
+    },
+  },
+
   'delivery/capacity': {
     // The artboard: "Findings across N people: who is over cap, by how much, and
     // which overage sits behind a granted seat. Separates schedulable overflow

@@ -1250,11 +1250,57 @@ partnerDelivery.get('/status-reports', async (c) => {
         ORDER BY r.period DESC, r.id DESC
         LIMIT 200`,
     ).bind(partnerId).all<any>();
-    const items = (rows.results || []).map(reportDto);
+
+    // BLOCKERS ARE READ LIVE AND ATTACHED, NEVER STORED ON THE REPORT. The
+    // compose endpoint has said so since it was written — "a prose copy would
+    // go stale the moment one cleared, and the side is what a stale copy
+    // loses" — and the listing had simply never carried them at all, which left
+    // the `With blockers` chip selecting nothing on every build.
+    //
+    // OPEN ONLY. A cleared blocker is not what a report is blocked on; it is
+    // what a report used to be blocked on, and a chip that swept those in would
+    // report resolved problems as live ones.
+    const blockers = await c.env.DB.prepare(
+      `SELECT b.engagement_id, b.side, b.summary, b.raised_at
+         FROM engagement_blockers b
+         JOIN engagements e ON e.id = b.engagement_id
+        WHERE e.partner_id = ? AND b.cleared_at IS NULL
+        ORDER BY b.raised_at`,
+    ).bind(partnerId).all<any>();
+    const byEngagement = new Map<number, any[]>();
+    for (const b of blockers.results || []) {
+      const key = Number(b.engagement_id);
+      if (!byEngagement.has(key)) byEngagement.set(key, []);
+      byEngagement.get(key)!.push({
+        side: b.side, summary: b.summary, days_open: daysBetween(b.raised_at),
+      });
+    }
+
+    const period = currentPeriod();
+    const items = (rows.results || []).map((r: any) => ({
+      ...reportDto(r),
+      blockers: byEngagement.get(Number(r.engagement_id)) || [],
+    }));
     return c.json({
       items,
+      // THE CYCLE THE PAGE IS OPEN ON, so `This cycle` and `Archive` are two
+      // ends of one comparison rather than two chips over a field the response
+      // never sent. Without it both selected the whole list or none of it.
+      period,
       draft_count: items.filter((r: any) => r.state === 'draft').length,
       sent_count: items.filter((r: any) => r.state === 'sent').length,
+      sent_this_cycle: items.filter((r: any) => r.state === 'sent' && r.period === period).length,
+      blocked_count: items.filter((r: any) => r.blockers.length > 0).length,
+      client_blocked_count: items.filter(
+        (r: any) => r.blockers.some((b: any) => b.side === 'client'),
+      ).length,
+      // WHAT A REPORT CANNOT REPORT ABOUT ITSELF. A read time needs an open,
+      // an open is the client's act, and no client-side surface exists to
+      // record one — the same absence `engagement_deliverables.opened_at`
+      // has and for the same reason. Refused with the reason rather than
+      // timed from the send, which would measure our own silence.
+      read_time_median_days: null,
+      read_time_note: 'Nothing records that a client read a report. There is no client-side surface to record it on, so a read time here would be a number about our own send, not about them.',
       // The report is composed here and delivered by a person. Nothing in this
       // product emails a client on a firm's behalf, and "sent" records that a
       // person sent it rather than that this product did.
