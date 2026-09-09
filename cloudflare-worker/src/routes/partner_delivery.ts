@@ -339,6 +339,39 @@ partnerDelivery.get('/health', async (c) => {
       ).bind(partnerId).all<any>(),
     ]);
 
+    // WHAT THE FIRM WROTE DOWN ABOUT THE ENGAGEMENT, beside the work (232).
+    // Owner, scope assessment and the client's score are none of them facts
+    // about milestones, blockers or deliverables — each is a sentence somebody
+    // stated — and all three are absent until they do.
+    const stated = await c.env.DB.prepare(
+      `SELECT h.engagement_id, h.owner_user_id, h.scope_state, h.scope_note,
+              h.satisfaction, h.satisfaction_source, h.satisfaction_at,
+              o.name AS owner_name
+         FROM partner_engagement_health h
+         JOIN engagements e ON e.id = h.engagement_id
+         LEFT JOIN users o ON o.id = h.owner_user_id
+        WHERE e.partner_id = ?`,
+    ).bind(partnerId).all<any>();
+    const statedByEng = new Map<number, any>();
+    for (const s of stated.results || []) statedByEng.set(Number(s.engagement_id), s);
+
+    // MODE IS DERIVED FROM THE SEAT, never stored — the same rule `/board`
+    // follows. An engagement that granted a seat IS embedded; a `mode` column
+    // would be a second place to say it that could disagree with the seat the
+    // first time one was revoked.
+    const seats = await c.env.DB.prepare(
+      `SELECT s.engagement_id, s.scope, s.revoked_at, u.name AS holder_name
+         FROM engagement_seats s
+         JOIN engagements e ON e.id = s.engagement_id
+         LEFT JOIN users u ON u.id = s.holder_user_id
+        WHERE e.partner_id = ?
+        ORDER BY s.revoked_at IS NOT NULL, s.granted_at DESC`,
+    ).bind(partnerId).all<any>();
+    const seatByEng = new Map<number, any>();
+    for (const s of seats.results || []) {
+      if (!seatByEng.has(Number(s.engagement_id))) seatByEng.set(Number(s.engagement_id), s);
+    }
+
     const by = <T extends { engagement_id: number }>(rows: T[]) => {
       const m = new Map<number, T[]>();
       for (const r of rows) {
@@ -358,6 +391,8 @@ partnerDelivery.get('/health', async (c) => {
 
     let rated = 0;
     const items = (engagements.results || []).map((e: any) => {
+      const st = statedByEng.get(Number(e.id));
+      const seat = seatByEng.get(Number(e.id));
       const ms = msByEng.get(Number(e.id)) || [];
       const allBl = blByEng.get(Number(e.id)) || [];
       const bl = allBl.filter((b: any) => !b.cleared_at);
@@ -384,6 +419,12 @@ partnerDelivery.get('/health', async (c) => {
         engagement_id: Number(e.id),
         engagement_uid: e.uid,
         status: e.status,
+        // RETURNED SO "LIVE" MEANS SOMETHING. The strip's satisfaction rule
+        // holds the firm-wide average back while any LIVE engagement is
+        // unscored; without this column every cancelled engagement in the book
+        // would keep it refused forever, which is a different claim from the
+        // one the artboard makes.
+        cancelled_at: e.cancelled_at ?? null,
         founder_id: e.founder_id ? Number(e.founder_id) : null,
         founder_name: e.founder_name ?? null,
         need_title: e.need_title ?? null,
@@ -400,6 +441,27 @@ partnerDelivery.get('/health', async (c) => {
         })),
         deliverables_sent: dl.filter((d: any) => d.sent_at).length,
         deliverables_unopened: unopened,
+        // ── What somebody at the firm stated (232) ──────────────────────────
+        // NULL THROUGHOUT UNTIL THEY DO. `scope_state` is not defaulted to
+        // 'within': an engagement nobody has assessed is not an engagement in
+        // scope, and a page that said otherwise would clear a client of drift
+        // by never having looked.
+        owner_user_id: st?.owner_user_id ? Number(st.owner_user_id) : null,
+        owner_name: st?.owner_name ?? null,
+        // The `Mode` column: a seat makes it embedded, and the grant's scope
+        // is what the founder actually handed over.
+        seat_scope: seat?.scope ?? null,
+        seat_holder: seat?.holder_name ?? null,
+        seat_revoked_at: seat?.revoked_at ?? null,
+        scope_state: st?.scope_state ?? null,
+        scope_note: st?.scope_note ?? null,
+        // A SCORE ALWAYS TRAVELS WITH ITS SOURCE. Migration 232's CHECK makes
+        // one impossible without the other, and the page prints the source
+        // beside every number: this is a remark somebody heard, not a metric
+        // this product measured.
+        satisfaction: st?.satisfaction == null ? null : Number(st.satisfaction),
+        satisfaction_source: st?.satisfaction_source ?? null,
+        satisfaction_at: st?.satisfaction_at ?? null,
         // Marked as a READ on the page, and it is one: the same helper the
         // Retainers zone calls, not a second computation of the same ratio.
         utilisation_source: 'pipeline_retainers',
@@ -407,6 +469,17 @@ partnerDelivery.get('/health', async (c) => {
         ...h,
       };
     });
+
+    // ── The `pd5` strip's four figures ────────────────────────────────────
+    const live = items.filter((r: any) => !r.cancelled_at);
+    const scored = live.filter((r: any) => r.satisfaction != null);
+    const withUtil = live.filter((r: any) => r.utilisation_pct != null);
+    // LOWEST, NOT AVERAGE. A renewal-risk page cares about the one client not
+    // using what they pay for, and an average would hide them behind four who
+    // are. The figure is the retainer record's, seam-marked on the row.
+    const lowest = withUtil.length
+      ? withUtil.reduce((a: any, b: any) => (b.utilisation_pct < a.utilisation_pct ? b : a))
+      : null;
 
     return c.json({
       items,
@@ -419,6 +492,128 @@ partnerDelivery.get('/health', async (c) => {
       unrated_note: items.length - rated
         ? `${items.length - rated} engagement${items.length - rated === 1 ? ' has' : 's have'} nothing recorded — no milestone, blocker, deliverable or retainer — so ${items.length - rated === 1 ? 'it is' : 'they are'} not rated. Silence is not good news.`
         : null,
+      at_risk_count: items.filter((r: any) => r.health === 'at_risk' || r.health === 'blocked').length,
+      // ONLY WHAT SOMEBODY ASSESSED AS DRIFT. An engagement nobody has looked
+      // at is neither in scope nor drifting, and it is counted as neither.
+      drift_count: items.filter((r: any) => r.scope_state === 'drift').length,
+      scope_unassessed_count: live.filter((r: any) => r.scope_state == null).length,
+      lowest_utilisation_pct: lowest ? lowest.utilisation_pct : null,
+      lowest_utilisation_client: lowest ? (lowest.founder_name ?? lowest.need_title ?? null) : null,
+      // A FIRM-WIDE AVERAGE NEEDS THE FIRM. While any live engagement has no
+      // score, averaging the rest would present a few opinions as a fact about
+      // all of them — which is the artboard's own reason for refusing it.
+      satisfaction_avg: live.length && scored.length === live.length
+        ? Math.round((scored.reduce((a: number, r: any) => a + r.satisfaction, 0) / scored.length) * 10) / 10
+        : null,
+      satisfaction_scored_count: scored.length,
+      satisfaction_unscored_count: live.length - scored.length,
+      satisfaction_note: live.length && scored.length === live.length
+        ? null
+        : `${live.length - scored.length} of ${live.length} engagement${live.length === 1 ? '' : 's'} ${live.length - scored.length === 1 ? 'has' : 'have'} no score, and averaging the rest would present ${scored.length} opinion${scored.length === 1 ? '' : 's'} as a firm-wide fact.`,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * What the firm states about an engagement: who owns it, whether it has
+ * drifted, and what the client said.
+ *
+ * NONE OF THE THREE IS DERIVABLE. Health is read from five stores and the
+ * artboard asks for three things none of them holds — an owner, a scope
+ * assessment, a satisfaction score. Migration 232's header has the argument;
+ * this route is the only way any of them gets written.
+ *
+ * A SCORE CANNOT BE SAVED WITHOUT ITS SOURCE. The CHECK enforces it in the
+ * schema and this refuses it with a sentence, because the failure it prevents
+ * is specific: a number typed by the person who wants the renewal, shown on the
+ * renewal-risk page as the client's opinion.
+ *
+ * AN OMITTED KEY IS UNTOUCHED; AN EXPLICIT NULL CLEARS. This is a PATCH in
+ * everything but name — a page saving the owner must not wipe a score it never
+ * loaded.
+ */
+partnerDelivery.put('/engagements/:engagementId/health', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const engagementId = Number(c.req.param('engagementId'));
+    await requireOwnEngagement(c.env, partnerId, engagementId);
+    const b = await body<any>(c);
+    const has = (k: string) => Object.prototype.hasOwnProperty.call(b, k);
+
+    const current = await c.env.DB.prepare(
+      'SELECT * FROM partner_engagement_health WHERE engagement_id = ?',
+    ).bind(engagementId).first<any>();
+
+    let ownerId = current?.owner_user_id ?? null;
+    if (has('owner_user_id')) {
+      if (b.owner_user_id === null) ownerId = null;
+      else {
+        // The firm's own people only — the same hole `requireOwnHolder` closes
+        // on the seat register. An owner is who to ask about this client.
+        const own = await requireOwnHolder(c.env, partnerId, Number(b.owner_user_id));
+        ownerId = Number(own.id);
+      }
+    }
+
+    let scopeState = current?.scope_state ?? null;
+    if (has('scope_state')) {
+      const v = b.scope_state === null ? null : String(b.scope_state);
+      if (v !== null && v !== 'within' && v !== 'drift') {
+        return c.json({ detail: 'Scope state is either within or drift' }, 400);
+      }
+      scopeState = v;
+    }
+    const scopeNote = has('scope_note')
+      ? trimOrNull(b.scope_note, 600) : (current?.scope_note ?? null);
+
+    let satisfaction = current?.satisfaction ?? null;
+    if (has('satisfaction')) {
+      if (b.satisfaction === null) satisfaction = null;
+      else {
+        const n = Number(b.satisfaction);
+        if (!Number.isFinite(n) || n < 1 || n > 5) {
+          return c.json({ detail: 'A satisfaction score is between 1 and 5' }, 400);
+        }
+        satisfaction = n;
+      }
+    }
+    const source = has('satisfaction_source')
+      ? trimOrNull(b.satisfaction_source, 300) : (current?.satisfaction_source ?? null);
+    if (satisfaction !== null && !source) {
+      return c.json({
+        detail: 'A satisfaction score needs a source — where it was said, and when. A number with none is the firm scoring itself.',
+      }, 400);
+    }
+    const at = has('satisfaction_at')
+      ? trimOrNull(b.satisfaction_at, 40) : (current?.satisfaction_at ?? null);
+
+    await c.env.DB.prepare(
+      `INSERT INTO partner_engagement_health
+         (engagement_id, owner_user_id, scope_state, scope_note,
+          satisfaction, satisfaction_source, satisfaction_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (engagement_id) DO UPDATE SET
+         owner_user_id = excluded.owner_user_id,
+         scope_state = excluded.scope_state,
+         scope_note = excluded.scope_note,
+         satisfaction = excluded.satisfaction,
+         satisfaction_source = excluded.satisfaction_source,
+         satisfaction_at = excluded.satisfaction_at,
+         updated_at = excluded.updated_at`,
+    ).bind(
+      engagementId, ownerId, scopeState, scopeNote,
+      satisfaction, source, at, nowIso(), nowIso(),
+    ).run();
+
+    return c.json({
+      ok: true,
+      engagement_id: engagementId,
+      owner_user_id: ownerId,
+      scope_state: scopeState,
+      scope_note: scopeNote,
+      satisfaction,
+      satisfaction_source: source,
+      satisfaction_at: at,
     });
   } catch (e) { return mapError(c, e); }
 });

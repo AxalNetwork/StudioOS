@@ -129,6 +129,7 @@ function freshDb() {
   // makes every assertion below true of a schema production does not have.
   db.exec(migration('230_partner_capacity'));
   db.exec(migration('231_partner_internal_hours'));
+  db.exec(migration('232_partner_engagement_health'));
 
   const u = db.prepare('INSERT INTO users (id, role, partner_id, name, email) VALUES (?,?,?,?,?)');
   u.run(OURS_USER, 'partner', 1, 'Ours', 'ours@example.com');
@@ -339,6 +340,164 @@ test('an unopened deliverable moves health to at risk', async () => {
   const row = (await call(e, 'GET', '/health', ours)).body.items[0];
   assert.equal(row.deliverables_unopened, 1);
   assert.equal(row.health, 'at_risk');
+});
+
+/**
+ * THE THREE FACTS NOTHING DERIVES (migration 232).
+ *
+ * Health is read across five stores, and the `pd5` artboard asks for three
+ * things none of them holds: who at the firm owns an engagement, whether it has
+ * drifted from its scope, and what the client thinks. Each is a sentence
+ * somebody states, and until they do all three are ABSENT — `scope_state` most
+ * of all, because defaulting it to "within" would clear a client of drift by
+ * never having looked.
+ */
+test('owner, scope and satisfaction are absent until stated', async () => {
+  const e = env(freshDb());
+  const r = (await call(e, 'GET', '/health', ours)).body;
+  const row = r.items[0];
+  assert.equal(row.owner_user_id, null);
+  assert.equal(row.scope_state, null, 'an unassessed engagement was defaulted to a scope state');
+  assert.equal(row.satisfaction, null);
+  assert.equal(r.drift_count, 0);
+  assert.equal(r.scope_unassessed_count, 1);
+  // AND THE FIRM-WIDE AVERAGE IS REFUSED, with the artboard's own reason.
+  assert.equal(r.satisfaction_avg, null);
+  assert.equal(r.satisfaction_unscored_count, 1);
+  assert.match(r.satisfaction_note, /averaging the rest would present/i);
+});
+
+test('a satisfaction score cannot be saved without saying where it was said', async () => {
+  const e = env(freshDb());
+  // 208:160 made `opened_at` the client's to set because a partner-side write
+  // would be the firm reporting a metric about itself. A score typed by the
+  // person who wants the renewal, on the page that decides one, is that
+  // failure — provenance is the whole difference.
+  const bare = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/health`, ours, {
+    satisfaction: 4.2,
+  });
+  assert.equal(bare.status, 400);
+  assert.match(bare.body.detail, /needs a source/i);
+
+  const ok = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/health`, ours, {
+    satisfaction: 4.2, satisfaction_source: 'quarterly review call, 14 Aug',
+  });
+  assert.equal(ok.status, 200);
+  const row = (await call(e, 'GET', '/health', ours)).body.items[0];
+  assert.equal(row.satisfaction, 4.2);
+  assert.equal(row.satisfaction_source, 'quarterly review call, 14 Aug');
+
+  for (const bad of [0, 0.9, 5.1, 11]) {
+    const r = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/health`, ours, {
+      satisfaction: bad, satisfaction_source: 'x',
+    });
+    assert.equal(r.status, 400, `${bad} was accepted as a satisfaction score`);
+  }
+});
+
+test('one write does not wipe the facts it was not carrying', async () => {
+  const e = env(freshDb());
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/health`, ours, {
+    satisfaction: 4, satisfaction_source: 'review call', scope_state: 'drift',
+    scope_note: 'requests beyond SOW §2',
+  });
+  // An OMITTED key is untouched — a page saving only the owner must not clear
+  // a score it never loaded.
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/health`, ours, {
+    owner_user_id: OUR_STAFF,
+  });
+  let row = (await call(e, 'GET', '/health', ours)).body.items[0];
+  assert.equal(row.owner_name, 'Sam');
+  assert.equal(row.satisfaction, 4);
+  assert.equal(row.scope_state, 'drift');
+  assert.equal(row.scope_note, 'requests beyond SOW §2');
+
+  // An EXPLICIT null clears.
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/health`, ours, {
+    owner_user_id: null, satisfaction: null,
+  });
+  row = (await call(e, 'GET', '/health', ours)).body.items[0];
+  assert.equal(row.owner_user_id, null);
+  assert.equal(row.satisfaction, null);
+  assert.equal(row.scope_state, 'drift', 'clearing one fact cleared another');
+});
+
+test('an owner must belong to this firm, and a scope state must be one of two', async () => {
+  const e = env(freshDb());
+  for (const outsider of [THEIR_STAFF, FOUNDER_USER]) {
+    const r = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/health`, ours, {
+      owner_user_id: outsider,
+    });
+    assert.equal(r.status, 400, `user ${outsider} was made the owner of our engagement`);
+  }
+  const bad = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/health`, ours, {
+    scope_state: 'probably fine',
+  });
+  assert.equal(bad.status, 400);
+  // AND ANOTHER FIRM CANNOT WRITE OURS AT ALL.
+  const theirWrite = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/health`, theirs, {
+    scope_state: 'drift',
+  });
+  assert.equal(theirWrite.status, 404);
+});
+
+/**
+ * LOWEST, NOT FIRST AND NOT AVERAGE.
+ *
+ * The renewal risk this page exists to surface is the ONE client not using what
+ * they pay for. An average hides them behind four who are, and taking whichever
+ * row happened to come back first is the same bug wearing a different mistake.
+ */
+test('the lowest utilisation is the lowest, whatever order the rows arrive in', async () => {
+  const db = freshDb();
+  const e = env(db);
+  db.prepare(
+    `INSERT INTO engagements (id, uid, need_id, quote_id, partner_id, founder_id, project_id, price)
+     VALUES (?,?,?,?,?,?,?,?)`,
+  ).run(904, 'e-ours-3', 502, 604, 1, FOUNDER_USER, 9, 9000);
+  const r = db.prepare(
+    `INSERT INTO partner_retainers (uid, engagement_id, retained_hours) VALUES (?,?,?)`);
+  r.run('ret-1', OUR_ENGAGEMENT, 100);
+  r.run('ret-2', 904, 100);
+  const u = db.prepare(
+    'INSERT INTO retainer_usage (retainer_id, period, hours_used) VALUES (?,?,?)');
+  // The high one is on the engagement the listing returns FIRST, so a read that
+  // takes `withUtil[0]` reports 95% as the lowest.
+  u.run(2, nowPeriod(), 34);
+  u.run(1, nowPeriod(), 95);
+
+  const body = (await call(e, 'GET', '/health', ours)).body;
+  assert.equal(body.lowest_utilisation_pct, 34, 'the strip reported something other than the lowest');
+  assert.equal(body.items[0].utilisation_pct, 95, 'the first row is not the high one — the fixture no longer tests order');
+});
+
+test('the strip figures come from the book, and the average waits for all of it', async () => {
+  const db = freshDb();
+  const e = env(db);
+  // A second engagement for this firm, so "all of it" means more than one.
+  db.prepare(
+    `INSERT INTO engagements (id, uid, need_id, quote_id, partner_id, founder_id, project_id, price)
+     VALUES (?,?,?,?,?,?,?,?)`,
+  ).run(903, 'e-ours-2', 502, 603, 1, FOUNDER_USER, 9, 9000);
+
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/health`, ours, {
+    scope_state: 'drift', satisfaction: 4, satisfaction_source: 'review call',
+  });
+  let r = (await call(e, 'GET', '/health', ours)).body;
+  assert.equal(r.drift_count, 1);
+  assert.equal(r.scope_unassessed_count, 1);
+  // ONE SCORE IS NOT A FIRM-WIDE FACT while the other engagement has none.
+  assert.equal(r.satisfaction_avg, null);
+  assert.equal(r.satisfaction_scored_count, 1);
+
+  await call(e, 'PUT', '/engagements/903/health', ours, {
+    scope_state: 'within', satisfaction: 3, satisfaction_source: 'email',
+  });
+  r = (await call(e, 'GET', '/health', ours)).body;
+  assert.equal(r.satisfaction_avg, 3.5);
+  assert.equal(r.satisfaction_note, null);
+  assert.equal(r.scope_unassessed_count, 0);
+  assert.equal(r.drift_count, 1);
 });
 
 // ---------------------------------------------------------------------------

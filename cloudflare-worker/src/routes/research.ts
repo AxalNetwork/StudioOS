@@ -1440,6 +1440,70 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  'delivery/health': {
+    // The artboard: "Per engagement: drift against SOW, utilization against the
+    // retainer record, and where satisfaction is ABSENT rather than low …
+    // Thornfield reads as the near-term risk on utilization and a decision the
+    // client has not made; Verwood reads as drift plus silence, which is a
+    // scoping conversation and not a renewal one yet."
+    //
+    // "Absent rather than low" is the instruction that matters, and it is the
+    // one a model gets wrong by default: a missing score reads as a bad one,
+    // an unassessed scope reads as a clean one, and an engagement with nothing
+    // recorded reads as healthy. Each of those turns silence into a finding
+    // pointing the wrong way.
+    instruction: [
+      'Read renewal risk per engagement below, using only what each row states.',
+      'Absent is not low and absent is not fine: no satisfaction score means nobody asked, an unassessed scope means nobody looked, and an engagement with nothing recorded is unrated rather than healthy. Say which, never fill it in.',
+      'Utilisation is read from the retainer record on Pipeline · Retainers. Quote it; never recompute it or reason from a different one.',
+      'Separate a scoping conversation from a renewal one: drift plus silence is the first, low utilisation against a near renewal date is the second, and they are not solved the same way.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT f.name AS client, n.title AS scope, r.renews_at AS renews_at,
+                h.scope_state AS scope_state, h.scope_note AS scope_note,
+                h.satisfaction AS satisfaction, h.satisfaction_source AS satisfaction_source,
+                o.name AS owner_name,
+                (SELECT COUNT(*) FROM engagement_milestones m
+                  WHERE m.engagement_id = e.id AND m.completed_at IS NULL
+                    AND m.due_at IS NOT NULL AND m.due_at < date('now')) AS overdue,
+                (SELECT COUNT(*) FROM engagement_blockers b
+                  WHERE b.engagement_id = e.id AND b.cleared_at IS NULL AND b.side = 'client') AS client_blocked,
+                (SELECT COUNT(*) FROM engagement_deliverables d
+                  WHERE d.engagement_id = e.id AND d.sent_at IS NOT NULL AND d.opened_at IS NULL) AS unopened
+           FROM engagements e
+           LEFT JOIN founder_needs n ON n.id = e.need_id
+           LEFT JOIN users f ON f.id = e.founder_id
+           LEFT JOIN partner_retainers r ON r.engagement_id = e.id
+           LEFT JOIN partner_engagement_health h ON h.engagement_id = e.id
+           LEFT JOIN users o ON o.id = h.owner_user_id
+          WHERE e.partner_id = ? AND e.cancelled_at IS NULL
+          ORDER BY e.created_at DESC LIMIT 100`
+      ).bind(me.partner_id).all<{
+        client: string | null; scope: string | null; renews_at: string | null;
+        scope_state: string | null; scope_note: string | null;
+        satisfaction: number | null; satisfaction_source: string | null;
+        owner_name: string | null; overdue: number; client_blocked: number; unopened: number;
+      }>();
+      return (rows.results || []).map((r) => {
+        const signals = [
+          r.overdue ? `${r.overdue} milestone(s) past due` : '',
+          r.client_blocked ? `${r.client_blocked} open blocker(s) on the client's side` : '',
+          r.unopened ? `${r.unopened} deliverable(s) sent and not acknowledged here` : '',
+        ].filter(Boolean);
+        return `${r.client || 'client not recorded'} — ${r.scope || 'scope not recorded'}; `
+          + `owner: ${r.owner_name || 'UNASSIGNED'}; `
+          + `renews: ${r.renews_at ? String(r.renews_at).slice(0, 10) : 'no renewal date recorded'}; `
+          + `scope: ${r.scope_state ? `${r.scope_state}${r.scope_note ? ` (${r.scope_note})` : ''}` : 'NOT ASSESSED — nobody has looked'}; `
+          + `satisfaction: ${r.satisfaction == null ? 'NO SCORE HEARD — absent, not low' : `${r.satisfaction}/5 (${r.satisfaction_source})`}; `
+          + `${signals.length ? signals.join('; ') : 'NOTHING RECORDED — unrated, not healthy'}`;
+      });
+    },
+  },
+
   'delivery/status-reports': {
     // The artboard: "One report per client drafted from the week's real
     // activity — shipped items from the deliverables log, next steps from

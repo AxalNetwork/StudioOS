@@ -3257,6 +3257,14 @@ export const api = {
   // when nothing is recorded — never 'on_track'. There is no method to set it,
   // because green-because-empty is the failure the zone was written against.
   getPartnerDeliveryHealth: () => request('/partner/delivery/health'),
+  // What the firm STATES about an engagement — owner, scope assessment, and
+  // the client's score with where it was said. None of the three is derivable
+  // from the five stores health is read across. An omitted key is untouched;
+  // an explicit null clears.
+  savePartnerEngagementHealth: (engagementId, data) =>
+    request(`/partner/delivery/engagements/${engagementId}/health`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
   // The `pd1` board: one row per engagement in whichever of the two modes it
   // is, with mode, grant, progress and health all derived server-side. See
   // `routes/partner_delivery.ts` for why none of the four is stored. Mounted at

@@ -351,10 +351,15 @@ export const PARTNER_ZONE_FILTERS = {
     { canvas: 'At risk', key: 'at_risk' },
     { canvas: 'All', key: 'all' },
     { canvas: 'Renewing soon', key: 'renewing' },
-    {
-      canvas: 'By owner',
-      unbuilt: 'nothing records who at the firm owns an engagement; the firm owner migration 224 added belongs to a book contact, which is a person the firm knows rather than work it is running',
-    },
+    // `By owner` WAS PROSE, AND THE REASON WAS EXACTLY RIGHT AT THE TIME: it
+    // read "nothing records who at the firm owns an engagement; the firm owner
+    // migration 224 added belongs to a book contact, which is a person the firm
+    // knows rather than work it is running." Migration 232 records the second
+    // thing — `partner_engagement_health.owner_user_id`, written from the
+    // health zone and returned on every row — so the distinction 224 could not
+    // cross is now on both sides. Unassigned sorts first: an engagement nobody
+    // owns is what this ordering exists to surface.
+    { canvas: 'By owner', key: 'owner' },
   ],
 
   // ── Research ─────────────────────────────────────────────────────────────
