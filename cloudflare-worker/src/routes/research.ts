@@ -1598,6 +1598,62 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  'pipeline/analytics': {
+    // The artboard: "You lost 4 of 9 decided bids this quarter and two of those
+    // losses were on price, every one of them fixed-scope, all against smaller
+    // shops. Retainers lost one, and not on price. The forecast of $58,000
+    // assumes the current 56% rate holds across $104,000 still live — reshape
+    // the open fixed-scope bids into retainers and that number moves without
+    // discounting anything."
+    //
+    // THE FAILURE MODE HERE IS NOT INVENTION, IT IS CONFIDENCE. Every figure is
+    // already computed and handed over, so a model has nothing to make up — what
+    // it will do by default is read a pattern out of three decisions and phrase
+    // it as a finding. The instructions are therefore about how many rows a
+    // claim is allowed to rest on, and about the difference between a loss with
+    // a recorded reason and a loss nobody explained.
+    instruction: [
+      'Narrate the quarter from the figures below and nothing else: win rate, median cycle, the shape breakdown, the loss reasons and the weighted forecast.',
+      'Say how many decisions each claim rests on, and where a shape has fewer than three decided bids, say the sample is too small to read rather than stating a pattern.',
+      'A loss with no recorded reason is not a loss on price. Never fold the unexplained losses into the taxonomy, and where they outnumber the explained ones, say the pattern describes only the explained ones.',
+      'The forecast is the open pipeline weighted by the current rate — it is an assumption, not a prediction. Say so, and never propose a discount as the way to move it.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      // One row per decided bid, with the shape it was filed under and the
+      // reason it was lost. The narrator is given the RECORD, not the summary,
+      // so it cannot be handed a rounded figure and asked to explain it.
+      const rows = await c.env.DB.prepare(
+        `SELECT q.status, q.price, q.loss_reason, q.created_at, q.decided_at,
+                n.category AS shape, f.name AS client
+           FROM quotes q
+           LEFT JOIN founder_needs n ON n.id = q.need_id
+           LEFT JOIN users f ON f.id = n.founder_id
+          WHERE q.partner_id = ? AND q.status IN ('accepted', 'rejected', 'submitted')
+          ORDER BY q.decided_at IS NULL, q.decided_at DESC
+          LIMIT 200`
+      ).bind(me.partner_id).all<{
+        status: string; price: number | null; loss_reason: string | null;
+        created_at: string | null; decided_at: string | null;
+        shape: string | null; client: string | null;
+      }>();
+      return (rows.results || []).map((r) => {
+        const value = r.price == null
+          ? 'NO VALUE RECORDED'
+          : `$${Math.round(Number(r.price)).toLocaleString('en-US')}`;
+        const outcome = r.status === 'accepted'
+          ? 'WON'
+          : (r.status === 'rejected'
+            ? `LOST — ${r.loss_reason ? `reason recorded: ${r.loss_reason}` : 'NO REASON RECORDED, do not read this as a price loss'}`
+            : 'STILL OPEN, in no quarter and in no win rate');
+        return `${r.client || 'client not recorded'}; shape ${r.shape || 'NOT RECORDED'}; ${value}; `
+          + `${outcome}; decided ${r.decided_at ? String(r.decided_at).slice(0, 10) : 'not yet'}`;
+      });
+    },
+  },
+
   'pipeline/leads': {
     // The artboard: "Accepting <lead> drafts a proposal shaped as a retainer
     // rather than a project — because retainers are where you win, and their

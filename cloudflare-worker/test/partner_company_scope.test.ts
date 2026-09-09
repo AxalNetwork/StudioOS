@@ -137,6 +137,9 @@ function freshDb() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       company_id INTEGER,
+      -- Migration 234. No CHECK: SQLite's ADD COLUMN cannot carry one, so the
+      -- live column has none either and the route is the only writer.
+      loss_reason TEXT,
       UNIQUE (need_id, partner_id)
     );
     CREATE TABLE engagements (

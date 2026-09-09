@@ -174,9 +174,21 @@ test('a version trail is append-only and self-numbering', () => {
 test('a loss reason is from the taxonomy, and an unstated one is its own row', () => {
   // THE VOCABULARY IS THE PASS SET MINUS TWO. You do not lose a deal for being
   // under your own floor, or for a capability you just quoted on.
-  const set = between(worker, 'const LOSS_REASONS = [', '];');
+  //
+  // IT MOVED, AND THIS FOLLOWED IT RATHER THAN LOOSENING. The list used to sit
+  // in this route beside the validator; Pipeline · Analytics now groups by it,
+  // so it lives in `services/bdAnalytics.ts` — the reader — and the writer
+  // imports it. Two literals is how a chart ends up with three bars over a
+  // four-value column, so this checks BOTH that the set is unchanged and that
+  // the writer no longer keeps a copy.
+  const engine = raw('cloudflare-worker/src/services/bdAnalytics.ts');
+  const set = between(engine, 'export const LOSS_REASONS: readonly string[] = [', '];');
   assert.deepEqual([...set.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]),
     ['price', 'scope_mismatch', 'timing', 'other']);
+  assert.ok(/import \{ LOSS_REASONS \} from '\.\.\/services\/bdAnalytics';/.test(worker),
+    'the writer stopped importing the taxonomy it validates against');
+  assert.ok(!/const LOSS_REASONS = \[/.test(worker),
+    'a second taxonomy literal is back in the route that writes it');
   const passSet = between(worker, 'const PASS_REASONS = [', '];');
   for (const r of ['price', 'scope_mismatch', 'timing', 'other']) {
     assert.ok(passSet.includes(`'${r}'`), `the two taxonomies have drifted apart on ${r}`);

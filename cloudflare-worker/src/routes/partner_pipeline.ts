@@ -51,6 +51,7 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
+import { LOSS_REASONS } from '../services/bdAnalytics';
 import {
   mapError, newUid, nowIso, requirePartnerProfile, trimOrNull,
 } from './_t13t14t15_helpers';
@@ -384,7 +385,9 @@ partnerPipeline.delete('/leads/:needId/pass', async (c) => {
  * reads — for one writer's constraint is the wrong trade. This route is that
  * writer; migration 234's header says so, so the next one is warned.
  */
-const LOSS_REASONS = ['price', 'scope_mismatch', 'timing', 'other'];
+// The list itself lives in `services/bdAnalytics.ts`, which is the reader.
+// Spelling it twice is how a writer and a chart end up with four categories and
+// three bars.
 
 /**
  * `GET /proposals` — every bid this firm has made, with its version trail.

@@ -1409,7 +1409,15 @@ export const api = {
   submitQuote: (needId, data) => request(`/needs/${needId}/quotes`, { method: 'POST', body: JSON.stringify(data) }),
   listQuotesForNeed: (needId) => request(`/needs/${needId}/quotes`),
   myQuotes: () => request('/quotes/me'),
-  quotesAnalytics: () => request('/quotes/analytics'),
+  // `period` is one of all | quarter | prev_quarter | ytd | shape — the
+  // Analytics chip row. Omitted is `all`, which is what the two older callers
+  // (`/partner/operations/performance` and the Studio home card) send, so their
+  // response shape is unchanged. It narrows what was DECIDED; the forecast is
+  // over the open pipeline either way, because an undecided quote sits in no
+  // quarter.
+  quotesAnalytics: (period) => request(
+    period && period !== 'all' ? `/quotes/analytics?period=${encodeURIComponent(period)}` : '/quotes/analytics',
+  ),
   acceptQuote: (id) => request(`/quotes/${id}/accept`, { method: 'POST' }),
   rejectQuote: (id) => request(`/quotes/${id}/reject`, { method: 'POST' }),
   withdrawQuote: (id) => request(`/quotes/${id}/withdraw`, { method: 'POST' }),

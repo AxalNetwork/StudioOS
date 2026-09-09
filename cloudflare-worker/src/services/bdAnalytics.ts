@@ -42,7 +42,27 @@ export interface QuoteRow {
    * than folding it into a real category.
    */
   shape?: string | null;
+  /**
+   * `quotes.loss_reason` (migration 234), one of `LOSS_REASONS` or null.
+   *
+   * NULL ON A REJECTED QUOTE IS ITS OWN ANSWER and is never folded into
+   * `other`: "nobody recorded why" and "they told us it was something else"
+   * are different findings, and only the second belongs in a taxonomy.
+   */
+  loss_reason?: string | null;
 }
+
+/**
+ * The loss taxonomy, and the only place it is spelled.
+ *
+ * Migration 233's pass vocabulary minus two — you do not lose a deal for being
+ * under your own floor, and you do not lose it for a capability you just quoted
+ * on. `routes/partner_pipeline.ts` writes it and validates against this list;
+ * this file groups by it. One vocabulary across the writer and the reader is
+ * what lets a count made on the Proposals zone be the same count Analytics
+ * reports.
+ */
+export const LOSS_REASONS: readonly string[] = ['price', 'scope_mismatch', 'timing', 'other'];
 
 export interface EngagementRow {
   status: string; // accepted | in_progress | delivered | cancelled
@@ -238,12 +258,48 @@ export function analyseDelivery(engagements: EngagementRow[]): DeliverySummary {
  * this is the only decomposition the store can honestly support, and the zone
  * says so beside the table rather than letting a column header imply more.
  *
- * WHAT NEITHER OF THESE IS. The canvas's third analytic block is a loss-reason
- * taxonomy, and it stays absent: `quotes` carries `status` and `decided_at`,
- * with no reason, no competitor and no price-against-won column. A "lost on
- * price" count derived from anything here would be a guess wearing a number's
- * clothes. The zone names that gap instead of filling it.
+ * THE THIRD BLOCK IS NO LONGER A GAP. The canvas's loss-reason taxonomy was
+ * refused here for as long as it had to be: `quotes` carried a status and a
+ * decision date and nothing about why, so any "lost on price" count would have
+ * been a guess wearing a number's clothes. Migration 234 added
+ * `quotes.loss_reason` and the Proposals zone writes it against a closed
+ * vocabulary, so the count is now READ rather than inferred —
+ * `analyseLossReasons` below, and the on-price count per shape that the
+ * artboard insists be "stated per shape rather than asserted as a universal".
+ *
+ * WHAT IS STILL NOT STORED, and is why a loss with no reason is its own row
+ * rather than an `other`: nobody is obliged to record one. A taxonomy that
+ * silently absorbed the unanswered losses would report a pattern over exactly
+ * the decisions somebody bothered to explain.
  */
+/**
+ * The recorded loss reason, or null — including for a rejected quote whose
+ * reason nobody recorded, and for a stray value outside the taxonomy.
+ *
+ * Both null cases mean the same thing to every count in this file: this loss
+ * is not explained. Treating an off-taxonomy string as a fifth category would
+ * let one bad write invent a pattern.
+ */
+const UNRECORDED = '\u0000unrecorded';
+
+/**
+ * One ordering for shapes wherever they are listed: named shapes A-Z, and the
+ * unrecorded one last. Shared so the by-shape table and each quarter's series
+ * cannot disagree about where a nameless shape sits.
+ */
+function byShapeName(a: { shape: string | null }, b: { shape: string | null }): number {
+  if (a.shape === null) return b.shape === null ? 0 : 1;
+  if (b.shape === null) return -1;
+  return a.shape.localeCompare(b.shape);
+}
+
+function lossReasonOf(q: QuoteRow): string | null {
+  const raw = q?.loss_reason;
+  if (raw === null || raw === undefined) return null;
+  const v = String(raw).trim();
+  return LOSS_REASONS.includes(v) ? v : null;
+}
+
 export interface ShapeBreakdown {
   /** `founder_needs.category`. Null when the need row is unreadable. */
   shape: string | null;
@@ -257,6 +313,15 @@ export interface ShapeBreakdown {
   median_cycle_days: number | null;
   won_value: number;
   open_value: number;
+  /**
+   * Losses in this shape carrying `loss_reason = 'price'`, and losses carrying
+   * ANY reason. Two numbers because the artboard's row reads "two of the three
+   * losses on price" — a fraction whose denominator must be the losses somebody
+   * explained, not every loss. With `losses_with_reason` at 0 the row has
+   * nothing to say about price and says that instead.
+   */
+  on_price_losses: number;
+  losses_with_reason: number;
 }
 
 /**
@@ -270,18 +335,29 @@ export interface ShapeBreakdown {
  */
 export function analyseByShape(quotes: QuoteRow[]): ShapeBreakdown[] {
   const by = new Map<string, { shape: string | null; accepted: number; rejected: number;
-    pending: number; withdrawn: number; won: number; open: number; cycles: number[] }>();
+    pending: number; withdrawn: number; won: number; open: number; cycles: number[];
+    onPrice: number; reasoned: number }>();
 
   for (const q of quotes || []) {
     const raw = q?.shape;
     const shape = raw === null || raw === undefined || String(raw).trim() === '' ? null : String(raw);
-    const key = shape === null ? ' unrecorded' : shape;
+    const key = shape === null ? UNRECORDED : shape;
     const cur = by.get(key)
-      || { shape, accepted: 0, rejected: 0, pending: 0, withdrawn: 0, won: 0, open: 0, cycles: [] };
+      || { shape, accepted: 0, rejected: 0, pending: 0, withdrawn: 0, won: 0, open: 0, cycles: [],
+        onPrice: 0, reasoned: 0 };
     const status = String(q?.status || '');
     const amount = Math.max(0, num(q?.amount) ?? 0);
     if (status === 'accepted') { cur.accepted++; cur.won += amount; }
-    else if (status === 'rejected') cur.rejected++;
+    else if (status === 'rejected') {
+      cur.rejected++;
+      // READ, NEVER INFERRED. Only a reason actually in the taxonomy counts: a
+      // stray string is an unexplained loss, not a fifth category.
+      const reason = lossReasonOf(q);
+      if (reason) {
+        cur.reasoned++;
+        if (reason === 'price') cur.onPrice++;
+      }
+    }
     else if (PENDING.has(status)) { cur.pending++; cur.open += amount; }
     else if (status === 'withdrawn') cur.withdrawn++;
     if (DECIDED.has(status) && q?.created_at && q?.decided_at) {
@@ -307,14 +383,22 @@ export function analyseByShape(quotes: QuoteRow[]): ShapeBreakdown[] {
         median_cycle_days: med === null ? null : Math.round(med * 10) / 10,
         won_value: money(v.won),
         open_value: money(v.open),
+        on_price_losses: v.onPrice,
+        losses_with_reason: v.reasoned,
       };
     })
-    .sort((a, b) => {
-      if (b.quote_count !== a.quote_count) return b.quote_count - a.quote_count;
-      if (a.shape === null) return b.shape === null ? 0 : 1;
-      if (b.shape === null) return -1;
-      return a.shape.localeCompare(b.shape);
-    });
+    .sort((a, b) => (b.quote_count !== a.quote_count
+      ? b.quote_count - a.quote_count
+      : byShapeName(a, b)));
+}
+
+export interface QuarterSeriesPoint {
+  /** `founder_needs.category`, or null for a quote whose need is unreadable. */
+  shape: string | null;
+  decided: number;
+  accepted: number;
+  /** Null when this shape decided nothing in this quarter. */
+  win_rate_pct: number | null;
 }
 
 export interface QuarterBreakdown {
@@ -325,6 +409,14 @@ export interface QuarterBreakdown {
   decided: number;
   win_rate_pct: number | null;
   won_value: number;
+  /**
+   * The same quarter split by shape, because the artboard's chart is "win rate
+   * BY SHAPE" quarter over quarter rather than one overall bar. Only shapes
+   * that decided something in this quarter appear: a shape with no decision
+   * has no rate here, and a zero-height bar would read as having lost every
+   * bid rather than as having made none.
+   */
+  by_shape: QuarterSeriesPoint[];
 }
 
 /**
@@ -340,17 +432,26 @@ export interface QuarterBreakdown {
  * come back chronologically, because a trend is read left to right.
  */
 export function analyseByQuarter(quotes: QuoteRow[]): QuarterBreakdown[] {
-  const by = new Map<string, { accepted: number; rejected: number; won: number }>();
+  const by = new Map<string, {
+    accepted: number; rejected: number; won: number;
+    shapes: Map<string, { shape: string | null; accepted: number; decided: number }>;
+  }>();
   for (const q of quotes || []) {
     const status = String(q?.status || '');
     if (!DECIDED.has(status)) continue;
     const t = Date.parse(String(q?.decided_at || ''));
     if (Number.isNaN(t)) continue;
-    const d = new Date(t);
-    const quarter = `${d.getUTCFullYear()}-Q${Math.floor(d.getUTCMonth() / 3) + 1}`;
-    const cur = by.get(quarter) || { accepted: 0, rejected: 0, won: 0 };
+    const quarter = quarterOf(new Date(t));
+    const cur = by.get(quarter) || { accepted: 0, rejected: 0, won: 0, shapes: new Map() };
     if (status === 'accepted') { cur.accepted++; cur.won += Math.max(0, num(q?.amount) ?? 0); }
     else cur.rejected++;
+    const raw = q?.shape;
+    const shape = raw === null || raw === undefined || String(raw).trim() === '' ? null : String(raw);
+    const key = shape === null ? UNRECORDED : shape;
+    const sc = cur.shapes.get(key) || { shape, accepted: 0, decided: 0 };
+    sc.decided++;
+    if (status === 'accepted') sc.accepted++;
+    cur.shapes.set(key, sc);
     by.set(quarter, cur);
   }
   return [...by.entries()]
@@ -363,7 +464,111 @@ export function analyseByQuarter(quotes: QuoteRow[]): QuarterBreakdown[] {
         decided,
         win_rate_pct: decided > 0 ? pct(v.accepted / decided) : null,
         won_value: money(v.won),
+        by_shape: [...v.shapes.values()]
+          .map((s) => ({
+            shape: s.shape,
+            decided: s.decided,
+            accepted: s.accepted,
+            win_rate_pct: s.decided > 0 ? pct(s.accepted / s.decided) : null,
+          }))
+          .sort(byShapeName),
       };
     })
     .sort((a, b) => a.quarter.localeCompare(b.quarter));
+}
+
+// ---------- the loss taxonomy, and the window a reader chose ----------
+
+export interface LossBreakdown {
+  /** Every taxonomy entry, in the order it is defined — including the zeroes. */
+  reasons: Array<{ reason: string; count: number }>;
+  /** Rejected quotes carrying no reason in the taxonomy. Never an `other`. */
+  unstated: number;
+  /** Rejected quotes in the window, whether explained or not. */
+  losses: number;
+  /** Losses recorded as lost on price. The artboard's fourth tile. */
+  on_price: number;
+}
+
+/**
+ * The loss pattern, counted rather than inferred.
+ *
+ * EVERY TAXONOMY ENTRY COMES BACK, zeroes included, because a bar chart missing
+ * its zero rows implies the reasons it omits were never options. The chart is
+ * about a fixed vocabulary; the vocabulary is the finding as much as the counts
+ * are.
+ *
+ * AND `unstated` IS THE ROW THAT MATTERS MOST when it is large: a taxonomy
+ * covering three of eleven losses describes the three, and a reader who cannot
+ * see that reads it as describing eleven.
+ */
+export function analyseLossReasons(quotes: QuoteRow[]): LossBreakdown {
+  const counts: Record<string, number> = {};
+  for (const r of LOSS_REASONS) counts[r] = 0;
+  let unstated = 0;
+  let losses = 0;
+  for (const q of quotes || []) {
+    if (String(q?.status || '') !== 'rejected') continue;
+    losses++;
+    const reason = lossReasonOf(q);
+    if (reason) counts[reason] += 1;
+    else unstated++;
+  }
+  return {
+    reasons: LOSS_REASONS.map((reason) => ({ reason, count: counts[reason] })),
+    unstated,
+    losses,
+    on_price: counts.price,
+  };
+}
+
+/** The calendar quarter a date falls in, as `2026-Q3`. */
+export function quarterOf(d: Date): string {
+  return `${d.getUTCFullYear()}-Q${Math.floor(d.getUTCMonth() / 3) + 1}`;
+}
+
+/** The windows the analytics chip row offers. `all` is the default. */
+export type DecisionPeriod = 'all' | 'quarter' | 'prev_quarter' | 'ytd' | 'shape';
+
+/**
+ * The quotes whose DECISION landed inside the reader's chosen window.
+ *
+ * KEYED ON THE DECISION, like `analyseByQuarter` and for the same reason: a
+ * quote sent in March and lost in July is a July loss, and keying on when it
+ * was sent would move a result into a quarter whose outcome was unknown at the
+ * time.
+ *
+ * AN UNDECIDED QUOTE IS IN EVERY WINDOW. It has no decision date to place it,
+ * and dropping it would empty the open-pipeline figures the moment a reader
+ * pressed a period chip — so the window narrows what has been DECIDED and
+ * leaves what is still open alone. The zone says so rather than letting a
+ * forecast quietly change meaning with the chip row.
+ *
+ * `shape` IS A GROUPING, NOT A WINDOW, so it selects everything: the artboard's
+ * fourth chip re-reads the same rows down the shape axis instead of the time
+ * one.
+ */
+export function inDecisionPeriod(
+  quotes: QuoteRow[],
+  period: DecisionPeriod,
+  now: Date,
+): QuoteRow[] {
+  const rows = quotes || [];
+  if (period === 'all' || period === 'shape') return rows;
+  const thisQuarter = quarterOf(now);
+  const prevDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 3, 1));
+  const prevQuarter = quarterOf(prevDate);
+  const year = String(now.getUTCFullYear());
+  return rows.filter((q) => {
+    const status = String(q?.status || '');
+    if (!DECIDED.has(status)) return true;
+    const t = Date.parse(String(q?.decided_at || ''));
+    // A DECIDED QUOTE WITH NO READABLE DATE IS IN NO WINDOW. It cannot be
+    // placed, and placing it in the current one would credit this quarter with
+    // a decision that may be years old.
+    if (Number.isNaN(t)) return false;
+    const d = new Date(t);
+    if (period === 'ytd') return String(d.getUTCFullYear()) === year;
+    return quarterOf(d) === (period === 'quarter' ? thisQuarter : prevQuarter);
+  });
 }
