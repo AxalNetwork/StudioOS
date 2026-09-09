@@ -114,10 +114,15 @@ test('the route the Delivery row lands on reads the Delivery stores', () => {
   // is not on; `profile_zone_actions` fails on it, and this pins the reason.
   assert.ok(!engagements.includes("partnerZoneActions('delivery/board'"),
     'EngagementsPage is building the board’s action row again');
-  // Flattened: the note wraps across comment lines.
+  // Flattened: the note wraps across comment lines. The wording moved when
+  // `/pipeline/proposals` also got its own zone and this page stopped carrying
+  // BOTH header rows — what has to survive is the record that the rows left
+  // with the zones that own them, not one particular sentence.
   const engRaw = raw('frontend/src/pages/partner/operations/EngagementsPage.jsx').replace(/\s+/g, ' ');
-  assert.ok(engRaw.includes('this page is no longer that zone'),
+  assert.ok(engRaw.includes('the header rows went with the zones that own them'),
     'the removal is no longer recorded, so the next reader re-adds it');
+  assert.ok(engRaw.includes('delivery/BoardZone` took the route'),
+    'the record no longer names the zone that took this route');
   // The five stores the old page could not see.
   for (const table of ['engagement_seats', 'engagement_milestones', 'engagement_blockers',
     'engagement_deliverables', 'engagement_hours']) {

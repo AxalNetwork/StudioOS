@@ -1,11 +1,29 @@
 /**
- * /api/partner/pipeline — Negotiations and Retainers.
+ * /api/partner/pipeline — Leads, Proposals, Negotiations and Retainers.
  *
- * Two of the nine partner workspace zones that rendered a "no store behind
- * this yet" card until migration 208 gave them one. This file is the first
- * thing that reads those tables.
+ * IT WAS TWO ZONES WHEN THIS FILE WAS WRITTEN, and the header said so: the two
+ * that rendered a "no store behind this yet" card until migration 208 gave them
+ * one. The other two rendered SHARED PAGES instead — `/pipeline/leads` the
+ * marketplace needs board four licences see, `/pipeline/proposals` the
+ * engagements-and-invoices page it shared with `/delivery/board` — so neither
+ * had a partner-specific read at all, and neither could carry the artboard its
+ * bucket was specified from.
  *
- * WHAT THE ZONES ASKED FOR AND WHY THE STORE IS SHAPED THIS WAY:
+ * WHAT THE TWO NEW ZONES ASKED FOR:
+ *
+ *   LEADS. Three sets that must not overlap — an open lead, a proposal, a pass
+ *   — and a score against the firm's OWN rules. `partner_fit_rules` (209/229)
+ *   held those rules the whole time and nothing read them;
+ *   `partner_lead_passes` (233) is new, because a decision NOT to bid was not
+ *   recorded anywhere and a pass without a reason is a lead read again next
+ *   quarter.
+ *
+ *   PROPOSALS. A version trail and a loss taxonomy, neither of which `quotes`
+ *   could hold: one row, one price, overwritten on edit, and a `rejected`
+ *   status with no reason beside it. Migration 234 adds both. What it does NOT
+ *   add is a read receipt — see `GET /proposals`.
+ *
+ * WHAT THE ORIGINAL TWO ASKED FOR AND WHY THE STORE IS SHAPED THIS WAY:
  *
  *   NEGOTIATIONS. A quote is sent or decided; the conversation between those
  *   two states was unmodelled. `quote_negotiations` adds the stage, whose move
@@ -54,10 +72,6 @@ async function actingPartner(c: any): Promise<{ user: User; partnerId: number }>
 async function body<T>(c: any): Promise<T> {
   return (await c.req.json().catch(() => ({}))) as T;
 }
-
-// ---------------------------------------------------------------------------
-// Negotiations
-// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Leads — the three sets, and a score that shows its work
@@ -352,6 +366,229 @@ partnerPipeline.delete('/leads/:needId/pass', async (c) => {
       'DELETE FROM partner_lead_passes WHERE partner_id = ? AND need_id = ?',
     ).bind(partnerId, needId).run();
     return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// Proposals — the lifecycle, the versions, and the one thing it cannot see
+// ---------------------------------------------------------------------------
+
+/**
+ * A LOSS TAKES THE PASS VOCABULARY MINUS TWO. Migration 233's set, without
+ * `below_floor` and `no_capability`: you do not lose a deal for being under your
+ * own floor, and you do not lose it for a capability you just quoted on. One
+ * vocabulary across both tables is what lets Pipeline · Analytics group them.
+ *
+ * ENFORCED HERE BECAUSE SQLITE CANNOT ENFORCE IT THERE. `ALTER TABLE … ADD
+ * COLUMN` takes no CHECK, and rebuilding `quotes` — a core table every licence
+ * reads — for one writer's constraint is the wrong trade. This route is that
+ * writer; migration 234's header says so, so the next one is warned.
+ */
+const LOSS_REASONS = ['price', 'scope_mismatch', 'timing', 'other'];
+
+/**
+ * `GET /proposals` — every bid this firm has made, with its version trail.
+ *
+ * THE ARTBOARD'S SUBJECT IS THE LIFECYCLE: "a proposal opened four times and not
+ * answered is a different object from one never opened." THIS BUILD CANNOT TELL
+ * THOSE APART, and the response says so rather than letting the page imply it.
+ * `quotes` has no open, no read receipt and no view count, and no founder-side
+ * surface records one — the same absence `engagement_deliverables.opened_at`
+ * has, for the same reason: an open is the client's act.
+ *
+ * So `signal` is what this side genuinely knows — sent, how long ago, decided or
+ * not — and `read_receipts: 'none'` carries the reason. A "never opened" count
+ * computed from silence would be a number about our own send.
+ */
+partnerPipeline.get('/proposals', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const [rows, versions] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT q.id, q.uid, q.need_id, q.price, q.timeline_weeks, q.deliverables,
+                q.status, q.decided_at, q.loss_reason, q.created_at, q.updated_at,
+                n.title AS need_title, f.name AS client,
+                e.id AS engagement_id, r.shape AS retainer_shape
+           FROM quotes q
+           LEFT JOIN founder_needs n ON n.id = q.need_id
+           LEFT JOIN users f ON f.id = n.founder_id
+           LEFT JOIN engagements e ON e.quote_id = q.id
+           LEFT JOIN partner_retainers r ON r.engagement_id = e.id
+          WHERE q.partner_id = ?
+          ORDER BY q.created_at DESC
+          LIMIT 200`,
+      ).bind(partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT v.id, v.quote_id, v.version, v.change_summary, v.note, v.price_cents, v.created_at
+           FROM quote_versions v
+           JOIN quotes q ON q.id = v.quote_id
+          WHERE q.partner_id = ?
+          ORDER BY v.quote_id, v.version`,
+      ).bind(partnerId).all<any>(),
+    ]);
+
+    const byQuote = new Map<number, any[]>();
+    for (const v of versions.results || []) {
+      const k = Number(v.quote_id);
+      if (!byQuote.has(k)) byQuote.set(k, []);
+      byQuote.get(k)!.push({
+        id: Number(v.id),
+        version: Number(v.version),
+        change_summary: v.change_summary,
+        note: v.note ?? null,
+        price_cents: v.price_cents == null ? null : Number(v.price_cents),
+        created_at: v.created_at,
+      });
+    }
+
+    const items = (rows.results || []).map((q: any) => {
+      const trail = byQuote.get(Number(q.id)) || [];
+      const decided = Boolean(q.decided_at) || q.status === 'accepted' || q.status === 'rejected';
+      return {
+        quote_id: Number(q.id),
+        uid: q.uid,
+        need_id: Number(q.need_id),
+        client: q.client ?? null,
+        need_title: q.need_title ?? null,
+        // `quotes.price` is grandfathered REAL dollars; every new money column
+        // in this bucket is cents, so the unit is named rather than guessed at
+        // by the reader.
+        price_dollars: q.price == null ? null : Number(q.price),
+        timeline_weeks: q.timeline_weeks == null ? null : Number(q.timeline_weeks),
+        // THE SHAPE IS THE RETAINER RECORD'S OR IT IS A FIXED SCOPE. Nothing
+        // stores "shape" on a quote, and an accepted quote with a retainer
+        // behind it is the only thing that makes one recurring.
+        shape: q.retainer_shape === 'retainer' ? 'Retainer'
+          : (q.retainer_shape === 'embedded_seat' ? 'Embedded seat' : 'Fixed scope'),
+        // v1 IS THE PROPOSAL ITSELF. A quote with no version rows has been sent
+        // once and never revised, which is a version history of length one
+        // rather than an absence.
+        version: trail.length ? Math.max(...trail.map((v: any) => v.version)) : 1,
+        versions: trail,
+        status: q.status,
+        state: q.status === 'accepted' ? 'Won'
+          : (q.status === 'rejected' ? 'Lost'
+            : (q.status === 'withdrawn' ? 'Withdrawn' : 'Sent')),
+        decided,
+        decided_at: q.decided_at ?? null,
+        loss_reason: q.loss_reason ?? null,
+        days_since_sent: daysBetween(q.created_at),
+        // WHAT THIS SIDE KNOWS, and it is not whether they read it.
+        signal: decided
+          ? `Decided ${q.decided_at ? String(q.decided_at).slice(0, 10) : ''}`.trim()
+          : `Sent · silent ${daysBetween(q.created_at) ?? 0} days`,
+        engagement_id: q.engagement_id ? Number(q.engagement_id) : null,
+      };
+    });
+
+    const live = items.filter((x: any) => !x.decided && x.status !== 'withdrawn');
+    const decidedItems = items.filter((x: any) => x.decided);
+    const won = decidedItems.filter((x: any) => x.state === 'Won');
+    const lost = decidedItems.filter((x: any) => x.state === 'Lost');
+    const lossCounts: Record<string, number> = {};
+    for (const r of LOSS_REASONS) lossCounts[r] = 0;
+    let unstatedLosses = 0;
+    for (const l of lost) {
+      if (l.loss_reason && LOSS_REASONS.includes(l.loss_reason)) lossCounts[l.loss_reason] += 1;
+      else unstatedLosses += 1;
+    }
+
+    return c.json({
+      items,
+      live_count: live.length,
+      live_value_dollars: live.reduce((a: number, x: any) => a + (x.price_dollars || 0), 0),
+      decided_count: decidedItems.length,
+      won_count: won.length,
+      lost_count: lost.length,
+      // NULL WITH NOTHING DECIDED. A rate over an empty denominator is not zero
+      // per cent, and the analytics zone reports the same figure from the same
+      // rule rather than a second one.
+      win_rate_pct: decidedItems.length
+        ? Math.round((won.length / decidedItems.length) * 100) : null,
+      loss_reasons: LOSS_REASONS.map((reason) => ({ reason, count: lossCounts[reason] })),
+      // A LOSS WITH NO REASON IS THE CHART'S REAL FINDING, so it is counted
+      // rather than folded into `other`: "we did not ask" and "they said other"
+      // are different answers and only one of them is a taxonomy entry.
+      losses_unstated: unstatedLosses,
+      // THE ONE THING THIS ZONE CANNOT SEE, said in the response so the page
+      // cannot imply otherwise while the response stays silent.
+      read_receipts: 'none',
+      read_receipts_note: 'Nothing records that a client opened a proposal. There is no client-side surface to record it on, so a proposal that has gone quiet cannot be told from one that was never read — and "never opened" here would be a claim about our own silence rather than about them.',
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Append a version — what changed, and what it cost.
+ *
+ * APPEND-ONLY AND SELF-NUMBERING. The caller does not choose the version: the
+ * next one is the highest plus one, so two edits from two people cannot both
+ * claim to be v3. Nothing here edits or deletes an earlier version, because a
+ * history that can be rewritten is not one.
+ */
+partnerPipeline.post('/proposals/:quoteId/versions', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const quoteId = Number(c.req.param('quoteId'));
+    await requireOwnQuote(c.env, partnerId, quoteId);
+    const b = await body<any>(c);
+    const summary = trimOrNull(b.change_summary, 400);
+    if (!summary) return c.json({ detail: 'A version needs to say what changed' }, 400);
+    const cents = parseCents(b.price_cents, 'price_cents');
+    if ('error' in cents) return c.json({ detail: cents.error }, 400);
+
+    const top = await c.env.DB.prepare(
+      'SELECT MAX(version) AS top FROM quote_versions WHERE quote_id = ?',
+    ).bind(quoteId).first<{ top: number | null }>();
+    const version = Number(top?.top || 0) + 1;
+
+    const ins = await c.env.DB.prepare(
+      `INSERT INTO quote_versions (quote_id, version, change_summary, note, price_cents, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(quoteId, version, summary, trimOrNull(b.note, 600), cents.cents, nowIso(), nowIso()).run();
+    return c.json({
+      id: Number((ins as any).meta?.last_row_id),
+      quote_id: quoteId,
+      version,
+      change_summary: summary,
+      note: trimOrNull(b.note, 600),
+      price_cents: cents.cents,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Record why a proposal was lost — from the taxonomy, never typed.
+ *
+ * THE ARTBOARD'S OWN REASON: "reasons are picked from a fixed taxonomy, not
+ * typed. Free text would make this chart unreadable within a quarter." So this
+ * refuses anything outside the set, and it refuses a reason on a proposal that
+ * was not lost — a won deal with a loss reason is a row nothing can read.
+ */
+partnerPipeline.put('/proposals/:quoteId/outcome', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const quoteId = Number(c.req.param('quoteId'));
+    const quote = await requireOwnQuote(c.env, partnerId, quoteId);
+    const b = await body<any>(c);
+
+    if (b.loss_reason === null) {
+      await c.env.DB.prepare('UPDATE quotes SET loss_reason = NULL, updated_at = ? WHERE id = ?')
+        .bind(nowIso(), quoteId).run();
+      return c.json({ ok: true, loss_reason: null });
+    }
+    const reason = String(b.loss_reason ?? '');
+    if (!LOSS_REASONS.includes(reason)) {
+      return c.json({ detail: `A loss reason is one of: ${LOSS_REASONS.join(', ')}` }, 400);
+    }
+    if ((quote as any).status !== 'rejected') {
+      return c.json({
+        detail: 'Only a lost proposal carries a loss reason. A bid you never made is a pass, recorded on Leads with its own reason.',
+      }, 409);
+    }
+    await c.env.DB.prepare('UPDATE quotes SET loss_reason = ?, updated_at = ? WHERE id = ?')
+      .bind(reason, nowIso(), quoteId).run();
+    return c.json({ ok: true, quote_id: quoteId, loss_reason: reason });
   } catch (e) { return mapError(c, e); }
 });
 

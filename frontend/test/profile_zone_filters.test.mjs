@@ -303,14 +303,14 @@ const PROFILES = {
     // take the same bound builder their siblings do, and the four other
     // Delivery zones hoist a `ZoneToolbar` above their `ZoneBody` the way every
     // newer zone does. Was 11, then 12, then 13.
-    // EIGHTEEN MOUNT THEIRS, and the four that do not are named rather than
-    // rounded away: `pipeline/proposals` still renders `EngagementsPage`, which
-    // draws `ZoneActions` directly and no toolbar, and `pipeline/negotiations`,
-    // `pipeline/retainers` and `pipeline/analytics` have their own files and no
-    // header row in them yet. `pipeline/leads` has one — it stopped rendering
-    // the shared marketplace board and became this firm's own lead list. Was
-    // 11, then 12, then 13, then 17.
-    mounted: 18,
+    // NINETEEN MOUNT THEIRS, and the three that do not are named rather than
+    // rounded away: `pipeline/negotiations`, `pipeline/retainers` and
+    // `pipeline/analytics` have their own files and no header row in them yet.
+    // The two that joined stopped rendering shared pages — `pipeline/leads` the
+    // marketplace board four licences see, `pipeline/proposals` the
+    // proposals-and-invoices view it shared with `delivery/board` — and became
+    // this firm's own. Was 11, then 12, then 13, then 17, then 18.
+    mounted: 19,
     // THE PARTNER SET CARRIES SAMPLES NOW, AND ONLY IN ONE PLACE. Its canvases
     // were digit-free until `Pages · Partner Pipeline` entered scope, which is
     // exactly what the "prove the absence" branch of the sample test exists to

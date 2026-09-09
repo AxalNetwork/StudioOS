@@ -468,8 +468,21 @@ export const PARTNER_ZONE_FILTERS = {
   // the zone must not do is read either as the client ignoring it.
   'pipeline/proposals': [
     { canvas: 'All', key: 'all' },
-    { canvas: 'Opened, unanswered', key: 'unanswered' },
-    { canvas: 'Never opened', key: 'unopened' },
+    // BOTH OF THESE NEED A READ RECEIPT AND NOTHING RECORDS ONE. `quotes` has
+    // no open, no view count and no client-side surface that could write one —
+    // the same absence `engagement_deliverables.opened_at` has, for the same
+    // reason: an open is the client's act. So the two states the artboard
+    // separates are ONE state here, and two chips over one state would be
+    // inventing the distinction they claim to filter on. The zone says the
+    // same thing in its strip, where both tiles read absent.
+    {
+      canvas: 'Opened, unanswered',
+      unbuilt: 'nothing records that a client opened a proposal, so this cannot be told from one never read',
+    },
+    {
+      canvas: 'Never opened',
+      unbuilt: 'the same missing read receipt — naming a silent proposal never-opened would be a claim about our own send',
+    },
     { canvas: 'Won', key: 'won' },
     { canvas: 'Lost', key: 'lost' },
   ],

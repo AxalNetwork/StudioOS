@@ -39,6 +39,11 @@ const PartnerPipelineAnalytics = lazy(() => import('../../pages/partner/pipeline
 // already bid on from one nobody had opened, had no score, no provenance and
 // nowhere to record a pass.
 const PartnerLeads = lazy(() => import('../../pages/partner/pipeline/LeadsZone'));
+// AND THE OTHER HALF OF `EngagementsPage` GOES THE SAME WAY. `/pipeline/
+// proposals` rendered the proposals-and-invoices view it shared with
+// `/delivery/board` until that zone got its own; it listed quotes and their
+// status and nothing else — no version trail, no loss reason, no lifecycle.
+const PartnerProposals = lazy(() => import('../../pages/partner/pipeline/ProposalsZone'));
 // #45 — the two Pipeline zones migration 208 gave a store to. Both read
 // `/api/partner/pipeline/*` and nothing else; neither has a legacy route,
 // because neither has ever had a surface anywhere in the product.
@@ -188,7 +193,7 @@ const LIVE = {
     // `EngagementsPage`, which already calls the table directly for
     // `/delivery/board` and now does the same for its own zone.
     leads: () => <PartnerLeads />,
-    proposals: () => <PartnerEngagements view="proposals" />,
+    proposals: () => <PartnerProposals />,
     negotiations: () => <PartnerNegotiations />,
     retainers: () => <PartnerRetainers />,
     analytics: () => <PartnerPipelineAnalytics />,

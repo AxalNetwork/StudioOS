@@ -141,6 +141,7 @@ function freshDb() {
   db.exec(migration('209_partner_offers_stores'));
   db.exec(migration('229_fit_rule_signal'));
   db.exec(migration('233_partner_lead_passes'));
+  db.exec(migration('234_quote_versions_and_loss'));
   db.exec(`
     CREATE TABLE IF NOT EXISTS projects (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE, name TEXT NOT NULL
@@ -804,4 +805,111 @@ test('an exclusion is not a low score, and it quotes the firm’s own sentence',
   assert.equal(r.excluded_count, 1);
   assert.ok(!r.items.filter((x: any) => x.need_id !== 409).some((x: any) => x.excluded_by),
     'a lead the rules do not exclude is being marked excluded');
+});
+
+// ---------------------------------------------------------------------------
+// Proposals — the version trail, the taxonomy, and the receipt nobody has
+// ---------------------------------------------------------------------------
+
+/**
+ * THE ARTBOARD'S SUBJECT IS A DISTINCTION THIS BUILD CANNOT MAKE: "a proposal
+ * opened four times and not answered is a different object from one never
+ * opened." Nothing records an open — `quotes` has no such column and no
+ * founder-side surface writes one — so the response says so rather than
+ * letting the page compute "never opened" out of our own silence.
+ */
+test('the proposals read refuses a read receipt and says why', async () => {
+  const e = env(freshDb());
+  const r = (await call(e, 'GET', '/proposals', ours)).body;
+  assert.equal(r.read_receipts, 'none');
+  assert.match(r.read_receipts_note, /no client-side surface to record it on/i);
+  const keys = new Set(r.items.flatMap((x: any) => Object.keys(x)));
+  for (const k of keys) {
+    assert.ok(!/opened|opens|read_count|view/i.test(k),
+      `the response carries a field named ${k}, which would imply a read receipt`);
+  }
+});
+
+test('a win rate is null with nothing decided, and won over decided after', async () => {
+  const db = freshDb();
+  const e = env(db);
+  let r = (await call(e, 'GET', '/proposals', ours)).body;
+  // OUR_QUOTE is `submitted` in the fixture — live, not decided.
+  assert.equal(r.decided_count, 0);
+  assert.equal(r.win_rate_pct, null, 'a rate over an empty denominator');
+  assert.equal(r.live_count, 1);
+  assert.equal(r.live_value_dollars, 42000);
+
+  db.prepare("UPDATE quotes SET status='accepted', decided_at='2026-08-01' WHERE id=?").run(OUR_QUOTE);
+  r = (await call(e, 'GET', '/proposals', ours)).body;
+  assert.equal(r.decided_count, 1);
+  assert.equal(r.won_count, 1);
+  assert.equal(r.win_rate_pct, 100);
+  assert.equal(r.live_count, 0, 'a decided proposal is still counted as live');
+});
+
+test('a version trail is appended and numbered here, not by the caller', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const a = await call(e, 'POST', `/proposals/${OUR_QUOTE}/versions`, ours, {
+    change_summary: 'Fixed scope, 12 weeks', price_cents: 5200000,
+  });
+  assert.equal(a.status, 200);
+  assert.equal(a.body.version, 1);
+  // THE CALLER'S OWN NUMBER IS IGNORED — two edits cannot both be v2.
+  const b = await call(e, 'POST', `/proposals/${OUR_QUOTE}/versions`, ours, {
+    change_summary: 'Split into 3 phases, same total', version: 1,
+  });
+  assert.equal(b.body.version, 2, 'the caller chose the version number');
+
+  const r = (await call(e, 'GET', '/proposals', ours)).body;
+  const q = r.items.find((x: any) => x.quote_id === OUR_QUOTE);
+  assert.equal(q.version, 2);
+  assert.deepEqual(q.versions.map((v: any) => v.version), [1, 2]);
+  assert.equal(q.versions[0].price_cents, 5200000);
+  // A VERSION WITH NO PRICE IS A SHAPE CHANGE, not a free one.
+  assert.equal(q.versions[1].price_cents, null);
+
+  // A QUOTE WITH NO TRAIL IS v1, not v0: it was sent once and never revised.
+  const untouched = (await call(e, 'GET', '/proposals', theirs)).body.items[0];
+  assert.equal(untouched.version, 1);
+  assert.deepEqual(untouched.versions, []);
+
+  assert.equal((await call(e, 'POST', `/proposals/${OUR_QUOTE}/versions`, ours, {})).status, 400,
+    'a version with nothing to say was accepted');
+  assert.equal((await call(e, 'POST', `/proposals/${THEIR_QUOTE}/versions`, ours, {
+    change_summary: 'not ours',
+  })).status, 404, 'a version was appended to another firm’s quote');
+});
+
+test('a loss reason comes from the taxonomy, and only a lost proposal carries one', async () => {
+  const db = freshDb();
+  const e = env(db);
+  // A proposal that was not lost cannot carry a reason: the row would be
+  // unreadable and would skew the chart it feeds.
+  const early = await call(e, 'PUT', `/proposals/${OUR_QUOTE}/outcome`, ours, { loss_reason: 'price' });
+  assert.equal(early.status, 409);
+
+  db.prepare("UPDATE quotes SET status='rejected', decided_at='2026-08-02' WHERE id=?").run(OUR_QUOTE);
+  for (const bad of ['below_floor', 'no_capability', 'vibes', 'Price']) {
+    const r = await call(e, 'PUT', `/proposals/${OUR_QUOTE}/outcome`, ours, { loss_reason: bad });
+    assert.equal(r.status, 400, `"${bad}" was accepted as a loss reason`);
+  }
+  assert.equal((await call(e, 'PUT', `/proposals/${OUR_QUOTE}/outcome`, ours, { loss_reason: 'price' })).status, 200);
+
+  let r = (await call(e, 'GET', '/proposals', ours)).body;
+  assert.equal(r.lost_count, 1);
+  assert.equal(r.losses_unstated, 0);
+  assert.deepEqual(r.loss_reasons.find((x: any) => x.reason === 'price'), { reason: 'price', count: 1 });
+
+  // CLEARING PUTS IT BACK IN THE UNSTATED COLUMN, which is the chart's real
+  // finding — not a share of `other`.
+  await call(e, 'PUT', `/proposals/${OUR_QUOTE}/outcome`, ours, { loss_reason: null });
+  r = (await call(e, 'GET', '/proposals', ours)).body;
+  assert.equal(r.losses_unstated, 1);
+  assert.equal(r.loss_reasons.find((x: any) => x.reason === 'other').count, 0,
+    'a loss with no reason is being counted as `other`');
+  assert.equal((await call(e, 'PUT', `/proposals/${THEIR_QUOTE}/outcome`, ours, {
+    loss_reason: 'timing',
+  })).status, 404, 'a loss reason was written on another firm’s quote');
 });

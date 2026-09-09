@@ -3178,6 +3178,22 @@ export const api = {
     request(`/partner/pipeline/leads/${needId}/pass`, { method: 'POST', body: JSON.stringify(data) }),
   unpassPartnerLead: (needId) =>
     request(`/partner/pipeline/leads/${needId}/pass`, { method: 'DELETE' }),
+  // Every bid this firm has made, with its version trail and the loss taxonomy.
+  // `read_receipts: 'none'` comes back with it: nothing records that a client
+  // opened a proposal, so a quiet one cannot be told from an unread one.
+  listPartnerProposals: () => request('/partner/pipeline/proposals'),
+  // Append-only and self-numbering — the caller does not choose the version, so
+  // two edits cannot both claim to be v3.
+  addPartnerProposalVersion: (quoteId, data) =>
+    request(`/partner/pipeline/proposals/${quoteId}/versions`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  // From the taxonomy, never typed: free text makes the loss chart unreadable
+  // within a quarter. `loss_reason: null` clears it.
+  setPartnerProposalOutcome: (quoteId, data) =>
+    request(`/partner/pipeline/proposals/${quoteId}/outcome`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
   listPartnerNegotiations: () => request('/partner/pipeline/negotiations'),
   // PUT, not POST: one negotiation per quote is a UNIQUE index, so this is an
   // upsert. `{touch: true}` advances the stalled clock without changing stage.

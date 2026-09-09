@@ -1440,6 +1440,59 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  'pipeline/proposals': {
+    // The artboard's own reading of this book: "Aperture has been sent for nine
+    // days with no read receipt at all, which is a different problem from Kelp
+    // Bio opening theirs four times and going quiet. The first is a delivery
+    // failure; the second is a decision in progress."
+    //
+    // THIS BUILD CANNOT MAKE THAT DISTINCTION and the instruction has to say
+    // so, or a model handed a list of silent proposals will confidently sort
+    // them into the two buckets the artboard names. Nothing records an open.
+    // The second instruction is the taxonomy: a loss with no reason recorded is
+    // the finding, not a gap to fill by guessing which reason it probably was.
+    instruction: [
+      'Read the decided proposals below for what they have in common: which loss reasons recur, which shapes close, and at what values.',
+      'Nothing in this product records whether a client opened a proposal. Never say or imply that one was read, ignored or never opened — a silent proposal is silent, and that is all the record says.',
+      'A loss with no reason recorded is a gap in the firm’s own record and the most useful thing you can point at. Never guess which reason it was.',
+      'Use only the reasons as given. Do not invent a category, and do not read a pattern out of fewer than three decided proposals — say the sample is too small instead.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT q.price, q.status, q.loss_reason, q.decided_at, q.timeline_weeks,
+                n.title AS need_title, f.name AS client,
+                r.shape AS retainer_shape,
+                (SELECT COUNT(*) FROM quote_versions v WHERE v.quote_id = q.id) AS versions
+           FROM quotes q
+           LEFT JOIN founder_needs n ON n.id = q.need_id
+           LEFT JOIN users f ON f.id = n.founder_id
+           LEFT JOIN engagements e ON e.quote_id = q.id
+           LEFT JOIN partner_retainers r ON r.engagement_id = e.id
+          WHERE q.partner_id = ?
+          ORDER BY q.created_at DESC LIMIT 100`
+      ).bind(me.partner_id).all<{
+        price: number | null; status: string; loss_reason: string | null;
+        decided_at: string | null; timeline_weeks: number | null;
+        need_title: string | null; client: string | null;
+        retainer_shape: string | null; versions: number;
+      }>();
+      return (rows.results || []).map((r) => {
+        const state = r.status === 'accepted' ? 'WON'
+          : (r.status === 'rejected' ? 'LOST' : (r.status === 'withdrawn' ? 'WITHDRAWN' : 'SENT, not decided'));
+        return `${r.client || 'client not recorded'} — ${r.need_title || 'scope not recorded'}; `
+          + `${r.retainer_shape === 'retainer' ? 'retainer' : (r.retainer_shape === 'embedded_seat' ? 'embedded seat' : 'fixed scope')}; `
+          + `$${Number(r.price || 0).toLocaleString('en-US')}`
+          + `${r.timeline_weeks ? ` over ${r.timeline_weeks} weeks` : ''}; `
+          + `${state}`
+          + `${state === 'LOST' ? `; reason: ${r.loss_reason || 'NONE RECORDED — nobody entered one'}` : ''}; `
+          + `${r.versions} revision(s) recorded`;
+      });
+    },
+  },
+
   'pipeline/leads': {
     // The artboard: "Accepting <lead> drafts a proposal shaped as a retainer
     // rather than a project — because retainers are where you win, and their
