@@ -249,13 +249,19 @@ const PROFILES = {
     table: PARTNER_ZONE_FILTERS,
     build: partnerZoneFilters,
     call: 'partnerZoneFilters',
-    canvasDirs: ['design/incoming'],
+    // BOTH DIRECTORIES, BECAUSE THE PARTNER SET IS SPLIT ACROSS THEM. Network,
+    // Offers and Research were re-exported into `design/incoming/`; Delivery and
+    // Pipeline were not, and their newest export is the one already in
+    // `design/canvases/integrated/` — verified byte-for-byte against the
+    // artifact the Delivery bucket was specified from. Naming only one
+    // directory made `delivery/board`'s chip row look like labels from nowhere.
+    canvasDirs: ['design/incoming', 'design/canvases/integrated'],
     // `Offers` JOINS THE REGEX, and `canvasDirs` needs no change for it:
     // `design/incoming/Pages · Partner Offers.dc.html` is already in the
     // directory this profile opens, and it is byte-identical on the nineteen
     // labels to the copy in `design/canvases/integrated/` — checked rather than
     // assumed, both name the same five routes in the same order.
-    canvas: /^Pages · Partner (Network|Offers|Research)\.dc\.html$/,
+    canvas: /^Pages · Partner (Delivery|Network|Offers|Research)\.dc\.html$/,
     // `pages/partner/offers` IS ITS OWN ENTRY BECAUSE `mountingFile` DOES NOT
     // RECURSE. Three of the five Offers zones have their own file in there and
     // are found by the ordinary search once the directory is listed — which
@@ -265,16 +271,27 @@ const PROFILES = {
     // three in the map to save a line would have handed them that exemption
     // and stopped this file checking the thing it exists to check.
     pages: ['frontend/src/pages/partner', 'frontend/src/pages/partner/offers',
+      'frontend/src/pages/partner/delivery',
       'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/partnerZoneActions.js',
-    // Twelve, and the twelfth is `network/organizations` — the zone this
+    // Thirteen. The twelfth was `network/organizations` — the zone this
     // profile's `excluded` list carried until migrations 224 and 226 gave the
-    // book a company name and a relationship to group it by. Was 11.
-    zones: 12,
-    // And all twelve mount their filters: `OrganizationsZone` takes the same
-    // bound builder its two Network siblings do. Was 11, when the twelfth zone
-    // had no body to mount anything in.
-    mounted: 12,
+    // book a company name and a relationship to group it by. The thirteenth is
+    // `delivery/board`, which had no row in the filter table at all: it
+    // rendered `EngagementsPage`, which draws `ZoneActions` directly and no
+    // toolbar, so there was nowhere for a chip row to go. It has its own zone
+    // now, reading the five stores migration 208 built for this bucket.
+    // Was 11, then 12, then 13 — and 13 lasted one run: widening the canvas
+    // regex to read `Pages · Partner Delivery` surfaced FOUR MORE artboards
+    // whose chip rows this table did not cover at all. All five Delivery zones
+    // specify one; none had an entry, and the guard could not say so because
+    // the file its labels come from was outside the pattern it read.
+    zones: 17,
+    // And all thirteen mount their filters: `BoardZone` and `OrganizationsZone`
+    // take the same bound builder their siblings do, and the four other
+    // Delivery zones hoist a `ZoneToolbar` above their `ZoneBody` the way every
+    // newer zone does. Was 11, then 12, then 13.
+    mounted: 17,
     // The two that ARE genuinely shared. `ServiceCatalogPage` is mounted for
     // admin, founder, partner and investor and `PerksPage` for those four plus
     // advisor and exploring, both from `frontend/src/pages/` — a directory this

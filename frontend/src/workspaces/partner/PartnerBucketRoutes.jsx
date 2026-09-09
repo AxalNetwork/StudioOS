@@ -50,6 +50,7 @@ const PartnerAudienceFit = lazy(() => import('../../pages/partner/offers/Audienc
 // derives a rating over milestones, blockers, deliverables and the retainer
 // record, and returns null rather than "on track" when none of them carries
 // anything.
+const PartnerBoard = lazy(() => import('../../pages/partner/delivery/BoardZone'));
 const PartnerHealth = lazy(() => import('../../pages/partner/delivery/HealthZone'));
 const PartnerDeliverables = lazy(() => import('../../pages/partner/delivery/DeliverablesZone'));
 const PartnerCapacity = lazy(() => import('../../pages/partner/delivery/CapacityZone'));
@@ -184,7 +185,11 @@ const LIVE = {
     analytics: () => <PartnerPipelineAnalytics />,
   },
   '/delivery': {
-    board: () => <PartnerEngagements view="engagements" />,
+    // THE ZONE THE DELIVERY ROW LANDS ON NOW READS THE DELIVERY STORES. It
+    // rendered `EngagementsPage` — a proposals-and-invoices page shared with
+    // `/pipeline/proposals` — so none of the five stores migration 208 built
+    // for this bucket reached the one page the bucket opens on.
+    board: () => <PartnerBoard />,
     health: () => <PartnerHealth />,
     deliverables: () => <PartnerDeliverables />,
     capacity: () => <PartnerCapacity />,

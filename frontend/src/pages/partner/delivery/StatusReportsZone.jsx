@@ -8,6 +8,8 @@ import {
   inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
+import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
+import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 
 /**
  * Delivery · Status reports — `/delivery/status-reports`.
@@ -294,6 +296,7 @@ function Composer({ engagements, busy, onSaved, onError, note }) {
 
 export default function PartnerStatusReportsZone() {
   const [state, setState] = useState({ loading: true, error: '', data: null, engagements: null });
+  const [view, setView] = useState('this_cycle');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
   const [composing, setComposing] = useState(false);
@@ -342,15 +345,35 @@ export default function PartnerStatusReportsZone() {
   // Hoisted so the gate branch below and the live row draw the SAME row.
   // With nothing loaded the export renders disabled and says so itself,
   // which is what makes a header row over an unreadable store honest.
-  const rowActions = partnerZoneActions('delivery/status-reports', { view: { header: ['Period', 'Founder', 'Shipped', 'Next up'], rows: items, cells: (r) => [r.period, r.founder_name, r.shipped, r.next_up] } });
+  // ══ THE `pd4` CHIP ROW ═══════════════════════════════════════════════════
+  // `Archive` IS EVERY EARLIER CYCLE, not a deleted state: a report is written
+  // against a period and stays against it. `With blockers` reads the blockers
+  // the response already returns per report rather than a flag on the report,
+  // because a blocker belongs to the engagement and a report quotes it.
+  const period = d?.period || '';
+  const visible = (() => {
+    if (view === 'this_cycle') return items.filter((r) => !period || r.period === period);
+    if (view === 'drafts') return items.filter((r) => r.state === 'draft');
+    if (view === 'blocked') return items.filter((r) => (r.blockers?.length ?? 0) > 0);
+    if (view === 'archive') return items.filter((r) => period && r.period < period);
+    return items;
+  })();
+
+  const rowActions = partnerZoneActions('delivery/status-reports', { view: { header: ['Period', 'Founder', 'State', 'Shipped', 'Next up'], rows: visible, cells: (r) => [r.period, r.founder_name, r.state, r.shipped, r.next_up] } });
 
   if (isNoPartnerProfile(state.error)) {
     return <UnlinkedZone title="Status reports" actions={rowActions} />;
   }
 
   return (
+    <>
+      <ZoneToolbar
+        className="mb-3"
+        role="partner"
+        filters={partnerZoneFilters('delivery/status-reports', { value: view, onChange: setView })}
+        actions={rowActions}
+      />
     <ZoneBody
-      actions={rowActions}
       loading={state.loading}
       error={state.error}
       onRetry={load}
@@ -457,5 +480,6 @@ export default function PartnerStatusReportsZone() {
         </StatedLimit>
       </div>
     </ZoneBody>
+    </>
   );
 }

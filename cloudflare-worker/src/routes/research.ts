@@ -1346,6 +1346,59 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  'delivery/board': {
+    // The artboard: "Across five live engagements, two carry risk and both are
+    // client-facing … Neither is a capacity problem, so neither is solved by
+    // adding people."
+    //
+    // That last clause is the instruction that matters. A model reading a board
+    // of at-risk work will otherwise recommend more people for every one of
+    // them, which is the wrong answer to a client-side blocker and an expensive
+    // one to act on.
+    instruction: [
+      'Say which engagements below carry risk and why, using only the reasons each row states.',
+      'Separate a client-facing problem — an unopened deliverable, a decision the client owes — from a capacity one: the first is not solved by adding people, so never suggest it for one.',
+      'An engagement with nothing recorded against it is not healthy, it is unrated: say it has no signal rather than calling it on track.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT n.title AS scope, f.name AS client,
+                (SELECT COUNT(*) FROM engagement_seats s
+                  WHERE s.engagement_id = e.id AND s.revoked_at IS NULL) AS seats,
+                (SELECT COUNT(*) FROM engagement_milestones m
+                  WHERE m.engagement_id = e.id AND m.completed_at IS NULL
+                    AND m.due_at IS NOT NULL AND m.due_at < date('now')) AS overdue,
+                (SELECT COUNT(*) FROM engagement_blockers b
+                  WHERE b.engagement_id = e.id AND b.cleared_at IS NULL AND b.side = 'client') AS client_blocked,
+                (SELECT COUNT(*) FROM engagement_blockers b
+                  WHERE b.engagement_id = e.id AND b.cleared_at IS NULL AND b.side <> 'client') AS our_blocked,
+                (SELECT COUNT(*) FROM engagement_deliverables d
+                  WHERE d.engagement_id = e.id AND d.sent_at IS NOT NULL AND d.opened_at IS NULL) AS unopened
+           FROM engagements e
+           LEFT JOIN founder_needs n ON n.id = e.need_id
+           LEFT JOIN users f ON f.id = e.founder_id
+          WHERE e.partner_id = ? ORDER BY e.created_at DESC LIMIT 100`
+      ).bind(me.partner_id).all<{
+        scope: string | null; client: string | null; seats: number;
+        overdue: number; client_blocked: number; our_blocked: number; unopened: number;
+      }>();
+      return (rows.results || []).map((r) => {
+        const signals = [
+          r.overdue ? `${r.overdue} milestone(s) past due` : '',
+          r.client_blocked ? `${r.client_blocked} open blocker(s) on the client's side` : '',
+          r.our_blocked ? `${r.our_blocked} open blocker(s) on ours` : '',
+          r.unopened ? `${r.unopened} deliverable(s) sent and not opened` : '',
+        ].filter(Boolean);
+        return `${r.client || 'client not recorded'} — ${r.scope || 'scope not recorded'}; `
+          + `${r.seats ? 'embedded seat' : 'project'}; `
+          + `${signals.length ? signals.join('; ') : 'NOTHING RECORDED — unrated, not healthy'}`;
+      });
+    },
+  },
+
   'offers/audience-fit': {
     // The artboard: "For each stated exclusion, a short pass note a person can
     // send: the reason, and where relevant a named firm better suited. Points to

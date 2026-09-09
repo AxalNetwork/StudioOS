@@ -8,6 +8,8 @@ import {
   inputClass, buttonClass, ghostButtonClass,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
+import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
+import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 
 /**
  * Delivery · Health — `/delivery/health`.
@@ -343,6 +345,7 @@ function HealthRow({ row, busy, onChanged, onError, note }) {
 
 export default function PartnerHealthZone() {
   const [state, setState] = useState({ loading: true, error: '', data: null });
+  const [view, setView] = useState('at_risk');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
 
@@ -367,15 +370,44 @@ export default function PartnerHealthZone() {
   // Hoisted so the gate branch below and the live row draw the SAME row.
   // With nothing loaded the export renders disabled and says so itself,
   // which is what makes a header row over an unreadable store honest.
-  const rowActions = partnerZoneActions('delivery/health', { view: { header: ['Engagement', 'Founder', 'Utilisation %', 'Milestones', 'Deliverables sent', 'Open blockers'], rows: items, cells: (r) => [r.need_title, r.founder_name, r.utilisation_pct, r.milestone_count, r.deliverables_sent, r.open_blockers?.length ?? 0] } });
+  // ══ THE `pd5` CHIP ROW ═══════════════════════════════════════════════════
+  // `At risk` IS THE DEFAULT because the artboard selects it, and it is the two
+  // RATED-bad states rather than "anything not green": an engagement with
+  // nothing recorded is unrated, not at risk, and the read says so separately.
+  //
+  // `Renewing soon` IS THIRTY DAYS, and the date is `partner_retainers
+  // .renews_at` — stored and indexed by migration 208, and returned by the
+  // health read so this chip has something to select on.
+  const soon = new Date();
+  soon.setUTCDate(soon.getUTCDate() + 30);
+  const soonIso = soon.toISOString().slice(0, 10);
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const visible = (() => {
+    if (view === 'at_risk') return items.filter((r) => r.health === 'at_risk' || r.health === 'blocked');
+    if (view === 'renewing') {
+      return items.filter((r) => r.renews_at
+        && String(r.renews_at).slice(0, 10) >= todayIso
+        && String(r.renews_at).slice(0, 10) <= soonIso);
+    }
+    if (view === 'all') return items;
+    return items;
+  })();
+
+  const rowActions = partnerZoneActions('delivery/health', { view: { header: ['Engagement', 'Founder', 'Health', 'Utilisation %', 'Milestones', 'Deliverables sent', 'Open blockers', 'Renews'], rows: visible, cells: (r) => [r.need_title, r.founder_name, r.health, r.utilisation_pct, r.milestone_count, r.deliverables_sent, r.open_blockers?.length ?? 0, r.renews_at] } });
 
   if (isNoPartnerProfile(state.error)) {
     return <UnlinkedZone title="Health" actions={rowActions} />;
   }
 
   return (
+    <>
+      <ZoneToolbar
+        className="mb-3"
+        role="partner"
+        filters={partnerZoneFilters('delivery/health', { value: view, onChange: setView })}
+        actions={rowActions}
+      />
     <ZoneBody
-      actions={rowActions}
       loading={state.loading}
       error={state.error}
       onRetry={load}
@@ -477,5 +509,6 @@ export default function PartnerHealthZone() {
         </StatedLimit>
       </div>
     </ZoneBody>
+    </>
   );
 }

@@ -8,6 +8,8 @@ import {
   inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
+import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
+import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 
 /**
  * Delivery · Deliverables — `/delivery/deliverables`.
@@ -123,6 +125,7 @@ function DeliverableRow({ row, busy, onSave, onDelete, note }) {
 
 export default function PartnerDeliverablesZone() {
   const [state, setState] = useState({ loading: true, error: '', data: null, engagements: null });
+  const [view, setView] = useState('never_opened');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -181,15 +184,37 @@ export default function PartnerDeliverablesZone() {
   // Hoisted so the gate branch below and the live row draw the SAME row.
   // With nothing loaded the export renders disabled and says so itself,
   // which is what makes a header row over an unreadable store honest.
-  const rowActions = partnerZoneActions('delivery/deliverables', { view: { header: ['Deliverable', 'Need', 'Version', 'Sent', 'Opened', 'Signed off'], rows: items, cells: (r) => [r.title, r.need_title, r.version, r.sent_at, r.opened_at, r.signed_off_at] } });
+  // ══ THE `pd2` CHIP ROW ═══════════════════════════════════════════════════
+  // `Never opened` IS THE DEFAULT because the artboard selects it (`fil([…],
+  // 0)`): sent-and-not-opened is the firm's most expensive state, and a log
+  // that opens on everything buries it. `By client` is an ORDERING rather than
+  // a subset — it groups the same rows instead of removing any.
+  const visible = (() => {
+    if (view === 'never_opened') return items.filter((r) => r.sent_at && !r.opened_at);
+    if (view === 'signed_off') return items.filter((r) => r.signed_off_at);
+    if (view === 'by_client') {
+      return [...items].sort((a, b) => String(a.founder_name || '').localeCompare(String(b.founder_name || ''))
+        || String(a.title || '').localeCompare(String(b.title || '')));
+    }
+    if (view === 'all') return items;
+    return items;
+  })();
+
+  const rowActions = partnerZoneActions('delivery/deliverables', { view: { header: ['Deliverable', 'Need', 'Version', 'Sent', 'Opened', 'Signed off'], rows: visible, cells: (r) => [r.title, r.need_title, r.version, r.sent_at, r.opened_at, r.signed_off_at] } });
 
   if (isNoPartnerProfile(state.error)) {
     return <UnlinkedZone title="Deliverables" actions={rowActions} />;
   }
 
   return (
+    <>
+      <ZoneToolbar
+        className="mb-3"
+        role="partner"
+        filters={partnerZoneFilters('delivery/deliverables', { value: view, onChange: setView })}
+        actions={rowActions}
+      />
     <ZoneBody
-      actions={rowActions}
       loading={state.loading}
       error={state.error}
       onRetry={load}
@@ -338,5 +363,6 @@ export default function PartnerDeliverablesZone() {
         </StatedLimit>
       </div>
     </ZoneBody>
+    </>
   );
 }

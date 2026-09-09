@@ -132,9 +132,90 @@ export function SourceLegend({ theirs = 'Founder-sourced', theirsNote, ours = 'O
  * judge the ratio from the numbers can see it — and it is drawn only where the
  * caller passes a percentage it computed from that same pair.
  */
+/**
+ * The Delivery canvas's legend, which is three entries rather than two.
+ *
+ * `SourceLegend` above is the TWO-ENTRY special case — cyan theirs, amber ours —
+ * and it stays because five Research and Network artboards draw exactly that.
+ * `Pages · Partner Delivery` draws a third: a violet grant, and the same grant
+ * struck through once the founder revokes it. A caller passes the artboard's
+ * own list rather than a fixed pair.
+ *
+ * Rendered only where the table actually carries the marks it explains. A
+ * legend over rows that are all one kind explains a distinction the reader
+ * cannot see, which is the same defect as a chip that selects everything.
+ */
+export function Legend({ items }) {
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10.5px] text-gray-600 dark:text-gray-400">
+      {items.map((it) => (
+        <span key={it.chip} className="inline-flex items-center gap-1.5">
+          {it.grant
+            ? <GrantMark revoked={it.revoked}>{it.chip}</GrantMark>
+            : <Pill tone={it.tone || 'neutral'} className="!text-[9.5px]">{it.chip}</Pill>}
+          {it.note}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The violet grant mark, and its revoked form.
+ *
+ * NAMED HERE BECAUSE THE CANVAS NAMES IT. `Pages · Partner Delivery`'s `cell()`
+ * takes `{ grant, revoked }` and gives `.grant` its own violet rules
+ * (`#5b21b6` on `#f7f4ff` inside `#ddd6fe`), with `.grant.rv` re-colouring to
+ * grey and striking the text through. It is not a status: it says a founder
+ * granted a named, revocable scope to a named operator, which is a different
+ * relationship from a file handed over — the artboard's own instNote turns on
+ * exactly that. Reaching for `pill` and a tone would say it in a vocabulary the
+ * artboard does not use.
+ *
+ * REVOKED IS STRUCK THROUGH RATHER THAN REMOVED. "A founder closing a seat is a
+ * normal event in this bucket, not an error state", and a mark that vanished
+ * would leave the row looking like a project.
+ */
+export function GrantMark({ children, revoked = false }) {
+  return (
+    <span
+      className={`inline-flex items-center whitespace-nowrap rounded-[4px] border px-[6px] py-0.5 text-[9.5px] font-bold ${
+        revoked
+          ? 'border-gray-200 bg-gray-50 text-gray-500 line-through dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400'
+          : 'border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300'
+      }`}
+    >
+      {children}
+    </span>
+  );
+}
+
+/**
+ * The `mode` chip — the Offers and Delivery canvases' own square badge for a
+ * value that is STRUCTURAL rather than a state: how a service is charged, and
+ * whether an engagement is a project or an embedded seat. Both canvases give it
+ * `.mode` and a per-value colour, distinct from the round status pill.
+ */
+const MODE_CLASS = {
+  Project: 'border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300',
+  Embedded: 'border-cyan-200 bg-cyan-50 text-cyan-800 dark:border-cyan-900 dark:bg-cyan-950/40 dark:text-cyan-300',
+};
+
+export function ModeMark({ children }) {
+  return (
+    <span
+      className={`inline-block whitespace-nowrap rounded-[4px] border px-[7px] py-0.5 text-[9.5px] font-extrabold tracking-[.04em] ${
+        MODE_CLASS[children] || 'border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300'
+      }`}
+    >
+      {children}
+    </span>
+  );
+}
+
 export function Cell({
   text, pill, pillTone = 'neutral', seam, ours, orph, gate, stale, cite, rvk, nr, sub,
-  barPct, barColor = '#b45309', node,
+  mode, grant, grantRevoked = false, barPct, barColor = '#b45309', node,
 }) {
   return (
     <span className="min-w-0 text-[11.5px] text-axal-ink dark:text-gray-200">
@@ -148,6 +229,8 @@ export function Cell({
         {stale ? <Pill tone="danger" className="!text-[9.5px]">{stale}</Pill> : null}
         {cite ? <Pill tone="cite" className="!text-[9.5px]">{cite}</Pill> : null}
         {rvk ? <Pill tone="danger" className="!text-[9.5px]">{rvk}</Pill> : null}
+        {mode ? <ModeMark>{mode}</ModeMark> : null}
+        {grant ? <GrantMark revoked={grantRevoked}>{grant}</GrantMark> : null}
         {nr ? <NotRecorded /> : null}
       </span>
       {sub ? <span className="mt-0.5 block text-[10px] leading-snug text-gray-500 dark:text-gray-400">{sub}</span> : null}

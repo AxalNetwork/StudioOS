@@ -347,7 +347,9 @@ test('Extend offers only what can be extended, and does not claim to restore', (
 });
 
 test('the two marks this artboard needs are named in the kit, not improvised', () => {
-  assert.match(kit, /export function Cell\(\{\s*\n\s*text, pill, pillTone = 'neutral', seam, ours, orph, gate, stale, cite, rvk, nr, sub,\s*\n\s*barPct, barColor = '#b45309', node,/,
+  // The signature also carries the Delivery canvas's `mode` and `grant`; this
+  // assertion is about the two Offers marks keeping their named slots in it.
+  assert.match(kit, /export function Cell\(\{\s*\n\s*text, pill, pillTone = 'neutral', seam, ours, orph, gate, stale, cite, rvk, nr, sub,\s*\n\s*mode, grant, grantRevoked = false, barPct, barColor = '#b45309', node,/,
     'the cell no longer takes the canvas’s own two Offers marks');
   assert.match(kit, /\{rvk \? <Pill tone="danger" className="!text-\[9\.5px\]">\{rvk\}<\/Pill> : null\}/,
     'the revoked mark no longer renders');

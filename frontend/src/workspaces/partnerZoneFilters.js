@@ -276,6 +276,87 @@ export const PARTNER_ZONE_FILTERS = {
     { canvas: 'Weak', key: 'weak_intent' },
   ],
 
+  // ── Delivery ─────────────────────────────────────────────────────────────
+  // `/delivery/board` HAD NO ROW IN THIS TABLE AT ALL, which is why its four
+  // chips never appeared: the zone rendered `EngagementsPage`, which draws
+  // `ZoneActions` directly and no toolbar, so there was nowhere for a filter
+  // row to go and nothing declaring one.
+  //
+  // THREE OF THE FOUR SELECT ON THINGS THAT ARE DERIVED, NOT STORED, and that
+  // is correct rather than a compromise. `Project` and `Embedded` are whether
+  // an engagement granted a seat — the artboard's "mode is structural, not a
+  // status" — and `Needs attention` is `healthFor`'s rating, a read over five
+  // tables that nothing stores because a stored copy would disagree with them.
+  //
+  // `Needs attention` IS THE TWO RATED-BAD STATES, not "anything not green".
+  // An unrated engagement has nothing recorded against it, which the strip says
+  // in its own tile; folding it in here would turn "we have not looked" into
+  // "something is wrong".
+  'delivery/board': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Project', key: 'project' },
+    { canvas: 'Embedded', key: 'embedded' },
+    { canvas: 'Needs attention', key: 'attention' },
+  ],
+
+  // `Never opened` IS THE DEFAULT, AND THE ARTBOARD PUTS IT FIRST ON PURPOSE:
+  // `fil([...], 0)` selects it, because sent-and-not-opened is the firm's most
+  // expensive state and a log that opens on everything buries it.
+  //
+  // `By client` IS AN ORDERING, NOT A SUBSET — it groups the same rows rather
+  // than removing any, which is why its key selects everything and sorts. The
+  // same shape `offers/visibility`'s `By engagements` has.
+  'delivery/deliverables': [
+    { canvas: 'Never opened', key: 'never_opened' },
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Signed off', key: 'signed_off' },
+    { canvas: 'By client', key: 'by_client' },
+  ],
+
+  // TWO OF THESE CHANGE THE PERIOD RATHER THAN THE ROWS. `GET /capacity` takes
+  // `?period=`, and hours are logged per period, so `This week` and `Next week`
+  // are two reads of the same store rather than two views of one read — which
+  // is also why next week is usually empty and says so instead of reading as
+  // nobody being busy.
+  'delivery/capacity': [
+    { canvas: 'This week', key: 'this_week' },
+    { canvas: 'Next week', key: 'next_week' },
+    { canvas: 'Seats only', key: 'seats' },
+    { canvas: 'All', key: 'all' },
+  ],
+
+  // `Archive` IS EVERY EARLIER CYCLE, not a deleted state. A report is written
+  // against a period and stays against it; there is no archive flag and there
+  // does not need to be one.
+  'delivery/status-reports': [
+    { canvas: 'This cycle', key: 'this_cycle' },
+    { canvas: 'Drafts', key: 'drafts' },
+    { canvas: 'With blockers', key: 'blocked' },
+    { canvas: 'Archive', key: 'archive' },
+  ],
+
+  // `At risk` IS THE DEFAULT for the reason the artboard opens on it, and it is
+  // the two RATED-bad states rather than "anything not green": an engagement
+  // with nothing recorded is unrated, not at risk, and the zone says which
+  // separately.
+  //
+  // `Renewing soon` READS `partner_retainers.renews_at`, which migration 208
+  // stored and indexed and which the health response now returns.
+  //
+  // `By owner` HAS NOTHING TO ORDER BY. Nothing records who at the firm owns an
+  // engagement: migration 224 put a firm owner on a BOOK CONTACT, which is a
+  // person the firm knows rather than a piece of work it is running, and
+  // reading one as the other would name the wrong person against every row.
+  'delivery/health': [
+    { canvas: 'At risk', key: 'at_risk' },
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Renewing soon', key: 'renewing' },
+    {
+      canvas: 'By owner',
+      unbuilt: 'nothing records who at the firm owns an engagement; the firm owner migration 224 added belongs to a book contact, which is a person the firm knows rather than work it is running',
+    },
+  ],
+
   // ── Research ─────────────────────────────────────────────────────────────
   // ALL FOUR LIVE, AND MIGRATION 222 IS WHY. Three carried `ONE_SOURCE_ONLY`
   // and a fourth its own sentence, and all four were exact: every row this

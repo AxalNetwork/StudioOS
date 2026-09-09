@@ -110,6 +110,176 @@ function currentPeriod(now = new Date()): string {
 // ---------------------------------------------------------------------------
 
 /**
+ * The `pd1` board: one row per engagement, in whichever of the two modes it is.
+ *
+ * MODE IS STRUCTURAL, NOT A STATUS — the artboard's own instMeta, and the
+ * reason there is no `mode` column anywhere. An engagement that granted a seat
+ * IS embedded; one that did not IS a project. That is a fact about what exists,
+ * derived here from `engagement_seats`, and a column would be a second place to
+ * say it that could disagree with the seat the first time one was revoked.
+ *
+ * A REVOKED SEAT STAYS EMBEDDED AND STAYS ON THE BOARD. The artboard is explicit:
+ * "a founder closing a seat is a normal event in this bucket, not an error
+ * state", and its own row is kept visible and struck through. Filtering it out
+ * would make the board quietly disagree with the ledger about how many
+ * engagements the firm has had.
+ *
+ * PROGRESS IS TWO DIFFERENT MEASURES AND IS NEVER AVERAGED. A project counts
+ * milestones; an embedded seat counts hours this period against the retainer's
+ * retained hours. One number over both would compare a fraction of a scope with
+ * a fraction of a week.
+ *
+ * HEALTH IS THE SAME `healthFor` `/health` CALLS, not a second rating. `null`
+ * is a real answer — nothing recorded — and the board draws it as absent rather
+ * than green, which is the failure that helper's docblock exists against.
+ */
+partnerDelivery.get('/board', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const period = currentPeriod();
+
+    const engagements = await c.env.DB.prepare(
+      `SELECT e.id, e.uid, e.status, e.price, e.delivered_at, e.cancelled_at,
+              n.title AS need_title, f.name AS founder_name,
+              r.id AS retainer_id, r.retained_hours
+         FROM engagements e
+         LEFT JOIN founder_needs n ON n.id = e.need_id
+         LEFT JOIN users f ON f.id = e.founder_id
+         LEFT JOIN partner_retainers r ON r.engagement_id = e.id
+        WHERE e.partner_id = ?
+        ORDER BY e.created_at DESC
+        LIMIT 200`,
+    ).bind(partnerId).all<any>();
+
+    // The same join-back-to-owner shape every read in this file uses: nothing
+    // is interpolated, and no row can come back for another firm's engagement.
+    const [seats, milestones, blockers, deliverables, hours, usage] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT s.engagement_id, s.scope, s.granted_at, s.revoked_at, u.name AS holder_name
+           FROM engagement_seats s
+           JOIN engagements e ON e.id = s.engagement_id
+           LEFT JOIN users u ON u.id = s.holder_user_id
+          WHERE e.partner_id = ? ORDER BY s.granted_at DESC`,
+      ).bind(partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT m.engagement_id, m.due_at, m.completed_at
+           FROM engagement_milestones m
+           JOIN engagements e ON e.id = m.engagement_id
+          WHERE e.partner_id = ?`,
+      ).bind(partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT b.engagement_id, b.side, b.cleared_at
+           FROM engagement_blockers b
+           JOIN engagements e ON e.id = b.engagement_id
+          WHERE e.partner_id = ?`,
+      ).bind(partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT d.engagement_id, d.sent_at, d.opened_at
+           FROM engagement_deliverables d
+           JOIN engagements e ON e.id = d.engagement_id
+          WHERE e.partner_id = ?`,
+      ).bind(partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT h.engagement_id, h.hours
+           FROM engagement_hours h
+           JOIN engagements e ON e.id = h.engagement_id
+          WHERE e.partner_id = ? AND h.period = ?`,
+      ).bind(partnerId, period).all<any>(),
+      c.env.DB.prepare(
+        `SELECT u.retainer_id, u.period, u.hours_used
+           FROM retainer_usage u
+           JOIN partner_retainers r ON r.id = u.retainer_id
+           JOIN engagements e ON e.id = r.engagement_id
+          WHERE e.partner_id = ?`,
+      ).bind(partnerId).all<any>(),
+    ]);
+
+    const group = <T extends { engagement_id: number }>(rows: T[]) => {
+      const m = new Map<number, T[]>();
+      for (const r of rows) {
+        const k = Number(r.engagement_id);
+        if (!m.has(k)) m.set(k, []);
+        m.get(k)!.push(r);
+      }
+      return m;
+    };
+    const seatByEng = group(seats.results || []);
+    const msByEng = group(milestones.results || []);
+    const blByEng = group(blockers.results || []);
+    const dlByEng = group(deliverables.results || []);
+    const hrByEng = group(hours.results || []);
+    const usageByRetainer = new Map<number, any>();
+    for (const u of usage.results || []) {
+      if (u.period === period) usageByRetainer.set(Number(u.retainer_id), u);
+    }
+
+    const items = (engagements.results || []).map((e: any) => {
+      const id = Number(e.id);
+      // The most recently granted seat is the one the row is about. A seat
+      // regranted after a revocation is a live embedded engagement again.
+      const seat = (seatByEng.get(id) || [])[0] || null;
+      const ms = msByEng.get(id) || [];
+      const allBl = blByEng.get(id) || [];
+      const bl = allBl.filter((b: any) => !b.cleared_at);
+      const dl = dlByEng.get(id) || [];
+      const hrs = (hrByEng.get(id) || []).reduce((a: number, h: any) => a + (Number(h.hours) || 0), 0);
+      const u = utilisationFor(
+        e.retainer_id
+          ? { retained_hours: e.retained_hours === null ? null : Number(e.retained_hours) }
+          : null,
+        usageByRetainer.get(Number(e.retainer_id)) || null,
+      );
+      const h = healthFor({
+        milestones: ms.map((m: any) => ({ due_at: m.due_at, completed_at: m.completed_at })),
+        openBlockers: bl.map((b: any) => ({ side: b.side })),
+        clearedBlockers: allBl.length - bl.length,
+        unopenedDeliverables: dl.filter((d: any) => d.sent_at && !d.opened_at).length,
+        utilisation: u,
+      });
+      return {
+        engagement_id: id,
+        engagement_uid: e.uid,
+        status: e.status,
+        client: e.founder_name ?? null,
+        scope: e.need_title ?? null,
+        price: e.price === null || e.price === undefined ? null : Number(e.price),
+        mode: seat ? 'embedded' : 'project',
+        // What the founder granted, in their own words — `engagement_seats
+        // .scope` is free text for exactly that reason.
+        grant: seat?.scope ?? null,
+        grant_holder: seat?.holder_name ?? null,
+        seat_revoked_at: seat?.revoked_at ?? null,
+        milestone_count: ms.length,
+        milestones_done: ms.filter((m: any) => m.completed_at).length,
+        hours_this_period: seat ? hrs : null,
+        // The cap an embedded row measures against is the retainer's retained
+        // hours. No retainer means no cap, which the page states rather than
+        // filling in a number nobody agreed to.
+        hours_cap: e.retainer_id && e.retained_hours !== null ? Number(e.retained_hours) : null,
+        ...h,
+      };
+    });
+
+    const live = items.filter((i: any) => !i.seat_revoked_at);
+    const money = (rows: any[]) => rows.reduce((a: number, r: any) => a + (Number(r.price) || 0), 0);
+    return c.json({
+      items,
+      period,
+      // The artboard's four tiles, each summed over the whole board rather than
+      // any narrowed view, and each named for what it counts.
+      project_value: money(live.filter((i: any) => i.mode === 'project')),
+      embedded_monthly: money(live.filter((i: any) => i.mode === 'embedded')),
+      needs_attention: live.filter((i: any) => i.health === 'at_risk' || i.health === 'blocked').length,
+      revoked_seats: items.filter((i: any) => i.seat_revoked_at).length,
+      // Same honesty the health read reports: an unrated row is not a healthy
+      // one, and the strip must not read as a clean board when it is an empty
+      // one.
+      unrated_count: items.filter((i: any) => i.health === null).length,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
  * Every engagement with its health, its reasons, and the seam-marked read.
  *
  * Five tables feed one judgement, which is why it is computed here rather than
@@ -125,7 +295,7 @@ partnerDelivery.get('/health', async (c) => {
     const engagements = await c.env.DB.prepare(
       `SELECT e.id, e.uid, e.status, e.price, e.founder_id, e.delivered_at, e.cancelled_at,
               n.title AS need_title, f.name AS founder_name,
-              r.id AS retainer_id, r.retained_hours, r.shape
+              r.id AS retainer_id, r.retained_hours, r.shape, r.renews_at
          FROM engagements e
          LEFT JOIN founder_needs n ON n.id = e.need_id
          LEFT JOIN users f ON f.id = e.founder_id
@@ -218,6 +388,9 @@ partnerDelivery.get('/health', async (c) => {
         founder_name: e.founder_name ?? null,
         need_title: e.need_title ?? null,
         shape: e.shape ?? null,
+        // Migration 208 stored and indexed `renews_at`; the response withheld
+        // it, so `Renewing soon` had a column behind it and no way to reach it.
+        renews_at: e.renews_at ?? null,
         milestone_count: ms.length,
         overdue_count: ms.filter(
           (m: any) => !m.completed_at && m.due_at && (daysBetween(m.due_at) ?? -1) > 0,

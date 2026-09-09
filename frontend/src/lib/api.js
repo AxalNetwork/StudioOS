@@ -3257,6 +3257,12 @@ export const api = {
   // when nothing is recorded — never 'on_track'. There is no method to set it,
   // because green-because-empty is the failure the zone was written against.
   getPartnerDeliveryHealth: () => request('/partner/delivery/health'),
+  // The `pd1` board: one row per engagement in whichever of the two modes it
+  // is, with mode, grant, progress and health all derived server-side. See
+  // `routes/partner_delivery.ts` for why none of the four is stored. Mounted at
+  // `/api/partner/delivery`, beside its five siblings — NOT at
+  // `/api/partner-delivery`, which is what the drift guard caught.
+  getPartnerDeliveryBoard: () => request('/partner/delivery/board'),
 
   listPartnerMilestones: (engagementId) =>
     request(`/partner/delivery/engagements/${engagementId}/milestones`),

@@ -8,6 +8,8 @@ import {
   inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
+import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
+import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 
 /**
  * Delivery · Capacity — `/delivery/capacity`.
@@ -45,6 +47,16 @@ import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
  * worker closes that; this page only ever offers the firm's own roster.
  */
 
+/**
+ * The period label one month on, in the `YYYY-MM` shape `currentPeriod()` on
+ * the worker produces. `Next week` reads it; nothing writes it, so a period
+ * nobody has logged against comes back empty and says so.
+ */
+function nextPeriod(now = new Date()) {
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
 export default function PartnerCapacityZone() {
   const [state, setState] = useState({
     loading: true, error: '', data: null, people: null, engagements: null,
@@ -54,12 +66,20 @@ export default function PartnerCapacityZone() {
   const [granting, setGranting] = useState(false);
   const [grant, setGrant] = useState({ engagement_id: '', holder_user_id: '', scope: '' });
   const [hours, setHours] = useState({ engagement_id: '', person_user_id: '', hours: '' });
+  const [view, setView] = useState('this_week');
+
+  // ══ TWO OF THE `pd3` CHIPS CHANGE THE PERIOD, NOT THE ROWS ═══════════════
+  // Hours are logged per period, so `This week` and `Next week` are two reads
+  // of the same store rather than two views of one read — which is why the
+  // period is part of the load rather than a filter over what came back, and
+  // why next week is usually empty rather than quiet.
+  const period = view === 'next_week' ? nextPeriod() : undefined;
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: '' }));
     try {
       const [cap, ppl, health] = await Promise.all([
-        api.getPartnerCapacity(),
+        api.getPartnerCapacity(period),
         api.listPartnerPeople(),
         api.getPartnerDeliveryHealth(),
       ]);
@@ -104,15 +124,34 @@ export default function PartnerCapacityZone() {
   // Hoisted so the gate branch below and the live row draw the SAME row.
   // With nothing loaded the export renders disabled and says so itself,
   // which is what makes a header row over an unreadable store honest.
-  const rowActions = partnerZoneActions('delivery/capacity', { view: { header: ['Person', 'Live seats'], rows: people, cells: (p) => [p.name, p.live_seats] } });
+  // `Seats only` NARROWS THE ROSTER; the two period chips already narrowed the
+  // READ. `All` is everyone the period returned — a person appears if they hold
+  // a seat or logged hours, because neither table alone is the roster.
+  // Every key is named rather than falling through: `this_week` and
+  // `next_week` chose the PERIOD in the load above, so here they are the whole
+  // roster that period returned, and `all` is the same list under a label the
+  // artboard draws.
+  const visible = (() => {
+    if (view === 'seats') return people.filter((p) => (p.live_seats || 0) > 0);
+    if (view === 'this_week' || view === 'next_week' || view === 'all') return people;
+    return people;
+  })();
+
+  const rowActions = partnerZoneActions('delivery/capacity', { view: { header: ['Person', 'Live seats', 'Period'], rows: visible, cells: (p) => [p.name, p.live_seats, d?.period] } });
 
   if (isNoPartnerProfile(state.error)) {
     return <UnlinkedZone title="Capacity" actions={rowActions} />;
   }
 
   return (
+    <>
+      <ZoneToolbar
+        className="mb-3"
+        role="partner"
+        filters={partnerZoneFilters('delivery/capacity', { value: view, onChange: setView })}
+        actions={rowActions}
+      />
     <ZoneBody
-      actions={rowActions}
       loading={state.loading}
       error={state.error}
       onRetry={load}
@@ -377,5 +416,6 @@ export default function PartnerCapacityZone() {
         </StatedLimit>
       </div>
     </ZoneBody>
+    </>
   );
 }

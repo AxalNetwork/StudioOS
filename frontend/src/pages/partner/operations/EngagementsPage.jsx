@@ -171,13 +171,13 @@ export default function EngagementsPage({ view: initialView = DEFAULT_VIEW }) {
           — so the file matches what is on screen. Its other op,
           `Bulk: nudge unopened`, is unbuilt and draws nothing: nothing in this
           product sends mail, and `opened_at` is the client's column to set. */}
-      {view === 'engagements' && (
-        <ZoneActions items={partnerZoneActions('delivery/board', { view: {
-          header: ['Engagement', 'Founder', 'Project', 'Category', 'Status', 'Price'],
-          rows: engagements,
-          cells: (e) => [e.need_title, e.founder_name, e.project_name, e.need_category, e.status, e.price],
-        } })} />
-      )}
+      {/* NO ROW FOR THE ENGAGEMENTS VIEW ANY MORE, and the reason is that this
+          page is no longer that zone. `/delivery/board` used to render it, so
+          the view carried `delivery/board`'s canvas actions; the board is now
+          `delivery/BoardZone`, which reads the five stores migration 208 built
+          and which this page never touched. What survives here is the invoice
+          ledger, which lives nowhere else — so the view stays and its header
+          row goes with the zone that owns it. */}
       {view === 'proposals' && (
         <ZoneActions items={partnerZoneActions('pipeline/proposals', { view: {
           header: ['Request', 'Category', 'Price', 'Timeline (weeks)', 'Status', 'Sent'],
