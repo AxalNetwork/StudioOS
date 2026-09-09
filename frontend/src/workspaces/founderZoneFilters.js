@@ -1,15 +1,34 @@
 import { makeZoneFilters } from './zoneFilterBuilder.js';
 
 /**
- * The founder profile's twenty-six zone pages, and what each of their canvas
- * filters can honestly do. That is ALL OF THEM: every route on all five
+ * The founder profile's thirty zone pages, and what each of their canvas
+ * filters can honestly do. That is ALL OF THEM: every route on all SIX
  * artboards has an entry, and `profile_zone_filters.test.mjs`'s `excluded` list
  * for this licence is now empty. The count is pinned in the guard, so a canvas
  * that gains a zone fails here rather than shrinking the covered set quietly.
  *
- * WHERE THE LABELS COME FROM. Verbatim from the `filters: fil([…])` array of
- * the zone's artboard in `design/canvases/integrated/Pages · Founder
- * {Build,Raise,Grow,Network,Research}.dc.html`, in the canvas's own order.
+ * IT SAID TWENTY-SIX AND "ALL OF THEM" IN THE SAME SENTENCE, AND BOTH HALVES
+ * WERE WRONG TOGETHER. The founder profile has thirty zone pages — Validate 4,
+ * Build 5, Raise 6, Grow 7, Network 3, Research 5 — and this table covered
+ * twenty-six of them. It was short by exactly Validate, whose four zones sat in
+ * the guard's `excluded` list, so the empty-`excluded` claim and the count were
+ * each true of the set the file had chosen to look at. A count that measures
+ * the covered set cannot also prove the set is complete; the guard's `zones`
+ * pin, which counts the DIRECTORY, is what does that.
+ *
+ * WHERE THE LABELS COME FROM. Verbatim from the zone's artboard in
+ * `design/canvases/integrated/Pages · Founder {Validate,Build,Raise,Grow,
+ * Network,Research}.dc.html`, in the canvas's own order.
+ *
+ * THE CANVASES SPEAK TWO DIALECTS AND BOTH ARE FIRST-CLASS. Five artboards
+ * declare a chip row as `filters: fil(['This week','Last 4',…], 0)`. `Pages ·
+ * Founder Validate` — the NEWEST of the six, exported 2026-09-07 — declares the
+ * same thing as `views: views(['All','Deck-eligible',…])` on a `boards` array,
+ * where the route lives in `sub:'violet · /validate/interviews'`. The helpers
+ * differ in name only: both map a label list with the first one active. A reader
+ * that knew only `fil([` found nothing in that file and reported the canvas as
+ * carrying no filters, which is how sixteen chips stayed invisible while the
+ * artboard had drawn them all along. `artboardFilters` in the guard reads both.
  * Network and Research are shared surfaces — one component serves all four
  * licences — which is why their entries sit in four per-licence tables rather
  * than one common one, and why a zone's four tables land together. `founderZoneActions`
@@ -106,8 +125,68 @@ const NO_GROUP_TO_AGE =
 // fourth kind of reason this table has needed. See the zone's entry below.
 const CATEGORY_IS_PER_COMPETITOR =
   'each competitor inside an analysis is filed as direct or adjacent, but this row narrows the saved analyses, and an analysis carries no relation of its own';
+// `/validate/verdict`. Both time-travel labels share one absence, and it is not
+// a missing column. `validation_decisions` DOES carry `decided_at` and
+// `superseded_at`, the route returns the full history, and the POST supersedes
+// rather than overwrites — a real ledger. What no store holds is the thing these
+// two labels name: a per-claim verdict is recomputed from the evidence on every
+// request (`verdictFor`), never written down, so there is no state of the board
+// as of last week to return to. Snapshotting it is a change to the model, not a
+// predicate this row can carry.
+const NO_VERDICT_SNAPSHOT =
+  'a claim’s verdict is recomputed from its evidence on every request and never stored, so no earlier state of the board exists to compare against';
 
 export const FOUNDER_ZONE_FILTERS = {
+  // ── Validate ─────────────────────────────────────────────────────────────
+  // Both of this zone's evidence fields are real AND written: `progress.ts`
+  // accepts `icp_fit` and `quote_consent` by name, and `DiscoveryPage`'s
+  // `InterviewModal` sends the whole record through it — the fourth step of the
+  // check, and the one `/research/funds` failed. `LogInterviewModal` writes
+  // `icp_fit` too. Deck-eligibility is not a stored flag: it derives from
+  // consent, which is what makes a quote usable, so the chip reads the column
+  // the consent question writes.
+  'validate/interviews': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Deck-eligible', key: 'deck' },
+    { canvas: 'Strong fit', key: 'strong' },
+    { canvas: 'Not ICP', key: 'not-icp' },
+  ],
+  // ALL FOUR ARE PROSE, AND THE FIRST TWO ARE THE INTERESTING ONES. This zone
+  // reads `api.painGroups`, whose `PainGroupsView` gives each theme a list of
+  // `{ phrase_norm, display_phrase }` — the PHRASES, never the interviews behind
+  // them. So no mention can be attributed to a conversation, and with no
+  // conversation there is no `icp_fit` to narrow by and no `interview_date` to
+  // order by. `ICP only` and `All interviews` are two views of an attribution
+  // the payload does not carry, and one of them is the whole page.
+  //
+  // THE PAGE COULD COMPUTE IT AND MUST NOT. `listInterviews` does return
+  // `icp_fit` and `pains` per interview, so a client-side regroup is reachable —
+  // and it would re-implement the server's normalisation and alias mapping to
+  // produce a second frequency for the same theme. This workspace's own header
+  // is explicit that both zones read one endpoint so they "cannot disagree";
+  // a chip that quietly forks the number is a worse answer than no chip.
+  'validate/pain-map': [
+    { canvas: 'ICP only', unbuilt: 'a theme carries its phrases and not the interviews they came from, so no mention can be traced to a conversation whose ICP fit is recorded' },
+    { canvas: 'All interviews', unbuilt: 'the same missing attribution seen from the other side — with no per-mention interview there is no subset for this to be the whole of, and it would match every theme on the page' },
+    { canvas: 'Need-to-have', unbuilt: 'no mention carries a severity: `interview_pain_severities` exists with no reader and no writer anywhere in the worker, so nothing separates a need from a nice-to-have' },
+    { canvas: 'By recency', unbuilt: 'a pain theme carries no date — the grouped view has no interview behind a phrase, and `loadEvidenceBase` does not select `interview_date` either' },
+  ],
+  // `Blocking the verdict` is the one label here the board already answers in
+  // prose: `buildBoard` computes `_note` for every claim whose verdict is null
+  // because interviews touching it have no ICP fit recorded. The chip narrows to
+  // exactly the claims that note is about.
+  'validate/hypotheses': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Blocking the verdict', key: 'blocking' },
+    { canvas: 'Recently moved', unbuilt: 'the board selects id, code, claim, sort_order and retired_at — no `updated_at` reaches the page, and nothing records a claim moving between lanes' },
+    { canvas: 'Retired', key: 'retired' },
+  ],
+  'validate/verdict': [
+    { canvas: 'Current', key: 'current' },
+    { canvas: 'As of last week', unbuilt: NO_VERDICT_SNAPSHOT },
+    { canvas: 'Changed this month', unbuilt: NO_VERDICT_SNAPSHOT },
+    { canvas: 'Retired claims', key: 'retired' },
+  ],
   // ── Build ────────────────────────────────────────────────────────────────
   // Reads the Now column of the stored roadmap. Nothing stamps a key result
   // with a week, and nothing records one moving between weeks, which is why the

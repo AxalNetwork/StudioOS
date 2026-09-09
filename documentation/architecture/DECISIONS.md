@@ -3568,3 +3568,47 @@ said it on every card until the fetch resolved, and a store holding 196,956 rows
 said it too. The `failed` list existed and only ever set one page-wide banner,
 so no card could tell whether its own source had broken. It is three states now,
 with three sentences, and a later success clears the failure it recovered from.
+
+## D67 — The action builder gets a fourth kind, because one zone set could only be built outside it
+
+`zoneActionBuilder.js` could say three things about a zone header op: `kind:
+'export'` runs `exportView` over rows the page has loaded, `to:` links to a
+route the licence may open, and `unbuilt:` renders nothing and records why.
+Across all four profiles' 218 entries there was not one op performed by the page
+that drew it.
+
+`/validate/*` is the zone set that could not be expressed. Three of its ops open
+a dialog the workspace owns (`setLogOpen`, `setHypOpen`, `setLinkOpen`) and its
+three exports are **server-side** CSV downloads with a busy spinner and a shared
+error line — not `exportView` over loaded rows. So `FounderValidateWorkspace`
+built its own local `ACTIONS` map: the only zone header in the product outside
+`founderZoneActions.js`, and therefore the only one no canvas guard could check.
+
+**The cost was not cosmetic.** `profile_zone_filters.test.mjs` requires every
+zone with a filter table to have an ACTION table for the same zone, so the four
+Validate zones sat in its `excluded` list — which is why the founder profile
+covered 26 of its 30 zone pages and the registry's docblock claimed that was
+"ALL OF THEM". A missing word in a builder's vocabulary kept sixteen canvas
+chips off the screen and made a count read as complete.
+
+`kind: 'handler'` is that word. The table declares the op and names the handler;
+the page supplies either the click or `{ onClick, disabled, busy, title }` when
+it has more to say — a server-side export knows when it is in flight, a control
+needing a venture knows when there is none, and neither fact can live in a
+table. A handler the page does not supply **renders nothing**, exactly as
+`unbuilt` does, because the alternative is a button that does nothing.
+
+**Two guards, because the static one cannot see a browser and the runtime one
+cannot fail CI.** `zone_actions.test.mjs` checks that every declared handler is
+supplied and every supplied handler is reachable — a rename would otherwise drop
+an op from the row and stay green — and it calls the builder directly to prove
+the drop actually happens. `profile_zone_actions.test.mjs` pins the count per
+profile at 6 for founder and **0** for the other three, so a second use shows up
+as a change rather than as a silent spread.
+
+### What the fourth kind is not
+
+It is not a render prop. The page passes handlers *in* and gets a bound row
+back, which is the same split D53 records for filters: the table owns which ops
+the canvas promised, the page owns the state only it can hold.
+

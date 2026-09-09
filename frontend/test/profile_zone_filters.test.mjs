@@ -104,57 +104,43 @@ const PROFILES = {
     // listed with a reason and re-checked on every run. The eight shared-surface
     // routes moved from the first mechanism to the second here.
     canvas: /^Pages · Founder /,
-    pages: ['frontend/src/pages/founder', 'frontend/src/workspaces'],
+    // `workspaces/founder` holds `FounderValidateWorkspace`, which mounts all
+    // four `/validate/*` rows. The walk does not recurse, so the subdirectory
+    // is named outright rather than inherited from its parent.
+    pages: ['frontend/src/pages/founder', 'frontend/src/workspaces', 'frontend/src/workspaces/founder'],
     actions: 'frontend/src/workspaces/founderZoneActions.js',
-    zones: 26,
-    mounted: 26,
+    zones: 30,
+    mounted: 30,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.founder },
-    // FOUR, AND THEY ARRIVED BY THE READER LEARNING TO SEE THEM. This note used
-    // to read "EMPTY … every canvas route on all five founder artboards now has
-    // a filter table", and the count was the parser's rather than the
-    // directory's: `/^Pages · Founder /` matches SIX files, and the sixth —
-    // `Pages · Founder Validate` — is a single artboard looped over a `boards`
-    // array, so a reader that only understood `route:'…'` found nothing in it
-    // and the list stayed empty by accident rather than by achievement.
+    // EMPTY, AND THIS TIME THE COUNT PROVES IT RATHER THAN AGREEING WITH IT.
+    // The four `validate/*` zones sat here for one release, and the note that
+    // held them recorded two separate errors worth keeping, because each was
+    // reasoning from a reader's blind spot rather than from the canvas.
     //
-    // It specifies sixteen chips across its four zones and none of them is on
-    // screen: `FounderValidateWorkspace.jsx` imports `ZoneActions` and no
-    // `ZoneToolbar`, so all four zones ship an action row over an unfiltered
-    // list. That is a real gap, recorded here by name so it is re-checked on
-    // every run.
+    // FIRST: "`Pages · Founder Validate` … a single artboard looped over a
+    // `boards` array, so a reader that only understood `route:'…'` found nothing
+    // in it". True of the reader, never of the canvas. That artboard has carried
+    // sixteen chips the whole time — `views(['All','Deck-eligible','Strong fit',
+    // 'Not ICP'])` and three more like it — in a helper named `views` rather than
+    // `fil`, differing in name only. `artboardFilters` reads both dialects now,
+    // and the per-file emptiness assert above is what stopped the sixth canvas
+    // from contributing nothing and saying nothing about it.
     //
-    // WHAT ACTUALLY BLOCKS IT, WHICH IS NOT THE FOUR FILTER TABLES. This note
-    // first said the work was "four filter tables and four narrowed row sets".
-    // It is not, and the correction is worth keeping because the wrong version
-    // makes the job look like an afternoon.
+    // SECOND, AND THE ONE THAT ACTUALLY BLOCKED THE WORK: the test below requires
+    // every zone with a filter table to have an ACTION table for the same zone,
+    // and `founderZoneActions.js` had no `validate/*` key — that workspace built
+    // its row in a local `ACTIONS` map, because `zoneActionBuilder.js` could
+    // express `kind: 'export'` over loaded rows, `to:` a route and `unbuilt:`,
+    // and none of the three fits an op that opens a dialog the page owns or runs
+    // a server-side download with a busy spinner. The note called that "a
+    // defensible change and probably the right one". It was: `kind: 'handler'`
+    // is that fourth kind, D67 records it, and the six Validate ops are its first
+    // and only use.
     //
-    // The test below requires every zone with a filter table to have an ACTION
-    // table for the same zone, and `founderZoneActions.js` has no `validate/*`
-    // key — that workspace builds its own row, in a local `ACTIONS` map. It has
-    // to: three of its ops open a modal (`setLogOpen`, `setHypOpen`,
-    // `setLinkOpen`) and its three exports are SERVER-side calls with a busy
-    // spinner and a shared error line. `zoneActionBuilder.js` can express
-    // exactly three things — `kind: 'export'` over rows the page has loaded,
-    // `to:` a route, and `unbuilt:` — and across all four profiles' 218 entries
-    // there is not one page-supplied handler. So bringing Validate into the
-    // table means giving the SHARED builder a fourth kind, and giving the guard
-    // a way to check it (the page must actually supply the handler its table
-    // declares, the same shape as the live-filter-key assertion above).
-    //
-    // That is a defensible change and probably the right one — a fourth kind
-    // for "the page performs this, because it owns state a table cannot" is a
-    // real gap in the builder's vocabulary, not a workaround. But it is a
-    // change to a builder four profiles depend on, and it is not a prerequisite
-    // anyone would guess from the words "add a filter row".
-    //
-    // The three that LEFT this list are still gone for their own reasons:
-    // `research/{ask,library}` when all four licences gained them in one
-    // commit; `network/organizations` when the two licences that HAVE a body
-    // for it gained it — advisor and partner keep it excluded for a reason that
-    // is theirs and is stated in their own profiles.
-    excluded: [
-      'validate/interviews', 'validate/pain-map', 'validate/hypotheses', 'validate/verdict',
-    ],
+    // The count moved 26 → 30 in the same commit. It counts the DIRECTORY, so it
+    // is what refuses the reading the old note's own first line fell into — a
+    // covered set agreeing with itself.
+    excluded: [],
     // Counts welded onto a real filter — `All 14`, `All 14 mo`, `Aug 2026`.
     samples: /\b(14|2026)\b/,
     // Founder canvas routes are the live routes.

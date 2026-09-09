@@ -3,7 +3,9 @@ import { useLocation, Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Card, EmptyState, ErrorState, WorkerRail, Skeleton } from '../../ui';
 import WorkspaceShell, { NotRecorded } from '../WorkspaceShell';
-import ZoneActions from '../ZoneActions';
+import ZoneToolbar from '../ZoneToolbar';
+import { founderZoneFilters } from '../founderZoneFilters';
+import { founderZoneActions } from '../founderZoneActions';
 import ValidateProposals from './ValidateProposals';
 import InterviewRecording from './InterviewRecording';
 import useAssistMode from '../../hooks/useAssistMode';
@@ -32,14 +34,23 @@ import { bucketForPath, bucketTitle, zoneForPath } from '../shellConfig';
  * HYPOTHESES AND VERDICT HAVE A BACKEND NOW, and this header used to say they
  * did not. Migration 211 added `hypotheses`, `hypothesis_pain_links` and
  * `validation_decisions`, plus `discovery_interviews.quote_consent` — so the
- * boards read live records and the consent column is real. Two things are still
- * absent and are still said out loud rather than drawn: nothing WRITES
- * `quote_consent` from any screen, and `interview_pain_severities` exists with
- * no reader and no writer.
+ * boards read live records and the consent column is real.
  *
- * THE HEADER'S ACTION SLOT. `WorkspaceShell` has always had one; until this
- * change no workspace zone page in the product passed it, which is why a page
- * built to log interviews had no way to log one. See `../ZoneActions.jsx`.
+ * `quote_consent` HAS A WRITER, AND THIS HEADER USED TO SAY IT DID NOT. That
+ * sentence was true when it was written and is not now: `progress.ts` accepts
+ * `quote_consent` by name on the interview create and update, and
+ * `DiscoveryPage`'s interview modal carries the control that sends it. The claim
+ * mattered because it is the fourth step of the filter check — a column with no
+ * screen behind it can only ever be NULL — so leaving it standing would have
+ * argued a live chip out of existence. `interview_pain_severities` is the half
+ * that is STILL true: it exists with no reader and no writer anywhere, which is
+ * why `/validate/pain-map`'s "Need-to-have" is prose rather than a chip.
+ *
+ * THE HEADER'S ACTION SLOT. `WorkspaceShell` has always had one; the first
+ * version of this file was the first zone page in the product to pass it, which
+ * is why a page built to log interviews had no way to log one. The row lives in
+ * the bodies now, as a `ZoneToolbar` over the shared tables — see the note above
+ * `zoneKey` below, and D67.
  */
 
 const useProjectId = () => {
@@ -76,9 +87,27 @@ function StatRow({ items }) {
   );
 }
 
-function Interviews({ projectId, ready, reloadKey = 0, onLog }) {
+// The canvas's four views of the interview log, and the record field each one
+// reads. Both fields are three-state and both are WRITTEN — `progress.ts`
+// accepts `icp_fit` and `quote_consent` by name and `DiscoveryPage`'s modal
+// sends them — which is the step `/research/funds` failed with three chips over
+// a column no screen could set.
+//
+// `null` IS NOT `none`, ON EITHER FIELD. An unassessed interview is not "not our
+// customer" and an unasked consent question is not a refusal, so `Not ICP` reads
+// `=== 'none'` rather than `!== 'strong'`, and `Deck-eligible` reads `=== true`.
+// The stat strip below already counts them apart for the same reason.
+const INTERVIEW_VIEWS = {
+  all: () => true,
+  deck: (r) => r.quote_consent === true,
+  strong: (r) => r.icp_fit === 'strong',
+  'not-icp': (r) => r.icp_fit === 'none',
+};
+
+function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneActions }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
+  const [view, setView] = useState('all');
   // Read here as well as on the shell: attaching a recording is data entry and
   // is always available, transcribing spends money and sits behind the switch.
   // The hook is one shared store, so both readers see the same answer.
@@ -119,9 +148,18 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog }) {
   // count below is consenting interviews only and the note carries the rest.
   const consented = rows.filter((r) => r.quote_consent === true).length;
   const consentUnasked = rows.filter((r) => r.quote_consent === null || r.quote_consent === undefined).length;
+  // The stat strip keeps counting the WHOLE log — it reports the evidence base,
+  // and a base that shrank when a chip was clicked would be a different claim.
+  // Only the list narrows.
+  const shown = rows.filter(INTERVIEW_VIEWS[view] || INTERVIEW_VIEWS.all);
 
   return (
     <div className="space-y-4">
+      <ZoneToolbar
+        role="founder"
+        filters={zoneFilters ? zoneFilters({ value: view, onChange: setView }) : []}
+        actions={zoneActions ? zoneActions() : []}
+      />
       <StatRow items={[
         { label: 'Interviews logged', value: rows.length, note: 'the base every later stage counts against' },
         { label: 'With a pain recorded', value: withPain.length, note: 'an interview with no pain feeds nothing downstream' },
@@ -143,10 +181,23 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog }) {
         <Card className="p-4">
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <span className="text-sm font-extrabold tracking-tight">Interview log</span>
-            <span className="text-[11px] text-axal-ink-3">One venture · newest first</span>
+            <span className="text-[11px] text-axal-ink-3">
+              {view === 'all' ? 'One venture · newest first' : `${shown.length} of ${rows.length} · newest first`}
+            </span>
           </div>
+          {/*
+            A live filter returning nothing is a real answer, and it has to be
+            SAID. Left as a bare empty list it reads as "no interviews logged",
+            which is the sentence the empty state above owns and which is not
+            true here — the log has rows, none of them in this view.
+          */}
+          {shown.length === 0 && (
+            <p className="py-2 text-[11px] text-axal-ink-3" data-testid="text-interviews-view-empty">
+              No interview in this log matches that view. The count in the strip above is the full log.
+            </p>
+          )}
           <ul className="divide-y divide-axal-border-soft">
-            {rows.slice(0, 25).map((r) => {
+            {shown.slice(0, 25).map((r) => {
               const pains = r.pain_points || r.pains || [];
               return (
                 <li key={r.id} className="py-2.5">
@@ -218,7 +269,11 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog }) {
   );
 }
 
-function PainMap({ projectId, ready }) {
+// No filter state here, and that is the table's answer rather than an omission:
+// all four of this zone's canvas labels are `unbuilt`, so `zoneFilters` returns
+// an empty array and the toolbar draws its action side only. See
+// `founderZoneFilters.js` for why a grouped view cannot narrow by ICP.
+function PainMap({ projectId, ready, zoneFilters, zoneActions }) {
   const [view, setView] = useState(null);
   const [error, setError] = useState(null);
 
@@ -244,6 +299,11 @@ function PainMap({ projectId, ready }) {
 
   return (
     <div className="space-y-4">
+      <ZoneToolbar
+        role="founder"
+        filters={zoneFilters ? zoneFilters({}) : []}
+        actions={zoneActions ? zoneActions() : []}
+      />
       <StatRow items={[
         // WAS "founder-curated, never AI-grouped", and that stopped being
         // true when migration 214 landed. What is still true, and is the
@@ -389,8 +449,20 @@ function FitGap({ base }) {
   );
 }
 
-function HypothesisBoard({ projectId, ready, board, onNew }) {
+// `Blocking the verdict` is not a new computation — `buildBoard` already writes
+// `_note` on exactly these claims, because a null verdict has to be explained
+// rather than rendered as a blank cell. The chip narrows to the claims that note
+// is about. `Retired` reads `retired_at`, which migration 211 created FOR this
+// label and which nothing could write until the control below existed.
+const HYPOTHESIS_VIEWS = {
+  all: (h) => !h.retired_at,
+  blocking: (h) => !h.retired_at && h.verdict === null,
+  retired: (h) => Boolean(h.retired_at),
+};
+
+function HypothesisBoard({ projectId, ready, board, onNew, onRetire, retiring, zoneFilters, zoneActions }) {
   const { data, error } = board;
+  const [view, setView] = useState('all');
   if (!ready) return <Skeleton className="h-40" />;
   if (!projectId) return <NoVenture what="The hypothesis board" />;
   if (error) return <ErrorState error={error} />;
@@ -399,10 +471,16 @@ function HypothesisBoard({ projectId, ready, board, onNew }) {
   const items = data.hypotheses || [];
   const live = items.filter((h) => !h.retired_at);
   const base = data.evidence_base || {};
-  const byLane = (lane) => live.filter((h) => h.lane === lane);
+  const shown = items.filter(HYPOTHESIS_VIEWS[view] || HYPOTHESIS_VIEWS.all);
+  const byLane = (lane) => shown.filter((h) => h.lane === lane);
 
   return (
     <div className="space-y-4">
+      <ZoneToolbar
+        role="founder"
+        filters={zoneFilters ? zoneFilters({ value: view, onChange: setView }) : []}
+        actions={zoneActions ? zoneActions() : []}
+      />
       <StatRow items={[
         { label: 'Hypotheses', value: live.length, note: `${byLane('validated').length} validated, ${byLane('invalidated').length} invalidated` },
         { label: 'Awaiting evidence', value: byLane('testing').length + byLane('none').length, note: 'not yet at the bar either way' },
@@ -413,7 +491,7 @@ function HypothesisBoard({ projectId, ready, board, onNew }) {
 
       <FitGap base={base} />
 
-      {live.length === 0 ? (
+      {items.length === 0 ? (
         <EmptyState
           title="No hypotheses yet"
           description="A hypothesis names what you believe and which pain themes would prove or disprove it. Add one and the interviews already logged start counting toward it. Nothing here is inferred — an empty board means an empty board, on purpose."
@@ -423,6 +501,15 @@ function HypothesisBoard({ projectId, ready, board, onNew }) {
             </button>
           )}
         />
+      ) : shown.length === 0 ? (
+        // A live chip that matches nothing has to say which question it just
+        // answered. Falling through to the board's own "No hypotheses yet" would
+        // report an empty board, which is a different and untrue claim.
+        <p className="text-[12px] text-axal-ink-3" data-testid="text-hypotheses-view-empty">
+          {view === 'retired'
+            ? 'No claim has been retired. A retired claim stays on the record — it is never deleted — so this view fills the first time you retire one.'
+            : 'No claim is waiting on an ICP fit. Every hypothesis on the board has the evidence it needs for a verdict.'}
+        </p>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {LANES.map(([lane, label]) => {
@@ -447,6 +534,30 @@ function HypothesisBoard({ projectId, ready, board, onNew }) {
                       <div className="mt-0.5 text-[11px] text-axal-ink-3">
                         {h.bar_note || 'Distance to the bar cannot be computed until the fits above are recorded.'}
                       </div>
+                      {/*
+                        RETIRE, NEVER DELETE. The worker has taken both
+                        directions since migration 211 and `retired_at` was
+                        created for the canvas's "Retired" filter — but nothing
+                        in the product called `api.updateHypothesis`, so the
+                        column could only ever be NULL and both labels that read
+                        it filtered an empty set. This is the caller it was
+                        missing. An abandoned claim is evidence about how the
+                        venture thought, which is why it comes back rather than
+                        going away.
+                      */}
+                      {onRetire && (
+                        <button
+                          type="button"
+                          onClick={() => onRetire(h.id, !h.retired_at)}
+                          disabled={retiring === h.id}
+                          data-testid={`button-retire-hypothesis-${h.id}`}
+                          className="mt-1.5 text-[11px] font-semibold text-axal-ink-3 underline decoration-dotted underline-offset-2 hover:text-axal-violet disabled:opacity-50"
+                        >
+                          {retiring === h.id
+                            ? 'Saving…'
+                            : h.retired_at ? 'Restore this claim' : 'Retire this claim'}
+                        </button>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -458,17 +569,27 @@ function HypothesisBoard({ projectId, ready, board, onNew }) {
 
       <p className="text-[11px] leading-relaxed text-axal-ink-3">
         Lanes are computed from the evidence, never dragged: a claim sits where its
-        interviews put it. Verdict history, a generated summary and its screening
-        state are drawn on the canvas and are not built — so no filter for them is
-        shown here rather than one that filters nothing.
+        interviews put it. The canvas also draws “Recently moved”, and nothing
+        records a claim changing lanes — so that chip is not shown at all, rather
+        than shown over a set it cannot compute.
       </p>
     </div>
   );
 }
 
-function ValidationSummary({ projectId, ready, board }) {
+// The summary's two live views. `Current` is the working set — the claims still
+// standing — and `Retired claims` is the record of the ones that are not, which
+// exists because a retired claim is never deleted. The canvas's other two labels
+// ask for the board as it stood at a past moment, and no such moment is stored.
+const SUMMARY_VIEWS = {
+  current: (h) => !h.retired_at,
+  retired: (h) => Boolean(h.retired_at),
+};
+
+function ValidationSummary({ projectId, ready, board, zoneFilters, zoneActions }) {
   const { data, error } = board;
   const [decision, setDecision] = useState(undefined);
+  const [view, setView] = useState('current');
 
   useEffect(() => {
     if (!ready || !projectId) return undefined;
@@ -486,12 +607,22 @@ function ValidationSummary({ projectId, ready, board }) {
   if (error) return <ErrorState error={error} />;
   if (!data) return <Skeleton className="h-40" />;
 
-  const live = (data.hypotheses || []).filter((h) => !h.retired_at);
+  const items = data.hypotheses || [];
+  const live = items.filter((h) => !h.retired_at);
   const base = data.evidence_base || {};
   const current = decision === undefined ? undefined : decision?.current || null;
+  // The strip keeps reporting the standing claims whichever view is selected:
+  // "Validated 3 of 4" is a statement about the venture, not about the table
+  // below it, and it would be a different sentence over the retired set.
+  const shown = items.filter(SUMMARY_VIEWS[view] || SUMMARY_VIEWS.current);
 
   return (
     <div className="space-y-4">
+      <ZoneToolbar
+        role="founder"
+        filters={zoneFilters ? zoneFilters({ value: view, onChange: setView }) : []}
+        actions={zoneActions ? zoneActions() : []}
+      />
       <StatRow items={[
         { label: 'Validated', value: live.filter((h) => h.verdict === 'validated').length, note: `of ${live.length} claims` },
         { label: 'Evidence base', value: base.interviews ?? 0, note: `${base.icp ?? 0} recorded as ICP · bar is ${data.bar}` },
@@ -503,16 +634,23 @@ function ValidationSummary({ projectId, ready, board }) {
 
       <FitGap base={base} />
 
-      {live.length === 0 ? (
+      {items.length === 0 ? (
         <EmptyState
           title="Nothing to reconcile yet"
           description="The summary reads the hypothesis board. Add a claim there and its evidence appears here with the interviews behind it."
           action={<Link to="/validate/hypotheses" className="text-axal-violet underline">See hypotheses</Link>}
         />
+      ) : shown.length === 0 ? (
+        <p className="text-[12px] text-axal-ink-3" data-testid="text-summary-view-empty">
+          No claim has been retired. Retiring one on the hypothesis board keeps it
+          here rather than deleting it, and this view is where it lands.
+        </p>
       ) : (
         <Card className="p-4">
           <div className="mb-3 flex items-baseline justify-between gap-3">
-            <span className="text-sm font-extrabold tracking-tight">Every verdict, with its receipts</span>
+            <span className="text-sm font-extrabold tracking-tight">
+              {view === 'retired' ? 'Retired claims, with their receipts' : 'Every verdict, with its receipts'}
+            </span>
             <span className="text-[11px] text-axal-ink-3">Computed from the interview log</span>
           </div>
           <div className="overflow-x-auto">
@@ -527,7 +665,7 @@ function ValidationSummary({ projectId, ready, board }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-axal-border-soft">
-                {live.map((h) => (
+                {shown.map((h) => (
                   <tr key={h.id} className="align-top">
                     <td className="py-2 pr-3">
                       <span className="text-axal-ink-3">{h.code} · </span>{h.claim}
@@ -629,76 +767,123 @@ export default function FounderValidateWorkspace() {
       setBusy('');
     }
   };
-  const exportAction = (label, testid, fn) => ({
-    label, testid, disabled: !projectId, busy: busy === testid,
-    onClick: () => runExport(testid, fn),
+  // What the table's `kind: 'handler'` entries bind to. The busy flag and the
+  // "no venture" disable both live here, which is the reason a table could not
+  // express these ops and the reason the builder now takes an object rather than
+  // a bare function.
+  const exportHandler = (testid, fn) => ({
+    disabled: !projectId, busy: busy === testid, onClick: () => runExport(testid, fn),
   });
+
+  // RETIRE AND RESTORE. `retired_at` has existed since migration 211, created
+  // for the canvas's "Retired" filter, and `api.updateHypothesis` had no caller
+  // anywhere in the SPA — so the column could only ever be NULL and both labels
+  // over it filtered an empty set forever. A failure re-reads the board rather
+  // than leaving the card showing a state the server did not accept.
+  const [retiring, setRetiring] = useState(null);
+  const retireHypothesis = async (id, retired) => {
+    setRetiring(id); setExportError('');
+    try {
+      await api.updateHypothesis(id, { retired });
+    } catch (e) {
+      setExportError(e?.message || 'That claim could not be updated.');
+    } finally {
+      setRetiring(null);
+      setBoardKey((n) => n + 1);
+    }
+  };
 
   // Shared with the rail's switch through a module store — see
   // hooks/useAssistMode.js for why not a provider.
   const [fillsOn] = useAssistMode('Validate');
 
+  // THE OPS THIS COMPONENT PERFORMS, named for the table's `handler:` keys. They
+  // are this component's rather than a body's because the dialogs, the busy flag
+  // and the shared error line are — which is the whole reason a table needed a
+  // fourth kind to declare them.
+  const handlers = {
+    logInterview: { disabled: !projectId, onClick: () => setLogOpen(true) },
+    newHypothesis: { disabled: !projectId, onClick: () => setHypOpen(true) },
+    // Nothing to link until the board has both ends of a link. The dialog says
+    // which end is missing; the button opens it either way so the reader learns
+    // that rather than finding a control that does nothing.
+    linkPain: { disabled: !projectId, onClick: () => setLinkOpen(true) },
+    exportInterviews: exportHandler('action-export-interviews', api.exportValidateInterviews),
+    exportPainMap: exportHandler('action-export-pain-map', api.exportValidatePainMap),
+    exportSummary: exportHandler('action-export-summary', api.exportValidateSummary),
+  };
+
+  // EACH BODY NAMES ITS OWN ZONE, RATHER THAN THIS COMPONENT COMPUTING THE KEY.
+  // `validate/${zone.slug}` worked and was invisible to both profile guards —
+  // they find a mount by searching for the builder with a LITERAL key, which is
+  // what proves a declared zone is on screen somewhere. A computed key satisfies
+  // the compiler and nothing else, so the four keys are spelled out.
   const body = useMemo(() => {
     switch (zone?.slug) {
       case 'pain-map':
-        return <PainMap projectId={projectId} ready={ready} />;
+        return (
+          <PainMap
+            projectId={projectId}
+            ready={ready}
+            zoneFilters={(opts) => founderZoneFilters('validate/pain-map', opts)}
+            zoneActions={() => founderZoneActions('validate/pain-map', { handlers })}
+          />
+        );
       case 'hypotheses':
-        return <HypothesisBoard projectId={projectId} ready={ready} board={board} onNew={() => setHypOpen(true)} />;
+        return (
+          <HypothesisBoard
+            projectId={projectId}
+            ready={ready}
+            board={board}
+            onNew={() => setHypOpen(true)}
+            onRetire={retireHypothesis}
+            retiring={retiring}
+            zoneFilters={(opts) => founderZoneFilters('validate/hypotheses', opts)}
+            zoneActions={() => founderZoneActions('validate/hypotheses', { handlers })}
+          />
+        );
       case 'verdict':
-        return <ValidationSummary projectId={projectId} ready={ready} board={board} />;
+        return (
+          <ValidationSummary
+            projectId={projectId}
+            ready={ready}
+            board={board}
+            zoneFilters={(opts) => founderZoneFilters('validate/verdict', opts)}
+            zoneActions={() => founderZoneActions('validate/verdict', { handlers })}
+          />
+        );
       case 'interviews':
       default:
-        return <Interviews projectId={projectId} ready={ready} reloadKey={reloadKey} onLog={() => setLogOpen(true)} />;
+        return (
+          <Interviews
+            projectId={projectId}
+            ready={ready}
+            reloadKey={reloadKey}
+            onLog={() => setLogOpen(true)}
+            zoneFilters={(opts) => founderZoneFilters('validate/interviews', opts)}
+            zoneActions={() => founderZoneActions('validate/interviews', { handlers })}
+          />
+        );
     }
-  }, [zone?.slug, projectId, ready, reloadKey, board]);
+    // `busy`, `retiring` and `projectId` all change what the handlers report, so
+    // the row would otherwise keep rendering a stale disabled or busy state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zone?.slug, projectId, ready, reloadKey, board, busy, retiring]);
 
-  // WHY THIS IS THE FIRST ZONE PAGE IN THE PRODUCT TO USE `actions`.
-  // `WorkspaceShell` has had the slot since it was written, and every caller
-  // passing it was a Spin-Out Lab page — so `/validate/interviews`, a page
-  // whose whole job is logging interviews, offered no way to log one. The
-  // create path was never missing: `api.createInterview` and
-  // `components/discovery/LogInterviewModal` have both been in place all along,
-  // used by Discovery and by the Lab. Only this door was.
+  // WHY THE ROW MOVED OUT OF THE SHELL'S `actions` SLOT AND INTO THE BODIES.
+  // This workspace was the first zone page in the product to use that slot, and
+  // for one release it held a local `ACTIONS` map — the only zone header in the
+  // product built outside `founderZoneActions.js`, and therefore the only one no
+  // canvas guard could check. It was outside by necessity: `zoneActionBuilder`
+  // could express an export over loaded rows, a link, and a gap, and every op
+  // here is a dialog this component owns or a server-side download it tracks.
   //
-  // The other three zones get their actions as their endpoints land. A zone
-  // with nothing backed draws nothing — a button is a promise.
-  const ACTIONS = {
-    interviews: [
-      {
-        label: 'Log an interview',
-        testid: 'action-log-interview',
-        onClick: () => setLogOpen(true),
-        // No venture means no `project_id` to write against; the button would
-        // 400. The body already explains the state, so this just stays shut.
-        disabled: !projectId,
-      },
-      exportAction('Export interviews', 'action-export-interviews', api.exportValidateInterviews),
-    ],
-    'pain-map': [
-      exportAction('Export map', 'action-export-pain-map', api.exportValidatePainMap),
-    ],
-    hypotheses: [
-      { label: 'New hypothesis', testid: 'action-new-hypothesis', onClick: () => setHypOpen(true), disabled: !projectId },
-      {
-        label: 'Link to a pain',
-        testid: 'action-link-pain',
-        onClick: () => setLinkOpen(true),
-        // Nothing to link until the board has both ends of a link. The dialog
-        // says which end is missing; the button opens it either way so the
-        // reader learns that rather than finding a control that does nothing.
-        disabled: !projectId,
-      },
-    ],
-    verdict: [
-      exportAction('Export summary', 'action-export-summary', api.exportValidateSummary),
-    ],
-    // "Send to Problem slide" is on the canvas for Pain map and Verdict and is
-    // NOT here. It has no endpoint — and more to the point, the pain themes
-    // already feed the deck's slide 2 (`pain_groups` is curated for exactly
-    // that, see progress.ts), so a button that "sends" would be theatre over a
-    // pipe that already runs. What it should become is a link that says so.
-  };
-  const actions = ACTIONS[zone?.slug] ? <ZoneActions items={ACTIONS[zone.slug]} /> : null;
+  // `kind: 'handler'` is that missing vocabulary (D67), so the map is gone and
+  // the ops come from the shared table like every other zone's. The row is now a
+  // `ZoneToolbar` rendered by each BODY rather than by the shell, because the
+  // filter half needs `value` and `onChange` that only the body has — the shape
+  // D53 records and `ResearchWorkspace` established. One toolbar per body, and
+  // the shell's `actions` slot goes back to being unused here.
 
   const INTRO = {
     interviews: 'Every conversation logged against this venture. The same records Discovery writes — one log, two doors.',
@@ -730,7 +915,6 @@ export default function FounderValidateWorkspace() {
       title={isRoot ? bucketTitle(bucket) : undefined}
       activeSlug={isRoot ? null : undefined}
       intro={INTRO[zone?.slug] || INTRO.interviews}
-      actions={actions}
     >
       {exportError && (
         <p
