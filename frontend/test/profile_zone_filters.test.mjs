@@ -310,7 +310,7 @@ const PROFILES = {
     // marketplace board four licences see, `pipeline/proposals` the
     // proposals-and-invoices view it shared with `delivery/board` — and became
     // this firm's own. Was 11, then 12, then 13, then 17, then 18.
-    mounted: 20,
+    mounted: 21,
     // THE PARTNER SET CARRIES SAMPLES NOW, AND ONLY IN ONE PLACE. Its canvases
     // were digit-free until `Pages · Partner Pipeline` entered scope, which is
     // exactly what the "prove the absence" branch of the sample test exists to

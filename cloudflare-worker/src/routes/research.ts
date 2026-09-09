@@ -1440,6 +1440,58 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  'pipeline/retainers': {
+    // The artboard: "Thornfield renews in 17 days at 34% utilization. The draft
+    // opens with what they have NOT USED rather than what they owe — a
+    // right-sizing conversation at $5,000/mo keeps the relationship, where a
+    // renewal notice at the current figure invites them to do the arithmetic
+    // themselves and leave."
+    //
+    // The instruction that matters is the opening move: a model handed a
+    // renewal will write a renewal notice, which is the one thing this page
+    // exists to argue against. The second is that a retainer with no retained
+    // hours has no utilisation — a fee-based deal is a different shape, not a
+    // badly consumed one, and reading it as a churn risk would be a finding
+    // about a number that does not exist.
+    instruction: [
+      'Draft one right-sizing conversation for the retainer below that renews soonest at the lowest utilisation.',
+      'Open with what the client has NOT used, never with what they owe: a renewal notice at the current figure invites them to do the arithmetic themselves.',
+      'Where a retainer has no retained hours, it has no utilisation at all — say so and do not read it as under-consumption.',
+      'Use only the figures given. Never propose a new monthly amount the record cannot support, and never state a renewal date that is not recorded.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT f.name AS client, n.title AS need_title,
+                r.shape, r.cadence, r.amount_cents, r.retained_hours, r.renews_at, r.ended_at,
+                (SELECT u.hours_used FROM retainer_usage u
+                  WHERE u.retainer_id = r.id ORDER BY u.period DESC LIMIT 1) AS hours_used
+           FROM partner_retainers r
+           JOIN engagements e ON e.id = r.engagement_id
+           LEFT JOIN founder_needs n ON n.id = e.need_id
+           LEFT JOIN users f ON f.id = e.founder_id
+          WHERE e.partner_id = ? AND r.ended_at IS NULL
+          ORDER BY r.renews_at IS NULL, r.renews_at LIMIT 50`
+      ).bind(me.partner_id).all<{
+        client: string | null; need_title: string | null; shape: string; cadence: string;
+        amount_cents: number | null; retained_hours: number | null;
+        renews_at: string | null; ended_at: string | null; hours_used: number | null;
+      }>();
+      return (rows.results || []).map((r) => {
+        const util = r.retained_hours
+          ? `${Math.round(((r.hours_used || 0) / Number(r.retained_hours)) * 100)}% of ${r.retained_hours} retained hours`
+          : 'NO RETAINED HOURS — this is not sold by the hour and has no utilisation';
+        return `${r.client || 'client not recorded'} — ${r.need_title || 'scope not recorded'}; `
+          + `${r.shape === 'embedded_seat' ? 'embedded seat' : 'retainer'}, ${r.cadence}; `
+          + `${r.amount_cents == null ? 'NO AMOUNT RECORDED' : `$${Math.round(Number(r.amount_cents) / 100).toLocaleString('en-US')}`}; `
+          + `${util}; `
+          + `renews ${r.renews_at ? String(r.renews_at).slice(0, 10) : 'NO DATE RECORDED'}`;
+      });
+    },
+  },
+
   'pipeline/negotiations': {
     // The artboard: "Aperture has asked for a flexible scope at a fixed price
     // twice, and has sat in Scoping for nine days. The counter reframes it as a

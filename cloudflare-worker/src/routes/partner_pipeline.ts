@@ -988,10 +988,44 @@ partnerPipeline.get('/retainers', async (c) => {
       };
     });
 
+    // ── The `p4` strip ───────────────────────────────────────────────────
+    // UNDER-CONSUMING IS THE PAGE'S WHOLE ARGUMENT: "a client using 34% of
+    // retained hours is a churn risk that no complaint has surfaced yet, and a
+    // client at 118% is unbilled work." Both are read off the same utilisation
+    // the row draws, so the strip and the table cannot disagree.
+    //
+    // A RETAINER WITH NO RETAINED HOURS IS IN NEITHER. It has no utilisation at
+    // all — a different shape of deal, not a badly-consumed one — and sweeping
+    // it into `under` would report a fee-based retainer as a churn risk.
+    const live = items.filter((x: any) => x.retainer && !x.retainer.ended_at);
+    const under = live.filter((x: any) => x.utilisation_pct != null && x.utilisation_pct < 60);
+    const over = live.filter((x: any) => x.utilisation_pct != null && x.utilisation_pct > 100);
+    const monthlyOf = (x: any) => {
+      const cents = x.retainer?.amount_cents;
+      if (cents == null) return null;
+      return x.retainer.cadence === 'quarterly' ? Math.round(Number(cents) / 3) : Number(cents);
+    };
+    const byShape: Record<string, number> = { retainer: 0, embedded_seat: 0 };
+    for (const x of live) {
+      const shape = x.retainer?.shape;
+      if (shape && shape in byShape) byShape[shape] += 1;
+    }
+
     return c.json({
       items,
       retainer_count: withRetainer,
       mrr_cents: counted ? mrrCents : null,
+      // COUNTED BY SHAPE, because an embedded seat is recurring revenue and is
+      // not a retainer — and this is the page that exists to tell those
+      // economics apart.
+      shape_counts: byShape,
+      under_consuming_count: under.length,
+      over_scope_count: over.length,
+      // NULL, NOT ZERO, when nothing under-consuming carries an amount: "no
+      // money at risk" and "we cannot price the risk" are different answers.
+      at_risk_mrr_cents: under.some((x: any) => monthlyOf(x) != null)
+        ? under.reduce((a: number, x: any) => a + (monthlyOf(x) || 0), 0)
+        : null,
       // Says what it counted rather than presenting a total as complete. A
       // retainer with no amount is skipped, never counted as zero — zero would
       // claim the client pays nothing.
