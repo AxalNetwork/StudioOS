@@ -1340,6 +1340,36 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  'offers/visibility': {
+    // The artboard: "Points to the referral and webinar surfaces as the ones
+    // converting, and to the directory as volume without intent … Where a
+    // surface has no view counter the read says so instead of modelling one."
+    // The last clause is the instruction that matters most here, because this
+    // product has no view counter on ANY surface and a model asked to compare
+    // reach will otherwise supply one.
+    instruction: [
+      'Compare these surfaces by the engagements each produced, and say which are converting.',
+      'There is no view count and no lead count for any of them: say so rather than estimating either, and never rank by reach.',
+      'A surface with no engagement is volume without intent, and is a placement to change rather than a channel to celebrate.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      // `partner_surfaces` keys on `partners.id`, not on the account — the
+      // convention migration 209's header spells out — so the caller's partner
+      // row is resolved first and an account with none has nothing to read.
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT s.name AS name, s.kind AS kind, s.is_active AS is_active,
+                (SELECT COUNT(*) FROM engagement_sources es WHERE es.surface_id = s.id) AS engagements
+           FROM partner_surfaces s WHERE s.partner_id = ? ORDER BY engagements DESC LIMIT 100`
+      ).bind(me.partner_id).all<{ name: string; kind: string; is_active: number; engagements: number }>();
+      return (rows.results || []).map((r) =>
+        `${r.name} (${r.kind}${r.is_active ? '' : ', retired'}) — `
+        + `${r.engagements} engagement${r.engagements === 1 ? '' : 's'} sourced; no view count and no lead count recorded`);
+    },
+  },
+
   'network/organizations': {
     // The artboard: "Points to every client resting on one known contact … Names
     // the exposure; the second contact is a person's job to make." The last
