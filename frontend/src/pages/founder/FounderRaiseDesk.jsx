@@ -147,7 +147,12 @@ export default function FounderRaiseDesk() {
 }
 
 function RaiseSections({ loading, project, data, errors, query, state, projectId, fillsOn }) {
-  const { roundInfo, progress, prospects, docs, versions, room, inPlay } = data;
+  // `prospects` is deliberately not destructured here. The status card counted
+  // every stored prospect before A4; it now reads `inPlay`, which is the same
+  // list narrowed to the three stages that are actually in play, and the full
+  // count survives where it belongs — the rail's coverage line, off `data`.
+  // CodeQL raised the leftover binding (alert 6054).
+  const { roundInfo, progress, docs, versions, room, inPlay } = data;
   const round = roundInfo.round;
   const target = round?.target_amount;
   const files = asList(room, 'files'); const folders = asList(room, 'folders'); const grants = asList(room, 'grants');
