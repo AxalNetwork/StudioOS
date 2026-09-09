@@ -3773,7 +3773,39 @@ export const api = {
     // Returns a short-lived one-time URL, not the bytes.
     downloadUrl: (uid) => request(`/research/documents/${encodeURIComponent(uid)}/download`),
     remove: (uid) => request(`/research/documents/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
-    ask: (question) => request('/research/ask', { method: 'POST', body: JSON.stringify({ question }) }),
+    // `session_uid` is optional and the worker falls back to the caller's most
+    // recent thread, so a reader who has just landed can ask without one.
+    ask: (question, sessionUid) => request('/research/ask', {
+      method: 'POST',
+      body: JSON.stringify(sessionUid ? { question, session_uid: sessionUid } : { question }),
+    }),
+    // Ask's thread (migration 221). `scope` is the header chip: 'session' for
+    // `This session`, 'all' for `All history`, 'saved' for the ops row's
+    // `Saved answers`. `Cited` and `Unanswered` narrow whichever slice came
+    // back, in the page, because both are predicates over `reason` and
+    // `citations` rather than a different read.
+    askSessions: (scope = 'session', sessionUid) => {
+      const q = new URLSearchParams({ scope, ...(sessionUid ? { session: sessionUid } : {}) }).toString();
+      return request(`/research/ask/sessions?${q}`);
+    },
+    askNewSession: () => request('/research/ask/sessions', { method: 'POST', body: JSON.stringify({}) }),
+    askSaveAnswer: (uid, saved) => request(`/research/ask/answers/${encodeURIComponent(uid)}`, {
+      method: 'PATCH', body: JSON.stringify({ saved: !!saved }),
+    }),
+
+    // The AI band every Research and Network artboard ends with (migration
+    // 221). `surface` is the zone key and is allow-listed in the worker, so a
+    // page that has not mounted the band cannot spend on it.
+    zoneDrafts: (surface) => request(`/research/drafts?surface=${encodeURIComponent(surface)}`),
+    zoneDraftRun: (surface, scopeKey) => request('/research/drafts', {
+      method: 'POST', body: JSON.stringify({ surface, ...(scopeKey ? { scope_key: scopeKey } : {}) }),
+    }),
+    // Accept, having optionally edited first — one write, because editing then
+    // accepting is the same act with a different body.
+    zoneDraftAccept: (uid, body) => request(`/research/drafts/${encodeURIComponent(uid)}`, {
+      method: 'PATCH', body: JSON.stringify(body ? { body } : {}),
+    }),
+    zoneDraftDiscard: (uid) => request(`/research/drafts/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
 
     // Funds — founder-facing fund research (migration 216). Every read is
     // owner-scoped in the worker; there is no cross-user listing to call.

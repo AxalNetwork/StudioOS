@@ -140,10 +140,24 @@ export const INVESTOR_ZONE_ACTIONS = {
   ],
 
   // ── Research ─────────────────────────────────────────────────────────────
+  // `New brief` STARTS A THREAD, and the label is the artboard's own. A brief
+  // on this licence is what a line of questions produces — the closing band is
+  // `Draft · session brief` — so beginning a new one is beginning a new
+  // session, which is the act migration 221 made possible. It was
+  // `unbuilt: 'the question box below starts one'`: true of the box, and never
+  // true of the op, since a box that always appends to one thread cannot start
+  // a second.
+  //
+  // `Clear history` KEEPS A NOTE, AND IT IS A DIFFERENT NOTE. "No session
+  // history is stored to clear" stopped being true with the same migration —
+  // but what replaced it is not a clear button. Nothing deletes an answer,
+  // deliberately: kept-or-not-kept is the only bit the ops row writes, and
+  // erasing a reader's own questions is the one irreversible act on this page.
+  // The reason is now about the refusal rather than about an absent store.
   'research/ask': [
-    { label: 'New brief', unbuilt: 'the question box below starts one' },
+    { label: 'New brief', kind: 'handler', handler: 'newSession' },
     { label: 'Export session', kind: 'export' },
-    { label: 'Clear history', unbuilt: 'no session history is stored to clear' },
+    { label: 'Clear history', unbuilt: 'the history is stored now and nothing deletes from it — an answer is kept or not kept, and erasing a reader’s own questions is the one irreversible act this page declines to offer' },
   ],
   // Both of these zones have had a real body since the research stores landed,
   // and both were calling `zoneActionsFor` all along — with no key here, so

@@ -79,13 +79,18 @@ test('none of the three is registered as a zone with no store', () => {
     'ZONE_COPY gained an entry; a zone in it renders NoStoreYet instead of its body');
 });
 
-test('all three record what they ARE blocked on, where a reader can see it', () => {
+test('the zones still blocked record what they ARE blocked on, where a reader can see it', () => {
   // THE OTHER HALF OF THE SAME HONESTY, and the half that was missing. Each of
   // these zones serves a real feed and each has a canvas-specified capability
   // with no store behind it — recorded until now only in `founderZoneFilters.js`,
   // which no customer opens. Saying nothing there leaves a reader comparing the
   // artboard to the page with missing controls and no reason given.
-  for (const slug of ['markets', 'companies', 'ask']) {
+  //
+  // `ask` WAS THE THIRD AND IS DELIBERATELY ABSENT. Migration 221 built the
+  // session store its card was about, so the card is gone; the assertion below
+  // that it is gone is the half of this pair that keeps a stale gap from
+  // creeping back. Two remain, and each is closed the same way.
+  for (const slug of ['markets', 'companies']) {
     const gap = RESEARCH_STORE_GAPS[slug];
     assert.ok(gap, `${slug} records no store gap`);
     for (const field of ['eyebrow', 'blocks', 'heading', 'what', 'why']) {
@@ -121,8 +126,16 @@ test('the recorded gap cannot drift from the filter table that found it', () => 
   const SHARED = {
     markets: 'deep-dive',
     companies: 'direct or adjacent',
-    ask: 'no past question, kept answer or discarded one',
   };
+  // `ask` was the third pairing and both halves went at once: migration 221
+  // stored the session, the filter table's four chips became live keys, and the
+  // gap card was deleted. Asserted rather than merely dropped from the list —
+  // a reinstated card with no gap behind it is the failure this file names as
+  // worse than never having written one.
+  assert.equal(RESEARCH_STORE_GAPS.ask, undefined,
+    'the ask gap card is back, over a zone whose session store exists');
+  assert.ok(!filters.includes('no past question, kept answer or discarded one'),
+    'the filter table is denying a session store that migration 221 built');
   for (const [slug, phrase] of Object.entries(SHARED)) {
     assert.ok(filters.includes(phrase),
       `the filter table no longer says "${phrase}" for ${slug}`);

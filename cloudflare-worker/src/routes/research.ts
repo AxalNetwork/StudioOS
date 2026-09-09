@@ -252,11 +252,241 @@ research.delete('/documents/:uid', async (c) => {
  * understood, the library was searched, and the honest result is "nothing here
  * answers this". A 4xx would make the page render it as a failure.
  */
+// ---------------------------------------------------------------------------
+// Ask — and the session it is now kept in (migration 221)
+// ---------------------------------------------------------------------------
+//
+// EVERY OUTCOME WRITES A ROW, including the two that produce no answer. The
+// `pr1` artboard's third exchange is a question the library could not answer,
+// kept on screen with the gap named — so `no_source` is a record, not a
+// discard, and it is precisely what the `Unanswered` chip selects on.
+// `model_unavailable` is stored apart from it because reporting a model
+// outage as an empty library sends the reader to upload a document that would
+// not have helped.
+
+interface AskSessionRow {
+  id: number; uid: string; owner_user_id: number;
+  last_asked_at: string | null; created_at: string;
+}
+
+interface AskAnswerRow {
+  id: number; uid: string; session_id: number; owner_user_id: number;
+  question: string; answer: string | null; reason: string;
+  best_score: number | null; score_floor: number | null; citations: string;
+  model: string | null; prompt_tokens: number; completion_tokens: number;
+  cached: number; cost_micro_usd: number; saved: number; created_at: string;
+}
+
+const answerDto = (r: AskAnswerRow) => ({
+  uid: r.uid,
+  question: r.question,
+  answer: r.answer,
+  reason: r.reason,
+  best_score: r.best_score,
+  score_floor: r.score_floor,
+  // Stored as text, returned as the array the page renders. A malformed value
+  // degrades to no citations rather than failing the whole thread — the answer
+  // is still worth reading, and an exception here would take the session with it.
+  citations: ((): unknown[] => {
+    try {
+      const parsed = JSON.parse(r.citations || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch { return []; }
+  })(),
+  model: r.model,
+  prompt_tokens: r.prompt_tokens,
+  completion_tokens: r.completion_tokens,
+  cached: r.cached === 1,
+  // Back to dollars at the boundary, so nothing above this line has to know
+  // the storage unit. Six places is the unit's own resolution, not a rounding.
+  cost_usd: r.cost_micro_usd / 1e6,
+  saved: r.saved === 1,
+  created_at: r.created_at,
+});
+
+/**
+ * Totals for the header strip, counted over whatever slice is being returned.
+ *
+ * `answered` and `asked` are separate figures rather than one ratio because
+ * the artboard prints "2 of 3" and a single number cannot say that. `no_source`
+ * and `model_unavailable` are counted apart for the reason the store keeps
+ * them apart.
+ */
+function askTotals(items: ReturnType<typeof answerDto>[]) {
+  return {
+    asked: items.length,
+    answered: items.filter((i) => i.reason === 'answered').length,
+    no_source: items.filter((i) => i.reason === 'no_source').length,
+    model_unavailable: items.filter((i) => i.reason === 'model_unavailable').length,
+    saved: items.filter((i) => i.saved).length,
+    // Summed from the per-answer receipts, never re-derived from tokens and a
+    // current rate: a price list that moves must not silently restate what a
+    // past session cost. Summed in whole micro-dollars and divided once, so a
+    // long session's total is not the accumulated error of N float additions.
+    cost_usd: items.reduce((sum, i) => sum + Math.round((i.cost_usd || 0) * 1e6), 0) / 1e6,
+  };
+}
+
+/** The caller's session by uid, or null. Owner-scoped like every read here. */
+async function askSession(c: { env: Env }, userId: number, uid: string) {
+  return c.env.DB.prepare(
+    `SELECT * FROM research_ask_sessions WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, userId).first<AskSessionRow>();
+}
+
+/**
+ * The session a question belongs to: the one named, else the caller's most
+ * recent, else a new one.
+ *
+ * WHY IT FALLS BACK RATHER THAN 400-ing. A reader who lands on `/research/ask`
+ * and types a question has no session uid to send, and demanding one would put
+ * a "start a session" step in front of the only thing the page does. `New
+ * session` is then a real act — it forces the next question into a fresh
+ * thread — instead of the thing you must do before asking anything at all.
+ */
+async function resolveAskSession(c: { env: Env }, userId: number, wanted: string) {
+  if (wanted) {
+    const named = await askSession(c, userId, wanted);
+    if (named) return named;
+  }
+  const latest = await c.env.DB.prepare(
+    `SELECT * FROM research_ask_sessions WHERE owner_user_id = ? ORDER BY id DESC LIMIT 1`
+  ).bind(userId).first<AskSessionRow>();
+  if (latest) return latest;
+  const uid = newUid();
+  await c.env.DB.prepare(
+    `INSERT INTO research_ask_sessions (uid, owner_user_id) VALUES (?, ?)`
+  ).bind(uid, userId).run();
+  return askSession(c, userId, uid) as Promise<AskSessionRow>;
+}
+
+/** Write one exchange and stamp its session. Returns the row's uid. */
+async function recordAnswer(c: { env: Env }, session: AskSessionRow, row: {
+  question: string; answer: string | null; reason: string;
+  best_score: number | null; citations: unknown[];
+  model?: string | null; prompt_tokens?: number; completion_tokens?: number;
+  cached?: boolean; cost_usd?: number;
+}) {
+  const uid = newUid();
+  await c.env.DB.prepare(
+    `INSERT INTO research_ask_answers
+       (uid, session_id, owner_user_id, question, answer, reason, best_score, score_floor,
+        citations, model, prompt_tokens, completion_tokens, cached, cost_micro_usd)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    uid, session.id, session.owner_user_id, row.question, row.answer, row.reason,
+    row.best_score, SCORE_FLOOR, JSON.stringify(row.citations ?? []),
+    row.model ?? null, Math.max(0, Math.round(row.prompt_tokens ?? 0)),
+    Math.max(0, Math.round(row.completion_tokens ?? 0)),
+    row.cached ? 1 : 0, Math.max(0, Math.round((row.cost_usd ?? 0) * 1e6)),
+  ).run();
+  await c.env.DB.prepare(
+    `UPDATE research_ask_sessions SET last_asked_at = datetime('now') WHERE id = ?`
+  ).bind(session.id).run();
+  return uid;
+}
+
+/**
+ * Start a thread. `New session` in the artboard's ops row, which was
+ * `unbuilt: 'the question box below starts one'` — true of the box, and not of
+ * the op: a box that always appends to the same thread cannot start a second.
+ */
+research.post('/ask/sessions', async (c) => {
+  const user = await requireAuth(c);
+  const uid = newUid();
+  await c.env.DB.prepare(
+    `INSERT INTO research_ask_sessions (uid, owner_user_id) VALUES (?, ?)`
+  ).bind(uid, user.id).run();
+  const row = await askSession(c, user.id, uid);
+  return c.json({ session: { uid, created_at: row?.created_at ?? null, last_asked_at: null }, items: [], totals: askTotals([]) }, 201);
+});
+
+/**
+ * A thread, or the whole history, or the saved slice — the three chips, one
+ * read.
+ *
+ * `scope=session` is the artboard's default (`This session`, selected). The
+ * absent-session case returns an empty thread with a null uid rather than a
+ * 404: a reader who has never asked anything has no session, and that is the
+ * page's empty state, not an error.
+ */
+research.get('/ask/sessions', async (c) => {
+  const user = await requireAuth(c);
+  const scope = String(c.req.query('scope') || 'session');
+  const wanted = String(c.req.query('session') || '');
+
+  let session: AskSessionRow | null = null;
+  if (wanted) {
+    session = await askSession(c, user.id, wanted);
+  } else {
+    session = await c.env.DB.prepare(
+      `SELECT * FROM research_ask_sessions WHERE owner_user_id = ? ORDER BY id DESC LIMIT 1`
+    ).bind(user.id).first<AskSessionRow>();
+  }
+
+  // THREE WHOLE STATEMENTS RATHER THAN ONE WITH A FRAGMENT SPLICED IN.
+  // `check-sql-prepare` refuses a `${…}` inside a prepared query even when the
+  // value is a literal chosen by a ternary, and it is right to: the next person
+  // to add a fourth scope reaches for the same seam with a variable in hand.
+  // The `saved = 1` predicate is written out where it applies.
+  let rows: { results: AskAnswerRow[] };
+  if (scope === 'saved') {
+    rows = await c.env.DB.prepare(
+      `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND saved = 1 ORDER BY id DESC LIMIT 200`
+    ).bind(user.id).all<AskAnswerRow>();
+  } else if (scope === 'all') {
+    rows = await c.env.DB.prepare(
+      `SELECT * FROM research_ask_answers WHERE owner_user_id = ? ORDER BY id DESC LIMIT 200`
+    ).bind(user.id).all<AskAnswerRow>();
+  } else if (session) {
+    rows = await c.env.DB.prepare(
+      `SELECT * FROM research_ask_answers WHERE session_id = ? AND owner_user_id = ? ORDER BY id ASC LIMIT 200`
+    ).bind(session.id, user.id).all<AskAnswerRow>();
+  } else {
+    rows = { results: [] };
+  }
+
+  const items = (rows.results || []).map(answerDto);
+  return c.json({
+    scope,
+    session: session ? { uid: session.uid, created_at: session.created_at, last_asked_at: session.last_asked_at } : null,
+    items,
+    totals: askTotals(items),
+    // The count of sessions the reader has, so the page can say whether `All
+    // history` would show anything this thread does not.
+    score_floor: SCORE_FLOOR,
+  });
+});
+
+/**
+ * Keep or unkeep one answer — `Saved answers` in the ops row.
+ *
+ * A PATCH on the answer rather than a POST to a saved-answers collection,
+ * because there is no second object: saving is one bit on a row the reader
+ * already owns, and a collection endpoint would imply a list that can hold
+ * something the history does not.
+ */
+research.patch('/ask/answers/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const uid = c.req.param('uid');
+  const body = await c.req.json().catch(() => ({} as any));
+  if (typeof body?.saved !== 'boolean') return c.json({ detail: 'saved_required' }, 400);
+  const res = await c.env.DB.prepare(
+    `UPDATE research_ask_answers SET saved = ? WHERE uid = ? AND owner_user_id = ?`
+  ).bind(body.saved ? 1 : 0, uid, user.id).run();
+  if (!res.meta?.changes) return c.json({ detail: 'not_found' }, 404);
+  const row = await c.env.DB.prepare(
+    `SELECT * FROM research_ask_answers WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, user.id).first<AskAnswerRow>();
+  return c.json({ item: row ? answerDto(row) : null });
+});
+
 research.post('/ask', async (c) => {
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
   const question = String(body?.question || '').trim().slice(0, 1000);
   if (!question) return c.json({ detail: 'question_required' }, 400);
+  const session = await resolveAskSession(c, user.id, String(body?.session_uid || ''));
 
   const hits = await searchSemantic(c.env, question, {
     topK: 8,
@@ -270,6 +500,14 @@ research.post('/ask', async (c) => {
     const indexed = await c.env.DB.prepare(
       `SELECT COUNT(*) AS n FROM research_documents WHERE owner_user_id = ? AND index_state = 'indexed'`
     ).bind(user.id).first<{ n: number }>();
+    const best = hits.length ? Number(hits[0].score.toFixed(3)) : null;
+    // Nothing was retrieved, so no model ran and nothing is charged. The row
+    // records that as a zero rather than as an absent figure: "charged
+    // nothing" is a fact about this question, and the strip's `No source` tile
+    // says so beside it.
+    const answer_uid = await recordAnswer(c, session, {
+      question, answer: null, reason: 'no_source', best_score: best, citations: [],
+    });
     return c.json({
       question,
       answer: null,
@@ -278,9 +516,12 @@ research.post('/ask', async (c) => {
       // nothing on this" is the whole message, and the page renders each
       // differently.
       indexed_documents: indexed?.n ?? 0,
-      best_score: hits.length ? Number(hits[0].score.toFixed(3)) : null,
+      best_score: best,
       score_floor: SCORE_FLOOR,
       citations: [],
+      session_uid: session.uid,
+      answer_uid,
+      cost_usd: 0,
     });
   }
 
@@ -299,6 +540,7 @@ research.post('/ask', async (c) => {
   ].join('\n');
 
   let answer: string | null = null;
+  let usage: { model?: string; prompt_tokens?: number; completion_tokens?: number; cached?: boolean; est_cost_usd?: number } | null = null;
   try {
     const out = await runAI(c.env, {
       task: 'research_ask',
@@ -311,32 +553,248 @@ research.post('/ask', async (c) => {
       maxTokens: 700,
     });
     answer = out.ok && out.output ? out.output.trim() : null;
+    // The router's own receipt, already written to `ai_usage_logs`. Taken
+    // whether or not the answer arrived — a model that ran and returned
+    // nothing still cost what it cost, and hiding that would make the session
+    // total disagree with the admin dashboard.
+    usage = out.usage || null;
   } catch (e) {
     console.error('[research] ask failed:', (e as Error).message);
   }
 
+  const receipt = {
+    model: usage?.model ?? null,
+    prompt_tokens: usage?.prompt_tokens ?? 0,
+    completion_tokens: usage?.completion_tokens ?? 0,
+    cached: usage?.cached === true,
+    cost_usd: usage?.est_cost_usd ?? 0,
+  };
+
   if (!answer) {
     // The retrieval worked and the model did not. Reporting that as
     // `no_source` would blame the library for a failure that is not its.
+    const citations = usable.map((h) => ({ title: h.title, chunk: h.chunk ?? null, score: Number(h.score.toFixed(3)) }));
+    const answer_uid = await recordAnswer(c, session, {
+      question, answer: null, reason: 'model_unavailable',
+      best_score: Number(usable[0].score.toFixed(3)), citations, ...receipt,
+    });
     return c.json({
       question, answer: null, reason: 'model_unavailable',
-      citations: usable.map((h) => ({ title: h.title, chunk: h.chunk ?? null, score: Number(h.score.toFixed(3)) })),
+      citations,
       score_floor: SCORE_FLOOR,
+      session_uid: session.uid,
+      answer_uid,
+      cost_usd: receipt.cost_usd,
     });
   }
+
+  const citations = usable.map((h, i) => ({
+    n: i + 1,
+    title: h.title,
+    chunk: h.chunk ?? null,
+    score: Number(h.score.toFixed(3)),
+  }));
+  const answer_uid = await recordAnswer(c, session, {
+    question, answer, reason: 'answered',
+    best_score: Number(usable[0].score.toFixed(3)), citations, ...receipt,
+  });
 
   return c.json({
     question,
     answer,
     reason: 'answered',
-    citations: usable.map((h, i) => ({
-      n: i + 1,
-      title: h.title,
-      chunk: h.chunk ?? null,
-      score: Number(h.score.toFixed(3)),
-    })),
+    citations,
     score_floor: SCORE_FLOOR,
+    session_uid: session.uid,
+    answer_uid,
+    cost_usd: receipt.cost_usd,
   });
+});
+
+
+// ---------------------------------------------------------------------------
+// Zone drafts — the AI band every Research and Network artboard ends with
+// ---------------------------------------------------------------------------
+//
+// WHY `workspace_explain` AND NOT A NEW TASK CLASS. The band's work is read
+// back what this page is showing and write one paragraph — which is the task
+// `workspace_explain` already names, already has `alternates` and a model menu
+// for, and is already registered as the `workspace` assist surface so the
+// rail's model card is true for it. A `research_draft` class would be the same
+// prompt under a second name, splitting `/api/ai/me/spend` into two figures for
+// one kind of work. The task is the join key; it follows the work, not the URL.
+//
+// SURFACES ARE ALLOW-LISTED, AND THE LIST IS ONE ENTRY LONG ON PURPOSE. A
+// surface here with no band mounted on it would be config for a page that
+// cannot spend it — the failure `ui_assist_rail_and_sidebar` catches on the
+// rail. Each artboard adds its own entry when its band lands.
+
+interface ZoneDraftRow {
+  id: number; uid: string; owner_user_id: number; surface: string;
+  scope_key: string | null; body: string; model: string | null;
+  cost_micro_usd: number; accepted_at: string | null; created_at: string;
+}
+
+const draftDto = (r: ZoneDraftRow) => ({
+  uid: r.uid,
+  surface: r.surface,
+  scope_key: r.scope_key,
+  body: r.body,
+  model: r.model,
+  cost_usd: r.cost_micro_usd / 1e6,
+  accepted: r.accepted_at != null,
+  accepted_at: r.accepted_at,
+  created_at: r.created_at,
+});
+
+/**
+ * What each surface drafts, and over what.
+ *
+ * `label` and `accept` are the artboard's own words for the band — they are
+ * copy, and they live in the frontend beside the rest of the page's copy. What
+ * is here is the part only the worker can hold: the instruction, and the reader
+ * of the rows it is given.
+ */
+const DRAFT_SURFACES: Record<string, {
+  instruction: string;
+  gather: (c: { env: Env }, userId: number, scope: string) => Promise<string[]>;
+}> = {
+  'research/ask': {
+    instruction: [
+      'Write one short brief gathering the answers below into a single passage.',
+      'Carry every bracketed citation through to the claim it supports.',
+      'Name any question that went unanswered as a gap. Do not answer it.',
+      'Add no fact that is not in the material below.',
+    ].join(' '),
+    // The session's own exchanges, in order. A question that came back with no
+    // source is INCLUDED and marked — it is the gap the brief has to name, and
+    // dropping it here would produce a brief that reads as though the session
+    // answered everything it was asked.
+    gather: async (c, userId, scope) => {
+      const session = scope
+        ? await c.env.DB.prepare(
+            `SELECT id FROM research_ask_sessions WHERE uid = ? AND owner_user_id = ?`
+          ).bind(scope, userId).first<{ id: number }>()
+        : await c.env.DB.prepare(
+            `SELECT id FROM research_ask_sessions WHERE owner_user_id = ? ORDER BY id DESC LIMIT 1`
+          ).bind(userId).first<{ id: number }>();
+      if (!session) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT question, answer, reason, citations FROM research_ask_answers
+          WHERE session_id = ? AND owner_user_id = ? ORDER BY id ASC LIMIT 50`
+      ).bind(session.id, userId).all<{ question: string; answer: string | null; reason: string; citations: string }>();
+      return (rows.results || []).map((r) => {
+        if (r.reason !== 'answered') return `Q: ${r.question}\nA: (no retrievable source — unanswered)`;
+        let cites = '';
+        try {
+          const list = JSON.parse(r.citations || '[]');
+          if (Array.isArray(list) && list.length) {
+            cites = `\nSources: ${list.map((x: any) => `[${x.n}] ${x.title}`).join(', ')}`;
+          }
+        } catch { /* a malformed citation list costs the brief its sources, not its answer */ }
+        return `Q: ${r.question}\nA: ${r.answer}${cites}`;
+      });
+    },
+  },
+};
+
+research.get('/drafts', async (c) => {
+  const user = await requireAuth(c);
+  const surface = String(c.req.query('surface') || '');
+  if (!DRAFT_SURFACES[surface]) return c.json({ detail: 'unknown_surface' }, 400);
+  const rows = await c.env.DB.prepare(
+    `SELECT * FROM research_zone_drafts WHERE owner_user_id = ? AND surface = ? ORDER BY id DESC LIMIT 20`
+  ).bind(user.id, surface).all<ZoneDraftRow>();
+  return c.json({ items: (rows.results || []).map(draftDto) });
+});
+
+/**
+ * Draft one. NOTHING RUNS ON MOUNT — this is a POST behind a button, for the
+ * reason `ValidateProposals` states in its own docblock: a component that
+ * proposed on render would spend a reader's budget for visiting a page.
+ */
+research.post('/drafts', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const surface = String(body?.surface || '');
+  const spec = DRAFT_SURFACES[surface];
+  if (!spec) return c.json({ detail: 'unknown_surface' }, 400);
+  const scope = String(body?.scope_key || '');
+
+  const material = await spec.gather(c, user.id, scope);
+  // NOTHING TO READ IS NOT AN ERROR AND MUST NOT REACH THE MODEL. A brief over
+  // an empty session would be written from the model's own knowledge in exactly
+  // the voice a grounded one uses — the failure `/ask` refuses by retrieving
+  // first, and the same refusal belongs here.
+  if (!material.length) return c.json({ detail: 'nothing_to_draft' }, 409);
+
+  let out;
+  try {
+    out = await runAI(c.env, {
+      task: 'workspace_explain',
+      userId: user.id,
+      text: `${spec.instruction}\n\n${material.join('\n\n')}`,
+      maxTokens: 500,
+    });
+  } catch (e) {
+    console.error('[research] draft failed:', (e as Error).message);
+    return c.json({ detail: 'draft_unavailable' }, 503);
+  }
+  const text = out.ok && out.output ? out.output.trim() : '';
+  if (!text) return c.json({ detail: 'draft_unavailable' }, 503);
+
+  const uid = newUid();
+  await c.env.DB.prepare(
+    `INSERT INTO research_zone_drafts (uid, owner_user_id, surface, scope_key, body, model, cost_micro_usd)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    uid, user.id, surface, scope || null, text,
+    out.usage?.model ?? null, Math.max(0, Math.round((out.usage?.est_cost_usd ?? 0) * 1e6)),
+  ).run();
+  const row = await c.env.DB.prepare(
+    `SELECT * FROM research_zone_drafts WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, user.id).first<ZoneDraftRow>();
+  return c.json({ item: row ? draftDto(row) : null }, 201);
+});
+
+/**
+ * Accept it, having optionally edited it first — the artboard's `Accept …` and
+ * `Edit first` are one write, because editing then accepting is the same act
+ * with a different body. A `body` that arrives is the reader's version and
+ * replaces the drafted one; the receipt does not change, since the run is what
+ * was charged.
+ */
+research.patch('/drafts/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const uid = c.req.param('uid');
+  const body = await c.req.json().catch(() => ({} as any));
+  const edited = typeof body?.body === 'string' ? body.body.trim().slice(0, 8000) : null;
+  if (edited !== null && !edited) return c.json({ detail: 'body_empty' }, 400);
+
+  if (edited) {
+    await c.env.DB.prepare(
+      `UPDATE research_zone_drafts SET body = ?, accepted_at = datetime('now') WHERE uid = ? AND owner_user_id = ?`
+    ).bind(edited, uid, user.id).run();
+  } else {
+    await c.env.DB.prepare(
+      `UPDATE research_zone_drafts SET accepted_at = datetime('now') WHERE uid = ? AND owner_user_id = ?`
+    ).bind(uid, user.id).run();
+  }
+  const row = await c.env.DB.prepare(
+    `SELECT * FROM research_zone_drafts WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, user.id).first<ZoneDraftRow>();
+  if (!row) return c.json({ detail: 'not_found' }, 404);
+  return c.json({ item: draftDto(row) });
+});
+
+/** Discard. The row goes; see the migration's note on why there is no third state. */
+research.delete('/drafts/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const res = await c.env.DB.prepare(
+    `DELETE FROM research_zone_drafts WHERE uid = ? AND owner_user_id = ?`
+  ).bind(c.req.param('uid'), user.id).run();
+  if (!res.meta?.changes) return c.json({ detail: 'not_found' }, 404);
+  return c.json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------

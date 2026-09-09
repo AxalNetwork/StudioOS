@@ -3612,3 +3612,84 @@ It is not a render prop. The page passes handlers *in* and gets a bound row
 back, which is the same split D53 records for filters: the table owns which ops
 the canvas promised, the page owns the state only it can hold.
 
+
+## D68 — "Not recorded" belongs to the reader's data, never to the product's gaps
+
+**2026-09-09.** Task #122, `/research/ask` — but the rule settles a tension that
+runs through all seven Partner Research and Network artboards, so it is recorded
+once rather than argued seven times.
+
+### The two decisions that appeared to disagree
+
+**D56** says a stat tile with no store behind it is **not drawn**. That rule was
+itself a reversal: the tiles used to render `Not recorded` with a sentence
+beneath each, and `research_canvas_strips.test.mjs` REQUIRED it. The reversal's
+argument was exact — "printing the refusal INSIDE the control's own label turned
+every unbuilt op into a paragraph of design-review commentary on the customer
+surface" — and it has not been weakened.
+
+**The artboards draw `Not recorded` tiles anyway.** `Pages · Partner
+Research`'s Market zone opens with `Retainer rate · Not recorded · never run`;
+Client prep with `Their Q4 budget · Not recorded · not in anything Verwood has
+shared`. Both are the design's deliberate choice and both are on the composition
+the product was asked to match.
+
+### The distinction that resolves it: whose absence is it?
+
+- A tile absent because **the product never built the store** is design
+  commentary on a customer's screen. `Sectors covered` and `Net revenue
+  retention` were that case; they are still not drawn, and their reasons live in
+  `SignalsPage`'s own docblock where whoever can build the store reads them.
+- A cell absent because **the reader's own record has no such fact** is a
+  finding. "Verwood has never shared a Q4 budget" and "the firm has never run a
+  retainer reading" are the two most actionable lines on their pages, and
+  hiding either would leave a blank where a decision belongs.
+
+So `NotRecorded` in `frontend/src/workspaces/canvasKit.jsx` is for the second
+kind, and its docblock says so. The test for whether a tile may draw it is not
+"is there a number" but "would the sentence be about the product or about the
+reader".
+
+### What followed from applying it to Ask
+
+Every one of Ask's tiles turned out to be the FIRST kind — the product had no
+session store — which is why the strip had been cut to a single tile on two
+licences and dropped entirely on the other two. Migration 221 built the store,
+and seven of the eight tiles across the four artboards became real in one
+change, along with four filter chips and two ops in four tables. One tile is
+still not drawn: `Follow-up cost` prices DeepSeek's cached input, and
+`research_ask` routes to Workers AI Llama 3.3 70B with the task marked uncached,
+so no answer this product writes is ever billed as a follow-up. It will start
+drawing itself the day a cached answer is written — the tile's `value` returns
+null over no rows rather than zero, because **zero reads as free**.
+
+### Three consequences worth stating
+
+1. **A gap card is deleted in the commit that closes its gap.**
+   `RESEARCH_STORE_GAPS.ask` said "Answers are produced. Nothing keeps them."
+   It went with migration 221. A gap card outliving its gap is worse than never
+   writing one: it is a confident, specific, prominent claim that the product
+   cannot do something it now does. The same applies to an `unbuilt:` reason —
+   `ONE_ANSWER_ONLY`, `NO_ANSWER_RECORD` and `NO_SESSION_RECORD` were deleted,
+   and removing `NO_SESSION_RECORD` revealed it had been covering two different
+   absences under one sentence.
+2. **The per-licence strip table is the shape, not a special case.**
+   `SignalsPage`'s `MARKETS_STRIP` reached it first; `AskZone`'s `ASK_STRIP` is
+   the second. Four artboards ask for two different sets of four tiles, and
+   drawing one set on all four is matching one artboard and overwriting three.
+3. **A rate is a fact and comes from the router.** The artboards quote
+   `$0.440 / M in · $0.014 cached` — DeepSeek's price list, for a model this
+   product does not run. `railModels.js` and D13/D16 already said a model's
+   name, id and rate come from `GET /api/ai/pricing`; the metered banner reads
+   it there. Matching an artboard means matching its composition, not
+   transcribing a competitor's prices under our own model's work.
+
+### The kit
+
+`canvasKit.jsx` holds the anatomy the seven artboards share — the stat strip's
+`NotRecorded`, the metered banner, the source legend, the instrument card with
+its `instNote`, the pair note — because they render seven pages from one
+template and only the data differs. This repo already carries three copies of
+one CSV escaper that disagree with each other; seven copies of a table would be
+the same mistake at seven times the size. Copy stays on the page that draws it,
+where a reader comparing artboard to screen can see both.

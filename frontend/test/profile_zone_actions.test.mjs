@@ -54,12 +54,17 @@ const PROFILES = {
     zones: 30,
     links: 17,
     exports: 20,
-    // Six ops the WORKSPACE performs, all of them Validate's: three open a
-    // dialog it owns and three are server-side CSV downloads with a busy state.
-    // Every other profile is 0 — this is the first and so far only use of
-    // `kind: 'handler'`, and pinning it at 0 elsewhere is what makes a second
-    // one show up here as a change rather than as a silent spread.
-    handlers: 6,
+    // Seven ops the PAGE performs: six of Validate's — three open a dialog the
+    // workspace owns and three are server-side CSV downloads with a busy state —
+    // plus `research/ask`'s `New brief`, which starts a thread in the session
+    // store migration 221 added.
+    //
+    // THE KIND HAS SPREAD, WHICH IS WHAT THESE COUNTS ARE FOR. It was one
+    // profile's answer and is now four; the note that used to sit here said
+    // "pinning it at 0 elsewhere is what makes a second one show up as a change
+    // rather than as a silent spread", and that is exactly how this landed —
+    // three counts went red in one run and each was read before it was moved.
+    handlers: 7,
     // NOTHING IS EXCLUDED ANY MORE. `research/funds` sat here as "a card in
     // `ResearchWorkspace`'s ZONE_COPY, not a body" — true when it was written
     // and untrue since `ZONE_COPY` became `{}` and `LIVE_ZONES` gained `funds`.
@@ -81,10 +86,9 @@ const PROFILES = {
     zones: 19,
     links: 1,
     exports: 13,
-    // No page-supplied op on this profile. Pinned at zero rather than left
-    // unstated: `kind: 'handler'` is one profile's answer today, and a second
-    // profile growing one should read as a change here.
-    handlers: 0,
+    // One page-supplied op: `research/ask`'s `New brief`, which starts a thread
+    // in migration 221's session store. Was 0.
+    handlers: 1,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -132,10 +136,10 @@ const PROFILES = {
     zones: 21,
     links: 0,
     exports: 19,
-    // No page-supplied op on this profile. Pinned at zero rather than left
-    // unstated: `kind: 'handler'` is one profile's answer today, and a second
-    // profile growing one should read as a change here.
-    handlers: 0,
+    // Two page-supplied ops, both `research/ask`'s: `New session` starts a
+    // thread and `Saved answers` switches the view to the kept ones. Neither is
+    // a destination, which is why neither is a `to:`. Was 0.
+    handlers: 2,
     // `network/organizations`: `NetworkPage` catches a slug it has no tab for and
     // suppresses every body, so that route already renders its own heading above
     // a card stating the gap — there is nothing for a row to sit over. Checked
@@ -172,10 +176,9 @@ const PROFILES = {
     zones: 11,
     links: 1,
     exports: 11,
-    // No page-supplied op on this profile. Pinned at zero rather than left
-    // unstated: `kind: 'handler'` is one profile's answer today, and a second
-    // profile growing one should read as a change here.
-    handlers: 0,
+    // Two page-supplied ops, both `research/ask`'s — the same pair partner has,
+    // because `AskZone` is one file serving both. Was 0.
+    handlers: 2,
     embeddedGuards: 0,
     // Both remaining exclusions are cards whose whole page IS the gap
     // statement, so there is nothing for a row to sit over. `expertise/
@@ -753,9 +756,16 @@ for (const [name, profile] of Object.entries(PROFILES)) {
         assert.ok(open >= 0, `${f} declares export columns but no row mapping`);
         const body = balanced(after.slice(after.indexOf('[', open)));
         const cols = [...header[1].matchAll(/'/g)].length / 2;
+        // A TRAILING COMMA IS NOT AN EIGHTH VALUE. `[a, b,]` has two elements
+        // in JavaScript and this counted three, so a multi-line `cells` array
+        // written in the house style every other list in this repo uses failed
+        // with "writes 8 values under 7 column headings" — a real-sounding
+        // message for a formatting choice. Dropped before the split, which is
+        // the one place it can be done without special-casing the loop.
+        const inner = body.replace(/^\[/, '').replace(/\]$/, '').replace(/,\s*$/, '');
         // Top-level commas only: an accessor may carry brackets or calls.
         let depth = 0, count = 1;
-        for (const ch of body) {
+        for (const ch of inner) {
           if ('([{'.includes(ch)) depth += 1;
           else if (')]}'.includes(ch)) depth -= 1;
           else if (ch === ',' && depth === 0) count += 1;

@@ -36,13 +36,11 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  * a filter to narrow. A row over that page would be four controls above a
  * sentence saying the page has no rows.
  */
-// Both Ask filters fail for reasons that are not the same reason, so they are
-// named separately: one shared string would claim to explain a label it does
-// not. Neither renders — these are reasons for whoever builds the filters.
-const ONE_ANSWER_ONLY =
-  'one answer is on screen at a time and the citations under it are the whole of it, so neither of these narrows anything';
-const NO_ANSWER_RECORD =
-  'no answer is saved, so nothing records a past question or whether one went unanswered';
+// `ONE_ANSWER_ONLY` and `NO_ANSWER_RECORD` stood here and are gone with the
+// entries they explained: migration 221 gave Ask a session store, so "one
+// answer is on screen at a time" and "no answer is saved" are both no longer
+// true. The partner table, which is one file away and served by the same
+// component, lost its word-for-word copy of them in the same change.
 // `/research/companies`. `competitor_analyses` is keyed on `user_id` and names
 // no company at all, which `ResearchWorkspace` already states on the page: an
 // analysis belongs to the person who ran it, so there is no client dimension to
@@ -117,11 +115,26 @@ export const ADVISOR_ZONE_FILTERS = {
   // `Cited` would select everything on screen, and `All history` and
   // `Unanswered` would select nothing that exists. Two different failures, and
   // the ops half of this row already states the second one in these words.
+  // ALL FOUR LIVE, AND MIGRATION 221 IS WHY. Both of these entries used to
+  // carry prose — `ONE_ANSWER_ONLY` for the two that narrow a thread and
+  // `NO_ANSWER_RECORD` for the two that need a past. `POST /api/research/ask`
+  // answered and returned without writing anything down, so there was one
+  // answer on screen, no history behind it, and four chips that could only
+  // have selected everything or nothing. `research_ask_sessions` and
+  // `research_ask_answers` store every exchange including the ones that came
+  // back with no source, which is exactly what `Unanswered` selects on.
+  //
+  // TWO SCOPES AND TWO PREDICATES, DELIBERATELY. `This session` and `All
+  // history` are different READS — the page asks the worker for a different
+  // slice — while `Cited` and `Unanswered` narrow whichever slice came back.
+  // Splitting them the other way would make `Cited` mean "cited answers in
+  // this session" on one chip and "in all history" on another, which is two
+  // chips for one question.
   'research/ask': [
-    { canvas: 'This session', unbuilt: ONE_ANSWER_ONLY },
-    { canvas: 'All history', unbuilt: NO_ANSWER_RECORD },
-    { canvas: 'Cited', unbuilt: ONE_ANSWER_ONLY },
-    { canvas: 'Unanswered', unbuilt: NO_ANSWER_RECORD },
+    { canvas: 'This session', key: 'session' },
+    { canvas: 'All history', key: 'all' },
+    { canvas: 'Cited', key: 'cited' },
+    { canvas: 'Unanswered', key: 'unanswered' },
   ],
   // The ops half of this row already argues the grant story — "a brief exists
   // when a founder opens their record to you; nothing here asks for one". These

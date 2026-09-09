@@ -69,21 +69,63 @@ test('Ask treats no_source as an answer, and separates it from a broken model', 
   const code = codeOnly(ask);
   // THE WHOLE POINT OF THE ZONE. Three outcomes, rendered differently,
   // because the reader's next action differs for each.
-  assert.match(code, /result\?\.reason === 'answered'/);
-  assert.match(code, /result\?\.reason === 'no_source'/);
-  assert.match(code, /result\?\.reason === 'model_unavailable'/,
+  //
+  // READ OFF THE ROW, NOT OFF ONE ANSWER IN STATE. These matched
+  // `result?.reason === '…'` — the single answer this page held before
+  // migration 221 gave it a session store. The three outcomes are unchanged and
+  // so is the rule; what changed is that every one of them is now a stored row
+  // in a thread, which is why the probe is `t.reason`.
+  assert.match(code, /t\.reason === 'answered' \? t\.answer/,
+    'an answered row must print its answer');
+  assert.match(code, /t\.reason === 'model_unavailable'/,
     'a model failure must not be reported as an empty library — it would send the reader to upload something that would not help');
+  assert.match(code, /t\.reason === 'no_source'/,
+    'a question the library could not answer must render as its own outcome');
+
+  // THE THREE MUST NOT COLLAPSE INTO TWO. The failure worth guarding is not a
+  // missing branch but two branches saying the same thing: a `model_unavailable`
+  // row that reads "nothing in your library was close enough" is precisely the
+  // sentence that sends someone off to upload a document that would not have
+  // helped. So the copy is checked, not only the comparison.
+  assert.match(code, /Your library does have relevant passages/,
+    'the model-failure copy no longer says the library was fine');
+  assert.match(code, /Adding documents will not help/,
+    'the model-failure copy no longer tells the reader what NOT to do about it');
+  assert.match(code, /Nothing in your library was close enough/,
+    'the no-source copy no longer names the library as the gap');
+
   // And it must say plainly that it will not fall back to general knowledge.
   assert.match(ask, /will not answer from general knowledge/);
 });
 
-/** The JSX a `reason === '<name>'` branch renders, bounded at both ends. */
-function branch(code, reason) {
-  const start = code.indexOf(`result?.reason === '${reason}'`);
-  assert.notEqual(start, -1, `the ${reason} branch is gone`);
-  const end = code.indexOf('\n        )}', start);
-  assert.ok(end > start, `the ${reason} branch is not a closed JSX block`);
-  return code.slice(start, end);
+/**
+ * One thread card's JSX, bounded at both ends.
+ *
+ * The old helper sliced a `result?.reason === '<name>'` block per outcome.
+ * There is one card now and the outcomes are branches inside it, so the slice
+ * is the card — from the row's key to the close of the map. Bounded rather than
+ * read to end-of-file for the reason the old one was: a whole-file match passes
+ * on dead code.
+ */
+function threadCard(code) {
+  const start = code.indexOf('{visible.map((t) => (');
+  assert.notEqual(start, -1, 'the thread is no longer rendered as a map over the visible rows');
+  // BALANCED, NOT THE FIRST `))}`. The naive end marker landed on the CITATION
+  // map's own close, a dozen lines above the no-source note — so the slice
+  // stopped short and the note read as missing. A card that renders a nested
+  // map is exactly the case a first-delimiter search cannot bound, and this
+  // file has made the same mistake twice before with fixed-width windows.
+  let depth = 0;
+  for (let i = start; i < code.length; i += 1) {
+    const ch = code[i];
+    if ('([{'.includes(ch)) depth += 1;
+    else if (')]}'.includes(ch)) {
+      depth -= 1;
+      if (depth === 0) return code.slice(start, i + 1);
+    }
+  }
+  assert.fail('the thread map is not a closed block');
+  return '';
 }
 
 test('Ask shows what the closest passage scored rather than only refusing', () => {
@@ -91,31 +133,43 @@ test('Ask shows what the closest passage scored rather than only refusing', () =
   // question or add a document. The number is the fact; whether it is close
   // enough is the floor's job, and both are shown.
   //
-  // SCOPED TO THE BRANCH THAT RENDERS IT, because a whole-file match passes on
+  // SCOPED TO THE BLOCK THAT RENDERS IT, because a whole-file match passes on
   // dead code: wrapping the score in `{false && …}` left the identifier in the
   // source and the first version of this test went green (mutation A3).
-  const noSource = branch(codeOnly(ask), 'no_source');
-  assert.match(noSource, /\{result\.best_score != null/,
-    'the closest score is not rendered in the no-source branch');
-  assert.match(noSource, /result\.score_floor/,
+  const card = threadCard(codeOnly(ask));
+  const noSource = card.slice(card.indexOf("t.reason === 'no_source' ? ("));
+  assert.ok(noSource.length > 0, 'the no-source note is gone from the thread card');
+  assert.match(noSource, /t\.best_score != null/,
+    'the closest score is not rendered in the no-source note');
+  assert.match(noSource, /t\.score_floor/,
     'the floor the score fell under is not shown beside it');
   assert.doesNotMatch(noSource, /false &&/, 'the score is rendered behind a dead guard');
+  // A ROW THAT NEVER REACHED A MODEL COSTS NOTHING, AND THE NOTE SAYS SO. It is
+  // the artboard's own argument for keeping the unanswered question on screen
+  // rather than dropping it, and it is checkable against the worker: the
+  // `no_source` path in `research.ts` writes the row before any model runs.
+  assert.match(noSource, /Nothing is charged for a question the library cannot answer/,
+    'the no-source note no longer says the question was free');
 });
 
-test('every citation names its passage, in both branches that list one', () => {
+test('every citation names its passage, and one list serves both branches', () => {
   const code = codeOnly(ask);
   assert.match(code, /citations/, 'an answer with no citations is the failure D12 withdrew a tab for');
-  // BOTH branches, counted rather than matched once. The first version
-  // asserted a single occurrence, and there are two — so removing the one on
-  // the answer itself still passed on the one under model_unavailable
-  // (mutation A4). A citation that names only the document sends a reader to
-  // re-read the whole file.
-  const answered = branch(code, 'answered');
-  assert.match(answered, /passage \{ct\.chunk \+ 1\}/,
-    'an answer’s citation does not name the passage it used');
-  const unavailable = branch(code, 'model_unavailable');
-  assert.match(unavailable, /passage \{ct\.chunk \+ 1\}/,
-    'the passages found before the model failed are listed without their position');
+  const card = threadCard(code);
+  assert.match(card, /passage \$\{ct\.chunk \+ 1\}/,
+    'a citation does not name the passage it used');
+
+  // ONE LIST, NOT TWO, AND THAT IS THE FIX RATHER THAN THE RISK. This used to
+  // count the same assertion across two branches, because `answered` and
+  // `model_unavailable` each rendered their own citation list and deleting one
+  // still passed on the other (mutation A4). The thread renders `t.citations`
+  // once for every row, so the two cannot disagree — but only while the list
+  // stays outside an outcome test, which is what this holds.
+  const cites = card.slice(card.indexOf('(t.citations || []).map('));
+  assert.ok(cites.length > 0, 'the citation list is gone from the thread card');
+  const before = card.slice(0, card.indexOf('(t.citations || []).map('));
+  assert.doesNotMatch(before.slice(before.lastIndexOf('<div')), /t\.reason === 'answered' &&/,
+    'the citation list has been put behind an answered-only guard, so a model failure would list nothing');
 });
 
 test('both zones state that nobody can share a document with you', () => {
@@ -134,7 +188,16 @@ test('the api methods exist and none of them takes a whose-library argument', ()
   }
   const start = api.indexOf('research: {');
   const block = api.slice(start, api.indexOf('\n  },', start));
-  assert.ok(block.length > 0 && block.length < 2000, 'the research api slice must not run away');
+  // BOUNDED STRUCTURALLY, NOT BY A LENGTH. This read `block.length < 2000`,
+  // which is a proxy for "the delimiter found the end of the object" and stops
+  // being one the moment the object legitimately grows — migration 221 added
+  // seven methods here and the guard failed on the size rather than on
+  // anything being wrong. What it is actually for is that the slice covers the
+  // research block and nothing after it, so that is what it asserts: the
+  // block's own last method is inside, and the next top-level key is not.
+  assert.ok(block.startsWith('research: {'), 'the research block did not start where it was found');
+  assert.ok(block.includes('diligence:'), 'the slice stops short of the end of the research block');
+  assert.ok(!block.includes('export const dd'), 'the slice ran past the end of the research block');
   // Every read is scoped to the signed-in user by the worker. A user_id or
   // owner parameter here would be the beginning of a cross-account read.
   for (const banned of ['user_id', 'userId', 'owner', 'advisor_id']) {
@@ -202,110 +265,118 @@ test('the library lists documents as the canvas’s named columns', () => {
 });
 
 /**
- * Ask's canvas structure, and the one judgement in C9 that reverses a recorded
- * one.
+ * Ask's canvas structure — four artboards, eight distinct tiles, and the store
+ * that turned seven of them on at once.
  *
- * `77f53bf28` — the commit that gave Library this treatment — argued in writing
- * that Ask should NOT get it: "Four empty tiles and an empty table would
- * restate one absence five more times." That reasoning was right about the
- * licences it was looking at and wrong about the other two, and the split is
- * what these tests hold still.
+ * THE HISTORY MATTERS HERE, because this block has been reversed twice and both
+ * reversals were right at the time.
  *
- * On FOUNDER and INVESTOR it stands. All four of their canvas tiles —
- * `Questions asked`, `Answers kept`, and two per-question costs — and their
- * whole `Session history` table are downstream of one missing thing: a stored
- * session. `research.post('/ask')` searches, answers and returns; the only
- * per-call row in the product is `ai_usage_logs`, holding token counts with no
- * question text. So those two licences state the absence once, in a sentence,
- * and draw neither strip nor table.
+ * `77f53bf28` gave Library its stat strip and argued in writing that Ask should
+ * NOT get one: "Four empty tiles and an empty table would restate one absence
+ * five more times." A later pass split that by licence — advisor and partner
+ * drew a one-tile strip because `Indexed documents` is real, founder and
+ * investor drew nothing because not one of their four was.
  *
- * On ADVISOR and PARTNER it does not stand, because their artboards open with a
- * different first tile. `Indexed documents` and the whole `What Ask can reach`
- * table are fields `api.research.documents()` already returns and this page has
- * already fetched for its empty state. A real strip with three stated gaps is
- * the Library treatment exactly; refusing to draw it would hide a table that
- * answers the zone's own question — which of my documents can Ask actually
- * see — behind an argument about tiles that are not on this artboard.
+ * BOTH JUDGEMENTS WERE ABOUT ONE MISSING STORE, and migration 221 built it.
+ * `research_ask_sessions` and `research_ask_answers` keep every exchange with
+ * its outcome, its citations and the router's own cost receipt, so `Answered`,
+ * `No source`, `Session spend`, `Questions asked` and `Answers kept` are all
+ * counted from rows now. D56's rule has not moved: a tile with no store is
+ * still not drawn, and the file still has one such tile.
+ *
+ * WHAT THESE TESTS HOLD, THEREFORE, IS NOT "how many tiles" BUT "each licence
+ * gets its own artboard's tiles, and every drawn tile reads a real source".
  */
-test('the ask strip and table are drawn only where their first tile is real', () => {
+test('each licence draws its own artboard’s tiles, not another licence’s', () => {
+  // `Pages · {Advisor,Partner} Research` open Ask with `Indexed documents`,
+  // `Answered`, `No source`, `Session spend`. `Pages · {Founder,Investor}
+  // Research` open it with `Questions asked`, `Answers kept`, `First-pass
+  // cost`, `Follow-up cost`. Four artboards, two sets — drawing one set on all
+  // four would be matching one artboard and overwriting three.
   const code = codeOnly(ask);
-  // THE SET, NOT A ROLE TEST INLINE. One named constant gates both surfaces,
-  // so the strip and the table can never disagree about which licence they are
-  // for — which is the drift a second `role === 'advisor'` further down the
-  // file would introduce silently.
-  assert.match(code, /const ASK_STRIP_LICENCES = new Set\(\['advisor', 'partner'\]\)/,
-    'the licence set that gates Ask’s canvas structure is gone or has changed shape');
-  assert.equal((code.match(/ASK_STRIP_LICENCES\.has\(role\)/g) || []).length, 2,
-    'exactly two surfaces are gated: the stat strip and the instrument card');
-  // Founder and investor must reach neither, and must not do so by accident:
-  // the only role comparisons in this file are the set above.
+  assert.match(code, /const ASK_STRIP = \{/, 'the per-licence strip table is gone');
+  const table = code.slice(code.indexOf('const ASK_STRIP = {'));
+  const decl = table.slice(0, table.indexOf('\n};'));
+  const labels = (key) => {
+    const at = decl.indexOf(`  ${key}: [`);
+    assert.notEqual(at, -1, `the ${key} strip is gone`);
+    const block = decl.slice(at, decl.indexOf('\n  ],', at));
+    return [...block.matchAll(/label: '([^']+)'/g)].map((m) => m[1]);
+  };
+  assert.deepEqual(labels('advisor'),
+    ['Indexed documents', 'Answered', 'No source', 'Session spend'],
+    'the advisor/partner strip is no longer its artboard’s four tiles, in the artboard’s order');
+  assert.deepEqual(labels('founder'),
+    ['Questions asked', 'Answers kept', 'First-pass cost', 'Follow-up cost'],
+    'the founder/investor strip is no longer its artboard’s four tiles, in the artboard’s order');
+
+  // ALIASED, NOT COPIED. Partner's artboard is advisor's and investor's is
+  // founder's, so the second of each pair points at the first — a duplicated
+  // array is two lists that can drift, which is the whole reason this file
+  // reads the table rather than the JSX.
+  assert.match(code, /ASK_STRIP\.partner = ASK_STRIP\.advisor;/,
+    'partner has its own copy of the advisor strip and can now drift from it');
+  assert.match(code, /ASK_STRIP\.investor = ASK_STRIP\.founder;/,
+    'investor has its own copy of the founder strip and can now drift from it');
+
+  // The licence gate that used to draw the strip on two roles is gone, and no
+  // bare role comparison replaced it: the table IS the gate.
+  assert.doesNotMatch(code, /ASK_STRIP_LICENCES/,
+    'the two-licence gate is back — every licence has a strip of its own now');
   assert.doesNotMatch(code, /role === '(founder|investor|advisor|partner)'/,
-    'a bare role comparison would let one surface drift from the other');
+    'a bare role comparison would let one surface drift from the table');
 });
 
-test('ask draws only the strip tile that has a source', () => {
-  // `Pages · {Advisor,Partner} Research`'s Ask artboard asks for four tiles:
-  // `Indexed documents`, `Answered`, `No source`, `Session spend`.
-  //
-  // THIS ASSERTION IS REVERSED, DELIBERATELY. It used to REQUIRE the last three
-  // to read `value="Not recorded"`, each under a sentence explaining the
-  // missing session store — the design's figures replaced by prose about why
-  // they are absent, on the page a reader came to for answers. Refusing to
-  // model a figure nobody stores was right and has not changed: the tile is now
-  // not drawn at all, and the reason lives in the component's own comment where
-  // whoever builds the session store reads it.
-  //
-  // `Indexed documents` survives because it is real — `api.research.documents()`
-  // is already loaded for the empty state — and it still has to read that
-  // payload. A strip whose one figure is decorative is worse than no strip.
+test('every drawn tile reads the store, and a tile with nothing to read is not drawn', () => {
+  // D56, unchanged and now enforced at the tile rather than at the strip. A
+  // `value` that returns null is dropped by the renderer; a `value` that
+  // returns a literal would be a decorative figure, which is worse than an
+  // absent one.
   const code = codeOnly(ask);
-  assert.match(code, /<div className="grid grid-cols-2 gap-3 lg:grid-cols-4">/,
-    'the strip the advisor and partner canvases draw is gone entirely');
-
-  const tiles = Object.fromEntries(code.split(/<Stat\s/).slice(1).map((segment) => {
-    const tile = segment.slice(0, segment.indexOf('/>'));
-    return [tile.match(/label="([^"]+)"/)?.[1], tile];
-  }));
-  assert.deepEqual(Object.keys(tiles), ['Indexed documents'],
-    'the strip draws a tile the store cannot fill');
-  assert.match(tiles['Indexed documents'], /value=\{payload \? indexed : undefined\}/,
-    'the Indexed documents tile no longer reads the library payload');
+  assert.match(code, /if \(v === null\) return null;/,
+    'a tile whose value is unavailable is drawn anyway');
   assert.doesNotMatch(code, /value="Not recorded"/,
     'a tile states its own absence again instead of not being drawn');
+
+  const table = code.slice(code.indexOf('const ASK_STRIP = {'));
+  const decl = table.slice(0, table.indexOf('\n};'));
+  // Every `value:` in the table is a function of the context object — never a
+  // constant. `x.` is the tell: a tile that never reads `x` is reporting
+  // something it did not measure.
+  const values = [...decl.matchAll(/value: \(x\) => ([^\n]+)/g)].map((m) => m[1]);
+  assert.equal(values.length, 8, 'the two strips no longer declare eight tiles between them');
+  for (const v of values) {
+    assert.match(v, /\bx\./, `a tile value reads nothing from the page: ${v}`);
+  }
+  // The two cost tiles average over the rows and return null when there are
+  // none of their kind — which is how `Follow-up cost` stays undrawn while
+  // `research_ask` is billed uncached.
+  assert.equal((decl.match(/return m == null \? null : formatCost\(m\);/g) || []).length, 2,
+    'a mean over no rows must be null rather than zero — zero reads as free');
+  assert.match(decl, /filter\(\(t\) => t\.cached\)/,
+    'the follow-up tile no longer selects the answers billed from cache');
+  assert.match(decl, /filter\(\(t\) => !t\.cached\)/,
+    'the first-pass tile no longer selects the answers billed at full rate');
 });
 
-test('founder and investor get no strip and no paragraph about one', () => {
-  // ALSO REVERSED. This required a `<StatedLimit>` naming all four tiles the
-  // two licences lose — `Questions asked`, `Answers kept`, `First-pass cost`,
-  // `Follow-up cost` — since four tiles each reading "Not recorded" would state
-  // one absence four times. Saying it once was better than saying it four
-  // times; saying it nowhere on the customer surface is better than both. Not
-  // one of the four has a source, so the strip is simply absent for them.
+test('the session history is a thread on screen, not a table nothing writes', () => {
+  // The founder/investor artboards draw a `Session history` TABLE — `Question
+  // / Drew on / Cost / What you did with it`. It was not drawn because nothing
+  // wrote a row. Migration 221 writes them, and they are rendered as the
+  // thread every artboard's Ask page actually draws rather than as a fifth
+  // table: the questions, in order, each with its answer, its citations and
+  // its charge.
   const code = codeOnly(ask);
-  assert.doesNotMatch(code, /<StatedLimit>/,
-    'the untitled stated-limit panel is back — that is the canvas narration');
-  for (const label of ['Questions asked', 'Answers kept', 'First-pass cost', 'Follow-up cost']) {
-    assert.ok(!code.includes(`label="${label}"`),
-      `"${label}" is drawn as a tile and no session store fills it`);
-  }
-
-  // The founder/investor `Session history` table is NOT drawn either, for the
-  // same reason: a table whose every row would be "Not recorded" is what the
-  // library rule already forbids.
-  //
-  // BANNING THE PHRASE IS THE WRONG PROBE, and this assertion failed as one
-  // first. `codeOnly` deliberately keeps indented `{/* */}` comments — its own
-  // docblock explains why a naive stripper is worse — and the comment above the
-  // instrument card names `Session history` precisely to say it is not drawn.
-  // So the probe is the rendered thing: one `<table>` in the whole file, which
-  // the test above has already pinned to the licence-gated card, and none of
-  // the session table's own column headings anywhere.
-  assert.equal((code.match(/<table/g) || []).length, 1,
-    'a second table in this file is the session history nothing keeps');
-  for (const head of ['Drew on', 'What you did with it']) {
-    assert.ok(!code.includes(`>${head}<`),
-      `"${head}" is a session-history column and nothing writes a row for it`);
-  }
+  const card = threadCard(code);
+  assert.match(card, /\{formatCost\(t\.cost_usd\)\}/,
+    'a row no longer shows what that question cost');
+  assert.match(card, /t\.saved \? 'Kept' : 'Keep'/,
+    'the artboard’s "what you did with it" column has no control behind it');
+  // ONE INSTRUMENT TABLE IN THE FILE, still. The thread is cards; `What Ask can
+  // reach` is the only grid, and a second one would be the session-history
+  // table drawn twice in two shapes.
+  assert.equal((code.match(/<Instrument/g) || []).length, 1,
+    'a second instrument card in this file is the session history in a second shape');
 });
 
 test('the ask instrument card lists documents as its canvas’s named columns', () => {
@@ -313,18 +384,20 @@ test('the ask instrument card lists documents as its canvas’s named columns', 
   // `Added` is the same deliberate relabel the library made: the canvas's slot
   // means the source's own date, `created_at` is when the file arrived here.
   const code = codeOnly(ask);
-  // SLICED FROM THE RENDERED HEADING, not the first mention of it. The comment
-  // above the card names the title and all five columns while explaining where
-  // they come from, so `indexOf('What Ask can reach')` lands in prose and every
-  // column below would then be checked against the sentence describing them.
-  assert.match(code, /<h3 className="[^"]*">What Ask can reach<\/h3>/,
-    'the advisor/partner instrument card is gone');
-  const card = code.slice(code.indexOf('What Ask can reach</h3>'));
-  for (const head of ['Document', 'Kind', 'Added', 'Index state', 'In Ask']) {
-    assert.ok(card.includes(`>${head}<`), `the instrument card lost its "${head}" column`);
-  }
-  assert.equal((code.match(/<div className="mt-3 overflow-x-auto">/g) || []).length, 1,
-    'the table must scroll inside its own container, never the page');
+  assert.match(code, /title="What Ask can reach"/, 'the instrument card is gone');
+  const card = code.slice(code.indexOf('title="What Ask can reach"'));
+  const head = card.match(/head=\{\[([^\]]*)\]\}/);
+  assert.ok(head, 'the instrument card no longer declares its column heads');
+  assert.deepEqual(
+    head[1].split(',').map((x) => x.trim().replace(/^'|'$/g, '')),
+    ['Document', 'Kind', 'Added', 'Index state', 'In Ask'],
+  );
+  // The scroller moved into `canvasKit`'s `Instrument`, which is the point of
+  // it existing — seven artboards render this table and one of them owning the
+  // overflow rule is how the other six cannot forget it.
+  const kit = codeOnly(read('frontend/src/workspaces/canvasKit.jsx'));
+  assert.match(kit, /overflow-x-auto/,
+    'the shared instrument table lost its own scroller and the page will scroll sideways');
 });
 
 test('“In Ask” is derived from the index state, never from a stale passage count', () => {
@@ -334,19 +407,17 @@ test('“In Ask” is derived from the index state, never from a stale passage c
   // the number alone. Reading the count would call that document answerable
   // when Ask cannot see it.
   const code = codeOnly(ask);
-  // From the rendered heading, for the reason the test above gives: the comment
-  // that names `chunk_count` to rule it out sits ABOVE the card.
-  const card = code.slice(code.indexOf('What Ask can reach</h3>'));
-  assert.match(card, /d\.index_state === 'indexed'\s*\?\s*'Answerable'/,
+  const rows = code.slice(code.indexOf('const libRows = items.map('), code.indexOf('title="What Ask can reach"'));
+  assert.ok(rows.length > 0, 'the instrument card’s row builder is gone');
+  assert.match(rows, /d\.index_state === 'indexed'\s*\?\s*\{ text: 'Answerable in Ask' \}/,
     'the In Ask column must read the index state');
-  assert.match(card, /<Unrecorded>Not answerable<\/Unrecorded>/,
-    'a document Ask cannot see must read as unrecorded, not as a blank cell');
-  // `d.chunk_count`, not the bare token. The comment ruling the field out sits
-  // INSIDE this card — it is the comment worth keeping — and the field is only
-  // reachable off the row object, so the property access is the code form and
-  // the backticked name in prose is not. Banning the bare token here would ban
-  // the explanation rather than the behaviour.
-  assert.doesNotMatch(card, /d\.chunk_count/,
+  assert.match(rows, /\{ text: 'Not answerable until indexed' \}/,
+    'a document Ask cannot see must say why, not render a blank cell');
+  // `d.chunk_count`, not the bare token: the field is only reachable off the
+  // row object, so the property access is the code form and a backticked name
+  // in prose is not. Banning the bare token would ban the explanation rather
+  // than the behaviour.
+  assert.doesNotMatch(rows, /d\.chunk_count/,
     'chunk_count survives a failed re-index and would call an unreachable document answerable');
 });
 

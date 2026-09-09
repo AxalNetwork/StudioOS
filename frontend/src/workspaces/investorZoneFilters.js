@@ -87,13 +87,11 @@ const NO_ORG_ON_A_RELATIONSHIP =
 // taxonomy on a deal, which the pipeline zone reads and this one does not.
 const KEPT_IN_ANOTHER_STORE =
   'both name records this page never loads: an LP belongs to a fund’s own register, and a pass is a reason stamped on a deal';
-// `/research/ask` and `/research/library` are shared surfaces, so these two
-// read the same as founder's — deliberately. One component draws both rows, and
-// a reader moving between licences must not find one absence explained two
-// ways. The ops half of the Ask row already says "no session history is stored
-// to clear"; this is that clause, extended to the views the filters name.
-const NO_SESSION_RECORD =
-  'no session history is stored, so no past question, kept answer or discarded one exists to look through';
+// `/research/library` is a shared surface, so its reasons read the same as
+// founder's — deliberately. One component draws both rows, and a reader moving
+// between licences must not find one absence explained two ways. Ask's
+// `NO_SESSION_RECORD` was the other half of that pairing and is gone from both
+// files together: migration 221 stored the session history it denied.
 const NO_SUCH_KIND =
   'a document is filed as a document, a playbook or about a client, and no upload can classify one any other way';
 // `/research/markets`. The same absence founder's row states, in this licence's
@@ -282,14 +280,22 @@ export const INVESTOR_ZONE_FILTERS = {
   // written per question — `research.post('/ask')` searches, answers and
   // returns — so there is no session, kept answer or outcome to narrow. The ops
   // half of this row already says "no session history is stored to clear".
+  // TWO LIVE, TWO STILL PROSE, AND THE SPLIT IS NOT THE ONE THIS TABLE
+  // EXPECTED. Migration 221 gave Ask a session store, so `All sessions` and
+  // `Saved` both select something now — the same store that turned advisor's
+  // and partner's rows fully live. `Cited in a memo` and `Discarded` do not
+  // follow it: a citation names the passage it quoted and carries no document
+  // id, and nothing discards an answer — the ops row offers save, not throw
+  // away. Two of these four were never about the session store at all, which
+  // is why `NO_SESSION_RECORD` covering all four was hiding a distinction.
   'research/ask': [
-    { canvas: 'All sessions', unbuilt: NO_SESSION_RECORD },
-    { canvas: 'Saved', unbuilt: NO_SESSION_RECORD },
+    { canvas: 'All sessions', key: 'all' },
+    { canvas: 'Saved', key: 'saved' },
     {
       canvas: 'Cited in a memo',
       unbuilt: 'a citation names the passage it quoted and carries no document id, and nothing carries one into a memo',
     },
-    { canvas: 'Discarded', unbuilt: NO_SESSION_RECORD },
+    { canvas: 'Discarded', unbuilt: 'nothing discards an answer — the ops row offers keeping one, and an answer not kept is simply not kept' },
   ],
   // ROOM ACCESS, AND THE CANVAS MEANS SOMETHING DIFFERENT BY `Requested` THAN
   // THE WORD SUGGESTS. Its own artboard code reads

@@ -154,9 +154,19 @@ export const PARTNER_ZONE_ACTIONS = {
   ],
 
   // ── Research ─────────────────────────────────────────────────────────────
+  // TWO OPS THAT WERE `unbuilt:` AND ARE NOW THE PAGE'S OWN. `New session` said
+  // "the question box below starts one" — true of the box and not of the op: a
+  // box that always appends to the same thread cannot start a second one, and
+  // migration 221 is what made a second one a thing that exists. `Saved
+  // answers` said no answer is saved; one bit on `research_ask_answers` and the
+  // ops row now keeps them.
+  //
+  // BOTH ARE `kind: 'handler'` RATHER THAN `to:`, because neither is a
+  // destination: starting a session and switching the view to the kept ones
+  // both act on state this page owns. D67.
   'research/ask': [
-    { label: 'New session', unbuilt: 'the question box below starts one' },
-    { label: 'Saved answers', unbuilt: 'no answer is saved; the citations below belong to this question' },
+    { label: 'New session', kind: 'handler', handler: 'newSession' },
+    { label: 'Saved answers', kind: 'handler', handler: 'savedAnswers' },
     { label: 'Export', kind: 'export' },
   ],
   // Excluded as "a card, not a body" until now, and it is a body — see the

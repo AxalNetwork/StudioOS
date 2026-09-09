@@ -257,16 +257,23 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
     if (slug === 'ask') {
       return (
         <Suspense fallback={<Loading />}>
-          {/* The citations of the answer ON SCREEN, which is the whole session
-              this surface stores: nothing keeps a history, and the zone says so
-              rather than offering to export one that does not exist. */}
+          {/* THE THREAD, NOT THE CITATIONS OF ONE ANSWER. This exported
+              `['#', 'Document', 'Score', 'Passage']` — the passages behind
+              whichever answer happened to be on screen — because that was the
+              whole of what the surface held. Migration 221 stores the session,
+              so `Export` now carries what the reader is actually looking at:
+              the questions, what came back, whether it was answered at all, and
+              what each one cost. `rows` is the NARROWED list, so exporting
+              under `Unanswered` gives the unanswered ones. */}
           <AskZone
             role={role}
             zoneFilters={(opts) => zoneFiltersFor(role, 'research/ask', opts)}
-            zoneActions={(rows) => zoneActionsFor(role, 'research/ask', { view: {
-            header: ['#', 'Document', 'Score', 'Passage'],
+            zoneActions={(rows, handlers) => zoneActionsFor(role, 'research/ask', { handlers, view: {
+            zone: 'ask',
+            header: ['Asked', 'Question', 'Outcome', 'Answer', 'Sources', 'Cost (USD)', 'Kept'],
             rows,
-            cells: (c) => [c.n, c.title, c.score, c.chunk],
+            cells: (t) => [t.created_at, t.question, t.reason, t.answer || '',
+              (t.citations || []).map((ct) => ct.title).join('; '), t.cost_usd, t.saved ? 'yes' : 'no'],
           } })} />
         </Suspense>
       );

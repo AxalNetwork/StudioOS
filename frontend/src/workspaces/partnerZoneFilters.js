@@ -28,14 +28,12 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  * own heading above a card stating the gap — a filter row would be four
  * controls above a sentence explaining that there is nothing to filter.
  */
-// Word for word what the advisor table says, because `AskZone` is one file
-// serving both and the two canvases ask for the same four views. Two different
-// failures, so two sentences: the first pair would select everything on screen,
-// the second pair would select something that was never written down.
-const ONE_ANSWER_ONLY =
-  'one answer is on screen at a time and the citations under it are the whole of it, so neither of these narrows anything';
-const NO_ANSWER_RECORD =
-  'no answer is saved, so nothing records a past question or whether one went unanswered';
+// TWO STRINGS THAT USED TO LIVE HERE ARE GONE, and their absence is the point.
+// `ONE_ANSWER_ONLY` and `NO_ANSWER_RECORD` explained why all four of Ask's
+// chips were prose: one answer on screen and no record of any past one.
+// Migration 221 stored both, so the reasons stopped being true and went with
+// the entries they justified. A reason kept past the gap it describes is worse
+// than no reason at all — it reads as current.
 
 // `/research/client-prep`, and the same single fact the advisor table names:
 // every row a brief produces carries `source: 'client'`, so `Ours only` matches
@@ -214,11 +212,26 @@ export const PARTNER_ZONE_FILTERS = {
       unbuilt: 'no row joins a signal to a proposal — the only foreign keys to a signal in the whole schema are its evidence and the companies it names',
     },
   ],
+  // ALL FOUR LIVE, AND MIGRATION 221 IS WHY. Both of these entries used to
+  // carry prose — `ONE_ANSWER_ONLY` for the two that narrow a thread and
+  // `NO_ANSWER_RECORD` for the two that need a past. `POST /api/research/ask`
+  // answered and returned without writing anything down, so there was one
+  // answer on screen, no history behind it, and four chips that could only
+  // have selected everything or nothing. `research_ask_sessions` and
+  // `research_ask_answers` store every exchange including the ones that came
+  // back with no source, which is exactly what `Unanswered` selects on.
+  //
+  // TWO SCOPES AND TWO PREDICATES, DELIBERATELY. `This session` and `All
+  // history` are different READS — the page asks the worker for a different
+  // slice — while `Cited` and `Unanswered` narrow whichever slice came back.
+  // Splitting them the other way would make `Cited` mean "cited answers in
+  // this session" on one chip and "in all history" on another, which is two
+  // chips for one question.
   'research/ask': [
-    { canvas: 'This session', unbuilt: ONE_ANSWER_ONLY },
-    { canvas: 'All history', unbuilt: NO_ANSWER_RECORD },
-    { canvas: 'Cited', unbuilt: ONE_ANSWER_ONLY },
-    { canvas: 'Unanswered', unbuilt: NO_ANSWER_RECORD },
+    { canvas: 'This session', key: 'session' },
+    { canvas: 'All history', key: 'all' },
+    { canvas: 'Cited', key: 'cited' },
+    { canvas: 'Unanswered', key: 'unanswered' },
   ],
   // Four labels, four predicates, no prose — the only zone in this pass where
   // that happens. `Client docs` needs no relabel: `About a client` is what the
