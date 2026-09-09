@@ -73,11 +73,21 @@ const NO_DIRECTION_RECORDED =
 // `metadata` is a real column on `partner_relationships` and it is free-text
 // JSON, so `metadata.organization_name` is a shape the store could physically
 // hold — which is exactly the trap D52 was written about. The write path exists
-// (`POST /partnernet/relationships`), the client method exists
-// (`api.createRelationship`), and the only caller in the product
-// (`RelationshipsPage.jsx:154`) sends `{partner_id, relationship_type,
-// strength_score}` and no metadata at all. The string `organization_name`
-// appears nowhere in the worker or the backend. Nothing has ever written one.
+// (`POST /partnernet/relationships`) and the client method exists
+// (`api.createRelationship`). What it no longer has is a CALLER: this note used
+// to cite `RelationshipsPage.jsx:154` sending `{partner_id, relationship_type,
+// strength_score}` and no metadata, and that page has since been rebuilt onto
+// the firm book (migration 224) and calls neither. So the count of writers went
+// from one-that-omits-it to none, which makes the conclusion stronger rather
+// than stale. The string `organization_name` appears nowhere in the worker or
+// the backend. Nothing has ever written one.
+//
+// AND THE BOOK'S `organization` COLUMN IS NOT AN ANSWER HERE. Migration 224
+// gives a contact an employer as text, which is what `pn3`'s intended-shape
+// table would group by — but that table is the PARTNER licence's book, read
+// through `/api/partnernet/book`, and an investor's Organizations zone rolls up
+// `partner_relationships`. A column on a table this zone does not read is not a
+// column this zone has.
 const NO_ORG_ON_A_RELATIONSHIP =
   'a relationship records two accounts, a type and a strength, and nothing on it names the firm either of them is at, so there are no organisations here to select between';
 // The other two name records that are real and are kept somewhere this page

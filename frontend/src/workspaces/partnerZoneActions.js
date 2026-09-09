@@ -5,23 +5,24 @@ import { makeZoneActions } from './zoneActionBuilder';
  * canvas actions actually does. `zoneActionBuilder.js` states the three
  * outcomes and the rules they follow; this file is the partner's answers.
  *
- * THREE BUCKETS ARE ABSENT FROM THIS TABLE AND NONE OF THEM IS AN OVERSIGHT.
+ * THE PARAGRAPH THAT STOOD HERE SAID `/network` AND `/research` WERE ABSENT,
+ * and both are below. It read: "its three zones render `NetworkPage`, whose
+ * bodies are three further shared components … Threading a partner-only row
+ * through four files that four licences render is the shared-surface pass, not
+ * this one." That was true when it was written and the shared-surface pass
+ * happened; the rows landed and the paragraph did not move, so this file opened
+ * by denying its own contents. A note kept past the state it describes reads as
+ * current, which is the same defect as a stale `unbuilt:` reason.
  *
- *   `/network` — its three zones render `NetworkPage`, whose bodies are three
- *     further shared components (`RelationshipsPanel`, `IntroductionsPanel`,
- *     `ContactsPanel`) used by more than one licence. Threading a partner-only
- *     row through four files that four licences render is the shared-surface
- *     pass, not this one. `network/organizations` is excluded for a different
- *     reason: `NetworkPage` renders that zone as a stated gap, not
- *     as another tab's list: `unservedZone` catches a slug it has no tab for
- *     and `unservedAlone` suppresses every body, so the reader gets the
- *     Organizations heading above a card explaining the roll-up needs an edge
- *     from a person to an organisation that nothing stores. That is already the
- *     honest answer, and a header row would add nothing to it.
+ * ONE ZONE IS STILL ABSENT, for a reason the pass did not change:
+ * `network/organizations` renders as a stated gap rather than as a list —
+ * `NetworkPage`'s `unservedZone` catches a slug it has no tab for and
+ * `unservedAlone` suppresses every body, so the reader gets the Organizations
+ * heading above a card explaining the roll-up needs an edge from a person to an
+ * organisation that nothing stores. A header row over a page that is entirely
+ * that statement would add nothing to it.
  *
- *   `/research` — same shared surface as every other profile's.
- *
- * WHAT THE TEN THAT ARE HERE LOOK LIKE. Ten of thirty run. Every zone can
+ * WHAT THE TEN DELIVERY AND OFFERS ZONES LOOK LIKE. Ten of thirty run. Every zone can
  * export what it is showing, because migrations 208 and 209 gave these zones
  * real stores — this is the first profile in the pass where the exports are the
  * rule rather than the exception. The writes are the gaps, and they are gaps for
@@ -142,9 +143,22 @@ export const PARTNER_ZONE_ACTIONS = {
   ],
 
   // ── Network ──────────────────────────────────────────────────────────────
+  // ── Network ──────────────────────────────────────────────────────────────
+  // BOTH REASONS HERE WERE TRUE OF `partner_relationships` AND ARE NOT TRUE OF
+  // WHAT THIS ZONE READS. They said "no owner field is stored on a
+  // relationship" and "no interaction log is stored", and that table is a
+  // partner-to-partner edge carrying `relationship_type` and a hand-set
+  // `strength_score` — neither an owner nor a date. Migration 224 gives the
+  // firm's BOOK its own table with `firm_owner_user_id` and a dated
+  // `partner_book_interactions`, which is what the `pn1` artboard's `Firm owner`
+  // and `Last interaction` columns are. The reasons went with the gaps.
+  //
+  // `kind: 'handler'` FOR BOTH, because neither is a destination: assigning an
+  // owner and logging a touch act on state this page owns, and both open its
+  // own board. D67.
   'network/relationships': [
-    { label: 'Assign owner', unbuilt: 'no owner field is stored on a relationship' },
-    { label: 'Log interaction', unbuilt: 'no interaction log is stored' },
+    { label: 'Assign owner', kind: 'handler', handler: 'assignOwner' },
+    { label: 'Log interaction', kind: 'handler', handler: 'logInteraction' },
     { label: 'Export', kind: 'export' },
   ],
   'network/introductions': [

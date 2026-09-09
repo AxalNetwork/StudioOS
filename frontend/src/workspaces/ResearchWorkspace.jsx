@@ -256,7 +256,13 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
           <LibraryZone
             role={role}
             zoneFilters={(opts) => zoneFiltersFor(role, 'research/library', opts)}
-            zoneActions={(rows) => zoneActionsFor(role, 'research/library', { view: {
+            /* `handlers` — dropped here until now, and the drop was invisible:
+               `Add document` and `Re-index` are `kind: 'handler'` in all four
+               tables, the builder finds no callable and returns null rather
+               than a dead control, so two of the artboard's three ops simply
+               were not on the page. A closure that takes only `rows` cannot
+               carry a page's own functions. */
+            zoneActions={(rows, handlers) => zoneActionsFor(role, 'research/library', { handlers, view: {
             header: ['Document', 'Kind', 'Index state', 'Passages', 'Size (bytes)', 'Added'],
             rows,
             cells: (d) => [d.title, d.kind, d.index_state, d.chunk_count, d.size_bytes, d.created_at],
@@ -326,7 +332,7 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
           <ClientPrepZone
             role={role}
             zoneFilters={(opts) => zoneFiltersFor(role, 'research/client-prep', opts)}
-            zoneActions={(rows) => zoneActionsFor(role, 'research/client-prep', { view: {
+            zoneActions={(rows, handlers) => zoneActionsFor(role, 'research/client-prep', { handlers, view: {
             scope: null,
             zone: 'client-prep',
             header: ['Section', 'What it says', 'Source'],

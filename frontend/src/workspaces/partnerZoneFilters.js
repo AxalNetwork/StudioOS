@@ -41,13 +41,20 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
 // of its own to separate out. `ClientPrepZone` is one file serving this licence
 // and advisor, and both copies of the constant went together.
 
-// `/network/relationships`. Two labels, one absent column, and the ops half of
-// this very row already names it — "no owner field is stored on a relationship".
-// These are the same sentence from the other side, so they share one string.
-const NO_OWNER_ON_A_RELATIONSHIP =
-  'no owner is stored on a relationship, so there is no assignment to bring forward and none to filter by';
-const NO_INTERACTION_DATE =
-  'no interaction date is stored on a relationship, so nothing can be called cold; the only history kept is that the row was created and edited';
+// `NO_OWNER_ON_A_RELATIONSHIP` AND `NO_INTERACTION_DATE` STOOD HERE AND ARE
+// GONE, and the deletion is the whole of what changed on this zone. They said
+// "no owner is stored on a relationship, so there is no assignment to bring
+// forward and none to filter by" and "no interaction date is stored … the only
+// history kept is that the row was created and edited". Both were true of
+// `partner_relationships`, which this zone no longer reads: it is a
+// partner-to-partner edge carrying a type and a hand-set `strength_score`.
+//
+// Migration 224 stores the firm's BOOK — `firm_owner_user_id`, nullable and
+// unset on creation, and `partner_book_interactions.happened_at`, which is the
+// date the touch happened rather than the date it was typed. Three of the four
+// labels below narrow on those two columns, so all four now run. The reasons
+// went with the gaps they described, because a reason kept past its gap reads
+// as current.
 
 // `/network/introductions`. `Gated` IS RELABELLED because the canvas's word
 // means the double opt-in and this page can only see one side of it: the
@@ -78,15 +85,28 @@ const NO_PERK_EXPIRY =
 
 export const PARTNER_ZONE_FILTERS = {
   // ── Network ──────────────────────────────────────────────────────────────
-  // One live chip out of four, the same as advisor's and for the same reason:
-  // this licence reads `partner_relationships`, which carries a type and a
-  // strength score and nothing else. Founder's row on this zone runs all four,
-  // because founder relationships are `contacts`.
+  // FOUR OF FOUR, WHERE THIS ROW USED TO RUN ONE. `Unassigned first` and `By
+  // owner` are the two sides of `firm_owner_user_id` being null or not — and
+  // `Unassigned first` is the canvas's own default (`fil([…], 0)`), which is
+  // the artboard saying the orphans are what this page opens on.
+  //
+  // `Going cold` IS SIXTY DAYS, AND THAT NUMBER IS THE ARTBOARD'S. `cold =
+  // BOOK.filter(c => c.days !== null && c.days > 60)`, and its `cmpBody` says
+  // "going cold past 60 days" in as many words. `MarketZone`'s ninety is a
+  // different question about a different object — how stale a price reading may
+  // be before a proposal may not carry it — and transcribing one onto the other
+  // is how two numbers become one.
+  //
+  // A CONTACT WITH NO DATED INTERACTION IS NOT COLD. `days` is null there, and
+  // the predicate requires a date, so an undated row is excluded rather than
+  // swept in as maximally cold. It sorts to the bottom of the list — nobody
+  // knows when it was last touched — but "we have no date" is not the same
+  // claim as "it has been sixty days", and only one of them is in the store.
   'network/relationships': [
-    { canvas: 'Unassigned first', unbuilt: NO_OWNER_ON_A_RELATIONSHIP },
+    { canvas: 'Unassigned first', key: 'unassigned' },
     { canvas: 'All', key: 'all' },
-    { canvas: 'By owner', unbuilt: NO_OWNER_ON_A_RELATIONSHIP },
-    { canvas: 'Going cold', unbuilt: NO_INTERACTION_DATE },
+    { canvas: 'By owner', key: 'owned' },
+    { canvas: 'Going cold', key: 'cold' },
   ],
 
   'network/introductions': [

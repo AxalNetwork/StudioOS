@@ -110,8 +110,17 @@ export function SourceLegend({ theirs = 'Founder-sourced', theirsNote, ours = 'O
  * WITH an `Ours` chip, and `105 d old` WITH a `Blocked from proposals` chip.
  * `sub` is the provenance line the artboards put under a value in small grey:
  * `11 comparables`, `Delivery · deliverables log`.
+ *
+ * `orph` AND `gate` ARE THE NETWORK CANVAS'S OWN TWO MARKS, and they are named
+ * here rather than folded into `pill` because the canvas names them: its
+ * `cell()` takes `{ pill, seam, ours, orph, gate, nr, sub }` and gives `.orph`
+ * and `.gate` their own square-badge rules beside `.seam` and `.ours`, distinct
+ * from the round `pill()` factory. A page that writes `orph:'Orphaned'` reads
+ * against the artboard line for line; one that writes `pill:'Orphaned',
+ * pillTone:'danger'` says the same thing in a vocabulary the artboard does not
+ * use, and the next reader has to work out that they match.
  */
-export function Cell({ text, pill, pillTone = 'neutral', seam, ours, stale, cite, nr, sub, node }) {
+export function Cell({ text, pill, pillTone = 'neutral', seam, ours, orph, gate, stale, cite, nr, sub, node }) {
   return (
     <span className="min-w-0 text-[11.5px] text-axal-ink dark:text-gray-200">
       <span className="inline-flex flex-wrap items-center gap-1.5">
@@ -119,6 +128,8 @@ export function Cell({ text, pill, pillTone = 'neutral', seam, ours, stale, cite
         {pill ? <Pill tone={pillTone} className="!text-[9.5px]">{pill}</Pill> : null}
         {seam ? <Pill tone="seam" className="!text-[9.5px]">{seam}</Pill> : null}
         {ours ? <Pill tone="warn" className="!text-[9.5px]">{ours}</Pill> : null}
+        {orph ? <Pill tone="danger" className="!text-[9.5px]">{orph}</Pill> : null}
+        {gate ? <Pill tone="neutral" className="!text-[9.5px]">{gate}</Pill> : null}
         {stale ? <Pill tone="danger" className="!text-[9.5px]">{stale}</Pill> : null}
         {cite ? <Pill tone="cite" className="!text-[9.5px]">{cite}</Pill> : null}
         {nr ? <NotRecorded /> : null}

@@ -152,8 +152,14 @@ export default function NetworkPage({ embedded = false, zoneActions = null, zone
       )}
 
       {!unservedAlone && activeTab === 'contacts' && canContacts && <ContactsPanel />}
-      {!unservedAlone && activeTab === 'introductions' && <IntroductionsPanel role={role} zoneActions={zoneActions && ((rows) => zoneActions('introductions', rows))} zoneFilters={zoneFilters && ((opts) => zoneFilters('introductions', opts))} />}
-      {!unservedAlone && activeTab === 'relationships' && <RelationshipsPanel role={role} zoneActions={zoneActions && ((rows) => zoneActions('relationships', rows))} zoneFilters={zoneFilters && ((opts) => zoneFilters('relationships', opts))} />}
+      {/* `handlers` IS THE SECOND ARGUMENT AND IT MUST SURVIVE THIS HOP. A
+          panel's `kind: 'handler'` ops — `Assign owner`, `Log interaction` —
+          are functions the PANEL owns, so it passes them up with its rows; a
+          closure that took only `rows` dropped them silently and the builder,
+          finding no callable, rendered nothing rather than a dead button. The
+          op then vanished from the header row with no error anywhere. */}
+      {!unservedAlone && activeTab === 'introductions' && <IntroductionsPanel role={role} zoneActions={zoneActions && ((rows, handlers) => zoneActions('introductions', rows, handlers))} zoneFilters={zoneFilters && ((opts) => zoneFilters('introductions', opts))} />}
+      {!unservedAlone && activeTab === 'relationships' && <RelationshipsPanel role={role} zoneActions={zoneActions && ((rows, handlers) => zoneActions('relationships', rows, handlers))} zoneFilters={zoneFilters && ((opts) => zoneFilters('relationships', opts))} />}
     </div>
   );
 

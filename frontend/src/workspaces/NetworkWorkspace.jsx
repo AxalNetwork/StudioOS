@@ -218,14 +218,25 @@ export default function NetworkWorkspace({ role = 'founder' }) {
         <NetworkPage
           embedded
           zoneFilters={(kind, opts) => zoneFiltersFor(role, `network/${kind}`, opts)}
-          zoneActions={(kind, rows) => (
+          zoneActions={(kind, rows, handlers) => (
           kind === 'relationships'
-            ? zoneActionsFor(role, 'network/relationships', { view: {
-                header: ['Person', 'Type', 'Status', 'Strength', 'Added'],
+            /* THE COLUMNS ARE THE BOOK'S, and the ones they replace were the
+               partner-to-partner edge's: `Person · Type · Status · Strength ·
+               Added`, where `Strength` was `strength_score` — the hand-set
+               0-100 number the artboard refuses and migration 224 does not
+               store. Exporting it would have carried a figure off the page that
+               the page itself will not print. What ships instead is what the
+               reader is looking at, derivation included: the two numbers
+               strength is computed from, so a spreadsheet can reach the same
+               conclusion the table did rather than inheriting its verdict. */
+            ? zoneActionsFor(role, 'network/relationships', { handlers, view: {
+                header: ['Contact', 'Organization', 'Role', 'Firm owner', 'Last interaction', 'Interactions', 'Source'],
                 rows,
-                cells: (r) => [r.other?.name || r.other?.email, r.relationship_type, r.status, r.strength_score, r.created_at],
+                cells: (r) => [r.name, r.organization, r.role_title, r.firm_owner?.name || '',
+                  r.last_interaction_at || '', r.interaction_count,
+                  r.source === 'platform' ? (r.source_label || 'Platform') : 'Ours'],
               } })
-            : zoneActionsFor(role, 'network/introductions', { view: {
+            : zoneActionsFor(role, 'network/introductions', { handlers, view: {
                 header: ['Counterpart', 'Status', 'Score', 'Source'],
                 rows,
                 cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source],

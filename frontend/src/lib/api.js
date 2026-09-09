@@ -2203,6 +2203,25 @@ export const api = {
 
   partnerSummary: () => request('/partnernet/summary'),
   partnerRelationships: () => request('/partnernet/relationships'),
+
+  // The firm relationship book (migration 224) — people the firm knows at
+  // client companies, each owned by someone at the firm or conspicuously not.
+  // A different object from `partnerRelationships`, which is a partner-to-
+  // partner edge; see the migration for why they are two tables.
+  partnerBook: () => request('/partnernet/book'),
+  partnerBookAdd: (data) => request('/partnernet/book', { method: 'POST', body: JSON.stringify(data || {}) }),
+  // Who at the firm can be given a row: the caller plus everyone linked to a
+  // company the caller is linked to. The same set the PATCH below accepts, so
+  // the picker cannot offer a choice the write refuses.
+  partnerBookOwners: () => request('/partnernet/book/owners'),
+  // `null` unassigns. An owner who leaves puts the row back at the top of the
+  // book, which is where the page's own finding lives.
+  partnerBookSetOwner: (uid, firmOwnerId) => request(`/partnernet/book/${encodeURIComponent(uid)}/owner`, {
+    method: 'PATCH', body: JSON.stringify({ firm_owner_id: firmOwnerId ?? null }),
+  }),
+  partnerBookLogInteraction: (uid, data) => request(`/partnernet/book/${encodeURIComponent(uid)}/interactions`, {
+    method: 'POST', body: JSON.stringify(data || {}),
+  }),
   createRelationship: (data) => request('/partnernet/relationships', { method: 'POST', body: JSON.stringify(data) }),
   updateRelationship: (id, data) => request(`/partnernet/relationships/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   relationshipEvents: (id) => request(`/partnernet/relationships/${id}/events`),

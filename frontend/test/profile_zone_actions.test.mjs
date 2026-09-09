@@ -137,13 +137,18 @@ const PROFILES = {
     zones: 21,
     links: 0,
     exports: 19,
-    // Five page-supplied ops. `research/ask`: `New session` starts a thread,
+    // Seven page-supplied ops. `research/ask`: `New session` starts a thread,
     // `Saved answers` switches the view to the kept ones. `research/library`:
     // `Add document` opens the file picker, `Re-index` re-queues every document
     // Ask cannot currently read. `research/client-prep`: `Attach to proposal`,
     // which migration 222's `research_attachments` made an edge rather than a
-    // wish. None is a destination, which is why none is a `to:`. Was 0.
-    handlers: 5,
+    // wish. `network/relationships`: `Assign owner` opens the board where
+    // ownership changes and `Log interaction` dates a touch — both were gaps
+    // reading "no owner field is stored on a relationship" and "no interaction
+    // log is stored", true of `partner_relationships` and not of the book
+    // migration 224 stores. None is a destination, which is why none is a `to:`.
+    // Was 0, then 5.
+    handlers: 7,
     // `network/organizations`: `NetworkPage` catches a slug it has no tab for and
     // suppresses every body, so that route already renders its own heading above
     // a card stating the gap — there is nothing for a row to sit over. Checked
