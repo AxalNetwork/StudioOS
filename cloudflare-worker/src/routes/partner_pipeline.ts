@@ -635,10 +635,12 @@ partnerPipeline.get('/negotiations', async (c) => {
     const rows = await c.env.DB.prepare(
       `SELECT q.id AS quote_id, q.uid AS quote_uid, q.price, q.status AS quote_status,
               q.need_id, n.title AS need_title, n.category AS need_category,
+              f.name AS founder_name,
               g.id AS negotiation_id, g.uid AS negotiation_uid, g.stage, g.ball,
               g.open_question, g.last_moved_at
          FROM quotes q
          LEFT JOIN founder_needs n ON n.id = q.need_id
+         LEFT JOIN users f ON f.id = n.founder_id
          LEFT JOIN quote_negotiations g ON g.quote_id = q.id
         WHERE q.partner_id = ?
         ORDER BY q.created_at DESC
@@ -679,10 +681,38 @@ partnerPipeline.get('/negotiations', async (c) => {
       need_id: r.need_id ? Number(r.need_id) : null,
       need_title: r.need_title ?? null,
       need_category: r.need_category ?? null,
+      // The lane card's heading. `need_title` is what the work is; the client
+      // is who it is for, and a board of scopes with no names on it is a board
+      // nobody can act from.
+      founder_name: r.founder_name ?? null,
       negotiation: r.negotiation_id ? negotiationDto(r) : null,
       terms: r.negotiation_id ? (termsByNegotiation.get(Number(r.negotiation_id)) || []) : [],
     }));
-    return c.json({ items });
+
+    // ── The `p3` strip, counted server-side over the whole book ───────────
+    // TRACKED AND OPEN. A quote with no negotiation row is not being tracked
+    // here at all, and a closed one is not live — neither belongs in a count
+    // of what is in play, and folding either in would make the board look
+    // busier than the work is.
+    const open = items.filter(
+      (x: any) => x.negotiation && x.negotiation.stage !== 'closed',
+    );
+    return c.json({
+      items,
+      live_count: open.length,
+      // `quotes.price` is grandfathered REAL dollars — named, not guessed at.
+      live_value_dollars: open.reduce((a: number, x: any) => a + (Number(x.price) || 0), 0),
+      awaiting_us_count: open.filter((x: any) => x.negotiation.ball === 'us').length,
+      awaiting_them_count: open.filter((x: any) => x.negotiation.ball === 'them').length,
+      // SEVEN DAYS WITHOUT A RECORDED MOVE. `days_stalled` is computed from
+      // `last_moved_at` in the worker rather than by the page, so the row and
+      // the count cannot disagree about the same negotiation.
+      stalled_count: open.filter((x: any) => (x.negotiation.days_stalled ?? 0) >= 7).length,
+      // NOT COMPUTABLE, AND SAID IN THE RESPONSE. See the zone's own limit: a
+      // percentage drawn from stage alone is the stage relabelled as a forecast.
+      close_probability: null,
+      close_probability_note: 'Nothing here forecasts a close. Migration 234 records why a proposal was LOST, which is a taxonomy rather than a rate, and a handful of decided deals cannot support a probability conditioned on stage. A number drawn from stage alone would be the stage relabelled as a forecast.',
+    });
   } catch (e) { return mapError(c, e); }
 });
 

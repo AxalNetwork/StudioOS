@@ -207,22 +207,41 @@ test('MRR states what it counted', () => {
 test('the negotiations zone refuses a close probability', () => {
   const raw = read(`${ZONE_ROOT}/pipeline/NegotiationsZone.jsx`);
   const src = codeOnly(raw);
-  // The canvas puts a percentage beside each deal. Nothing records why a past
-  // negotiation was won or lost, so there is no history to weight a live one
-  // against — a figure drawn from stage alone would be the stage relabelled as
-  // a forecast. The stat exists and reads as an em-dash, because removing it
-  // would hide the gap rather than state it. UNCHANGED.
-  assert.match(src, /Close probability/, 'the canvas asks for it, so the zone must address it');
-  assert.match(src, /value="—"/, 'and it must be an em-dash rather than a computed number');
+  const worker = read('cloudflare-worker/src/routes/partner_pipeline.ts');
 
-  // WHAT CHANGED IS THE PARAGRAPH BENEATH IT. A `No close probability` block
-  // explained the canvas to the reader; the em-dash already says the honest
-  // thing, and the reasoning belongs with whoever would add the decision
-  // column. So the reason moves into the source and off the page.
-  assert.doesNotMatch(src, /No close probability/,
-    'the canvas-narration paragraph is back beneath the em-dash');
-  assert.match(raw, /NO CLOSE PROBABILITY, AND NO PARAGRAPH ABOUT ITS ABSENCE/,
-    'the record of why the stat is an em-dash has been lost');
+  // THE REFUSAL MOVED, AND THIS TEST MOVED WITH IT RATHER THAN BEING DROPPED.
+  // It used to require a `Close probability` STAT reading `value="—"`, on the
+  // reading that removing the tile would hide the gap rather than state it.
+  // That was right about the strip this zone had — a strip of its own devising.
+  // The `p3` artboard's four tiles are `Live negotiations`, `Awaiting you`,
+  // `Awaiting them` and `Stalled 7d+`; no close probability appears on it at
+  // all, so an em-dash tile in that row would be answering a question the
+  // design does not ask, in the place where it asks four others.
+  //
+  // What must not weaken is the refusal itself, and it is now stated in TWO
+  // places rather than drawn in one: the response answers `close_probability:
+  // null` with its reason, and the zone's stated limits carry the argument.
+  assert.match(worker, /close_probability: null,/,
+    'the negotiations read now returns a close probability');
+  assert.match(worker, /close_probability_note:/,
+    'the read stopped saying why it refuses one');
+  assert.match(src, /Nothing here forecasts a close/,
+    'the zone stopped stating that it does not forecast');
+  assert.match(src, /the stage relabelled as a forecast/,
+    'the reason a stage-derived number is refused has been lost');
+
+  // AND THE REASON IS THE CURRENT ONE. The old note said "nothing records why a
+  // past negotiation was won or lost" — migration 234 records exactly that, so
+  // a page still saying it would be asserting a gap that has been closed. The
+  // refusal survives on the argument that survived: a taxonomy is not a rate.
+  assert.doesNotMatch(src, /nothing records why a past negotiation was won or lost/i,
+    'the zone claims a gap migration 234 closed');
+  assert.match(src, /taxonomy rather than a rate/,
+    'the current reason for the refusal is not stated');
+
+  // No computed figure sneaks back in under another name.
+  assert.doesNotMatch(src, /probability.*Math\.round|Math\.round.*probability/i,
+    'a close probability is being computed after all');
 
   // The block that stays is the one that explains a figure the reader CAN see.
   assert.match(src, /What “stalled” counts/,

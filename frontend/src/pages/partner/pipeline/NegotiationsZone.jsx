@@ -2,9 +2,16 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
+import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
+import ZoneToolbar from '../../../workspaces/ZoneToolbar';
+import ZoneDraft from '../../../workspaces/ZoneDraft';
+import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  StatCard, Section, Field, SaveNote, NotComputable, UnlinkedZone,
+  // `StatCard` went with the four tiles it drew: the strip is the artboard's
+  // own now, and its fourth tile is a count rather than the em dash that stood
+  // where a close probability would be.
+  Section, Field, SaveNote, NotComputable, UnlinkedZone,
   isNoPartnerProfile, inputClass, buttonClass, ghostButtonClass, moneyDollars,
 } from '../kit';
 
@@ -45,6 +52,24 @@ const STAGES = [
   ['closed', 'Closed'],
 ];
 const STAGE_LABEL = Object.fromEntries(STAGES);
+// The four the artboard draws as lanes. `closed` is a fifth stage and not a
+// lane: a board is what is in play, and a closed negotiation is not.
+const LANES = [['scoping', 'Scoping'], ['terms', 'Terms'], ['legal', 'Legal'], ['ready_to_sign', 'Ready to sign']];
+
+/** The strip tile, in the anatomy the artboards share. */
+function NegotiationTile({ label, value, note, nr = false }) {
+  return (
+    <div className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+      <Eyebrow>{label}</Eyebrow>
+      <div className="mt-1.5">
+        {nr ? <NotRecorded /> : (
+          <span className="font-mono text-[16px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{value}</span>
+        )}
+      </div>
+      <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
+    </div>
+  );
+}
 
 const TERM_STATES = [
   ['open', 'Open'],
@@ -316,9 +341,10 @@ function NegotiationCard({ row, onSaveNegotiation, onAddTerm, onSaveTerm, onDele
 }
 
 export default function PartnerNegotiationsZone() {
-  const [state, setState] = useState({ loading: true, error: '', items: null });
+  const [state, setState] = useState({ loading: true, error: '', items: null, data: null });
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
+  const [view, setView] = useState('all');
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: '' }));
@@ -326,12 +352,15 @@ export default function PartnerNegotiationsZone() {
       const r = await api.listPartnerNegotiations();
       // A bare array, a missing key or an object are all survivable here: the
       // page renders an empty list rather than throwing on `.map` of undefined.
-      setState({ loading: false, error: '', items: Array.isArray(r?.items) ? r.items : [] });
+      setState({
+        loading: false, error: '', data: r || {},
+        items: Array.isArray(r?.items) ? r.items : [],
+      });
     } catch (e) {
       setState({
         loading: false,
         error: e?.message || 'The negotiation record did not load.',
-        items: null,
+        items: null, data: null,
       });
     }
   }, []);
@@ -360,8 +389,27 @@ export default function PartnerNegotiationsZone() {
     }
   }, [load]);
 
+  const d = state.data;
   const items = state.items || [];
   const tracked = useMemo(() => items.filter((r) => r.negotiation), [items]);
+  // ══ THE `p3` CHIP ROW ════════════════════════════════════════════════════
+  // All four run off columns migration 208 stores. `quote_negotiations.ball` is
+  // literally `us` / `them`, and `Stalled 7d+` reads `days_stalled`, which the
+  // WORKER computes from `last_moved_at` — a page computing its own age from a
+  // different clock would make the chip and the strip disagree about the same
+  // negotiation.
+  //
+  // A CLOSED NEGOTIATION IS IN NONE OF THEM. The board is what is in play.
+  const open = useMemo(
+    () => tracked.filter((r) => r.negotiation.stage !== 'closed'),
+    [tracked],
+  );
+  const visible = useMemo(() => {
+    if (view === 'us') return open.filter((r) => r.negotiation.ball === 'us');
+    if (view === 'them') return open.filter((r) => r.negotiation.ball === 'them');
+    if (view === 'stalled') return open.filter((r) => (r.negotiation.days_stalled ?? 0) >= 7);
+    return items;
+  }, [view, open, items]);
   const stalled = useMemo(
     () => tracked.filter((r) => (r.negotiation.days_stalled ?? 0) >= 7 && r.negotiation.stage !== 'closed'),
     [tracked],
@@ -385,14 +433,21 @@ export default function PartnerNegotiationsZone() {
   }
 
   return (
+    <>
+      {/* THE OPS HALF RENDERS NOTHING TODAY, ON PURPOSE, and the call is here
+          anyway. The canvas gives this zone one op — `WIP limit: 5 per stage` —
+          and no per-stage limit is stored, so the table marks it `unbuilt` and
+          the builder drops it. The FILTER half is four live chips, which is why
+          the toolbar is now mounted rather than the actions being handed
+          straight to `ZoneBody`: a header row with one empty half is still a
+          header row. */}
+      <ZoneToolbar
+        className="mb-3"
+        role="partner"
+        filters={partnerZoneFilters('pipeline/negotiations', { value: view, onChange: setView })}
+        actions={rowActions}
+      />
     <ZoneBody
-      // THIS ROW RENDERS NOTHING TODAY, ON PURPOSE, and the call is here anyway.
-      // The canvas gives this zone one op — `WIP limit: 5 per stage` — and no
-      // per-stage limit is stored, so the table marks it `unbuilt` and the
-      // builder drops it. What survives is an empty array and no row. The call
-      // stays because it is the seam: the day a limit is stored, the control
-      // appears here without this file changing.
-      actions={rowActions}
       loading={state.loading}
       error={state.error}
       onRetry={load}
@@ -411,32 +466,141 @@ export default function PartnerNegotiationsZone() {
     >
       <div className="space-y-6">
         <ZoneHeading
-          title="Live deals at terms"
+          title="Negotiations"
           blurb={
-            'Every quote this firm has out, with the conversation on top of it: '
-            + 'what each side asked, where it lands, whose move it is, and how '
-            + 'long since it last moved.'
+            'Scope and terms, retainer versus project state. Every card carries '
+            + 'the one open question blocking it — a negotiation without a named '
+            + 'blocker is a negotiation nobody is running.'
           }
         />
 
+        {/* ══ THE `p3` STRIP ════════════════════════════════════════════════
+            `Live negotiations · Awaiting you · Awaiting them · Stalled 7d+`.
+            The artboard's fourth tile is a COUNT, which is why the em dash that
+            stood here for `Close probability` is gone rather than relabelled —
+            that tile was never on this artboard, and its absence is recorded in
+            the limits below where it belongs. */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <StatCard label="Quotes out" value={items.length} hint={`${tracked.length} being tracked here`} />
-          <StatCard
-            label="Our move"
-            value={ourCourt.length}
-            hint={tracked.length ? 'open negotiations waiting on us' : 'nothing tracked yet'}
+          <NegotiationTile
+            label="Live negotiations"
+            value={String(d?.live_count ?? open.length)}
+            note={`${moneyDollars(d?.live_value_dollars ?? 0)} carried`}
           />
-          <StatCard
+          <NegotiationTile
+            label="Awaiting you"
+            value={String(d?.awaiting_us_count ?? ourCourt.length)}
+            note="your move to make"
+          />
+          <NegotiationTile
+            label="Awaiting them"
+            value={String(d?.awaiting_them_count ?? 0)}
+            note="waiting on a client"
+          />
+          <NegotiationTile
             label="Stalled 7d+"
-            value={stalled.length}
-            hint={tracked.length ? 'no recorded move in a week' : 'nothing tracked yet'}
-          />
-          <StatCard
-            label="Close probability"
-            value="—"
-            hint="not computable — see below"
+            value={String(d?.stalled_count ?? stalled.length)}
+            note="no recorded move either way"
           />
         </div>
+
+        {/* ══ THE LANES — this artboard is a WORK BOARD ══════════════════════
+            Four stages across, one card per negotiation, the open question on
+            every card. `closed` is a fifth stage and NOT a lane: a board is
+            what is in play.
+
+            THE COUNT IS `n`, NOT `n / 5`. The artboard draws a limit and the
+            ops row asks to edit it; no per-stage limit is stored, and the five
+            is the canvas's own sample. Printing it would police this firm's
+            board with somebody else's number — the same call `delivery/capacity`
+            makes about the hardcoded forty it refuses to treat as a cap. */}
+        <div className="grid gap-3 md:grid-cols-4">
+          {LANES.map(([key, name]) => {
+            const cards = open.filter((r) => r.negotiation.stage === key);
+            return (
+              <div key={key} className="rounded-[10px] border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700 dark:bg-gray-900/40">
+                <div className="flex items-baseline justify-between gap-2">
+                  <Eyebrow>{name}</Eyebrow>
+                  <span className="font-mono text-[11px] font-bold text-axal-ink-3">{cards.length}</span>
+                </div>
+                <div className="mt-2 space-y-2">
+                  {cards.length === 0
+                    ? <p className="text-[11px] text-axal-ink-3">Nothing here</p>
+                    : cards.map((r) => (
+                      <div
+                        key={r.quote_id}
+                        className={`rounded-[10px] border p-3 ${
+                          (r.negotiation.days_stalled ?? 0) >= 7
+                            ? 'border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/15'
+                            : 'border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900'
+                        }`}
+                      >
+                        <div className="text-[12px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">
+                          {r.founder_name || r.need_title || `Quote ${r.quote_id}`}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-axal-ink-2">
+                          {moneyDollars(r.price ?? 0)}
+                        </div>
+                        {/* THE ONE OPEN QUESTION IS THE CARD'S REASON FOR
+                            EXISTING, so a card without one says that rather
+                            than looking complete. */}
+                        <div className="mt-1.5 text-[11px] leading-snug text-axal-ink-2">
+                          {r.negotiation.open_question
+                            || <Unrecorded>No blocker named</Unrecorded>}
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <Pill tone={r.negotiation.ball === 'us' ? 'warn' : 'neutral'}>
+                            {r.negotiation.ball === 'us' ? 'You' : 'Them'}
+                          </Pill>
+                          <span className={`text-[10.5px] ${
+                            (r.negotiation.days_stalled ?? 0) >= 7
+                              ? 'font-semibold text-red-700 dark:text-red-300' : 'text-axal-ink-3'
+                          }`}
+                          >
+                            {r.negotiation.days_stalled ?? 0} d
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ══ TERMS IN PLAY — the artboard's clause-level table ══════════════ */}
+        <Instrument
+          testid="terms-in-play"
+          title="Terms in play"
+          meta="The clause-level view · only here"
+          cols="1fr .9fr .9fr 1.4fr"
+          head={['Client', 'You asked', 'They asked', 'Where it lands']}
+          rows={open.flatMap((r) => (r.terms || [])
+            .filter((t) => t.state === 'open')
+            .map((t) => ({
+              key: `${r.quote_id}-${t.id}`,
+              cells: [
+                r.founder_name
+                  ? { text: r.founder_name, sub: t.label }
+                  : { text: t.label },
+                t.our_position ? { text: t.our_position } : { nr: true },
+                t.their_position ? { text: t.their_position } : { nr: true },
+                // A LANDING MAY BE EMPTY WITHOUT THE ROW BEING INCOMPLETE —
+                // that is the whole reason a term carries three positions.
+                t.landing ? { text: t.landing } : { nr: true },
+              ],
+            })))}
+          note={'A term carries three positions rather than one value, and the row is complete without the third: collapsing "we asked ninety days, they asked thirty, it lands at forty-five" to a current value of forty-five loses the two halves that explain it — which are the halves a person needs when the same clause comes back on the next deal. Only OPEN terms are here; an agreed, conceded or refused one is settled and belongs to the deal rather than to the board. A term with no landing yet is not a gap in the record, it is a negotiation still running.'}
+        />
+
+        <ZoneDraft
+          surface="pipeline/negotiations"
+          label="Proposal · counter drafted"
+          accept="Send counter"
+          run="Draft the counter"
+          foot="Terms read from the clause record."
+          empty="For the negotiation that has been still longest: a counter built from the clauses already on the table — what each side asked, what has been conceded, and the one line that says why the two positions cannot both hold."
+          nothingToDraft="No negotiation is open, so there is nothing to counter."
+        />
 
         <Section title="Negotiations">
           <div className="space-y-3">
@@ -467,15 +631,7 @@ export default function PartnerNegotiationsZone() {
           </div>
         </Section>
 
-        {/* NO CLOSE PROBABILITY, AND NO PARAGRAPH ABOUT ITS ABSENCE.
-            The canvas puts a percentage beside each deal. Nothing records why a
-            past negotiation was won or lost — `quotes` carries a status and the
-            date it was decided and nothing about the decision — so there is no
-            history to weight a live deal against, and a number drawn from stage
-            alone would be the stage relabelled as a forecast. The stat above is
-            an em-dash for exactly that reason, which is the honest rendering;
-            a second paragraph explaining the canvas was not. */}
-        <StatedLimit title="What “stalled” counts">
+        <StatedLimit title="What “stalled” counts, and what is not forecast">
           <p>
             <strong>No recorded move</strong>, not silence. The
             clock advances on a stage or court change, or on an explicit “Log a
@@ -484,8 +640,32 @@ export default function PartnerNegotiationsZone() {
             alive and read as stalled. That is the honest failure direction:
             the count over-reports rather than reassuring.
           </p>
+          {/* THE REASON THIS PARAGRAPH GIVES CHANGED, so it is stated rather
+              than left as a comment. It used to read "nothing records why a
+              past negotiation was won or lost", and migration 234 records
+              exactly that — a loss taxonomy on `quotes`. What has not changed
+              is that a taxonomy is not a rate: a handful of decided deals
+              cannot support a probability conditioned on stage, and a number
+              drawn from stage alone would be the stage relabelled as a
+              forecast. A gap claim kept past the gap reads as current. */}
+          <p className="mt-2">
+            <strong>Nothing here forecasts a close.</strong> Proposals now
+            records WHY a bid was lost, which is a taxonomy rather than a rate —
+            a handful of decided deals cannot support a probability conditioned
+            on the stage a deal happens to be sitting in, and a percentage drawn
+            from stage alone would be the stage relabelled as a forecast. The
+            lanes say where each deal is and how long it has been there, which
+            is what the record can actually support.
+          </p>
+          <p className="mt-2">
+            <strong>The lane count is a count, not a limit.</strong> The design
+            draws “n / 5” and offers to edit the five; no per-stage limit is
+            stored anywhere, and printing the design’s own sample would police
+            this firm’s board with somebody else’s number.
+          </p>
         </StatedLimit>
       </div>
     </ZoneBody>
+    </>
   );
 }

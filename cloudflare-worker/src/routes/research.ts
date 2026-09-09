@@ -1440,6 +1440,59 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  'pipeline/negotiations': {
+    // The artboard: "Aperture has asked for a flexible scope at a fixed price
+    // twice, and has sat in Scoping for nine days. The counter reframes it as a
+    // retainer at the same monthly figure — which gives them the flexibility
+    // they actually want and gives you the utilization data to price the next
+    // quarter. It also names, in one line, why fixed-price and flexible cannot
+    // coexist."
+    //
+    // The instruction that matters is that a counter must be built from the
+    // CLAUSES ALREADY ON THE TABLE. A model handed a stalled deal will
+    // otherwise invent a concession nobody offered — and a counter naming a
+    // term the firm never put in writing is worse than no counter at all,
+    // because a person may send it.
+    instruction: [
+      'Draft one counter for the negotiation that has been still longest, built only from the clauses listed below: what each side asked, what has already been conceded or refused, and where a term is still open.',
+      'Never invent a term, a price or a concession. If the record does not carry a position for a clause, say the position is not recorded rather than supplying one.',
+      'Name in one line why the two positions cannot both hold — that sentence is the counter’s whole job.',
+      'A stalled day count is time since a RECORDED move, not since the client last spoke. Never write as though silence has been measured.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT f.name AS client, n.title AS need_title, q.price,
+                g.stage, g.ball, g.open_question, g.last_moved_at,
+                (SELECT GROUP_CONCAT(
+                    t.label || ': we asked ' || COALESCE(t.our_position, 'NOT RECORDED')
+                    || '; they asked ' || COALESCE(t.their_position, 'NOT RECORDED')
+                    || '; lands ' || COALESCE(t.landing, 'NOT AGREED')
+                    || ' [' || t.state || ']', ' | ')
+                   FROM quote_terms t WHERE t.negotiation_id = g.id) AS terms
+           FROM quote_negotiations g
+           JOIN quotes q ON q.id = g.quote_id
+           LEFT JOIN founder_needs n ON n.id = q.need_id
+           LEFT JOIN users f ON f.id = n.founder_id
+          WHERE q.partner_id = ? AND g.stage <> 'closed'
+          ORDER BY g.last_moved_at ASC LIMIT 25`
+      ).bind(me.partner_id).all<{
+        client: string | null; need_title: string | null; price: number | null;
+        stage: string; ball: string; open_question: string | null;
+        last_moved_at: string; terms: string | null;
+      }>();
+      return (rows.results || []).map((r) =>
+        `${r.client || 'client not recorded'} — ${r.need_title || 'scope not recorded'}; `
+        + `$${Number(r.price || 0).toLocaleString('en-US')}; stage ${r.stage}; `
+        + `${r.ball === 'us' ? 'our move' : 'their move'}; `
+        + `last RECORDED move ${String(r.last_moved_at).slice(0, 10)}; `
+        + `open question: ${r.open_question || 'NONE NAMED — nobody has said what is blocking it'}; `
+        + `terms: ${r.terms || 'NONE RECORDED'}`);
+    },
+  },
+
   'pipeline/proposals': {
     // The artboard's own reading of this book: "Aperture has been sent for nine
     // days with no read receipt at all, which is a different problem from Kelp
