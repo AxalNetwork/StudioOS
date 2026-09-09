@@ -31,6 +31,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { RESEARCH_STORE_GAPS } from '../src/workspaces/noStoreCopy.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const WORKSPACE = codeOnly(read('frontend/src/workspaces/ResearchWorkspace.jsx'));
@@ -48,13 +49,107 @@ test('markets, ask and companies stay inside LIVE_ZONES', () => {
 
 test('none of the three is registered as a zone with no store', () => {
   // `noStoreCopy.js` is the registry for UNBUILT zones, and `ZONE_COPY` is what
-  // `unbuiltFrom` turns into gap cards. An empty store does not belong in
-  // either: the sentence they render is about the store not existing.
+  // `unbuiltFrom` turns into gap cards. A zone in either renders `NoStoreYet`
+  // INSTEAD of its body, and the sentence it renders is about the store not
+  // existing. None of these three may enter that path — that is the line this
+  // file has always drawn, and `RESEARCH_STORE_GAPS` (below) is deliberately
+  // not it: that object renders ABOVE a body the zone keeps.
   const copy = codeOnly(read('frontend/src/workspaces/noStoreCopy.js'));
   for (const word of ['MARKETS', 'COMPANIES', 'ASK']) {
     assert.doesNotMatch(copy, new RegExp(`RESEARCH_${word}_COPY`),
       `a no-store card was written for ${word}, which reads a live store`);
   }
+  // And the map `unbuiltFrom` reads must stay empty of them. A zone landing in
+  // ZONE_COPY loses its body entirely — the one outcome the row counts forbid.
+  // Brace-balanced, not a regex. `const ZONE_COPY = {};` is one line and a
+  // lazy `[\s\S]*?` up to the next `\n};` runs straight past it into the
+  // close of `ZONE_BLURB` twenty lines below — which reported the blurb map's
+  // contents as ZONE_COPY's and failed on correct code.
+  const at = WORKSPACE.indexOf('const ZONE_COPY = {');
+  assert.ok(at >= 0, 'ZONE_COPY is gone — recheck how an unbacked zone is declared');
+  let depth = 0;
+  let inner = '';
+  for (let i = WORKSPACE.indexOf('{', at); i < WORKSPACE.length; i += 1) {
+    const ch = WORKSPACE[i];
+    if (ch === '{') { depth += 1; if (depth === 1) continue; }
+    else if (ch === '}') { depth -= 1; if (depth === 0) break; }
+    inner += ch;
+  }
+  assert.equal(inner.trim(), '',
+    'ZONE_COPY gained an entry; a zone in it renders NoStoreYet instead of its body');
+});
+
+test('all three record what they ARE blocked on, where a reader can see it', () => {
+  // THE OTHER HALF OF THE SAME HONESTY, and the half that was missing. Each of
+  // these zones serves a real feed and each has a canvas-specified capability
+  // with no store behind it — recorded until now only in `founderZoneFilters.js`,
+  // which no customer opens. Saying nothing there leaves a reader comparing the
+  // artboard to the page with missing controls and no reason given.
+  for (const slug of ['markets', 'companies', 'ask']) {
+    const gap = RESEARCH_STORE_GAPS[slug];
+    assert.ok(gap, `${slug} records no store gap`);
+    for (const field of ['eyebrow', 'blocks', 'heading', 'what', 'why']) {
+      assert.ok(typeof gap[field] === 'string' && gap[field].length > 0,
+        `${slug}'s gap has no ${field}`);
+    }
+    // The eyebrow may NOT be the component's default. "No store behind this
+    // yet" over a zone that reads one is the false sentence this whole file
+    // exists to keep off the page — and it is what you get by forgetting the
+    // prop, which is why it is asserted rather than assumed.
+    assert.notEqual(gap.eyebrow, 'No store behind this yet',
+      `${slug} would render the whole-zone sentence over a zone that reads a store`);
+  }
+  // THE MIRROR, and it belongs here because this feature is what put a default
+  // behind that prop. Every caller that renders `NoStoreYet` INSTEAD of a body
+  // — advisor Expertise, Network Organizations, Research Client prep — passes
+  // no eyebrow and is correct to say the whole-zone sentence. Deleting the
+  // default empties the label on all of them at once, and no test covered it:
+  // the two that match that string read pages which hardcode it themselves.
+  const component = read('frontend/src/workspaces/NoStoreYet.jsx');
+  assert.match(component, /eyebrow = 'No store behind this yet',/,
+    'NoStoreYet lost its default eyebrow, so every whole-zone gap card now renders a blank label');
+});
+
+test('the recorded gap cannot drift from the filter table that found it', () => {
+  // One absence, two audiences: `founderZoneFilters.js` states it for whoever
+  // maintains the header row, and `RESEARCH_STORE_GAPS` states it for whoever
+  // reads the page. They are separate strings in separate files, so the only
+  // thing stopping them parting company is this assertion. The phrase per zone
+  // is the load-bearing noun of the absence, not a whole sentence — a reworded
+  // explanation should pass, a differently-scoped one should not.
+  const filters = codeOnly(read('frontend/src/workspaces/founderZoneFilters.js'));
+  const SHARED = {
+    markets: 'deep-dive',
+    companies: 'direct or adjacent',
+    ask: 'no past question, kept answer or discarded one',
+  };
+  for (const [slug, phrase] of Object.entries(SHARED)) {
+    assert.ok(filters.includes(phrase),
+      `the filter table no longer says "${phrase}" for ${slug}`);
+    assert.ok(RESEARCH_STORE_GAPS[slug].why.includes(phrase),
+      `${slug}'s page copy no longer says "${phrase}", so the two records have drifted`);
+  }
+});
+
+test('the gap renders above the body, and the rail reports it too', () => {
+  // Above, never instead. `{body}` has to survive: dropping it is how "record
+  // the gap" turns into "delete the feed", which for markets would take the
+  // largest store in the product off the screen.
+  assert.match(WORKSPACE, /const storeGap = !isRoot && slug \? RESEARCH_STORE_GAPS\[slug\] : null;/,
+    'the per-zone gap lookup is gone');
+  // ANCHORED TO THE BRACE. `/storeGap && \(/` alone still matches
+  // `{false && storeGap && (`, so a guard that switches the whole block off
+  // passed this — found by mutation. Requiring `storeGap` to be the FIRST
+  // operand after the brace is what makes a disabling conjunct fail.
+  assert.match(WORKSPACE, /\{storeGap && \(/, 'the gap is no longer rendered unconditionally');
+  assert.match(WORKSPACE, /eyebrow=\{storeGap\.eyebrow\}/,
+    'the gap renders without its own eyebrow, so it claims the zone has no store at all');
+  assert.match(WORKSPACE, /\{body\}/, 'the live body is no longer rendered beneath the gap');
+  // The rail's stated stance is "which zones have a store behind them", so a
+  // zone blocked on one belongs in its report. One object feeds both surfaces,
+  // so the rail cannot be gentler than the page.
+  assert.match(WORKSPACE, /storeGap \? \[\[`No \$\{storeGap\.blocks\}`, storeGap\.why\]\] : \[\]/,
+    'the rail no longer reports the zone as blocked on a store');
 });
 
 test('the desk tells loading, failed and empty apart', () => {
