@@ -8,6 +8,20 @@ import { zonePillClass } from './deskZoneNav';
 import CreateStartupForm from '../../components/CreateStartupForm';
 import './founderBuildDesk.css';
 
+/**
+ * Five labels, five routes — the shape the other three founder desks use.
+ *
+ * This lived inline in the chip row as a five-pair array literal. Pulling it up
+ * is not tidying: `founder_overview_subpage_links.test.mjs` holds one rule for
+ * all four desks — that the chip row and the cards under it come from the same
+ * list, so a card cannot summarise a page the row does not name, or hand off to
+ * a page that is not in this bucket. That rule needs the list to be findable.
+ */
+const SECTIONS = [
+  ['This week', 'this-week'], ['Board', 'board'], ['Cadence', 'cadence'],
+  ['Roadmap', 'roadmap'], ['KPI entry', 'kpi'],
+];
+
 const clean = (value) => String(value || '').trim();
 const statusName = (value) => clean(value).replace(/_/g, ' ') || 'Not recorded';
 const dateRange = () => {
@@ -106,13 +120,16 @@ export default function FounderBuildDesk() {
 
   const navigationState = { founderBuildSeed: { projects, projectId, okrs, deals, snapshots, summary } };
   if (workspace) return <ExecutionPage />;
-  const roadmapLink = `/build/roadmap${projectId ? `?project_id=${projectId}` : ''}`;
-  const metricsLink = `/build/metrics${projectId ? `?project_id=${projectId}` : ''}`;
-  const kpiLink = `/build/kpi${projectId ? `?project_id=${projectId}` : ''}`;
-  const cadenceLink = `/build/cadence${projectId ? `?project_id=${projectId}` : ''}`;
-  const weekLink = `/build/this-week${projectId ? `?project_id=${projectId}` : ''}`;
-  const boardLink = `/build/board${projectId ? `?project_id=${projectId}` : ''}`;
-  const executionLink = `/execution?mode=workspace${projectId ? `&project_id=${projectId}` : ''}`;
+  const query = projectId ? `?project_id=${projectId}` : '';
+  const roadmapLink = `/build/roadmap${query}`;
+  const metricsLink = `/build/metrics${query}`;
+  const kpiLink = `/build/kpi${query}`;
+  const weekLink = `/build/this-week${query}`;
+  const boardLink = `/build/board${query}`;
+  // `This week` is the bucket's own entry point and the first chip in the row
+  // below, which is what these two controls should offer — not the shared
+  // workspace `/execution?mode=workspace` renders.
+  const executionLink = weekLink;
 
   return <main className="build-desk" data-testid="founder-build-desk">
     <section className="build-canvas">
@@ -121,7 +138,7 @@ export default function FounderBuildDesk() {
           <div className="build-hero-line">
             <div><h1>Operate the company this week</h1><p>Commitments first, with execution, roadmap, cadence, and metrics serving the days ahead.</p></div>
             <div className="build-actions">
-              <Link data-testid="link-open-execution-workspace" className="build-open" to={executionLink} state={navigationState}>Open execution workspace <ArrowUpRight size={14} /></Link>
+              <Link data-testid="link-open-execution-workspace" className="build-open" to={executionLink} state={navigationState}>Open this week <ArrowUpRight size={14} /></Link>
             </div>
           </div>
           <CreateStartupForm
@@ -150,10 +167,9 @@ export default function FounderBuildDesk() {
               // block comment on purpose: `codeOnly` strips whole-line `//`
               // comments and cannot strip `{/* … */}`, so prose here would read
               // to founder_shell's anchor ban as if it were markup.
-              [['This week', weekLink], ['Board', boardLink], ['Cadence', cadenceLink],
-                ['Roadmap', roadmapLink], ['KPI entry', kpiLink]].map(([label, to], index) => (
-                  <NavLink data-testid={`link-build-anchor-${index}`} key={label} to={to} className={zonePillClass}>{label}</NavLink>
-                ))
+              SECTIONS.map(([label, slug], index) => (
+                <NavLink data-testid={`link-build-anchor-${index}`} key={label} to={`/build/${slug}${query}`} className={zonePillClass}>{label}</NavLink>
+              ))
             }
           </nav>
         </header>
@@ -169,7 +185,7 @@ export default function FounderBuildDesk() {
           `${data.commitments.length} current key result${data.commitments.length === 1 ? '' : 's'}`,
           `${data.boardTotal} stored execution card${data.boardTotal === 1 ? '' : 's'} for this startup`,
         ]}
-        action={<Link data-testid="link-rail-open-execution" to={executionLink} state={navigationState}>Open workspace <ChevronRight size={14} /></Link>}
+        action={<Link data-testid="link-rail-open-execution" to={executionLink} state={navigationState}>Open this week <ChevronRight size={14} /></Link>}
       />
     </section>
   </main>;

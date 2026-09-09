@@ -10,7 +10,35 @@ test('A4 Raise desk uses selected-project source records and preserves the pitch
   const editor = read('frontend/src/pages/PitchDeckPage.jsx');
   assert.match(desk, /Get capital, stay legal/);
   for (const call of ['api\\.raiseRound\\(projectId\\)', 'api\\.raiseProspects\\(projectId\\)', 'api\\.listDocuments\\(projectId\\)', 'api\\.dataRoom\\(project\\.uid\\)', 'api\\.deckListVersions\\(projectId\\)']) assert.match(desk, new RegExp(call));
-  assert.match(desk, /mode=workspace/);
+  // WAS `assert.match(desk, /mode=workspace/)`, ON A READING THAT NO LONGER
+  // HOLDS. The point of that line was that the seeded handoff to the pitch
+  // workspace survived — but `?mode=workspace` is read by `App.jsx` and renders
+  // the shared `FounderWorkspaceTabs` INSTEAD of `/raise/pitch`, so the Pitch
+  // card's own link went past the page it summarises. The seeding is what
+  // mattered and it is unchanged: the workspace still reads
+  // `founderRaiseSeed`, and it is still reachable — from the sidebar and from
+  // the pitch page itself, which is where a workspace belongs.
+  //
+  // What this now requires is the rule the desk was missing: every card links
+  // to its own `/raise/*` page.
+  assert.doesNotMatch(desk, /mode=workspace/,
+    'a Raise card is routing through the shared workspace instead of to its own page');
+  // Each card's own DeskLink, matched by its test id, so a card cannot pass on
+  // a path that appears somewhere else in the file.
+  for (const [testid, path] of [
+    ['link-open-round-status', '/raise/status'],
+    ['link-open-capital', '/raise/capital'],
+    ['link-open-legal', '/raise/legal'],
+    ['link-open-data-room', '/raise/data-room'],
+    ['link-open-pitch-workspace', '/raise/pitch'],
+    ['link-open-liquidity', '/raise/liquidity'],
+  ]) {
+    const link = desk.match(new RegExp(`testid="${testid}"\\s+to=\\{([^}]*)\\}`));
+    assert.ok(link, `the ${testid} link is gone from the Raise desk`);
+    assert.ok(link[1].includes(path), `${testid} points at ${link[1]}, not ${path}`);
+  }
+  assert.doesNotMatch(desk, /to="\/liquidity"/,
+    '`/liquidity` is a workspace mount; `/raise/liquidity` is this bucket’s own page');
   assert.match(workspace, /location\.state\?\.founderRaiseSeed/);
   assert.match(workspace, /initialProjects=\{raiseSeed\?\.projects\}/);
   assert.match(editor, /Number\(searchParams\.get\('project_id'\)\)/);

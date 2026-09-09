@@ -45,7 +45,38 @@ test('A2 uses live discovery sources and retains the detailed editor', () => {
   assert.match(page, /initialInterviews=\{interviews\}/);
   assert.match(page, /initialTab="interviews"/);
   assert.match(page, /workspaceMode/);
-  assert.match(page, /to=\{detailLink\} state=\{workspaceNavigationState\}/);
+  // WAS `to={detailLink} state={workspaceNavigationState}`, AND `detailLink`
+  // WAS THE PROBLEM. It was one constant — `/build/discovery?mode=workspace` —
+  // behind EVERY link on this page: the hero button, the rail action, the
+  // interview handoff and all three empty states. So the desk that summarises
+  // the four evidence stages sent a reader to the same place from all of them,
+  // that place was in another bucket, and `?mode=workspace` meant `App.jsx`
+  // rendered the shared workspace rather than a page. None of
+  // `/validate/interviews`, `/validate/pain-map`, `/validate/hypotheses` or
+  // `/validate/verdict` was reachable from the summary of them.
+  //
+  // The seeded handoff this line existed to protect is intact — the state is
+  // still passed — and the destinations are now the four stages, taken from
+  // the same `SECTIONS` list the chip row uses.
+  assert.match(page, /const stage = Object\.fromEntries\(SECTIONS\.map\(/,
+    'the stage links are no longer derived from the section list the chips use');
+  for (const [testid, path] of [
+    ['link-open-discovery-workspace', 'stageLinks.interviews'],
+    ['link-manage-interviews', 'stageLinks.interviews'],
+    ['link-open-pain-map', 'stageLinks.pains'],
+    ['link-open-hypotheses', 'stageLinks.hypotheses'],
+    ['link-open-verdict', 'stageLinks.verdict'],
+    ['link-rail-open-workspace', 'stageLinks.interviews'],
+  ]) {
+    const link = page.match(new RegExp(`testid="${testid}"[^>]*?to=\\{([^}]*)\\}`));
+    assert.ok(link, `the ${testid} link is gone from the Validate desk`);
+    assert.equal(link[1].trim(), path, `${testid} points at ${link[1]}, not ${path}`);
+  }
+  assert.doesNotMatch(page, /mode=workspace[^'"`]*"/,
+    'a Validate card is routing through the shared workspace instead of to a stage page');
+  assert.ok(!page.includes('detailLink'), 'the one-destination constant is back');
+  assert.match(page, /state=\{workspaceNavigationState\}/,
+    'the seeded handoff must survive the retarget');
   assert.match(page, /founderValidateSeed/);
   assert.match(page, /\['leads', 'interviews', 'insights'\]\.includes\(searchParams\.get\('tab'\)\)/);
   assert.match(page, /setReloadKey\(\(value\) => value \+ 1\)/);

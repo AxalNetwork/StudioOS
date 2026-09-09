@@ -27,8 +27,34 @@ test('A5 reads only documented sources and does not post investor matches', () =
   assert.match(page, /project_id.*projectId.*project_uid.*projectUid/s);
 });
 
-test('A5 has all detailed handoffs and a read-only rail', () => {
-  for (const path of ['/build/metrics', '/build/discovery', '/build/team?mode=workspace', '/spinout-lab/brand', '/raise/capital/pipeline', '/comarketing']) assert.ok(page.includes(path));
+test('every card hands off to the Grow page it summarises, and none to another bucket', () => {
+  // REVERSED, AND THE OLD LIST IS THE FINDING. This required exactly six
+  // cross-bucket destinations — `/build/metrics`, `/build/discovery`,
+  // `/build/team?mode=workspace`, `/spinout-lab/brand`,
+  // `/raise/capital/pipeline` and `/comarketing` — on the reading that a
+  // summary card should hand off to wherever that record is edited. Two
+  // problems with it that the reading did not survive: the seven `/grow/*`
+  // pages this desk summarises had been built, so the handoffs were pointing
+  // past them; and `?mode=workspace` is read by `App.jsx` and renders the
+  // shared `FounderWorkspaceTabs`, so that one was not even a page. A reader
+  // could open the summary of their own Grow pages and reach none of them.
+  //
+  // The rule is now the one an overview needs: each card links to its own page,
+  // and the targets come from `SECTIONS` so a slug cannot drift between the
+  // chip row and the card beneath it.
+  assert.match(page, /const GROW_PAGES = Object\.fromEntries\(SECTIONS\.map\(\(\[label, slug\]\) => \[slug, `\/grow\/\$\{slug\}`\]\)\);/,
+    'the card targets are no longer derived from the section list the chips use');
+  for (const slug of ['focus', 'customers', 'talent', 'brand', 'capital-match', 'partnerships', 'launch']) {
+    assert.ok(new RegExp(`GROW_PAGES(\\.${slug.replace('-', '\\-')}|\\['${slug}'\\])`).test(page),
+      `the ${slug} card does not link to /grow/${slug}`);
+  }
+  for (const gone of ['/build/metrics', '/build/discovery', '/build/team?mode=workspace',
+    '/spinout-lab/brand', '/raise/capital/pipeline', '/comarketing']) {
+    assert.ok(!codeOnly(page).includes(`to={\`${gone}`),
+      `a Grow card still hands off to ${gone}, which is not a Grow page`);
+  }
+  assert.doesNotMatch(page, /mode=workspace/,
+    'a card is routing through the shared workspace instead of to a page');
   // "Read-only source coverage" is A5's own stance line and stays here. The
   // boundary statement ("no automated actions") is the shared rail's default
   // footer now, so it is asserted against the component rather than pasted
