@@ -150,7 +150,10 @@ function freshDb() {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       company_id INTEGER
     );
-    -- Verbatim from sql/schema_baseline.sql — the shape routes/services.ts reads.
+    -- Verbatim from sql/schema_baseline.sql — the shape routes/services.ts reads
+    -- — plus the two columns migration 227 adds by ALTER, in the same order the
+    -- runner would produce them. A fixture that stops at the baseline models a
+    -- database that cannot exist once the migration has applied.
     CREATE TABLE service_offerings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
@@ -159,7 +162,28 @@ function freshDb() {
       is_active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-      company_id INTEGER
+      company_id INTEGER,
+      engagement_model TEXT
+        CHECK (engagement_model IS NULL OR engagement_model IN ('fixed', 'retainer', 'seat')),
+      price_cents INTEGER
+    );
+    -- THE LIST READ JOINS THIS, so the fixture has to hold it. The sold count
+    -- comes from service_engagements (migration 034) rather than from a column
+    -- on the offering; without the table here the whole handler throws and
+    -- three company-scoping tests fail on a null body rather than on scope.
+    -- (No backticks in these comments: the DDL is a template literal, and one
+    -- would end it mid-string — which is how this fixture first failed to
+    -- parse rather than failing to run.)
+    CREATE TABLE service_engagements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
+      offering_id INTEGER NOT NULL,
+      requester_user_id INTEGER NOT NULL,
+      owner_user_id INTEGER NOT NULL,
+      note TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
   const u = db.prepare('INSERT INTO users (id, role, founder_id, partner_id, email) VALUES (?,?,?,?,?)');

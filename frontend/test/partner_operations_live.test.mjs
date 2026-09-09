@@ -88,8 +88,12 @@ test('offerings ?mine=1 is scoped to the caller in the worker', () => {
   const services = readFileSync(
     resolve(process.cwd(), 'cloudflare-worker/src/routes/services.ts'), 'utf8',
   );
+  // QUALIFIED OR NOT, THE PREDICATE IS THE POINT. The list SELECT aliases
+  // `service_offerings` to `o` so it can join the sold count, so the branch now
+  // reads `o.owner_user_id = ?`. The optional alias is what this pattern
+  // tolerates; the column is what it requires.
   assert.match(
-    services, /mine\s*\?\s*'owner_user_id = \?'/,
+    services, /mine\s*\?\s*'(?:o\.)?owner_user_id = \?'/,
     'the mine=1 branch must filter by owner_user_id — without it every partner sees every draft',
   );
 });

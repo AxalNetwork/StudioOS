@@ -67,7 +67,9 @@ test('My offerings reads the route the worker actually serves', () => {
 
 test('`?mine=1` is a real arm of the worker handler, not a query it ignores', () => {
   assert.match(SERVICES_ROUTE, /c\.req\.query\('mine'\) === '1'/);
-  assert.match(SERVICES_ROUTE, /mine \? 'owner_user_id = \?' : 'is_active = 1'/,
+  // The optional `o.` is the table alias the list SELECT gained to join each
+  // offering's sold count; the column is what this assertion is about.
+  assert.match(SERVICES_ROUTE, /mine \? '(?:o\.)?owner_user_id = \?' : '(?:o\.)?is_active = 1'/,
     'the owner arm must scope on the caller, or `mine=1` would return the whole marketplace');
 });
 

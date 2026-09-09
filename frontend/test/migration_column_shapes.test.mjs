@@ -186,11 +186,26 @@ test('the shape 200 builds is the shape routes/services.ts writes', () => {
   assert.ok(columns.has('owner_user_id') && columns.has('company_id'),
     'the rebuild must carry both the target owner column and 196’s company_id');
 
+  // A LATER `ALTER TABLE ADD COLUMN` IS ALSO PART OF THE SHAPE. The runner is
+  // forward-only and ordered, so a column migration 227 adds exists by the time
+  // any request runs — and asking 200 to have declared it would mean editing a
+  // rebuild that has already applied in production. `alteredColumns()` is the
+  // same reader `violations()` consults for exactly this, so the two agree
+  // about what "present" means.
+  const added = alteredColumns().get('service_offerings') ?? new Set();
+  const present = new Set([...columns, ...added]);
   const route = read('cloudflare-worker/src/routes/services.ts');
   const inserted = /INSERT INTO service_offerings \(([^)]*)\)/.exec(route);
   assert.ok(inserted, 'services.ts must still have its INSERT');
   for (const col of inserted[1].split(',').map((c) => c.trim().toLowerCase())) {
-    assert.ok(columns.has(col), `services.ts inserts ${col}, which 200 does not create`);
+    assert.ok(present.has(col),
+      `services.ts inserts ${col}, which neither 200 creates nor a later ALTER adds`);
+  }
+  // And the two new ones really do come from an ALTER rather than from nowhere:
+  // without this, widening the check above would pass on a column no migration
+  // declares at all.
+  for (const col of ['engagement_model', 'price_cents']) {
+    assert.ok(added.has(col), `${col} is written by the route but added by no migration`);
   }
 });
 
