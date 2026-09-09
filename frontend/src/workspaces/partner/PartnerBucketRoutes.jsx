@@ -217,10 +217,11 @@ const LIVE = {
       } })} />,
     'perk-deals': (user) => <PerksPage user={user} embedded role="partner"
       zoneFilters={(opts) => partnerZoneFilters('offers/perk-deals', opts)}
-      zoneActions={(rows) => partnerZoneActions('offers/perk-deals', { view: {
-        header: ['Offer', 'Partner', 'Category', 'Kind', 'Tier', 'Status', 'Claims'],
+      zoneActions={(rows, handlers) => partnerZoneActions('offers/perk-deals', { handlers, view: {
+        header: ['Offer', 'State', 'Redeemed', 'Cap', 'Ends', 'What it granted', 'Revoked on', 'Review state'],
         rows,
-        cells: (p) => [p.offer, p.partner_name, p.category, p.kind, p.required_tier, p.status, p.claim_count],
+        cells: (p) => [p.offer, p.lifecycle, p.claim_count, p.claim_cap,
+          p.ends_at, p.grant_scope, p.grant_revoked_on, p.status],
       } })} />,
     visibility: () => <PartnerVisibility />,
     proof: () => <PartnerProof />,

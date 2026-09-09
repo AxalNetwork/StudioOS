@@ -119,8 +119,23 @@ export function SourceLegend({ theirs = 'Founder-sourced', theirsNote, ours = 'O
  * against the artboard line for line; one that writes `pill:'Orphaned',
  * pillTone:'danger'` says the same thing in a vocabulary the artboard does not
  * use, and the next reader has to work out that they match.
+ *
+ * `rvk` AND THE BAR ARE THE OFFERS CANVAS'S TWO, on the same grounds. Its
+ * `cell()` factory takes `{ pill, seam, rvk, gate, nr, barPct, barColor }` and
+ * gives `.rvk` its own red rules — `#b91c1c` on `#fef2f2` inside `#fecaca` —
+ * separate from every other badge, because the thing it marks is separate: a
+ * grant that an expiry TOOK BACK, on the date it took it. `stale` is the
+ * nearest existing mark and is the wrong word for it.
+ *
+ * THE BAR IS A SECOND ENCODING OF THE CELL'S OWN TEXT, never a figure of its
+ * own. `po2` draws it under `4 of 10` at `barPct: 40`, so a reader who cannot
+ * judge the ratio from the numbers can see it — and it is drawn only where the
+ * caller passes a percentage it computed from that same pair.
  */
-export function Cell({ text, pill, pillTone = 'neutral', seam, ours, orph, gate, stale, cite, nr, sub, node }) {
+export function Cell({
+  text, pill, pillTone = 'neutral', seam, ours, orph, gate, stale, cite, rvk, nr, sub,
+  barPct, barColor = '#b45309', node,
+}) {
   return (
     <span className="min-w-0 text-[11.5px] text-axal-ink dark:text-gray-200">
       <span className="inline-flex flex-wrap items-center gap-1.5">
@@ -132,9 +147,18 @@ export function Cell({ text, pill, pillTone = 'neutral', seam, ours, orph, gate,
         {gate ? <Pill tone="neutral" className="!text-[9.5px]">{gate}</Pill> : null}
         {stale ? <Pill tone="danger" className="!text-[9.5px]">{stale}</Pill> : null}
         {cite ? <Pill tone="cite" className="!text-[9.5px]">{cite}</Pill> : null}
+        {rvk ? <Pill tone="danger" className="!text-[9.5px]">{rvk}</Pill> : null}
         {nr ? <NotRecorded /> : null}
       </span>
       {sub ? <span className="mt-0.5 block text-[10px] leading-snug text-gray-500 dark:text-gray-400">{sub}</span> : null}
+      {barPct == null ? null : (
+        <span className="mt-1.5 block h-[5px] overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+          <span
+            className="block h-full"
+            style={{ width: `${Math.max(0, Math.min(100, Number(barPct) || 0))}%`, background: barColor }}
+          />
+        </span>
+      )}
       {/* WHERE A ROW'S CONTROLS GO, AND WHY THEY ARE NOT A SIXTH COLUMN. The
           artboards draw five columns and no actions column, and adding one
           would put every table half a column out from the composition it is

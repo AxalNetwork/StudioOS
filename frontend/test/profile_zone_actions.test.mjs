@@ -167,9 +167,13 @@ const PROFILES = {
     // `offers/catalog`: `New service`, which was prose reading "services are
     // added from the catalogue's own form below" — true of a body with a New
     // offering button above it, and the artboard's composition has no such
-    // button: the ops row IS the header. None is a destination, which is why
-    // none is a `to:`. Was 0, then 5, then 7, then 8, then 9.
-    handlers: 10,
+    // button: the ops row IS the header. `offers/perk-deals`: `New perk`, the
+    // same correction on the same grounds; and `Extend`, which was 'an expiry
+    // is edited on the perk itself, not extended in bulk' — not a preference
+    // but a description of a table with no expiry on it at all, and migration
+    // 228 put one there. None is a destination, which is why none is a `to:`.
+    // Was 0, then 5, then 7, then 8, then 9, then 10.
+    handlers: 12,
     // NOTHING IS EXCLUDED ON THIS PROFILE ANY MORE. The entry that stood here
     // read: "`network/organizations`: `NetworkPage` catches a slug it has no tab
     // for and suppresses every body … there is nothing for a row to sit over.

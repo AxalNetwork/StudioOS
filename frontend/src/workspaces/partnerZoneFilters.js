@@ -92,12 +92,15 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
 // shared by `Fixed`, `Retainer` and `Seat`. Migration 227 added it, the offering
 // form writes it, and all three chips narrow on it.
 
-// `/offers/perk-deals`. Two chips about time on a table that keeps none. The
-// second half matters as much as the first: `perk_claims.expires_at` DOES
-// exist, so a reader could reasonably assume the listing expires too — it is a
-// deadline on one founder's issued code, not on the offer.
-const NO_PERK_EXPIRY =
-  'a perk listing carries no date at all; the only expiry in this store is on a claim already issued to one founder, which says nothing about the offer';
+// `/offers/perk-deals`'s two time chips ran on this until migration 228, and
+// the reason is quoted rather than deleted because it was exact and its second
+// half is still true: "a perk listing carries no date at all; the only expiry
+// in this store is on a claim already issued to one founder, which says
+// nothing about the offer." `perk_claims.expires_at` still exists and still
+// says nothing about the offer. What changed is that `perks.ends_at` now
+// exists beside it — one date per offer, one per issued code — so `Expiring`
+// and `Expired` read the first and the confusion the note warned about is a
+// distinction the schema now draws.
 
 export const PARTNER_ZONE_FILTERS = {
   // ── Network ──────────────────────────────────────────────────────────────
@@ -189,11 +192,22 @@ export const PARTNER_ZONE_FILTERS = {
   // `Live` IS THE STORE'S OWN WORD. `perks.status` is a CHECK over `draft`,
   // `in_review`, `live`, `paused` and `rejected`, so the canvas's chip and the
   // column agree exactly and no relabel is needed.
+  // FOUR OF FOUR, AND `Live` NOW MEANS BOTH THINGS IT SHOULD. It used to read
+  // `perks.status = 'live'` alone — the REVIEW state, "an admin approved it".
+  // The artboard's tile note for the same word is "accepting redemptions",
+  // which is approved AND not past its end date. A perk approved in March and
+  // ended in June is not accepting anything, and calling it Live said it was.
+  //
+  // A DRAFT WITH A FAR-OFF END DATE IS UNDER `All` AND ONLY `All`, and that is
+  // the same fourth state `offers/proof` names below: not approved, not
+  // ending, not ended. Sweeping it into `Live` would claim a review that has
+  // not happened; sweeping it into `Expiring` would claim an urgency it does
+  // not have.
   'offers/perk-deals': [
     { canvas: 'All', key: 'all' },
     { canvas: 'Live', key: 'live' },
-    { canvas: 'Expiring', unbuilt: NO_PERK_EXPIRY },
-    { canvas: 'Expired', unbuilt: NO_PERK_EXPIRY },
+    { canvas: 'Expiring', key: 'expiring' },
+    { canvas: 'Expired', key: 'expired' },
   ],
 
   // FOUR ORDERINGS, ONE OF WHICH IS THE ONE THE SERVER ALREADY RETURNS.

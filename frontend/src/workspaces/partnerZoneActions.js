@@ -78,9 +78,16 @@ export const PARTNER_ZONE_ACTIONS = {
     { label: 'Pricing history', unbuilt: 'only the current price is stored and an edit overwrites it, so there is no earlier figure to open' },
     { label: 'Export', kind: 'export' },
   ],
+  // BOTH WRITES RUN NOW, AND THE SECOND ONE COULD NOT BEFORE. `New perk` was
+  // 'perks are added from the form below' — true, and the same shape `New
+  // service` had before it became a handler onto the form it was describing.
+  // `Extend` was 'an expiry is edited on the perk itself, not extended in bulk'
+  // and that was not a preference: there was no expiry on a perk to edit at
+  // all. Migration 228 put one there, so extending is a real edit to a real
+  // column and the header op opens the set it applies to.
   'offers/perk-deals': [
-    { label: 'New perk', unbuilt: 'perks are added from the form below' },
-    { label: 'Extend', unbuilt: 'an expiry is edited on the perk itself, not extended in bulk' },
+    { label: 'New perk', kind: 'handler', handler: 'newPerk' },
+    { label: 'Extend', kind: 'handler', handler: 'extend' },
     { label: 'Export', kind: 'export' },
   ],
   'offers/visibility': [

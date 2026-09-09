@@ -41,6 +41,12 @@ import { searchSemantic, deleteChunkedEntity, researchNamespace } from '../servi
 import { run as runAI } from '../services/aiRouter';
 import { companyScope } from '../services/tenancyScope';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
+// The perk lifecycle window lives in ONE place. `offers/perk-deals`'s gather
+// below decides what is expiring, and it has to agree with what the zone shows
+// a reader — so it imports the same helper the partner listing serves from
+// rather than repeating thirty days here.
+import { perkLifecycle } from './perks';
+import { todayIso } from './_t13t14t15_helpers';
 
 const research = new Hono<{ Bindings: Env }>();
 
@@ -1337,6 +1343,36 @@ const DRAFT_SURFACES: Record<string, {
         `${r.title} — ${r.model || 'engagement model not recorded'}; `
         + `${r.cents == null ? 'NO PRICE RECORDED' : money(r.cents)}; sold ${r.sold} time${r.sold === 1 ? '' : 's'}`
         + `${r.summary ? `; includes ${r.summary}` : ''}`);
+    },
+  },
+
+  'offers/perk-deals': {
+    // The artboard: "For each expiring perk, what its expiry revokes and from
+    // whom … Points to which redeemers lose access, so a notice can go out
+    // before it happens rather than after." The last clause is what the draft
+    // is FOR — it is a warning list, not a summary — and the instruction says so
+    // rather than leaving the model to produce a tidy recap of the whole book.
+    instruction: [
+      'For each perk below that is expiring, say what its expiry revokes and how many redeemers lose it.',
+      'A perk recorded as granting nothing beyond the offer revokes nothing on expiry: say so rather than listing it as a loss.',
+      'Nothing in this product withdraws a scope automatically, so write this as a notice somebody must send, never as something already done.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const today = todayIso();
+      const rows = await c.env.DB.prepare(
+        `SELECT p.offer AS offer, p.ends_at AS ends_at, p.grant_scope AS grant_scope,
+                p.claim_cap AS cap,
+                (SELECT COUNT(*) FROM perk_claims x WHERE x.perk_id = p.id) AS redeemed
+           FROM perks p
+          WHERE p.partner_user_id = ? AND p.ends_at IS NOT NULL
+          ORDER BY p.ends_at ASC LIMIT 100`
+      ).bind(userId).all<{
+        offer: string; ends_at: string; grant_scope: string | null; cap: number | null; redeemed: number;
+      }>();
+      return (rows.results || []).map((p) =>
+        `${p.offer} — ${perkLifecycle(p.ends_at, today)}, ends ${p.ends_at}; `
+        + `${p.redeemed} redeemed${p.cap == null ? ' (uncapped)' : ` of ${p.cap}`}; `
+        + `${p.grant_scope ? `grants ${p.grant_scope}` : 'grants nothing beyond the offer itself'}`);
     },
   },
 

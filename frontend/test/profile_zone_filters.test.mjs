@@ -877,10 +877,15 @@ test('a zone whose row can narrow hands the export the narrowed rows', () => {
     },
     {
       // The render-prop shape: `PartnerBucketRoutes` supplies the columns and
-      // this page supplies the rows, so the call site here is the argument.
+      // this page supplies the rows, so the call site here is the FIRST
+      // argument — the second is the handler bag the page supplies for `New
+      // perk` and `Extend`, which is why the terminator is `[,)]` rather than
+      // `)`. Pinned to argument one deliberately: it is the rows that must be
+      // the narrowed list, and a regex that accepted any argument would pass a
+      // call that handed over `items` and narrowed something else.
       zone: 'offers/perk-deals',
       file: 'frontend/src/pages/PerksPage.jsx',
-      call: /zoneActions\((\w+)\)/,
+      call: /zoneActions\((\w+)[,)]/,
     },
   ];
 
