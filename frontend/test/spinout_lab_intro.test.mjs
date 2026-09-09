@@ -408,7 +408,17 @@ const cal = (() => {
   };
   const body = [
     "const COHORT_TZ = 'America/New_York';",
-    'const COHORT_BASE = { year: 2026, month: 5, num: 1 };',
+    // READ, NOT RE-DECLARED. This line used to be a hand-copy of the anchor:
+    // `const COHORT_BASE = { year: 2026, month: 5, num: 1 };`. The assertions
+    // below then checked `cohortNumFor` against the TEST's own constant, so the
+    // one number this block exists to pin was the one thing it could not see —
+    // re-anchoring the source left every assertion green. Taking the line from
+    // the file is what makes the pin real.
+    (() => {
+      const m = LIB.match(/const COHORT_BASE = \{[^}]*\};/);
+      assert.ok(m, 'COHORT_BASE is gone from lib/spinoutLab.js');
+      return m[0];
+    })(),
     LIB.slice(LIB.indexOf('export const COHORT_WEEKS')).split('\n')[0].replace(/^export /, ''),
     pick('_wallToUtcMs'),
     pick('cohortNumFor', 'export function').replace(/^export /, ''),
@@ -458,8 +468,20 @@ test('the client window matches the rule the worker enforces', () => {
   assert.match(LIB, /America\/New_York/);
 });
 
-test('May 2026 is Cohort 1, and the sequence is arithmetic', () => {
-  assert.equal(cal.cohortNumFor(2026, 5), 1);
-  assert.equal(cal.cohortNumFor(2026, 8), 4); // the anchor the old copy cited
-  assert.equal(cal.cohortNumFor(2027, 5), 13);
+test('October 2026 is Cohort 1, and the sequence is arithmetic', () => {
+  // THE FIRST COHORT THAT RUNS WITH ANYONE IN IT. The anchor was May 2026 on the
+  // strength of a comment citing "Cohort 4 = Aug 2026" — a sample label off the
+  // reference artboard, not a record of cohorts that ran. Production had zero
+  // applicants against every cohort table, and the two `cohort_cycles` rows
+  // before October were opened and rolled forward by the timing cron with
+  // nobody in them. Counting from May numbered the first real cohort sixth, and
+  // the hero shipped "Apply to Cohort 6".
+  assert.equal(cal.cohortNumFor(2026, 10), 1);
+  assert.equal(cal.cohortNumFor(2026, 11), 2);
+  assert.equal(cal.cohortNumFor(2027, 10), 13);
+  // The months before the anchor still compute, and go non-positive rather than
+  // wrapping — worth pinning so a future reader does not "fix" a negative into
+  // a plausible-looking 1 and silently renumber everything after it.
+  assert.equal(cal.cohortNumFor(2026, 9), 0);
+  assert.equal(cal.cohortNumFor(2026, 5), -4);
 });

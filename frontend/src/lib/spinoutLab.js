@@ -26,8 +26,29 @@ import { reportError } from './log';
 // ---------------------------------------------------------------------------
 // Cohort window helpers (client-side, mirrors Worker math)
 // ---------------------------------------------------------------------------
-// Base anchor: May 2026 = Cohort 1 (Cohort 4 = Aug 2026 confirms the sequence).
-const COHORT_BASE = { year: 2026, month: 5, num: 1 };
+// Base anchor: October 2026 = Cohort 1 — the first cohort that runs with anyone
+// in it.
+//
+// IT SAID MAY 2026, AND THE JUSTIFICATION WAS A MOCK. The old comment read
+// "(Cohort 4 = Aug 2026 confirms the sequence)", and "Cohort 4" is a sample
+// label off the reference artboard — the same frozen string the brief page and
+// the apply page still cite in their own comments. Nothing confirmed anything;
+// one design placeholder was read as a record of cohorts that had run, and the
+// hero shipped "Apply to Cohort 6" for the first cohort ever offered.
+//
+// WHAT THE STORE SAYS (studioos-db, 2026-09-09). `cohort_applicants`,
+// `spinout_applications` and `advisor_cohort_assignments` are ALL EMPTY, and
+// `cohort_cycles` holds four rows the timing cron created on 2026-08-03: August
+// marked completed, September active, October scheduled, November scheduled.
+// August and September rolled forward on schedule with nobody in them. An empty
+// cycle the cron opened and closed is not a cohort anyone attended, so counting
+// from it numbered the first real cohort sixth.
+//
+// The count is still pure arithmetic from this anchor — one cohort a month, no
+// table of past cohorts to keep in step. Moving the anchor is the only supported
+// way to renumber, and `spinout_lab_intro.test.mjs` reads THIS constant rather
+// than keeping its own copy, so the two cannot disagree.
+const COHORT_BASE = { year: 2026, month: 10, num: 1 };
 export const COHORT_TZ = 'America/New_York'; // Delaware time — DST-correct via Intl
 
 /** How many 7-day weeks a cohort runs. Mirrors the worker's cohort timing. */
