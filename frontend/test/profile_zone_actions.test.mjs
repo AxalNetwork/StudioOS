@@ -176,8 +176,13 @@ const PROFILES = {
     // longer exists — "no founder-side surface exists to ask from here", and
     // `/attest/partner/:token` is that surface, mounted in `App.jsx` since
     // migration 209. None is a destination, which is why none is a `to:`.
-    // Was 0, then 5, then 7, then 8, then 9, then 10, then 12.
-    handlers: 13,
+    // `offers/audience-fit`: `Pass reasons`, whose reason was wrong about its
+    // own store — "a pass reason is not a stored field on a fit rule", and
+    // `partner_fit_rules.statement` is exactly that field, the one the form
+    // labels "The sentence a pass quotes". None is a destination, which is why
+    // none is a `to:`.
+    // Was 0, then 5, then 7, then 8, then 9, then 10, then 12, then 13.
+    handlers: 14,
     // NOTHING IS EXCLUDED ON THIS PROFILE ANY MORE. The entry that stood here
     // read: "`network/organizations`: `NetworkPage` catches a slug it has no tab
     // for and suppresses every body … there is nothing for a row to sit over.

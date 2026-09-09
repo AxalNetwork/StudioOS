@@ -1346,6 +1346,49 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  'offers/audience-fit': {
+    // The artboard: "For each stated exclusion, a short pass note a person can
+    // send: the reason, and where relevant a named firm better suited. Points to
+    // the floor as the most-used exclusion, and to the absent capabilities as
+    // the two worth revisiting if demand keeps arriving for them."
+    //
+    // The instruction below refuses the one thing a model will otherwise do
+    // here: soften a pass into a maybe. A pass with a reason is the zone's
+    // entire argument, and a note that leaves the door ajar is the silence it
+    // exists to replace wearing better manners.
+    instruction: [
+      'Draft one short pass note per stated exclusion below, in the firm’s own words, quoting the sentence it already wrote.',
+      'Where an exclusion names a firm to refer to, include it. Where it names none, do not invent one.',
+      'A pass is a no with a reason: never soften it into a maybe, and never promise a revisit the rules do not state.',
+      'An exclusion with no sentence recorded cannot be drafted from — say so rather than writing one for it.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      // `partner_fit_rules` keys on `partners.id`, so the caller's partner row
+      // is resolved first and an account with none has nothing to read.
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT r.kind AS kind, r.value AS value, r.floor_cents AS floor_cents,
+                r.statement AS statement, r.referred_to AS referred_to
+           FROM partner_fit_rules r
+          WHERE r.partner_id = ? AND r.is_active = 1 AND r.kind <> 'best_fit'
+          ORDER BY r.kind, r.id LIMIT 100`
+      ).bind(me.partner_id).all<{
+        kind: string; value: string | null; floor_cents: number | null;
+        statement: string | null; referred_to: string | null;
+      }>();
+      return (rows.results || []).map((r) => {
+        const subject = r.kind === 'budget_floor'
+          ? (r.floor_cents == null ? 'a floor with no amount recorded' : `under $${Math.round(r.floor_cents / 100).toLocaleString('en-US')}`)
+          : (r.value || 'unnamed');
+        return `${r.kind.replace('_', ' ')} — ${subject}; `
+          + `${r.statement ? `the firm's words: "${r.statement}"` : 'NO SENTENCE RECORDED'}`
+          + `${r.referred_to ? `; refer to ${r.referred_to}` : '; no alternative named'}`;
+      });
+    },
+  },
+
   'offers/proof': {
     // The artboard: "A consent request per held outcome, naming the engagement,
     // the specific claim, and where it would appear — sent by a person from the

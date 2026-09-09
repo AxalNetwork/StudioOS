@@ -114,6 +114,11 @@ function freshDb() {
     );
   `);
   db.exec(migration('209_partner_offers_stores'));
+  // APPLIED, NOT MIRRORED. Every later migration that touches these tables is
+  // run here in order, so a route reading a column added after 209 is tested
+  // against the schema as it ships rather than against a hand-written copy that
+  // has to be remembered. 229 adds `partner_fit_rules.signal`.
+  db.exec(migration('229_fit_rule_signal'));
 
   const u = db.prepare('INSERT INTO users (id, role, partner_id, name, email) VALUES (?,?,?,?,?)');
   u.run(OURS_USER, 'partner', 1, 'Ours', 'ours@example.com');

@@ -252,23 +252,28 @@ export const PARTNER_ZONE_FILTERS = {
     { canvas: 'Blocked', key: 'blocked' },
   ],
 
-  // `Best fit` IS A STORED KIND, not a score. `audience_fit_rules.kind` is a
-  // CHECK over `budget_floor`, `sector_declined`, `capability_absent` and
-  // `best_fit`, so the chip selects the rules the firm wrote about who it is
-  // for. `Qualified` and `Weak` are the other thing entirely — words about a
-  // LEAD rather than about a rule — and the worker settles it in its own
-  // response: `enforcement: 'none'`, nothing here scores anybody.
+  // ALL FOUR RUN, AND THE TWO REASONS THAT STOOD HERE MISREAD THEIR OWN
+  // ARTBOARD. They said: "no lead is scored against these rules — the worker
+  // answers `enforcement: 'none'` — so nothing here is qualified or not", and
+  // "the same absent score from the other end; a rule records who the firm is
+  // for, and no row anywhere marks a lead as weak against one."
+  //
+  // Both are exactly right about LEADS and neither is what these chips select.
+  // The artboard's own rows are "Series A companies without design leadership —
+  // Qualified" and "Pre-product founders with a deck — Weak intent": the FIRM'S
+  // judgement about a KIND of client, written down beside the profile, not a
+  // score computed about anybody. Its instNote turns on the distinction — "pre-
+  // product founders read as weak intent rather than declined, because the
+  // honest answer is 'not yet'".
+  //
+  // Migration 229 stores that judgement as `partner_fit_rules.signal`, and
+  // `enforcement: 'none'` is exactly as true after it as before: nothing scores
+  // a founder, and the zone still says so.
   'offers/audience-fit': [
     { canvas: 'All', key: 'all' },
     { canvas: 'Best fit', key: 'best_fit' },
-    {
-      canvas: 'Qualified',
-      unbuilt: 'no lead is scored against these rules — the worker answers `enforcement: \'none\'` — so nothing here is qualified or not',
-    },
-    {
-      canvas: 'Weak',
-      unbuilt: 'the same absent score from the other end; a rule records who the firm is for, and no row anywhere marks a lead as weak against one',
-    },
+    { canvas: 'Qualified', key: 'qualified' },
+    { canvas: 'Weak', key: 'weak_intent' },
   ],
 
   // ── Research ─────────────────────────────────────────────────────────────

@@ -110,9 +110,18 @@ export const PARTNER_ZONE_ACTIONS = {
     { label: 'Preview public page', unbuilt: 'no public proof page is published yet, so there is nothing to preview' },
     { label: 'Export', kind: 'export' },
   ],
+  // THE SECOND REASON HERE WAS WRONG ABOUT ITS OWN STORE. It read "a pass
+  // reason is not a stored field on a fit rule" — and `partner_fit_rules
+  // .statement` is exactly that field. The form labels it "The sentence a pass
+  // quotes" and the zone's docblock calls it the field that matters, so the op
+  // composes the sentences the firm already wrote rather than generating any.
+  //
+  // The FIRST is still exact, and for a reason a header control cannot get
+  // around: which rule an edit means is the first thing the edit needs, and
+  // there is nowhere in a row of buttons to say it. Editing stays on the row.
   'offers/audience-fit': [
-    { label: 'Edit fit rules', unbuilt: 'rules are edited on the rule itself, below' },
-    { label: 'Pass reasons', unbuilt: 'a pass reason is not a stored field on a fit rule' },
+    { label: 'Edit fit rules', unbuilt: 'every rule is edited on its own row — which rule you mean is the first thing an edit needs, and a header control cannot say it' },
+    { label: 'Pass reasons', kind: 'handler', handler: 'passReasons' },
     { label: 'Export', kind: 'export' },
   ],
 
