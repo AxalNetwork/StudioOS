@@ -2208,6 +2208,12 @@ export const api = {
   // client companies, each owned by someone at the firm or conspicuously not.
   // A different object from `partnerRelationships`, which is a partner-to-
   // partner edge; see the migration for why they are two tables.
+  // What an introduction is — a favour or a referral with a fee — and what came
+  // of it. One side's record on one side's row; the write refuses any
+  // proposition not addressed to the caller.
+  introSetTerms: (uid, data) => request(`/introductions/propositions/${encodeURIComponent(uid)}/terms`, {
+    method: 'PUT', body: JSON.stringify(data || {}),
+  }),
   partnerBook: () => request('/partnernet/book'),
   partnerBookAdd: (data) => request('/partnernet/book', { method: 'POST', body: JSON.stringify(data || {}) }),
   // Who at the firm can be given a row: the caller plus everyone linked to a

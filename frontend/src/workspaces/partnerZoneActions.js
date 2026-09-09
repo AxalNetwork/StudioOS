@@ -161,9 +161,22 @@ export const PARTNER_ZONE_ACTIONS = {
     { label: 'Log interaction', kind: 'handler', handler: 'logInteraction' },
     { label: 'Export', kind: 'export' },
   ],
+  // `New introduction` STAYS PROSE AND THE REASON IS SHARPER THAN IT WAS. It
+  // read "introductions arrive as propositions; none is composed here", which
+  // named the flow rather than the obstacle. The obstacle: a proposition is an
+  // edge between two `users` rows, and the firm's book (migration 224) holds
+  // people who mostly have no account here — so there is nothing to compose one
+  // FROM, and `POST /propositions` exists nowhere to compose it WITH.
+  //
+  // `Consent log` IS NOW A HANDLER, and the reason it was prose turned out to be
+  // a claim about the response rather than the store: "consent is recorded per
+  // introduction, not as a log". The consents ARE the log — one row per side,
+  // each with its own `responded_at` — and the only missing piece was returning
+  // the counterpart's. Gathering what is already recorded into one chronological
+  // view invents nothing, which is why it can be built.
   'network/introductions': [
-    { label: 'New introduction', unbuilt: 'introductions arrive as propositions; none is composed here' },
-    { label: 'Consent log', unbuilt: 'consent is recorded per introduction, not as a log' },
+    { label: 'New introduction', unbuilt: 'a proposition is an edge between two accounts and the firm’s book holds people who mostly have none, so there is nothing here to compose one from — and no write path that would accept it' },
+    { label: 'Consent log', kind: 'handler', handler: 'consentLog' },
     { label: 'Export', kind: 'export' },
   ],
 

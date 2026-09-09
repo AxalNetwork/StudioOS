@@ -137,7 +137,7 @@ const PROFILES = {
     zones: 21,
     links: 0,
     exports: 19,
-    // Seven page-supplied ops. `research/ask`: `New session` starts a thread,
+    // Eight page-supplied ops. `research/ask`: `New session` starts a thread,
     // `Saved answers` switches the view to the kept ones. `research/library`:
     // `Add document` opens the file picker, `Re-index` re-queues every document
     // Ask cannot currently read. `research/client-prep`: `Attach to proposal`,
@@ -146,9 +146,12 @@ const PROFILES = {
     // ownership changes and `Log interaction` dates a touch — both were gaps
     // reading "no owner field is stored on a relationship" and "no interaction
     // log is stored", true of `partner_relationships` and not of the book
-    // migration 224 stores. None is a destination, which is why none is a `to:`.
-    // Was 0, then 5.
-    handlers: 7,
+    // migration 224 stores. `network/introductions`: `Consent log`, which was
+    // prose reading "consent is recorded per introduction, not as a log" — a
+    // claim about the RESPONSE rather than the store, since both sides' answers
+    // have been rows since migration 150 and only the DTO omitted the second.
+    // None is a destination, which is why none is a `to:`. Was 0, then 5, then 7.
+    handlers: 8,
     // `network/organizations`: `NetworkPage` catches a slug it has no tab for and
     // suppresses every body, so that route already renders its own heading above
     // a card stating the gap — there is nothing for a row to sit over. Checked

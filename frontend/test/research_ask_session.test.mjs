@@ -24,6 +24,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { codeOnly } from './_codeOnly.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -258,13 +259,43 @@ test('the AI band never runs on mount, and its surfaces are allow-listed', () =>
   assert.match(load, /api\.research\.zoneDrafts\(surface\)/, 'the band’s read is gone');
   assert.doesNotMatch(load, /zoneDraftRun/, 'the band drafts on mount, spending a budget for a page view');
 
-  // The worker's allow-list is one entry long while one band is mounted. A
-  // surface here with no band behind it is config for a page that cannot spend
-  // it — the failure `ui_assist_rail_and_sidebar` catches on the rail.
+  // ── THE ALLOW-LIST AND THE MOUNTS ARE ONE SET, CHECKED BOTH WAYS ─────────
+  //
+  // THIS ASSERTION USED TO PIN A COUNT — "the allow-list is one entry long
+  // while one band is mounted" — and the count was right on the day and then
+  // wrong for five zones. `ZoneDraft` shipped on Library, Client prep, Market
+  // and Relationships while `DRAFT_SURFACES` still held only `research/ask`, so
+  // `GET /drafts` 400'd, the band caught the error and rendered its empty
+  // state, and four pages showed an AI band whose run button did nothing. A
+  // number cannot notice that; the two lists compared can.
+  //
+  // Both directions matter and they fail differently. A surface with no mount
+  // is config for a page that cannot spend it — the failure
+  // `ui_assist_rail_and_sidebar` catches on the rail. A mount with no surface
+  // is a control that 400s in silence, which is worse, because the page looks
+  // finished.
   const surfaces = WORKER.slice(WORKER.indexOf('const DRAFT_SURFACES'), WORKER.indexOf("research.get('/drafts'"));
-  assert.equal((surfaces.match(/^ {2}'[a-z/-]+': \{$/gm) || []).length, 1,
-    'the draft surface list has grown; every entry needs a band mounted on its page');
-  assert.match(surfaces, /'research\/ask': \{/, 'the ask surface is gone from the allow-list');
+  const allowed = (surfaces.match(/^ {2}'[a-z/-]+': \{$/gm) || [])
+    .map((s) => s.trim().replace(/^'|': \{$/g, '')).sort();
+  assert.ok(allowed.includes('research/ask'), 'the ask surface is gone from the allow-list');
+
+  // Scoped to `<ZoneDraft …/>` elements, not to every `surface=` prop in the
+  // tree: `WorkerRail` and the assist registrations take a prop of the same
+  // name over a different vocabulary (`app`, `brand`, `advisory`), and reading
+  // those as draft surfaces compares two unrelated lists.
+  const files = execFileSync('grep', ['-rl', '<ZoneDraft', 'frontend/src'], { encoding: 'utf8' })
+    .split('\n').filter(Boolean);
+  const mounted = [...new Set(files.flatMap((f) => {
+    const src = codeOnly(read(f));
+    return src.split('<ZoneDraft').slice(1)
+      .map((seg) => seg.slice(0, seg.indexOf('/>')).match(/surface="([a-z/-]+)"/)?.[1])
+      .filter(Boolean);
+  }))].sort();
+  assert.ok(mounted.length >= 6, `expected the band to be mounted on the artboards; found ${mounted.length}`);
+  assert.deepEqual(allowed, mounted,
+    'the worker’s draft surfaces and the pages that mount a band have diverged: '
+    + `allow-listed ${JSON.stringify(allowed)}, mounted ${JSON.stringify(mounted)}`);
+
   assert.match(WORKER, /if \(!spec\) return c\.json\(\{ detail: 'unknown_surface' \}, 400\);/,
     'an unknown surface is no longer refused');
 });

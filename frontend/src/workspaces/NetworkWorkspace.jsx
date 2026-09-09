@@ -236,10 +236,17 @@ export default function NetworkWorkspace({ role = 'founder' }) {
                   r.last_interaction_at || '', r.interaction_count,
                   r.source === 'platform' ? (r.source_label || 'Platform') : 'Ours'],
               } })
+            /* BOTH CONSENTS, NOT ONE STATUS. `Status` was the caller's own
+               half of a double opt-in, so a spreadsheet of accepted rows said
+               nothing about whether any introduction had happened. What ships
+               is the pipeline the table shows: each side's answer, what the
+               introduction is, and whether it was made. */
             : zoneActionsFor(role, 'network/introductions', { handlers, view: {
-                header: ['Counterpart', 'Status', 'Score', 'Source'],
+                header: ['Counterpart', 'You', 'They', 'Kind', 'Fee (bps)', 'Made on', 'Outcome', 'Score'],
                 rows,
-                cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source],
+                cells: (p) => [p.target?.name || p.target?.email, p.status,
+                  p.counterpart_status || 'not asked', p.terms?.kind || '',
+                  p.terms?.fee_bps ?? '', p.terms?.made_at || '', p.terms?.outcome || '', p.score],
               } })
           )}
         />

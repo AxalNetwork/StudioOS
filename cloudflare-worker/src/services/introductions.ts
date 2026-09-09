@@ -78,6 +78,29 @@ export async function ensureIntroNetworkSchema(env: Env): Promise<void> {
        ON intro_credit_ledger(user_id, kind, source_ref)`,
     `CREATE INDEX IF NOT EXISTS idx_intro_ledger_user
        ON intro_credit_ledger(user_id, created_at)`,
+    // Migration 225, mirrored here for the same reason the two above are: the
+    // proposition list LEFT JOINs this table, so a dev or preview D1 that has
+    // not been migrated would 500 the page rather than degrade. The CHECKs come
+    // with it — a self-healed table that accepted a referral with no fee would
+    // be a laxer store than the migrated one, which is worse than no table.
+    `CREATE TABLE IF NOT EXISTS intro_terms (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       uid TEXT NOT NULL UNIQUE,
+       proposition_uid TEXT NOT NULL,
+       owner_user_id INTEGER NOT NULL,
+       kind TEXT NOT NULL CHECK (kind IN ('favour','referral')),
+       fee_bps INTEGER,
+       made_at TEXT,
+       outcome TEXT,
+       created_at TEXT NOT NULL DEFAULT (datetime('now')),
+       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+       UNIQUE (owner_user_id, proposition_uid),
+       CHECK (kind = 'favour' OR fee_bps IS NOT NULL),
+       CHECK (kind = 'referral' OR fee_bps IS NULL),
+       CHECK (fee_bps IS NULL OR (fee_bps > 0 AND fee_bps <= 10000))
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_intro_terms_owner
+       ON intro_terms(owner_user_id, proposition_uid)`,
   ];
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch { /* idempotent */ } }
   migratedDbs.add(env.DB as unknown as object);

@@ -56,18 +56,20 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
 // went with the gaps they described, because a reason kept past its gap reads
 // as current.
 
-// `/network/introductions`. `Gated` IS RELABELLED because the canvas's word
-// means the double opt-in and this page can only see one side of it: the
-// counterpart's consent is a separate `intro_propositions` row owned by
-// `target_user_id`, which the response never returns. What `status = 'pending'`
-// actually means is that YOU have not answered, so the chip says that.
+// `NO_CONNECTED_STATE` STOOD HERE AND IS GONE, and it is worth recording that
+// it was HALF wrong rather than simply out of date. It read: "accepting is
+// recorded per side, so this page knows that you accepted and not whether they
+// did; no connected state exists to mark an introduction as made". The first
+// clause was a fact about the RESPONSE, not about the store — the counterpart's
+// consent is the mirror row (`source = 'reciprocal'`, owned by
+// `target_user_id`) and has been in `intro_propositions` since migration 150;
+// only the DTO omitted it. Returning it made `Gated` mean the canvas's word
+// again, so the `label:` override that renamed it `Awaiting you` went too.
 //
-// `Made` is the same asymmetry, and the zone's own docblock already argues it:
-// `accepted` means you accepted and "cannot distinguish 'waiting on them' from
-// 'you are already connected'". No `connected` value exists — the CHECK on
-// `status` would reject one.
-const NO_CONNECTED_STATE =
-  'accepting is recorded per side, so this page knows that you accepted and not whether they did; no connected state exists to mark an introduction as made';
+// The second clause was right, and migration 225 is the answer to it: two
+// consents mean an introduction MAY happen, and `intro_terms.made_at` is what
+// says it did. Reading `accepted` as `Made` would have been the inference the
+// old reason correctly refused.
 
 // `/offers/catalog`. `service_offerings` holds one `price_usd` and nothing
 // saying HOW it is charged, so a fixed fee, a monthly retainer and a per-seat
@@ -109,10 +111,23 @@ export const PARTNER_ZONE_FILTERS = {
     { canvas: 'Going cold', key: 'cold' },
   ],
 
+  // FOUR OF FOUR, AND ALL FOUR NARROW ON A DERIVED STATE RATHER THAN ON
+  // `status`. `stateOf` in `IntroductionsPanel` reads the caller's status and
+  // the counterpart's together, which is what the artboard's pipeline is:
+  // `Gated` is `Requested` or `One side` — a state a recorded consent could
+  // still open — and `Made` is `intro_terms.made_at`, the introduction having
+  // actually happened rather than merely being permitted.
+  //
+  // `Lapsed` HAS NO CHIP, DELIBERATELY. An expired proposition is not at a gate
+  // (no consent can advance it) and is not declined (nobody refused), so it
+  // belongs to none of the three narrow chips and is reachable through `All`.
+  // Giving it a fifth chip would add a control the artboard does not draw;
+  // folding it into `Gated` would count rows that cannot move as rows waiting
+  // to.
   'network/introductions': [
     { canvas: 'All', key: 'all' },
-    { canvas: 'Gated', key: 'pending', label: 'Awaiting you' },
-    { canvas: 'Made', unbuilt: NO_CONNECTED_STATE },
+    { canvas: 'Gated', key: 'gated' },
+    { canvas: 'Made', key: 'made' },
     { canvas: 'Declined', key: 'declined' },
   ],
 

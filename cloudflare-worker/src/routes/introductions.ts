@@ -153,10 +153,39 @@ introductions.post('/request', async (c) => {
 // intro_credit_ledger; see services/introductions.ts for the math.
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Target-profile projection joined onto each proposition row. */
+/**
+ * Target-profile projection joined onto each proposition row.
+ *
+ * ══ THE COUNTERPART'S CONSENT WAS ALWAYS STORED AND NEVER RETURNED ═════════
+ *
+ * `generateIntroPropositions` writes a MIRROR row for every proposition —
+ * `source = 'reciprocal'`, owned by the counterpart, pointing back at this user
+ * — so the other side's decision has been in `intro_propositions` since
+ * migration 150. The response returned only the caller's own `status`, and the
+ * whole double-opt-in was therefore invisible: a page could say "you accepted"
+ * and could not say whether anything had come of it. That is why
+ * `network/introductions` sat in `profile_zone_filters.test.mjs`'s `excluded`
+ * set, why the `pn2` artboard's `At a gate` tile had nothing to count, and why
+ * its `Consent record` column could only ever have shown half a record.
+ *
+ * WHAT IS RETURNED IS THE CONSENT STATE AND ITS DATE, AND NOTHING ELSE. Not
+ * the counterpart's score, not their breakdown, not the reasons the engine gave
+ * them — those are their record. "They have agreed", "they have not answered",
+ * "they declined", and when. That is precisely what a gate needs to be shown as
+ * a gate rather than a warning, and it is a fact about the caller's own
+ * introduction as much as about the other person.
+ */
 const PROPOSITION_SELECT = `
   SELECT p.uid, p.status, p.score, p.breakdown_json, p.source,
          p.expires_at, p.responded_at, p.created_at,
+         (SELECT m.status FROM intro_propositions m
+           WHERE m.user_id = p.target_user_id AND m.target_user_id = p.user_id
+           ORDER BY m.id DESC LIMIT 1) AS counterpart_status,
+         (SELECT m.responded_at FROM intro_propositions m
+           WHERE m.user_id = p.target_user_id AND m.target_user_id = p.user_id
+           ORDER BY m.id DESC LIMIT 1) AS counterpart_responded_at,
+         t.kind AS terms_kind, t.fee_bps AS terms_fee_bps,
+         t.made_at AS terms_made_at, t.outcome AS terms_outcome,
          u.uid AS target_uid, COALESCE(u.display_name, u.name) AS target_name,
          u.role AS target_role, u.headline AS target_headline,
          u.country AS target_country,
@@ -165,7 +194,8 @@ const PROPOSITION_SELECT = `
          (SELECT persona_id FROM user_personas up
            WHERE up.user_id = u.id AND up.is_primary = 1 LIMIT 1) AS target_persona
     FROM intro_propositions p
-    JOIN users u ON u.id = p.target_user_id`;
+    JOIN users u ON u.id = p.target_user_id
+    LEFT JOIN intro_terms t ON t.proposition_uid = p.uid AND t.owner_user_id = p.user_id`;
 
 function propositionDto(r: any) {
   let breakdown: any = null;
@@ -178,6 +208,23 @@ function propositionDto(r: any) {
     expires_at: r.expires_at,
     responded_at: r.responded_at,
     created_at: r.created_at,
+    // NULL MEANS THERE IS NO MIRROR ROW, WHICH IS NOT THE SAME AS "PENDING".
+    // A hand-curated (`source = 'admin'`) proposition has no counterpart row at
+    // all, so the other side has never been asked — a page that rendered that
+    // as "not yet answered" would be reporting a question nobody put.
+    counterpart_status: r.counterpart_status ?? null,
+    counterpart_responded_at: r.counterpart_responded_at ?? null,
+    // The firm's own record of what this introduction is and what came of it,
+    // or null. Never the counterpart's — `owner_user_id = p.user_id` in the
+    // join above is what keeps one side's fee off the other side's screen.
+    terms: r.terms_kind
+      ? {
+        kind: r.terms_kind,
+        fee_bps: r.terms_fee_bps ?? null,
+        made_at: r.terms_made_at ?? null,
+        outcome: r.terms_outcome ?? null,
+      }
+      : null,
     breakdown,
     target: {
       uid: r.target_uid,
@@ -242,11 +289,20 @@ introductions.get('/propositions', async (c) => {
     rows = await c.env.DB.prepare(
       `SELECT p.uid, p.status, p.score, p.breakdown_json, p.source,
               p.expires_at, p.responded_at, p.created_at,
+              (SELECT m.status FROM intro_propositions m
+                WHERE m.user_id = p.target_user_id AND m.target_user_id = p.user_id
+                ORDER BY m.id DESC LIMIT 1) AS counterpart_status,
+              (SELECT m.responded_at FROM intro_propositions m
+                WHERE m.user_id = p.target_user_id AND m.target_user_id = p.user_id
+                ORDER BY m.id DESC LIMIT 1) AS counterpart_responded_at,
+              t.kind AS terms_kind, t.fee_bps AS terms_fee_bps,
+              t.made_at AS terms_made_at, t.outcome AS terms_outcome,
               u.uid AS target_uid, u.name AS target_name, u.role AS target_role,
               NULL AS target_headline, NULL AS target_country,
               NULL AS target_headshot_url, NULL AS target_persona
          FROM intro_propositions p
-         JOIN users u ON u.id = p.target_user_id ${tail}`,
+         JOIN users u ON u.id = p.target_user_id
+         LEFT JOIN intro_terms t ON t.proposition_uid = p.uid AND t.owner_user_id = p.user_id ${tail}`,
     ).bind(...binds).all();
   }
 
@@ -433,6 +489,67 @@ introductions.post('/propositions/:uid/decline', async (c) => {
 
   const credits = await getIntroCreditState(c.env, user as any);
   return c.json({ ok: true, uid, status: 'declined', credits });
+});
+
+/**
+ * PUT /propositions/:uid/terms — what this introduction is, and what came of it.
+ *
+ * `Kind` AND `With economics` ARE THE SAME FIELD. The `pn2` artboard states it
+ * plainly: "For a partner firm an introduction often carries economics, so every
+ * row states whether it is a favour or a referral with a fee attached." A row
+ * that says neither leaves a reader to guess, and the guess is worth money.
+ *
+ * ONE SIDE'S RECORD, ON ONE SIDE'S ROW. The proposition addressed to this user
+ * is the only one they may write terms against — `owner_user_id` and the
+ * ownership check below are the same rule twice, because a referral fee written
+ * onto the counterpart's row would be one firm's claim rendered on the other's
+ * screen as though both had agreed it.
+ *
+ * `made_at` IS WHAT SEPARATES `Made` FROM `Both agreed`. Two consents mean the
+ * introduction MAY happen; this column says it did. Nothing infers one from the
+ * other, which is why the artboard draws them as two of five states.
+ */
+introductions.put('/propositions/:uid/terms', async (c) => {
+  const user = (await requireAuth(c)) as User;
+  await ensureIntroNetworkSchema(c.env);
+  const uid = String(c.req.param('uid') || '').trim();
+  const body = await c.req.json().catch(() => ({} as any));
+
+  const own = await c.env.DB.prepare(
+    `SELECT uid FROM intro_propositions WHERE uid = ? AND user_id = ?`,
+  ).bind(uid, user.id).first<{ uid: string }>();
+  // Not found rather than forbidden: whether a proposition exists between two
+  // other people is not something a third party may learn by probing.
+  if (!own) return c.json({ error: 'not_found' }, 404);
+
+  const kind = String(body?.kind || '').trim();
+  if (kind !== 'favour' && kind !== 'referral') return c.json({ error: 'kind_invalid' }, 400);
+  let feeBps: number | null = null;
+  if (kind === 'referral') {
+    feeBps = Math.round(Number(body?.fee_bps));
+    // The store's CHECK says the same thing; this says it with a message a
+    // reader can act on rather than as a constraint failure.
+    if (!Number.isInteger(feeBps) || feeBps <= 0 || feeBps > 10000) {
+      return c.json({ error: 'fee_bps_required' }, 400);
+    }
+  }
+  const madeAt = String(body?.made_at || '').trim();
+  if (madeAt && !/^\d{4}-\d{2}-\d{2}$/.test(madeAt)) return c.json({ error: 'made_at_invalid' }, 400);
+  const outcome = body?.outcome ? String(body.outcome).slice(0, 2000) : null;
+
+  await c.env.DB.prepare(
+    `INSERT INTO intro_terms (uid, proposition_uid, owner_user_id, kind, fee_bps, made_at, outcome)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (owner_user_id, proposition_uid) DO UPDATE SET
+       kind = excluded.kind, fee_bps = excluded.fee_bps, made_at = excluded.made_at,
+       outcome = excluded.outcome, updated_at = datetime('now')`,
+  ).bind(crypto.randomUUID().replace(/-/g, ''), uid, user.id, kind, feeBps, madeAt || null, outcome).run();
+
+  const row = await c.env.DB.prepare(
+    `SELECT kind, fee_bps, made_at, outcome FROM intro_terms
+      WHERE owner_user_id = ? AND proposition_uid = ?`,
+  ).bind(user.id, uid).first<{ kind: string; fee_bps: number | null; made_at: string | null; outcome: string | null }>();
+  return c.json({ ok: true, terms: row || null });
 });
 
 // GET /credits — balance breakdown for the header summary.

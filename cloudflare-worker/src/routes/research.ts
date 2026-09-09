@@ -1125,6 +1125,191 @@ const DRAFT_SURFACES: Record<string, {
       });
     },
   },
+
+  // ── THE FIVE THAT WERE MOUNTED AND NOT ALLOW-LISTED ──────────────────────
+  //
+  // `research/ask` stood here alone while `ZoneDraft` was mounted on five more
+  // zones, and the failure was silent in exactly the way this file's own rules
+  // are written against. `GET /drafts` 400s an unknown surface; the band
+  // catches and renders its empty state, which is indistinguishable from "no
+  // draft yet". So five artboards showed their AI band, their cost line and
+  // their run button, and the button 400'd. The band is config that follows a
+  // mount — and a mount without its config is a control that does nothing.
+  //
+  // EVERY `gather` READS THE ZONE'S OWN ROWS AND NOTHING ELSE. That is what
+  // makes the drafts grounded rather than written from the model's knowledge in
+  // the voice of a grounded one, and it is why each returns `[]` rather than a
+  // placeholder when there is nothing: `POST /drafts` turns an empty gather into
+  // a 409 that never reaches the model.
+
+  'research/library': {
+    // The artboard: "Points to the unindexed document and what it would unlock
+    // in Ask". So the material is the index state, and the instruction forbids
+    // the one thing a model would otherwise volunteer — guessing at what a
+    // document it has never read contains.
+    instruction: [
+      'List which documents are not indexed and are therefore invisible to Ask.',
+      'For each, name the document by its title and say only what its title and kind state.',
+      'Do not speculate about contents. If every document is indexed, say so in one line.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const rows = await c.env.DB.prepare(
+        `SELECT title, kind, index_state, chunk_count FROM research_documents
+          WHERE owner_user_id = ? ORDER BY id DESC LIMIT 60`
+      ).bind(userId).all<{ title: string; kind: string; index_state: string; chunk_count: number }>();
+      return (rows.results || []).map((r) =>
+        `${r.title} — filed as ${r.kind}; index state ${r.index_state}; ${r.chunk_count || 0} passages readable by Ask`);
+    },
+  },
+
+  'research/client-prep': {
+    // The artboard: "keeping founder-sourced facts attributed to Verwood and
+    // firm-written facts to the firm". The seam is the whole point of this zone,
+    // so it is in the instruction and it is in every line of the material.
+    instruction: [
+      'Draft a one-page checkpoint brief from the rows below.',
+      'Keep each fact attributed to the side it came from: rows marked (from the client) are theirs and must be quoted rather than rewritten.',
+      'Name any row still marked open as an item to settle. Add no fact that is not below.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      // Scoped to the client whose brief is on screen. Without a scope there is
+      // nothing to draft — a brief spanning every client is not a brief.
+      if (!scope) return [];
+      // THE GRANT IS THE GATE HERE AS EVERYWHERE ELSE, and `scope_project` is
+      // checked separately from the grant's existence: a founder may open their
+      // sessions and not their project record, and the client half of this
+      // brief is only ever as wide as what they opened.
+      const project = await c.env.DB.prepare(
+        `SELECT p.id AS id, p.name AS name, p.sector AS sector, p.stage AS stage,
+                g.scope_project AS scope_project
+           FROM advisor_client_grants g
+           JOIN projects p ON p.id = g.project_id
+          WHERE g.advisor_user_id = ? AND g.status = 'active' AND p.uid = ?
+          ORDER BY g.id DESC LIMIT 1`
+      ).bind(userId, scope).first<{
+        id: number; name: string; sector: string | null; stage: string | null; scope_project: number;
+      }>();
+      if (!project) return [];
+      const ours = await c.env.DB.prepare(
+        `SELECT section, body, open FROM research_brief_notes
+          WHERE owner_user_id = ? AND project_id = ? ORDER BY id ASC LIMIT 60`
+      ).bind(userId, project.id).all<{ section: string; body: string; open: number }>();
+      // The documents the founder pushed — by share, never by namespace, which
+      // is the same read the library list unions in. Titles only: what is
+      // inside them is Ask's job and needs a citation, not a draft.
+      const shared = await c.env.DB.prepare(
+        `SELECT d.title AS title, d.kind AS kind
+           FROM advisor_client_document_shares s
+           JOIN research_documents d ON d.id = s.document_id
+          WHERE s.advisor_user_id = ? AND s.status = 'active'
+            AND d.owner_user_id IN (
+              SELECT id FROM users WHERE founder_id =
+                (SELECT founder_id FROM projects WHERE id = ?))
+          ORDER BY d.id DESC LIMIT 30`
+      ).bind(userId, project.id).all<{ title: string; kind: string }>();
+      const theirs = [
+        ...(project.scope_project
+          ? [`${project.name} (from the client): sector ${project.sector || 'not recorded'}, stage ${project.stage || 'not recorded'}`]
+          : []),
+        ...(shared.results || []).map((r) => `Document shared by the client: ${r.title} (${r.kind})`),
+      ];
+      return [
+        ...theirs,
+        ...(ours.results || []).map((r) => `${r.section} (ours${r.open ? ', open' : ''}): ${r.body}`),
+      ];
+    },
+  },
+
+  'research/market': {
+    // The artboard: "on six comparables — a thin base, which the reading states
+    // rather than smoothing", and "points to the two stale readings as the ones
+    // to re-run". Both halves are instructions, because a model summarising
+    // ranges will otherwise average them and drop the sample size.
+    instruction: [
+      'Summarise what these comparable readings say about the firm’s own service lines.',
+      'Carry each range’s comparable count and run date into any statement about it; never average ranges together.',
+      'Name the readings that are stale as the ones to re-run before a proposal cites them.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const rows = await c.env.DB.prepare(
+        `SELECT metric, range_low_cents, range_high_cents, comparable_count, ran_at, scope
+           FROM research_market_readings WHERE owner_user_id = ? ORDER BY ran_at DESC LIMIT 40`
+      ).bind(userId).all<{
+        metric: string; range_low_cents: number; range_high_cents: number;
+        comparable_count: number; ran_at: string; scope: string | null;
+      }>();
+      const money = (cents: number) => `$${Math.round(cents / 100).toLocaleString('en-US')}`;
+      return (rows.results || []).map((r) =>
+        `${r.metric}${r.scope ? ` (${r.scope})` : ''}: ${money(r.range_low_cents)} – ${money(r.range_high_cents)}`
+        + `, from ${r.comparable_count} comparable${r.comparable_count === 1 ? '' : 's'}, run ${r.ran_at}`);
+    },
+  },
+
+  'network/relationships': {
+    // The artboard: "who at the firm has the most recorded interactions with
+    // that organization — Aoife Brennan sits against Thornbury Capital, where
+    // nobody does, which is itself the finding". The last clause is the
+    // instruction that matters: the empty answer is an answer.
+    instruction: [
+      'For each contact below that has no firm owner, say who at the firm has the most recorded interactions with that same organization.',
+      'Where nobody at the firm has any interaction with that organization, say so plainly — that is the finding, not a gap to fill.',
+      'Suggest nothing about contacts that already have an owner.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      // `bc`, NOT A ONE-LETTER ALIAS. `research_stores_scoping.test.ts` refuses
+      // an owner read off a single-letter identifier in this file, because that
+      // letter is this codebase's habitual name for a parsed request body and an
+      // owner taken from one is how an owner-scoped table stops being one. A SQL
+      // alias reads identically to that guard, so the alias gets a longer name
+      // rather than the ban being loosened around it.
+      const rows = await c.env.DB.prepare(
+        `SELECT bc.name, bc.organization, bc.firm_owner_user_id,
+                COALESCE(u.name, u.email) AS owner_name,
+                (SELECT COUNT(*) FROM partner_book_interactions i WHERE i.contact_id = bc.id) AS n
+           FROM partner_book_contacts bc
+           LEFT JOIN users u ON u.id = bc.firm_owner_user_id
+          WHERE bc.owner_user_id = ? ORDER BY bc.id ASC LIMIT 200`
+      ).bind(userId).all<{
+        name: string; organization: string | null;
+        firm_owner_user_id: number | null; owner_name: string | null; n: number;
+      }>();
+      const all = rows.results || [];
+      // NOTHING TO DRAFT WHEN NOTHING IS ORPHANED, which is the 409 rather than
+      // a paragraph congratulating the firm on a full book.
+      if (!all.some((r) => !r.firm_owner_user_id)) return [];
+      return all.map((r) =>
+        `${r.name} at ${r.organization || 'no organization recorded'} — `
+        + `${r.firm_owner_user_id ? `owned by ${r.owner_name}` : 'UNASSIGNED'}, ${r.n} recorded interaction${r.n === 1 ? '' : 's'}`);
+    },
+  },
+
+  'network/introductions': {
+    // The artboard: "Every suggestion arrives as a draft ask requiring both
+    // consents before it can move — nothing is introduced by the draft itself."
+    // Which is a statement about this route: it writes a draft row and nothing
+    // else, and the instruction says the same thing to the model so the text it
+    // produces does not read as though an introduction had been made.
+    instruction: [
+      'Suggest possible introductions between the firm’s own contacts, using only the interaction counts below as evidence of who knows whom.',
+      'Write each as a draft ask that still needs both sides to consent. Never write as though an introduction has been made.',
+      'Where the evidence is one or two interactions, say the path is thin rather than proposing it as strong.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const rows = await c.env.DB.prepare(
+        `SELECT bc.name, bc.organization,
+                (SELECT COUNT(*) FROM partner_book_interactions i WHERE i.contact_id = bc.id) AS n
+           FROM partner_book_contacts bc
+          WHERE bc.owner_user_id = ? ORDER BY bc.id ASC LIMIT 200`
+      ).bind(userId).all<{ name: string; organization: string | null; n: number }>();
+      // TWO CONTACTS IS THE FLOOR FOR A PATH BETWEEN THEM. One name cannot be
+      // introduced to anybody, and a draft over it would be the model filling
+      // in the second half.
+      const all = (rows.results || []).filter((r) => r.n > 0);
+      if (all.length < 2) return [];
+      return all.map((r) =>
+        `${r.name} at ${r.organization || 'no organization recorded'} — ${r.n} recorded interaction${r.n === 1 ? '' : 's'} with the firm`);
+    },
+  },
 };
 
 research.get('/drafts', async (c) => {
