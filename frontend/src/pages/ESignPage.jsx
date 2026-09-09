@@ -97,14 +97,31 @@ export default function ESignPage() {
     if (!sigDataUrl) { setError('Please draw your signature in the box.'); return; }
     setError(''); setSubmitting(true);
     try {
-      // SECURITY: deliberately do NOT ship the drawn-signature image
-      // (`sigDataUrl`) to the backend. The server treats authenticated
-      // click-through + typed_name as the legal signature record (data
-      // minimisation — see services/signatures.py). Sending the base64
-      // image would be wasted bandwidth and unnecessary PII surface.
+      // THE DRAWN IMAGE IS THE ARTEFACT, and withholding it made signing
+      // impossible in production. The comment that stood here read: "SECURITY:
+      // deliberately do NOT ship the drawn-signature image (`sigDataUrl`) to
+      // the backend. The server treats authenticated click-through +
+      // typed_name as the legal signature record (data minimisation — see
+      // services/signatures.py). Sending the base64 image would be wasted
+      // bandwidth and unnecessary PII surface."
+      //
+      // `services/signatures.py` IS THE DEV FASTAPI, WHICH IS NEVER DEPLOYED
+      // (CLAUDE.md, fact 3). The production API is the Cloudflare Worker, and
+      // `routes/esign.ts` requires `signature_data_url` to start with
+      // `data:image/png;base64,` — it 400s with "Signature must be a PNG canvas
+      // drawing" without it — because `services/pdf.ts` embeds that PNG into
+      // the signed PDF's execution block. So the pad drew a signature, this
+      // function threw it away, and every submission was rejected: a person
+      // could draw, type their name, tick the consent box, and never sign
+      // anything.
+      //
+      // It is not extra PII either. The image is a rendering of a name the
+      // same request already carries as `typed_name`, it goes only into the
+      // signed PDF the signer receives, and the worker caps it at 256 KB.
       const r = await api.esignSubmitSignature(token, {
         accepted: true,
         typed_name: typedName,
+        signature_data_url: sigDataUrl,
       });
       setDone(r);
     } catch (e) {
