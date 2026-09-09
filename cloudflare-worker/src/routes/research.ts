@@ -1346,6 +1346,47 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  'delivery/deliverables': {
+    // The artboard: "A chase note per unopened deliverable, naming the item, the
+    // date sent, and what the review unblocks … States the milestone consequence
+    // without assigning blame."
+    //
+    // The last clause is the instruction that matters. A model drafting chases
+    // will otherwise write something that reads as an accusation, and the one
+    // thing this zone knows for certain is that it does NOT know whether the
+    // client opened the file: `opened_at` is theirs to set and nothing writes it.
+    instruction: [
+      'Draft one short chase note per unopened deliverable below: the item, when it went out, and what reviewing it unblocks.',
+      'Never say or imply the client ignored it: this product records no opens at all, so an unopened row means we have not heard, not that they did not look.',
+      'State the milestone consequence plainly and assign no blame. These are drafts for a person to send.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT d.title AS title, d.version AS version, d.sent_at AS sent_at,
+                n.title AS need_title, f.name AS client,
+                (SELECT COUNT(*) FROM engagement_milestones m
+                  WHERE m.engagement_id = e.id AND m.completed_at IS NULL) AS open_milestones
+           FROM engagement_deliverables d
+           JOIN engagements e ON e.id = d.engagement_id
+           LEFT JOIN founder_needs n ON n.id = e.need_id
+           LEFT JOIN users f ON f.id = e.founder_id
+          WHERE e.partner_id = ? AND d.sent_at IS NOT NULL AND d.opened_at IS NULL
+          ORDER BY d.sent_at ASC LIMIT 100`
+      ).bind(me.partner_id).all<{
+        title: string; version: string | null; sent_at: string;
+        need_title: string | null; client: string | null; open_milestones: number;
+      }>();
+      return (rows.results || []).map((r) =>
+        `${r.client || 'client not recorded'} — "${r.title}"${r.version ? ` v${r.version}` : ''}, `
+        + `sent ${String(r.sent_at).slice(0, 10)}, not acknowledged here; `
+        + `${r.need_title ? `engagement: ${r.need_title}; ` : ''}`
+        + `${r.open_milestones} milestone${r.open_milestones === 1 ? '' : 's'} still open on it`);
+    },
+  },
+
   'delivery/board': {
     // The artboard: "Across five live engagements, two carry risk and both are
     // client-facing … Neither is a capacity problem, so neither is solved by

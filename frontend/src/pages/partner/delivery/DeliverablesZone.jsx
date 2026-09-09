@@ -3,13 +3,18 @@ import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Pill,
-  StatCard, Section, Field, SaveNote, NotComputable,
+  // `StatCard` went with the four tiles it drew: the strip is the artboard's
+  // own composition now, and `ShipTile` below can draw an absence as a chip
+  // rather than as an em dash a reader mistakes for zero.
+  Section, Field, SaveNote, NotComputable,
   UnlinkedZone, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
+import ZoneDraft from '../../../workspaces/ZoneDraft';
+import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
 
 /**
  * Delivery · Deliverables — `/delivery/deliverables`.
@@ -123,6 +128,21 @@ function DeliverableRow({ row, busy, onSave, onDelete, note }) {
   );
 }
 
+/** The strip tile, in the anatomy the artboards share. */
+function ShipTile({ label, value, note, nr = false }) {
+  return (
+    <div className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+      <Eyebrow>{label}</Eyebrow>
+      <div className="mt-1.5">
+        {nr ? <NotRecorded /> : (
+          <span className="font-mono text-[16px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{value}</span>
+        )}
+      </div>
+      <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
+    </div>
+  );
+}
+
 export default function PartnerDeliverablesZone() {
   const [state, setState] = useState({ loading: true, error: '', data: null, engagements: null });
   const [view, setView] = useState('never_opened');
@@ -175,6 +195,13 @@ export default function PartnerDeliverablesZone() {
   const d = state.data;
   const items = Array.isArray(d?.items) ? d.items : [];
   const engagements = state.engagements || [];
+  // ══ THE ARTBOARD'S FOUR TILES, COUNTED OVER THE WHOLE LOG ═══════════════
+  // Never over `visible`: a figure that changes because a chip was clicked is
+  // not reporting what its label claims.
+  const unopened = items.filter((r) => r.sent_at && !r.opened_at);
+  const signedOff = items.filter((r) => r.signed_off_at);
+  const shippedThisMonth = items.filter((r) => r.days_since_sent != null && r.days_since_sent <= 31);
+  const clientCount = new Set(items.map((r) => r.founder_name || r.need_title).filter(Boolean)).size;
   const oldestUnopened = useMemo(() => {
     const sent = items.filter((x) => x.is_unopened && x.days_since_sent != null);
     if (!sent.length) return null;
@@ -200,7 +227,17 @@ export default function PartnerDeliverablesZone() {
     return items;
   })();
 
-  const rowActions = partnerZoneActions('delivery/deliverables', { view: { header: ['Deliverable', 'Need', 'Version', 'Sent', 'Opened', 'Signed off'], rows: visible, cells: (r) => [r.title, r.need_title, r.version, r.sent_at, r.opened_at, r.signed_off_at] } });
+  // THE ARTBOARD'S OWN ORDER — "unopened first, oldest first within it" — and
+  // it is the instrument's meta line, so the page must actually do it rather
+  // than trust whatever order the read returned. `By client` is the one chip
+  // that replaces this ordering, because that is what the chip IS.
+  const ordered = view === 'by_client' ? visible : [...visible].sort((a, b) => {
+    const au = a.sent_at && !a.opened_at ? 0 : 1;
+    const bu = b.sent_at && !b.opened_at ? 0 : 1;
+    return au - bu || (b.days_since_sent ?? -1) - (a.days_since_sent ?? -1);
+  });
+
+  const rowActions = partnerZoneActions('delivery/deliverables', { view: { header: ['Client', 'Deliverable', 'Version', 'Sent', 'Age', 'Opened', 'Signed off'], rows: ordered, cells: (r) => [r.founder_name, r.title, r.version, r.sent_at, r.days_since_sent, r.opened_at, r.signed_off_at] } });
 
   if (isNoPartnerProfile(state.error)) {
     return <UnlinkedZone title="Deliverables" actions={rowActions} />;
@@ -248,19 +285,36 @@ export default function PartnerDeliverablesZone() {
           )}
         />
 
+        {/* ══ THE `pd2` STRIP ══════════════════════════════════════════════
+            `Never opened · Signed off · Shipped this month · Median days to
+            open`. The fourth reads absent, and the artboard says why in its own
+            instNote: averaging a handful of opens "would look like a metric".
+            Here the reason is stronger still — `opened_at` is the CLIENT'S
+            column and no founder-side surface writes it, so the sample is not
+            small, it is empty. */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <StatCard label="Logged" value={items.length} hint={`${d?.sent_count ?? 0} sent`} />
-          <StatCard
-            label="Sent, unopened"
-            value={d?.unopened_count ?? 0}
-            hint="not the same as ignored — see below"
+          <ShipTile
+            label="Never opened"
+            value={String(unopened.length)}
+            note={oldestUnopened
+              ? `oldest ${oldestUnopened.days_since_sent} days out`
+              : 'nothing sent and unopened'}
           />
-          <StatCard
-            label="Longest unopened"
-            value={oldestUnopened ? `${oldestUnopened.days_since_sent}d` : '—'}
-            hint={oldestUnopened ? oldestUnopened.title : 'nothing sent yet'}
+          <ShipTile
+            label="Signed off"
+            value={String(signedOff.length)}
+            note={signedOff.length ? 'the client marked it accepted' : 'nothing signed off yet'}
           />
-          <StatCard label="Median time to open" value="—" hint="not computable — see below" />
+          <ShipTile
+            label="Shipped this month"
+            value={String(shippedThisMonth.length)}
+            note={`across ${clientCount} client${clientCount === 1 ? '' : 's'}`}
+          />
+          <ShipTile
+            label="Median days to open"
+            nr
+            note="no opened_at is written anywhere, so there is no sample to take a median of"
+          />
         </div>
 
         {d?.unopened_note && (
@@ -312,9 +366,58 @@ export default function PartnerDeliverablesZone() {
           </div>
         )}
 
+        <Instrument
+          testid="shipped-log"
+          title="Shipped log"
+          meta="Unopened first, oldest first within it"
+          cols="1fr 2.1fr .8fr .9fr 1.1fr"
+          head={['Client', 'Deliverable', 'Sent', 'Age', 'Acknowledgment']}
+          rows={ordered.map((row) => {
+            const isUnopened = Boolean(row.sent_at && !row.opened_at);
+            return {
+              key: row.id,
+              rowClass: isUnopened ? 'bg-red-50/40 dark:bg-red-950/10' : '',
+              cells: [
+                row.founder_name ? { text: row.founder_name } : { nr: true },
+                { text: row.title, sub: row.version ? `v${row.version}` : undefined },
+                row.sent_at ? { text: formatDay(row.sent_at) } : { nr: true },
+                // AGE IS SINCE SENDING, and it is the number the row is sorted
+                // by. An unsent draft has no age, which is not the same as an
+                // age of zero.
+                row.days_since_sent == null
+                  ? { nr: true }
+                  : { text: `${row.days_since_sent} d ago` },
+                // THE ONE COLUMN THIS PRODUCT CANNOT FILL FROM ITS OWN SIDE.
+                // `opened_at` and `signed_off_at` are the CLIENT'S to set —
+                // migration 208 says so and no route here accepts either — so a
+                // sent-and-unopened row says exactly that rather than claiming
+                // the client ignored it.
+                row.signed_off_at
+                  ? { pill: 'Signed off', pillTone: 'ok' }
+                  : (row.opened_at
+                    ? { pill: 'Opened', pillTone: 'info' }
+                    : (row.sent_at
+                      ? { pill: 'Never opened', pillTone: 'danger', sub: 'or opened without telling us' }
+                      : { pill: 'Not sent', pillTone: 'neutral' })),
+              ],
+            };
+          })}
+          note={'The unopened rows lead the page and tint red because work delivered into silence is the firm\u2019s most expensive state: invoiced, unreviewed, and blocking the next milestone — which is also why an engagement with unopened deliverables reads at risk on the board. `Median days to open` is absent rather than averaged, and the reason here is stronger than the artboard\u2019s "too few opened items": `opened_at` is the client\u2019s column, no founder-side surface writes it, and a median over a column nobody writes would be a number about our own silence. `Never opened` means exactly sent-and-not-acknowledged-here, never that the client ignored it.'}
+        />
+
+        <ZoneDraft
+          surface="delivery/deliverables"
+          label="Draft · unopened chase"
+          accept="Accept drafts"
+          run="Draft the chases"
+          foot={`${unopened.length} note${unopened.length === 1 ? '' : 's'}; a human sends each.`}
+          empty="A chase note per unopened deliverable — the item, the date it went out, and what the review unblocks, for a person to send from the account that shipped it."
+          nothingToDraft="Nothing is sent and unopened, so there is nothing to chase."
+        />
+
         <Section title="Log">
           <div>
-            {items.map((row) => (
+            {ordered.map((row) => (
               <DeliverableRow
                 key={row.id}
                 row={row}
