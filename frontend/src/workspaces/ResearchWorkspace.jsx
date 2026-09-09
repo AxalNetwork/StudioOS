@@ -45,15 +45,16 @@ import { api } from '../lib/api';
  * was reachable only by deep link after being dropped from the sidebar — worth
  * reviving rather than rebuilding.
  *
- * THE ZONE PAGES GET THEIR PROPS NOW, AND FOR A LONG TIME THEY DID NOT.
- * `SignalsPage` was mounted with `embedded` alone; it destructures `{ user }`,
- * so BOTH props were dropped. `user` being undefined meant `mode` resolved to
+ * MARKETS NO LONGER MOUNTS THE SIGNALS FEED, and the paragraph that stood here
+ * described the props that feed needed. The finding is worth keeping: mounted
+ * with `embedded` alone, `SignalsPage` dropped `user`, so `mode` resolved to
  * `'founder'` for every role on this route — no advisor ordering, no advisor
- * strip, no `advisor_note` — while the founder hero rendered a second h1 inside
- * this shell's own. `CompetitorAnalysisPage` took no props at all and swallowed
- * its `embedded` the same way. Both are fixed at the source; `Markets` now
- * receives `user`, and `Companies` a `chromeless` flag that is deliberately not
- * `embedded` (see `components/CompetitorAnalysis.jsx` for why).
+ * strip, no `advisor_note`. That was fixed, and then the zone turned out to be
+ * about a different object altogether: the `pr3` artboard's comparable RANGES
+ * for the firm's own service lines, not sector signals. `MarketZone` is that
+ * page and the feed keeps `/signals`. `CompetitorAnalysisPage` had the same
+ * swallowed-props defect and keeps its fix — `Companies` takes a `chromeless`
+ * flag that is deliberately not `embedded` (see `components/CompetitorAnalysis.jsx`).
  *
  * ASK, LIBRARY AND COMPANIES CARRY A HISTORY WORTH KNOWING. Decisions D9 and
  * D12 withdrew four `/advisor/research/*` tabs — companies, AI research, news,
@@ -86,7 +87,7 @@ import { api } from '../lib/api';
  * empty state says so in its own words.
  */
 
-const SignalsPage = lazy(() => import('../pages/SignalsPage'));
+const MarketZone = lazy(() => import('../pages/research/MarketZone'));
 const CompetitorAnalysisPage = lazy(() => import('../pages/CompetitorAnalysisPage'));
 const LibraryZone = lazy(() => import('../pages/research/LibraryZone'));
 const AskZone = lazy(() => import('../pages/research/AskZone'));
@@ -206,16 +207,25 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
       return <ResearchOverview role={role} />;
     }
     if (slug === 'markets') {
+      // THE ZONE'S OBJECT CHANGED, WHICH IS WHY THE MOUNT DID. This rendered
+      // `SignalsPage` embedded — the `market_intel_rows` sector feed — and the
+      // `pr3` artboard is about comparable RANGES for the firm's own service
+      // lines, each attachable to a proposal. A sector signal is not a price.
+      // The feed keeps its own route at `/signals`, which every licence that
+      // had it here still reaches, and `MarketZone` links to it in as many
+      // words rather than leaving a reader to find it.
       return (
         <Suspense fallback={<Loading />}>
-          <SignalsPage user={user} mode={role === 'advisor' ? 'advisor' : 'founder'} embedded
+          <MarketZone
             role={role}
             zoneFilters={(opts) => zoneFiltersFor(role, 'research/markets', opts)}
-            zoneActions={(rows) => zoneActionsFor(role, 'research/markets', { view: {
-              header: ['Signal', 'Type', 'Sector', 'Niche', 'Region', 'Confidence', 'Freshness', 'Updated'],
-              rows,
-              cells: (g) => [g.title, g.type, g.sector, g.niche, g.region, g.confidence_score, g.freshness_score, g.updated_at],
-            } })} />
+            zoneActions={(rows, handlers) => zoneActionsFor(role, 'research/markets', { handlers, view: {
+            zone: 'markets',
+            header: ['Reading', 'Low (USD cents)', 'High (USD cents)', 'Comparables', 'Run date', 'Age (days)', 'Attachment'],
+            rows,
+            cells: (r) => [r.metric, r.range_low_cents, r.range_high_cents, r.comparable_count,
+              r.ran_at, r.days, r.band === 'stale' ? 'blocked' : (r.days === null ? 'nothing to attach' : (r.attached ? 'attached' : 'attachable'))],
+          } })} />
         </Suspense>
       );
     }

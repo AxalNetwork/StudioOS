@@ -730,6 +730,139 @@ research.post('/ask', async (c) => {
 
 
 // ---------------------------------------------------------------------------
+// Market readings — comparable ranges for the firm's own service lines (223)
+// ---------------------------------------------------------------------------
+//
+// THE ROWS ARE THE CATALOG, joined to the newest reading for each. An offering
+// with no reading is the artboard's "never run" row and its `Retainer rate ·
+// Not recorded` tile — a fact about the firm's own record, which is why it is
+// returned rather than filtered out.
+
+interface ReadingRow {
+  id: number; uid: string; owner_user_id: number; offering_id: number | null;
+  metric: string; range_low_cents: number; range_high_cents: number;
+  comparable_count: number; ran_at: string; scope: string | null;
+  created_at: string; updated_at: string;
+}
+
+const readingDto = (r: ReadingRow) => ({
+  uid: r.uid,
+  offering_uid: null as string | null,
+  metric: r.metric,
+  range_low_cents: r.range_low_cents,
+  range_high_cents: r.range_high_cents,
+  comparable_count: r.comparable_count,
+  ran_at: r.ran_at,
+  scope: r.scope,
+});
+
+/**
+ * Every service line, with the newest reading for it — and every reading that
+ * is not for a service line.
+ *
+ * TWO READS RATHER THAN ONE OUTER JOIN, because the interesting row is the one
+ * with nothing on the other side and an outer join makes that row's absence
+ * indistinguishable from a row that was never selected. The page needs both
+ * halves named.
+ */
+research.get('/market-readings', async (c) => {
+  const user = await requireAuth(c);
+  const offerings = await c.env.DB.prepare(
+    `SELECT id, uid, title, price_usd FROM service_offerings
+      WHERE owner_user_id = ? AND is_active = 1 ORDER BY created_at DESC LIMIT 200`
+  ).bind(user.id).all<{ id: number; uid: string; title: string; price_usd: number | null }>();
+  const readings = await c.env.DB.prepare(
+    `SELECT * FROM research_market_readings WHERE owner_user_id = ? ORDER BY ran_at DESC LIMIT 500`
+  ).bind(user.id).all<ReadingRow>();
+
+  // Newest first out of the query, so the first one seen per offering is the
+  // newest — no comparison, no tie-break, no chance of picking the wrong run.
+  const newest = new Map<number, ReadingRow>();
+  const loose: ReadingRow[] = [];
+  for (const r of readings.results || []) {
+    if (r.offering_id == null) { loose.push(r); continue; }
+    if (!newest.has(r.offering_id)) newest.set(r.offering_id, r);
+  }
+
+  const items = [
+    ...(offerings.results || []).map((o) => {
+      const r = newest.get(o.id);
+      return {
+        offering_uid: o.uid,
+        metric: o.title,
+        // NULL, NOT ZERO, AND THIS IS THE ROW THE ARTBOARD IS ABOUT. A service
+        // line nobody has priced the market for reads "Not recorded"; a zero
+        // would say the firm looked and found the work is worth nothing.
+        ...(r ? { ...readingDto(r), offering_uid: o.uid, metric: o.title } : {
+          uid: null, range_low_cents: null, range_high_cents: null,
+          comparable_count: null, ran_at: null, scope: null,
+        }),
+        // The catalog's own price, so the page can say when a service line is
+        // unpriced AND unread — the two halves of the same gap.
+        catalogued: o.price_usd != null,
+      };
+    }),
+    ...loose.map((r) => ({ ...readingDto(r), catalogued: false })),
+  ];
+  return c.json({ items });
+});
+
+research.post('/market-readings', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const low = Number(body?.range_low_cents);
+  const high = Number(body?.range_high_cents);
+  const n = Number(body?.comparable_count);
+  const ranAt = String(body?.ran_at || '').trim().slice(0, 32);
+  let metric = String(body?.metric || '').trim().slice(0, 200);
+
+  let offeringId: number | null = null;
+  if (body?.offering_uid) {
+    const o = await c.env.DB.prepare(
+      `SELECT id, title FROM service_offerings WHERE uid = ? AND owner_user_id = ?`
+    ).bind(String(body.offering_uid), user.id).first<{ id: number; title: string }>();
+    if (!o) return c.json({ detail: 'not_found' }, 404);
+    offeringId = o.id;
+    // The offering's own title, so a reading cannot be filed under a name the
+    // catalog does not use — the page joins the two and a second label would be
+    // the place they disagree.
+    metric = o.title;
+  }
+  if (!metric) return c.json({ detail: 'metric_required' }, 400);
+  // EVERY ONE OF THESE IS REFUSED RATHER THAN DEFAULTED. A range with no
+  // comparable count is a number a client will ask about and the firm cannot
+  // answer; a range with no run date cannot age, and age is what this zone
+  // gates attachment on. `research_benchmarks` refuses a peer figure on exactly
+  // these grounds and its schema carries the same CHECK.
+  if (!Number.isInteger(low) || !Number.isInteger(high) || low < 0 || high < low) {
+    return c.json({ detail: 'range_required' }, 400);
+  }
+  if (!Number.isInteger(n) || n < 1) return c.json({ detail: 'comparable_count_required' }, 400);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ranAt)) return c.json({ detail: 'ran_at_required' }, 400);
+
+  const uid = newUid();
+  await c.env.DB.prepare(
+    `INSERT INTO research_market_readings
+       (uid, owner_user_id, offering_id, metric, range_low_cents, range_high_cents, comparable_count, ran_at, scope)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(uid, user.id, offeringId, metric, low, high, n, ranAt,
+    body?.scope ? String(body.scope).slice(0, 200) : null).run();
+  const row = await c.env.DB.prepare(
+    `SELECT * FROM research_market_readings WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, user.id).first<ReadingRow>();
+  return c.json({ item: row ? readingDto(row) : null }, 201);
+});
+
+research.delete('/market-readings/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const res = await c.env.DB.prepare(
+    `DELETE FROM research_market_readings WHERE uid = ? AND owner_user_id = ?`
+  ).bind(c.req.param('uid'), user.id).run();
+  if (!res.meta?.changes) return c.json({ detail: 'not_found' }, 404);
+  return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
 // Brief notes — the firm's own half of a client brief (migration 222)
 // ---------------------------------------------------------------------------
 //

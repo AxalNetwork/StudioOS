@@ -83,7 +83,11 @@ const NETWORK_BODIES = {
 const RESEARCH_BODIES = {
   'research/ask': 'frontend/src/pages/research/AskZone.jsx',
   'research/library': 'frontend/src/pages/research/LibraryZone.jsx',
-  'research/markets': 'frontend/src/pages/SignalsPage.jsx',
+  // WAS `pages/SignalsPage.jsx`, AND THE ZONE'S OBJECT IS WHY IT MOVED. That
+  // page is the `market_intel_rows` sector feed and keeps its own route at
+  // `/signals`; the `pr3` artboard is about comparable RANGES for the firm's
+  // own service lines, which is what `MarketZone` reads.
+  'research/markets': 'frontend/src/pages/research/MarketZone.jsx',
   'research/companies': 'frontend/src/components/CompetitorAnalysis.jsx',
   'research/funds': 'frontend/src/pages/research/FundsZone.jsx',
   'research/benchmarking': 'frontend/src/pages/research/BenchmarkingZone.jsx',

@@ -3831,6 +3831,16 @@ export const api = {
     }),
     detach: (uid) => request(`/research/attachments/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
 
+    // Comparable ranges for the firm's own service lines (migration 223). The
+    // list is the catalog joined to the newest reading for each, so a service
+    // line nobody has priced the market for comes back with nulls rather than
+    // being left out — that row is what the zone is about.
+    marketReadings: () => request('/research/market-readings'),
+    marketReadingCreate: (data) => request('/research/market-readings', {
+      method: 'POST', body: JSON.stringify(data || {}),
+    }),
+    marketReadingRemove: (uid) => request(`/research/market-readings/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+
     // Funds — founder-facing fund research (migration 216). Every read is
     // owner-scoped in the worker; there is no cross-user listing to call.
     funds: () => request('/research/funds'),
