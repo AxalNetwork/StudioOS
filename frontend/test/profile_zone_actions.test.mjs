@@ -139,7 +139,14 @@ const PROFILES = {
     // route rendered a stated gap rather than a list — true of the page that
     // then existed, and migrations 224 and 226 changed it. Was 21.
     zones: 22,
-    links: 0,
+    // ONE LINK, AND IT REPLACED A REASON THAT HAD GONE STALE. `pipeline/leads`'
+    // `Edit capability weights` was prose on the grounds that "no capability
+    // register is stored, and no weight against one" — true when it was
+    // written, and untrue since `partner_fit_rules` (209/229) was built for
+    // Offers · Audience fit. The rules are edited there and read on Leads, so
+    // the op links to the one place they are written rather than opening a
+    // second form over the same numbers. Was 0.
+    links: 1,
     // Twenty exports. Organizations exports the roll-up it is showing: the
     // grouped companies, their relationship and how many people the firm knows
     // inside each. The two absent columns ship as empty cells rather than as

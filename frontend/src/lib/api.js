@@ -3167,6 +3167,17 @@ export const api = {
   // for the same reason the advisor block above does not take an advisor id.
   // A quote or engagement belonging to another firm answers 404, not 403 — a
   // non-owner is not told the row exists.
+  // The three sets the Leads zone keeps disjoint: open leads (never bid, never
+  // passed), the passes with their reasons, and — by their absence — the needs
+  // this firm already quoted on, which are proposals.
+  listPartnerLeads: () => request('/partner/pipeline/leads'),
+  // A pass is not a loss: a lost bid is a bid, and this is the record of a bid
+  // never made. `reason` is a closed set; the note is what makes it useful to
+  // the next person who reads the same lead.
+  passPartnerLead: (needId, data) =>
+    request(`/partner/pipeline/leads/${needId}/pass`, { method: 'POST', body: JSON.stringify(data) }),
+  unpassPartnerLead: (needId) =>
+    request(`/partner/pipeline/leads/${needId}/pass`, { method: 'DELETE' }),
   listPartnerNegotiations: () => request('/partner/pipeline/negotiations'),
   // PUT, not POST: one negotiation per quote is a UNIQUE index, so this is an
   // upsert. `{touch: true}` advances the stalled clock without changing stage.

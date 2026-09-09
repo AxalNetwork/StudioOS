@@ -147,10 +147,26 @@ export const PARTNER_ZONE_ACTIONS = {
   // zones already loads the rows an export would write. The other four each
   // need a store that does not exist, named per entry.
   'pipeline/leads': [
-    // Scoring a lead against what this firm can do needs a weight per
-    // capability and a capability register to hang it on. Neither is stored: a
-    // lead's fit is judged by the person reading it.
-    { label: 'Edit capability weights', unbuilt: 'no capability register is stored, and no weight against one, so there is nothing to edit' },
+    // THE REASON HERE WAS TRUE WHEN IT WAS WRITTEN AND IS NOT TRUE NOW, and it
+    // is worth keeping both halves of what it said. The note read: "scoring a
+    // lead against what this firm can do needs a weight per capability and a
+    // capability register to hang it on. Neither is stored: a lead's fit is
+    // judged by the person reading it." The `unbuilt` string a reader of this
+    // table actually saw was "no capability register is stored, and no weight
+    // against one, so there is nothing to edit".
+    //
+    // The register was built for a different zone. `partner_fit_rules` (209,
+    // plus 229's `signal`) is exactly it — what this firm takes, what it passes
+    // on, and the budget below which it does not bid — and `service_offerings`
+    // is what it sells. `/offers/fit-rules` answered `enforcement: 'none'` all
+    // that time, accurately: nothing read them. `/pipeline/leads` now does, and
+    // every receipt on a lead names the rule it came from.
+    //
+    // So this op LINKS rather than opening an editor of its own. The rules are
+    // edited where they are written and read everywhere they apply; a second
+    // form here would be a second place to change one number, and the first
+    // time the two disagreed nobody would know which the score used.
+    { label: 'Edit capability weights', to: '/offers/audience-fit', linkNote: 'The rules a lead is scored against are your fit rules — edited on Offers · Audience fit, and read here.' },
   ],
   'pipeline/proposals': [
     // `opened_at` is the CLIENT'S column to set and no surface lets them, so

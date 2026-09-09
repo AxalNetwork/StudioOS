@@ -1440,6 +1440,69 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  'pipeline/leads': {
+    // The artboard: "Accepting <lead> drafts a proposal shaped as a retainer
+    // rather than a project — because retainers are where you win, and their
+    // eight-week framing is a project only by habit. Their stated budget covers
+    // three months at your rate."
+    //
+    // Two instructions carry it. The shape claim must come from the firm's OWN
+    // record — a model that recommends a retainer because retainers are
+    // fashionable is worse than one that recommends nothing — and the budget
+    // arithmetic must use the firm's stated floor rather than a guess at its
+    // rate. Where either is missing, the draft says so instead of inventing it,
+    // which is the same refusal the score itself makes.
+    instruction: [
+      'Draft a proposal outline for the strongest open lead below, using only the firm’s own listed services, stated budget floor and the client’s own words.',
+      'Recommend a shape — retainer or fixed project — only when this firm’s own won work supports it, and name the evidence. Where the record does not say which shape wins, say that and recommend neither.',
+      'Check the client’s stated budget against the firm’s stated floor and say plainly whether it clears it. Where either number is absent, say which is missing rather than estimating it.',
+      'Never invent a capability, a rate or a timeline. A lead the firm’s rules exclude is not a lead to draft for — say so and stop.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      // The open leads, plus the two things a shape recommendation needs: what
+      // this firm sells and what it says it will not take.
+      const [leads, offerings, rules] = await Promise.all([
+        c.env.DB.prepare(
+          `SELECT n.title, n.description, n.category, n.budget_min, n.budget_max, n.timeline,
+                  f.name AS client
+             FROM founder_needs n
+             LEFT JOIN users f ON f.id = n.founder_id
+            WHERE n.status = 'open'
+              AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.need_id = n.id AND q.partner_id = ?)
+              AND NOT EXISTS (SELECT 1 FROM partner_lead_passes lp WHERE lp.need_id = n.id AND lp.partner_id = ?)
+            ORDER BY n.created_at DESC LIMIT 25`
+        ).bind(me.partner_id, me.partner_id).all<any>(),
+        c.env.DB.prepare(
+          `SELECT o.title, o.category,
+                  (SELECT COUNT(*) FROM engagements e
+                     JOIN quotes q ON q.id = e.quote_id
+                    WHERE e.partner_id = o.partner_id) AS firm_wins
+             FROM service_offerings o
+            WHERE o.partner_id = ? AND o.is_active = 1 LIMIT 25`
+        ).bind(me.partner_id).all<any>(),
+        c.env.DB.prepare(
+          `SELECT kind, value, floor_cents, statement FROM partner_fit_rules
+            WHERE partner_id = ? AND is_active = 1 LIMIT 50`
+        ).bind(me.partner_id).all<any>(),
+      ]);
+
+      const floor = (rules.results || []).find((r: any) => r.kind === 'budget_floor' && r.floor_cents != null);
+      const context = [
+        `FIRM SELLS: ${(offerings.results || []).map((o: any) => o.title).join('; ') || 'NOTHING LISTED — no capability on record'}`,
+        `FIRM BUDGET FLOOR: ${floor ? `$${Math.round(Number(floor.floor_cents) / 100).toLocaleString('en-US')}` : 'NOT STATED — do not estimate one'}`,
+        `FIRM EXCLUSIONS: ${(rules.results || []).filter((r: any) => r.kind !== 'budget_floor' && r.kind !== 'best_fit').map((r: any) => r.value).join('; ') || 'none stated'}`,
+      ];
+      return context.concat((leads.results || []).map((l: any) =>
+        `LEAD — ${l.client || 'client not recorded'}: ${l.title}; `
+        + `${l.description || 'no description given'}; `
+        + `budget ${l.budget_max == null ? 'NOT STATED by the client' : `up to $${Number(l.budget_max).toLocaleString('en-US')}`}; `
+        + `timeline ${l.timeline || 'not stated'}`));
+    },
+  },
+
   'delivery/health': {
     // The artboard: "Per engagement: drift against SOW, utilization against the
     // retainer record, and where satisfaction is ABSENT rather than low …

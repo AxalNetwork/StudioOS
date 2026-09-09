@@ -290,7 +290,15 @@ test('all five Delivery zones have their chip row, and the guard can see them', 
   const guard = raw('frontend/test/profile_zone_filters.test.mjs');
   assert.ok(guard.includes("canvasDirs: ['design/incoming', 'design/canvases/integrated'],"),
     'the partner filter guard reads one directory again, so half its canvases are invisible');
-  assert.match(guard, /canvas: \/\^Pages · Partner \(Delivery\|Network\|Offers\|Research\)\\\.dc\\\.html\$\//,
+  // NAMED, NOT PINNED. This asserted the whole alternation
+  // (`Delivery|Network|Offers|Research`), so bringing the Pipeline canvas into
+  // the same guard — which found five more uncovered chip rows — failed here
+  // for no reason connected to Delivery. What this file needs to know is that
+  // its own canvas is still read; which other buckets joined it is that
+  // guard's business.
+  const alternation = guard.match(/canvas: \/\^Pages · Partner \(([^)]*)\)/);
+  assert.ok(alternation, 'the partner filter guard no longer selects its canvases by name');
+  assert.ok(alternation[1].split('|').includes('Delivery'),
     'the partner filter guard no longer reads the Delivery canvas');
   // And each of the four other zones mounts what it declares.
   for (const [file, zoneKey] of [

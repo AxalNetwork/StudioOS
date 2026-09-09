@@ -432,6 +432,81 @@ export const PARTNER_ZONE_FILTERS = {
     { canvas: 'Reusable', key: 'playbook' },
     { canvas: 'Not indexed', key: 'unindexed' },
   ],
+
+  // ── Pipeline ─────────────────────────────────────────────────────────────
+  // THE WHOLE BUCKET WAS ABSENT FROM THIS TABLE, so five zones with a `views(…)`
+  // row on their artboard rendered no chip row at all. Not prose, not a
+  // relabel — nothing. The labels below are `Pages · Partner Pipeline`'s own,
+  // in its own order, out of the five `views([…])` calls in its data prelude.
+
+  // `Open` IS THE DEFAULT AND IT IS A THREE-WAY EXCLUSION, not a status column:
+  // a need this firm has quoted on is a PROPOSAL and a need with a pass row is
+  // a PASS, so an open lead is what is left. The artboard states the rule
+  // itself — "a lead you already bid is not a lead, and a lead you declined is
+  // not one either" — and the read enforces it rather than trusting a flag.
+  //
+  // `Warm intros` READS PROVENANCE, and on this build there is exactly one kind
+  // of it: every lead this product can see is a marketplace need. Nothing
+  // records a lead arriving through an investor or a referral, so this chip
+  // selects the whole open list and says so rather than pretending to narrow.
+  'pipeline/leads': [
+    { canvas: 'Open', key: 'open' },
+    { canvas: 'Strong fit', key: 'strong' },
+    {
+      canvas: 'Warm intros',
+      unbuilt: 'every lead here is a marketplace need — nothing records a lead arriving through an investor or a referral, so there is no second provenance to select',
+    },
+    { canvas: 'Passed', key: 'passed' },
+    { canvas: 'All sources', key: 'all' },
+  ],
+
+  // `Opened, unanswered` AND `Never opened` BOTH READ `quotes` AND BOTH ARE
+  // ABOUT A COLUMN NOBODY WRITES. No surface lets a client mark a proposal
+  // read, so "never opened" means "we have not heard" — the same reading
+  // `delivery/deliverables` documents at length. The chips stay, because the
+  // distinction they draw is real on the firm's side (sent vs decided); what
+  // the zone must not do is read either as the client ignoring it.
+  'pipeline/proposals': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Opened, unanswered', key: 'unanswered' },
+    { canvas: 'Never opened', key: 'unopened' },
+    { canvas: 'Won', key: 'won' },
+    { canvas: 'Lost', key: 'lost' },
+  ],
+
+  // `quote_negotiations.ball` IS EXACTLY THESE TWO CHIPS — migration 208 stores
+  // `us` / `them` and the zone already renders it. `Stalled 7d+` reads
+  // `days_stalled`, which the worker computes from `last_moved_at` rather than
+  // letting the page do it against a different clock.
+  'pipeline/negotiations': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Awaiting you', key: 'us' },
+    { canvas: 'Awaiting them', key: 'them' },
+    { canvas: 'Stalled 7d+', key: 'stalled' },
+  ],
+
+  // `Renewing 30d` READS `partner_retainers.renews_at`; `Under-consuming` and
+  // `Over scope` read the utilisation the retainers zone already computes —
+  // under 70% and over 100% of retained hours. A retainer sold as a fee rather
+  // than by the hour has no retained hours and therefore no utilisation, so it
+  // is in neither: it is unmeasured, not fine.
+  'pipeline/retainers': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Renewing 30d', key: 'renewing' },
+    { canvas: 'Under-consuming', key: 'under' },
+    { canvas: 'Over scope', key: 'over' },
+  ],
+
+  // THREE PERIODS AND A GROUPING, which is what an analytics chip row is. The
+  // quarters are relative to today rather than the canvas's `Q3 2026` — that
+  // date is when the artboard was drawn, and a page whose first chip named a
+  // fixed quarter would be wrong for every reader after it.
+  'pipeline/analytics': [
+    { canvas: 'Q3 2026', key: 'quarter', label: 'This quarter' },
+    { canvas: 'Q2 2026', key: 'prev_quarter', label: 'Last quarter' },
+    { canvas: 'Year to date', key: 'ytd' },
+    { canvas: 'By shape', key: 'shape' },
+  ],
 };
 
 export const partnerZoneFilters = makeZoneFilters(PARTNER_ZONE_FILTERS);

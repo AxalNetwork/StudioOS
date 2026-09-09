@@ -25,7 +25,6 @@ import { api } from '../../lib/api';
 // directly removes the doubled chrome and the wrong-bucket header together,
 // and leaves /partner/operations/* exactly as it was.
 const PartnerEngagements = lazy(() => import('../../pages/partner/operations/EngagementsPage'));
-const NeedsBoardPage = lazy(() => import('../../pages/NeedsBoardPage'));
 const PerksPage = lazy(() => import('../../pages/PerksPage'));
 const ServiceCatalogPage = lazy(() => import('../../pages/ServiceCatalogPage'));
 // Pipeline · analytics used to mount `PartnerInsightsPage` — Demand Insights,
@@ -34,6 +33,12 @@ const ServiceCatalogPage = lazy(() => import('../../pages/ServiceCatalogPage'));
 // time and forecast. Both are honest surfaces answering different questions;
 // Demand Insights keeps its own mount at /partner/insights.
 const PartnerPipelineAnalytics = lazy(() => import('../../pages/partner/pipeline/AnalyticsZone'));
+// THE ZONE THE PIPELINE ROW LANDS ON NOW READS THE FIRM'S OWN LEADS. It
+// rendered `NeedsBoardPage` — the shared marketplace board a founder and an
+// admin see — which listed open needs and could not tell one this firm had
+// already bid on from one nobody had opened, had no score, no provenance and
+// nowhere to record a pass.
+const PartnerLeads = lazy(() => import('../../pages/partner/pipeline/LeadsZone'));
 // #45 — the two Pipeline zones migration 208 gave a store to. Both read
 // `/api/partner/pipeline/*` and nothing else; neither has a legacy route,
 // because neither has ever had a surface anywhere in the product.
@@ -128,11 +133,19 @@ function Loading() {
  * bare component, because two of these need props to be the right zone at all.
  *
  * `user` is the prop whose absence was a visible feature loss, not a style
- * one: `NeedsBoardPage` reads `user.role` to decide whether to offer the
- * partner's **My quotes** tab, and `PerksPage` reads it for **My listings**.
- * Mounted with no props, both saw `undefined` and silently dropped the one tab
- * the operator came for. `ResearchWorkspace` records fixing the identical
- * prop-drop for `SignalsPage`; this is the same bug on two more pages.
+ * one: `PerksPage` reads `user.role` to decide whether to offer **My
+ * listings**, and `ServiceCatalogPage` reads it the same way. Mounted with no
+ * props both saw `undefined` and silently dropped the one tab the operator came
+ * for. `ResearchWorkspace` records fixing the identical prop-drop for
+ * `SignalsPage`.
+ *
+ * `NeedsBoardPage` USED TO BE HERE, on `/pipeline/leads`, and the same
+ * paragraph named it first: it read `user.role` for the partner's **My quotes**
+ * tab. It is gone because the zone is no longer the shared marketplace board —
+ * `LeadsZone` reads this firm's own leads, scores them against its own fit
+ * rules and records a pass with its reason, none of which a board serving four
+ * licences could do. The marketplace itself is still at `/needs`, and the
+ * zone's empty state links there.
  *
  * `embedded` suppresses each page's own heading block — the shell above has
  * already drawn the crumb, the h1 and the zone pills. It deliberately does NOT
@@ -174,11 +187,7 @@ const LIVE = {
     // way Offers' catalog and perk-deals do. Proposals is the other half of
     // `EngagementsPage`, which already calls the table directly for
     // `/delivery/board` and now does the same for its own zone.
-    leads: (user) => <NeedsBoardPage user={user} embedded zoneActions={(rows) => partnerZoneActions('pipeline/leads', { view: {
-      header: ['Need', 'Category', 'Project', 'Budget min', 'Budget max', 'Timeline', 'Quotes'],
-      rows,
-      cells: (n) => [n.title, n.category, n.project_name, n.budget_min, n.budget_max, n.timeline, n.quote_count],
-    } })} />,
+    leads: () => <PartnerLeads />,
     proposals: () => <PartnerEngagements view="proposals" />,
     negotiations: () => <PartnerNegotiations />,
     retainers: () => <PartnerRetainers />,

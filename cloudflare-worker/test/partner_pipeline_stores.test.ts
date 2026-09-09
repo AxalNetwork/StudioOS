@@ -134,6 +134,25 @@ function freshDb() {
   // The new tables come from the migration file verbatim. If it stops parsing,
   // these tests stop running — which is the point.
   db.exec(migration('208_partner_delivery_stores'));
+  // `/leads` scores a need against the firm's OWN rules, so the two tables that
+  // hold them are here too — applied from their files rather than mirrored, for
+  // the reason above: a hand-copied DDL that drifts makes every assertion below
+  // true of a schema production does not have.
+  db.exec(migration('209_partner_offers_stores'));
+  db.exec(migration('229_fit_rule_signal'));
+  db.exec(migration('233_partner_lead_passes'));
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE, name TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS service_offerings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
+      partner_id INTEGER NOT NULL, category TEXT NOT NULL, title TEXT NOT NULL,
+      description TEXT, price_min REAL, price_max REAL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
 
   const u = db.prepare('INSERT INTO users (id, role, partner_id, name, email) VALUES (?,?,?,?,?)');
   u.run(OURS_USER, 'partner', 1, 'Ours', 'ours@example.com');
@@ -620,4 +639,169 @@ test('no route writes a value it computes', () => {
     assert.ok(!named.has(derived),
       `a write names \`${derived}\` — that value is derived and must not be stored`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// Leads — the three sets, the score's receipts, and the pass
+// ---------------------------------------------------------------------------
+
+/** One open need this firm has neither bid on nor passed, ready to score. */
+function seedLead(db: InstanceType<typeof DatabaseSync>, id: number, over: Record<string, any> = {}) {
+  db.prepare(
+    `INSERT INTO founder_needs (id, uid, project_id, founder_id, category, title, description, budget_max, status)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    id, `need-${id}`, 9, FOUNDER_USER,
+    over.category ?? 'design', over.title ?? 'Design system and component library',
+    over.description ?? 'Pre-seed, eight weeks', over.budget_max ?? null, over.status ?? 'open',
+  );
+}
+const rule = (db: any, partnerId: number, kind: string, over: Record<string, any> = {}) =>
+  db.prepare(
+    `INSERT INTO partner_fit_rules (uid, partner_id, kind, value, floor_cents, statement, signal)
+     VALUES (?,?,?,?,?,?,?)`,
+  ).run(
+    `fr-${Math.random().toString(36).slice(2, 10)}`, partnerId, kind,
+    over.value ?? null, over.floor_cents ?? null, over.statement ?? null, over.signal ?? null,
+  );
+
+/**
+ * THE THREE SETS. The artboard states the rule — "a lead you already bid is not
+ * a lead, and a lead you declined is not one either" — and the read is what
+ * enforces it. A status column kept in step by hand would drift the first time
+ * a write half-failed.
+ */
+test('a need this firm bid on, or passed, is not a lead', async () => {
+  const db = freshDb();
+  const e = env(db);
+  seedLead(db, 401);
+  seedLead(db, 402);
+  // 301 already carries OUR_QUOTE from the fixture, so it is a proposal.
+  let r = (await call(e, 'GET', '/leads', ours)).body;
+  assert.deepEqual(r.items.map((x: any) => x.need_id).sort(), [302, 401, 402],
+    'the need this firm quoted on is still being listed as a lead');
+
+  const pass = await call(e, 'POST', '/leads/401/pass', ours, { reason: 'timing', note: 'revisit in Q4' });
+  assert.equal(pass.status, 200);
+  r = (await call(e, 'GET', '/leads', ours)).body;
+  assert.deepEqual(r.items.map((x: any) => x.need_id).sort(), [302, 402],
+    'a passed need is still being listed as a lead');
+  assert.equal(r.passed.length, 1);
+  assert.equal(r.passed[0].reason, 'timing');
+  assert.equal(r.passed[0].note, 'revisit in Q4');
+  assert.equal(r.passed_count, 1);
+
+  // AND THE OTHER FIRM'S BOOK IS UNTOUCHED — our pass is not their pass.
+  const theirView = (await call(e, 'GET', '/leads', theirs)).body;
+  assert.equal(theirView.passed.length, 0);
+  assert.ok(theirView.items.some((x: any) => x.need_id === 401),
+    'our pass removed a lead from another firm’s list');
+
+  // UN-PASSING PUTS IT BACK, with no trace of the mistake.
+  await call(e, 'DELETE', '/leads/401/pass', ours);
+  r = (await call(e, 'GET', '/leads', ours)).body;
+  assert.ok(r.items.some((x: any) => x.need_id === 401));
+  assert.equal(db.prepare('SELECT COUNT(*) AS c FROM partner_lead_passes').get().c, 0);
+});
+
+test('a need this firm already bid on cannot also be passed', async () => {
+  const e = env(freshDb());
+  // 301 carries OUR_QUOTE. Refusing at the write is what keeps the sets
+  // disjoint even for an instant, not only in the read.
+  const r = await call(e, 'POST', '/leads/301/pass', ours, { reason: 'price' });
+  assert.equal(r.status, 409);
+  assert.match(r.body.detail, /proposal rather than a lead/i);
+});
+
+test('a pass needs a reason from the closed set, and the need must exist', async () => {
+  const db = freshDb();
+  const e = env(db);
+  seedLead(db, 403);
+  for (const bad of ['', 'vibes', 'Below floor', null]) {
+    const r = await call(e, 'POST', '/leads/403/pass', ours, { reason: bad });
+    assert.equal(r.status, 400, `"${bad}" was accepted as a pass reason`);
+  }
+  assert.equal((await call(e, 'POST', '/leads/9999/pass', ours, { reason: 'timing' })).status, 404);
+});
+
+/**
+ * THE SCORE IS THE FIRM'S OWN RULES, COUNTED, AND IT REFUSES RATHER THAN
+ * GUESSES. `/offers/fit-rules` has answered `enforcement: 'none'` since it was
+ * written, accurately: nothing read those rules. This is the reader.
+ */
+test('a firm with no rules gets no score, and says so', async () => {
+  const db = freshDb();
+  const e = env(db);
+  seedLead(db, 404, { budget_max: 32000 });
+  const r = (await call(e, 'GET', '/leads', ours)).body;
+  const lead = r.items.find((x: any) => x.need_id === 404);
+  // NOT FIFTY. A number produced with nothing to measure against would be the
+  // product's opinion wearing the firm's name.
+  assert.equal(lead.score, null);
+  assert.equal(lead.excluded_by, null);
+  assert.match(lead.score_note, /nothing to score it against/i);
+  assert.equal(r.strong_fit_count, null, 'a strong-fit count over unscorable leads');
+  assert.equal(r.scoring, 'none');
+  assert.match(r.scoring_note, /nothing is guessed/i);
+});
+
+test('a score counts the rules it met over the rules it was measured against', async () => {
+  const db = freshDb();
+  const e = env(db);
+  db.prepare('INSERT INTO service_offerings (uid, partner_id, category, title) VALUES (?,?,?,?)')
+    .run('so-1', 1, 'design', 'Design system');
+  rule(db, 1, 'budget_floor', { floor_cents: 1000000 }); // $10,000
+
+  // Meets both: the title names the offering, the budget clears the floor.
+  seedLead(db, 405, { title: 'Design system rebuild', budget_max: 32000 });
+  // Meets one: the capability matches, the budget does not.
+  seedLead(db, 406, { title: 'Design system audit', budget_max: 4000 });
+  // Meets neither.
+  seedLead(db, 407, { title: 'Warehouse robotics firmware', budget_max: 4000 });
+  // Budget NOT STATED is a gap, not a miss — the client did not say, which is
+  // different from saying too little. So this scores 100 off one signal.
+  seedLead(db, 408, { title: 'Design system tokens', budget_max: null });
+
+  const r = (await call(e, 'GET', '/leads', ours)).body;
+  const by = (id: number) => r.items.find((x: any) => x.need_id === id);
+  assert.equal(by(405).score, 100);
+  assert.equal(by(406).score, 50);
+  assert.equal(by(407).score, 0);
+  assert.equal(by(408).score, 100);
+  assert.ok(by(408).receipts.some((x: any) => x.kind === 'gap' && /not stated by the client/i.test(x.label)),
+    'an unstated budget is being scored as a miss rather than left out');
+  assert.equal(r.scoring, 'fit_rules');
+  // TWO, NOT FOUR: 405 and 408 clear 80; 406 scores 50 and 407 zero. The
+  // fixture's own `Brand refresh` need is in the list too and scores zero — it
+  // matches no offering and states no budget — which is what makes this count
+  // a real narrowing rather than the length of the list.
+  assert.equal(r.strong_fit_count, 2, 'the strong-fit count is not the leads at or above 80');
+  assert.equal(r.open_count, 5);
+
+  // DOLLARS AGAINST CENTS. $4,000 is below a $10,000 floor and $32,000 is
+  // above it; without the conversion every lead would read as below.
+  assert.ok(by(405).receipts.some((x: any) => /at or above your floor/i.test(x.label)));
+  assert.ok(by(406).receipts.some((x: any) => /below your floor/i.test(x.label)));
+});
+
+test('an exclusion is not a low score, and it quotes the firm’s own sentence', async () => {
+  const db = freshDb();
+  const e = env(db);
+  db.prepare('INSERT INTO service_offerings (uid, partner_id, category, title) VALUES (?,?,?,?)')
+    .run('so-2', 1, 'design', 'Design system');
+  rule(db, 1, 'capability_absent', {
+    value: 'native mobile',
+    statement: 'We do not build native mobile. Honest gap — we say so rather than bidding to learn.',
+  });
+  seedLead(db, 409, { title: 'Native mobile rebuild', budget_max: 90000 });
+
+  const r = (await call(e, 'GET', '/leads', ours)).body;
+  const lead = r.items.find((x: any) => x.need_id === 409);
+  // NOT TWENTY OUT OF A HUNDRED. Ranking an exclusion against fits would put a
+  // lead the firm has ruled out above one it merely fits badly.
+  assert.equal(lead.score, null);
+  assert.match(lead.excluded_by, /we do not build native mobile/i);
+  assert.equal(r.excluded_count, 1);
+  assert.ok(!r.items.filter((x: any) => x.need_id !== 409).some((x: any) => x.excluded_by),
+    'a lead the rules do not exclude is being marked excluded');
 });

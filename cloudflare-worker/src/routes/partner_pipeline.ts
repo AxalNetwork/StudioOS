@@ -59,6 +59,306 @@ async function body<T>(c: any): Promise<T> {
 // Negotiations
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Leads — the three sets, and a score that shows its work
+// ---------------------------------------------------------------------------
+
+const PASS_REASONS = [
+  'below_floor', 'no_capability', 'scope_mismatch', 'timing', 'price', 'other',
+];
+
+/**
+ * Does this need mention the thing this rule or offering is about?
+ *
+ * DELIBERATELY DUMB, AND SAID SO ON THE PAGE. A case-insensitive substring over
+ * the need's own words is not semantic matching and must not be presented as
+ * it: the receipt on the row names the phrase that matched, so a reader can see
+ * the match was "design system" appearing in a title rather than a judgement
+ * about the work. A cleverer matcher that could not show its reason would be
+ * worse here, not better.
+ */
+function mentions(haystack: string, phrase: string | null): boolean {
+  const p = String(phrase ?? '').trim().toLowerCase();
+  if (p.length < 3) return false;
+  return haystack.includes(p);
+}
+
+/**
+ * Score a need against the rules the firm wrote for itself, and return the
+ * receipts rather than only the number.
+ *
+ * THE RULES ARE ALREADY THERE. `partner_fit_rules` (209/229) is the firm's own
+ * register of what it takes and what it passes on, and `service_offerings` is
+ * what it sells. Nothing was ever scored against either — `/offers/fit-rules`
+ * has answered `enforcement: 'none'` since it was written, with the accurate
+ * note that "these rules are a record a person reads before passing on a lead."
+ * This is the reader.
+ *
+ * A SCORE WITH NO RULES BEHIND IT IS NULL, NOT FIFTY. A firm that has stated no
+ * fit rule and listed no offering has told this product nothing to judge a lead
+ * against, and a number produced anyway would be the product's opinion wearing
+ * the firm's name. `score: null` with the reason, and the `Strong fit` tile
+ * goes with it.
+ *
+ * AN EXCLUSION IS NOT A LOW SCORE. "We do not do native mobile" is not 20 out
+ * of 100 — it is a different answer, and squeezing it onto the same axis would
+ * put a lead the firm has already ruled out above one it merely fits badly.
+ * An excluded lead carries `excluded_by` and no number at all.
+ */
+function scoreLead(
+  need: { title: string; description: string | null; category: string | null; budget_min: number | null; budget_max: number | null },
+  rules: any[],
+  offerings: any[],
+): {
+  score: number | null;
+  receipts: { label: string; kind: 'hit' | 'miss' | 'gap' }[];
+  excluded_by: string | null;
+  score_note: string | null;
+} {
+  const hay = [need.title, need.description, need.category]
+    .filter(Boolean).join(' ').toLowerCase();
+  const receipts: { label: string; kind: 'hit' | 'miss' | 'gap' }[] = [];
+
+  // ── An exclusion ends the read ────────────────────────────────────────────
+  for (const r of rules) {
+    if (r.kind !== 'sector_declined' && r.kind !== 'capability_absent') continue;
+    if (!mentions(hay, r.value)) continue;
+    return {
+      score: null,
+      receipts: [{ label: `${r.value} · excluded`, kind: 'miss' }],
+      // The firm's own sentence, so the pass quotes them rather than us.
+      excluded_by: r.statement || `This firm's rules exclude ${r.value}.`,
+      score_note: null,
+    };
+  }
+
+  // ── Capability ────────────────────────────────────────────────────────────
+  const bestFit = rules.filter((r) => r.kind === 'best_fit');
+  const capabilityHit = offerings.find((o) => mentions(hay, o.title))
+    || bestFit.find((r) => mentions(hay, r.value));
+  if (offerings.length || bestFit.length) {
+    if (capabilityHit) {
+      receipts.push({
+        label: `${capabilityHit.title || capabilityHit.value} · match`, kind: 'hit',
+      });
+    } else {
+      receipts.push({ label: 'No listed capability named', kind: 'miss' });
+    }
+  } else {
+    receipts.push({ label: 'No capability listed to match against', kind: 'gap' });
+  }
+
+  // ── Budget against the firm's own floor ───────────────────────────────────
+  const floor = rules.find((r) => r.kind === 'budget_floor' && r.floor_cents != null);
+  const stated = need.budget_max ?? need.budget_min;
+  if (!floor) {
+    receipts.push({ label: 'No budget floor stated', kind: 'gap' });
+  } else if (stated == null) {
+    // THE READER'S OWN RECORD HAS NO SUCH FACT — a gap, not a failure. The
+    // client did not say, which is different from saying too little.
+    receipts.push({ label: 'Budget not stated by the client', kind: 'gap' });
+  } else {
+    // `founder_needs.budget_*` is dollars (REAL, grandfathered); `floor_cents`
+    // is cents. Comparing them without the conversion would put every lead a
+    // hundred times under the floor.
+    const cents = Math.round(Number(stated) * 100);
+    receipts.push(cents >= Number(floor.floor_cents)
+      ? { label: 'At or above your floor', kind: 'hit' }
+      : { label: 'Below your floor', kind: 'miss' });
+  }
+
+  // ── Signal strength, where the matched profile carries one (229) ──────────
+  const signal = capabilityHit && capabilityHit.signal ? String(capabilityHit.signal) : null;
+  if (signal === 'best_fit') receipts.push({ label: 'You called this profile best fit', kind: 'hit' });
+  if (signal === 'weak_intent') receipts.push({ label: 'You called this profile weak intent', kind: 'miss' });
+
+  const hits = receipts.filter((x) => x.kind === 'hit').length;
+  const misses = receipts.filter((x) => x.kind === 'miss').length;
+  if (hits + misses === 0) {
+    return {
+      score: null,
+      receipts,
+      excluded_by: null,
+      score_note: 'Nothing this firm has written down applies to this lead, so there is nothing to score it against. Add a capability or a budget floor on Offers · Audience fit and this lead gets a number with its reasons.',
+    };
+  }
+  return {
+    score: Math.round((hits / (hits + misses)) * 100),
+    receipts,
+    excluded_by: null,
+    score_note: null,
+  };
+}
+
+/**
+ * `GET /leads` — the open leads, the passes, and the counts the strip reads.
+ *
+ * THE THREE SETS ARE ENFORCED, NOT ASSERTED. The artboard's own note: "a lead
+ * you already bid is not a lead, and a lead you declined is not one either."
+ * A need this firm has quoted on is a PROPOSAL and lives on `/pipeline/proposals`;
+ * a need with a row in `partner_lead_passes` is a PASS; everything else open is
+ * a LEAD. Each read excludes the other two, so no status column has to be kept
+ * in step and no name can claim two states at once.
+ */
+partnerPipeline.get('/leads', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+
+    const [needs, rules, offerings, passes] = await Promise.all([
+      // Open needs this firm has NOT quoted on. The `NOT EXISTS` is what makes
+      // "already bid" leave this list rather than a flag somebody maintains.
+      c.env.DB.prepare(
+        `SELECT n.id, n.uid, n.title, n.description, n.category,
+                n.budget_min, n.budget_max, n.timeline, n.created_at,
+                f.name AS founder_name, p.name AS project_name
+           FROM founder_needs n
+           LEFT JOIN users f ON f.id = n.founder_id
+           LEFT JOIN projects p ON p.id = n.project_id
+          WHERE n.status = 'open'
+            AND NOT EXISTS (
+              SELECT 1 FROM quotes q WHERE q.need_id = n.id AND q.partner_id = ?
+            )
+          ORDER BY n.created_at DESC
+          LIMIT 200`,
+      ).bind(partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT kind, value, floor_cents, statement, referred_to, signal
+           FROM partner_fit_rules WHERE partner_id = ? AND is_active = 1`,
+      ).bind(partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT title, category FROM service_offerings
+          WHERE partner_id = ? AND is_active = 1`,
+      ).bind(partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT lp.id, lp.need_id, lp.reason, lp.note, lp.passed_at,
+                n.title AS need_title, f.name AS founder_name
+           FROM partner_lead_passes lp
+           JOIN founder_needs n ON n.id = lp.need_id
+           LEFT JOIN users f ON f.id = n.founder_id
+          WHERE lp.partner_id = ?
+          ORDER BY lp.passed_at DESC
+          LIMIT 200`,
+      ).bind(partnerId).all<any>(),
+    ]);
+
+    const ruleRows = rules.results || [];
+    const offeringRows = offerings.results || [];
+    const passedIds = new Set((passes.results || []).map((p: any) => Number(p.need_id)));
+
+    const items = (needs.results || [])
+      .filter((n: any) => !passedIds.has(Number(n.id)))
+      .map((n: any) => {
+        const judged = scoreLead(n, ruleRows, offeringRows);
+        return {
+          need_id: Number(n.id),
+          need_uid: n.uid,
+          who: n.founder_name ?? n.project_name ?? null,
+          title: n.title,
+          need: n.description ?? null,
+          category: n.category ?? null,
+          budget_min: n.budget_min == null ? null : Number(n.budget_min),
+          budget_max: n.budget_max == null ? null : Number(n.budget_max),
+          timeline: n.timeline ?? null,
+          // WHERE IT CAME FROM, and there is exactly one answer on this build.
+          // Every lead this product can see is a marketplace need; nothing
+          // records a lead arriving any other way, so a second provenance chip
+          // would be a distinction the reader could never see.
+          source: 'marketplace_need',
+          source_label: 'Marketplace need',
+          days_old: daysBetween(n.created_at),
+          ...judged,
+        };
+      });
+
+    const scored = items.filter((x: any) => x.score != null);
+    return c.json({
+      items,
+      passed: (passes.results || []).map((p: any) => ({
+        id: Number(p.id),
+        need_id: Number(p.need_id),
+        who: p.founder_name ?? null,
+        title: p.need_title,
+        reason: p.reason,
+        note: p.note ?? null,
+        passed_at: p.passed_at,
+      })),
+      open_count: items.length,
+      // NULL, NOT ZERO, when nothing can be scored at all. "No strong fits" and
+      // "no rules to judge fit with" are different answers and the strip draws
+      // them differently.
+      strong_fit_count: scored.length ? scored.filter((x: any) => x.score >= 80).length : null,
+      excluded_count: items.filter((x: any) => x.excluded_by).length,
+      passed_count: (passes.results || []).length,
+      // What the score is made of, said in the response so the page cannot
+      // imply a model where there is a substring match.
+      scoring: ruleRows.length || offeringRows.length ? 'fit_rules' : 'none',
+      scoring_note: ruleRows.length || offeringRows.length
+        ? 'A score is a count of your own stated rules this lead meets, over the ones it was measured against. Every receipt on the row names the rule it came from. Nothing here is a model.'
+        : 'This firm has stated no fit rule and listed no service, so there is nothing to score a lead against. Nothing is scored, and nothing is guessed.',
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Record a pass — the decision not to bid, with the reason that stops the lead
+ * coming round again.
+ *
+ * A PASS IS NOT A LOSS. It goes in its own table for the reason migration 233's
+ * header gives: a lost bid is a bid, and merging them would move a firm's win
+ * rate in whichever direction somebody guessed.
+ */
+partnerPipeline.post('/leads/:needId/pass', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const needId = Number(c.req.param('needId'));
+    const b = await body<any>(c);
+    const reason = String(b.reason ?? '');
+    if (!PASS_REASONS.includes(reason)) {
+      return c.json({ detail: `A pass needs one of these reasons: ${PASS_REASONS.join(', ')}` }, 400);
+    }
+    const need = await c.env.DB.prepare('SELECT id FROM founder_needs WHERE id = ?')
+      .bind(needId).first<any>();
+    if (!need) return c.json({ detail: 'Need not found' }, 404);
+
+    // A NEED THIS FIRM ALREADY BID ON IS NOT A LEAD TO PASS. Refusing it here
+    // is what keeps the three sets disjoint at the write rather than only in
+    // the read: a row that made a need both a proposal and a pass would put one
+    // client in two places on the same bucket.
+    const bid = await c.env.DB.prepare(
+      'SELECT 1 AS ok FROM quotes WHERE need_id = ? AND partner_id = ?',
+    ).bind(needId, partnerId).first<{ ok: number }>();
+    if (bid) {
+      return c.json({
+        detail: 'You have already bid on this need, so it is a proposal rather than a lead. A bid you lost is recorded on Proposals with its reason.',
+      }, 409);
+    }
+
+    await c.env.DB.prepare(
+      `INSERT INTO partner_lead_passes (partner_id, need_id, reason, note, passed_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (partner_id, need_id) DO UPDATE SET
+         reason = excluded.reason, note = excluded.note, updated_at = excluded.updated_at`,
+    ).bind(partnerId, needId, reason, trimOrNull(b.note, 600), nowIso(), nowIso(), nowIso()).run();
+    return c.json({ ok: true, need_id: needId, reason });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** Un-pass: the lead goes back where it was, with no trace of the mistake. */
+partnerPipeline.delete('/leads/:needId/pass', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const needId = Number(c.req.param('needId'));
+    await c.env.DB.prepare(
+      'DELETE FROM partner_lead_passes WHERE partner_id = ? AND need_id = ?',
+    ).bind(partnerId, needId).run();
+    return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// Negotiations
+// ---------------------------------------------------------------------------
+
 function negotiationDto(r: any) {
   return {
     id: Number(r.id),

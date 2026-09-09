@@ -261,7 +261,13 @@ const PROFILES = {
     // directory this profile opens, and it is byte-identical on the nineteen
     // labels to the copy in `design/canvases/integrated/` — checked rather than
     // assumed, both name the same five routes in the same order.
-    canvas: /^Pages · Partner (Delivery|Network|Offers|Research)\.dc\.html$/,
+    // `Pipeline` JOINS THE REGEX, and it is the reader's third canvas shape —
+    // `<section class="ab" id="p1">` markup with the route in `class="ab-sub"`
+    // and the chips behind a `sc-for list="{{ l_views }}"` binding. See
+    // `artboardFilters`. Until it entered scope the whole Pipeline bucket was
+    // absent from `partnerZoneFilters.js`: five zones, five `views([…])` rows on
+    // the artboard, and no chip row anywhere in the product.
+    canvas: /^Pages · Partner (Delivery|Network|Offers|Pipeline|Research)\.dc\.html$/,
     // `pages/partner/offers` IS ITS OWN ENTRY BECAUSE `mountingFile` DOES NOT
     // RECURSE. Three of the five Offers zones have their own file in there and
     // are found by the ordinary search once the directory is listed — which
@@ -271,7 +277,7 @@ const PROFILES = {
     // three in the map to save a line would have handed them that exemption
     // and stopped this file checking the thing it exists to check.
     pages: ['frontend/src/pages/partner', 'frontend/src/pages/partner/offers',
-      'frontend/src/pages/partner/delivery',
+      'frontend/src/pages/partner/delivery', 'frontend/src/pages/partner/pipeline',
       'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/partnerZoneActions.js',
     // Thirteen. The twelfth was `network/organizations` — the zone this
@@ -286,12 +292,38 @@ const PROFILES = {
     // whose chip rows this table did not cover at all. All five Delivery zones
     // specify one; none had an entry, and the guard could not say so because
     // the file its labels come from was outside the pattern it read.
-    zones: 17,
+    // Twenty-two. Widening the regex to read `Pages · Partner Pipeline`
+    // surfaced FIVE MORE artboards whose chip rows this table did not cover at
+    // all — the entire bucket. Every one of the five specifies a `views([…])`
+    // row; none had an entry, and the guard could not say so because the canvas
+    // was outside the pattern it read and in a shape it could not parse. Was
+    // 11, then 12, then 13, then 17.
+    zones: 22,
     // And all thirteen mount their filters: `BoardZone` and `OrganizationsZone`
     // take the same bound builder their siblings do, and the four other
     // Delivery zones hoist a `ZoneToolbar` above their `ZoneBody` the way every
     // newer zone does. Was 11, then 12, then 13.
-    mounted: 17,
+    // EIGHTEEN MOUNT THEIRS, and the four that do not are named rather than
+    // rounded away: `pipeline/proposals` still renders `EngagementsPage`, which
+    // draws `ZoneActions` directly and no toolbar, and `pipeline/negotiations`,
+    // `pipeline/retainers` and `pipeline/analytics` have their own files and no
+    // header row in them yet. `pipeline/leads` has one — it stopped rendering
+    // the shared marketplace board and became this firm's own lead list. Was
+    // 11, then 12, then 13, then 17.
+    mounted: 18,
+    // THE PARTNER SET CARRIES SAMPLES NOW, AND ONLY IN ONE PLACE. Its canvases
+    // were digit-free until `Pages · Partner Pipeline` entered scope, which is
+    // exactly what the "prove the absence" branch of the sample test exists to
+    // catch — and it did, naming all four labels with a figure in them.
+    //
+    // Two of the four are NOT samples and the pattern must not treat them as
+    // such: `Stalled 7d+` and `Renewing 30d` are thresholds this product
+    // implements — seven days without a move, thirty days to a renewal — so the
+    // number IS the filter's meaning rather than a figure from the mock data.
+    // The other two are the quarter the artboard happened to be drawn in, and a
+    // chip reading `Q3 2026` would be wrong for every reader after it, so both
+    // are relabelled positionally: `This quarter`, `Last quarter`.
+    samples: /\b(?:Q[1-4] )?20\d\d\b/,
     // The two that ARE genuinely shared. `ServiceCatalogPage` is mounted for
     // admin, founder, partner and investor and `PerksPage` for those four plus
     // advisor and exploring, both from `frontend/src/pages/` — a directory this
@@ -375,12 +407,28 @@ function canvasFilters(profile) {
  * a board that gains a `sub` and no `views` drops out instead of shifting every
  * later board's chips onto the wrong route.
  *
- * `profile_zone_actions.test.mjs` knows a third shape — `sc-` markup with
- * `class="vm"` ops, which is how `Pages · Partner Pipeline` states its actions.
- * It is deliberately not here: no canvas in any filter profile's scope uses it,
- * and a branch nothing exercises is a branch nobody notices breaking. A canvas
- * in that shape entering scope trips the assertion above, which is the intended
- * way to find out.
+ * SHAPE D — `<section class="ab" id="p1">` markup, where the route sits in the
+ * section's own `class="ab-sub"` (`amber · /pipeline/leads`) and the chips come
+ * from the FIRST `sc-for list="{{ l_views }}"` binding inside it, resolved
+ * against a `l_views: views([…])` in the canvas's data block. `Pages · Partner
+ * Pipeline` is the only one, and until this branch existed it was invisible
+ * here for the same reason `Pages · Founder Validate` was: nothing in the file
+ * matches `route:'…'`, so the loop never ran.
+ *
+ * THE DOCBLOCK HERE USED TO SAY THIS SHAPE WOULD NEVER BE READ, and it is worth
+ * recording why that was right and what changed rather than deleting it. It
+ * read: "`profile_zone_actions.test.mjs` knows a third shape … It is
+ * deliberately not here: no canvas in any filter profile's scope uses it, and a
+ * branch nothing exercises is a branch nobody notices breaking. A canvas in
+ * that shape entering scope trips the assertion above, which is the intended
+ * way to find out." That is exactly what happened — the Pipeline bucket's five
+ * zones had no chip row in `partnerZoneFilters.js` at all, and bringing the
+ * canvas into scope is what proves the five rows added for them are the
+ * artboard's own labels rather than a guess.
+ *
+ * The binding is read PER SECTION rather than by zipping whole-file matches, so
+ * a section that gains a route and no `views` drops out instead of shifting
+ * every later section's chips onto the wrong zone.
  */
 function artboardFilters(src) {
   const out = {};
@@ -394,19 +442,43 @@ function artboardFilters(src) {
     return out;
   }
   const boardsAt = src.search(/\bboards:\s*\[/);
-  if (boardsAt < 0) return out;
-  for (const board of src.slice(boardsAt).split(/\{ id:\s*'/).slice(1)) {
-    const route = board.match(/sub:\s*'[^']*?(\/[a-z0-9/-]+)'/);
-    const views = board.match(/views\(\[([^\]]*)\]\)/);
-    if (!route || !views) continue;
-    out[route[1]] = chips(views[1]);
+  if (boardsAt >= 0) {
+    for (const board of src.slice(boardsAt).split(/\{ id:\s*'/).slice(1)) {
+      const route = board.match(/sub:\s*'[^']*?(\/[a-z0-9/-]+)'/);
+      const views = board.match(/views\(\[([^\]]*)\]\)/);
+      if (!route || !views) continue;
+      out[route[1]] = chips(views[1]);
+    }
+    return out;
+  }
+  for (const section of src.split(/<section class="ab" id="/).slice(1)) {
+    const route = section.match(/class="ab-sub">[^<]*?(\/[a-z0-9/-]+)</);
+    const binding = section.match(/sc-for list="\{\{\s*(\w+_views)\s*\}\}"/);
+    if (!route || !binding) continue;
+    // The binding names a `<name>: views([…])` in the canvas's data block. The
+    // list is looked up rather than assumed from the section's id, because the
+    // prefixes (`l_`, `pr_`, `n_`, `r_`, `a_`) are the canvas author's shorthand
+    // and nothing makes them track the section ids.
+    const declared = src.match(new RegExp(`\\b${binding[1]}:\\s*views\\(\\[([^\\]]*)\\]\\)`));
+    if (!declared) continue;
+    out[route[1]] = chips(declared[1]);
   }
   return out;
 }
 
-/** `'All','Deck-eligible','Strong fit'` → the three labels. */
+/**
+ * `'All','Deck-eligible','Strong fit'` → the three labels.
+ *
+ * READ AS QUOTED STRINGS, NOT SPLIT ON COMMAS. A comma inside a label is not a
+ * separator, and one exists: `Pages · Partner Pipeline` draws `'All','Opened,
+ * unanswered','Never opened',…` on its proposals artboard. Splitting turned that
+ * one chip into two — `Opened` and `unanswered` — and then reported the table as
+ * having drifted from a canvas it matched exactly.
+ */
 function chips(list) {
-  return list.split(',').map((one) => one.trim().replace(/^'|'$/g, '')).filter(Boolean);
+  return [...list.matchAll(/'((?:[^'\\]|\\.)*)'/g)]
+    .map((m) => m[1].replace(/\\(.)/g, '$1'))
+    .filter(Boolean);
 }
 
 /**
