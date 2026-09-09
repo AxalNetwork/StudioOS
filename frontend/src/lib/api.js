@@ -3811,6 +3811,26 @@ export const api = {
     }),
     zoneDraftDiscard: (uid) => request(`/research/drafts/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
 
+    // The firm's own half of a client brief (migration 222). `project` is the
+    // project uid; the worker checks a live grant before it writes, so a firm
+    // that never held one cannot keep a file on that founder here.
+    briefNotes: (projectUid) => request(`/research/brief-notes?project=${encodeURIComponent(projectUid)}`),
+    briefNoteCreate: (projectUid, section, body) => request('/research/brief-notes', {
+      method: 'POST', body: JSON.stringify({ project: projectUid, section, body }),
+    }),
+    briefNoteSetOpen: (uid, open) => request(`/research/brief-notes/${encodeURIComponent(uid)}`, {
+      method: 'PATCH', body: JSON.stringify({ open: !!open }),
+    }),
+    briefNoteRemove: (uid) => request(`/research/brief-notes/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+
+    // `Attach to proposal`, shared by Client prep and Market. `kind` is
+    // 'brief' | 'reading' and `ref_key` is whatever that zone calls its thing.
+    attachments: (kind) => request(`/research/attachments?kind=${encodeURIComponent(kind)}`),
+    attach: (kind, refKey, quoteId) => request('/research/attachments', {
+      method: 'POST', body: JSON.stringify({ kind, ref_key: refKey, quote_id: quoteId }),
+    }),
+    detach: (uid) => request(`/research/attachments/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+
     // Funds — founder-facing fund research (migration 216). Every read is
     // owner-scoped in the worker; there is no cross-user listing to call.
     funds: () => request('/research/funds'),

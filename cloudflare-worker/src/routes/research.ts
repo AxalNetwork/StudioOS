@@ -730,6 +730,185 @@ research.post('/ask', async (c) => {
 
 
 // ---------------------------------------------------------------------------
+// Brief notes — the firm's own half of a client brief (migration 222)
+// ---------------------------------------------------------------------------
+//
+// THE SECOND SOURCE. `ClientPrepZone`'s rows are all `source: 'client'` — the
+// founder's record, quoted — so the `pr2` artboard's `Ours only` chip matched
+// nothing and `Founder-sourced` matched everything. These are the rows that
+// make the axis real, and `open` is the fourth chip: only a note the firm wrote
+// can be marked settled, because ticking off a fact the CLIENT recorded would
+// be editing someone else's record.
+
+interface BriefNoteRow {
+  id: number; uid: string; owner_user_id: number; project_id: number;
+  section: string; body: string; open: number; created_at: string; updated_at: string;
+}
+
+const noteDto = (r: BriefNoteRow) => ({
+  uid: r.uid,
+  section: r.section,
+  body: r.body,
+  open: r.open === 1,
+  // The axis the chips filter on. Stated by the route so the page never has to
+  // decide what its own rows are — the brief's other rows say `'client'` and
+  // these say `'ours'`, and one place decides both.
+  source: 'ours' as const,
+  created_at: r.created_at,
+  updated_at: r.updated_at,
+});
+
+/**
+ * The project a note may be written against: one the caller holds a LIVE grant
+ * over.
+ *
+ * A firm that never held a grant has no business keeping a file on that founder
+ * inside this product, and a revoked grant is the founder taking that back —
+ * which is why the check is on `status = 'active'` and not merely on the grant
+ * having once existed. Returns the project's id, or null.
+ */
+async function grantedProjectId(c: { env: Env }, userId: number, projectUid: string) {
+  const row = await c.env.DB.prepare(
+    `SELECT p.id AS id
+       FROM advisor_client_grants g
+       JOIN projects p ON p.id = g.project_id
+      WHERE g.advisor_user_id = ? AND g.status = 'active' AND p.uid = ?
+      ORDER BY g.id DESC LIMIT 1`
+  ).bind(userId, projectUid).first<{ id: number }>();
+  return row?.id ?? null;
+}
+
+research.get('/brief-notes', async (c) => {
+  const user = await requireAuth(c);
+  const projectUid = String(c.req.query('project') || '');
+  if (!projectUid) return c.json({ detail: 'project_required' }, 400);
+  const projectId = await grantedProjectId(c, user.id, projectUid);
+  // NOT FOUND RATHER THAN FORBIDDEN, and deliberately: whether a given founder
+  // exists is not something a firm without a grant may learn by probing.
+  if (!projectId) return c.json({ detail: 'not_found' }, 404);
+  const rows = await c.env.DB.prepare(
+    `SELECT * FROM research_brief_notes WHERE owner_user_id = ? AND project_id = ? ORDER BY id ASC LIMIT 200`
+  ).bind(user.id, projectId).all<BriefNoteRow>();
+  return c.json({ items: (rows.results || []).map(noteDto) });
+});
+
+research.post('/brief-notes', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const projectUid = String(body?.project || '');
+  const section = String(body?.section || '').trim().slice(0, 120);
+  const text = String(body?.body || '').trim().slice(0, 4000);
+  if (!projectUid || !section || !text) return c.json({ detail: 'section_and_body_required' }, 400);
+  const projectId = await grantedProjectId(c, user.id, projectUid);
+  if (!projectId) return c.json({ detail: 'not_found' }, 404);
+
+  const uid = newUid();
+  await c.env.DB.prepare(
+    `INSERT INTO research_brief_notes (uid, owner_user_id, project_id, section, body, open)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).bind(uid, user.id, projectId, section, text, body?.open === false ? 0 : 1).run();
+  const row = await c.env.DB.prepare(
+    `SELECT * FROM research_brief_notes WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, user.id).first<BriefNoteRow>();
+  return c.json({ item: row ? noteDto(row) : null }, 201);
+});
+
+/** Settle a note, or reopen it. The only field the artboard's chips act on. */
+research.patch('/brief-notes/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  if (typeof body?.open !== 'boolean') return c.json({ detail: 'open_required' }, 400);
+  const res = await c.env.DB.prepare(
+    `UPDATE research_brief_notes SET open = ?, updated_at = datetime('now')
+      WHERE uid = ? AND owner_user_id = ?`
+  ).bind(body.open ? 1 : 0, c.req.param('uid'), user.id).run();
+  if (!res.meta?.changes) return c.json({ detail: 'not_found' }, 404);
+  const row = await c.env.DB.prepare(
+    `SELECT * FROM research_brief_notes WHERE uid = ? AND owner_user_id = ?`
+  ).bind(c.req.param('uid'), user.id).first<BriefNoteRow>();
+  return c.json({ item: row ? noteDto(row) : null });
+});
+
+research.delete('/brief-notes/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const res = await c.env.DB.prepare(
+    `DELETE FROM research_brief_notes WHERE uid = ? AND owner_user_id = ?`
+  ).bind(c.req.param('uid'), user.id).run();
+  if (!res.meta?.changes) return c.json({ detail: 'not_found' }, 404);
+  return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Attachments — `Attach to proposal`, on two artboards (migration 222)
+// ---------------------------------------------------------------------------
+//
+// The op was `unbuilt:` on both Client prep and Market for the want of an EDGE,
+// never for the want of a proposal: `quotes` is live and `api.myQuotes()` reads
+// it. One table serves both, keyed by `kind`.
+
+const ATTACH_KINDS = new Set(['brief', 'reading']);
+
+interface AttachmentRow {
+  id: number; uid: string; owner_user_id: number; kind: string;
+  ref_key: string; quote_id: number; created_at: string;
+}
+
+research.get('/attachments', async (c) => {
+  const user = await requireAuth(c);
+  const kind = String(c.req.query('kind') || '');
+  if (!ATTACH_KINDS.has(kind)) return c.json({ detail: 'unknown_kind' }, 400);
+  const rows = await c.env.DB.prepare(
+    `SELECT * FROM research_attachments WHERE owner_user_id = ? AND kind = ? ORDER BY id DESC LIMIT 500`
+  ).bind(user.id, kind).all<AttachmentRow>();
+  return c.json({
+    items: (rows.results || []).map((r) => ({
+      uid: r.uid, kind: r.kind, ref_key: r.ref_key, quote_id: r.quote_id, created_at: r.created_at,
+    })),
+  });
+});
+
+research.post('/attachments', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const kind = String(body?.kind || '');
+  const refKey = String(body?.ref_key || '').trim().slice(0, 200);
+  const quoteId = Number(body?.quote_id);
+  if (!ATTACH_KINDS.has(kind) || !refKey || !Number.isInteger(quoteId)) {
+    return c.json({ detail: 'kind_ref_and_quote_required' }, 400);
+  }
+  // THE QUOTE MUST BE THE CALLER'S OWN. Attaching a market reading to somebody
+  // else's proposal would put the firm's reasoning behind a number they did not
+  // quote — and would tell them a figure exists that they cannot see.
+  const quote = await c.env.DB.prepare(
+    `SELECT id FROM quotes WHERE id = ? AND provider_user_id = ?`
+  ).bind(quoteId, user.id).first<{ id: number }>();
+  if (!quote) return c.json({ detail: 'not_found' }, 404);
+
+  const uid = newUid();
+  await c.env.DB.prepare(
+    `INSERT OR IGNORE INTO research_attachments (uid, owner_user_id, kind, ref_key, quote_id)
+     VALUES (?, ?, ?, ?, ?)`
+  ).bind(uid, user.id, kind, refKey, quoteId).run();
+  // `OR IGNORE` because attaching the same thing to the same proposal twice is
+  // not a second fact — the row's own UNIQUE says so — and a 409 here would
+  // make a reader think the first attachment had failed.
+  const row = await c.env.DB.prepare(
+    `SELECT * FROM research_attachments
+      WHERE owner_user_id = ? AND kind = ? AND ref_key = ? AND quote_id = ?`
+  ).bind(user.id, kind, refKey, quoteId).first<AttachmentRow>();
+  return c.json({ item: row ? { uid: row.uid, kind: row.kind, ref_key: row.ref_key, quote_id: row.quote_id, created_at: row.created_at } : null }, 201);
+});
+
+research.delete('/attachments/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const res = await c.env.DB.prepare(
+    `DELETE FROM research_attachments WHERE uid = ? AND owner_user_id = ?`
+  ).bind(c.req.param('uid'), user.id).run();
+  if (!res.meta?.changes) return c.json({ detail: 'not_found' }, 404);
+  return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
 // Zone drafts — the AI band every Research and Network artboard ends with
 // ---------------------------------------------------------------------------
 //

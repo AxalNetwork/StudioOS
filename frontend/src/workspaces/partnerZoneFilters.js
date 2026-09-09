@@ -35,14 +35,11 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
 // the entries they justified. A reason kept past the gap it describes is worse
 // than no reason at all — it reads as current.
 
-// `/research/client-prep`, and the same single fact the advisor table names:
-// every row a brief produces carries `source: 'client'`, so `Ours only` matches
-// nothing and `Founder-sourced` matches everything. The dead chip was live on
-// this licence too — `ClientPrepZone` is one file, and its hand-rolled row was
-// hardcoded to the ADVISOR accent, so a partner clicking it got a green chip
-// and an empty brief.
-const ONE_SOURCE_ONLY =
-  'every row in a brief comes from the founder’s grant and nothing records a note of the firm’s own against a client, so there is no second source to separate out';
+// `ONE_SOURCE_ONLY` STOOD HERE AND IS GONE. It named one fact that cut both
+// ways — every brief row was the founder's, so `Ours only` matched nothing and
+// `Founder-sourced` matched everything — and migration 222 gave the firm rows
+// of its own to separate out. `ClientPrepZone` is one file serving this licence
+// and advisor, and both copies of the constant went together.
 
 // `/network/relationships`. Two labels, one absent column, and the ops half of
 // this very row already names it — "no owner field is stored on a relationship".
@@ -187,14 +184,22 @@ export const PARTNER_ZONE_FILTERS = {
   ],
 
   // ── Research ─────────────────────────────────────────────────────────────
+  // ALL FOUR LIVE, AND MIGRATION 222 IS WHY. Three carried `ONE_SOURCE_ONLY`
+  // and a fourth its own sentence, and all four were exact: every row this
+  // brief produced was the founder's, so `Ours only` matched nothing and
+  // `Founder-sourced` matched everything, and no row could be marked open
+  // because none was the reader's to settle. `research_brief_notes` is the
+  // second source — a row the firm writes against a client it holds a live
+  // grant over — and `open` is a flag on those rows only.
+  //
+  // `Open items` IS `Ours only` NARROWED, NOT A THIRD AXIS, and that is the honest
+  // shape rather than a shortcut: a founder-sourced row is the client's record,
+  // quoted, and ticking it off would be editing someone else's fact.
   'research/client-prep': [
     { canvas: 'Full brief', key: 'all' },
-    { canvas: 'Ours only', unbuilt: ONE_SOURCE_ONLY },
-    { canvas: 'Founder-sourced', unbuilt: ONE_SOURCE_ONLY },
-    {
-      canvas: 'Open items',
-      unbuilt: 'nothing records a brief row as open or closed; these rows are what the founder opened to you, not a checklist the firm works through',
-    },
+    { canvas: 'Ours only', key: 'ours' },
+    { canvas: 'Founder-sourced', key: 'client' },
+    { canvas: 'Open items', key: 'open' },
   ],
   // Three live, one prose. The windows are this canvas's own — `const STALE_AT
   // = 90, AGE_AT = 30`, ninety where advisor's artboard says a hundred and

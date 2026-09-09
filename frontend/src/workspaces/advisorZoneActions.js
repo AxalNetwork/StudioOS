@@ -90,7 +90,15 @@ export const ADVISOR_ZONE_ACTIONS = {
   // a `scope_sessions` flag, so a client's sessions can be opened to you — what
   // nothing records is a brief against one of them.
   'research/client-prep': [
-    { label: 'New brief', unbuilt: 'a brief exists when a founder opens their record to you; nothing here asks for one' },
+    // BOTH STAY PROSE, and migration 222 sharpened the first rather than
+    // closing it. What the reader can now write is a ROW inside a brief that
+    // already exists — the form on the page takes one — and that is a different
+    // act from asking a founder to open their record. A control called `New
+    // brief` that added a row would name the wrong thing.
+    { label: 'New brief', unbuilt: 'a brief exists because a founder opened their record to you, and nothing here can ask for one — what you can add is a row inside a brief you already hold, which the form below takes' },
+    // NOT THE PARTNER'S `Attach to proposal`, and not the same edge. Partner's
+    // is brief→`quotes`, which migration 222 built; an advisor holds no quotes,
+    // and this artboard asks for brief→session, which nothing records.
     { label: 'Attach to session', unbuilt: 'a grant can open a client’s sessions to you, but nothing records a brief against one' },
     { label: 'Export', kind: 'export' },
   ],

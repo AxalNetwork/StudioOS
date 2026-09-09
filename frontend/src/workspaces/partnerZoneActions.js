@@ -175,8 +175,18 @@ export const PARTNER_ZONE_ACTIONS = {
   // about a brief, where `research/markets` below is about a signal, and both
   // fail for the want of a link rather than the want of a proposal.
   'research/client-prep': [
-    { label: 'New brief', unbuilt: 'a brief exists when a founder opens their record to you; nothing here asks for one' },
-    { label: 'Attach to proposal', unbuilt: 'nothing links a brief to a proposal record' },
+    // `New brief` STAYS PROSE, AND THE REASON IS SHARPER THAN IT WAS. It read
+    // "a brief exists when a founder opens their record to you; nothing here
+    // asks for one" — still true of the BRIEF, and migration 222 did not change
+    // it: what the firm can now write is a ROW of its own inside a brief that
+    // already exists, which is a different act and has its own form on the page.
+    // A control called `New brief` that added a row would name the wrong thing.
+    { label: 'New brief', unbuilt: 'a brief exists because a founder opened their record to you, and nothing here can ask for one — what the firm can add is a row inside a brief it already holds, which the form below takes' },
+    // LIVE, AND IT WAS NEVER THE PROPOSAL THAT WAS MISSING. The note said
+    // "nothing links a brief to a proposal record"; `quotes` (migration 034) is
+    // live and `api.myQuotes()` reads it, so what was missing was the EDGE, and
+    // migration 222's `research_attachments` is it. D67.
+    { label: 'Attach to proposal', kind: 'handler', handler: 'attachToProposal' },
     { label: 'Export', kind: 'export' },
   ],
   'research/markets': [

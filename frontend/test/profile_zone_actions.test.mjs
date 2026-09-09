@@ -137,12 +137,13 @@ const PROFILES = {
     zones: 21,
     links: 0,
     exports: 19,
-    // Four page-supplied ops. `research/ask`: `New session` starts a thread,
+    // Five page-supplied ops. `research/ask`: `New session` starts a thread,
     // `Saved answers` switches the view to the kept ones. `research/library`:
     // `Add document` opens the file picker, `Re-index` re-queues every document
-    // Ask cannot currently read. None is a destination, which is why none is a
-    // `to:`. Was 0.
-    handlers: 4,
+    // Ask cannot currently read. `research/client-prep`: `Attach to proposal`,
+    // which migration 222's `research_attachments` made an edge rather than a
+    // wish. None is a destination, which is why none is a `to:`. Was 0.
+    handlers: 5,
     // `network/organizations`: `NetworkPage` catches a slug it has no tab for and
     // suppresses every body, so that route already renders its own heading above
     // a card stating the gap — there is nothing for a row to sit over. Checked

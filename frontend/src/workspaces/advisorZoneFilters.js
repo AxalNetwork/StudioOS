@@ -48,14 +48,13 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
 const NO_COMPANY_ON_AN_ANALYSIS =
   'an analysis is stored against the person who ran it and names no company, so nothing marks one as a relationship or as somebody you are pursuing';
 
-// `/research/client-prep`. TWO LABELS, ONE FACT, AND THE FACT CUTS BOTH WAYS:
-// every row a brief produces carries `source: 'client'` and nothing else can,
-// so `Mine only` matches nothing and `Founder-sourced` matches everything.
-// Neither narrows, and the page shipped the first of them as a live chip until
-// this commit — clicking it said "nothing matches this filter" over a full
-// brief, which is exactly the failure D51 was written about.
-const ONE_SOURCE_ONLY =
-  'every row in a brief comes from the founder’s grant and nothing records a note of your own against a client, so there is no second source to separate out';
+// `ONE_SOURCE_ONLY` STOOD HERE AND IS GONE WITH THE ENTRIES IT EXPLAINED. It
+// read "every row in a brief comes from the founder's grant and nothing records
+// a note of your own against a client, so there is no second source to separate
+// out" — exact, and the reason `Mine only` matched nothing while
+// `Founder-sourced` matched everything. Migration 222's `research_brief_notes`
+// is that second source, so the sentence stopped being true and went with the
+// prose it justified. The partner table lost its own copy in the same change.
 
 // `/network/relationships`. The zone's own `StatedLimit` already states the
 // first of these in the page's voice — "No last touch, and therefore no 'going
@@ -141,14 +140,22 @@ export const ADVISOR_ZONE_FILTERS = {
   // name a different absence: no row of your own, and no open/answered state on
   // any row. The canvas's own `Open questions` count comes from a hand-written
   // `state: 'Not done'` in the artboard's mock.
+  // ALL FOUR LIVE, AND MIGRATION 222 IS WHY. Three carried `ONE_SOURCE_ONLY`
+  // and a fourth its own sentence, and all four were exact: every row this
+  // brief produced was the founder's, so `Mine only` matched nothing and
+  // `Founder-sourced` matched everything, and no row could be marked open
+  // because none was the reader's to settle. `research_brief_notes` is the
+  // second source — a row the firm writes against a client it holds a live
+  // grant over — and `open` is a flag on those rows only.
+  //
+  // `Open questions` IS `Mine only` NARROWED, NOT A THIRD AXIS, and that is the honest
+  // shape rather than a shortcut: a founder-sourced row is the client's record,
+  // quoted, and ticking it off would be editing someone else's fact.
   'research/client-prep': [
     { canvas: 'Full brief', key: 'all' },
-    { canvas: 'Mine only', unbuilt: ONE_SOURCE_ONLY },
-    { canvas: 'Founder-sourced', unbuilt: ONE_SOURCE_ONLY },
-    {
-      canvas: 'Open questions',
-      unbuilt: 'nothing records a brief row as open or answered; these rows are what the founder opened to you, not a checklist you work through',
-    },
+    { canvas: 'Mine only', key: 'ours' },
+    { canvas: 'Founder-sourced', key: 'client' },
+    { canvas: 'Open questions', key: 'open' },
   ],
   // THE ONE PLACE THE SIGNALS FEED ANSWERS THE CANVAS'S QUESTION. Founder and
   // investor ask this zone for a saved deep-dive with a lifecycle, and nothing
