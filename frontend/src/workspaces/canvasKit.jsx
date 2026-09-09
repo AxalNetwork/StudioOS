@@ -111,7 +111,7 @@ export function SourceLegend({ theirs = 'Founder-sourced', theirsNote, ours = 'O
  * `sub` is the provenance line the artboards put under a value in small grey:
  * `11 comparables`, `Delivery · deliverables log`.
  */
-export function Cell({ text, pill, pillTone = 'neutral', seam, ours, stale, cite, nr, sub }) {
+export function Cell({ text, pill, pillTone = 'neutral', seam, ours, stale, cite, nr, sub, node }) {
   return (
     <span className="min-w-0 text-[11.5px] text-axal-ink dark:text-gray-200">
       <span className="inline-flex flex-wrap items-center gap-1.5">
@@ -124,6 +124,13 @@ export function Cell({ text, pill, pillTone = 'neutral', seam, ours, stale, cite
         {nr ? <NotRecorded /> : null}
       </span>
       {sub ? <span className="mt-0.5 block text-[10px] leading-snug text-gray-500 dark:text-gray-400">{sub}</span> : null}
+      {/* WHERE A ROW'S CONTROLS GO, AND WHY THEY ARE NOT A SIXTH COLUMN. The
+          artboards draw five columns and no actions column, and adding one
+          would put every table half a column out from the composition it is
+          meant to match. But a table that lists a file and offers no way to
+          open it has lost a capability to a layout — so the controls ride
+          inside the cell whose subject they act on. */}
+      {node ? <span className="mt-1 flex flex-wrap items-center gap-3">{node}</span> : null}
     </span>
   );
 }

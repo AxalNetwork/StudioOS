@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Card, Pill, Stat } from '../../ui';
+import { formatCost } from '../../ui/assistCost';
 import { api } from '../../lib/api';
 import {
-  Field, NothingYet, SaveNote, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
+  Field, NothingYet, SaveNote, StatedLimit, ZoneBody, ZoneHeading,
   buttonClass, ghostButtonClass, inputClass,
 } from '../advisor/expertise/kit';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
+import ZoneDraft from '../../workspaces/ZoneDraft';
+import { Instrument, PairNote, SourceLegend } from '../../workspaces/canvasKit';
 
 /**
  * Research · Library — the documents you hold, and how far Ask can see into them.
@@ -28,11 +31,25 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
  * inside that grant — a table that had a reader and no writer until the control
  * beside `AdvisorGrantSection` was built.
  *
- * A pushed document does NOT appear here. It appears in that advisor's client
- * brief for that startup, resolved by id, because this library is your own and
- * the isolation D37 protects is the reason the whole grant is scoped by id
- * rather than by namespace. So an empty library still means you have uploaded
- * nothing — it just no longer also means nobody could have sent you anything.
+ * A PUSHED DOCUMENT NOW APPEARS HERE, AND THIS PARAGRAPH USED TO SAY IT DID
+ * NOT. It said the file showed only in that reader's client brief, "because
+ * this library is your own". The `pr4` artboard disagrees and is right: its
+ * fourth tile is `From clients` and two of its six rows carry the seam mark, so
+ * a document a client opened to you belongs in the list of what you hold.
+ * `GET /documents` returns both sets.
+ *
+ * NOTHING IS COPIED AND D37 IS UNTOUCHED. A shared document is LISTED, not
+ * duplicated — same row, same R2 object, still owned by the client — and it
+ * stays indexed in their namespace, which `searchSemantic` never searches for
+ * you. So the `In Ask` column reports it as unreachable, which is true and is a
+ * sharper version of this page's own point: index state is Ask's reach, and a
+ * file can be in your library and outside it.
+ *
+ * READ-ONLY IS THE OWNERSHIP, NOT A FLAG. Every write path here is
+ * `WHERE owner_user_id = ?`, so a client's document 404s on remove and on
+ * re-index by construction; the row simply does not draw controls it could not
+ * carry out. An empty library still means you have uploaded nothing AND nobody
+ * has opened anything to you.
  */
 
 const STATE_LABEL = {
@@ -53,6 +70,11 @@ const KINDS = [
   { value: 'playbook', label: 'My playbook' },
   { value: 'client', label: 'About a client' },
 ];
+// The artboard tints kind as well as state, and the two must not read alike: a
+// kind is what a document IS and can never be wrong, so none of these is a
+// status colour. `seam` and `cite` are the two provenance tones `Pill` carries
+// for exactly this reason.
+const KIND_TONE = { client: 'seam', playbook: 'cite', document: 'neutral' };
 
 function fmtBytes(n) {
   if (n == null) return null;
@@ -60,6 +82,56 @@ function fmtBytes(n) {
   if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+/**
+ * The stat strip, per licence, because the four artboards ask for DIFFERENT
+ * TILES — and this file drew one set of four on all of them.
+ *
+ * THE BUG THIS TABLE FIXES. `Pages · {Founder,Investor} Research` open Library
+ * with `Documents`, `Primary sources`, `Questions asked` and `Cost per
+ * question`. `Pages · {Advisor,Partner} Research` open it with `Documents`,
+ * `Indexed`, `Not indexed` and `From clients`. This page hard-coded the first
+ * four for every licence, so a partner's Library has been showing a founder's
+ * artboard — three tiles reading "Not recorded" where their own artboard asks
+ * for three figures the store can produce.
+ *
+ * AND TWO OF THOSE THREE WERE ALREADY FALSE. `Questions asked` read "no
+ * question history is stored, here or in Ask" and `Cost per question` "the same
+ * missing history"; migration 221 stores both. A gap card outliving its gap is
+ * worse than never having written one (D68) — it is a confident, specific claim
+ * that the product cannot do something it now does. Founder and investor get
+ * the real figures from the same place Ask's strip does.
+ *
+ * `Primary sources` IS THE ONE TILE STILL NOT DRAWN, and it is the D56 case
+ * unchanged: nothing on a document records whether it is the reader's own
+ * research or a bought report, `kind` is document/playbook/client, and no
+ * upload can classify one any other way. Its `value` returns null and the tile
+ * is absent. The reason lives here, where whoever adds the field reads it.
+ */
+const LIBRARY_STRIP = {
+  advisor: [
+    { label: 'Documents', value: (x) => x.total, note: (x) => `${x.clientDocs} client, ${x.reusable} reusable` },
+    { label: 'Indexed', value: (x) => x.indexed, note: () => 'answerable in Ask' },
+    { label: 'Not indexed', value: (x) => x.notIndexed, note: () => 'invisible to Ask until indexed' },
+    { label: 'From clients', value: (x) => x.fromClients, note: () => 'read-only, opened to you through a grant' },
+  ],
+  founder: [
+    { label: 'Documents', value: (x) => x.total, note: (x) => `${x.indexed} answerable by Ask` },
+    { label: 'Primary sources', value: () => null, note: () => '' },
+    { label: 'Questions asked', value: (x) => x.asked, note: (x) => `${x.noSource} came back with no source` },
+    {
+      label: 'Cost per question',
+      value: (x) => (x.asked ? formatCost(x.spend / x.asked) : null),
+      note: () => 'mean over the questions on record',
+      mono: true,
+    },
+  ],
+};
+// Partner's artboard is advisor's and investor's is founder's. Aliased rather
+// than duplicated, the same way `ASK_STRIP` is, so a change to one cannot
+// silently leave its twin behind.
+LIBRARY_STRIP.partner = LIBRARY_STRIP.advisor;
+LIBRARY_STRIP.investor = LIBRARY_STRIP.founder;
 
 /**
  * `zoneActions` is the same render prop `AskZone` takes, for the same reason:
@@ -87,6 +159,23 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
     }
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // THE ASK HISTORY, READ HERE TOO, AND ONLY ON THE LICENCES WHOSE ARTBOARD
+  // ASKS FOR IT. Founder's and investor's Library artboards open with
+  // `Questions asked` and `Cost per question` — figures about Ask, on the
+  // Library page, because the two zones are one system and the artboards say so
+  // from both ends. A failure here leaves those two tiles undrawn rather than
+  // failing the page: the documents are what this zone is for.
+  const [ask, setAsk] = useState(null);
+  const wantsAsk = LIBRARY_STRIP[role] === LIBRARY_STRIP.founder;
+  useEffect(() => {
+    if (!wantsAsk) return undefined;
+    let live = true;
+    api.research.askSessions('all')
+      .then((r) => { if (live) setAsk(r?.totals || null); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [wantsAsk]);
 
   const upload = async (e) => {
     e.preventDefault();
@@ -151,6 +240,49 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   // call to make — so the chip that is on is also the way back off it.
   const choose = (key) => setFilter((current) => (current === key ? 'all' : key));
 
+  const strip = LIBRARY_STRIP[role] || LIBRARY_STRIP.founder;
+  // COUNTED OVER THE WHOLE LIBRARY, NEVER OVER `visible`. A tile that changes
+  // because you clicked a chip is not reporting what it claims to — the same
+  // rule `SignalsPage`'s age bands follow, and for the same reason.
+  const ctx = {
+    total: items.length,
+    indexed: payload?.indexed ?? 0,
+    notIndexed: payload?.not_indexed ?? 0,
+    fromClients: payload?.from_clients ?? 0,
+    clientDocs: items.filter((d) => d.kind === 'client').length,
+    reusable: items.filter((d) => d.kind === 'playbook').length,
+    asked: ask?.asked ?? 0,
+    noSource: ask?.no_source ?? 0,
+    spend: ask?.cost_usd ?? 0,
+  };
+
+  const reindex = async (uid) => {
+    setBusy(true); setNote(null);
+    try {
+      await api.research.reindex(uid);
+      setNote({ ok: true, text: 'Reading it again — the state below updates when Ask can use it.' });
+      await load();
+    } catch (err) {
+      setNote({ ok: false, text: err?.message || 'That could not be re-indexed.' });
+    } finally { setBusy(false); }
+  };
+
+  // `Re-index` acts on every own document that Ask cannot currently read, which
+  // is what the ops row means on a page listing the whole library. It is
+  // disabled with a reason rather than hidden when there is nothing to re-run —
+  // a control that vanishes leaves a reader wondering whether it ever existed.
+  const stale = items.filter((d) => d.source !== 'client' && d.index_state !== 'indexed');
+  const handlers = {
+    addDocument: () => fileRef.current?.click(),
+    reindex: {
+      onClick: () => stale.forEach((d) => reindex(d.uid)),
+      disabled: busy || stale.length === 0,
+      title: stale.length === 0
+        ? 'every document you own is already indexed'
+        : `re-read ${stale.length} document${stale.length === 1 ? '' : 's'} Ask cannot currently see`,
+    },
+  };
+
   return (
     <div className="space-y-4">
       {zoneActions && (
@@ -158,7 +290,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
           role={role}
           className="mb-3"
           filters={zoneFilters ? zoneFilters({ value: filter, onChange: choose }) : []}
-          actions={zoneActions(visible)}
+          actions={zoneActions(visible, handlers)}
         />
       )}
       <ZoneHeading
@@ -197,45 +329,36 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
         </form>
       </Card>
 
-      {/* THE CANVAS'S FOUR-STAT STRIP, WITH THREE OF THE FOUR ADMITTING THEY
-          HAVE NO SOURCE — which is the finding, not a shortfall in the wiring.
-          `Pages · {Founder,Investor} Research` asks this zone for `Documents`,
-          `Primary sources`, `Questions asked` and a cost per question.
-          `research_documents` holds title, kind, size, index state, passage
-          count and dates: no primary/secondary classification, no question
-          history, no per-question cost. Two of those three follow from the same
-          missing store, so the strip names it once and the header row's ops
-          half — `Clear history — no session history is stored to clear` —
-          already says the same thing from the other side.
-
-          A figure is never modelled to fill a tile. `Stat` would print an
-          em-dash for a null, which reads as a value; these say `Not recorded`
-          in words. */}
+      {/* THIS LICENCE'S ARTBOARD TILES. See `LIBRARY_STRIP` above for which
+          four, and why one table rather than one row of literals. */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat
-          label="Documents"
-          value={payload ? items.length : undefined}
-          note={payload ? `${payload.indexed} answerable by Ask` : 'library not read'}
-        />
-        <Stat
-          label="Primary sources"
-          value="Not recorded"
-          mono={false}
-          note="no document records whether it is your own research or a bought report"
-        />
-        <Stat
-          label="Questions asked"
-          value="Not recorded"
-          mono={false}
-          note="no question history is stored, here or in Ask"
-        />
-        <Stat
-          label="Cost per question"
-          value="Not recorded"
-          mono={false}
-          note="the same missing history — nothing is priced per question or per document"
-        />
+        {strip.map((tile) => {
+          const v = payload ? tile.value(ctx) : undefined;
+          if (v === null) return null;
+          return (
+            <Stat
+              key={tile.label}
+              label={tile.label}
+              value={v}
+              mono={tile.mono !== false}
+              note={payload ? tile.note(ctx) : 'library not read'}
+            />
+          );
+        })}
       </div>
+
+      {/* Cyan is theirs, amber is ours — rendered only where the table can
+          actually carry both marks. A legend over rows that are all one source
+          explains a distinction the reader cannot see, which is the same defect
+          as a filter chip that selects everything. */}
+      {ctx.fromClients > 0 && (
+        <SourceLegend
+          theirs="From a client"
+          theirsNote="read-only — opened to you through a grant"
+          ours="Ours"
+          oursNote="uploaded by you, yours to change"
+        />
+      )}
 
       <ZoneBody
         loading={state.loading}
@@ -245,81 +368,72 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
         empty={(
           <NothingYet
             title="Nothing in your library yet"
-            body="Add a document above and Ask can answer questions from it, citing the passage it used. Nothing here is inferred — an empty library means you have not added anything, not that a document failed to arrive. Nobody can send you one yet."
+            body="Add a document above and Ask can answer questions from it, citing the passage it used. Nothing here is inferred — an empty library means you have not added anything and no client has opened a file to you, not that something failed to arrive."
           />
         )}
       >
-        <Card className="p-4">
-          <div className="mb-3 flex items-baseline justify-between gap-3">
-            <span className="text-sm font-extrabold tracking-tight">Documents</span>
-            <span className="text-[11px] text-gray-500 dark:text-gray-400">
-              Newest first · state governs what Ask can cite
-            </span>
-          </div>
-          {/* THE CANVAS DRAWS A TABLE WITH NAMED COLUMNS, and it is the right
-              shape: kind and state were chips in a row of chips, which is fine
-              to read one at a time and impossible to scan down.
-
-              `Year` IS RELABELLED, NOT DROPPED. The canvas means the source's
-              own year — the thing that makes a 2023 report stale — and nothing
-              records it; `created_at` is when the file was added here, which is
-              a different fact, so the column says `Added` and carries the date
-              it actually has. `Questions` has no column at all: it would be a
-              whole column of "Not recorded", and the strip above says it once.
-
-              Its own scroller, so a narrow viewport scrolls the table and never
-              the page. */}
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] border-collapse text-left">
-              <thead>
-                <tr className="border-b border-gray-200 dark:border-gray-800">
-                  {['Document', 'Kind', 'Added', 'Passages', 'State', ''].map((head) => (
-                    <th
-                      key={head || 'actions'}
-                      scope="col"
-                      className="pb-2 pr-3 text-[10px] font-extrabold uppercase tracking-[.07em] text-gray-500 dark:text-gray-400"
-                    >
-                      {head}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((d) => (
-                  <tr key={d.uid} className="border-b border-gray-100 align-top dark:border-gray-800">
-                    <td className="py-3 pr-3">
-                      <span className="text-[13px] font-extrabold">{d.title}</span>
-                      <span className="mt-0.5 block text-[11px] text-gray-500 dark:text-gray-400">
-                        {fmtBytes(d.size_bytes) || <Unrecorded>Size not recorded</Unrecorded>}
-                      </span>
-                      {d.index_note && (
-                        <p className="mt-1.5 text-[11.5px] leading-relaxed text-gray-600 dark:text-gray-300">
-                          {d.index_note}
-                        </p>
-                      )}
-                    </td>
-                    <td className="py-3 pr-3 text-[11.5px] text-gray-600 dark:text-gray-300">
-                      {KINDS.find((k) => k.value === d.kind)?.label || d.kind}
-                    </td>
-                    <td className="py-3 pr-3 text-[11.5px] tabular-nums text-gray-600 dark:text-gray-300">
-                      {String(d.created_at || '').slice(0, 10) || <Unrecorded>Not recorded</Unrecorded>}
-                    </td>
-                    <td className="py-3 pr-3 text-[11.5px] tabular-nums text-gray-600 dark:text-gray-300">
-                      {/* NULL, not 0. A document that has never been read shows
-                          no passage count rather than claiming it has none. */}
-                      {d.chunk_count == null
-                        ? <Unrecorded>Not indexed</Unrecorded>
-                        : d.chunk_count}
-                    </td>
-                    <td className="py-3 pr-3">
-                      <Pill tone={STATE_TONE[d.index_state] || 'neutral'}>
-                        {STATE_LABEL[d.index_state] || d.index_state}
-                      </Pill>
-                    </td>
-                    <td className="py-3">
-                      <div className="flex flex-wrap gap-3">
-                        <button type="button" className={ghostButtonClass} onClick={() => download(d.uid)}>
-                          Open
+        <Instrument
+          testid="library-documents"
+          title="Library"
+          meta="Index state is Ask’s reach, stated as a column"
+          cols="2.2fr 1fr 1fr .9fr 1.4fr"
+          head={['Document', 'Kind', 'Added', 'Index state', 'In Ask']}
+          rows={visible.map((d) => ({
+            key: d.uid,
+            // The row a reader has to act on, tinted so the eye finds it before
+            // the column does. `In Ask` says what it means; the tint says where.
+            rowClass: d.in_ask ? '' : 'bg-amber-50/40 dark:bg-amber-950/20',
+            cells: [
+              {
+                text: d.title,
+                // Cyan is theirs, amber is ours — the legend above says which,
+                // and the marks are the artboard's `seam` and `ours`.
+                seam: d.source === 'client' ? (d.source_label || 'From client') : null,
+                ours: d.source === 'client' ? null : 'Ours',
+                sub: fmtBytes(d.size_bytes) || 'Size not recorded',
+              },
+              { pill: KINDS.find((k) => k.value === d.kind)?.label || d.kind, pillTone: KIND_TONE[d.kind] || 'neutral' },
+              // `Added`, not the artboard's own word for this slot. It means
+              // the source's own date — the thing that makes a 2023 report
+              // stale — and nothing records it; `created_at` is when the file
+              // arrived here, which is a different fact.
+              { text: String(d.created_at || '').slice(0, 10), nr: !d.created_at },
+              {
+                pill: STATE_LABEL[d.index_state] || d.index_state,
+                pillTone: STATE_TONE[d.index_state] || 'neutral',
+                // The passage count belongs beside the state and nowhere else:
+                // NULL, not 0, because "never read" and "read into nothing" are
+                // different facts and only one means Ask can cite the file.
+                sub: d.chunk_count == null ? null : `${d.chunk_count} passages`,
+              },
+              // THE ZONE'S OWN QUESTION, PER ROW, and the one column that is
+              // not a restatement of the one before it. A client's document is
+              // indexed in THEIR library, so it is unreachable here however
+              // green its state reads — which is exactly why the two columns
+              // are separate.
+              {
+                text: d.in_ask
+                  ? 'Answerable in Ask'
+                  : (d.source === 'client'
+                    ? 'Indexed in their library, not yours'
+                    : 'Not answerable until indexed'),
+                node: (
+                  <>
+                    <button type="button" className={ghostButtonClass} onClick={() => download(d.uid)}>
+                      Open
+                    </button>
+                    {/* A CLIENT'S DOCUMENT OFFERS NEITHER. Removing it is not
+                        the reader's to do — the route 404s on it, because it is
+                        not in their own set — and re-indexing it would index
+                        into a namespace it does not belong to. Drawing either
+                        would be a control that cannot act. */}
+                    {d.source !== 'client' && (
+                      <>
+                        <button
+                          type="button" disabled={busy} onClick={() => reindex(d.uid)}
+                          className="text-[11px] text-gray-500 underline hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                        >
+                          Re-index
                         </button>
                         <button
                           type="button" disabled={busy} onClick={() => remove(d.uid)}
@@ -327,34 +441,62 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
                         >
                           Remove
                         </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {/* A narrowed view that finds nothing says which view it is, because
-              a bare empty table under a selected chip reads as "your library is
-              empty" — which it is not, and the count above says so. */}
-          {items.length > 0 && visible.length === 0 && (
-            <p className="mt-3 text-[12px] text-gray-600 dark:text-gray-300">
-              No document in your library matches this view. {items.length} in total.
-            </p>
-          )}
-        </Card>
+                      </>
+                    )}
+                  </>
+                ),
+              },
+            ],
+          }))}
+          note={`Ask reaches exactly the ${ctx.indexed} indexed ${ctx.indexed === 1 ? 'document' : 'documents'} you own. Adding a document and making it answerable are two acts, and the last column is where the second one becomes visible — a file on the shelf that Ask cannot read is invisible to every question asked upstairs.`}
+        />
+
+        {/* THE ARTBOARD'S PAIR NOTE, and the only one in the Research set. It
+            earns its place because the `In Ask` column above is meaningless
+            without it: the last column is not a status, it is Ask's reach,
+            restated here so the relationship is visible from both ends. */}
+        <PairNote heading="Library and Ask are one system" meta="Empty library, no Ask">
+          What is indexed here is precisely what Ask can answer over. With an empty library
+          Ask has no empty-state prose to fall back on — it can only report that nothing is
+          indexed, which is why an unindexed document is a working gap rather than
+          housekeeping. A document a client opened to you is read-only: you can read it,
+          and changing it is not yours to do.
+        </PairNote>
+
+        <ZoneDraft
+          surface="research/library"
+          label="Draft · index gaps"
+          accept="Accept draft"
+          run="Draft the gaps"
+          foot="Counted from index state."
+          empty="Points to the documents Ask cannot currently read and what indexing each would unlock — drafted from the index state on this page and nothing else."
+          nothingToDraft="Every document you own is already answerable, so there is no gap to draft over."
+        />
       </ZoneBody>
 
-      <StatedLimit title="Nobody can send you a document yet">
+      {/* WAS "Nobody can send you a document yet", AND THAT IS NO LONGER TRUE.
+          The panel said a founder could not share a document with a reader
+          because "the product has that mechanism for investors and no
+          counterpart for anyone else". `advisor_client_grants` (migration 218)
+          is that counterpart, and the list above now includes what has arrived
+          through one. What is still worth stating is the half a reader would
+          otherwise get wrong: a shared document is listed and unreachable, and
+          those are not a contradiction. */}
+      <StatedLimit title="What a shared document does and does not do">
         <p>
-          This library holds what you add to it. A founder cannot share one of their own
-          documents with you: the product has that mechanism for investors and no
-          counterpart for anyone else, and adding one is a decision about a founder&rsquo;s
-          privacy rather than a missing table.
+          A client can open one of their own files to you, through a grant they control and
+          can revoke. It is listed here with their name on it, you can read it, and it is
+          not yours to change or remove &mdash; which is the right asymmetry for a record
+          they also see.
         </p>
         <p>
-          So an empty library means you have not uploaded anything. It never means a
-          document was shared and failed to arrive.
+          Ask cannot cite it. A shared document stays indexed in the client&rsquo;s library,
+          and Ask searches only your own, so the last column reads &ldquo;indexed in their
+          library, not yours&rdquo; rather than showing it as answerable.
+        </p>
+        <p>
+          So an empty library means you have uploaded nothing and nobody has opened
+          anything to you. It never means something was shared and failed to arrive.
         </p>
       </StatedLimit>
     </div>

@@ -185,8 +185,16 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
     { label: 'Cite in a memo', unbuilt: 'nothing carries a signal into a memo' },
   ],
+  // `Upload` IS THIS LICENCE'S WORD FOR THE SAME OP advisor and partner call
+  // `Add document`, and it opens the same file picker. It was
+  // `unbuilt: 'the add-document form below takes a file or a link'` — true of
+  // the form, never true of the op.
+  //
+  // `New collection` KEEPS ITS NOTE. Collections are still not stored, and
+  // nothing in migration 221 or the library's own store changed that: a
+  // collection is a grouping of documents and there is no table for one.
   'research/library': [
-    { label: 'Upload', unbuilt: 'the add-document form below takes a file or a link' },
+    { label: 'Upload', kind: 'handler', handler: 'addDocument' },
     { label: 'New collection', unbuilt: 'collections are not stored' },
     { label: 'Export', kind: 'export' },
   ],

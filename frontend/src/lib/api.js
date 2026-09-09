@@ -3773,6 +3773,10 @@ export const api = {
     // Returns a short-lived one-time URL, not the bytes.
     downloadUrl: (uid) => request(`/research/documents/${encodeURIComponent(uid)}/download`),
     remove: (uid) => request(`/research/documents/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+    // `Re-index` in the Library ops row. Only an own document can be re-queued:
+    // a client-sourced one is indexed in their library, not yours, and its uid
+    // is not in your own set.
+    reindex: (uid) => request(`/research/documents/${encodeURIComponent(uid)}/reindex`, { method: 'POST' }),
     // `session_uid` is optional and the worker falls back to the caller's most
     // recent thread, so a reader who has just landed can ask without one.
     ask: (question, sessionUid) => request('/research/ask', {

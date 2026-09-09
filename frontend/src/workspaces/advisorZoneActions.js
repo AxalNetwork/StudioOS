@@ -104,9 +104,19 @@ export const ADVISOR_ZONE_ACTIONS = {
     { label: 'Open in Ask', unbuilt: 'Ask answers from the library, and an analysis is not a library document' },
     { label: 'Export', kind: 'export' },
   ],
+  // BOTH OPS ARE THE PAGE'S OWN NOW. `Add document` said "the add-document form
+  // below takes a file or a link" — true of the form and not of the op, which
+  // is what a reader looking at the ops row reaches for; it opens the file
+  // picker on that same form rather than being a second uploader. `Re-index`
+  // said "indexing runs on upload; there is no re-run control", which was the
+  // gap this artboard's whole composition turns on: its Thornfield row is a
+  // document the firm added and never indexed, so it answers nothing in Ask and
+  // there was no way to act on it from the page reporting it. There is now —
+  // `POST /api/research/documents/:uid/reindex`, over the same `embed_entity`
+  // job the upload path enqueues. D67.
   'research/library': [
-    { label: 'Add document', unbuilt: 'the add-document form below takes a file or a link' },
-    { label: 'Re-index', unbuilt: 'indexing runs on upload; there is no re-run control' },
+    { label: 'Add document', kind: 'handler', handler: 'addDocument' },
+    { label: 'Re-index', kind: 'handler', handler: 'reindex' },
     { label: 'Export', kind: 'export' },
   ],
 };

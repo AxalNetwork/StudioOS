@@ -92,7 +92,30 @@ interface DocRow {
   indexed_at: string | null; created_at: string; updated_at: string;
 }
 
-const dto = (r: DocRow) => ({
+/**
+ * `source` IS WHERE A DOCUMENT CAME FROM, AND IT IS NOT A COLUMN.
+ *
+ * The `pr4` artboard's fourth tile is `From clients` — "read-only, seam-marked"
+ * — and two of its six rows carry the cyan seam chip. `research_documents` has
+ * `kind`, whose `client` value the upload form calls "About a client": that is
+ * what a document is ABOUT, not where it came from. A teardown the firm wrote
+ * about a prospect and a brief the prospect sent them are both `kind = 'client'`
+ * today, and only one of them is read-only.
+ *
+ * A FIRST DRAFT ADDED `source` AND `source_label` COLUMNS IN A MIGRATION AND
+ * THAT WAS WRONG. Nothing would have written them. `advisor_client_document_shares`
+ * (migration 218) already records exactly this fact — which document, shared
+ * with whom, active or revoked — so the column would have been a second copy of
+ * a truth that already exists, with no writer, which is the first failure D53's
+ * four-step check is for. The list reads both sets instead.
+ *
+ * NOTHING IS COPIED AND NO NAMESPACE WIDENS. A shared document is listed, not
+ * duplicated; it is indexed in the CLIENT's namespace and `searchSemantic` still
+ * only ever searches the caller's own, so `In Ask` reports it as unreachable —
+ * which is true, and is a sharper version of the artboard's own point that index
+ * state is Ask's reach. D37 is untouched.
+ */
+const dto = (r: DocRow, source: 'own' | 'client' = 'own', sourceLabel: string | null = null) => ({
   uid: r.uid,
   title: r.title,
   kind: r.kind,
@@ -105,6 +128,16 @@ const dto = (r: DocRow) => ({
   chunk_count: r.chunk_count,
   indexed_at: r.indexed_at,
   created_at: r.created_at,
+  source,
+  source_label: sourceLabel,
+  // Stated by the route rather than derived in the page. The rule is the
+  // route's — a shared document's uid is not in the caller's own set, so every
+  // write path 404s on it already — and a second copy of it in the client would
+  // be the place the two disagree.
+  read_only: source === 'client',
+  // What Ask can actually reach. An own document is answerable when it is
+  // indexed; a shared one never is, because it is indexed somewhere else.
+  in_ask: source === 'own' && r.index_state === 'indexed',
 });
 
 /** Always scoped to the caller. There is no route here that reads another user's row. */
@@ -123,14 +156,93 @@ research.get('/documents', async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT * FROM research_documents WHERE owner_user_id = ? ORDER BY created_at DESC LIMIT 500`
   ).bind(user.id).all<DocRow>();
-  const items = (rows.results || []).map(dto);
+
+  // The documents clients have opened to this reader, through the grants
+  // migration 218 already models. `status = 'active'` because a revoke is a
+  // state rather than a delete, and a revoked share must stop appearing here
+  // the moment it is revoked.
+  //
+  // The project's name is the seam chip's label — "From Verwood" — and it is
+  // taken from the grant rather than stored on the document, so a project
+  // renamed after the share still labels correctly.
+  // A CORRELATED SUBQUERY FOR THE NAME, not a join, because a reader can hold
+  // grants over several projects and joining would return the same document
+  // once per grant. This picks the newest grant this reader holds over a
+  // project belonging to the document's owner, which is the client the file
+  // came from.
+  const shared = await c.env.DB.prepare(
+    `SELECT d.*, (
+              SELECT p.name
+                FROM advisor_client_grants g
+                JOIN projects p ON p.id = g.project_id
+               WHERE g.advisor_user_id = s.advisor_user_id
+                 AND g.status = 'active'
+                 AND p.founder_id = d.owner_user_id
+               ORDER BY g.id DESC LIMIT 1
+            ) AS project_name
+       FROM advisor_client_document_shares s
+       JOIN research_documents d ON d.id = s.document_id
+      WHERE s.advisor_user_id = ? AND s.status = 'active'
+      ORDER BY d.created_at DESC LIMIT 200`
+  ).bind(user.id).all<DocRow & { project_name: string | null }>();
+
+  const items = [
+    ...(rows.results || []).map((r) => dto(r, 'own')),
+    ...(shared.results || []).map((r) => dto(r, 'client', r.project_name ? `From ${r.project_name}` : 'From client')),
+  ];
   return c.json({
     items,
     // The library's own reach, stated rather than left for a reader to count.
     indexed: items.filter((i) => i.index_state === 'indexed').length,
     not_indexed: items.filter((i) => i.index_state !== 'indexed').length,
+    // The `pr4` artboard's fourth tile. Counted here rather than in the page so
+    // the tile and the `Client docs` chip cannot disagree about what the word
+    // means: this is provenance (migration 222), NOT `kind = 'client'`, which
+    // is what a document is about.
+    from_clients: items.filter((i) => i.source === 'client').length,
     score_floor: SCORE_FLOOR,
   });
+});
+
+/**
+ * Re-index one document — the artboard's `Re-index` op, which was
+ * `unbuilt: 'indexing runs on upload; there is no re-run control'`.
+ *
+ * That was true and is the gap the whole `pr4` composition turns on: its
+ * Thornfield teardown row is a document the firm added and never indexed, so it
+ * answers nothing in Ask, and there was no way to act on it from the page that
+ * reports it. Re-queuing is the act.
+ *
+ * A CLIENT-SOURCED DOCUMENT MAY BE RE-INDEXED. Read-only means the reader
+ * cannot change or delete it; indexing writes nothing to the document and only
+ * touches the reader's own namespace, which is the reason the file is in front
+ * of them at all.
+ */
+research.post('/documents/:uid/reindex', async (c) => {
+  const user = await requireAuth(c);
+  const doc = await ownDoc(c.env, user.id, c.req.param('uid'));
+  if (!doc) return c.json({ detail: 'not_found' }, 404);
+  // Already queued. Re-queuing would put a second job behind the first for the
+  // same file, and the page would report "reading" either way.
+  if (doc.index_state === 'pending') return c.json({ detail: 'already_queued' }, 409);
+  await c.env.DB.prepare(
+    `UPDATE research_documents
+        SET index_state = 'pending', index_note = NULL, updated_at = datetime('now')
+      WHERE id = ? AND owner_user_id = ?`
+  ).bind(doc.id, user.id).run();
+  // The SAME job the upload path enqueues, `embed_entity` over `research_doc`
+  // — not a second indexer. Two enqueue shapes for one piece of work is how the
+  // re-run and the first run drift into indexing differently, and the second
+  // one is the one nobody tests.
+  try {
+    await Jobs.enqueue(c.env, 'embed_entity', { type: 'research_doc', id: doc.id });
+  } catch {
+    // The hourly sweep walks `index_state` past a watermark and will catch it,
+    // which is why the upload path swallows this too. The row is already
+    // 'pending', so the page reports the truth either way.
+  }
+  const fresh = await ownDoc(c.env, user.id, doc.uid);
+  return c.json({ item: fresh ? dto(fresh) : null });
 });
 
 research.post('/documents', async (c) => {
@@ -220,6 +332,11 @@ research.get('/documents/:uid/download', async (c) => {
 research.delete('/documents/:uid', async (c) => {
   const user = await requireAuth(c);
   const row = await ownDoc(c.env, user.id, c.req.param('uid'));
+  // A CLIENT-SOURCED DOCUMENT CANNOT REACH THIS LINE, and that is the read-only
+  // asymmetry rather than a missing check. `ownDoc` is `WHERE owner_user_id = ?`,
+  // and a shared document is owned by the client — so its uid 404s here, and on
+  // every other write path in this file, by construction. There is nothing to
+  // guard because there is nothing to reach.
   if (!row) return c.json({ detail: 'Not found' }, 404);
 
   // VECTORS FIRST, and the order is the point: if the row went first, its

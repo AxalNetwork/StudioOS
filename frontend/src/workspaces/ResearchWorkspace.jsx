@@ -401,7 +401,14 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
             // so a question needing a source you have not added has no answer
             // here rather than a general-knowledge one.
             ['Answers from outside your library', 'Ask reads only documents you have added. It cannot search the web, company databases or market data — those need a licensed source the product does not have.'],
-            ['Documents shared with you', 'Nobody can send you a document yet. A founder sharing their own file needs a grant the product has for investors and for nobody else.'],
+            // WAS "Nobody can send you a document yet", AND THAT STOPPED BEING
+            // TRUE. `advisor_client_grants` (migration 218) is the grant it
+            // said the product had "for investors and for nobody else", and
+            // `advisor_client_document_shares` carries a file inside one; the
+            // library lists what has arrived that way. What is still absent is
+            // the reach: a shared document stays indexed in the client's
+            // namespace, which is never searched for you, so Ask cannot cite it.
+            ['Ask over a document a client shared', 'A client can open a file to you and the library lists it, but it stays indexed in their namespace — so Ask, which searches only your own, cannot cite it.'],
             ...(ownAnalysesOnly
               ? [['Client-scoped research', 'An analysis is stored against you, not against a company, so nothing here can be filed under a client or reopened per client.']]
               : []),

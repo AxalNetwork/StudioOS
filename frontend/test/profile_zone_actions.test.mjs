@@ -56,15 +56,16 @@ const PROFILES = {
     exports: 20,
     // Seven ops the PAGE performs: six of Validate's — three open a dialog the
     // workspace owns and three are server-side CSV downloads with a busy state —
-    // plus `research/ask`'s `New brief`, which starts a thread in the session
-    // store migration 221 added.
+    // plus `research/ask`'s `New brief` and `research/library`'s `Upload` —
+    // one starts a thread in the session store migration 221 added, the other
+    // opens the file picker on the form already on the page.
     //
     // THE KIND HAS SPREAD, WHICH IS WHAT THESE COUNTS ARE FOR. It was one
     // profile's answer and is now four; the note that used to sit here said
     // "pinning it at 0 elsewhere is what makes a second one show up as a change
     // rather than as a silent spread", and that is exactly how this landed —
     // three counts went red in one run and each was read before it was moved.
-    handlers: 7,
+    handlers: 8,
     // NOTHING IS EXCLUDED ANY MORE. `research/funds` sat here as "a card in
     // `ResearchWorkspace`'s ZONE_COPY, not a body" — true when it was written
     // and untrue since `ZONE_COPY` became `{}` and `LIVE_ZONES` gained `funds`.
@@ -86,9 +87,9 @@ const PROFILES = {
     zones: 19,
     links: 1,
     exports: 13,
-    // One page-supplied op: `research/ask`'s `New brief`, which starts a thread
-    // in migration 221's session store. Was 0.
-    handlers: 1,
+    // Two page-supplied ops: `research/ask`'s `New brief` and
+    // `research/library`'s `Upload`. Was 0.
+    handlers: 2,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -136,10 +137,12 @@ const PROFILES = {
     zones: 21,
     links: 0,
     exports: 19,
-    // Two page-supplied ops, both `research/ask`'s: `New session` starts a
-    // thread and `Saved answers` switches the view to the kept ones. Neither is
-    // a destination, which is why neither is a `to:`. Was 0.
-    handlers: 2,
+    // Four page-supplied ops. `research/ask`: `New session` starts a thread,
+    // `Saved answers` switches the view to the kept ones. `research/library`:
+    // `Add document` opens the file picker, `Re-index` re-queues every document
+    // Ask cannot currently read. None is a destination, which is why none is a
+    // `to:`. Was 0.
+    handlers: 4,
     // `network/organizations`: `NetworkPage` catches a slug it has no tab for and
     // suppresses every body, so that route already renders its own heading above
     // a card stating the gap — there is nothing for a row to sit over. Checked
@@ -176,9 +179,9 @@ const PROFILES = {
     zones: 11,
     links: 1,
     exports: 11,
-    // Two page-supplied ops, both `research/ask`'s — the same pair partner has,
-    // because `AskZone` is one file serving both. Was 0.
-    handlers: 2,
+    // Four page-supplied ops — the same set partner has, because `AskZone` and
+    // `LibraryZone` are each one file serving both. Was 0.
+    handlers: 4,
     embeddedGuards: 0,
     // Both remaining exclusions are cards whose whole page IS the gap
     // statement, so there is nothing for a row to sit over. `expertise/

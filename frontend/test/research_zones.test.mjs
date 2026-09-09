@@ -44,13 +44,16 @@ test('the library never renders "indexed into nothing" as a fact', () => {
   // from "Ask has not read this yet" — and only one of them is true.
   assert.match(code, /chunk_count == null/,
     'the library must distinguish a never-indexed document from an empty one');
-  // The BRANCH, not the sentence in it. This used to pin the exact words "No
-  // passages indexed", which held the wording still rather than the behaviour:
-  // moving the count into a column headed `Passages` made that phrasing say
-  // "passages" twice, and a test should not be the reason a page reads worse.
-  // What must not change is that the null case goes through `Unrecorded`.
-  assert.match(code, /chunk_count == null\s*\?\s*<Unrecorded>/,
-    'a never-indexed document must read as unrecorded, not as zero passages');
+  // THE BRANCH, NOT THE SENTENCE IN IT, and not the component either. This
+  // pinned `chunk_count == null ? <Unrecorded>`, which held the RENDERING
+  // still rather than the behaviour — twice now. It first pinned the words "No
+  // passages indexed" and had to move when the count became a column; it then
+  // pinned `<Unrecorded>` and had to move again when the count became the
+  // `sub` line under the index-state cell, where the artboard puts it. What
+  // must not change is that the null case produces nothing at all rather than
+  // a number.
+  assert.match(code, /chunk_count == null \? null :/,
+    'a never-indexed document must render no passage count, not a zero');
   assert.doesNotMatch(code, /chunk_count \|\| 0/,
     'coercing chunk_count to 0 turns "not read yet" into "read, found nothing"');
 });
@@ -172,14 +175,46 @@ test('every citation names its passage, and one list serves both branches', () =
     'the citation list has been put behind an answered-only guard, so a model failure would list nothing');
 });
 
-test('both zones state that nobody can share a document with you', () => {
-  // The absent half of the feature, said out loud. Without it an empty library
-  // reads as "nobody sent me anything" rather than "I have not added anything",
-  // and those imply completely different next actions.
-  assert.match(library, /Nobody can send you a document yet/);
+test('a shared document is listed, and the page says why Ask still cannot cite it', () => {
+  // REVERSED, AND THE REVERSAL IS THE POINT. This required the library, Ask and
+  // the rail all to say "Nobody can send you a document yet". That was true
+  // when it was written and stopped being true: `advisor_client_grants`
+  // (migration 218) is the grant it said existed "for investors and for nobody
+  // else", `advisor_client_document_shares` carries a file inside one, and
+  // `GET /documents` now lists what has arrived that way.
+  //
+  // What has NOT changed is the reach, and that is what the three surfaces have
+  // to agree on now: a shared document is indexed in the client's namespace,
+  // `searchSemantic` only ever searches the caller's own, so Ask cannot cite it.
+  // Listed and unreachable is not a contradiction, and a reader who is told
+  // only the first half will assume the second.
+  // THROUGH A COMMENT STRIP, and for the reason `_codeOnly.mjs` exists at all:
+  // both files explain the reversal by quoting the sentence they replaced, and
+  // banning the string outright bans the explanation rather than the behaviour.
+  // `codeOnly` deliberately keeps indented `{/* */}` blocks, so those go too.
+  const rendered = (src) => codeOnly(src).replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+  const libRendered = rendered(library);
+  const railRendered = rendered(workspace);
+  assert.ok(libRendered.length > 0 && libRendered.length < library.length,
+    'the strip removed nothing, so the bans below are not reading the page');
+  assert.doesNotMatch(libRendered, /Nobody can send you a document yet/,
+    'the library denies a share path that migration 218 built and this page reads');
+  assert.doesNotMatch(railRendered, /Nobody can send you a document yet/,
+    'the rail denies a share path the library reads');
+
+  assert.match(library, /indexed in their library, not yours/i,
+    'the library no longer says why a shared document is unreachable');
+  assert.match(library, /not yours to change or remove/,
+    'the library no longer states the read-only asymmetry');
   assert.match(ask, /answers only from documents you have added/i);
-  assert.match(workspace, /Documents shared with you/,
-    'the rail must list sharing among what is unavailable');
+  assert.match(workspace, /Ask over a document a client shared/,
+    'the rail must report the reach that is still unavailable');
+
+  // AND THE PAGE MUST NOT OVERCORRECT. An empty library still means two things
+  // — nothing uploaded AND nothing opened to you — and saying only the first
+  // is the failure this test has guarded from the beginning.
+  assert.match(library, /no client has opened a file to you/,
+    'an empty library reads as "I have not uploaded anything" and hides the other half');
 });
 
 test('the api methods exist and none of them takes a whose-library argument', () => {
@@ -206,62 +241,102 @@ test('the api methods exist and none of them takes a whose-library argument', ()
   }
 });
 
-test('the library carries the canvas stat strip, and a tile with no source says so', () => {
-  // C9. `Pages · {Founder,Investor} Research` gives the Library zone a
-  // four-stat strip: `Documents`, `Primary sources`, `Questions asked` and a
-  // cost per question. `research_documents` holds title, kind, size, index
-  // state, passage count and dates — so exactly one of those four has a
-  // source, and the other three must SAY they have none rather than being
-  // dropped or filled with a plausible figure.
+test('each licence draws its own Library artboard’s tiles', () => {
+  // THE BUG THIS REPLACES. This test required ONE strip — `Documents`,
+  // `Primary sources`, `Questions asked`, `Cost per question` — for every
+  // licence, and the page drew exactly that. Those are the FOUNDER and INVESTOR
+  // artboards' tiles. `Pages · {Advisor,Partner} Research` open Library with
+  // `Documents`, `Indexed`, `Not indexed`, `From clients`, so a partner's page
+  // has been showing a founder's artboard, with three tiles reading "Not
+  // recorded" where their own asks for three figures the store can produce.
+  //
+  // AND TWO OF THOSE THREE WERE ALREADY FALSE by the time this ran: migration
+  // 221 stores the question history that `Questions asked` and `Cost per
+  // question` both denied. This test REQUIRED that denial — `value="Not
+  // recorded"` on each — which is how a stale gap claim survives a green suite.
   const code = codeOnly(library);
-  assert.match(code, /<div className="grid grid-cols-2 gap-3 lg:grid-cols-4">/,
-    'the four-stat strip the canvas draws is gone');
-
-  // EACH TILE BOUNDED AT ITS OWN `/>`, not read through a fixed window. A
-  // 260-character window was the first version and it spilled into the tile
-  // BELOW: replacing `Questions asked`'s value with a modelled
-  // `items.length * 3` still passed, because the window reached the next
-  // tile's `value="Not recorded"` and matched that instead. Same mistake, and
-  // the same fix, as the capped `<ZoneToolbar` regex in the filters guard.
-  // `/<Stat\s/` and not `'<Stat'`: `<StatedLimit` further down the file starts
-  // with the same five characters, and splitting on the bare string picked it
-  // up as a fifth, label-less tile.
-  const tiles = Object.fromEntries(code.split(/<Stat\s/).slice(1).map((segment) => {
-    const tile = segment.slice(0, segment.indexOf('/>'));
-    return [tile.match(/label="([^"]+)"/)?.[1], tile];
-  }));
-  assert.deepEqual(
-    Object.keys(tiles),
+  assert.match(code, /const LIBRARY_STRIP = \{/, 'the per-licence strip table is gone');
+  const table = code.slice(code.indexOf('const LIBRARY_STRIP = {'));
+  const decl = table.slice(0, table.indexOf('\n};'));
+  const labels = (key) => {
+    const at = decl.indexOf(`  ${key}: [`);
+    assert.notEqual(at, -1, `the ${key} strip is gone`);
+    const block = decl.slice(at, decl.indexOf('\n  ],', at));
+    return [...block.matchAll(/label: '([^']+)'/g)].map((m) => m[1]);
+  };
+  assert.deepEqual(labels('advisor'),
+    ['Documents', 'Indexed', 'Not indexed', 'From clients'],
+    'the advisor/partner strip is no longer its artboard’s four tiles, in the artboard’s order');
+  assert.deepEqual(labels('founder'),
     ['Documents', 'Primary sources', 'Questions asked', 'Cost per question'],
-    'the strip is no longer the canvas\'s four tiles, in the canvas\'s order',
-  );
-  // The three with no store, each pinned to its own tile.
-  for (const label of ['Primary sources', 'Questions asked', 'Cost per question']) {
-    assert.match(tiles[label], /value="Not recorded"/,
-      `${label} has no source and must say "Not recorded", not print a figure`);
-    assert.doesNotMatch(tiles[label], /value=\{/,
-      `${label} has no source, so any expression in its value is a modelled figure`);
-  }
-  // And the one that does have a source must read the real list, never a
-  // constant — the whole strip is worthless if the true tile is decorative.
-  assert.match(tiles.Documents, /value=\{payload \? items\.length : undefined\}/,
-    'the Documents tile no longer counts the documents actually loaded');
+    'the founder/investor strip is no longer its artboard’s four tiles, in the artboard’s order');
+
+  // Aliased, not copied — the same rule `ASK_STRIP` follows one file over.
+  assert.match(code, /LIBRARY_STRIP\.partner = LIBRARY_STRIP\.advisor;/,
+    'partner has its own copy of the advisor strip and can now drift from it');
+  assert.match(code, /LIBRARY_STRIP\.investor = LIBRARY_STRIP\.founder;/,
+    'investor has its own copy of the founder strip and can now drift from it');
+
+  // D56 IS UNCHANGED AND IS NOW ENFORCED AT THE TILE. A `value` returning null
+  // is dropped; nothing prints its own absence into the slot where a figure
+  // belongs. `Primary sources` is the one tile that still has no store —
+  // nothing on a document records whether it is own research or a bought
+  // report — and it is the only `value` allowed to be a bare null.
+  assert.match(code, /if \(v === null\) return null;/,
+    'a tile whose value is unavailable is drawn anyway');
+  assert.doesNotMatch(code, /value="Not recorded"/,
+    'a tile states its own absence again instead of not being drawn');
+  const nulls = [...decl.matchAll(/label: '([^']+)', value: \(\) => null/g)].map((m) => m[1]);
+  assert.deepEqual(nulls, ['Primary sources'],
+    'a second tile has been given up on, or the one with no store has been filled');
+
+  // Every other tile reads the page. `x.` is the tell: a tile that never reads
+  // the context is reporting something it did not measure.
+  const values = [...decl.matchAll(/value: \(x\) => ([^\n]+)/g)].map((m) => m[1]);
+  assert.equal(values.length, 7, 'the two strips no longer declare seven sourced tiles between them');
+  for (const v of values) assert.match(v, /\bx\./, `a tile value reads nothing from the page: ${v}`);
+
+  // COUNTED OVER THE WHOLE LIBRARY, NEVER OVER THE CHIP-NARROWED LIST. A tile
+  // that changes because you clicked a chip is not reporting what it claims to.
+  const ctx = code.slice(code.indexOf('const ctx = {'), code.indexOf('const reindex ='));
+  assert.ok(ctx.length > 0, 'the strip context is gone');
+  assert.doesNotMatch(ctx, /\bvisible\b/, 'the tiles count the chip-narrowed list');
 });
 
-test('the library lists documents as the canvas’s named columns', () => {
-  // A row of chips is fine to read one at a time and impossible to scan down.
-  // `Year` is deliberately absent: the canvas means the SOURCE's own year,
-  // which nothing records, and `created_at` is when the file was added here —
-  // a different fact, so the column says `Added`. `Questions` is absent for
-  // the same reason the tile above says "Not recorded"; a whole column of it
-  // would say the same thing once per row.
+test('the library lists documents as its artboard’s named columns', () => {
+  // `Document / Kind / Added / Index state / In Ask`. `Added` is a deliberate
+  // relabel: the artboard's slot means the SOURCE's own year — the thing that
+  // makes a 2023 report stale — and nothing records it, so the column carries
+  // the date it actually has, which is when the file arrived here.
+  //
+  // `Passages` IS NO LONGER A COLUMN and that is the artboard's own layout: the
+  // count is the `sub` line under the index state, because it is a detail of
+  // that state rather than a fact of its own. The guard above holds the null
+  // case.
   const code = codeOnly(library);
-  for (const head of ['Document', 'Kind', 'Added', 'Passages', 'State']) {
-    assert.ok(code.includes(`'${head}'`), `the documents table lost its "${head}" column`);
-  }
+  assert.match(code, /title="Library"/, 'the instrument card is gone');
+  const card = code.slice(code.indexOf('title="Library"'));
+  const head = card.match(/head=\{\[([^\]]*)\]\}/);
+  assert.ok(head, 'the instrument card no longer declares its column heads');
+  assert.deepEqual(
+    head[1].split(',').map((x) => x.trim().replace(/^'|'$/g, '')),
+    ['Document', 'Kind', 'Added', 'Index state', 'In Ask'],
+  );
   assert.doesNotMatch(code, /'Year'/, 'a source year column would have nothing to fill it');
-  assert.match(code, /<div className="overflow-x-auto">/,
-    'the table must scroll inside its own container, never the page');
+
+  // `In Ask` IS NOT A SECOND COPY OF `Index state`, which is the one way this
+  // table could go quietly wrong. A client's document can be indexed — in THEIR
+  // library — and still be uncitable here, so the last column reads the reach
+  // the worker computed rather than the state beside it.
+  assert.match(card, /d\.in_ask/, 'the In Ask column no longer reads the computed reach');
+  assert.match(card, /Indexed in their library, not yours/,
+    'a shared document reads as answerable, or as unindexed, instead of as out of reach');
+
+  // The scroller lives in the shared `Instrument`, which is why seven artboards
+  // cannot each forget it.
+  const kit = codeOnly(read('frontend/src/workspaces/canvasKit.jsx'));
+  assert.match(kit, /overflow-x-auto/,
+    'the shared instrument table lost its own scroller and the page will scroll sideways');
 });
 
 /**
