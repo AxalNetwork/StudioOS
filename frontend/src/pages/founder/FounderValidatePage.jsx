@@ -5,10 +5,42 @@ import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import DiscoveryPage from '../DiscoveryPage';
 import { zonePillClass } from './deskZoneNav';
+import ValidateProposals from '../../workspaces/founder/ValidateProposals';
+import useAssistMode from '../../hooks/useAssistMode';
 import './founderValidate.css';
 import './founderValidateWorkspace.css';
 
 const statusLabel = { validated: 'Validated', invalidated: 'Invalidated', inconclusive: 'Inconclusive' };
+
+/**
+ * How many quotes an interview carries, and how many are QUOTABLE.
+ *
+ * The artboard's table column is `Quotes`, and its own note is that
+ * deck-eligibility "is not a flag someone sets — it derives from consent". So
+ * an interview with recorded evidence and no consent has quotes that cannot
+ * leave the page, which is a different number from the ones it has. Migration
+ * 211 made `quote_consent` three-state on purpose: true, false, or never
+ * asked, and folding null into false would report "declined" for everyone
+ * nobody has asked yet.
+ */
+const quoteCount = (row) => (row?.hypotheses || []).length + (row?.pains || []).length;
+const quotable = (row) => row?.quote_consent === true;
+
+/** Interviews logged in the last seven days — the artboard's `3 this week`. */
+function loggedThisWeek(rows) {
+  const cutoff = Date.now() - 7 * 86400000;
+  return rows.filter((r) => {
+    const t = Date.parse(String(r.interview_date || r.created_at || ''));
+    return !Number.isNaN(t) && t >= cutoff;
+  }).length;
+}
+
+/** `44 min audio` — the artboard's cost line, from the stored duration. */
+function clipLength(sec) {
+  if (sec == null || !Number.isFinite(Number(sec)) || Number(sec) <= 0) return null;
+  const mins = Math.round(Number(sec) / 60);
+  return mins < 1 ? '<1 min audio' : `${mins} min audio`;
+}
 const clean = (value) => String(value || '').trim();
 const quoteFrom = (notes) => {
   const text = clean(notes).replace(/\s+/g, ' ');
@@ -37,6 +69,10 @@ export default function FounderValidatePage() {
   const [state, setState] = useState(() => navigationSeed ? 'ready' : 'loading');
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  // The same per-workspace mode the hypotheses page reads, so a founder who
+  // turned fills on once does not have to turn it on again here — and one who
+  // has not is offered nothing that spends their budget.
+  const [fillsOn] = useAssistMode('Validate');
   const workspaceFromUrl = searchParams.get('mode') === 'workspace'
     || ['leads', 'interviews', 'insights'].includes(searchParams.get('tab'));
   const [showWorkspace, setShowWorkspace] = useState(workspaceFromUrl);
@@ -183,7 +219,7 @@ export default function FounderValidatePage() {
             </nav>
           </header>
           {state === 'error' && <div className="validate-error" data-testid="status-validate-error"><AlertCircle size={16} /> {error} <button data-testid="button-retry-validate" onClick={() => setReloadKey((value) => value + 1)}>Retry</button></div>}
-          <EvidenceCards loading={state === 'loading'} projects={projects} featured={featured} interviews={interviews} evidence={evidence} signals={signals} dateFormat={dateFormat} stageLinks={stageLinks} workspaceNavigationState={workspaceNavigationState} />
+          <EvidenceCards loading={state === 'loading'} projects={projects} projectId={projectId} fillsOn={fillsOn} onApplied={() => setReloadKey((value) => value + 1)} featured={featured} interviews={interviews} evidence={evidence} signals={signals} dateFormat={dateFormat} stageLinks={stageLinks} workspaceNavigationState={workspaceNavigationState} />
         </div>
         <WorkerRail
           workspace="Validate"
@@ -203,20 +239,45 @@ export default function FounderValidatePage() {
   );
 }
 
-function EvidenceCards({ loading, projects, featured, interviews, evidence, signals, dateFormat, stageLinks, workspaceNavigationState }) {
+function EvidenceCards({ loading, projects, projectId, fillsOn, onApplied, featured, interviews, evidence, signals, dateFormat, stageLinks, workspaceNavigationState }) {
   const cards = evidence.hypotheses.slice(0, 6);
   return <div className="validate-sections">
-    <section className="evidence-card" id="validate-0"><SectionHead icon={MessageSquare} title="Interview library" meta={loading ? 'Reading source records' : `${interviews.length} logged · ${interviews.filter((item) => item.featured).length} featured`} />
-      {loading ? <Skeleton rows={4} /> : !projects.length ? <Empty icon={Target} text="No startup is available to this view yet." action="Choose or create a startup on the interviews page." link={stageLinks.interviews} linkState={workspaceNavigationState} label="Open interviews" /> : featured ? <div className="source-quote"><div className="source-label"><span>Recorded evidence</span><span>{dateFormat(featured.interview_date)}</span></div><strong>{clean(featured.interviewee_name) || 'Unnamed interviewee'}{featured.interviewee_role ? ` · ${featured.interviewee_role}` : ''}</strong><p><Quote size={14} /> {quoteFrom(featured.notes)}</p><div className="source-foot">Source: interview notes · {(featured.hypotheses || []).length} hypothesis record{(featured.hypotheses || []).length === 1 ? '' : 's'} · {(featured.pains || []).length} pain tag{(featured.pains || []).length === 1 ? '' : 's'}</div></div> : <Empty icon={FileText} text="No recorded interview notes with a usable quote yet." action="Log evidence on the interviews page; this desk only shows recorded material." link={stageLinks.interviews} linkState={workspaceNavigationState} label="Open interviews" />}
-      {!loading && interviews.length > 0 && <div className="interview-table"><div className="table-head"><span>Person</span><span>Role</span><span>Date</span><span>Evidence</span></div>{interviews.slice(0, 6).map((item) => <div className="table-row" key={item.id}><strong>{clean(item.interviewee_name) || 'Unnamed'}</strong><span>{clean(item.interviewee_role) || 'Not recorded'}</span><span>{dateFormat(item.interview_date)}</span><span>{(item.hypotheses || []).length + (item.pains || []).length} records</span></div>)}</div>}
+    <section className="evidence-card" id="validate-0"><SectionHead icon={MessageSquare} title="Interview library" meta={loading ? 'Reading source records' : `${interviews.length} logged · ${loggedThisWeek(interviews)} this week`} />
+      {loading ? <Skeleton rows={4} /> : !projects.length ? <Empty icon={Target} text="No startup is available to this view yet." action="Choose or create a startup on the interviews page." link={stageLinks.interviews} linkState={workspaceNavigationState} label="Open interviews" /> : featured ? <div className="source-quote">{featured.transcript != null && <div className="source-transcribed" data-testid="mark-transcribed"><span>Transcribed{featured.transcribed_by_model ? ` · ${featured.transcribed_by_model}` : ''}</span>{clipLength(featured.recording_duration_sec) ? <span className="num">{clipLength(featured.recording_duration_sec)}</span> : null}</div>}<div className="source-label"><span>Recorded evidence</span><span>{dateFormat(featured.interview_date)}</span></div><strong>{clean(featured.interviewee_name) || 'Unnamed interviewee'}{featured.interviewee_role ? ` · ${featured.interviewee_role}` : ''}</strong><p><Quote size={14} /> {quoteFrom(featured.notes)}</p><div className="source-foot">Source: interview notes · {(featured.hypotheses || []).length} hypothesis record{(featured.hypotheses || []).length === 1 ? '' : 's'} · {(featured.pains || []).length} pain tag{(featured.pains || []).length === 1 ? '' : 's'}</div></div> : <Empty icon={FileText} text="No recorded interview notes with a usable quote yet." action="Log evidence on the interviews page; this desk only shows recorded material." link={stageLinks.interviews} linkState={workspaceNavigationState} label="Open interviews" />}
+      {!loading && interviews.length > 0 && <div className="interview-table"><div className="table-head"><span>Person</span><span>Role</span><span>Date</span><span>Quotes</span></div>{interviews.slice(0, 6).map((item) => <div className="table-row" key={item.id}><strong>{clean(item.interviewee_name) || 'Unnamed'}</strong><span>{clean(item.interviewee_role) || 'Not recorded'}</span><span>{dateFormat(item.interview_date)}</span><span>{quoteCount(item)}{quoteCount(item) > 0 && !quotable(item) ? <em className="not-quotable" title={item.quote_consent === false ? 'Consent was declined, so nothing here can be quoted.' : 'Nobody has asked for consent yet, so nothing here can be quoted.'}> · not quotable</em> : null}</span></div>)}</div>}
+      <div className="evidence-ops" data-testid="ops-interviews">
+        <Link data-testid="op-record-now" to={`${stageLinks.interviews}${stageLinks.interviews.includes('?') ? '&' : '?'}new=record`} state={workspaceNavigationState}>+ Record now</Link>
+        <Link data-testid="op-upload-audio" to={`${stageLinks.interviews}${stageLinks.interviews.includes('?') ? '&' : '?'}new=upload`} state={workspaceNavigationState}>Upload audio</Link>
+        <Link data-testid="op-type-notes" to={`${stageLinks.interviews}${stageLinks.interviews.includes('?') ? '&' : '?'}new=notes`} state={workspaceNavigationState}>Type notes</Link>
+      </div>
       <Link data-testid="link-manage-interviews" className="manage-link" to={stageLinks.interviews} state={workspaceNavigationState}>Manage interviews and source notes <ChevronRight size={14} /></Link>
     </section>
-    <section className="evidence-card" id="validate-1"><SectionHead icon={Layers3} title="Pain map" meta={painLabel(evidence.pains.length)} />{loading ? <Skeleton rows={3} /> : evidence.pains.length ? <div className="pain-map">{evidence.pains.slice(0, 8).map((pain) => <div className="pain-row" key={pain.name}><strong>{pain.name}</strong><div><i style={{ width: `${Math.max(7, pain.count / evidence.maxPain * 100)}%` }} /></div><span>{pain.count} recorded</span></div>)}</div> : <Empty icon={Layers3} text="No pains have been logged or curated yet." action="Pain counts appear only after a recorded pain is grouped." link={stageLinks.pains} linkState={workspaceNavigationState} label="Open the pain map" />}<Link data-testid="link-open-pain-map" className="manage-link" to={stageLinks.pains}>Open the pain map <ChevronRight size={14} /></Link></section>
-    <section className="evidence-card" id="validate-2"><SectionHead icon={Target} title="Hypotheses" meta={`${evidence.hypotheses.length} stored record${evidence.hypotheses.length === 1 ? '' : 's'}`} />{loading ? <Skeleton rows={2} /> : cards.length ? <div className="hypothesis-grid">{cards.map((item, index) => <article className={`hypothesis hypothesis-${item.status || 'inconclusive'}`} key={`${item.interview.id}-${index}`}><span>{statusLabel[item.status] || 'Unclassified'}</span><strong>{item.hypothesis}</strong><small>{clean(item.evidence) ? `Evidence: ${item.evidence}` : `Linked to ${clean(item.interview.interviewee_name) || 'an interview'} · no evidence note recorded`}</small></article>)}</div> : <Empty icon={Target} text="No hypotheses have been stored yet." action="Create and assess them on the hypotheses page." link={stageLinks.hypotheses} linkState={workspaceNavigationState} label="Open hypotheses" />}<Link data-testid="link-open-hypotheses" className="manage-link" to={stageLinks.hypotheses}>Open hypotheses <ChevronRight size={14} /></Link></section>
-    <section className="evidence-card" id="validate-3"><SectionHead icon={FileText} title="Validation summary" meta="Derived from stored records" /><Verdict evidence={evidence} interviews={interviews} signals={signals} /><Link data-testid="link-open-verdict" className="manage-link" to={stageLinks.verdict}>Open the verdict <ChevronRight size={14} /></Link></section>
+    <section className="evidence-card" id="validate-1"><SectionHead icon={Layers3} title="Pain map" meta={painLabel(evidence.pains.length)} sub="Edit any grouping on the pain map" />{loading ? <Skeleton rows={3} /> : evidence.pains.length ? <div className="pain-map">{evidence.pains.slice(0, 8).map((pain) => <div className="pain-row" key={pain.name}><strong>{pain.name}</strong><div><i style={{ width: `${Math.max(7, pain.count / evidence.maxPain * 100)}%` }} /></div><span>{pain.count} recorded</span></div>)}</div> : <Empty icon={Layers3} text="No pains have been logged or curated yet." action="Pain counts appear only after a recorded pain is grouped." link={stageLinks.pains} linkState={workspaceNavigationState} label="Open the pain map" />}<Link data-testid="link-open-pain-map" className="manage-link" to={stageLinks.pains}>Open the pain map <ChevronRight size={14} /></Link></section>
+    <section className="evidence-card" id="validate-2"><SectionHead icon={Target} title="Hypotheses" meta={`${evidence.hypotheses.length} stored record${evidence.hypotheses.length === 1 ? '' : 's'}`} sub="Each carries its evidence" />{loading ? <Skeleton rows={2} /> : cards.length ? <div className="hypothesis-grid">{cards.map((item, index) => <article className={`hypothesis hypothesis-${item.status || 'inconclusive'}`} key={`${item.interview.id}-${index}`}><span>{statusLabel[item.status] || 'Unclassified'}</span><strong>{item.hypothesis}</strong><small>{clean(item.evidence) ? `Evidence: ${item.evidence}` : `Linked to ${clean(item.interview.interviewee_name) || 'an interview'} · no evidence note recorded`}</small></article>)}</div> : <Empty icon={Target} text="No hypotheses have been stored yet." action="Create and assess them on the hypotheses page." link={stageLinks.hypotheses} linkState={workspaceNavigationState} label="Open hypotheses" />}
+      {/* THE ARTBOARD'S `Proposal · Advisor` BAND — "Three interviews mention
+          procurement blocking a trial, which no hypothesis covers yet", and a
+          drafted card under it. This is the SAME component the hypotheses page
+          mounts, with the same `hypothesis` kind: one drafter, so a claim
+          accepted here and a claim accepted there are the same write, and the
+          copy about what accepting means cannot drift between two surfaces.
+          Gated on the same per-workspace mode, which is OFF until a founder
+          turns it on — every run spends their own budget. */}
+      <ValidateProposals key="overview-hypotheses" projectId={projectId} kind="hypothesis" enabled={fillsOn} onApplied={onApplied} />
+      <Link data-testid="link-open-hypotheses" className="manage-link" to={stageLinks.hypotheses}>Open hypotheses <ChevronRight size={14} /></Link></section>
+    <section className="evidence-card" id="validate-3"><SectionHead icon={FileText} title="Validation summary" meta="Living verdict · rewrites as evidence lands" /><Verdict evidence={evidence} interviews={interviews} signals={signals} /><Link data-testid="link-open-verdict" className="manage-link" to={stageLinks.verdict}>Open the verdict <ChevronRight size={14} /></Link></section>
   </div>;
 }
-function SectionHead({ icon: Icon, title, meta }) { return <div className="section-head"><div><Icon size={16} /><h2>{title}</h2></div><span>{meta}</span></div>; }
+/**
+ * The artboard's `zh` row: a title, a count, and the line that says what the
+ * card is FOR.
+ *
+ * `sub` carries the artboard's second half — "each carries its evidence",
+ * "edit any grouping" — which the count alone cannot say. Two of the three
+ * were dropped when this desk was first built and the third
+ * ("Derived from stored records") was a description of the plumbing rather
+ * than of the card.
+ */
+function SectionHead({ icon: Icon, title, meta, sub }) { return <div className="section-head"><div><Icon size={16} /><h2>{title}</h2></div><span>{meta}{sub ? <em className="section-sub"> · {sub}</em> : null}</span></div>; }
 function Empty({ icon: Icon, text, action, link, linkState, label = 'Open the stage page' }) { return <div className="evidence-empty"><Icon size={21} /><div><strong>{text}</strong><p>{action}</p><Link data-testid="link-empty-to-workspace" to={link} state={linkState}>{label} <ChevronRight size={13} /></Link></div></div>; }
 function Skeleton({ rows }) { return <div className="evidence-skeleton">{Array.from({ length: rows }, (_, index) => <i key={index} />)}</div>; }
 function painLabel(count) { return count ? `${count} recorded pain theme${count === 1 ? '' : 's'}` : 'No curated pains'; }
