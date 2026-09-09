@@ -7,6 +7,7 @@ import { accentLinkClass, bucketForPath, bucketTitle, zoneForPath } from './shel
 import { zoneActionsFor } from './zoneActionsByRole';
 import { zoneFiltersFor } from './zoneFiltersByRole';
 import NoStoreYet from './NoStoreYet';
+import { RESEARCH_STORE_GAPS } from './noStoreCopy';
 import BucketBoard from './BucketBoard';
 import { boardFor } from './boards';
 import { api } from '../lib/api';
@@ -347,6 +348,14 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
     return <NoStoreYet {...copy} accentClass={copy.accentClass || accentClass} />;
   }, [slug, accentClass, role, user, isRoot]);
 
+  // THE GAP SITS ABOVE THE BODY, NOT INSTEAD OF IT. These three zones read a
+  // real store AND have a canvas-specified capability with none, so neither
+  // half of the page can be dropped: removing the body would hide a live feed,
+  // and rendering nothing leaves a reader comparing the design to the page with
+  // four missing controls and no reason given. `noStoreCopy.js` says why each
+  // one is recorded and what `blocks` is compared against.
+  const storeGap = !isRoot && slug ? RESEARCH_STORE_GAPS[slug] : null;
+
   // Companies has a live store for everyone, but for an advisor the store holds
   // only what they ran themselves — saying it "reads a live source" and stopping
   // there implies a client book that does not exist.
@@ -389,11 +398,28 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
             ...(ownAnalysesOnly
               ? [['Client-scoped research', 'An analysis is stored against you, not against a company, so nothing here can be filed under a client or reopened per client.']]
               : []),
+            // This rail's whole stance is "which zones have a store behind
+            // them", so a zone blocked on one belongs in its own report and not
+            // only on the page below it. One object feeds both, so the rail
+            // cannot be gentler than the body — the guarantee `noStoreCopy.js`
+            // exists to make structural.
+            ...(storeGap ? [[`No ${storeGap.blocks}`, storeGap.why]] : []),
           ]}
         />
       )}
       intro={isRoot ? 'Know more than the room — research over your own documents, markets, and companies.' : (INTRO[slug] || INTRO.ask)}
     >
+      {storeGap && (
+        <div className="mb-4">
+          <NoStoreYet
+            eyebrow={storeGap.eyebrow}
+            heading={storeGap.heading}
+            what={storeGap.what}
+            why={storeGap.why}
+            accentClass={accentClass}
+          />
+        </div>
+      )}
       {body}
     </WorkspaceShell>
   );

@@ -67,3 +67,53 @@ export const RESEARCH_CLIENT_PREP_COPY = {
   what: 'One client per brief: what they asked for, what the engagement record says, what changed on their side, and what is still open.',
   why: 'Half of it exists: a session request already carries the topic and the questions the client wrote themselves when they asked for it. What is missing is the client\'s own record — and not for want of a join. A client\'s account carries their founder id and a project carries the same id, which is the very column the founder-data guard reads before it decides, so what stands in the way is an access decision, not an absent table. Which decision it is depends on who is reading; the note above says which applies to you. A brief assembled from one side only would be half a brief presented as a whole one.',
 };
+
+/**
+ * Research · Markets, Companies and Ask — blocked on a store, said where a
+ * reader can see it.
+ *
+ * WHY THESE THREE ARE DIFFERENT FROM EVERY ENTRY ABOVE. The objects above
+ * describe zones that render NOTHING ELSE: `unbuiltFrom` turns each into a
+ * card, the page renders `NoStoreYet`, and the whole surface is the gap. These
+ * three have live bodies and keep them. What is recorded here is narrower and
+ * was previously written down only in `founderZoneFilters.js`, a table no
+ * customer opens: each of these zones serves a real feed AND has a
+ * canvas-specified capability with no store behind it.
+ *
+ * THE DISTINCTION IS THE WHOLE POINT, because collapsing it is how this gets
+ * said wrongly in both directions. Saying "no store behind this yet" over
+ * `/research/markets` is false — the signals feed is real, gathered on a
+ * schedule, and the largest store in the product. Saying nothing is false too:
+ * every filter the artboard draws for that zone is a view of a saved analysis
+ * that no table holds, so a reader comparing the design to the page finds four
+ * missing controls and no reason given. Both sentences are wrong; this is the
+ * one that is not.
+ *
+ * `blocks` IS THE MISSING STORE, NAMED. It is the string the guard compares
+ * against the filter registry's own reason for the same zone, so the sentence a
+ * customer reads and the sentence a developer reads cannot drift apart — the
+ * same coupling that put this whole file in one place.
+ */
+export const RESEARCH_STORE_GAPS = {
+  markets: {
+    eyebrow: 'Blocked on a store',
+    blocks: 'a saved market analysis',
+    heading: 'Signals are stored. A saved market analysis is not.',
+    what: 'A deep-dive you ran and kept — its method, the date it was run, the documents it rests on, and whether it is current or retired.',
+    why: 'Nothing saves a market deep-dive, so there is no analysis to keep, retire, build or list the sources of. The artboard makes this plain: its instrument table is Analysis · Method · Run · State, and all four filters it draws are views of that object. What this page reads instead is the signals feed, gathered on a schedule — real, populated, and a different object from the one the design narrows.',
+  },
+  companies: {
+    eyebrow: 'Blocked on a store',
+    blocks: 'a comparable, and a relation an analysis carries itself',
+    heading: 'The analyses are stored. A comparable is not, and neither is an analysis-level relation.',
+    what: 'Competitors filed as comparables, and saved analyses narrowed by the relation they describe.',
+    why: 'No competitor can be filed as a comparable at all: the form offers direct or adjacent, and the row editor, the AI prompt and three server-side coercions all push anything else back to direct. The relation that does exist sits one level below what this header governs — `competitor_candidates` carries it per competitor, while this row narrows the saved analyses, and an analysis carries no relation of its own. The analyses store is real and readable; whether it holds any is a separate question from whether it exists.',
+  },
+  ask: {
+    eyebrow: 'Blocked on a store',
+    blocks: 'a session record',
+    heading: 'Answers are produced. Nothing keeps them.',
+    what: 'The questions you have asked, the answers you kept, and the ones you discarded.',
+    why: 'The ask route searches, answers and returns without writing a row. The only per-question record anywhere is `ai_usage_logs`, which holds token counts and no question text — so no past question, kept answer or discarded one exists to look through, and the canvas’s own "Clear history" has nothing to clear. The library it answers from is a real store; it is the session that is not.',
+  },
+};

@@ -30,7 +30,21 @@ import { Card } from '../ui';
  * `workspaces/ZoneActions.jsx` settled on for the same reason, dark counterpart
  * included.
  */
+/**
+ * `eyebrow` DEFAULTS TO THE SENTENCE THIS COMPONENT WAS NAMED FOR, and exists
+ * because that sentence is not always the true one. Every caller until now
+ * rendered this INSTEAD of a body, so "No store behind this yet" described the
+ * whole zone and was right. `RESEARCH_STORE_GAPS` renders it ABOVE a live body,
+ * where the zone does read a store and a named capability inside it does not —
+ * and the default sentence over `/research/markets`, whose signals feed is the
+ * largest store in the product, would be plainly false.
+ *
+ * The prop is an override rather than a new component because the anatomy is
+ * identical: a label, what the thing would hold, why it does not, and where to
+ * go instead. Only the first line changes.
+ */
 export default function NoStoreYet({
+  eyebrow = 'No store behind this yet',
   heading,
   what,
   why,
@@ -43,7 +57,7 @@ export default function NoStoreYet({
     <Card variant="dashed" padding="lg">
       <div className="max-w-2xl">
         <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-gray-600 dark:text-gray-300">
-          No store behind this yet
+          {eyebrow}
         </div>
         <h2 className="mt-2 text-lg font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{heading}</h2>
         <p className="mt-2 text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-300">{what}</p>
