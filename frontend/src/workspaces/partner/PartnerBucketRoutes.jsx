@@ -25,7 +25,6 @@ import { api } from '../../lib/api';
 // directly removes the doubled chrome and the wrong-bucket header together,
 // and leaves /partner/operations/* exactly as it was.
 const PartnerEngagements = lazy(() => import('../../pages/partner/operations/EngagementsPage'));
-const NeedsBoardPage = lazy(() => import('../../pages/NeedsBoardPage'));
 const PerksPage = lazy(() => import('../../pages/PerksPage'));
 const ServiceCatalogPage = lazy(() => import('../../pages/ServiceCatalogPage'));
 // Pipeline · analytics used to mount `PartnerInsightsPage` — Demand Insights,
@@ -34,6 +33,17 @@ const ServiceCatalogPage = lazy(() => import('../../pages/ServiceCatalogPage'));
 // time and forecast. Both are honest surfaces answering different questions;
 // Demand Insights keeps its own mount at /partner/insights.
 const PartnerPipelineAnalytics = lazy(() => import('../../pages/partner/pipeline/AnalyticsZone'));
+// THE ZONE THE PIPELINE ROW LANDS ON NOW READS THE FIRM'S OWN LEADS. It
+// rendered `NeedsBoardPage` — the shared marketplace board a founder and an
+// admin see — which listed open needs and could not tell one this firm had
+// already bid on from one nobody had opened, had no score, no provenance and
+// nowhere to record a pass.
+const PartnerLeads = lazy(() => import('../../pages/partner/pipeline/LeadsZone'));
+// AND THE OTHER HALF OF `EngagementsPage` GOES THE SAME WAY. `/pipeline/
+// proposals` rendered the proposals-and-invoices view it shared with
+// `/delivery/board` until that zone got its own; it listed quotes and their
+// status and nothing else — no version trail, no loss reason, no lifecycle.
+const PartnerProposals = lazy(() => import('../../pages/partner/pipeline/ProposalsZone'));
 // #45 — the two Pipeline zones migration 208 gave a store to. Both read
 // `/api/partner/pipeline/*` and nothing else; neither has a legacy route,
 // because neither has ever had a surface anywhere in the product.
@@ -50,6 +60,7 @@ const PartnerAudienceFit = lazy(() => import('../../pages/partner/offers/Audienc
 // derives a rating over milestones, blockers, deliverables and the retainer
 // record, and returns null rather than "on track" when none of them carries
 // anything.
+const PartnerBoard = lazy(() => import('../../pages/partner/delivery/BoardZone'));
 const PartnerHealth = lazy(() => import('../../pages/partner/delivery/HealthZone'));
 const PartnerDeliverables = lazy(() => import('../../pages/partner/delivery/DeliverablesZone'));
 const PartnerCapacity = lazy(() => import('../../pages/partner/delivery/CapacityZone'));
@@ -92,6 +103,30 @@ const PartnerStatusReports = lazy(() => import('../../pages/partner/delivery/Sta
  *     completed engagement the client was party to, and carries their consent
  *     state. Consent is a gate, not a warning — an unconsented outcome has no
  *     published form to suppress. Nothing stores that consent today.
+ *
+ * `offers/catalog` TAKES `(rows, handlers)`, AND THE SECOND ARGUMENT MATTERS.
+ * `New service` is a page-supplied op (D67): the ops row IS the header on that
+ * artboard, so there is no `New offering` button beside the list any more and
+ * the op opens the form the page owns. A closure taking only `rows` drops the
+ * handlers, `makeZoneActions` finds no callable, and it returns null rather
+ * than a dead control — so the op disappears from the header with no error
+ * anywhere. `network_relationship_book.test.mjs` walks every handler-declaring
+ * zone to the module that binds it, for exactly this failure.
+ *
+ * Its export ships `price_cents` rather than the legacy `price_usd` REAL: a
+ * spreadsheet that divides late reads $47,999.99 where the page reads $48,000.
+ * There is no `State` column, because Draft is what an empty Price cell MEANS —
+ * adding one would either duplicate `catalogState` here, where the two copies
+ * could disagree, or force a static import of a page this router lazily loads.
+ *
+ * A NOTE ABOUT COMMENTS INSIDE THE ZONE MAPS BELOW. Three guards read this file
+ * as text and none of them strips an indented comment: `profile_zone_actions`
+ * scans for a balanced builder call and treats an apostrophe as opening a
+ * string; the same file reads bare identifiers out of the call and takes a
+ * capitalised word in a comment for a variable; and `partner_bucket_overview`
+ * reads depth-2 keys out of these maps, so a word followed by a colon becomes a
+ * zone slug that does not exist. Explanations go here, at column zero, where
+ * `codeOnly` removes them.
  */
 
 function Loading() {
@@ -103,11 +138,19 @@ function Loading() {
  * bare component, because two of these need props to be the right zone at all.
  *
  * `user` is the prop whose absence was a visible feature loss, not a style
- * one: `NeedsBoardPage` reads `user.role` to decide whether to offer the
- * partner's **My quotes** tab, and `PerksPage` reads it for **My listings**.
- * Mounted with no props, both saw `undefined` and silently dropped the one tab
- * the operator came for. `ResearchWorkspace` records fixing the identical
- * prop-drop for `SignalsPage`; this is the same bug on two more pages.
+ * one: `PerksPage` reads `user.role` to decide whether to offer **My
+ * listings**, and `ServiceCatalogPage` reads it the same way. Mounted with no
+ * props both saw `undefined` and silently dropped the one tab the operator came
+ * for. `ResearchWorkspace` records fixing the identical prop-drop for
+ * `SignalsPage`.
+ *
+ * `NeedsBoardPage` USED TO BE HERE, on `/pipeline/leads`, and the same
+ * paragraph named it first: it read `user.role` for the partner's **My quotes**
+ * tab. It is gone because the zone is no longer the shared marketplace board —
+ * `LeadsZone` reads this firm's own leads, scores them against its own fit
+ * rules and records a pass with its reason, none of which a board serving four
+ * licences could do. The marketplace itself is still at `/needs`, and the
+ * zone's empty state links there.
  *
  * `embedded` suppresses each page's own heading block — the shell above has
  * already drawn the crumb, the h1 and the zone pills. It deliberately does NOT
@@ -149,18 +192,18 @@ const LIVE = {
     // way Offers' catalog and perk-deals do. Proposals is the other half of
     // `EngagementsPage`, which already calls the table directly for
     // `/delivery/board` and now does the same for its own zone.
-    leads: (user) => <NeedsBoardPage user={user} embedded zoneActions={(rows) => partnerZoneActions('pipeline/leads', { view: {
-      header: ['Need', 'Category', 'Project', 'Budget min', 'Budget max', 'Timeline', 'Quotes'],
-      rows,
-      cells: (n) => [n.title, n.category, n.project_name, n.budget_min, n.budget_max, n.timeline, n.quote_count],
-    } })} />,
-    proposals: () => <PartnerEngagements view="proposals" />,
+    leads: () => <PartnerLeads />,
+    proposals: () => <PartnerProposals />,
     negotiations: () => <PartnerNegotiations />,
     retainers: () => <PartnerRetainers />,
     analytics: () => <PartnerPipelineAnalytics />,
   },
   '/delivery': {
-    board: () => <PartnerEngagements view="engagements" />,
+    // THE ZONE THE DELIVERY ROW LANDS ON NOW READS THE DELIVERY STORES. It
+    // rendered `EngagementsPage` — a proposals-and-invoices page shared with
+    // `/pipeline/proposals` — so none of the five stores migration 208 built
+    // for this bucket reached the one page the bucket opens on.
+    board: () => <PartnerBoard />,
     health: () => <PartnerHealth />,
     deliverables: () => <PartnerDeliverables />,
     capacity: () => <PartnerCapacity />,
@@ -185,17 +228,19 @@ const LIVE = {
     // and chips painted from `user.role` would put founder violet inside it.
     catalog: (user) => <ServiceCatalogPage user={user} embedded role="partner"
       zoneFilters={(opts) => partnerZoneFilters('offers/catalog', opts)}
-      zoneActions={(rows) => partnerZoneActions('offers/catalog', { view: {
-        header: ['Offering', 'Category', 'Summary', 'Price (USD)', 'Listed'],
+      zoneActions={(rows, handlers) => partnerZoneActions('offers/catalog', { handlers, view: {
+        header: ['Service', 'Model', 'Price (cents)', 'Sold', 'What’s included'],
         rows,
-        cells: (o) => [o.title, o.category, o.summary, o.price_usd, o.is_active ? 'yes' : 'no'],
+        cells: (o) => [o.title, o.engagement_model || '', o.price_cents ?? '',
+          o.sold || 0, o.summary],
       } })} />,
     'perk-deals': (user) => <PerksPage user={user} embedded role="partner"
       zoneFilters={(opts) => partnerZoneFilters('offers/perk-deals', opts)}
-      zoneActions={(rows) => partnerZoneActions('offers/perk-deals', { view: {
-        header: ['Offer', 'Partner', 'Category', 'Kind', 'Tier', 'Status', 'Claims'],
+      zoneActions={(rows, handlers) => partnerZoneActions('offers/perk-deals', { handlers, view: {
+        header: ['Offer', 'State', 'Redeemed', 'Cap', 'Ends', 'What it granted', 'Revoked on', 'Review state'],
         rows,
-        cells: (p) => [p.offer, p.partner_name, p.category, p.kind, p.required_tier, p.status, p.claim_count],
+        cells: (p) => [p.offer, p.lifecycle, p.claim_count, p.claim_cap,
+          p.ends_at, p.grant_scope, p.grant_revoked_on, p.status],
       } })} />,
     visibility: () => <PartnerVisibility />,
     proof: () => <PartnerProof />,

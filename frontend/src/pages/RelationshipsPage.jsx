@@ -1,219 +1,525 @@
-import React, { useEffect, useState } from 'react';
-import { Plus, Loader2, X, Award } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { api } from '../lib/api';
-import { useEscapeClose } from '../components/useEscapeClose';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
+import ZoneDraft from '../workspaces/ZoneDraft';
+import { Instrument, NotRecorded, SourceLegend } from '../workspaces/canvasKit';
 
-const REL_TYPES = [
-  { id: 'co_investor', label: 'Co-Investor', color: 'bg-emerald-100 text-emerald-700' },
-  { id: 'advisor_founder', label: 'Advisor ↔ Founder', color: 'bg-blue-100 text-blue-700' },
-  { id: 'operator_partner', label: 'Operator ↔ Partner', color: 'bg-violet-100 text-violet-700' },
-  { id: 'strategic_alliance', label: 'Strategic Alliance', color: 'bg-amber-100 text-amber-700' },
-  { id: 'advisor_mentee', label: 'Advisor ↔ Mentee', color: 'bg-pink-100 text-pink-700' },
-];
-
-// Relationships tab body for the unified Network page. Self-contained: owns its
-// partner summary, relationships grid, and create/edit modals. Rendered by
-// NetworkPage as the "Relationships" tab. The page-level title lives in the
-// NetworkPage container.
 /**
- * `zoneActions` is a render prop, called with the relationships on screen.
+ * Network · Relationships — the firm's book, and who at the firm owns each row.
+ *
+ * WHAT THIS REPLACED. A card grid over `partner_relationships`, with a violet
+ * gradient hero, a 0–100 STRENGTH SLIDER a person dragged, and a "New
+ * Relationship" modal asking for a raw "Partner User ID (e.g. 42)". That table
+ * is a partner-to-partner edge — `partner_a_id`, `partner_b_id`,
+ * `CHECK (partner_a_id < partner_b_id)`, `strength_score REAL DEFAULT 50` — and
+ * models "these two partners know each other". The `pn1` artboard is a firm's
+ * book of the PEOPLE it knows at client companies. Different objects; migration
+ * 224 gives the book its own table and the partner graph keeps its own.
+ *
+ * THE SLIDER IS THE THING THE ARTBOARD REFUSES, in as many words: its fourth
+ * tile reads `Firm-wide warmth score · Not recorded · no such score exists —
+ * strength is per-row and shows its derivation`, and its instNote says
+ * "strength is never a warmth number presented as fact". A number that defaults
+ * to 50, is dragged by hand, and renders as a gradient bar labelled "62/100" is
+ * precisely that. Strength here is DERIVED from logged interactions — how many,
+ * how recently — and every row prints the two numbers it came from.
+ *
+ * AN UNOWNED ROW IS THE FINDING, NOT A BLANK. "The failure mode this page
+ * exists to surface is an owned relationship with no owner", so unassigned rows
+ * sort to the top and read in red rather than sitting quietly in alphabetical
+ * order. Nothing defaults an owner — not even the person who added the contact —
+ * because a default would hide every instance of the thing being looked for.
+ *
+ * TWO TOUCHES AND NO DATES IS NOT ENOUGH TO CALL ANYTHING. A contact with
+ * interactions but no dated one reads `Not recorded` for strength rather than
+ * `Thin`, which is the artboard's own Yusuf Demir row and the distinction the
+ * old slider could not express at all.
+ */
+
+// The artboard's own window: past sixty days is going cold. Not ninety — that
+// is `MarketZone`'s attachment gate, a different question about a different
+// object, and transcribing one onto the other is how two numbers become one.
+export const COLD_AT = 60;
+
+const daysSince = (iso) => {
+  const at = Date.parse(iso || '');
+  return Number.isFinite(at) ? Math.floor((Date.now() - at) / 86400000) : null;
+};
+
+/**
+ * Strength, and the derivation it has to show.
+ *
+ * Returns `null` when there is nothing to judge on — no dated interaction —
+ * because a count alone cannot distinguish twenty touches last week from twenty
+ * touches three years ago, and calling either "Thin" would be inventing the
+ * half that is missing.
+ */
+export function strengthOf(count, days) {
+  if (days === null) return null;
+  if (count >= 20 && days <= 30) return 'Strong';
+  if (count >= 8 && days <= COLD_AT) return 'Working';
+  return 'Thin';
+}
+
+/** The four chips, as predicates over the assembled rows. */
+const NARROW = {
+  unassigned: (r) => !r.firm_owner,
+  owned: (r) => !!r.firm_owner,
+  cold: (r) => r.days !== null && r.days > COLD_AT,
+};
+
+/**
+ * `zoneActions` and `zoneFilters` are handed down bound.
  * `/network/relationships` is one route for four licences whose zone actions
  * differ; `/relationships` passes nothing and gets nothing. See
  * `workspaces/zoneActionsByRole.js`.
  */
 export function RelationshipsPanel({ zoneActions, zoneFilters = null, role = 'partner' }) {
-  const [summary, setSummary] = useState(null);
-  const [rels, setRels] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [err, setErr] = useState('');
+  const [state, setState] = useState({ loading: true, error: '', items: [], owners: [] });
+  const [filter, setFilter] = useState('unassigned');
+  const [busy, setBusy] = useState(false);
+  const [logging, setLogging] = useState(null);
+  const [assigning, setAssigning] = useState(false);
 
-  const reload = async () => {
-    setLoading(true); setErr('');
-    const labels = ['Partner summary', 'Relationships'];
-    const results = await Promise.allSettled([api.partnerSummary(), api.partnerRelationships()]);
-    const [s, r] = results;
-    if (s.status === 'fulfilled') setSummary(s.value); else setSummary(null);
-    setRels(r.status === 'fulfilled' && Array.isArray(r.value) ? r.value : []);
-    const failures = results
-      .map((res, i) => res.status === 'rejected' ? `${labels[i]}: ${res.reason?.message || 'failed'}` : null)
-      .filter(Boolean);
-    if (failures.length) setErr(failures.join(' • '));
-    setLoading(false);
+  // THE ROSTER LOADS WITH THE BOOK, not when the picker opens. A row's `Take
+  // it` needs the caller's own user id — the write takes an id, never a "me"
+  // token, because the server is the one place that knows who may own a row and
+  // it validates against the same list this returns.
+  const load = useCallback(async () => {
+    setState((c) => ({ ...c, loading: true, error: '' }));
+    const [book, owners] = await Promise.allSettled([api.partnerBook(), api.partnerBookOwners()]);
+    if (book.status !== 'fulfilled') {
+      setState({
+        loading: false, items: [], owners: [],
+        error: book.reason?.message || 'Your book could not be read.',
+      });
+      return;
+    }
+    setState({
+      loading: false,
+      error: owners.status === 'fulfilled' ? '' : 'The firm roster could not be read, so ownership cannot be changed here.',
+      items: book.value?.items || [],
+      owners: owners.status === 'fulfilled' ? (owners.value?.items || []) : [],
+    });
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const me = state.owners.find((o) => o.is_me) || null;
+
+  const rows = useMemo(() => {
+    const withAge = state.items.map((c) => {
+      const days = daysSince(c.last_interaction_at);
+      return { ...c, days, strength: strengthOf(c.interaction_count, days) };
+    });
+    // UNASSIGNED FIRST, THEN COLDEST — the artboard's own order, and the reason
+    // this page is a table rather than an alphabetical grid. An undated contact
+    // sorts as maximally cold within its group: nobody knows when it was last
+    // touched, which is not better than knowing it was long ago.
+    return withAge.sort((a, b) =>
+      (a.firm_owner ? 1 : 0) - (b.firm_owner ? 1 : 0)
+      || (b.days ?? Number.MAX_SAFE_INTEGER) - (a.days ?? Number.MAX_SAFE_INTEGER));
+  }, [state.items]);
+
+  const visible = NARROW[filter] ? rows.filter(NARROW[filter]) : rows;
+  const choose = (key) => setFilter((current) => (current === key ? 'all' : key));
+
+  // COUNTED OVER THE WHOLE BOOK, NEVER OVER THE CHIP-NARROWED LIST.
+  const orphans = rows.filter((r) => !r.firm_owner);
+  const platform = rows.filter((r) => r.source === 'platform');
+  const orgs = new Set(rows.map((r) => r.organization).filter(Boolean));
+
+  const setOwner = async (uid, firmOwnerId) => {
+    setBusy(true);
+    try {
+      await api.partnerBookSetOwner(uid, firmOwnerId);
+      await load();
+    } catch {
+      setState((c) => ({ ...c, error: 'That could not be changed.' }));
+    } finally { setBusy(false); }
   };
-  useEffect(() => { reload(); }, []);
 
-  if (loading) return <Loading />;
+  const addContact = async (fields) => {
+    setBusy(true);
+    try {
+      await api.partnerBookAdd(fields);
+      await load();
+      return true;
+    } catch (e) {
+      setState((c) => ({ ...c, error: e?.message || 'That contact could not be added.' }));
+      return false;
+    } finally { setBusy(false); }
+  };
+
+  const logInteraction = async (uid, happenedAt) => {
+    setBusy(true);
+    try {
+      await api.partnerBookLogInteraction(uid, { happened_at: happenedAt });
+      setLogging(null);
+      await load();
+    } catch {
+      setState((c) => ({ ...c, error: 'That interaction could not be logged.' }));
+    } finally { setBusy(false); }
+  };
+
+  // THE TWO OPS THE ARTBOARD DRAWS, AND NEITHER IS A SHORTCUT TO A CHIP.
+  // `Assign owner` opened as `setFilter('unassigned')` in a first draft, which
+  // is what the `Unassigned first` chip beside it already does — two controls
+  // performing one act, one of them named after an act it does not perform. It
+  // opens the board where ownership is actually changed.
+  const handlers = {
+    assignOwner: {
+      onClick: () => setAssigning(true),
+      disabled: rows.length === 0 || state.owners.length === 0,
+      title: state.owners.length === 0
+        ? 'the firm roster could not be read, so there is nobody to assign to'
+        : (orphans.length === 0
+          ? 'every contact has an owner — this reassigns them'
+          : `${orphans.length} contact${orphans.length === 1 ? '' : 's'} nobody at the firm owns`),
+    },
+    logInteraction: {
+      onClick: () => setLogging(visible[0]?.uid || rows[0]?.uid || null),
+      disabled: rows.length === 0,
+      title: 'record a touch against a contact, dated when it happened',
+    },
+  };
+
+  if (state.loading) return <Loading />;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {(zoneActions || zoneFilters) && (
         <ZoneToolbar
           className="mb-3"
           role={role}
-          // `All` is the only live label on this licence's row: the other three
-          // name an owner, a provenance mark or an interaction date that
-          // `partner_relationships` does not carry. So the page reports the one
-          // view it has rather than holding a state that could never change.
-          filters={zoneFilters ? zoneFilters({ value: 'all' }) : []}
-          actions={zoneActions ? zoneActions(rels) : []}
+          filters={zoneFilters ? zoneFilters({ value: filter, onChange: choose }) : []}
+          actions={zoneActions ? zoneActions(visible, handlers) : []}
         />
       )}
-      <p className="text-sm text-gray-600 dark:text-gray-400">Your partner graph and relationship strength.</p>
 
-      {err && <div className="bg-red-50 border border-red-200 text-red-700 rounded p-2 text-sm">{err}</div>}
+      <div>
+        <h2 className="text-lg font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Firm relationship book</h2>
+        <p className="mt-1 text-[12px] text-gray-600 dark:text-gray-400">
+          Contacts, their firm owner, and recorded last interaction. A contact nobody owns sorts
+          to the top.
+        </p>
+      </div>
 
-      {/* Partner summary card */}
-      {summary && (
-        <div className="bg-gradient-to-br from-violet-600 to-violet-700 text-white rounded-2xl p-6">
-          <div className="flex items-start justify-between flex-wrap gap-4">
-            <div>
-              <div className="text-xs uppercase opacity-80 mb-1">Partner Profile</div>
-              <div className="text-2xl font-bold">{summary.name || summary.email}</div>
-              <div className="text-xs opacity-80 mt-1">
-                {summary.partner_since ? `Partner since ${new Date(summary.partner_since).toLocaleDateString()}` : 'Newcomer'} • {summary.role}
-              </div>
-              {summary.verified_badges?.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-3">
-                  {summary.verified_badges.map(b => (
-                    <span key={b} className="bg-white/20 text-[10px] uppercase font-bold px-2 py-1 rounded flex items-center gap-1">
-                      <Award size={10} /> {b.replace('_', ' ')}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-              <SumStat label="Network Score" value={Math.round(summary.network_score || 0)} />
-              <SumStat label="Relationships" value={summary.active_relationships || 0} />
-              <SumStat label="Network Reach" value={summary.network_reach || 0} />
-              <SumStat label="Lifetime $" value={`$${((summary.lifetime_earnings_cents || 0) / 100).toFixed(0)}`} />
-            </div>
-          </div>
-        </div>
+      {state.error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-2 text-sm text-red-700">{state.error}</div>
       )}
 
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Relationships ({rels.length})</h2>
-        <button onClick={() => setCreating(true)} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm px-3 py-2 rounded-lg">
-          <Plus size={14} /> New Relationship
-        </button>
+      {/* THE ARTBOARD'S FOUR TILES. Three count rows; the fourth is the one it
+          refuses to compute, and says why. */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Tile label="Contacts" value={rows.length} note={`across ${orgs.size} organization${orgs.size === 1 ? '' : 's'}`} />
+        <Tile label="Unassigned" value={orphans.length} note="no one at the firm owns these" />
+        <Tile label="Platform-sourced" value={platform.length} note="read-only to the firm" />
+        <Tile
+          label="Firm-wide warmth score"
+          nr
+          note="no such score exists — strength is per-row and shows its derivation"
+        />
       </div>
 
-      <RelationshipsTab rels={rels} reload={reload} />
+      {/* Both marks or neither. The canvas draws this legend unconditionally,
+          because its seven sample rows always carry both; a real book with no
+          platform row would get a legend explaining a cyan mark that is
+          nowhere on the page. Wording is the canvas's own. */}
+      {platform.length > 0 && platform.length < rows.length && (
+        <SourceLegend
+          theirs="Platform"
+          theirsNote="came in through the platform — read-only to the firm"
+          ours="Ours"
+          oursNote="the firm’s own outreach, editable"
+        />
+      )}
 
-      {creating && <CreateRelModal onClose={() => setCreating(false)} onCreated={() => { setCreating(false); reload(); }} />}
+      {rows.length === 0 ? (
+        <p className="py-12 text-center text-sm text-gray-500">
+          Your book is empty. Nothing is inferred from your other records — a contact is here
+          because someone put it here, or because it arrived through the platform.
+        </p>
+      ) : (
+        <Instrument
+          testid="relationship-book"
+          title="Contacts"
+          meta="Unassigned first, then coldest"
+          cols="1.3fr 1.5fr 1.1fr 1.1fr 1.2fr"
+          head={['Contact', 'Organization', 'Firm owner', 'Last interaction', 'Strength']}
+          rows={visible.map((r) => ({
+            key: r.uid,
+            // The row that needs acting on, tinted so the eye finds it before
+            // the column does.
+            rowClass: r.firm_owner ? '' : 'bg-red-50/40 dark:bg-red-950/20',
+            cells: [
+              { text: r.name, sub: r.role_title },
+              {
+                text: r.organization,
+                nr: !r.organization,
+                seam: r.source === 'platform' ? (r.source_label || 'From the platform') : null,
+                ours: r.source === 'platform' ? null : 'Ours',
+              },
+              r.firm_owner
+                ? { text: r.firm_owner.name }
+                : {
+                  text: 'Unassigned',
+                  orph: 'Orphaned',
+                  node: me ? (
+                    <button type="button" disabled={busy} onClick={() => setOwner(r.uid, me.user_id)}
+                      className="text-[11px] text-gray-500 underline hover:text-gray-700 dark:text-gray-400">
+                      Take it
+                    </button>
+                  ) : null,
+                },
+              r.last_interaction_at
+                ? {
+                  text: r.last_interaction_at,
+                  ...(r.days > COLD_AT ? { pill: 'Going cold', pillTone: 'warn' } : {}),
+                  node: (
+                    <button type="button" disabled={busy} onClick={() => setLogging(r.uid)}
+                      className="text-[11px] text-gray-500 underline hover:text-gray-700 dark:text-gray-400">
+                      Log a touch
+                    </button>
+                  ),
+                }
+                : {
+                  nr: true,
+                  node: (
+                    <button type="button" disabled={busy} onClick={() => setLogging(r.uid)}
+                      className="text-[11px] text-gray-500 underline hover:text-gray-700 dark:text-gray-400">
+                      Log a touch
+                    </button>
+                  ),
+                },
+              // STRENGTH, WITH ITS DERIVATION UNDER IT — and deliberately NOT a
+              // pill. The artboard writes `cell(s.t, { sub: s.sub })`: plain
+              // text over a small grey line reading "14 recorded interactions ·
+              // last 6 d ago". A coloured chip would make the label the thing
+              // the eye lands on and the derivation the footnote, which is the
+              // reading order the 0–100 gradient bar had and the reason it was
+              // wrong. `null` means there is nothing to judge on, and says so.
+              r.strength
+                ? {
+                  text: r.strength,
+                  sub: `${r.interaction_count} recorded interaction${r.interaction_count === 1 ? '' : 's'} · last ${r.days} d ago`,
+                }
+                : { nr: true },
+            ],
+          }))}
+          note={`Strength is derived from what is logged and shows its working on every row: a contact with interactions but no dated one reads "Not recorded" rather than "Thin", because two touches and no dates is not enough to call anything. ${orphans.length ? `${orphans.length} contact${orphans.length === 1 ? '' : 's'} here ${orphans.length === 1 ? 'has' : 'have'} nobody at the firm responsible for ${orphans.length === 1 ? 'it' : 'them'}` : 'Every contact has an owner'} — which is the failure this page sorts for, not a display artefact.`}
+        />
+      )}
+
+      {/* WHERE A CONTACT COMES FROM, AND WHY THIS IS NOT IN THE OPS ROW. The
+          artboard's ops are `Assign owner · Log interaction · Export` and it
+          draws no `Add contact`, because its book already has seven rows. A
+          real firm's book starts at zero, and a page whose every element is
+          correct over a table nothing can ever put a row into is the same empty
+          surface this zone was reported for. So the form is the page's own, the
+          way Library's upload is, and the header row stays the artboard's. */}
+      <AddContact busy={busy} onAdd={addContact} />
+
+      {!visible.length && rows.length > 0 && (
+        <p className="text-[12px] text-gray-600 dark:text-gray-300">
+          {filter === 'cold'
+            ? `Nothing in the book is past ${COLD_AT} days.`
+            : (filter === 'unassigned'
+              ? 'Every contact has an owner.'
+              : 'No contact matches this view.')}
+        </p>
+      )}
+
+      {logging && <LogModal uid={logging} busy={busy} onClose={() => setLogging(null)} onSave={logInteraction} />}
+
+      {assigning && (
+        <AssignModal
+          rows={rows}
+          owners={state.owners}
+          busy={busy}
+          onClose={() => setAssigning(false)}
+          onSet={setOwner}
+        />
+      )}
+
+      <ZoneDraft
+        surface="network/relationships"
+        label="Draft · orphan reassignment"
+        accept="Accept draft"
+        run="Draft the reassignment"
+        foot="Derived from logged interactions only."
+        empty="Points to the contacts nobody owns and, for each, who at the firm has the most recorded interactions with that organization — including the ones where nobody does, which is itself the finding."
+        nothingToDraft="Every contact has an owner, so there is nothing to reassign."
+      />
     </div>
   );
 }
 
-function RelationshipsTab({ rels, reload }) {
-  const [editing, setEditing] = useState(null);
-  if (rels.length === 0) return <Empty text="You haven't formed any partner relationships yet. Click 'New Relationship' to start." />;
-  return (
-    <>
-    <div className="grid md:grid-cols-2 gap-3">
-      {rels.map(r => {
-        const t = REL_TYPES.find(x => x.id === r.relationship_type);
-        return (
-          <div key={r.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:border-violet-400 transition-colors dark:bg-gray-900 dark:border-gray-800">
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <div>
-                <div className="font-semibold text-sm text-gray-900 dark:text-gray-100">{r.other.name || r.other.email}</div>
-                <div className="text-xs text-gray-500">{r.other.email}</div>
-              </div>
-              <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded ${t?.color || 'bg-gray-100 text-gray-700'}`}>{t?.label || r.relationship_type}</span>
-            </div>
-            <div className="mt-3">
-              <div className="flex justify-between text-[10px] text-gray-500 mb-1">
-                <span>Strength</span><span className="font-bold">{Math.round(r.strength_score)}/100</span>
-              </div>
-              <div className="bg-gray-100 rounded-full h-2 overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-violet-500 to-emerald-500" style={{ width: `${r.strength_score}%` }} />
-              </div>
-            </div>
-            <div className="flex justify-between items-center mt-3 text-[10px] text-gray-500">
-              <span>{new Date(r.created_at).toLocaleDateString()}</span>
-              <button onClick={() => setEditing(r)} className="text-violet-600 hover:text-violet-700">Edit</button>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-    {editing && <EditRelModal rel={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />}
-    </>
-  );
-}
+/**
+ * The add form. `Organization` is a first-class field and not an afterthought:
+ * it is the column `contacts` never had — the absence that makes the founder
+ * and investor Organizations roll-up permanently empty (task #94) — and the one
+ * `pn3`'s intended-shape table would group by.
+ *
+ * NO OWNER FIELD HERE, DELIBERATELY. A new contact arrives unowned, sorts to the
+ * top in red, and stays there until someone takes it. Offering to pre-fill the
+ * adder as owner would make the page's own finding almost unreachable, since the
+ * person entering a contact is rarely the person who will carry it.
+ */
+function AddContact({ busy, onAdd }) {
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState({ name: '', organization: '', role_title: '', email: '' });
+  const set = (k) => (e) => setF((c) => ({ ...c, [k]: e.target.value }));
 
-function CreateRelModal({ onClose, onCreated }) {
-  const [form, setForm] = useState({ partner_id: '', relationship_type: 'co_investor', strength_score: 50 });
-  const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
-  const submit = async () => {
-    setBusy(true); setErr('');
-    try { await api.createRelationship({ partner_id: parseInt(form.partner_id), relationship_type: form.relationship_type, strength_score: parseFloat(form.strength_score) }); onCreated(); }
-    catch (e) { setErr(e.message); setBusy(false); }
-  };
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)}
+        className="rounded-lg border border-dashed border-gray-300 px-3 py-2 text-[12px] text-gray-600 hover:border-gray-400 dark:border-gray-700 dark:text-gray-300">
+        + Add a contact to the book
+      </button>
+    );
+  }
   return (
-    <Modal onClose={onClose} title="New Partner Relationship" titleClassName="text-gray-900">
-      <Field label="Partner User ID *"><input type="number" value={form.partner_id} onChange={e => setForm({...form, partner_id: e.target.value})} className={inputCls} placeholder="e.g. 42" /></Field>
-      <Field label="Relationship Type">
-        <select value={form.relationship_type} onChange={e => setForm({...form, relationship_type: e.target.value})} className={`${inputCls} appearance-none pr-10 bg-[linear-gradient(45deg,transparent_50%,#6b7280_50%),linear-gradient(135deg,#6b7280_50%,transparent_50%),linear-gradient(to_right,#fff,#fff)] bg-[position:calc(100%_-_18px)_50%,calc(100%_-_12px)_50%,0_0] bg-[size:6px_6px,6px_6px,100%_100%] bg-no-repeat`}>
-          {REL_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-        </select>
-      </Field>
-      <Field label={`Initial Strength: ${form.strength_score}/100`}>
-        <input type="range" min="0" max="100" value={form.strength_score} onChange={e => setForm({...form, strength_score: e.target.value})} className="w-full" />
-      </Field>
-      {err && <div className="text-xs text-red-600">{err}</div>}
-      <div className="flex justify-end gap-2 pt-2">
-        <button onClick={onClose} className="text-sm text-gray-700 hover:bg-gray-100 px-4 py-2 rounded dark:text-gray-300">Cancel</button>
-        <button onClick={submit} disabled={busy || !form.partner_id} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm px-4 py-2 rounded">
-          {busy ? <Loader2 className="animate-spin" size={14} /> : <Plus size={14} />} Create
+    <form
+      className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        if (!f.name.trim()) return;
+        if (await onAdd(f)) { setF({ name: '', organization: '', role_title: '', email: '' }); setOpen(false); }
+      }}
+    >
+      <div className="grid gap-2 sm:grid-cols-2">
+        <input required value={f.name} onChange={set('name')} placeholder="Name" aria-label="Contact name"
+          className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800" />
+        <input value={f.organization} onChange={set('organization')} placeholder="Organization" aria-label="Organization"
+          className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800" />
+        <input value={f.role_title} onChange={set('role_title')} placeholder="Role at that organization" aria-label="Role title"
+          className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800" />
+        <input type="email" value={f.email} onChange={set('email')} placeholder="Email (optional)" aria-label="Email"
+          className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800" />
+      </div>
+      <div className="mt-2 flex items-center gap-3">
+        <button type="submit" disabled={busy || !f.name.trim()}
+          className="rounded-lg bg-violet-600 px-4 py-2 text-sm text-white disabled:opacity-50">
+          {busy ? 'Adding…' : 'Add to book'}
         </button>
+        <button type="button" onClick={() => setOpen(false)} className="text-[12px] text-gray-500 underline">Cancel</button>
+        <span className="text-[11px] text-gray-500">Arrives unowned, at the top of the book.</span>
       </div>
-    </Modal>
+    </form>
   );
 }
 
-function EditRelModal({ rel, onClose, onSaved }) {
-  const [strength, setStrength] = useState(Math.round(rel.strength_score));
-  const [type, setType] = useState(rel.relationship_type);
-  const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
-  const save = async () => {
-    setBusy(true); setErr('');
-    try { await api.updateRelationship(rel.id, { strength_score: strength, relationship_type: type }); onSaved(); }
-    catch (e) { setErr(e.message); setBusy(false); }
-  };
+/**
+ * `Assign owner` — the whole book, unassigned first, one select per row.
+ *
+ * IT LISTS OWNED ROWS TOO, and that is not scope creep. An owner who leaves the
+ * firm is the case that produces orphans in the first place, and a board that
+ * could only ever add an owner would have no way to say "this is no longer
+ * mine". `— Unassigned —` is a real choice here for the same reason the PATCH
+ * accepts `null`.
+ *
+ * The roster is the server's, not a free-text field: a name typed here would be
+ * a claim about a person the product cannot check, and the write refuses any id
+ * outside the caller's own firm.
+ */
+function AssignModal({ rows, owners, busy, onClose, onSet }) {
   return (
-    <Modal onClose={onClose} title={`Edit Relationship with ${rel.other.name || rel.other.email}`}>
-      <Field label="Type"><select value={type} onChange={e => setType(e.target.value)} className={inputCls}>{REL_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}</select></Field>
-      <Field label={`Strength: ${strength}/100`}><input type="range" min="0" max="100" value={strength} onChange={e => setStrength(parseInt(e.target.value))} className="w-full" /></Field>
-      {err && <div className="text-xs text-red-600">{err}</div>}
-      <div className="flex justify-end gap-2 pt-2">
-        <button onClick={onClose} className="text-sm text-gray-700 hover:bg-gray-100 px-4 py-2 rounded dark:text-gray-300">Cancel</button>
-        <button onClick={save} disabled={busy} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm px-4 py-2 rounded">
-          {busy ? <Loader2 className="animate-spin" size={14} /> : null} Save
-        </button>
-      </div>
-    </Modal>
-  );
-}
-
-function Modal({ onClose, title, children }) {
-  useEscapeClose(onClose);
-  return (
-    <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto dark:bg-gray-900" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between dark:border-gray-800"><h2 className="text-lg font-semibold">{title}</h2><button onClick={onClose} className="text-gray-500 hover:text-gray-900"><X size={18} /></button></div>
-        <div className="p-6 space-y-3">{children}</div>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-xl dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-sm font-extrabold tracking-tight">Assign owner</h3>
+        <p className="mt-1 text-[11.5px] text-gray-600 dark:text-gray-400">
+          Someone at the firm is responsible for each contact. Unassigned first.
+        </p>
+        <div className="mt-3 space-y-1.5">
+          {rows.map((r) => (
+            <div key={r.uid} className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border p-2 ${
+              r.firm_owner ? 'border-axal-hairline dark:border-gray-800' : 'border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/20'}`}>
+              <span className="min-w-0 text-[11.5px]">
+                <span className="font-semibold">{r.name}</span>
+                {r.organization ? <span className="text-gray-500"> · {r.organization}</span> : null}
+              </span>
+              <select
+                value={r.firm_owner?.id ?? ''}
+                disabled={busy}
+                aria-label={`Firm owner for ${r.name}`}
+                onChange={(e) => onSet(r.uid, e.target.value === '' ? null : Number(e.target.value))}
+                className="rounded border border-gray-300 bg-gray-50 px-2 py-1 text-[11.5px] dark:border-gray-700 dark:bg-gray-800"
+              >
+                <option value="">— Unassigned —</option>
+                {owners.map((o) => (
+                  <option key={o.user_id} value={o.user_id}>{o.name}{o.is_me ? ' (you)' : ''}</option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 flex justify-end">
+          <button type="button" onClick={onClose} className="rounded px-4 py-2 text-sm text-gray-700 dark:text-gray-300">
+            Done
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-const inputCls = 'w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none';
-function Field({ label, children }) { return <div><label className="text-xs text-gray-700 font-medium block mb-1 dark:text-gray-300">{label}</label>{children}</div>; }
-function SumStat({ label, value }) { return <div className="bg-white/15 rounded-lg p-2 min-w-[80px]"><div className="text-[10px] uppercase opacity-80">{label}</div><div className="text-xl font-bold">{value}</div></div>; }
-function Empty({ text }) { return <div className="text-sm text-gray-500 py-12 text-center">{text}</div>; }
-function Loading() { return <div className="flex items-center gap-2 text-sm text-gray-500 py-20 justify-center"><Loader2 className="animate-spin" size={16} /> Loading…</div>; }
+/**
+ * Logging a touch asks WHEN IT HAPPENED and defaults to today rather than
+ * stamping the server clock. A call last month recorded now is a month-old
+ * touch, and treating it as fresh would make `Going cold` report on data entry
+ * instead of on the relationship.
+ */
+function LogModal({ uid, busy, onClose, onSave }) {
+  const [when, setWhen] = useState(new Date().toISOString().slice(0, 10));
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-sm font-extrabold tracking-tight">Log an interaction</h3>
+        <p className="mt-1 text-[11.5px] text-gray-600 dark:text-gray-400">
+          The date it happened, not the date you are recording it.
+        </p>
+        <input
+          type="date"
+          value={when}
+          onChange={(e) => setWhen(e.target.value)}
+          aria-label="When the interaction happened"
+          className="mt-3 w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
+        />
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded px-4 py-2 text-sm text-gray-700 dark:text-gray-300">
+            Cancel
+          </button>
+          <button
+            type="button" disabled={busy} onClick={() => onSave(uid, when)}
+            className="rounded bg-violet-600 px-4 py-2 text-sm text-white disabled:opacity-50"
+          >
+            {busy ? 'Saving…' : 'Log it'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Tile({ label, value, note, nr = false }) {
+  return (
+    <div className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-gray-600 dark:text-gray-300">{label}</div>
+      <div className="mt-1.5">
+        {nr ? <NotRecorded /> : (
+          <span className="font-mono text-[16px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{value}</span>
+        )}
+      </div>
+      <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
+    </div>
+  );
+}
+
+function Loading() {
+  return (
+    <div className="flex items-center justify-center gap-2 py-20 text-sm text-gray-500">
+      <Loader2 className="animate-spin" size={16} /> Loading…
+    </div>
+  );
+}

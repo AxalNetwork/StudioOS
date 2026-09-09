@@ -6,6 +6,8 @@ import {
 import { api } from '../lib/api';
 import { reportError } from '../lib/log';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
+import ZoneDraft from '../workspaces/ZoneDraft';
+import { Eyebrow, Instrument } from '../workspaces/canvasKit';
 
 /**
  * Perks & Products — /perks. One route, three audiences.
@@ -402,16 +404,146 @@ function MyPerks() {
  * Partner: submissions                                                *
  * ------------------------------------------------------------------ */
 
+/**
+ * `live` | `expiring` | `expired` for one listing, as the worker computed it.
+ *
+ * NEVER RECOMPUTED HERE. `routes/perks.ts` owns the thirty-day window and
+ * serves `lifecycle` on every row; `routes/research.ts` imports the same helper
+ * for the AI gather. A copy of the arithmetic in this file is how the strip and
+ * the chips come to disagree about which perks are ending.
+ *
+ * The fallback is `live` rather than a guess, and it is only reachable against a
+ * response that predates the field.
+ */
+export function perkState(p) {
+  const s = String(p?.lifecycle || '');
+  return s === 'expiring' || s === 'expired' ? s : 'live';
+}
+
+/**
+ * Which chip a listing answers to.
+ *
+ * `Live` IS BOTH THINGS, and this is the correction migration 228 made
+ * possible. It used to be `status === 'live'` alone — the REVIEW state, "an
+ * admin approved it" — while the artboard's own note for the word is
+ * "accepting redemptions". A perk approved in March and ended in June is not
+ * accepting anything.
+ *
+ * A draft with a far-off end date answers to `All` and to nothing else. That is
+ * a real fourth state with no word on the artboard, and the two wrong homes for
+ * it would each claim something untrue: `Live` claims a review that has not
+ * happened, `Expiring` claims an urgency it does not have.
+ */
+export function matchesPerkChip(p, chip) {
+  const state = perkState(p);
+  if (chip === 'live') return p.status === 'live' && state === 'live';
+  if (chip === 'expiring') return state === 'expiring';
+  if (chip === 'expired') return state === 'expired';
+  return true;
+}
+
+const STATE_LABEL = { live: 'Live', expiring: 'Expiring', expired: 'Expired' };
+const STATE_TONE = { live: 'ok', expiring: 'warn', expired: 'danger' };
+const REVIEW_NOTE = {
+  draft: 'draft — not submitted',
+  in_review: 'awaiting review',
+  paused: 'paused — hidden from founders',
+  rejected: 'rejected',
+};
+
+/** The strip tile, in the anatomy the artboards share. */
+function PerkTile({ label, value, note }) {
+  return (
+    <div className="rounded-[10px] border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+      <Eyebrow>{label}</Eyebrow>
+      <div className="mt-1.5 font-mono text-[16px] font-extrabold tracking-tight tabular-nums text-gray-900 dark:text-gray-100">{value}</div>
+      <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
+    </div>
+  );
+}
+
+/**
+ * `Extend`, the artboard's second op.
+ *
+ * IT LISTS ONLY WHAT CAN BE EXTENDED — perks that are ending or have ended.
+ * A perk with no end date recorded is not in the set: there is nothing to push,
+ * and offering to extend it would be offering to invent a date the firm never
+ * chose. A perk months from ending is not in it either, for the same reason the
+ * `Expiring` chip does not include it.
+ */
+function ExtendModal({ rows, busy, onSave, onClose, note }) {
+  const [dates, setDates] = useState(() => Object.fromEntries(
+    rows.map((p) => [p.uid, String(p.ends_at || '').slice(0, 10)]),
+  ));
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
+      <div className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="text-sm font-extrabold tracking-tight text-gray-900 dark:text-gray-100">Extend an offer</h3>
+          <button type="button" onClick={onClose} className="rounded p-1 hover:bg-gray-100 dark:hover:bg-gray-800" aria-label="Close">
+            <X size={16} />
+          </button>
+        </div>
+        {rows.length === 0 ? (
+          <p className="mt-3 text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400">
+            Nothing is ending. Only offers already expiring or expired can be extended —
+            a listing with no end date recorded has nothing to push, and one months away
+            is not ending yet.
+          </p>
+        ) : (
+          <>
+            <p className="mt-2 text-[11.5px] leading-relaxed text-gray-600 dark:text-gray-400">
+              Extending the offer does not restore a grant it already revoked. Those are two
+              decisions, and only the first one happens here.
+            </p>
+            <div className="mt-3 space-y-3">
+              {rows.map((p) => (
+                <div key={p.uid} className="rounded-md border border-gray-200 p-3 dark:border-gray-800">
+                  <div className="text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">{p.offer}</div>
+                  <div className="mt-0.5 text-[11px] text-gray-500">
+                    {STATE_LABEL[perkState(p)]} · ends {String(p.ends_at || '').slice(0, 10)}
+                    {p.grant_scope ? ` · grants ${p.grant_scope}` : ''}
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <input
+                      type="date" className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
+                      value={dates[p.uid] || ''}
+                      onChange={(e) => setDates((d) => ({ ...d, [p.uid]: e.target.value }))}
+                    />
+                    <button
+                      type="button" disabled={busy || !dates[p.uid] || dates[p.uid] === String(p.ends_at || '').slice(0, 10)}
+                      onClick={() => onSave(p, dates[p.uid])}
+                      className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      Save new end date
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+        {note && (
+          <p className={`mt-3 text-[12px] ${note.ok ? 'text-green-700' : 'text-red-600'}`}>{note.text}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PartnerConsole({ zoneActions, zoneFilters, role }) {
   const [items, setItems] = useState(null);
   const [view, setView] = useState('all');
   const [form, setForm] = useState({
     partner_name: '', offer: '', category: '', blurb: '', detail: '',
     kind: 'credits', credits: '', required_tier: 'growth', price_cents: '',
-    fulfilment: 'code', redeem_url: '', claim_cap: '',
+    fulfilment: 'code', redeem_url: '', claim_cap: '', ends_at: '', grant_scope: '',
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [extending, setExtending] = useState(false);
+  const [extendNote, setExtendNote] = useState(null);
+  const offerRef = React.useRef(null);
 
   const load = useCallback(() => {
     api.perkSubmissions()
@@ -433,8 +565,15 @@ function PartnerConsole({ zoneActions, zoneFilters, role }) {
         // cents everywhere in this codebase.
         price_cents: form.kind === 'money' ? Math.round((Number(form.price_cents) || 0) * 100) : null,
         claim_cap: form.claim_cap === '' ? null : Number(form.claim_cap),
+        // An empty field is an ABSENT date and an ABSENT grant, not an empty
+        // string: the worker stores null and the row reads `Not recorded`.
+        ends_at: form.ends_at || null,
+        grant_scope: form.grant_scope || null,
       });
-      setForm((f) => ({ ...f, offer: '', blurb: '', detail: '', credits: '', price_cents: '' }));
+      setForm((f) => ({
+        ...f, offer: '', blurb: '', detail: '', credits: '', price_cents: '',
+        ends_at: '', grant_scope: '',
+      }));
       load();
     } catch (e2) {
       reportError('perk_submit_failed', e2);
@@ -442,11 +581,49 @@ function PartnerConsole({ zoneActions, zoneFilters, role }) {
     } finally { setBusy(false); }
   }
 
-  // `Live` IS `perks.status`, the store's own word — a CHECK over `draft`,
-  // `in_review`, `live`, `paused` and `rejected`. The canvas's other two chips
-  // are about time, and a perk listing carries no date at all.
   const rows = items || [];
-  const visible = view === 'live' ? rows.filter((p) => p.status === 'live') : rows;
+  const visible = rows.filter((p) => matchesPerkChip(p, view));
+
+  // ══ THE ARTBOARD'S FOUR TILES, COUNTED OVER THE WHOLE BOOK ═══════════════
+  // Never over `visible`: a figure that changes because a chip was clicked is
+  // not reporting what its label claims.
+  const live = rows.filter((p) => p.status === 'live' && perkState(p) === 'live');
+  const expiring = rows.filter((p) => perkState(p) === 'expiring');
+  const expired = rows.filter((p) => perkState(p) === 'expired');
+  // `Grants revoked` COUNTS WHAT THIS BOOK NAMES, and the distinction is the
+  // artboard's own: a perk whose expiry took something back is one that RECORDED
+  // what it granted. A perk with no grant recorded contributes nothing — not
+  // because it granted nothing, but because nobody said. The instNote says so
+  // rather than letting the zero read as an all-clear.
+  const revoking = expired.filter((p) => p.grant_scope);
+  const revokedRedeemers = revoking.reduce((a, p) => a + (Number(p.claim_count) || 0), 0);
+  const nextEnd = expiring
+    .map((p) => String(p.ends_at || '').slice(0, 10))
+    .filter(Boolean)
+    .sort()[0];
+
+  const handlers = {
+    // `New perk` opens the form that was already on the page. The op used to
+    // read 'perks are added from the form below', which was true and made the
+    // header row point at something instead of doing it.
+    newPerk: () => {
+      offerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      offerRef.current?.focus({ preventScroll: true });
+    },
+    extend: () => { setExtendNote(null); setExtending(true); },
+  };
+
+  async function saveEnd(perk, date) {
+    setBusy(true); setExtendNote(null);
+    try {
+      await api.perkUpdate(perk.uid, { ends_at: date });
+      setExtendNote({ ok: true, text: `${perk.offer} now ends ${date}.` });
+      load();
+    } catch (e) {
+      reportError('perk_extend_failed', e);
+      setExtendNote({ ok: false, text: e?.message || 'That date did not save.' });
+    } finally { setBusy(false); }
+  }
 
   return (
     <div className="space-y-6">
@@ -458,27 +635,92 @@ function PartnerConsole({ zoneActions, zoneFilters, role }) {
         <ZoneToolbar
           role={role}
           filters={zoneFilters ? zoneFilters({ value: view, onChange: setView }) : []}
-          actions={zoneActions ? zoneActions(visible) : []}
+          actions={zoneActions ? zoneActions(visible, handlers) : []}
         />
       )}
-      {/* Canvas stats strip — computed from submissions, not asserted. */}
+
+      {/* ══ THE `po2` STRIP ═══════════════════════════════════════════════════
+          `Live · Expiring · Expired · Grants revoked`, all four counted from
+          rows. The window under `Expiring` is printed rather than assumed: the
+          artboard supplies no number, thirty days is chosen in
+          `routes/perks.ts`, and a reader who can see the rule can disagree
+          with it. */}
       {items && items.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {[
-            { label: 'Listings', value: String(items.length), note: `${items.filter((i) => i.status === 'live').length} live` },
-            { label: 'In review', value: String(items.filter((i) => i.status === 'in_review').length), note: 'awaiting approval' },
-            // `claim_count` is singular — routes/perks.ts computes it as a subquery
-            // alias. Reading `claims_count` produced 0 for every listing.
-            { label: 'Claims', value: String(items.reduce((a, i) => a + (Number(i.claim_count) || 0), 0)), note: 'total redemptions' },
-            { label: 'Paused', value: String(items.filter((i) => i.status === 'paused').length), note: 'not visible to founders' },
-          ].map((s) => (
-            <div key={s.label} className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
-              <div className="text-[9.5px] font-extrabold uppercase tracking-[.09em] text-gray-500 dark:text-gray-400">{s.label}</div>
-              <div className="mt-1 text-lg font-extrabold tabular-nums text-gray-900 dark:text-gray-100">{s.value}</div>
-              <div className="mt-0.5 text-[10.5px] text-gray-500 dark:text-gray-400">{s.note}</div>
-            </div>
-          ))}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <PerkTile label="Live" value={String(live.length)} note="accepting redemptions" />
+          <PerkTile
+            label="Expiring"
+            value={String(expiring.length)}
+            note={nextEnd ? `next ends ${nextEnd}` : 'none ending within 30 days'}
+          />
+          <PerkTile label="Expired" value={String(expired.length)} note="grants revoked on expiry" />
+          <PerkTile
+            label="Grants revoked"
+            value={String(revokedRedeemers)}
+            note={`redeemers affected across ${revoking.length} perk${revoking.length === 1 ? '' : 's'}`}
+          />
         </div>
+      )}
+
+      {items && items.length > 0 && (
+        <Instrument
+          testid="perk-lifecycle"
+          title="Perk lifecycle"
+          meta="Expiry is an event with a consequence, not a filter"
+          cols="1.6fr .9fr 1.1fr .9fr 1.9fr"
+          head={['Perk', 'State', 'Redeemed / cap', 'Ends', 'What it granted']}
+          rows={visible.map((p) => {
+            const state = perkState(p);
+            const used = Number(p.claim_count) || 0;
+            const cap = p.claim_cap == null ? null : Number(p.claim_cap);
+            const ratio = cap ? used / cap : 0;
+            return {
+              key: p.uid,
+              cells: [
+                { text: p.offer, sub: REVIEW_NOTE[p.status] || undefined },
+                { pill: STATE_LABEL[state], pillTone: STATE_TONE[state] },
+                // THE BAR IS DRAWN ONLY WHERE THERE IS A DENOMINATOR. An
+                // uncapped offer has a redemption count and no ratio, and a bar
+                // filled to some fraction of nothing would invent the cap the
+                // firm deliberately did not set.
+                cap == null
+                  ? { text: `${used} redeemed`, sub: 'uncapped' }
+                  : {
+                    text: `${used} of ${cap}`,
+                    barPct: Math.round(ratio * 100),
+                    barColor: ratio >= 1 ? '#b91c1c' : (ratio >= 0.7 ? '#b45309' : '#047857'),
+                  },
+                p.ends_at ? { text: String(p.ends_at).slice(0, 10) } : { nr: true },
+                p.grant_scope
+                  ? { text: p.grant_scope, ...(p.grant_revoked_on ? { rvk: `Revoked ${p.grant_revoked_on}` } : {}) }
+                  : { nr: true },
+              ],
+            };
+          })}
+          note={'An expired offer states what it took back and on what date rather than fading out — that is the whole reason this table has a lifecycle column instead of a filter. Two things it does not claim. Nothing in this product withdraws a scope automatically: the red mark records that the grant ended with the offer, and sending the notice is a person’s job. And `Grants revoked` counts the grants this book NAMES — a perk with no grant recorded contributes nothing to it, because nobody said what it gave, not because it gave nothing. An offer with no end date recorded reads Live and never appears under Expiring, so a date left blank is a listing that will run until somebody sets one.'}
+        />
+      )}
+
+      {items && items.length > 0 && (
+        <ZoneDraft
+          surface="offers/perk-deals"
+          label="Draft · expiry consequences"
+          accept="Accept draft"
+          run="Read the expiries"
+          foot="Traces to perk rows and grant scopes."
+          empty="For each expiring offer, what its expiry revokes and from whom — so a notice can go out before it happens rather than after."
+          nothingToDraft="No offer carries an end date yet, so nothing is expiring."
+        />
+      )}
+
+      {extending && (
+        <ExtendModal
+          rows={rows.filter((p) => p.ends_at && perkState(p) !== 'live')}
+          busy={busy}
+          note={extendNote}
+          onSave={saveEnd}
+          onClose={() => setExtending(false)}
+        />
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -491,7 +733,7 @@ function PartnerConsole({ zoneActions, zoneFilters, role }) {
         <form onSubmit={submit} className="mt-3 space-y-3">
           <input className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700" placeholder="Your company name"
             value={form.partner_name} onChange={set('partner_name')} required />
-          <input className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700" placeholder="The offer, e.g. 3 months free"
+          <input ref={offerRef} className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700" placeholder="The offer, e.g. 3 months free"
             value={form.offer} onChange={set('offer')} required />
           <input className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700" placeholder="Category"
             value={form.category} onChange={set('category')} />
@@ -533,6 +775,29 @@ function PartnerConsole({ zoneActions, zoneFilters, role }) {
             <input type="number" min="1" className="w-28 rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
               placeholder="Cap" value={form.claim_cap} onChange={set('claim_cap')} />
           </div>
+          {/* THE TWO FIELDS MIGRATION 228 ADDED, and both are optional because
+              both absences are real. An offer with no end date runs until
+              somebody sets one; an offer that grants nothing beyond itself
+              revokes nothing when it stops. Left blank they store null and the
+              row says `Not recorded` rather than inventing either. */}
+          <div className="flex flex-wrap gap-2">
+            <label className="flex flex-col gap-1 text-[11px] text-gray-500">
+              Ends (optional)
+              <input type="date" className="rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
+                value={form.ends_at} onChange={set('ends_at')} />
+            </label>
+            <label className="flex flex-1 flex-col gap-1 text-[11px] text-gray-500">
+              What it grants beyond the offer, and for how long (optional)
+              <input className="rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
+                placeholder="e.g. Priority queue access, 90 days" maxLength={300}
+                value={form.grant_scope} onChange={set('grant_scope')} />
+            </label>
+          </div>
+          <p className="text-[11px] leading-relaxed text-gray-500">
+            An end date is the offer’s own — separate from the expiry on a code already
+            issued to one founder. When the offer ends, whatever it granted ends with it,
+            and the lifecycle table above says what and on what day.
+          </p>
           {err && <p className="text-sm text-red-600">{err}</p>}
           <button type="submit" disabled={busy}
             className="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
@@ -550,7 +815,7 @@ function PartnerConsole({ zoneActions, zoneFilters, role }) {
             // selected chip — that reads as "you have submitted nothing", and
             // the count says otherwise.
             <p className="mt-2 text-sm text-gray-600">
-              No listing is live. {rows.length} submitted in total.
+              No listing is {view === 'all' ? 'shown' : view}. {rows.length} submitted in total.
             </p>
           ) : (
             <div className="mt-2 space-y-2">

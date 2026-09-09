@@ -88,8 +88,12 @@ test('offerings ?mine=1 is scoped to the caller in the worker', () => {
   const services = readFileSync(
     resolve(process.cwd(), 'cloudflare-worker/src/routes/services.ts'), 'utf8',
   );
+  // QUALIFIED OR NOT, THE PREDICATE IS THE POINT. The list SELECT aliases
+  // `service_offerings` to `o` so it can join the sold count, so the branch now
+  // reads `o.owner_user_id = ?`. The optional alias is what this pattern
+  // tolerates; the column is what it requires.
   assert.match(
-    services, /mine\s*\?\s*'owner_user_id = \?'/,
+    services, /mine\s*\?\s*'(?:o\.)?owner_user_id = \?'/,
     'the mine=1 branch must filter by owner_user_id — without it every partner sees every draft',
   );
 });
@@ -125,8 +129,15 @@ test('the partner stat strips read fields the worker actually emits', () => {
 
   assert.doesNotMatch(perks, /claims_count/,
     'routes/perks.ts aliases it `claim_count`, singular');
-  assert.match(perks, /Number\(i\.claim_count\)/,
-    'the claims total must read the alias the route emits');
+  // THE TOTAL MOVED AND THE PIN MOVED WITH IT. `Claims — total redemptions` was
+  // the old strip's third tile and read `Number(i.claim_count)`; the `po2`
+  // artboard's strip is `Live · Expiring · Expired · Grants revoked`, and the
+  // fourth of those is the one that sums redemptions — of expired perks that
+  // named what they granted. Same alias, same defect if it is ever mistyped.
+  assert.match(perks, /revoking\.reduce\(\(a, p\) => a \+ \(Number\(p\.claim_count\) \|\| 0\), 0\)/,
+    'the redeemers-affected total must read the alias the route emits');
+  assert.match(perks, /const used = Number\(p\.claim_count\) \|\| 0;/,
+    'the lifecycle row must read the alias the route emits');
 
   // A win rate divides by decisions, not by submissions, and the sentence under
   // it must count the same set the percentage does.

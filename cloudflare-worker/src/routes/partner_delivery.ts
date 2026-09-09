@@ -110,6 +110,176 @@ function currentPeriod(now = new Date()): string {
 // ---------------------------------------------------------------------------
 
 /**
+ * The `pd1` board: one row per engagement, in whichever of the two modes it is.
+ *
+ * MODE IS STRUCTURAL, NOT A STATUS — the artboard's own instMeta, and the
+ * reason there is no `mode` column anywhere. An engagement that granted a seat
+ * IS embedded; one that did not IS a project. That is a fact about what exists,
+ * derived here from `engagement_seats`, and a column would be a second place to
+ * say it that could disagree with the seat the first time one was revoked.
+ *
+ * A REVOKED SEAT STAYS EMBEDDED AND STAYS ON THE BOARD. The artboard is explicit:
+ * "a founder closing a seat is a normal event in this bucket, not an error
+ * state", and its own row is kept visible and struck through. Filtering it out
+ * would make the board quietly disagree with the ledger about how many
+ * engagements the firm has had.
+ *
+ * PROGRESS IS TWO DIFFERENT MEASURES AND IS NEVER AVERAGED. A project counts
+ * milestones; an embedded seat counts hours this period against the retainer's
+ * retained hours. One number over both would compare a fraction of a scope with
+ * a fraction of a week.
+ *
+ * HEALTH IS THE SAME `healthFor` `/health` CALLS, not a second rating. `null`
+ * is a real answer — nothing recorded — and the board draws it as absent rather
+ * than green, which is the failure that helper's docblock exists against.
+ */
+partnerDelivery.get('/board', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const period = currentPeriod();
+
+    const engagements = await c.env.DB.prepare(
+      `SELECT e.id, e.uid, e.status, e.price, e.delivered_at, e.cancelled_at,
+              n.title AS need_title, f.name AS founder_name,
+              r.id AS retainer_id, r.retained_hours
+         FROM engagements e
+         LEFT JOIN founder_needs n ON n.id = e.need_id
+         LEFT JOIN users f ON f.id = e.founder_id
+         LEFT JOIN partner_retainers r ON r.engagement_id = e.id
+        WHERE e.partner_id = ?
+        ORDER BY e.created_at DESC
+        LIMIT 200`,
+    ).bind(partnerId).all<any>();
+
+    // The same join-back-to-owner shape every read in this file uses: nothing
+    // is interpolated, and no row can come back for another firm's engagement.
+    const [seats, milestones, blockers, deliverables, hours, usage] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT s.engagement_id, s.scope, s.granted_at, s.revoked_at, u.name AS holder_name
+           FROM engagement_seats s
+           JOIN engagements e ON e.id = s.engagement_id
+           LEFT JOIN users u ON u.id = s.holder_user_id
+          WHERE e.partner_id = ? ORDER BY s.granted_at DESC`,
+      ).bind(partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT m.engagement_id, m.due_at, m.completed_at
+           FROM engagement_milestones m
+           JOIN engagements e ON e.id = m.engagement_id
+          WHERE e.partner_id = ?`,
+      ).bind(partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT b.engagement_id, b.side, b.cleared_at
+           FROM engagement_blockers b
+           JOIN engagements e ON e.id = b.engagement_id
+          WHERE e.partner_id = ?`,
+      ).bind(partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT d.engagement_id, d.sent_at, d.opened_at
+           FROM engagement_deliverables d
+           JOIN engagements e ON e.id = d.engagement_id
+          WHERE e.partner_id = ?`,
+      ).bind(partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT h.engagement_id, h.hours
+           FROM engagement_hours h
+           JOIN engagements e ON e.id = h.engagement_id
+          WHERE e.partner_id = ? AND h.period = ?`,
+      ).bind(partnerId, period).all<any>(),
+      c.env.DB.prepare(
+        `SELECT u.retainer_id, u.period, u.hours_used
+           FROM retainer_usage u
+           JOIN partner_retainers r ON r.id = u.retainer_id
+           JOIN engagements e ON e.id = r.engagement_id
+          WHERE e.partner_id = ?`,
+      ).bind(partnerId).all<any>(),
+    ]);
+
+    const group = <T extends { engagement_id: number }>(rows: T[]) => {
+      const m = new Map<number, T[]>();
+      for (const r of rows) {
+        const k = Number(r.engagement_id);
+        if (!m.has(k)) m.set(k, []);
+        m.get(k)!.push(r);
+      }
+      return m;
+    };
+    const seatByEng = group(seats.results || []);
+    const msByEng = group(milestones.results || []);
+    const blByEng = group(blockers.results || []);
+    const dlByEng = group(deliverables.results || []);
+    const hrByEng = group(hours.results || []);
+    const usageByRetainer = new Map<number, any>();
+    for (const u of usage.results || []) {
+      if (u.period === period) usageByRetainer.set(Number(u.retainer_id), u);
+    }
+
+    const items = (engagements.results || []).map((e: any) => {
+      const id = Number(e.id);
+      // The most recently granted seat is the one the row is about. A seat
+      // regranted after a revocation is a live embedded engagement again.
+      const seat = (seatByEng.get(id) || [])[0] || null;
+      const ms = msByEng.get(id) || [];
+      const allBl = blByEng.get(id) || [];
+      const bl = allBl.filter((b: any) => !b.cleared_at);
+      const dl = dlByEng.get(id) || [];
+      const hrs = (hrByEng.get(id) || []).reduce((a: number, h: any) => a + (Number(h.hours) || 0), 0);
+      const u = utilisationFor(
+        e.retainer_id
+          ? { retained_hours: e.retained_hours === null ? null : Number(e.retained_hours) }
+          : null,
+        usageByRetainer.get(Number(e.retainer_id)) || null,
+      );
+      const h = healthFor({
+        milestones: ms.map((m: any) => ({ due_at: m.due_at, completed_at: m.completed_at })),
+        openBlockers: bl.map((b: any) => ({ side: b.side })),
+        clearedBlockers: allBl.length - bl.length,
+        unopenedDeliverables: dl.filter((d: any) => d.sent_at && !d.opened_at).length,
+        utilisation: u,
+      });
+      return {
+        engagement_id: id,
+        engagement_uid: e.uid,
+        status: e.status,
+        client: e.founder_name ?? null,
+        scope: e.need_title ?? null,
+        price: e.price === null || e.price === undefined ? null : Number(e.price),
+        mode: seat ? 'embedded' : 'project',
+        // What the founder granted, in their own words — `engagement_seats
+        // .scope` is free text for exactly that reason.
+        grant: seat?.scope ?? null,
+        grant_holder: seat?.holder_name ?? null,
+        seat_revoked_at: seat?.revoked_at ?? null,
+        milestone_count: ms.length,
+        milestones_done: ms.filter((m: any) => m.completed_at).length,
+        hours_this_period: seat ? hrs : null,
+        // The cap an embedded row measures against is the retainer's retained
+        // hours. No retainer means no cap, which the page states rather than
+        // filling in a number nobody agreed to.
+        hours_cap: e.retainer_id && e.retained_hours !== null ? Number(e.retained_hours) : null,
+        ...h,
+      };
+    });
+
+    const live = items.filter((i: any) => !i.seat_revoked_at);
+    const money = (rows: any[]) => rows.reduce((a: number, r: any) => a + (Number(r.price) || 0), 0);
+    return c.json({
+      items,
+      period,
+      // The artboard's four tiles, each summed over the whole board rather than
+      // any narrowed view, and each named for what it counts.
+      project_value: money(live.filter((i: any) => i.mode === 'project')),
+      embedded_monthly: money(live.filter((i: any) => i.mode === 'embedded')),
+      needs_attention: live.filter((i: any) => i.health === 'at_risk' || i.health === 'blocked').length,
+      revoked_seats: items.filter((i: any) => i.seat_revoked_at).length,
+      // Same honesty the health read reports: an unrated row is not a healthy
+      // one, and the strip must not read as a clean board when it is an empty
+      // one.
+      unrated_count: items.filter((i: any) => i.health === null).length,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
  * Every engagement with its health, its reasons, and the seam-marked read.
  *
  * Five tables feed one judgement, which is why it is computed here rather than
@@ -125,7 +295,7 @@ partnerDelivery.get('/health', async (c) => {
     const engagements = await c.env.DB.prepare(
       `SELECT e.id, e.uid, e.status, e.price, e.founder_id, e.delivered_at, e.cancelled_at,
               n.title AS need_title, f.name AS founder_name,
-              r.id AS retainer_id, r.retained_hours, r.shape
+              r.id AS retainer_id, r.retained_hours, r.shape, r.renews_at
          FROM engagements e
          LEFT JOIN founder_needs n ON n.id = e.need_id
          LEFT JOIN users f ON f.id = e.founder_id
@@ -169,6 +339,39 @@ partnerDelivery.get('/health', async (c) => {
       ).bind(partnerId).all<any>(),
     ]);
 
+    // WHAT THE FIRM WROTE DOWN ABOUT THE ENGAGEMENT, beside the work (232).
+    // Owner, scope assessment and the client's score are none of them facts
+    // about milestones, blockers or deliverables — each is a sentence somebody
+    // stated — and all three are absent until they do.
+    const stated = await c.env.DB.prepare(
+      `SELECT h.engagement_id, h.owner_user_id, h.scope_state, h.scope_note,
+              h.satisfaction, h.satisfaction_source, h.satisfaction_at,
+              o.name AS owner_name
+         FROM partner_engagement_health h
+         JOIN engagements e ON e.id = h.engagement_id
+         LEFT JOIN users o ON o.id = h.owner_user_id
+        WHERE e.partner_id = ?`,
+    ).bind(partnerId).all<any>();
+    const statedByEng = new Map<number, any>();
+    for (const s of stated.results || []) statedByEng.set(Number(s.engagement_id), s);
+
+    // MODE IS DERIVED FROM THE SEAT, never stored — the same rule `/board`
+    // follows. An engagement that granted a seat IS embedded; a `mode` column
+    // would be a second place to say it that could disagree with the seat the
+    // first time one was revoked.
+    const seats = await c.env.DB.prepare(
+      `SELECT s.engagement_id, s.scope, s.revoked_at, u.name AS holder_name
+         FROM engagement_seats s
+         JOIN engagements e ON e.id = s.engagement_id
+         LEFT JOIN users u ON u.id = s.holder_user_id
+        WHERE e.partner_id = ?
+        ORDER BY s.revoked_at IS NOT NULL, s.granted_at DESC`,
+    ).bind(partnerId).all<any>();
+    const seatByEng = new Map<number, any>();
+    for (const s of seats.results || []) {
+      if (!seatByEng.has(Number(s.engagement_id))) seatByEng.set(Number(s.engagement_id), s);
+    }
+
     const by = <T extends { engagement_id: number }>(rows: T[]) => {
       const m = new Map<number, T[]>();
       for (const r of rows) {
@@ -188,6 +391,8 @@ partnerDelivery.get('/health', async (c) => {
 
     let rated = 0;
     const items = (engagements.results || []).map((e: any) => {
+      const st = statedByEng.get(Number(e.id));
+      const seat = seatByEng.get(Number(e.id));
       const ms = msByEng.get(Number(e.id)) || [];
       const allBl = blByEng.get(Number(e.id)) || [];
       const bl = allBl.filter((b: any) => !b.cleared_at);
@@ -214,10 +419,19 @@ partnerDelivery.get('/health', async (c) => {
         engagement_id: Number(e.id),
         engagement_uid: e.uid,
         status: e.status,
+        // RETURNED SO "LIVE" MEANS SOMETHING. The strip's satisfaction rule
+        // holds the firm-wide average back while any LIVE engagement is
+        // unscored; without this column every cancelled engagement in the book
+        // would keep it refused forever, which is a different claim from the
+        // one the artboard makes.
+        cancelled_at: e.cancelled_at ?? null,
         founder_id: e.founder_id ? Number(e.founder_id) : null,
         founder_name: e.founder_name ?? null,
         need_title: e.need_title ?? null,
         shape: e.shape ?? null,
+        // Migration 208 stored and indexed `renews_at`; the response withheld
+        // it, so `Renewing soon` had a column behind it and no way to reach it.
+        renews_at: e.renews_at ?? null,
         milestone_count: ms.length,
         overdue_count: ms.filter(
           (m: any) => !m.completed_at && m.due_at && (daysBetween(m.due_at) ?? -1) > 0,
@@ -227,6 +441,27 @@ partnerDelivery.get('/health', async (c) => {
         })),
         deliverables_sent: dl.filter((d: any) => d.sent_at).length,
         deliverables_unopened: unopened,
+        // ── What somebody at the firm stated (232) ──────────────────────────
+        // NULL THROUGHOUT UNTIL THEY DO. `scope_state` is not defaulted to
+        // 'within': an engagement nobody has assessed is not an engagement in
+        // scope, and a page that said otherwise would clear a client of drift
+        // by never having looked.
+        owner_user_id: st?.owner_user_id ? Number(st.owner_user_id) : null,
+        owner_name: st?.owner_name ?? null,
+        // The `Mode` column: a seat makes it embedded, and the grant's scope
+        // is what the founder actually handed over.
+        seat_scope: seat?.scope ?? null,
+        seat_holder: seat?.holder_name ?? null,
+        seat_revoked_at: seat?.revoked_at ?? null,
+        scope_state: st?.scope_state ?? null,
+        scope_note: st?.scope_note ?? null,
+        // A SCORE ALWAYS TRAVELS WITH ITS SOURCE. Migration 232's CHECK makes
+        // one impossible without the other, and the page prints the source
+        // beside every number: this is a remark somebody heard, not a metric
+        // this product measured.
+        satisfaction: st?.satisfaction == null ? null : Number(st.satisfaction),
+        satisfaction_source: st?.satisfaction_source ?? null,
+        satisfaction_at: st?.satisfaction_at ?? null,
         // Marked as a READ on the page, and it is one: the same helper the
         // Retainers zone calls, not a second computation of the same ratio.
         utilisation_source: 'pipeline_retainers',
@@ -234,6 +469,17 @@ partnerDelivery.get('/health', async (c) => {
         ...h,
       };
     });
+
+    // ── The `pd5` strip's four figures ────────────────────────────────────
+    const live = items.filter((r: any) => !r.cancelled_at);
+    const scored = live.filter((r: any) => r.satisfaction != null);
+    const withUtil = live.filter((r: any) => r.utilisation_pct != null);
+    // LOWEST, NOT AVERAGE. A renewal-risk page cares about the one client not
+    // using what they pay for, and an average would hide them behind four who
+    // are. The figure is the retainer record's, seam-marked on the row.
+    const lowest = withUtil.length
+      ? withUtil.reduce((a: any, b: any) => (b.utilisation_pct < a.utilisation_pct ? b : a))
+      : null;
 
     return c.json({
       items,
@@ -246,6 +492,128 @@ partnerDelivery.get('/health', async (c) => {
       unrated_note: items.length - rated
         ? `${items.length - rated} engagement${items.length - rated === 1 ? ' has' : 's have'} nothing recorded — no milestone, blocker, deliverable or retainer — so ${items.length - rated === 1 ? 'it is' : 'they are'} not rated. Silence is not good news.`
         : null,
+      at_risk_count: items.filter((r: any) => r.health === 'at_risk' || r.health === 'blocked').length,
+      // ONLY WHAT SOMEBODY ASSESSED AS DRIFT. An engagement nobody has looked
+      // at is neither in scope nor drifting, and it is counted as neither.
+      drift_count: items.filter((r: any) => r.scope_state === 'drift').length,
+      scope_unassessed_count: live.filter((r: any) => r.scope_state == null).length,
+      lowest_utilisation_pct: lowest ? lowest.utilisation_pct : null,
+      lowest_utilisation_client: lowest ? (lowest.founder_name ?? lowest.need_title ?? null) : null,
+      // A FIRM-WIDE AVERAGE NEEDS THE FIRM. While any live engagement has no
+      // score, averaging the rest would present a few opinions as a fact about
+      // all of them — which is the artboard's own reason for refusing it.
+      satisfaction_avg: live.length && scored.length === live.length
+        ? Math.round((scored.reduce((a: number, r: any) => a + r.satisfaction, 0) / scored.length) * 10) / 10
+        : null,
+      satisfaction_scored_count: scored.length,
+      satisfaction_unscored_count: live.length - scored.length,
+      satisfaction_note: live.length && scored.length === live.length
+        ? null
+        : `${live.length - scored.length} of ${live.length} engagement${live.length === 1 ? '' : 's'} ${live.length - scored.length === 1 ? 'has' : 'have'} no score, and averaging the rest would present ${scored.length} opinion${scored.length === 1 ? '' : 's'} as a firm-wide fact.`,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * What the firm states about an engagement: who owns it, whether it has
+ * drifted, and what the client said.
+ *
+ * NONE OF THE THREE IS DERIVABLE. Health is read from five stores and the
+ * artboard asks for three things none of them holds — an owner, a scope
+ * assessment, a satisfaction score. Migration 232's header has the argument;
+ * this route is the only way any of them gets written.
+ *
+ * A SCORE CANNOT BE SAVED WITHOUT ITS SOURCE. The CHECK enforces it in the
+ * schema and this refuses it with a sentence, because the failure it prevents
+ * is specific: a number typed by the person who wants the renewal, shown on the
+ * renewal-risk page as the client's opinion.
+ *
+ * AN OMITTED KEY IS UNTOUCHED; AN EXPLICIT NULL CLEARS. This is a PATCH in
+ * everything but name — a page saving the owner must not wipe a score it never
+ * loaded.
+ */
+partnerDelivery.put('/engagements/:engagementId/health', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const engagementId = Number(c.req.param('engagementId'));
+    await requireOwnEngagement(c.env, partnerId, engagementId);
+    const b = await body<any>(c);
+    const has = (k: string) => Object.prototype.hasOwnProperty.call(b, k);
+
+    const current = await c.env.DB.prepare(
+      'SELECT * FROM partner_engagement_health WHERE engagement_id = ?',
+    ).bind(engagementId).first<any>();
+
+    let ownerId = current?.owner_user_id ?? null;
+    if (has('owner_user_id')) {
+      if (b.owner_user_id === null) ownerId = null;
+      else {
+        // The firm's own people only — the same hole `requireOwnHolder` closes
+        // on the seat register. An owner is who to ask about this client.
+        const own = await requireOwnHolder(c.env, partnerId, Number(b.owner_user_id));
+        ownerId = Number(own.id);
+      }
+    }
+
+    let scopeState = current?.scope_state ?? null;
+    if (has('scope_state')) {
+      const v = b.scope_state === null ? null : String(b.scope_state);
+      if (v !== null && v !== 'within' && v !== 'drift') {
+        return c.json({ detail: 'Scope state is either within or drift' }, 400);
+      }
+      scopeState = v;
+    }
+    const scopeNote = has('scope_note')
+      ? trimOrNull(b.scope_note, 600) : (current?.scope_note ?? null);
+
+    let satisfaction = current?.satisfaction ?? null;
+    if (has('satisfaction')) {
+      if (b.satisfaction === null) satisfaction = null;
+      else {
+        const n = Number(b.satisfaction);
+        if (!Number.isFinite(n) || n < 1 || n > 5) {
+          return c.json({ detail: 'A satisfaction score is between 1 and 5' }, 400);
+        }
+        satisfaction = n;
+      }
+    }
+    const source = has('satisfaction_source')
+      ? trimOrNull(b.satisfaction_source, 300) : (current?.satisfaction_source ?? null);
+    if (satisfaction !== null && !source) {
+      return c.json({
+        detail: 'A satisfaction score needs a source — where it was said, and when. A number with none is the firm scoring itself.',
+      }, 400);
+    }
+    const at = has('satisfaction_at')
+      ? trimOrNull(b.satisfaction_at, 40) : (current?.satisfaction_at ?? null);
+
+    await c.env.DB.prepare(
+      `INSERT INTO partner_engagement_health
+         (engagement_id, owner_user_id, scope_state, scope_note,
+          satisfaction, satisfaction_source, satisfaction_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (engagement_id) DO UPDATE SET
+         owner_user_id = excluded.owner_user_id,
+         scope_state = excluded.scope_state,
+         scope_note = excluded.scope_note,
+         satisfaction = excluded.satisfaction,
+         satisfaction_source = excluded.satisfaction_source,
+         satisfaction_at = excluded.satisfaction_at,
+         updated_at = excluded.updated_at`,
+    ).bind(
+      engagementId, ownerId, scopeState, scopeNote,
+      satisfaction, source, at, nowIso(), nowIso(),
+    ).run();
+
+    return c.json({
+      ok: true,
+      engagement_id: engagementId,
+      owner_user_id: ownerId,
+      scope_state: scopeState,
+      scope_note: scopeNote,
+      satisfaction,
+      satisfaction_source: source,
+      satisfaction_at: at,
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -601,8 +969,42 @@ partnerDelivery.get('/capacity', async (c) => {
         WHERE e.partner_id = ? AND h.period = ?`,
     ).bind(partnerId, period).all<any>();
 
-    // One row per person, assembled from both tables. A person appears if they
-    // hold a seat OR logged hours — neither table alone is the roster.
+    // HOURS THE FIRM OWES NOBODY (migration 231). Admin, recruiting, the
+    // proposal that lost — real hours of a real week with no client to bill.
+    // They are read here and NOT summed into the client totals: the artboard
+    // draws three columns because they answer three different questions, and
+    // only their sum is the week.
+    const internal = await c.env.DB.prepare(
+      `SELECT i.person_user_id, i.hours, i.note, u.name AS person_name
+         FROM partner_internal_hours i
+         LEFT JOIN users u ON u.id = i.person_user_id
+        WHERE i.partner_id = ? AND i.period = ?`,
+    ).bind(partnerId, period).all<any>();
+
+    // THE CAP THE FIRM SET FOR ITSELF (migration 230). A row with a NULL
+    // `person_user_id` is the firm's default; one naming somebody is theirs,
+    // and the read below prefers the specific. No rows at all is the commonest
+    // answer and stays a real one: `cap_hours` comes back null and nothing is
+    // marked over anything.
+    const caps = await c.env.DB.prepare(
+      `SELECT person_user_id, weekly_hours, note FROM partner_capacity WHERE partner_id = ?`,
+    ).bind(partnerId).all<any>();
+    let firmCap: number | null = null;
+    let firmCapNote: string | null = null;
+    const personCap = new Map<number, { hours: number; note: string | null }>();
+    for (const row of caps.results || []) {
+      if (row.person_user_id === null || row.person_user_id === undefined) {
+        firmCap = Number(row.weekly_hours);
+        firmCapNote = row.note ?? null;
+      } else {
+        personCap.set(Number(row.person_user_id), {
+          hours: Number(row.weekly_hours), note: row.note ?? null,
+        });
+      }
+    }
+
+    // One row per person, assembled from all three tables. A person appears if
+    // they hold a seat OR logged hours — no one table alone is the roster.
     const people = new Map<number, any>();
     const ensure = (id: number, name: string | null) => {
       if (!people.has(id)) {
@@ -611,8 +1013,13 @@ partnerDelivery.get('/capacity', async (c) => {
           name: name ?? null,
           hours: 0,
           hours_recorded: false,
+          project_hours: 0,
+          seat_hours: 0,
+          internal_hours: null as number | null,
+          internal_note: null as string | null,
           live_seats: 0,
           revoked_seats: 0,
+          seat_places: [] as any[],
           engagements: new Set<number>(),
         });
       }
@@ -621,17 +1028,56 @@ partnerDelivery.get('/capacity', async (c) => {
       return p;
     };
 
+    // WHOSE SEAT, ON WHICH ENGAGEMENT. An hour is a seat hour when the person
+    // who logged it holds a seat on the engagement they logged it against —
+    // their own grant, not the engagement's mode. Two people can work the same
+    // embedded engagement while only one of them is inside the client's
+    // systems, and the one who is not did project work.
+    const seatOf = new Set<string>();
     for (const s of seats.results || []) {
       const p = ensure(Number(s.holder_user_id), s.holder_name);
       if (s.revoked_at) p.revoked_seats += 1; else p.live_seats += 1;
       p.engagements.add(Number(s.engagement_id));
+      p.seat_places.push({
+        engagement_id: Number(s.engagement_id),
+        client: s.founder_name ?? s.need_title ?? s.engagement_uid,
+        scope: s.scope ?? null,
+        revoked: Boolean(s.revoked_at),
+      });
+      // A REVOKED SEAT STILL CLAIMS ITS HOURS. The access ended; the work done
+      // while it was open was still done inside the client's systems, and
+      // moving it into the project column afterwards would rewrite the past.
+      seatOf.add(`${s.holder_user_id}:${s.engagement_id}`);
     }
     for (const h of hours.results || []) {
       const p = ensure(Number(h.person_user_id), h.person_name);
-      p.hours += Number(h.hours || 0);
+      const n = Number(h.hours || 0);
+      p.hours += n;
+      if (seatOf.has(`${h.person_user_id}:${h.engagement_id}`)) p.seat_hours += n;
+      else p.project_hours += n;
       p.hours_recorded = true;
       p.engagements.add(Number(h.engagement_id));
     }
+    for (const row of internal.results || []) {
+      const p = ensure(Number(row.person_user_id), row.person_name);
+      p.internal_hours = Number(row.hours || 0);
+      p.internal_note = row.note ?? null;
+    }
+
+    // THE WEEK IS THE SUM OF THREE COLUMNS, and it exists only if at least one
+    // of them was stated. A total assembled from nothing at all is not zero
+    // hours; it is no answer, and the cap comparison below skips it.
+    const totalOf = (p: any) => (p.hours_recorded ? p.hours : 0) + (p.internal_hours ?? 0);
+    const measured = (p: any) => p.hours_recorded || p.internal_hours !== null;
+    const capOf = (p: any) => personCap.get(p.user_id)?.hours ?? firmCap;
+    const overOf = (p: any) => {
+      const cap = capOf(p);
+      // OVER-COMMITTED NEEDS BOTH SIDES. Unrecorded hours are not zero hours,
+      // so a person nobody logged against is not under cap either — they are
+      // unmeasured, and this stays null for them.
+      if (cap === null || !measured(p)) return null;
+      return totalOf(p) > cap;
+    };
 
     return c.json({
       period,
@@ -643,9 +1089,29 @@ partnerDelivery.get('/capacity', async (c) => {
           // would say they did no work, which is a different claim.
           hours: p.hours_recorded ? p.hours : null,
           hours_note: p.hours_recorded ? null : 'No hours logged for this period.',
+          // THE THREE COLUMNS THE ARTBOARD DRAWS, split rather than averaged.
+          // Project and seat hours are both zero-able because their absence is
+          // read off a book that exists; internal hours are null until somebody
+          // states them, because no book records unbilled time by default.
+          project_hours: p.hours_recorded ? p.project_hours : null,
+          seat_hours: p.hours_recorded ? p.seat_hours : null,
+          internal_hours: p.internal_hours,
+          internal_note: p.internal_note,
+          total_hours: measured(p) ? totalOf(p) : null,
           live_seats: p.live_seats,
           revoked_seats: p.revoked_seats,
+          // WHERE THE SEAT IS, not just how many. A seat register that counted
+          // without naming would make the trust exposure unreadable: "two
+          // seats" is a number, "Halverton · Board, KPIs" is the exposure.
+          seat_places: p.seat_places,
           engagement_count: p.engagements.size,
+          // THEIR OWN CAP IF THEY HAVE ONE, otherwise the firm's, otherwise
+          // none — and none is not zero. A person with no cap is not over any
+          // threshold, because there is no threshold.
+          cap_hours: capOf(p),
+          cap_source: personCap.has(p.user_id) ? 'person' : (firmCap === null ? null : 'firm'),
+          cap_note: personCap.get(p.user_id)?.note ?? firmCapNote,
+          over_committed: overOf(p),
         }))
         .sort((a, b) => b.live_seats - a.live_seats || (b.hours ?? -1) - (a.hours ?? -1)),
       seats: (seats.results || []).map((s: any) => ({
@@ -664,9 +1130,157 @@ partnerDelivery.get('/capacity', async (c) => {
         revoked_at: s.revoked_at ?? null,
         days_held: daysBetween(s.granted_at, s.revoked_at || undefined),
       })),
-      // The refusal, in the response so the page cannot quietly supply one.
-      cap_hours: null,
-      cap_note: 'No capacity cap is recorded anywhere in this product. Hours are real; a threshold to be over is not, so nothing here is marked over-committed.',
+      // WHAT THE FIRM SET, OR NULL — and null keeps the refusal that stood
+      // here, verbatim, because it is still what an unconfigured firm must be
+      // told. The canvas's hardcoded 40 is still refused: this number is
+      // whatever THIS firm wrote down, and until they write one there is no
+      // threshold to be over.
+      cap_hours: firmCap,
+      cap_source: firmCap === null ? null : 'firm',
+      cap_note: firmCap === null
+        ? 'No capacity cap is recorded anywhere in this product. Hours are real; a threshold to be over is not, so nothing here is marked over-committed.'
+        : firmCapNote,
+      over_committed_count: firmCap === null && personCap.size === 0
+        ? null
+        : [...people.values()].filter((p) => overOf(p) === true).length,
+      // THE STRIP'S THREE HOUR TILES, summed over the whole roster rather than
+      // over whatever the chips left visible — a firm's project hours do not
+      // change because the reader narrowed to seat-holders.
+      project_hours_total: [...people.values()].reduce((a, p) => a + p.project_hours, 0),
+      seat_hours_total: [...people.values()].reduce((a, p) => a + p.seat_hours, 0),
+      // NULL, NOT ZERO, when nobody has stated any internal time. Summing
+      // absent rows to zero would tell a firm its people spend no time on the
+      // firm, which is the one thing that is certainly false.
+      internal_hours_total: (internal.results || []).length === 0
+        ? null
+        : [...people.values()].reduce((a, p) => a + (p.internal_hours ?? 0), 0),
+      live_seats: (seats.results || []).filter((s: any) => !s.revoked_at).length,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Set or clear a capacity cap — the firm's default, or one person's.
+ *
+ * THE FIRM STATES ITS OWN NUMBER. Nothing here computes, infers or defaults a
+ * cap: `PUT` with `weekly_hours` writes what they typed, and `weekly_hours:
+ * null` removes the row so the answer goes back to "no cap recorded". That
+ * round trip matters — a cap that could be set and not unset would make the
+ * first typed number permanent.
+ *
+ * `person_user_id` OMITTED IS THE FIRM'S DEFAULT, which is the same convention
+ * migration 230's partial indexes enforce. A person named here must belong to
+ * this firm, for the reason `requireOwnHolder` exists on the seat register: a
+ * table referencing `users(id)` with no partner constraint would otherwise let
+ * a firm write a cap against anybody's account.
+ */
+partnerDelivery.put('/capacity/cap', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const b = await body<any>(c);
+    const personId = b.person_user_id === undefined || b.person_user_id === null
+      ? null : Number(b.person_user_id);
+    if (personId !== null) {
+      if (!Number.isFinite(personId)) return c.json({ detail: 'person_user_id must be a user id' }, 400);
+      const own = await c.env.DB.prepare(
+        'SELECT 1 AS ok FROM users WHERE id = ? AND partner_id = ?',
+      ).bind(personId, partnerId).first<{ ok: number }>();
+      // 404 rather than 403: whether an account exists elsewhere is not this
+      // firm's business to learn from an error code.
+      if (!own) return c.json({ detail: 'Person not found in this firm' }, 404);
+    }
+
+    if (b.weekly_hours === null) {
+      // CLEARING IS A DELETE, not a zero. Zero hours would say this person
+      // works no hours, which is a claim; no row says nobody has stated a cap.
+      if (personId === null) {
+        await c.env.DB.prepare(
+          'DELETE FROM partner_capacity WHERE partner_id = ? AND person_user_id IS NULL',
+        ).bind(partnerId).run();
+      } else {
+        await c.env.DB.prepare(
+          'DELETE FROM partner_capacity WHERE partner_id = ? AND person_user_id = ?',
+        ).bind(partnerId, personId).run();
+      }
+      return c.json({ ok: true, weekly_hours: null });
+    }
+
+    const hours = Number(b.weekly_hours);
+    if (!Number.isFinite(hours) || hours <= 0 || hours >= 168) {
+      return c.json({ detail: 'A weekly cap is a number of hours between 0 and 168' }, 400);
+    }
+    const note = trimOrNull(b.note, 300);
+    // Two literal statements rather than one with an interpolated predicate:
+    // `check-sql-prepare` refuses a `${}` inside `DB.prepare`, and the partial
+    // unique indexes migration 230 declares need the NULL case spelled out.
+    if (personId === null) {
+      await c.env.DB.prepare(
+        `INSERT INTO partner_capacity (partner_id, person_user_id, weekly_hours, note, created_at, updated_at)
+         VALUES (?, NULL, ?, ?, ?, ?)
+         ON CONFLICT (partner_id) WHERE person_user_id IS NULL
+         DO UPDATE SET weekly_hours = excluded.weekly_hours, note = excluded.note, updated_at = excluded.updated_at`,
+      ).bind(partnerId, hours, note, nowIso(), nowIso()).run();
+    } else {
+      await c.env.DB.prepare(
+        `INSERT INTO partner_capacity (partner_id, person_user_id, weekly_hours, note, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (partner_id, person_user_id) WHERE person_user_id IS NOT NULL
+         DO UPDATE SET weekly_hours = excluded.weekly_hours, note = excluded.note, updated_at = excluded.updated_at`,
+      ).bind(partnerId, personId, hours, note, nowIso(), nowIso()).run();
+    }
+    return c.json({ ok: true, weekly_hours: hours, person_user_id: personId, note });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * State a person's internal hours for a period — or clear the statement.
+ *
+ * THE HOURS NO CLIENT PAYS FOR ARE STILL HOURS. `engagement_hours` cannot hold
+ * them: its `engagement_id` is NOT NULL, so admin, recruiting and the losing
+ * proposal have nowhere to go, and a week assembled from client rows alone
+ * under-reports every person by exactly the part of it nobody is billed for.
+ * Migration 231's header has the rest of that argument.
+ *
+ * `hours: null` REMOVES THE ROW rather than writing a zero. Zero is a real
+ * answer — "none this period" — and it must stay distinguishable from nobody
+ * having said, which is what an absent row means and what the read returns.
+ */
+partnerDelivery.put('/capacity/internal-hours', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const b = await body<any>(c);
+    const personId = Number(b.person_user_id);
+    if (!Number.isFinite(personId)) return c.json({ detail: 'person_user_id must be a user id' }, 400);
+    const own = await c.env.DB.prepare(
+      'SELECT 1 AS ok FROM users WHERE id = ? AND partner_id = ?',
+    ).bind(personId, partnerId).first<{ ok: number }>();
+    // 404 rather than 403, for the reason the cap route gives: whether an
+    // account exists elsewhere is not this firm's business to learn.
+    if (!own) return c.json({ detail: 'Person not found in this firm' }, 404);
+
+    const parsed = parsePeriod(b.period, 'monthly');
+    if ('error' in parsed) return c.json({ detail: parsed.error }, 400);
+
+    if (b.hours === null) {
+      await c.env.DB.prepare(
+        'DELETE FROM partner_internal_hours WHERE partner_id = ? AND person_user_id = ? AND period = ?',
+      ).bind(partnerId, personId, parsed.period).run();
+      return c.json({ ok: true, hours: null, period: parsed.period });
+    }
+
+    const hours = Number(b.hours);
+    if (!Number.isFinite(hours) || hours < 0 || hours >= 744) {
+      return c.json({ detail: 'Internal hours are a number of hours in a month' }, 400);
+    }
+    const note = trimOrNull(b.note, 300);
+    await c.env.DB.prepare(
+      `INSERT INTO partner_internal_hours (partner_id, person_user_id, period, hours, note, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (partner_id, person_user_id, period)
+       DO UPDATE SET hours = excluded.hours, note = excluded.note, updated_at = excluded.updated_at`,
+    ).bind(partnerId, personId, parsed.period, hours, note, nowIso(), nowIso()).run();
+    return c.json({
+      ok: true, hours, note, period: parsed.period, person_user_id: personId,
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -831,11 +1445,57 @@ partnerDelivery.get('/status-reports', async (c) => {
         ORDER BY r.period DESC, r.id DESC
         LIMIT 200`,
     ).bind(partnerId).all<any>();
-    const items = (rows.results || []).map(reportDto);
+
+    // BLOCKERS ARE READ LIVE AND ATTACHED, NEVER STORED ON THE REPORT. The
+    // compose endpoint has said so since it was written — "a prose copy would
+    // go stale the moment one cleared, and the side is what a stale copy
+    // loses" — and the listing had simply never carried them at all, which left
+    // the `With blockers` chip selecting nothing on every build.
+    //
+    // OPEN ONLY. A cleared blocker is not what a report is blocked on; it is
+    // what a report used to be blocked on, and a chip that swept those in would
+    // report resolved problems as live ones.
+    const blockers = await c.env.DB.prepare(
+      `SELECT b.engagement_id, b.side, b.summary, b.raised_at
+         FROM engagement_blockers b
+         JOIN engagements e ON e.id = b.engagement_id
+        WHERE e.partner_id = ? AND b.cleared_at IS NULL
+        ORDER BY b.raised_at`,
+    ).bind(partnerId).all<any>();
+    const byEngagement = new Map<number, any[]>();
+    for (const b of blockers.results || []) {
+      const key = Number(b.engagement_id);
+      if (!byEngagement.has(key)) byEngagement.set(key, []);
+      byEngagement.get(key)!.push({
+        side: b.side, summary: b.summary, days_open: daysBetween(b.raised_at),
+      });
+    }
+
+    const period = currentPeriod();
+    const items = (rows.results || []).map((r: any) => ({
+      ...reportDto(r),
+      blockers: byEngagement.get(Number(r.engagement_id)) || [],
+    }));
     return c.json({
       items,
+      // THE CYCLE THE PAGE IS OPEN ON, so `This cycle` and `Archive` are two
+      // ends of one comparison rather than two chips over a field the response
+      // never sent. Without it both selected the whole list or none of it.
+      period,
       draft_count: items.filter((r: any) => r.state === 'draft').length,
       sent_count: items.filter((r: any) => r.state === 'sent').length,
+      sent_this_cycle: items.filter((r: any) => r.state === 'sent' && r.period === period).length,
+      blocked_count: items.filter((r: any) => r.blockers.length > 0).length,
+      client_blocked_count: items.filter(
+        (r: any) => r.blockers.some((b: any) => b.side === 'client'),
+      ).length,
+      // WHAT A REPORT CANNOT REPORT ABOUT ITSELF. A read time needs an open,
+      // an open is the client's act, and no client-side surface exists to
+      // record one — the same absence `engagement_deliverables.opened_at`
+      // has and for the same reason. Refused with the reason rather than
+      // timed from the send, which would measure our own silence.
+      read_time_median_days: null,
+      read_time_note: 'Nothing records that a client read a report. There is no client-side surface to record it on, so a read time here would be a number about our own send, not about them.',
       // The report is composed here and delivered by a person. Nothing in this
       // product emails a client on a firm's behalf, and "sent" records that a
       // person sent it rather than that this product did.

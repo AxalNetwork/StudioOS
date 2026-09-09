@@ -54,12 +54,18 @@ const PROFILES = {
     zones: 30,
     links: 17,
     exports: 20,
-    // Six ops the WORKSPACE performs, all of them Validate's: three open a
-    // dialog it owns and three are server-side CSV downloads with a busy state.
-    // Every other profile is 0 — this is the first and so far only use of
-    // `kind: 'handler'`, and pinning it at 0 elsewhere is what makes a second
-    // one show up here as a change rather than as a silent spread.
-    handlers: 6,
+    // Seven ops the PAGE performs: six of Validate's — three open a dialog the
+    // workspace owns and three are server-side CSV downloads with a busy state —
+    // plus `research/ask`'s `New brief` and `research/library`'s `Upload` —
+    // one starts a thread in the session store migration 221 added, the other
+    // opens the file picker on the form already on the page.
+    //
+    // THE KIND HAS SPREAD, WHICH IS WHAT THESE COUNTS ARE FOR. It was one
+    // profile's answer and is now four; the note that used to sit here said
+    // "pinning it at 0 elsewhere is what makes a second one show up as a change
+    // rather than as a silent spread", and that is exactly how this landed —
+    // three counts went red in one run and each was read before it was moved.
+    handlers: 8,
     // NOTHING IS EXCLUDED ANY MORE. `research/funds` sat here as "a card in
     // `ResearchWorkspace`'s ZONE_COPY, not a body" — true when it was written
     // and untrue since `ZONE_COPY` became `{}` and `LIVE_ZONES` gained `funds`.
@@ -81,10 +87,9 @@ const PROFILES = {
     zones: 19,
     links: 1,
     exports: 13,
-    // No page-supplied op on this profile. Pinned at zero rather than left
-    // unstated: `kind: 'handler'` is one profile's answer today, and a second
-    // profile growing one should read as a change here.
-    handlers: 0,
+    // Two page-supplied ops: `research/ask`'s `New brief` and
+    // `research/library`'s `Upload`. Was 0.
+    handlers: 2,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -129,24 +134,77 @@ const PROFILES = {
     // in scope for the ordinary reason: their canvases live in
     // `design/incoming/`, which `canvasDirs` above opens.
     buckets: /^(delivery|offers|network|pipeline|research)\//,
-    zones: 21,
-    links: 0,
-    exports: 19,
-    // No page-supplied op on this profile. Pinned at zero rather than left
-    // unstated: `kind: 'handler'` is one profile's answer today, and a second
-    // profile growing one should read as a change here.
-    handlers: 0,
-    // `network/organizations`: `NetworkPage` catches a slug it has no tab for and
-    // suppresses every body, so that route already renders its own heading above
-    // a card stating the gap — there is nothing for a row to sit over. Checked
-    // again rather than inherited: `ORG_BACKED` in `NetworkWorkspace.jsx` is
-    // still `['founder', 'investor']`, so this one is as true as it was.
+    // Twenty-two, and the twenty-second is `network/organizations`. It was the
+    // one zone whose canvas ops row had no table entry, on the reading that the
+    // route rendered a stated gap rather than a list — true of the page that
+    // then existed, and migrations 224 and 226 changed it. Was 21.
+    zones: 22,
+    // ONE LINK, AND IT REPLACED A REASON THAT HAD GONE STALE. `pipeline/leads`'
+    // `Edit capability weights` was prose on the grounds that "no capability
+    // register is stored, and no weight against one" — true when it was
+    // written, and untrue since `partner_fit_rules` (209/229) was built for
+    // Offers · Audience fit. The rules are edited there and read on Leads, so
+    // the op links to the one place they are written rather than opening a
+    // second form over the same numbers. Was 0.
+    links: 1,
+    // Twenty exports. Organizations exports the roll-up it is showing: the
+    // grouped companies, their relationship and how many people the firm knows
+    // inside each. The two absent columns ship as empty cells rather than as
+    // the words "Not recorded", which in a spreadsheet invite a formula over a
+    // fact that does not exist. Was 19.
+    exports: 20,
+    // Eight page-supplied ops. `research/ask`: `New session` starts a thread,
+    // `Saved answers` switches the view to the kept ones. `research/library`:
+    // `Add document` opens the file picker, `Re-index` re-queues every document
+    // Ask cannot currently read. `research/client-prep`: `Attach to proposal`,
+    // which migration 222's `research_attachments` made an edge rather than a
+    // wish. `network/relationships`: `Assign owner` opens the board where
+    // ownership changes and `Log interaction` dates a touch — both were gaps
+    // reading "no owner field is stored on a relationship" and "no interaction
+    // log is stored", true of `partner_relationships` and not of the book
+    // migration 224 stores. `network/introductions`: `Consent log`, which was
+    // prose reading "consent is recorded per introduction, not as a log" — a
+    // claim about the RESPONSE rather than the store, since both sides' answers
+    // have been rows since migration 150 and only the DTO omitted the second.
+    // `network/organizations`: `Build records`, which opens the board where the
+    // firm says what each company IS to it — the one organization fact
+    // migration 226 gave the book a place for. It does not create an
+    // organization record; there is no such table, and that absence is the
+    // subject of the whole page. None is a destination, which is why none is a
+    // `offers/catalog`: `New service`, which was prose reading "services are
+    // added from the catalogue's own form below" — true of a body with a New
+    // offering button above it, and the artboard's composition has no such
+    // button: the ops row IS the header. `offers/perk-deals`: `New perk`, the
+    // same correction on the same grounds; and `Extend`, which was 'an expiry
+    // is edited on the perk itself, not extended in bulk' — not a preference
+    // but a description of a table with no expiry on it at all, and migration
+    // 228 put one there. None is a destination, which is why none is a `to:`.
+    // `offers/proof`: `Ask for consent`, whose reason described a page that no
+    // longer exists — "no founder-side surface exists to ask from here", and
+    // `/attest/partner/:token` is that surface, mounted in `App.jsx` since
+    // migration 209. None is a destination, which is why none is a `to:`.
+    // `offers/audience-fit`: `Pass reasons`, whose reason was wrong about its
+    // own store — "a pass reason is not a stored field on a fit rule", and
+    // `partner_fit_rules.statement` is exactly that field, the one the form
+    // labels "The sentence a pass quotes". None is a destination, which is why
+    // none is a `to:`.
+    // Was 0, then 5, then 7, then 8, then 9, then 10, then 12, then 13.
+    handlers: 14,
+    // NOTHING IS EXCLUDED ON THIS PROFILE ANY MORE. The entry that stood here
+    // read: "`network/organizations`: `NetworkPage` catches a slug it has no tab
+    // for and suppresses every body … there is nothing for a row to sit over.
+    // Checked again rather than inherited: `ORG_BACKED` in
+    // `NetworkWorkspace.jsx` is still `['founder', 'investor']`, so this one is
+    // as true as it was." It was checked, it was true, and it stopped being
+    // true when `ORG_BACKED` gained `partner` and the zone got its own body.
+    // Re-checking an exclusion against the code is what makes it fall over on
+    // the commit that invalidates it rather than three months later.
     //
     // `research/client-prep` USED to be listed here as "a card, not a body". It
     // is a body — `ClientPrepZone.jsx` takes `zoneActions` and renders a row
     // from it — so the exclusion was hiding three specified ops that drew
     // nothing, exactly as the investor Research pair did.
-    excluded: ['network/organizations'],
+    excluded: [],
     embeddedGuards: 0,
     // The nine partner bodies that take the "no firm attached" branch —
     // `offers/{visibility,proof,audience-fit}`, `pipeline/{negotiations,
@@ -172,10 +230,9 @@ const PROFILES = {
     zones: 11,
     links: 1,
     exports: 11,
-    // No page-supplied op on this profile. Pinned at zero rather than left
-    // unstated: `kind: 'handler'` is one profile's answer today, and a second
-    // profile growing one should read as a change here.
-    handlers: 0,
+    // Four page-supplied ops — the same set partner has, because `AskZone` and
+    // `LibraryZone` are each one file serving both. Was 0.
+    handlers: 4,
     embeddedGuards: 0,
     // Both remaining exclusions are cards whose whole page IS the gap
     // statement, so there is nothing for a row to sit over. `expertise/
@@ -545,8 +602,19 @@ for (const [name, profile] of Object.entries(PROFILES)) {
         // Including an ENCLOSING arrow's parameter: the partner bucket router
         // hands these pages `(rows) => partnerZoneActions(…)`, so `rows` is
         // declared just before the call rather than inside it.
+        //
+        // EVERY PARAMETER, NOT THE FIRST. This read one name per arrow, which
+        // was right while every render prop took only its rows. A zone with a
+        // page-supplied op takes `(rows, handlers) =>` — the shape D67
+        // introduced and three workspaces now use — and a one-name pattern
+        // matches neither of them, so `handlers` read as an undeclared global
+        // on a page that declares it in the very arrow being scanned.
         const around = src.slice(Math.max(0, at - 160), at) + call;
-        const params = new Set([...around.matchAll(/\(\s*([A-Za-z_$][\w$]*)\s*\)\s*=>/g)].map((m) => m[1]));
+        const params = new Set(
+          [...around.matchAll(/\(\s*([A-Za-z_$][\w$,\s]*)\)\s*=>/g)]
+            .flatMap((m) => m[1].split(',').map((x) => x.trim()))
+            .filter(Boolean),
+        );
         for (const id of new Set([...bare.matchAll(/[A-Za-z_$][\w$]*/g)].map((m) => m[0]))) {
           if (KNOWN.has(id) || params.has(id)) continue;
           const declared = new RegExp(`(const|let|var|function|import)[^\\n;]*\\b${id}\\b`).test(src);
@@ -753,9 +821,16 @@ for (const [name, profile] of Object.entries(PROFILES)) {
         assert.ok(open >= 0, `${f} declares export columns but no row mapping`);
         const body = balanced(after.slice(after.indexOf('[', open)));
         const cols = [...header[1].matchAll(/'/g)].length / 2;
+        // A TRAILING COMMA IS NOT AN EIGHTH VALUE. `[a, b,]` has two elements
+        // in JavaScript and this counted three, so a multi-line `cells` array
+        // written in the house style every other list in this repo uses failed
+        // with "writes 8 values under 7 column headings" — a real-sounding
+        // message for a formatting choice. Dropped before the split, which is
+        // the one place it can be done without special-casing the loop.
+        const inner = body.replace(/^\[/, '').replace(/\]$/, '').replace(/,\s*$/, '');
         // Top-level commas only: an accessor may carry brackets or calls.
         let depth = 0, count = 1;
-        for (const ch of body) {
+        for (const ch of inner) {
           if ('([{'.includes(ch)) depth += 1;
           else if (')]}'.includes(ch)) depth -= 1;
           else if (ch === ',' && depth === 0) count += 1;

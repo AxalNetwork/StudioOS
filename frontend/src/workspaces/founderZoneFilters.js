@@ -76,13 +76,12 @@ const NO_CADENCE_STORE =
   'no ritual schedule or review archive is stored for this startup';
 const NO_LIQUIDITY_LEDGER =
   'no restriction, tender or liquidity-event ledger is connected';
-// Research · Ask has no store at all behind it, and the ops half of its own row
-// already says so — `Clear history — no session history is stored to clear`.
-// This reuses that clause rather than inventing a fourth phrasing of one
-// absence: `LibraryZone`'s stat strip is already the third
-// ("no question history is stored, here or in Ask").
-const NO_SESSION_RECORD =
-  'no session history is stored, so no past question, kept answer or discarded one exists to look through';
+// `NO_SESSION_RECORD` stood here — "no session history is stored, so no past
+// question, kept answer or discarded one exists to look through" — and covered
+// all four of Ask's labels. Migration 221 stored the history, and removing the
+// constant showed that it had been covering two DIFFERENT absences under one
+// sentence: two of the four were never about the session store. Both survivors
+// now carry their own reason.
 // `/research/library`. The classification column is real and free text; what is
 // missing is a WRITER that could produce these values. `research.ts:64` accepts
 // exactly `playbook | client | document` and coerces anything else, and the
@@ -418,14 +417,22 @@ export const FOUNDER_ZONE_FILTERS = {
   // returns; it writes no row, and the only per-question record anywhere is
   // `ai_usage_logs`, which holds token counts and no question text. So the page
   // has exactly one answer in state at a time and there is nothing to narrow.
+  // TWO LIVE, TWO STILL PROSE, AND THE SPLIT IS NOT THE ONE THIS TABLE
+  // EXPECTED. Migration 221 gave Ask a session store, so `All sessions` and
+  // `Saved` both select something now — the same store that turned advisor's
+  // and partner's rows fully live. `Cited in deck` and `Discarded` do not
+  // follow it: a citation names the passage it quoted and carries no document
+  // id, and nothing discards an answer — the ops row offers save, not throw
+  // away. Two of these four were never about the session store at all, which
+  // is why `NO_SESSION_RECORD` covering all four was hiding a distinction.
   'research/ask': [
-    { canvas: 'All sessions', unbuilt: NO_SESSION_RECORD },
-    { canvas: 'Saved', unbuilt: NO_SESSION_RECORD },
+    { canvas: 'All sessions', key: 'all' },
+    { canvas: 'Saved', key: 'saved' },
     {
       canvas: 'Cited in deck',
       unbuilt: 'a citation names the passage it quoted and carries no document id, and nothing carries one into the deck builder',
     },
-    { canvas: 'Discarded', unbuilt: NO_SESSION_RECORD },
+    { canvas: 'Discarded', unbuilt: 'nothing discards an answer — the ops row offers keeping one, and an answer not kept is simply not kept' },
   ],
   // THREE OF THESE FOUR WERE ALREADY ON SCREEN AND MATCHED NOTHING. The page
   // has held `stage_fit === 'right'`, `path === 'warm'` and `status ===

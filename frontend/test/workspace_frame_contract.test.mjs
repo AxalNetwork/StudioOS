@@ -196,11 +196,21 @@ test('every partner zone route resolves to a body of its own', () => {
   assert.deepEqual(bodies.filter((b, i, a) => a.indexOf(b) !== i), [],
     'two partner zones render the identical body — the four-routes-one-page bug');
 
-  // `user` is a feature, not a style detail: NeedsBoardPage reads it for the
-  // partner's "My quotes" tab and PerksPage for "My listings". Mounted with no
-  // props both saw undefined and dropped the one tab the operator came for.
-  assert.match(block, /<NeedsBoardPage user=\{user\}/, 'Leads must receive the signed-in user');
+  // `user` is a feature, not a style detail: a shared page reads it to decide
+  // which of its tabs this licence gets, and mounted with no props it sees
+  // undefined and drops the one tab the operator came for.
+  //
+  // `NeedsBoardPage` WAS NAMED HERE, on `/pipeline/leads`, for its "My quotes"
+  // tab. It is gone from the partner shell entirely: the zone is `LeadsZone`
+  // now, which reads this firm's own leads — scored against its own fit rules,
+  // with a pass and a reason — rather than the marketplace board four licences
+  // share. A zone with its own page needs no `user` prop, because it has no
+  // other licence to tell itself apart from. The marketplace is still at
+  // `/needs` and the zone's empty state links there.
+  assert.ok(!/<NeedsBoardPage/.test(block),
+    'the partner shell mounts the shared marketplace board again — Leads has its own zone');
   assert.match(block, /<PerksPage user=\{user\}/, 'Perk deals must receive the signed-in user');
+  assert.match(block, /<ServiceCatalogPage user=\{user\}/, 'Catalog must receive the signed-in user');
 });
 
 test('a page mounted inside the shell draws no second frame', () => {

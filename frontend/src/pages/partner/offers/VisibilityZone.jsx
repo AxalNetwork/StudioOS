@@ -2,13 +2,18 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import {
+  // `StatCard` went with the four tiles it drew: the strip is the artboard's
+  // own composition now, and `VisTile` below is the tile that can render `Not
+  // recorded` as a chip rather than as an em dash a reader reads as zero.
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  StatCard, Section, Field, SaveNote, NotComputable, UnlinkedZone,
+  Section, Field, SaveNote, NotComputable, UnlinkedZone,
   isNoPartnerProfile, inputClass, buttonClass, ghostButtonClass, moneyDollars,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
+import ZoneDraft from '../../../workspaces/ZoneDraft';
+import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
 
 /**
  * Offers · Visibility — `/offers/visibility`.
@@ -216,6 +221,12 @@ export default function PartnerVisibilityZone() {
   };
   const view = 'engagements';
   const visible = [...items].sort(ORDERINGS[view]);
+  // The artboard's `Best converter`, over the whole set rather than the sorted
+  // view — they are the same list here, and reading `items` says so.
+  const best = items.reduce(
+    (top, s2) => (Number(s2.engagement_count) > Number(top?.engagement_count ?? 0) ? s2 : top),
+    null,
+  );
 
   // Hoisted so the gate branch below and the live row draw the SAME row.
   // With nothing loaded the export renders disabled and says so itself,
@@ -283,16 +294,77 @@ export default function PartnerVisibilityZone() {
             )}
           />
 
+          {/* ══ THE ARTBOARD'S FOUR TILES, AND THE TWO IT ASKS FOR THAT THIS
+              PRODUCT CANNOT ANSWER ══════════════════════════════════════════
+
+              `po3`'s strip is `Leads · Engagements · Best converter · Directory
+              views`. Two of those four are real here and two are not, and the
+              difference is which side the absence sits on.
+
+              `Engagements` and `Best converter` count rows: `engagement_sources`
+              (migration 209) is a join, so every figure is a named row and a
+              surface nobody attributed counts toward nothing.
+
+              `Leads` and `Directory views` are the product's own gaps, not this
+              firm's. A lead is a `founder_needs` row and nothing records which
+              surface a founder arrived through; a view needs an impression
+              pipeline, not a table. D56 says a tile with no store behind it is
+              not drawn — so these two are `Not recorded` with the reason rather
+              than a zero, because a zero on `Leads` would read as "nobody came"
+              when it means "nobody counted". */}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <StatCard label="Surfaces" value={items.length} hint={`${active.length} still in use`} />
-            <StatCard
+            <VisTile label="Leads" nr note="no store records which surface a founder arrived through" />
+            <VisTile
               label="Engagements"
-              value={d?.engagement_total ?? 0}
-              hint={d?.unattributed_count ? `${d.unattributed_count} name no surface` : 'all attributed'}
+              value={String(d?.engagement_total ?? 0)}
+              note={d?.unattributed_count ? `${d.unattributed_count} name no surface` : 'each names its source'}
             />
-            <StatCard label="Views" value="—" hint="not recorded — see below" />
-            <StatCard label="Leads per surface" value="—" hint="no store — see below" />
+            {best
+              ? <VisTile label="Best converter" value={best.name} note={`${best.engagement_count} engagement${Number(best.engagement_count) === 1 ? '' : 's'} sourced`} />
+              : <VisTile label="Best converter" nr note="no engagement names a surface yet" />}
+            <VisTile label="Directory views" nr note="no impression pipeline — never estimated" />
           </div>
+
+          {/* THE ARTBOARD'S LINKAGE NOTE, and it is the sentence that makes the
+              Engagements column trustworthy: this zone counts named rows rather
+              than modelling a total, so nothing appears here that does not
+              exist in Delivery. */}
+          <div className="rounded-[10px] border border-cyan-200 bg-cyan-50/50 p-3 text-[11.5px] leading-relaxed text-gray-700 dark:border-cyan-900 dark:bg-cyan-950/20 dark:text-gray-300">
+            <strong className="text-cyan-700 dark:text-cyan-300">Reads through to Delivery:</strong>{' '}
+            Every engagement in Delivery names the surface that sourced it, so this column counts named
+            rows rather than modelling a total. Nothing appears here that does not exist there
+            {d?.unattributed_count
+              ? `, and the ${d.unattributed_count} that name no surface are counted toward none of them.`
+              : '.'}
+          </div>
+
+          <Instrument
+            testid="visibility-surfaces"
+            title="Surfaces"
+            meta="Sorted by engagements, not views"
+            cols="1.6fr .9fr .8fr 1fr 1.1fr"
+            head={['Surface', 'Views', 'Leads', 'Engagements', 'Lead → engagement']}
+            rows={visible.map((row) => ({
+              key: row.id,
+              cells: [
+                {
+                  text: row.name,
+                  sub: KIND_LABEL[row.kind] || row.kind,
+                  ...(row.is_active ? {} : { pill: 'Retired', pillTone: 'neutral' }),
+                },
+                // THREE COLUMNS THE ARTBOARD DRAWS AND THIS STORE CANNOT FILL,
+                // and the instNote below names each. The artboard itself
+                // renders an em dash where a surface has no view counter —
+                // "inventing one would make the widest column the least true" —
+                // and here that is every row rather than two of them.
+                { nr: true },
+                { nr: true },
+                { text: String(row.engagement_count ?? 0) },
+                { nr: true },
+              ],
+            }))}
+            note={'Views and Leads read "Not recorded" on every row, and the ratio between them with them: a view count needs an impression pipeline rather than a table, and nothing in the product records which surface a founder arrived through. The artboard renders an em dash where a surface has no view counter on the grounds that inventing one would make the widest column the least true — here that applies to every row, so the column is stated absent rather than filled. Engagements is real and is the ordering: a listing with a large audience and no work sits below a referral with one, which is the whole point of the zone.'}
+          />
 
           {d?.unattributed_note && (
             <p className="text-[12.5px] leading-relaxed text-axal-ink-2">
@@ -357,6 +429,16 @@ export default function PartnerVisibilityZone() {
               ))}
             </div>
           </Section>
+
+          <ZoneDraft
+            surface="offers/visibility"
+            label="Draft · attribution read"
+            accept="Accept read"
+            run="Read the attribution"
+            foot="Engagement counts traced to Delivery rows."
+            empty="Which surfaces are converting and which are volume without intent, counted from engagements that name their source. Where a surface has no view counter the read says so instead of modelling one."
+            nothingToDraft="No surface is recorded yet, so there is nothing to compare."
+          />
 
           <Section title="Where each engagement came from">
             {attribution.length === 0 ? (
@@ -431,5 +513,27 @@ export default function PartnerVisibilityZone() {
         </div>
       </ZoneBody>
     </>
+  );
+}
+
+/**
+ * The strip tile, in the anatomy the artboards share.
+ *
+ * `StatCard` is this bucket's older primitive and is still used elsewhere in
+ * the file; the strip is the artboard's own composition, so it takes the
+ * artboard's own tile — which is also the one that can draw `Not recorded` as a
+ * chip rather than as an em dash a reader mistakes for zero.
+ */
+function VisTile({ label, value, note, nr = false }) {
+  return (
+    <div className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+      <Eyebrow>{label}</Eyebrow>
+      <div className="mt-1.5">
+        {nr ? <NotRecorded /> : (
+          <span className="font-mono text-[16px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{value}</span>
+        )}
+      </div>
+      <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
+    </div>
   );
 }

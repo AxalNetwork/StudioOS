@@ -5,8 +5,6 @@ import {
   Chip, Section, SlideOver, EmptyState, Badge, RowCard, SearchInput, FilterChips,
   formatDay, formatRelativeDay, moneyUsd,
 } from './kit';
-import ZoneActions from '../../../workspaces/ZoneActions';
-import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 
 // Engagements — the live BD pipeline (Wave 1a; previously fixture projects).
 //
@@ -158,33 +156,23 @@ export default function EngagementsPage({ view: initialView = DEFAULT_VIEW }) {
 
   return (
     <div className="space-y-5">
-      {/* This page is two zones: `/delivery/board` renders it with
-          view="engagements" and `/pipeline/proposals` with view="proposals".
-          The reader can switch views without changing route, so each row
-          follows what is on screen rather than the URL.
-          BOTH HAVE CANVAS ACTIONS NOW. This comment used to end "Only the first
-          has canvas actions — `Pages · Partner Pipeline` specifies none", which
-          was never true of the canvas: that file carries all seven of its ops as
-          `class="vm"`, and the guard that reported it empty simply could not
-          read its shape. Proposals' `Export win/loss CSV` writes the quotes
-          loaded here — the record the Analytics zone aggregates a win rate from
-          — so the file matches what is on screen. Its other op,
-          `Bulk: nudge unopened`, is unbuilt and draws nothing: nothing in this
-          product sends mail, and `opened_at` is the client's column to set. */}
-      {view === 'engagements' && (
-        <ZoneActions items={partnerZoneActions('delivery/board', { view: {
-          header: ['Engagement', 'Founder', 'Project', 'Category', 'Status', 'Price'],
-          rows: engagements,
-          cells: (e) => [e.need_title, e.founder_name, e.project_name, e.need_category, e.status, e.price],
-        } })} />
-      )}
-      {view === 'proposals' && (
-        <ZoneActions items={partnerZoneActions('pipeline/proposals', { view: {
-          header: ['Request', 'Category', 'Price', 'Timeline (weeks)', 'Status', 'Sent'],
-          rows: quotes,
-          cells: (q) => [q.need_title, q.need_category, q.price, q.timeline_weeks, q.status, q.created_at],
-        } })} />
-      )}
+      {/* NO ZONE HEADER ROW HERE AT ALL ANY MORE, and both halves of that are
+          worth recording because this page carried two in turn.
+
+          `/delivery/board` rendered this page with view="engagements" until
+          `delivery/BoardZone` took the route — that zone reads the five stores
+          migration 208 built for the bucket, which this page never touched.
+          `/pipeline/proposals` rendered it with view="proposals" until
+          `pipeline/ProposalsZone` took that one, which reads the version trail
+          and loss taxonomy migration 234 added and which this page also never
+          touched. A row for a zone this page is no longer would mount that
+          zone's canvas actions twice — once here and once on the zone — and
+          `profile_zone_actions.test.mjs` fails exactly that, correctly.
+
+          What survives here is the INVOICE LEDGER and the open-requests desk,
+          neither of which lives anywhere else, reachable from
+          `/partner/operations/engagements`. So the views stay and the header
+          rows went with the zones that own them. */}
       {error && (
         <div className="rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-900/20 px-4 py-2.5 text-sm text-rose-700 dark:text-rose-300">{error}</div>
       )}

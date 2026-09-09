@@ -36,13 +36,11 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  * a filter to narrow. A row over that page would be four controls above a
  * sentence saying the page has no rows.
  */
-// Both Ask filters fail for reasons that are not the same reason, so they are
-// named separately: one shared string would claim to explain a label it does
-// not. Neither renders — these are reasons for whoever builds the filters.
-const ONE_ANSWER_ONLY =
-  'one answer is on screen at a time and the citations under it are the whole of it, so neither of these narrows anything';
-const NO_ANSWER_RECORD =
-  'no answer is saved, so nothing records a past question or whether one went unanswered';
+// `ONE_ANSWER_ONLY` and `NO_ANSWER_RECORD` stood here and are gone with the
+// entries they explained: migration 221 gave Ask a session store, so "one
+// answer is on screen at a time" and "no answer is saved" are both no longer
+// true. The partner table, which is one file away and served by the same
+// component, lost its word-for-word copy of them in the same change.
 // `/research/companies`. `competitor_analyses` is keyed on `user_id` and names
 // no company at all, which `ResearchWorkspace` already states on the page: an
 // analysis belongs to the person who ran it, so there is no client dimension to
@@ -50,14 +48,13 @@ const NO_ANSWER_RECORD =
 const NO_COMPANY_ON_AN_ANALYSIS =
   'an analysis is stored against the person who ran it and names no company, so nothing marks one as a relationship or as somebody you are pursuing';
 
-// `/research/client-prep`. TWO LABELS, ONE FACT, AND THE FACT CUTS BOTH WAYS:
-// every row a brief produces carries `source: 'client'` and nothing else can,
-// so `Mine only` matches nothing and `Founder-sourced` matches everything.
-// Neither narrows, and the page shipped the first of them as a live chip until
-// this commit — clicking it said "nothing matches this filter" over a full
-// brief, which is exactly the failure D51 was written about.
-const ONE_SOURCE_ONLY =
-  'every row in a brief comes from the founder’s grant and nothing records a note of your own against a client, so there is no second source to separate out';
+// `ONE_SOURCE_ONLY` STOOD HERE AND IS GONE WITH THE ENTRIES IT EXPLAINED. It
+// read "every row in a brief comes from the founder's grant and nothing records
+// a note of your own against a client, so there is no second source to separate
+// out" — exact, and the reason `Mine only` matched nothing while
+// `Founder-sourced` matched everything. Migration 222's `research_brief_notes`
+// is that second source, so the sentence stopped being true and went with the
+// prose it justified. The partner table lost its own copy in the same change.
 
 // `/network/relationships`. The zone's own `StatedLimit` already states the
 // first of these in the page's voice — "No last touch, and therefore no 'going
@@ -117,25 +114,48 @@ export const ADVISOR_ZONE_FILTERS = {
   // `Cited` would select everything on screen, and `All history` and
   // `Unanswered` would select nothing that exists. Two different failures, and
   // the ops half of this row already states the second one in these words.
+  // ALL FOUR LIVE, AND MIGRATION 221 IS WHY. Both of these entries used to
+  // carry prose — `ONE_ANSWER_ONLY` for the two that narrow a thread and
+  // `NO_ANSWER_RECORD` for the two that need a past. `POST /api/research/ask`
+  // answered and returned without writing anything down, so there was one
+  // answer on screen, no history behind it, and four chips that could only
+  // have selected everything or nothing. `research_ask_sessions` and
+  // `research_ask_answers` store every exchange including the ones that came
+  // back with no source, which is exactly what `Unanswered` selects on.
+  //
+  // TWO SCOPES AND TWO PREDICATES, DELIBERATELY. `This session` and `All
+  // history` are different READS — the page asks the worker for a different
+  // slice — while `Cited` and `Unanswered` narrow whichever slice came back.
+  // Splitting them the other way would make `Cited` mean "cited answers in
+  // this session" on one chip and "in all history" on another, which is two
+  // chips for one question.
   'research/ask': [
-    { canvas: 'This session', unbuilt: ONE_ANSWER_ONLY },
-    { canvas: 'All history', unbuilt: NO_ANSWER_RECORD },
-    { canvas: 'Cited', unbuilt: ONE_ANSWER_ONLY },
-    { canvas: 'Unanswered', unbuilt: NO_ANSWER_RECORD },
+    { canvas: 'This session', key: 'session' },
+    { canvas: 'All history', key: 'all' },
+    { canvas: 'Cited', key: 'cited' },
+    { canvas: 'Unanswered', key: 'unanswered' },
   ],
   // The ops half of this row already argues the grant story — "a brief exists
   // when a founder opens their record to you; nothing here asks for one". These
   // name a different absence: no row of your own, and no open/answered state on
   // any row. The canvas's own `Open questions` count comes from a hand-written
   // `state: 'Not done'` in the artboard's mock.
+  // ALL FOUR LIVE, AND MIGRATION 222 IS WHY. Three carried `ONE_SOURCE_ONLY`
+  // and a fourth its own sentence, and all four were exact: every row this
+  // brief produced was the founder's, so `Mine only` matched nothing and
+  // `Founder-sourced` matched everything, and no row could be marked open
+  // because none was the reader's to settle. `research_brief_notes` is the
+  // second source — a row the firm writes against a client it holds a live
+  // grant over — and `open` is a flag on those rows only.
+  //
+  // `Open questions` IS `Mine only` NARROWED, NOT A THIRD AXIS, and that is the honest
+  // shape rather than a shortcut: a founder-sourced row is the client's record,
+  // quoted, and ticking it off would be editing someone else's fact.
   'research/client-prep': [
     { canvas: 'Full brief', key: 'all' },
-    { canvas: 'Mine only', unbuilt: ONE_SOURCE_ONLY },
-    { canvas: 'Founder-sourced', unbuilt: ONE_SOURCE_ONLY },
-    {
-      canvas: 'Open questions',
-      unbuilt: 'nothing records a brief row as open or answered; these rows are what the founder opened to you, not a checklist you work through',
-    },
+    { canvas: 'Mine only', key: 'ours' },
+    { canvas: 'Founder-sourced', key: 'client' },
+    { canvas: 'Open questions', key: 'open' },
   ],
   // THE ONE PLACE THE SIGNALS FEED ANSWERS THE CANVAS'S QUESTION. Founder and
   // investor ask this zone for a saved deep-dive with a lifecycle, and nothing

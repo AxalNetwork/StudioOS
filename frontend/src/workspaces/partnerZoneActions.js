@@ -5,23 +5,25 @@ import { makeZoneActions } from './zoneActionBuilder';
  * canvas actions actually does. `zoneActionBuilder.js` states the three
  * outcomes and the rules they follow; this file is the partner's answers.
  *
- * THREE BUCKETS ARE ABSENT FROM THIS TABLE AND NONE OF THEM IS AN OVERSIGHT.
+ * THE PARAGRAPH THAT STOOD HERE SAID `/network` AND `/research` WERE ABSENT,
+ * and both are below. It read: "its three zones render `NetworkPage`, whose
+ * bodies are three further shared components … Threading a partner-only row
+ * through four files that four licences render is the shared-surface pass, not
+ * this one." That was true when it was written and the shared-surface pass
+ * happened; the rows landed and the paragraph did not move, so this file opened
+ * by denying its own contents. A note kept past the state it describes reads as
+ * current, which is the same defect as a stale `unbuilt:` reason.
  *
- *   `/network` — its three zones render `NetworkPage`, whose bodies are three
- *     further shared components (`RelationshipsPanel`, `IntroductionsPanel`,
- *     `ContactsPanel`) used by more than one licence. Threading a partner-only
- *     row through four files that four licences render is the shared-surface
- *     pass, not this one. `network/organizations` is excluded for a different
- *     reason: `NetworkPage` renders that zone as a stated gap, not
- *     as another tab's list: `unservedZone` catches a slug it has no tab for
- *     and `unservedAlone` suppresses every body, so the reader gets the
- *     Organizations heading above a card explaining the roll-up needs an edge
- *     from a person to an organisation that nothing stores. That is already the
- *     honest answer, and a header row would add nothing to it.
+ * AND THE ONE THAT WAS STILL ABSENT IS HERE TOO. That paragraph read:
+ * "`network/organizations` renders as a stated gap rather than as a list …
+ * a header row over a page that is entirely that statement would add nothing to
+ * it." True of the page it described, and the page changed: migration 224 put a
+ * company name on every book contact and 226 said what that company is to the
+ * firm, so the zone has its own body — the `pn3` empty state with the roll-up's
+ * intended shape under it. All twenty-two zones with a canvas ops row are now
+ * in this table.
  *
- *   `/research` — same shared surface as every other profile's.
- *
- * WHAT THE TEN THAT ARE HERE LOOK LIKE. Ten of thirty run. Every zone can
+ * WHAT THE TEN DELIVERY AND OFFERS ZONES LOOK LIKE. Ten of thirty run. Every zone can
  * export what it is showing, because migrations 208 and 209 gave these zones
  * real stores — this is the first profile in the pass where the exports are the
  * rule rather than the exception. The writes are the gaps, and they are gaps for
@@ -61,14 +63,31 @@ export const PARTNER_ZONE_ACTIONS = {
   ],
 
   // ── Offers ───────────────────────────────────────────────────────────────
+  // `New service` WAS PROSE AND THE REASON WAS TRUE OF THE OLD PAGE. It read
+  // "services are added from the catalogue's own form below", which was accurate
+  // when the body was a card grid with a `New offering` button sitting above it.
+  // The artboard's composition has no such button — the ops row IS the header —
+  // so the op opens the form the page already owns. `kind: 'handler'`, D67.
+  //
+  // `Pricing history` STAYS PROSE, and the reason is unchanged by migration 227:
+  // the column it added is a MODEL, not a series. `service_offerings` holds one
+  // price and overwrites it on edit, so there is no earlier figure to show and
+  // no table that ever held one.
   'offers/catalog': [
-    { label: 'New service', unbuilt: 'services are added from the catalogue’s own form below' },
-    { label: 'Pricing history', unbuilt: 'only the current price is stored; there is no history to open' },
+    { label: 'New service', kind: 'handler', handler: 'newService' },
+    { label: 'Pricing history', unbuilt: 'only the current price is stored and an edit overwrites it, so there is no earlier figure to open' },
     { label: 'Export', kind: 'export' },
   ],
+  // BOTH WRITES RUN NOW, AND THE SECOND ONE COULD NOT BEFORE. `New perk` was
+  // 'perks are added from the form below' — true, and the same shape `New
+  // service` had before it became a handler onto the form it was describing.
+  // `Extend` was 'an expiry is edited on the perk itself, not extended in bulk'
+  // and that was not a preference: there was no expiry on a perk to edit at
+  // all. Migration 228 put one there, so extending is a real edit to a real
+  // column and the header op opens the set it applies to.
   'offers/perk-deals': [
-    { label: 'New perk', unbuilt: 'perks are added from the form below' },
-    { label: 'Extend', unbuilt: 'an expiry is edited on the perk itself, not extended in bulk' },
+    { label: 'New perk', kind: 'handler', handler: 'newPerk' },
+    { label: 'Extend', kind: 'handler', handler: 'extend' },
     { label: 'Export', kind: 'export' },
   ],
   'offers/visibility': [
@@ -76,14 +95,33 @@ export const PARTNER_ZONE_ACTIONS = {
     { label: 'Attribution rules', unbuilt: 'attribution is counted from engagements, never configured' },
     { label: 'Export', kind: 'export' },
   ],
+  // THE FIRST REASON HERE DESCRIBED A PAGE THAT NO LONGER EXISTS, and it is
+  // worth recording rather than just replacing. It read: "consent is given by
+  // the founder, and no founder-side surface exists to ask from here." The
+  // surface is `/attest/partner/:token`, mounted in `App.jsx`, and
+  // `POST /proof/:id/consent-request` issues the credential for it — the ask
+  // has been real since migration 209 and only this row still said otherwise.
+  //
+  // The SECOND is still exact. Nothing in this product publishes a proof page:
+  // `is_published` is computed for the firm's own reading, and there is no
+  // public route that renders it, so there is nothing to preview.
   'offers/proof': [
-    { label: 'Ask for consent', unbuilt: 'consent is given by the founder, and no founder-side surface exists to ask from here' },
-    { label: 'Preview public page', unbuilt: 'no public proof page is published yet' },
+    { label: 'Ask for consent', kind: 'handler', handler: 'askConsent' },
+    { label: 'Preview public page', unbuilt: 'no public proof page is published yet, so there is nothing to preview' },
     { label: 'Export', kind: 'export' },
   ],
+  // THE SECOND REASON HERE WAS WRONG ABOUT ITS OWN STORE. It read "a pass
+  // reason is not a stored field on a fit rule" — and `partner_fit_rules
+  // .statement` is exactly that field. The form labels it "The sentence a pass
+  // quotes" and the zone's docblock calls it the field that matters, so the op
+  // composes the sentences the firm already wrote rather than generating any.
+  //
+  // The FIRST is still exact, and for a reason a header control cannot get
+  // around: which rule an edit means is the first thing the edit needs, and
+  // there is nowhere in a row of buttons to say it. Editing stays on the row.
   'offers/audience-fit': [
-    { label: 'Edit fit rules', unbuilt: 'rules are edited on the rule itself, below' },
-    { label: 'Pass reasons', unbuilt: 'a pass reason is not a stored field on a fit rule' },
+    { label: 'Edit fit rules', unbuilt: 'every rule is edited on its own row — which rule you mean is the first thing an edit needs, and a header control cannot say it' },
+    { label: 'Pass reasons', kind: 'handler', handler: 'passReasons' },
     { label: 'Export', kind: 'export' },
   ],
 
@@ -109,10 +147,26 @@ export const PARTNER_ZONE_ACTIONS = {
   // zones already loads the rows an export would write. The other four each
   // need a store that does not exist, named per entry.
   'pipeline/leads': [
-    // Scoring a lead against what this firm can do needs a weight per
-    // capability and a capability register to hang it on. Neither is stored: a
-    // lead's fit is judged by the person reading it.
-    { label: 'Edit capability weights', unbuilt: 'no capability register is stored, and no weight against one, so there is nothing to edit' },
+    // THE REASON HERE WAS TRUE WHEN IT WAS WRITTEN AND IS NOT TRUE NOW, and it
+    // is worth keeping both halves of what it said. The note read: "scoring a
+    // lead against what this firm can do needs a weight per capability and a
+    // capability register to hang it on. Neither is stored: a lead's fit is
+    // judged by the person reading it." The `unbuilt` string a reader of this
+    // table actually saw was "no capability register is stored, and no weight
+    // against one, so there is nothing to edit".
+    //
+    // The register was built for a different zone. `partner_fit_rules` (209,
+    // plus 229's `signal`) is exactly it — what this firm takes, what it passes
+    // on, and the budget below which it does not bid — and `service_offerings`
+    // is what it sells. `/offers/fit-rules` answered `enforcement: 'none'` all
+    // that time, accurately: nothing read them. `/pipeline/leads` now does, and
+    // every receipt on a lead names the rule it came from.
+    //
+    // So this op LINKS rather than opening an editor of its own. The rules are
+    // edited where they are written and read everywhere they apply; a second
+    // form here would be a second place to change one number, and the first
+    // time the two disagreed nobody would know which the score used.
+    { label: 'Edit capability weights', to: '/offers/audience-fit', linkNote: 'The rules a lead is scored against are your fit rules — edited on Offers · Audience fit, and read here.' },
   ],
   'pipeline/proposals': [
     // `opened_at` is the CLIENT'S column to set and no surface lets them, so
@@ -142,21 +196,77 @@ export const PARTNER_ZONE_ACTIONS = {
   ],
 
   // ── Network ──────────────────────────────────────────────────────────────
+  // ── Network ──────────────────────────────────────────────────────────────
+  // BOTH REASONS HERE WERE TRUE OF `partner_relationships` AND ARE NOT TRUE OF
+  // WHAT THIS ZONE READS. They said "no owner field is stored on a
+  // relationship" and "no interaction log is stored", and that table is a
+  // partner-to-partner edge carrying `relationship_type` and a hand-set
+  // `strength_score` — neither an owner nor a date. Migration 224 gives the
+  // firm's BOOK its own table with `firm_owner_user_id` and a dated
+  // `partner_book_interactions`, which is what the `pn1` artboard's `Firm owner`
+  // and `Last interaction` columns are. The reasons went with the gaps.
+  //
+  // `kind: 'handler'` FOR BOTH, because neither is a destination: assigning an
+  // owner and logging a touch act on state this page owns, and both open its
+  // own board. D67.
   'network/relationships': [
-    { label: 'Assign owner', unbuilt: 'no owner field is stored on a relationship' },
-    { label: 'Log interaction', unbuilt: 'no interaction log is stored' },
+    { label: 'Assign owner', kind: 'handler', handler: 'assignOwner' },
+    { label: 'Log interaction', kind: 'handler', handler: 'logInteraction' },
     { label: 'Export', kind: 'export' },
   ],
+  // `New introduction` STAYS PROSE AND THE REASON IS SHARPER THAN IT WAS. It
+  // read "introductions arrive as propositions; none is composed here", which
+  // named the flow rather than the obstacle. The obstacle: a proposition is an
+  // edge between two `users` rows, and the firm's book (migration 224) holds
+  // people who mostly have no account here — so there is nothing to compose one
+  // FROM, and `POST /propositions` exists nowhere to compose it WITH.
+  //
+  // `Consent log` IS NOW A HANDLER, and the reason it was prose turned out to be
+  // a claim about the response rather than the store: "consent is recorded per
+  // introduction, not as a log". The consents ARE the log — one row per side,
+  // each with its own `responded_at` — and the only missing piece was returning
+  // the counterpart's. Gathering what is already recorded into one chronological
+  // view invents nothing, which is why it can be built.
   'network/introductions': [
-    { label: 'New introduction', unbuilt: 'introductions arrive as propositions; none is composed here' },
-    { label: 'Consent log', unbuilt: 'consent is recorded per introduction, not as a log' },
+    { label: 'New introduction', unbuilt: 'a proposition is an edge between two accounts and the firm’s book holds people who mostly have none, so there is nothing here to compose one from — and no write path that would accept it' },
+    { label: 'Consent log', kind: 'handler', handler: 'consentLog' },
+    { label: 'Export', kind: 'export' },
+  ],
+
+  // `Build records` IS A HANDLER AND IT DOES NOT BUILD A RECORD, which needs
+  // saying plainly. There is no organization table and this op does not make
+  // one — that absence is the subject of the whole page. What it opens is the
+  // board where the firm says what each company IS to it, the single
+  // organization fact migration 226 gave the book a place for, written across
+  // every contact at that company. Naming it `Build records` is the canvas's
+  // word for the act, and the act is real; the record is still per contact,
+  // which the zone's empty state states in its own first sentence.
+  //
+  // `Import` STAYS PROSE. Nothing in this product ingests a contact list: there
+  // is no upload, no CSV parser and no route that would accept one, and the
+  // book's only writer is the form on `/network/relationships`. An op that
+  // opened a file picker onto nothing would be the dead control this table
+  // exists to refuse.
+  'network/organizations': [
+    { label: 'Build records', kind: 'handler', handler: 'buildRecords' },
+    { label: 'Import', unbuilt: 'nothing here ingests a contact list — there is no upload, no parser and no route that would take one, and the book is filled a contact at a time from its own form' },
     { label: 'Export', kind: 'export' },
   ],
 
   // ── Research ─────────────────────────────────────────────────────────────
+  // TWO OPS THAT WERE `unbuilt:` AND ARE NOW THE PAGE'S OWN. `New session` said
+  // "the question box below starts one" — true of the box and not of the op: a
+  // box that always appends to the same thread cannot start a second one, and
+  // migration 221 is what made a second one a thing that exists. `Saved
+  // answers` said no answer is saved; one bit on `research_ask_answers` and the
+  // ops row now keeps them.
+  //
+  // BOTH ARE `kind: 'handler'` RATHER THAN `to:`, because neither is a
+  // destination: starting a session and switching the view to the kept ones
+  // both act on state this page owns. D67.
   'research/ask': [
-    { label: 'New session', unbuilt: 'the question box below starts one' },
-    { label: 'Saved answers', unbuilt: 'no answer is saved; the citations below belong to this question' },
+    { label: 'New session', kind: 'handler', handler: 'newSession' },
+    { label: 'Saved answers', kind: 'handler', handler: 'savedAnswers' },
     { label: 'Export', kind: 'export' },
   ],
   // Excluded as "a card, not a body" until now, and it is a body — see the
@@ -165,8 +275,18 @@ export const PARTNER_ZONE_ACTIONS = {
   // about a brief, where `research/markets` below is about a signal, and both
   // fail for the want of a link rather than the want of a proposal.
   'research/client-prep': [
-    { label: 'New brief', unbuilt: 'a brief exists when a founder opens their record to you; nothing here asks for one' },
-    { label: 'Attach to proposal', unbuilt: 'nothing links a brief to a proposal record' },
+    // `New brief` STAYS PROSE, AND THE REASON IS SHARPER THAN IT WAS. It read
+    // "a brief exists when a founder opens their record to you; nothing here
+    // asks for one" — still true of the BRIEF, and migration 222 did not change
+    // it: what the firm can now write is a ROW of its own inside a brief that
+    // already exists, which is a different act and has its own form on the page.
+    // A control called `New brief` that added a row would name the wrong thing.
+    { label: 'New brief', unbuilt: 'a brief exists because a founder opened their record to you, and nothing here can ask for one — what the firm can add is a row inside a brief it already holds, which the form below takes' },
+    // LIVE, AND IT WAS NEVER THE PROPOSAL THAT WAS MISSING. The note said
+    // "nothing links a brief to a proposal record"; `quotes` (migration 034) is
+    // live and `api.myQuotes()` reads it, so what was missing was the EDGE, and
+    // migration 222's `research_attachments` is it. D67.
+    { label: 'Attach to proposal', kind: 'handler', handler: 'attachToProposal' },
     { label: 'Export', kind: 'export' },
   ],
   'research/markets': [
@@ -174,9 +294,19 @@ export const PARTNER_ZONE_ACTIONS = {
     { label: 'Attach to proposal', unbuilt: 'nothing carries a signal onto a proposal' },
     { label: 'Export', kind: 'export' },
   ],
+  // BOTH OPS ARE THE PAGE'S OWN NOW. `Add document` said "the add-document form
+  // below takes a file or a link" — true of the form and not of the op, which
+  // is what a reader looking at the ops row reaches for; it opens the file
+  // picker on that same form rather than being a second uploader. `Re-index`
+  // said "indexing runs on upload; there is no re-run control", which was the
+  // gap this artboard's whole composition turns on: its Thornfield row is a
+  // document the firm added and never indexed, so it answers nothing in Ask and
+  // there was no way to act on it from the page reporting it. There is now —
+  // `POST /api/research/documents/:uid/reindex`, over the same `embed_entity`
+  // job the upload path enqueues. D67.
   'research/library': [
-    { label: 'Add document', unbuilt: 'the add-document form below takes a file or a link' },
-    { label: 'Re-index', unbuilt: 'indexing runs on upload; there is no re-run control' },
+    { label: 'Add document', kind: 'handler', handler: 'addDocument' },
+    { label: 'Re-index', kind: 'handler', handler: 'reindex' },
     { label: 'Export', kind: 'export' },
   ],
 };

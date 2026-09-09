@@ -364,6 +364,230 @@ partnernet.get('/activity/logs', async (c) => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// The firm relationship book (migration 224)
+// ---------------------------------------------------------------------------
+//
+// A BOOK OF PEOPLE, NOT A GRAPH OF PARTNERS. `partner_relationships` above is a
+// partner-to-partner edge with a hand-set `strength_score`; the `pn1` artboard
+// is a firm's book of the people it knows at client companies, each owned by
+// someone at the firm or conspicuously not. See migration 224 for why they are
+// different tables rather than one widened one.
+//
+// STRENGTH IS NOT STORED. It is derived from the interactions below — how many,
+// how recently — and the row prints both numbers beside it, because "strength is
+// never a warmth number presented as fact" is the artboard's own rule and the
+// slider it replaces was exactly that number.
+
+// The three the `pn3` artboard's chips name, and the three the column's CHECK
+// accepts. One list, so a value the route lets through cannot be one the store
+// refuses.
+const RELATIONSHIPS = ['client', 'prospect', 'referral_source'];
+
+interface BookContactRow {
+  id: number; uid: string; owner_user_id: number; name: string; email: string | null;
+  role_title: string | null; organization: string | null; relationship: string | null;
+  firm_owner_user_id: number | null; source: string; source_label: string | null;
+  created_at: string; updated_at: string;
+  owner_name: string | null; owner_email: string | null;
+  interaction_count: number; last_interaction_at: string | null;
+}
+
+const bookDto = (r: BookContactRow) => ({
+  uid: r.uid,
+  name: r.name,
+  email: r.email,
+  role_title: r.role_title,
+  organization: r.organization,
+  // What that company is TO THE FIRM (migration 226). Null is "nobody has said"
+  // and is returned as null rather than coerced to a default — `pn3`'s three
+  // relationship chips narrow on this, and a defaulted value would make every
+  // legacy contact a prospect nobody chose.
+  relationship: r.relationship || null,
+  // The whole point of the page: a name, or nothing at all. Never a placeholder
+  // that reads as an assignment.
+  firm_owner: r.firm_owner_user_id
+    ? { name: r.owner_name || r.owner_email, id: r.firm_owner_user_id }
+    : null,
+  source: r.source || 'ours',
+  source_label: r.source_label,
+  // The two numbers strength is derived from, returned rather than a score.
+  // A page handed a number would print it; a page handed these has to show its
+  // working, which is what the artboard asks for.
+  interaction_count: r.interaction_count || 0,
+  last_interaction_at: r.last_interaction_at,
+  created_at: r.created_at,
+});
+
+partnernet.get('/book', async (c) => {
+  const user = await requireAuth(c);
+  const rows = await c.env.DB.prepare(
+    `SELECT b.*,
+            u.name AS owner_name, u.email AS owner_email,
+            (SELECT COUNT(*) FROM partner_book_interactions i WHERE i.contact_id = b.id) AS interaction_count,
+            (SELECT MAX(i.happened_at) FROM partner_book_interactions i WHERE i.contact_id = b.id) AS last_interaction_at
+       FROM partner_book_contacts b
+       LEFT JOIN users u ON u.id = b.firm_owner_user_id
+      WHERE b.owner_user_id = ?
+      ORDER BY b.id ASC LIMIT 500`
+  ).bind(user.id).all<BookContactRow>();
+  return c.json({ items: (rows.results || []).map(bookDto) });
+});
+
+partnernet.post('/book', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const name = String(body?.name || '').trim().slice(0, 200);
+  if (!name) return c.json({ error: 'name_required' }, 400);
+  const uid = crypto.randomUUID().replace(/-/g, '');
+  await c.env.DB.prepare(
+    `INSERT INTO partner_book_contacts (uid, owner_user_id, name, email, role_title, organization, relationship)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    uid, user.id, name,
+    body?.email ? String(body.email).slice(0, 200) : null,
+    body?.role_title ? String(body.role_title).slice(0, 120) : null,
+    body?.organization ? String(body.organization).slice(0, 200) : null,
+    // Unset unless the form said so. The column's CHECK refuses anything else,
+    // and the page's Not recorded is the honest reading of "nobody has said".
+    RELATIONSHIPS.includes(String(body?.relationship || '')) ? String(body.relationship) : null,
+  ).run();
+  // NO OWNER ON CREATION, DELIBERATELY. A contact arrives unowned and sorts to
+  // the top in red until someone takes it — which is the failure mode this page
+  // exists to surface, and defaulting the creator into it would hide every one.
+  return c.json({ ok: true, uid }, 201);
+});
+
+/**
+ * What that company is to the firm — `Build records` on the `pn3` artboard.
+ *
+ * IT IS SET PER CONTACT AND THE ROLL-UP GROUPS BY TEXT, which is the whole
+ * point of that page: there is no organization record, so there is nowhere else
+ * to put this. Two contacts at one company may therefore disagree, and the page
+ * reads `Mixed` and names both rather than picking one — a silent tie-break
+ * would be the roll-up inventing a relationship the firm never stated.
+ *
+ * `null` CLEARS IT, for the same reason `Assign owner` accepts a clear: a
+ * prospect that became a client and then went quiet is not still either, and a
+ * value that can only ever be set is one nobody can correct.
+ */
+partnernet.patch('/book/:uid/relationship', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const value = body?.relationship == null ? null : String(body.relationship);
+  if (value !== null && !RELATIONSHIPS.includes(value)) {
+    return c.json({ error: 'relationship_invalid' }, 400);
+  }
+  const res = await c.env.DB.prepare(
+    `UPDATE partner_book_contacts SET relationship = ?, updated_at = datetime('now')
+      WHERE uid = ? AND owner_user_id = ?`
+  ).bind(value, c.req.param('uid'), user.id).run();
+  if (!res.meta?.changes) return c.json({ error: 'Not found' }, 404);
+  return c.json({ ok: true });
+});
+
+/**
+ * WHO AT THE FIRM CAN OWN A ROW — the roster behind `Assign owner`.
+ *
+ * The artboard's owners are colleagues: "Nadia Okonkwo", "Tomás Ferreira",
+ * "Sena Adeyemi". This product already keeps that roster — `user_company_links`
+ * is the firm's membership, the same table `/company/:uid` reads its `members`
+ * from — so the candidates are the caller plus everyone linked to a company the
+ * caller is linked to. Nothing new is stored for this.
+ *
+ * IT IS ALSO THE VALIDATION, and that is the more important half. Without it
+ * `firm_owner_id` is any integer, so a partner could stamp an unrelated
+ * account's NAME onto their own row and the page would render it as the person
+ * responsible — a fact about a real user invented by someone who does not know
+ * them. The set that populates the picker is the set the PATCH accepts.
+ */
+async function firmOwnerCandidates(env: Env, userId: number) {
+  const rows = await env.DB.prepare(
+    `SELECT DISTINCT u.id AS user_id, u.name, u.email
+       FROM user_company_links mine
+       JOIN user_company_links theirs ON theirs.company_id = mine.company_id
+       JOIN users u ON u.id = theirs.user_id
+      WHERE mine.user_id = ?
+      ORDER BY u.id ASC LIMIT 200`
+  ).bind(userId).all<{ user_id: number; name: string | null; email: string }>();
+  const out = rows.results || [];
+  // The caller always owns their own book and can always take a row, whether or
+  // not they belong to a company record. A firm of one is the common case here
+  // and an empty picker would make the page's central act unreachable.
+  if (!out.some((r) => r.user_id === userId)) {
+    const me = await env.DB.prepare('SELECT id AS user_id, name, email FROM users WHERE id = ?')
+      .bind(userId).first<{ user_id: number; name: string | null; email: string }>();
+    if (me) out.unshift(me);
+  }
+  return out;
+}
+
+partnernet.get('/book/owners', async (c) => {
+  const user = await requireAuth(c);
+  const items = await firmOwnerCandidates(c.env, user.id);
+  return c.json({
+    items: items.map((r) => ({ user_id: r.user_id, name: r.name || r.email, is_me: r.user_id === user.id })),
+  });
+});
+
+/**
+ * Assign or unassign the firm owner — `Assign owner` in the ops row, which was
+ * `unbuilt: 'no owner field is stored on a relationship'`.
+ *
+ * `null` UNASSIGNS RATHER THAN BEING REJECTED. An owner who leaves, or a
+ * hand-off that has not landed, puts the row back at the top of the book where
+ * it belongs; refusing to clear it would make the page's own finding
+ * unreachable once anyone had ever claimed a row.
+ */
+partnernet.patch('/book/:uid/owner', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  let ownerId: number | null = null;
+  if (body?.firm_owner_id != null) {
+    ownerId = Number(body.firm_owner_id);
+    if (!Number.isInteger(ownerId)) return c.json({ error: 'firm_owner_id_invalid' }, 400);
+    const candidates = await firmOwnerCandidates(c.env, user.id);
+    if (!candidates.some((r) => r.user_id === ownerId)) {
+      return c.json({ error: 'not_a_firm_member' }, 403);
+    }
+  }
+  const res = await c.env.DB.prepare(
+    `UPDATE partner_book_contacts SET firm_owner_user_id = ?, updated_at = datetime('now')
+      WHERE uid = ? AND owner_user_id = ?`
+  ).bind(ownerId, c.req.param('uid'), user.id).run();
+  if (!res.meta?.changes) return c.json({ error: 'Not found' }, 404);
+  return c.json({ ok: true });
+});
+
+/**
+ * Log an interaction — `Log interaction` in the ops row, which was
+ * `unbuilt: 'no interaction date is stored on a relationship'`.
+ *
+ * `happened_at` IS WHEN IT HAPPENED, NOT WHEN IT WAS TYPED. A call last month
+ * recorded today is a month-old touch, and stamping `created_at` would call it
+ * fresh — which would make `Going cold` report on data entry rather than on the
+ * relationship.
+ */
+partnernet.post('/book/:uid/interactions', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const happenedAt = String(body?.happened_at || '').trim().slice(0, 32);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(happenedAt)) return c.json({ error: 'happened_at_required' }, 400);
+  const contact = await c.env.DB.prepare(
+    `SELECT id FROM partner_book_contacts WHERE uid = ? AND owner_user_id = ?`
+  ).bind(c.req.param('uid'), user.id).first<{ id: number }>();
+  if (!contact) return c.json({ error: 'Not found' }, 404);
+  await c.env.DB.prepare(
+    `INSERT INTO partner_book_interactions (uid, contact_id, owner_user_id, happened_at, kind, note)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).bind(
+    crypto.randomUUID().replace(/-/g, ''), contact.id, user.id, happenedAt,
+    body?.kind ? String(body.kind).slice(0, 40) : 'note',
+    body?.note ? String(body.note).slice(0, 2000) : null,
+  ).run();
+  return c.json({ ok: true }, 201);
+});
+
 partnernet.get('/summary', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);

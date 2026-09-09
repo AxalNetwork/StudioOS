@@ -56,7 +56,7 @@ import { Hono } from 'hono';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import type { Env } from '../types';
 import { requireAuth, requireAdmin, requireRole } from '../auth';
-import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
+import { mapError, newUid, nowIso, todayIso } from './_t13t14t15_helpers';
 import { userMeetsTier, type Tier } from '../middleware/requireTier';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -100,14 +100,70 @@ type PerkRow = {
   kind: string; credits: number; required_tier: string | null; price_cents: number | null;
   fulfilment: string; redeem_url: string | null; claim_cap: number | null;
   status: string; review_note: string | null; featured: number;
+  ends_at: string | null; grant_scope: string | null;
   created_at: string; updated_at: string;
 };
+
+/**
+ * How near an ending counts as `Expiring` — thirty days.
+ *
+ * THE ARTBOARD DOES NOT SUPPLY THIS NUMBER, so it is chosen here and the zone
+ * states it on the page. `po2` authors its five sample rows' states by hand
+ * (`state:'Expiring'` is written into the fixture), so there is no window to
+ * read off it the way `Going cold` reads 60 days off the Network artboard's own
+ * `days > 60`.
+ *
+ * A WINDOW IS NOT A CAP, which is why choosing one is allowed here and choosing
+ * `delivery/capacity`'s 40 is not. Forty would be a claim about how much work
+ * THIS FIRM can take. Thirty is the definition of a word the page itself uses,
+ * and the page prints the definition beside the word — a reader can see the
+ * rule and disagree with it, which is not true of an invented limit.
+ *
+ * ONE DEFINITION, IN THE WORKER. The frontend never computes a lifecycle: it
+ * reads `lifecycle` off the row. `routes/research.ts` imports the same helper
+ * for the draft gather. A second copy of this number is how two pages come to
+ * disagree about which perks are ending.
+ */
+export const PERK_EXPIRING_WITHIN_DAYS = 30;
+
+/**
+ * `live` | `expiring` | `expired` for one perk's end date.
+ *
+ * NULL IS `live`, NOT `expiring`. An open-ended standing discount has no end
+ * date because there is not one, which is a real answer rather than a missing
+ * value — so it never appears in a list of things about to stop.
+ *
+ * Compared as text. Every date in this schema is `YYYY-MM-DD`, and migration
+ * 228's CHECK refuses anything else on this column, so a lexical comparison is
+ * a chronological one.
+ */
+export function perkLifecycle(endsAt: string | null | undefined, today: string): 'live' | 'expiring' | 'expired' {
+  const end = String(endsAt || '').slice(0, 10);
+  if (!end) return 'live';
+  if (end < today) return 'expired';
+  const soon = new Date(`${today}T00:00:00Z`);
+  soon.setUTCDate(soon.getUTCDate() + PERK_EXPIRING_WITHIN_DAYS);
+  return end <= soon.toISOString().slice(0, 10) ? 'expiring' : 'live';
+}
 
 const str = (v: unknown, max = TEXT_MAX): string => String(v ?? '').trim().slice(0, max);
 const intOrNull = (v: unknown): number | null => {
   if (v === null || v === undefined || v === '') return null;
   const n = Number(v);
   return Number.isFinite(n) ? Math.trunc(n) : null;
+};
+
+/**
+ * A `YYYY-MM-DD` date, or null.
+ *
+ * The SAME shape migration 228's CHECK enforces, so a value this accepts is a
+ * value the column accepts. Anything else — an empty field, a typed
+ * "Oct 15 2026", a timestamp — becomes null here and the caller decides whether
+ * that is a clear (PATCH refuses it explicitly) or an omission (POST stores it).
+ */
+const dateOrNull = (v: unknown): string | null => {
+  const s = String(v ?? '').trim().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
 };
 
 /** Balance is derived. There is no balance column, on purpose. */
@@ -235,7 +291,21 @@ r.get('/partner', async (c) => {
             ORDER BY p.created_at DESC LIMIT 200`,
         ).bind(user.id, companyId)
     ).all<any>();
-    return c.json({ items: rows.results || [] });
+    // `lifecycle` IS SERVED, NEVER COMPUTED ON THE PAGE. The window lives in
+    // one constant above; a copy of it in the zone is how the strip and the
+    // chips come to disagree about which perks are ending.
+    const today = todayIso();
+    const items = (rows.results || []).map((p: any) => ({
+      ...p,
+      lifecycle: perkLifecycle(p.ends_at, today),
+      // WHAT THE END DATE TAKES BACK, AND WHEN — derived from the two columns
+      // migration 228 added rather than stored a third time. A perk that
+      // granted nothing revokes nothing, whatever its state.
+      grant_revoked_on: p.grant_scope && perkLifecycle(p.ends_at, today) === 'expired'
+        ? String(p.ends_at).slice(0, 10)
+        : null,
+    }));
+    return c.json({ items, expiring_within_days: PERK_EXPIRING_WITHIN_DAYS });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -259,12 +329,20 @@ r.post('/partner', async (c) => {
     await c.env.DB.prepare(
       `INSERT INTO perks (uid, partner_user_id, partner_name, category, offer, blurb,
                           detail, kind, credits, required_tier, price_cents, fulfilment,
-                          redeem_url, claim_cap, status, created_at, updated_at, company_id)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'in_review', ?, ?, ?)`,
+                          redeem_url, claim_cap, ends_at, grant_scope,
+                          status, created_at, updated_at, company_id)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'in_review', ?, ?, ?)`,
     ).bind(
       uid, user.id, partnerName, str(b?.category, 80) || 'Other', offer,
       str(b?.blurb, 500) || null, str(b?.detail) || null, kind, credits, requiredTier,
       priceCents, fulfilment, str(b?.redeem_url, 500) || null, intOrNull(b?.claim_cap),
+      // BOTH NULLABLE, AND AN EMPTY FIELD IS A NULL RATHER THAN A ''. An
+      // open-ended perk has no end date, and a perk whose value is spent at
+      // redemption grants nothing that outlives it — migration 228's header
+      // has the reasoning. `dateOrNull` refuses anything the column's CHECK
+      // would refuse, so a typed date fails here with a message rather than
+      // as a constraint error.
+      dateOrNull(b?.ends_at), str(b?.grant_scope, 300) || null,
       // The agency the listing was submitted under. None selected records
       // NULL rather than a guess at the partner's primary company.
       nowIso(), nowIso(), await activeCompanyFor(c, user),
@@ -292,6 +370,16 @@ r.patch('/partner/:uid', async (c) => {
     if (b?.price_cents !== undefined) put('price_cents', intOrNull(b.price_cents));
     if (b?.claim_cap !== undefined) put('claim_cap', intOrNull(b.claim_cap));
     if (b?.redeem_url !== undefined) put('redeem_url', str(b.redeem_url, 500) || null);
+    if (b?.ends_at !== undefined) {
+      // A DATE THAT DOES NOT PARSE IS REFUSED HERE, not passed to the CHECK.
+      // `Extend` on the zone sends this field and nothing else, so a bad value
+      // must come back as a sentence rather than as a constraint failure.
+      if (b.ends_at !== null && b.ends_at !== '' && dateOrNull(b.ends_at) === null) {
+        return c.json({ error: 'ends_at must be a date, as YYYY-MM-DD' }, 400);
+      }
+      put('ends_at', dateOrNull(b.ends_at));
+    }
+    if (b?.grant_scope !== undefined) put('grant_scope', str(b.grant_scope, 300) || null);
     if (!sets.length) return c.json({ error: 'nothing to update' }, 400);
     // Editing a LIVE listing returns it to review. The terms founders were
     // shown are the terms that were approved; a partner must not be able to

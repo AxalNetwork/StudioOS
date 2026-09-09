@@ -3,11 +3,17 @@ import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Pill, Unrecorded,
-  StatCard, Section, Field, SaveNote,
+  // `StatCard` went with the three tiles it drew. The strip is the artboard's
+  // own four now, and one of them has to draw an absence rather than a number.
+  Section, Field, SaveNote,
   UnlinkedZone, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
+import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
+import ZoneToolbar from '../../../workspaces/ZoneToolbar';
+import ZoneDraft from '../../../workspaces/ZoneDraft';
+import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
 
 /**
  * Delivery · Status reports — `/delivery/status-reports`.
@@ -17,15 +23,27 @@ import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
  * which is recorded" — 208 records both, and the draft below is composed from
  * them rather than typed from memory.
  *
- * BLOCKED IS NOT A FIELD, and that is deliberate. The draft reads open blockers
- * at compose time and shows them with their side; nothing copies them into the
- * report row. A prose copy would go stale the moment a blocker cleared, and the
- * side is exactly what a stale copy would lose.
+ * THREE OF THE FOUR CHIPS SELECTED NOTHING, AND THE LISTING IS WHY. `With
+ * blockers` read `r.blockers`, which the listing never returned; `This cycle`
+ * and `Archive` compared against a `period` it never returned either, so the
+ * first quietly showed everything and the second nothing. The compose endpoint
+ * had been reading blockers live since it was written — the listing simply
+ * never joined them. It does now, and the chips select what they name.
+ *
+ * BLOCKED IS NOT A FIELD, and that is deliberate. Blockers are read live and
+ * attached to each report at read time; nothing copies them into the report
+ * row. A prose copy would go stale the moment a blocker cleared, and the side
+ * is exactly what a stale copy would lose.
  *
  * A CLIENT-SIDE BLOCKER IS NAMED PLAINLY, WITHOUT BEING LEANED ON. That is a
  * copy decision as much as a data one, and the old card said so. The zone shows
  * the side on every blocker and puts the sentence in front of the author rather
  * than writing the report for them: say it, do not make it the excuse.
+ *
+ * `Median read time` IS THE ARTBOARD'S ONE ABSENT TILE, and the reason here is
+ * harder than its "reports do not report their own opens yet": a read needs an
+ * open, an open is the client's act, and no client-side surface exists to
+ * record one. Timing from the send would measure our own silence.
  *
  * SENDING IS A PERSON'S ACT, RECORDED — NOT A DELIVERY. Nothing in this product
  * emails a client. "Sent" means somebody sent it, by whatever channel they
@@ -37,6 +55,21 @@ import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
  * of the difference. The worker refuses both the edit and the delete, and this
  * page does not offer either.
  */
+
+/** The strip tile, in the anatomy the artboards share. */
+function ReportTile({ label, value, note, nr = false }) {
+  return (
+    <div className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+      <Eyebrow>{label}</Eyebrow>
+      <div className="mt-1.5">
+        {nr ? <NotRecorded /> : (
+          <span className="font-mono text-[16px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{value}</span>
+        )}
+      </div>
+      <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
+    </div>
+  );
+}
 
 function ReportCard({ report, busy, onEdit, onSend, onDelete, note }) {
   const sent = report.state === 'sent';
@@ -294,6 +327,7 @@ function Composer({ engagements, busy, onSaved, onError, note }) {
 
 export default function PartnerStatusReportsZone() {
   const [state, setState] = useState({ loading: true, error: '', data: null, engagements: null });
+  const [view, setView] = useState('this_cycle');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
   const [composing, setComposing] = useState(false);
@@ -336,21 +370,52 @@ export default function PartnerStatusReportsZone() {
   }, [load]);
 
   const d = state.data;
-  const items = Array.isArray(d?.items) ? d.items : [];
+  // NORMALISED ONCE, so every read below can say `r.blockers.length` without a
+  // guard. The listing returns the array; this is the belt for a response that
+  // predates it, and it keeps "no blockers" and "not returned" from becoming
+  // two shapes the JSX has to tell apart.
+  const items = (Array.isArray(d?.items) ? d.items : [])
+    .map((r) => ({ ...r, blockers: Array.isArray(r.blockers) ? r.blockers : [] }));
   const engagements = state.engagements || [];
+  const drafts = items.filter((r) => r.state === 'draft');
 
   // Hoisted so the gate branch below and the live row draw the SAME row.
   // With nothing loaded the export renders disabled and says so itself,
   // which is what makes a header row over an unreadable store honest.
-  const rowActions = partnerZoneActions('delivery/status-reports', { view: { header: ['Period', 'Founder', 'Shipped', 'Next up'], rows: items, cells: (r) => [r.period, r.founder_name, r.shipped, r.next_up] } });
+  // ══ THE `pd4` CHIP ROW, AND THE TWO FIELDS IT WAITED ON ══════════════════
+  // `Archive` IS EVERY EARLIER CYCLE, not a deleted state: a report is written
+  // against a period and stays against it. `With blockers` reads the blockers
+  // the listing now returns per report rather than a flag on the report,
+  // because a blocker belongs to the engagement and a report quotes it.
+  //
+  // Both comparisons used to run against fields the listing never sent —
+  // `r.blockers` and `d.period` — so `With blockers` and `Archive` matched
+  // nothing and `This cycle` fell through to everything. The chips are the
+  // same four; what changed is that the response answers them.
+  const period = d?.period || '';
+  const visible = (() => {
+    if (view === 'this_cycle') return items.filter((r) => !period || r.period === period);
+    if (view === 'drafts') return drafts;
+    if (view === 'blocked') return items.filter((r) => r.blockers.length > 0);
+    if (view === 'archive') return items.filter((r) => period && r.period < period);
+    return items;
+  })();
+
+  const rowActions = partnerZoneActions('delivery/status-reports', { view: { header: ['Period', 'Founder', 'State', 'Shipped', 'Next up'], rows: visible, cells: (r) => [r.period, r.founder_name, r.state, r.shipped, r.next_up] } });
 
   if (isNoPartnerProfile(state.error)) {
     return <UnlinkedZone title="Status reports" actions={rowActions} />;
   }
 
   return (
+    <>
+      <ZoneToolbar
+        className="mb-3"
+        role="partner"
+        filters={partnerZoneFilters('delivery/status-reports', { value: view, onChange: setView })}
+        actions={rowActions}
+      />
     <ZoneBody
-      actions={rowActions}
       loading={state.loading}
       error={state.error}
       onRetry={load}
@@ -372,11 +437,12 @@ export default function PartnerStatusReportsZone() {
     >
       <div className="space-y-6">
         <ZoneHeading
-          title="The recurring client update"
+          title="Client status reports"
           blurb={
-            'Shipped, next, blocked — composed from the engagement’s own record '
-            + 'and sent by a person. A client-side blocker is named plainly here '
-            + 'rather than being turned into an excuse or left out.'
+            'The recurring client-facing update: shipped, next, blocked. Drafted '
+            + 'with assistance and sent by a person — and where the blocker is on '
+            + 'the client’s side, the report says so plainly without treating it '
+            + 'as an excuse.'
           }
           action={engagements.length > 0 && (
             <button type="button" className={ghostButtonClass} onClick={() => setComposing((v) => !v)}>
@@ -385,15 +451,96 @@ export default function PartnerStatusReportsZone() {
           )}
         />
 
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-          <StatCard label="Reports" value={items.length} hint="across every engagement" />
-          <StatCard label="Drafts" value={d?.draft_count ?? 0} hint="written, not sent" />
-          <StatCard label="Sent" value={d?.sent_count ?? 0} hint="by a person, recorded here" />
+        {/* ══ THE `pd4` STRIP ═══════════════════════════════════════════════
+            `In draft · Sent this cycle · Naming a blocker · Median read time`,
+            each counted over every report rather than the chip-narrowed list. */}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <ReportTile
+            label="In draft"
+            value={String(d?.draft_count ?? 0)}
+            note={drafts.length
+              ? `${drafts[0].founder_name || drafts[0].need_title || 'a client'} · awaiting send`
+              : 'nothing written and unsent'}
+          />
+          <ReportTile
+            label="Sent this cycle"
+            value={String(d?.sent_this_cycle ?? 0)}
+            note={d?.period ? `period ${d.period}` : 'this period'}
+          />
+          <ReportTile
+            label="Naming a blocker"
+            value={String(d?.blocked_count ?? 0)}
+            note={d?.client_blocked_count
+              ? `${d.client_blocked_count} client-side`
+              : 'none on the client’s side'}
+          />
+          {/* THE ONE TILE THAT CANNOT BE FILLED FROM THIS SIDE. A read needs an
+              open and an open is the client's act — the same absence
+              `engagement_deliverables.opened_at` has, and refusing it is the
+              same decision. */}
+          <ReportTile
+            label="Median read time"
+            nr
+            note="nothing records that a client read one"
+          />
         </div>
 
         {d?.delivery_note && (
           <p className="text-[12.5px] leading-relaxed text-axal-ink-2">{d.delivery_note}</p>
         )}
+
+        <Instrument
+          testid="report-feed"
+          title="Report feed"
+          meta="A draft is never sent automatically"
+          cols="1fr .9fr .8fr 1.9fr 2.4fr"
+          head={['Client', 'Period', 'State', 'Shipped', 'Blocked on']}
+          rows={visible.map((r) => {
+            const client = r.blockers.filter((b) => b.side === 'client');
+            return {
+              key: r.id,
+              rowClass: r.state === 'draft' ? 'bg-amber-50/50 dark:bg-amber-950/10' : '',
+              cells: [
+                r.founder_name ? { text: r.founder_name } : { nr: true },
+                { text: r.period },
+                r.state === 'sent'
+                  ? { pill: 'Sent', pillTone: 'ok', sub: r.sent_at ? formatDay(r.sent_at) : undefined }
+                  : { pill: 'Draft', pillTone: 'warn' },
+                // WHAT THE FIRM WROTE, not what the log says was sent. The two
+                // are different claims and the composer keeps them apart.
+                r.shipped ? { text: r.shipped } : { nr: true },
+                // READ LIVE, NEVER STORED. A blocker cleared since the report
+                // was written stops showing here, which is the point.
+                r.blockers.length === 0
+                  ? { text: '—' }
+                  : {
+                    text: r.blockers.map((b) => b.summary).join(' · '),
+                    ...(client.length ? { pill: 'Blocked', pillTone: 'danger' } : { pill: 'Blocked', pillTone: 'warn' }),
+                    sub: client.length
+                      ? `${client.length} on the client’s side`
+                      : 'on ours',
+                  },
+              ],
+            };
+          })}
+          note={'A draft names the client as the blocker where that is what happened — the direction that was asked for and not given, the review that has not come — and states plainly that the deadline does not move because of it: not our delay, still our problem. Blockers are read live at this moment rather than copied into the report when it was written, so one cleared since is gone from this row and one raised since is on it; a prose copy would have gone stale the instant either happened, and the side, which is the whole reason the sentence can be said without leaning on it, is exactly what a stale copy loses. And nothing here sends anything: a draft waits for a person, and `Sent` records that a person sent it.'}
+        />
+
+        {items.length > 0 && visible.length === 0 && (
+          <p className="text-[12px] text-axal-ink-2">
+            No report is in this state. {items.length} written in total.
+          </p>
+        )}
+
+        <ZoneDraft
+          surface="delivery/status-reports"
+          label="Draft · weekly reports"
+          accept="Review the batch"
+          run="Draft the batch"
+          foot={`${engagements.length} draft${engagements.length === 1 ? '' : 's'}; none send themselves.`}
+          empty="One report per engagement drafted from the period’s real activity — shipped items from the deliverables log, next steps from open milestones, and blockers from where the work actually stopped, each with whose side it is on."
+          nothingToDraft="No engagement is live, so there is nothing to report on."
+        />
 
         {composing && (
           <Composer
@@ -457,5 +604,6 @@ export default function PartnerStatusReportsZone() {
         </StatedLimit>
       </div>
     </ZoneBody>
+    </>
   );
 }

@@ -17,6 +17,7 @@ import assert from 'node:assert/strict';
 
 import {
   analysePipeline, weightedPipeline, analyseDelivery, analyseByShape, analyseByQuarter,
+  analyseLossReasons, inDecisionPeriod, quarterOf, LOSS_REASONS,
   DEFAULT_STAGE_WEIGHTS, type QuoteRow,
 } from '../src/services/bdAnalytics.ts';
 
@@ -257,4 +258,156 @@ test('both breakdowns are safe on empty input and on unparseable dates', () => {
   assert.deepEqual(analyseByQuarter([{ status: 'accepted', amount: 1, decided_at: 'not a date' }]), []);
   const noShape = analyseByShape([{ status: 'accepted', amount: 1 }]);
   assert.equal(noShape[0].shape, null);
+});
+
+// ---------------------------------------------------------------------------
+// The loss taxonomy — read, and counted against the right denominator
+// ---------------------------------------------------------------------------
+//
+// These run the analysers rather than reading their source, because the failure
+// this file is guarding against is arithmetic. A count over the wrong
+// denominator looks correct in a diff and is wrong on the page.
+
+/** Four losses, of which one carries no reason and one carries a bad one. */
+const LOSSY: QuoteRow[] = [
+  { status: 'rejected', amount: 10_000, shape: 'design', loss_reason: 'price',
+    created_at: '2026-07-01', decided_at: '2026-07-20' },
+  { status: 'rejected', amount: 12_000, shape: 'design', loss_reason: 'timing',
+    created_at: '2026-07-02', decided_at: '2026-07-21' },
+  { status: 'rejected', amount: 8_000, shape: 'design', loss_reason: null,
+    created_at: '2026-07-03', decided_at: '2026-07-22' },
+  { status: 'rejected', amount: 9_000, shape: 'legal', loss_reason: 'made up',
+    created_at: '2026-07-04', decided_at: '2026-07-23' },
+  { status: 'accepted', amount: 50_000, shape: 'design',
+    created_at: '2026-07-05', decided_at: '2026-07-24' },
+  { status: 'submitted', amount: 30_000, shape: 'design', created_at: '2026-08-01' },
+];
+
+test('every taxonomy entry comes back, zeroes included', () => {
+  const l = analyseLossReasons(LOSSY);
+  assert.deepEqual(l.reasons.map((r) => r.reason), [...LOSS_REASONS],
+    'a chart missing its empty rows implies the reasons it omits were never options');
+  assert.deepEqual(
+    Object.fromEntries(l.reasons.map((r) => [r.reason, r.count])),
+    { price: 1, scope_mismatch: 0, timing: 1, other: 0 },
+  );
+});
+
+test('a loss with no reason — or an off-taxonomy one — is unstated, never "other"', () => {
+  const l = analyseLossReasons(LOSSY);
+  // The null one and the `made up` one. One bad write must not be able to
+  // invent a pattern by landing in a real category.
+  assert.equal(l.unstated, 2);
+  assert.equal(l.reasons.find((r) => r.reason === 'other')!.count, 0);
+  assert.equal(l.losses, 4, 'every rejected quote is a loss whether or not it was explained');
+  assert.equal(l.on_price, 1);
+  // The counts have to add up, or one of them is being double-counted.
+  assert.equal(l.reasons.reduce((a, r) => a + r.count, 0) + l.unstated, l.losses);
+});
+
+test('an accepted or open quote is never a loss', () => {
+  const l = analyseLossReasons([
+    { status: 'accepted', amount: 1, loss_reason: 'price' },
+    { status: 'submitted', amount: 1, loss_reason: 'price' },
+    { status: 'withdrawn', amount: 1, loss_reason: 'price' },
+  ]);
+  assert.equal(l.losses, 0, 'a stray reason on a won or open quote must not become a loss');
+  assert.equal(l.on_price, 0);
+  assert.equal(l.unstated, 0);
+});
+
+test('the on-price count is per shape, over the losses somebody explained', () => {
+  const rows = analyseByShape(LOSSY);
+  const design = rows.find((r) => r.shape === 'design')!;
+  assert.equal(design.rejected, 3);
+  assert.equal(design.losses_with_reason, 2, 'the unexplained loss is not in the denominator');
+  assert.equal(design.on_price_losses, 1);
+  const legal = rows.find((r) => r.shape === 'legal')!;
+  assert.equal(legal.rejected, 1);
+  assert.equal(legal.losses_with_reason, 0, 'an off-taxonomy reason explains nothing');
+  assert.equal(legal.on_price_losses, 0);
+});
+
+test('each quarter carries its own win rate by shape, and a shape with no decision is absent', () => {
+  const rows = analyseByQuarter([
+    { status: 'accepted', amount: 1, shape: 'design', created_at: '2026-01-02', decided_at: '2026-02-02' },
+    { status: 'rejected', amount: 1, shape: 'design', created_at: '2026-01-03', decided_at: '2026-02-03' },
+    { status: 'accepted', amount: 1, shape: 'legal', created_at: '2026-04-02', decided_at: '2026-05-02' },
+    { status: 'submitted', amount: 1, shape: 'legal', created_at: '2026-01-04' },
+  ]);
+  assert.deepEqual(rows.map((r) => r.quarter), ['2026-Q1', '2026-Q2']);
+  assert.deepEqual(rows[0].by_shape, [
+    { shape: 'design', decided: 2, accepted: 1, win_rate_pct: 50 },
+  ], 'legal decided nothing in Q1 and must not appear with a rate of any kind');
+  assert.deepEqual(rows[1].by_shape.map((s) => s.shape), ['legal']);
+  // The per-shape decided counts must sum to the quarter's own.
+  for (const r of rows) {
+    assert.equal(r.by_shape.reduce((a, s) => a + s.decided, 0), r.decided);
+  }
+});
+
+test('a shape with no name sorts last in a quarter’s series, as it does in the table', () => {
+  const rows = analyseByQuarter([
+    { status: 'accepted', amount: 1, shape: null, created_at: '2026-01-02', decided_at: '2026-02-02' },
+    { status: 'accepted', amount: 1, shape: 'legal', created_at: '2026-01-03', decided_at: '2026-02-03' },
+    { status: 'accepted', amount: 1, shape: 'design', created_at: '2026-01-04', decided_at: '2026-02-04' },
+  ]);
+  assert.deepEqual(rows[0].by_shape.map((s) => s.shape), ['design', 'legal', null],
+    'one colour must mean one row in the table and the chart alike');
+});
+
+// ---------------------------------------------------------------------------
+// The window — what it narrows, and what it deliberately does not
+// ---------------------------------------------------------------------------
+
+const NOW = new Date('2026-08-15T12:00:00Z');
+const WINDOWED: QuoteRow[] = [
+  { status: 'accepted', amount: 1, created_at: '2026-07-01', decided_at: '2026-07-20' }, // Q3
+  { status: 'rejected', amount: 1, created_at: '2026-04-01', decided_at: '2026-05-20' }, // Q2
+  { status: 'accepted', amount: 1, created_at: '2025-10-01', decided_at: '2025-11-20' }, // last year
+  { status: 'submitted', amount: 1, created_at: '2026-08-01' }, // open, no decision date
+  { status: 'accepted', amount: 1, created_at: '2026-01-01', decided_at: 'not a date' },
+];
+
+test('quarterOf is the calendar quarter of the date given', () => {
+  assert.equal(quarterOf(new Date('2026-01-01T00:00:00Z')), '2026-Q1');
+  assert.equal(quarterOf(new Date('2026-03-31T23:59:59Z')), '2026-Q1');
+  assert.equal(quarterOf(new Date('2026-04-01T00:00:00Z')), '2026-Q2');
+  assert.equal(quarterOf(new Date('2026-12-31T00:00:00Z')), '2026-Q4');
+});
+
+test('a period narrows decisions and keeps every open quote', () => {
+  const q3 = inDecisionPeriod(WINDOWED, 'quarter', NOW);
+  assert.deepEqual(q3.map((r) => r.decided_at), ['2026-07-20', undefined],
+    'the open quote stays in — it has no decision date to place in any window');
+  const q2 = inDecisionPeriod(WINDOWED, 'prev_quarter', NOW);
+  assert.deepEqual(q2.map((r) => r.decided_at), ['2026-05-20', undefined]);
+  const ytd = inDecisionPeriod(WINDOWED, 'ytd', NOW);
+  assert.deepEqual(ytd.map((r) => r.decided_at), ['2026-07-20', '2026-05-20', undefined],
+    'year to date is this calendar year, so last November is out');
+});
+
+test('a decided quote with an unreadable date is in no window at all', () => {
+  for (const period of ['quarter', 'prev_quarter', 'ytd'] as const) {
+    const kept = inDecisionPeriod(WINDOWED, period, NOW);
+    assert.ok(!kept.some((r) => r.decided_at === 'not a date'),
+      `${period} credited a decision it cannot place`);
+  }
+  // And it survives the unnarrowed reads, which is where it belongs.
+  assert.equal(inDecisionPeriod(WINDOWED, 'all', NOW).length, WINDOWED.length);
+});
+
+test('the grouping chip is not a window', () => {
+  assert.deepEqual(inDecisionPeriod(WINDOWED, 'shape', NOW), WINDOWED,
+    '`By shape` re-reads the same rows down the shape axis rather than narrowing time');
+});
+
+test('the previous quarter crosses a year boundary correctly', () => {
+  const jan = new Date('2026-01-20T00:00:00Z');
+  const rows: QuoteRow[] = [
+    { status: 'accepted', amount: 1, decided_at: '2025-11-05' },
+    { status: 'accepted', amount: 1, decided_at: '2026-01-05' },
+  ];
+  assert.deepEqual(inDecisionPeriod(rows, 'prev_quarter', jan).map((r) => r.decided_at), ['2025-11-05']);
+  assert.deepEqual(inDecisionPeriod(rows, 'quarter', jan).map((r) => r.decided_at), ['2026-01-05']);
 });

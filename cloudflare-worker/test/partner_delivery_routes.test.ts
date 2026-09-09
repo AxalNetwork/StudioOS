@@ -123,6 +123,13 @@ function freshDb() {
     );
   `);
   db.exec(migration('208_partner_delivery_stores'));
+  // APPLIED, NOT MIRRORED. The two capacity stores are read by `/capacity` and
+  // written by its two `PUT`s, so the harness runs their migration files for
+  // the same reason it runs 208's: a hand-copied DDL that drifts from the file
+  // makes every assertion below true of a schema production does not have.
+  db.exec(migration('230_partner_capacity'));
+  db.exec(migration('231_partner_internal_hours'));
+  db.exec(migration('232_partner_engagement_health'));
 
   const u = db.prepare('INSERT INTO users (id, role, partner_id, name, email) VALUES (?,?,?,?,?)');
   u.run(OURS_USER, 'partner', 1, 'Ours', 'ours@example.com');
@@ -335,28 +342,370 @@ test('an unopened deliverable moves health to at risk', async () => {
   assert.equal(row.health, 'at_risk');
 });
 
+/**
+ * THE THREE FACTS NOTHING DERIVES (migration 232).
+ *
+ * Health is read across five stores, and the `pd5` artboard asks for three
+ * things none of them holds: who at the firm owns an engagement, whether it has
+ * drifted from its scope, and what the client thinks. Each is a sentence
+ * somebody states, and until they do all three are ABSENT — `scope_state` most
+ * of all, because defaulting it to "within" would clear a client of drift by
+ * never having looked.
+ */
+test('owner, scope and satisfaction are absent until stated', async () => {
+  const e = env(freshDb());
+  const r = (await call(e, 'GET', '/health', ours)).body;
+  const row = r.items[0];
+  assert.equal(row.owner_user_id, null);
+  assert.equal(row.scope_state, null, 'an unassessed engagement was defaulted to a scope state');
+  assert.equal(row.satisfaction, null);
+  assert.equal(r.drift_count, 0);
+  assert.equal(r.scope_unassessed_count, 1);
+  // AND THE FIRM-WIDE AVERAGE IS REFUSED, with the artboard's own reason.
+  assert.equal(r.satisfaction_avg, null);
+  assert.equal(r.satisfaction_unscored_count, 1);
+  assert.match(r.satisfaction_note, /averaging the rest would present/i);
+});
+
+test('a satisfaction score cannot be saved without saying where it was said', async () => {
+  const e = env(freshDb());
+  // 208:160 made `opened_at` the client's to set because a partner-side write
+  // would be the firm reporting a metric about itself. A score typed by the
+  // person who wants the renewal, on the page that decides one, is that
+  // failure — provenance is the whole difference.
+  const bare = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/health`, ours, {
+    satisfaction: 4.2,
+  });
+  assert.equal(bare.status, 400);
+  assert.match(bare.body.detail, /needs a source/i);
+
+  const ok = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/health`, ours, {
+    satisfaction: 4.2, satisfaction_source: 'quarterly review call, 14 Aug',
+  });
+  assert.equal(ok.status, 200);
+  const row = (await call(e, 'GET', '/health', ours)).body.items[0];
+  assert.equal(row.satisfaction, 4.2);
+  assert.equal(row.satisfaction_source, 'quarterly review call, 14 Aug');
+
+  for (const bad of [0, 0.9, 5.1, 11]) {
+    const r = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/health`, ours, {
+      satisfaction: bad, satisfaction_source: 'x',
+    });
+    assert.equal(r.status, 400, `${bad} was accepted as a satisfaction score`);
+  }
+});
+
+test('one write does not wipe the facts it was not carrying', async () => {
+  const e = env(freshDb());
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/health`, ours, {
+    satisfaction: 4, satisfaction_source: 'review call', scope_state: 'drift',
+    scope_note: 'requests beyond SOW §2',
+  });
+  // An OMITTED key is untouched — a page saving only the owner must not clear
+  // a score it never loaded.
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/health`, ours, {
+    owner_user_id: OUR_STAFF,
+  });
+  let row = (await call(e, 'GET', '/health', ours)).body.items[0];
+  assert.equal(row.owner_name, 'Sam');
+  assert.equal(row.satisfaction, 4);
+  assert.equal(row.scope_state, 'drift');
+  assert.equal(row.scope_note, 'requests beyond SOW §2');
+
+  // An EXPLICIT null clears.
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/health`, ours, {
+    owner_user_id: null, satisfaction: null,
+  });
+  row = (await call(e, 'GET', '/health', ours)).body.items[0];
+  assert.equal(row.owner_user_id, null);
+  assert.equal(row.satisfaction, null);
+  assert.equal(row.scope_state, 'drift', 'clearing one fact cleared another');
+});
+
+test('an owner must belong to this firm, and a scope state must be one of two', async () => {
+  const e = env(freshDb());
+  for (const outsider of [THEIR_STAFF, FOUNDER_USER]) {
+    const r = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/health`, ours, {
+      owner_user_id: outsider,
+    });
+    assert.equal(r.status, 400, `user ${outsider} was made the owner of our engagement`);
+  }
+  const bad = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/health`, ours, {
+    scope_state: 'probably fine',
+  });
+  assert.equal(bad.status, 400);
+  // AND ANOTHER FIRM CANNOT WRITE OURS AT ALL.
+  const theirWrite = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/health`, theirs, {
+    scope_state: 'drift',
+  });
+  assert.equal(theirWrite.status, 404);
+});
+
+/**
+ * LOWEST, NOT FIRST AND NOT AVERAGE.
+ *
+ * The renewal risk this page exists to surface is the ONE client not using what
+ * they pay for. An average hides them behind four who are, and taking whichever
+ * row happened to come back first is the same bug wearing a different mistake.
+ */
+test('the lowest utilisation is the lowest, whatever order the rows arrive in', async () => {
+  const db = freshDb();
+  const e = env(db);
+  db.prepare(
+    `INSERT INTO engagements (id, uid, need_id, quote_id, partner_id, founder_id, project_id, price)
+     VALUES (?,?,?,?,?,?,?,?)`,
+  ).run(904, 'e-ours-3', 502, 604, 1, FOUNDER_USER, 9, 9000);
+  const r = db.prepare(
+    `INSERT INTO partner_retainers (uid, engagement_id, retained_hours) VALUES (?,?,?)`);
+  r.run('ret-1', OUR_ENGAGEMENT, 100);
+  r.run('ret-2', 904, 100);
+  const u = db.prepare(
+    'INSERT INTO retainer_usage (retainer_id, period, hours_used) VALUES (?,?,?)');
+  // The high one is on the engagement the listing returns FIRST, so a read that
+  // takes `withUtil[0]` reports 95% as the lowest.
+  u.run(2, nowPeriod(), 34);
+  u.run(1, nowPeriod(), 95);
+
+  const body = (await call(e, 'GET', '/health', ours)).body;
+  assert.equal(body.lowest_utilisation_pct, 34, 'the strip reported something other than the lowest');
+  assert.equal(body.items[0].utilisation_pct, 95, 'the first row is not the high one — the fixture no longer tests order');
+});
+
+test('the strip figures come from the book, and the average waits for all of it', async () => {
+  const db = freshDb();
+  const e = env(db);
+  // A second engagement for this firm, so "all of it" means more than one.
+  db.prepare(
+    `INSERT INTO engagements (id, uid, need_id, quote_id, partner_id, founder_id, project_id, price)
+     VALUES (?,?,?,?,?,?,?,?)`,
+  ).run(903, 'e-ours-2', 502, 603, 1, FOUNDER_USER, 9, 9000);
+
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/health`, ours, {
+    scope_state: 'drift', satisfaction: 4, satisfaction_source: 'review call',
+  });
+  let r = (await call(e, 'GET', '/health', ours)).body;
+  assert.equal(r.drift_count, 1);
+  assert.equal(r.scope_unassessed_count, 1);
+  // ONE SCORE IS NOT A FIRM-WIDE FACT while the other engagement has none.
+  assert.equal(r.satisfaction_avg, null);
+  assert.equal(r.satisfaction_scored_count, 1);
+
+  await call(e, 'PUT', '/engagements/903/health', ours, {
+    scope_state: 'within', satisfaction: 3, satisfaction_source: 'email',
+  });
+  r = (await call(e, 'GET', '/health', ours)).body;
+  assert.equal(r.satisfaction_avg, 3.5);
+  assert.equal(r.satisfaction_note, null);
+  assert.equal(r.scope_unassessed_count, 0);
+  assert.equal(r.drift_count, 1);
+});
+
 // ---------------------------------------------------------------------------
 // Capacity — the cap that does not exist, and the seat register
 // ---------------------------------------------------------------------------
 
-test('there is no capacity cap, and the response says so', async () => {
-  const e = env(freshDb());
+/**
+ * THE REFUSAL, AS IT STANDS AFTER MIGRATION 230.
+ *
+ * This test used to assert that NO FIELD in the response was named anything
+ * matching /over/, because on that build "over" was unsayable: nothing recorded
+ * a cap and the canvas's hardcoded 40 was the only number available. Migration
+ * 230 gives a firm somewhere to state its own, so the field now exists — and
+ * the assertion moves from the field's NAME to its VALUE, which is the thing
+ * that was ever actually at stake. A firm that has stated nothing still gets
+ * null everywhere and the same sentence, and no number anywhere is 40.
+ */
+test('with no cap stated, nothing is over anything and the response says why', async () => {
+  const db = freshDb();
+  const e = env(db);
+  // Hours exist, so the refusal is not simply an empty page: this person has a
+  // real week and is still not marked over, because there is no cap to be over.
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OUR_STAFF}/${nowPeriod()}`, ours, { hours: 62 });
   const r = (await call(e, 'GET', '/capacity', ours)).body;
-  // The canvas hardcodes 40. Adopting it would invent the firm's cap and then
-  // present the result as a finding.
   assert.equal(r.cap_hours, null);
+  assert.equal(r.cap_source, null);
   assert.match(r.cap_note, /no capacity cap is recorded/i);
-  // No FIELD claims it. Asserting over the whole JSON caught the cap_note
-  // itself, which uses the phrase to refuse the claim — the assertion has to
-  // look at what the response asserts, not at what it says.
-  const keys = new Set([
-    ...Object.keys(r),
-    ...r.people.flatMap((x: any) => Object.keys(x)),
-    ...r.seats.flatMap((x: any) => Object.keys(x)),
-  ]);
-  for (const k of keys) {
-    assert.doesNotMatch(k, /over/i, `the response carries a field named ${k}`);
+  assert.equal(r.over_committed_count, null);
+  assert.equal(r.people.length, 1);
+  assert.equal(r.people[0].hours, 62);
+  // NULL, NOT FALSE. "Not over" would be a judgement against a threshold
+  // nobody set; null is the absence of one.
+  assert.equal(r.people[0].over_committed, null);
+  assert.equal(r.people[0].cap_hours, null);
+  assert.equal(r.people[0].cap_source, null);
+  // THE CANVAS'S FORTY APPEARS NOWHERE. Adopting it would invent the firm's
+  // cap and then present the result as a finding — which is what the whole
+  // refusal is about, and what a value assertion catches that a name one
+  // cannot.
+  const numbers = JSON.stringify(r).match(/\d+(?:\.\d+)?/g) || [];
+  assert.ok(!numbers.includes('40'), 'the response carries the canvas fixture 40');
+});
+
+test('a stated cap is the firm’s number, and clearing it restores the refusal', async () => {
+  const db = freshDb();
+  const e = env(db);
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OUR_STAFF}/${nowPeriod()}`, ours, { hours: 44 });
+
+  const set = await call(e, 'PUT', '/capacity/cap', ours, { weekly_hours: 38, note: 'four days, one for internal' });
+  assert.equal(set.status, 200);
+  let r = (await call(e, 'GET', '/capacity', ours)).body;
+  assert.equal(r.cap_hours, 38);
+  assert.equal(r.cap_source, 'firm');
+  assert.equal(r.cap_note, 'four days, one for internal');
+  assert.equal(r.over_committed_count, 1);
+  assert.equal(r.people[0].over_committed, true);
+  assert.equal(r.people[0].cap_source, 'firm');
+
+  // A PERSON'S OWN NUMBER WINS over the firm's, and moves the same week back
+  // under the line — which is the whole reason the override exists.
+  await call(e, 'PUT', '/capacity/cap', ours, { person_user_id: OUR_STAFF, weekly_hours: 50 });
+  r = (await call(e, 'GET', '/capacity', ours)).body;
+  assert.equal(r.people[0].cap_hours, 50);
+  assert.equal(r.people[0].cap_source, 'person');
+  assert.equal(r.people[0].over_committed, false);
+  assert.equal(r.over_committed_count, 0);
+  // The firm's default is untouched by the override.
+  assert.equal(r.cap_hours, 38);
+
+  // CLEARING IS A DELETE, NOT A ZERO. A cap that could be set and not unset
+  // would make the first number typed permanent.
+  await call(e, 'PUT', '/capacity/cap', ours, { person_user_id: OUR_STAFF, weekly_hours: null });
+  await call(e, 'PUT', '/capacity/cap', ours, { weekly_hours: null });
+  r = (await call(e, 'GET', '/capacity', ours)).body;
+  assert.equal(r.cap_hours, null);
+  assert.equal(r.over_committed_count, null);
+  assert.equal(r.people[0].over_committed, null);
+  assert.match(r.cap_note, /no capacity cap is recorded/i);
+  assert.equal(
+    db.prepare('SELECT COUNT(*) AS c FROM partner_capacity').get().c, 0,
+    'clearing wrote a row instead of removing one',
+  );
+});
+
+test('a cap is refused for a person outside the firm, and for an impossible week', async () => {
+  const e = env(freshDb());
+  for (const outsider of [THEIR_STAFF, FOUNDER_USER]) {
+    const r = await call(e, 'PUT', '/capacity/cap', ours, { person_user_id: outsider, weekly_hours: 40 });
+    assert.equal(r.status, 404, `a cap was written against user ${outsider}`);
   }
+  for (const bad of [0, -1, 168, 900]) {
+    const r = await call(e, 'PUT', '/capacity/cap', ours, { weekly_hours: bad });
+    assert.equal(r.status, 400, `${bad} hours a week was accepted as a cap`);
+  }
+});
+
+/**
+ * THE THIRD COLUMN, AND WHY THE TOTAL IS A FLOOR WITHOUT IT.
+ *
+ * `engagement_hours.engagement_id` is NOT NULL, so the client book cannot hold
+ * admin, recruiting or the proposal that lost. A week assembled from it alone
+ * under-reports every person by exactly the part nobody is billed for — and in
+ * the reassuring direction, which is the failure this bucket is least allowed
+ * to have. Migration 231 holds the rest.
+ */
+test('internal hours are stated, not inferred, and they change who is over cap', async () => {
+  const db = freshDb();
+  const e = env(db);
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OUR_STAFF}/${nowPeriod()}`, ours, { hours: 36 });
+  await call(e, 'PUT', '/capacity/cap', ours, { weekly_hours: 40 });
+
+  let r = (await call(e, 'GET', '/capacity', ours)).body;
+  // NULL, NOT ZERO. Nobody has said, and a zero here would claim this person
+  // spends no time on the firm — the one thing that is certainly false.
+  assert.equal(r.people[0].internal_hours, null);
+  assert.equal(r.internal_hours_total, null);
+  assert.equal(r.people[0].total_hours, 36);
+  assert.equal(r.people[0].over_committed, false);
+
+  const put = await call(e, 'PUT', '/capacity/internal-hours', ours, {
+    person_user_id: OUR_STAFF, period: nowPeriod(), hours: 7, note: 'recruiting',
+  });
+  assert.equal(put.status, 200);
+  r = (await call(e, 'GET', '/capacity', ours)).body;
+  assert.equal(r.people[0].internal_hours, 7);
+  assert.equal(r.people[0].internal_note, 'recruiting');
+  assert.equal(r.internal_hours_total, 7);
+  // 36 + 7 crosses a cap 36 alone did not. The billable book called this week
+  // safe; the whole week is not.
+  assert.equal(r.people[0].total_hours, 43);
+  assert.equal(r.people[0].over_committed, true);
+
+  // ZERO IS A STATEMENT AND SURVIVES AS ONE.
+  await call(e, 'PUT', '/capacity/internal-hours', ours, {
+    person_user_id: OUR_STAFF, period: nowPeriod(), hours: 0,
+  });
+  r = (await call(e, 'GET', '/capacity', ours)).body;
+  assert.equal(r.people[0].internal_hours, 0);
+  assert.equal(r.internal_hours_total, 0);
+  assert.equal(r.people[0].over_committed, false);
+
+  // Clearing removes the row rather than writing a zero, so the read goes back
+  // to "nobody said" and not to "they said none".
+  await call(e, 'PUT', '/capacity/internal-hours', ours, {
+    person_user_id: OUR_STAFF, period: nowPeriod(), hours: null,
+  });
+  r = (await call(e, 'GET', '/capacity', ours)).body;
+  assert.equal(r.people[0].internal_hours, null);
+  assert.equal(
+    db.prepare('SELECT COUNT(*) AS c FROM partner_internal_hours').get().c, 0,
+    'clearing wrote a row instead of removing one',
+  );
+});
+
+test('internal hours are refused for outsiders and for a period that is not one', async () => {
+  const e = env(freshDb());
+  for (const outsider of [THEIR_STAFF, FOUNDER_USER]) {
+    const r = await call(e, 'PUT', '/capacity/internal-hours', ours, {
+      person_user_id: outsider, period: nowPeriod(), hours: 4,
+    });
+    assert.equal(r.status, 404, `internal hours were written against user ${outsider}`);
+  }
+  for (const bad of ['2026', '2026-13', 'last week', '']) {
+    const r = await call(e, 'PUT', '/capacity/internal-hours', ours, {
+      person_user_id: OUR_STAFF, period: bad, hours: 4,
+    });
+    assert.equal(r.status, 400, `"${bad}" was accepted as a period`);
+  }
+});
+
+/**
+ * SEAT HOURS ARE THE HOURS OF THE PERSON HOLDING THE SEAT, not of everyone on
+ * an embedded engagement. Two people can work one engagement while only one of
+ * them is inside the client's systems, and the one who is not did project work.
+ */
+test('hours split by whose seat it is, and a revoked seat keeps its hours', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const seat = await call(e, 'POST', `/engagements/${OUR_ENGAGEMENT}/seats`, ours, {
+    holder_user_id: OUR_STAFF, scope: 'Board, KPIs',
+  });
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OUR_STAFF}/${nowPeriod()}`, ours, { hours: 31 });
+  // The same engagement, a person with no seat on it.
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OURS_USER}/${nowPeriod()}`, ours, { hours: 12 });
+
+  let r = (await call(e, 'GET', '/capacity', ours)).body;
+  const holder = r.people.find((p: any) => p.user_id === OUR_STAFF);
+  const other = r.people.find((p: any) => p.user_id === OURS_USER);
+  assert.equal(holder.seat_hours, 31);
+  assert.equal(holder.project_hours, 0);
+  assert.equal(other.seat_hours, 0);
+  assert.equal(other.project_hours, 12);
+  assert.equal(r.seat_hours_total, 31);
+  assert.equal(r.project_hours_total, 12);
+  assert.equal(r.live_seats, 1);
+  assert.deepEqual(holder.seat_places.map((s: any) => [s.scope, s.revoked]), [['Board, KPIs', false]]);
+
+  // REVOKING DOES NOT REWRITE THE PAST. The access ended; the work done while
+  // it was open was still done inside the client's systems, so the hours stay
+  // seat hours rather than sliding into the project column.
+  await call(e, 'POST', `/seats/${seat.body.id}/revoke`, ours);
+  r = (await call(e, 'GET', '/capacity', ours)).body;
+  const after = r.people.find((p: any) => p.user_id === OUR_STAFF);
+  assert.equal(after.seat_hours, 31);
+  assert.equal(after.project_hours, 0);
+  assert.equal(r.seat_hours_total, 31);
+  assert.equal(r.live_seats, 0);
+  assert.equal(after.seat_places[0].revoked, true);
 });
 
 test('a seat cannot be granted to someone outside the firm', async () => {
@@ -532,6 +881,88 @@ test('the reports read says nothing is delivered', async () => {
   // does not have.
   assert.equal(r.delivery, 'manual');
   assert.match(r.delivery_note, /no email, no notification/i);
+});
+
+/**
+ * THE THREE CHIPS THAT SELECTED NOTHING, AND THE TWO FIELDS THEY WAITED ON.
+ *
+ * `With blockers` filtered on `r.blockers`, `This cycle` and `Archive` on
+ * `d.period` — neither of which this listing returned. The compose endpoint had
+ * been reading blockers live since it was written; the listing simply never
+ * joined them, so on every build one chip showed everything and two showed
+ * nothing.
+ */
+test('the reports listing carries the cycle and each report’s live blockers', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const p = nowPeriod();
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { shipped: 'x' });
+
+  let r = (await call(e, 'GET', '/status-reports', ours)).body;
+  assert.equal(r.period, p, 'the listing does not say which cycle it is');
+  assert.deepEqual(r.items[0].blockers, [], 'a report with nothing open has no blockers array');
+  assert.equal(r.blocked_count, 0);
+  assert.equal(r.client_blocked_count, 0);
+  assert.equal(r.sent_this_cycle, 0);
+
+  const b = await call(e, 'POST', `/engagements/${OUR_ENGAGEMENT}/blockers`, ours, {
+    side: 'client', summary: 'Waiting on a direction',
+  });
+  r = (await call(e, 'GET', '/status-reports', ours)).body;
+  assert.equal(r.items[0].blockers.length, 1);
+  assert.equal(r.items[0].blockers[0].side, 'client');
+  assert.equal(r.items[0].blockers[0].summary, 'Waiting on a direction');
+  assert.equal(r.blocked_count, 1);
+  assert.equal(r.client_blocked_count, 1);
+
+  // CLEARED IS NOT BLOCKED. A blocker cleared since the report was written is
+  // what it USED to be blocked on; returning it would report a solved problem
+  // as a live one — and it is exactly what a prose copy on the report row
+  // would have done.
+  await call(e, 'PATCH', `/blockers/${b.body.id}`, ours, { cleared_at: new Date().toISOString() });
+  r = (await call(e, 'GET', '/status-reports', ours)).body;
+  assert.deepEqual(r.items[0].blockers, []);
+  assert.equal(r.blocked_count, 0);
+
+  // SENT THIS CYCLE COUNTS THE CYCLE, not every report ever sent — so an
+  // earlier period's sent report is in `sent_count` and out of this tile.
+  const older = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/2024-01`, ours, {
+    shipped: 'last year',
+  });
+  await call(e, 'POST', `/status-reports/${older.body.id}/send`, ours);
+  const thisCycle = (await call(e, 'GET', '/status-reports', ours)).body.items
+    .find((x: any) => x.period === p);
+  await call(e, 'POST', `/status-reports/${thisCycle.id}/send`, ours);
+  r = (await call(e, 'GET', '/status-reports', ours)).body;
+  assert.equal(r.sent_count, 2, 'both sent reports should be counted overall');
+  assert.equal(r.sent_this_cycle, 1, 'an earlier cycle’s report was counted as this cycle’s');
+  assert.equal(r.draft_count, 0);
+});
+
+test('a read time is refused rather than timed from our own send', async () => {
+  const e = env(freshDb());
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${nowPeriod()}`, ours, {
+    shipped: 'x',
+  });
+  const r = (await call(e, 'GET', '/status-reports', ours)).body;
+  // A read needs an open; an open is the client's act; no client-side surface
+  // exists to record one. Timing from the send would measure our own silence.
+  assert.equal(r.read_time_median_days, null);
+  assert.match(r.read_time_note, /no client-side surface to record it on/i);
+});
+
+test('another firm’s blockers never reach this firm’s report feed', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const p = nowPeriod();
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { shipped: 'x' });
+  await call(e, 'POST', `/engagements/${THEIR_ENGAGEMENT}/blockers`, theirs, {
+    side: 'client', summary: 'Theirs, not ours',
+  });
+  const r = (await call(e, 'GET', '/status-reports', ours)).body;
+  assert.equal(r.items.length, 1);
+  assert.deepEqual(r.items[0].blockers, [], 'a blocker crossed a firm boundary into the feed');
+  assert.equal(r.blocked_count, 0);
 });
 
 test('a quarterly period label is refused for a monthly report', async () => {

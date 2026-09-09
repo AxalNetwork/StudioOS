@@ -45,15 +45,16 @@ import { api } from '../lib/api';
  * was reachable only by deep link after being dropped from the sidebar — worth
  * reviving rather than rebuilding.
  *
- * THE ZONE PAGES GET THEIR PROPS NOW, AND FOR A LONG TIME THEY DID NOT.
- * `SignalsPage` was mounted with `embedded` alone; it destructures `{ user }`,
- * so BOTH props were dropped. `user` being undefined meant `mode` resolved to
+ * MARKETS NO LONGER MOUNTS THE SIGNALS FEED, and the paragraph that stood here
+ * described the props that feed needed. The finding is worth keeping: mounted
+ * with `embedded` alone, `SignalsPage` dropped `user`, so `mode` resolved to
  * `'founder'` for every role on this route — no advisor ordering, no advisor
- * strip, no `advisor_note` — while the founder hero rendered a second h1 inside
- * this shell's own. `CompetitorAnalysisPage` took no props at all and swallowed
- * its `embedded` the same way. Both are fixed at the source; `Markets` now
- * receives `user`, and `Companies` a `chromeless` flag that is deliberately not
- * `embedded` (see `components/CompetitorAnalysis.jsx` for why).
+ * strip, no `advisor_note`. That was fixed, and then the zone turned out to be
+ * about a different object altogether: the `pr3` artboard's comparable RANGES
+ * for the firm's own service lines, not sector signals. `MarketZone` is that
+ * page and the feed keeps `/signals`. `CompetitorAnalysisPage` had the same
+ * swallowed-props defect and keeps its fix — `Companies` takes a `chromeless`
+ * flag that is deliberately not `embedded` (see `components/CompetitorAnalysis.jsx`).
  *
  * ASK, LIBRARY AND COMPANIES CARRY A HISTORY WORTH KNOWING. Decisions D9 and
  * D12 withdrew four `/advisor/research/*` tabs — companies, AI research, news,
@@ -86,7 +87,7 @@ import { api } from '../lib/api';
  * empty state says so in its own words.
  */
 
-const SignalsPage = lazy(() => import('../pages/SignalsPage'));
+const MarketZone = lazy(() => import('../pages/research/MarketZone'));
 const CompetitorAnalysisPage = lazy(() => import('../pages/CompetitorAnalysisPage'));
 const LibraryZone = lazy(() => import('../pages/research/LibraryZone'));
 const AskZone = lazy(() => import('../pages/research/AskZone'));
@@ -206,16 +207,25 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
       return <ResearchOverview role={role} />;
     }
     if (slug === 'markets') {
+      // THE ZONE'S OBJECT CHANGED, WHICH IS WHY THE MOUNT DID. This rendered
+      // `SignalsPage` embedded — the `market_intel_rows` sector feed — and the
+      // `pr3` artboard is about comparable RANGES for the firm's own service
+      // lines, each attachable to a proposal. A sector signal is not a price.
+      // The feed keeps its own route at `/signals`, which every licence that
+      // had it here still reaches, and `MarketZone` links to it in as many
+      // words rather than leaving a reader to find it.
       return (
         <Suspense fallback={<Loading />}>
-          <SignalsPage user={user} mode={role === 'advisor' ? 'advisor' : 'founder'} embedded
+          <MarketZone
             role={role}
             zoneFilters={(opts) => zoneFiltersFor(role, 'research/markets', opts)}
-            zoneActions={(rows) => zoneActionsFor(role, 'research/markets', { view: {
-              header: ['Signal', 'Type', 'Sector', 'Niche', 'Region', 'Confidence', 'Freshness', 'Updated'],
-              rows,
-              cells: (g) => [g.title, g.type, g.sector, g.niche, g.region, g.confidence_score, g.freshness_score, g.updated_at],
-            } })} />
+            zoneActions={(rows, handlers) => zoneActionsFor(role, 'research/markets', { handlers, view: {
+            zone: 'markets',
+            header: ['Reading', 'Low (USD cents)', 'High (USD cents)', 'Comparables', 'Run date', 'Age (days)', 'Attachment'],
+            rows,
+            cells: (r) => [r.metric, r.range_low_cents, r.range_high_cents, r.comparable_count,
+              r.ran_at, r.days, r.band === 'stale' ? 'blocked' : (r.days === null ? 'nothing to attach' : (r.attached ? 'attached' : 'attachable'))],
+          } })} />
         </Suspense>
       );
     }
@@ -246,7 +256,13 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
           <LibraryZone
             role={role}
             zoneFilters={(opts) => zoneFiltersFor(role, 'research/library', opts)}
-            zoneActions={(rows) => zoneActionsFor(role, 'research/library', { view: {
+            /* `handlers` — dropped here until now, and the drop was invisible:
+               `Add document` and `Re-index` are `kind: 'handler'` in all four
+               tables, the builder finds no callable and returns null rather
+               than a dead control, so two of the artboard's three ops simply
+               were not on the page. A closure that takes only `rows` cannot
+               carry a page's own functions. */
+            zoneActions={(rows, handlers) => zoneActionsFor(role, 'research/library', { handlers, view: {
             header: ['Document', 'Kind', 'Index state', 'Passages', 'Size (bytes)', 'Added'],
             rows,
             cells: (d) => [d.title, d.kind, d.index_state, d.chunk_count, d.size_bytes, d.created_at],
@@ -257,16 +273,23 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
     if (slug === 'ask') {
       return (
         <Suspense fallback={<Loading />}>
-          {/* The citations of the answer ON SCREEN, which is the whole session
-              this surface stores: nothing keeps a history, and the zone says so
-              rather than offering to export one that does not exist. */}
+          {/* THE THREAD, NOT THE CITATIONS OF ONE ANSWER. This exported
+              `['#', 'Document', 'Score', 'Passage']` — the passages behind
+              whichever answer happened to be on screen — because that was the
+              whole of what the surface held. Migration 221 stores the session,
+              so `Export` now carries what the reader is actually looking at:
+              the questions, what came back, whether it was answered at all, and
+              what each one cost. `rows` is the NARROWED list, so exporting
+              under `Unanswered` gives the unanswered ones. */}
           <AskZone
             role={role}
             zoneFilters={(opts) => zoneFiltersFor(role, 'research/ask', opts)}
-            zoneActions={(rows) => zoneActionsFor(role, 'research/ask', { view: {
-            header: ['#', 'Document', 'Score', 'Passage'],
+            zoneActions={(rows, handlers) => zoneActionsFor(role, 'research/ask', { handlers, view: {
+            zone: 'ask',
+            header: ['Asked', 'Question', 'Outcome', 'Answer', 'Sources', 'Cost (USD)', 'Kept'],
             rows,
-            cells: (c) => [c.n, c.title, c.score, c.chunk],
+            cells: (t) => [t.created_at, t.question, t.reason, t.answer || '',
+              (t.citations || []).map((ct) => ct.title).join('; '), t.cost_usd, t.saved ? 'yes' : 'no'],
           } })} />
         </Suspense>
       );
@@ -309,7 +332,7 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
           <ClientPrepZone
             role={role}
             zoneFilters={(opts) => zoneFiltersFor(role, 'research/client-prep', opts)}
-            zoneActions={(rows) => zoneActionsFor(role, 'research/client-prep', { view: {
+            zoneActions={(rows, handlers) => zoneActionsFor(role, 'research/client-prep', { handlers, view: {
             scope: null,
             zone: 'client-prep',
             header: ['Section', 'What it says', 'Source'],
@@ -394,7 +417,14 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
             // so a question needing a source you have not added has no answer
             // here rather than a general-knowledge one.
             ['Answers from outside your library', 'Ask reads only documents you have added. It cannot search the web, company databases or market data — those need a licensed source the product does not have.'],
-            ['Documents shared with you', 'Nobody can send you a document yet. A founder sharing their own file needs a grant the product has for investors and for nobody else.'],
+            // WAS "Nobody can send you a document yet", AND THAT STOPPED BEING
+            // TRUE. `advisor_client_grants` (migration 218) is the grant it
+            // said the product had "for investors and for nobody else", and
+            // `advisor_client_document_shares` carries a file inside one; the
+            // library lists what has arrived that way. What is still absent is
+            // the reach: a shared document stays indexed in the client's
+            // namespace, which is never searched for you, so Ask cannot cite it.
+            ['Ask over a document a client shared', 'A client can open a file to you and the library lists it, but it stays indexed in their namespace — so Ask, which searches only your own, cannot cite it.'],
             ...(ownAnalysesOnly
               ? [['Client-scoped research', 'An analysis is stored against you, not against a company, so nothing here can be filed under a client or reopened per client.']]
               : []),

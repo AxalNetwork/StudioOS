@@ -49,74 +49,97 @@ function tilesIn(code, from = 0) {
 }
 
 // ── Markets ───────────────────────────────────────────────────────────────
+//
+// THE ZONE MOVED, AND THAT IS WHAT THIS BLOCK NOW RECORDS. Its four tests read
+// `SignalsPage`'s `MARKETS_STRIP` — the two age-band tiles drawn over the
+// `market_intel_rows` sector feed when `/research/markets` mounted it embedded.
+// The `pr3` artboard is about a different object: comparable RANGES for the
+// firm's own service lines, each attachable to a proposal. A sector signal is
+// not a price. So the zone mounts `pages/research/MarketZone`, the feed keeps
+// `/signals` with no zone header at all, and the machinery that bridged them is
+// gone from `SignalsPage`.
+//
+// EVERY RULE THOSE FOUR TESTS HELD IS STILL HELD, one file over, and each is
+// worth more on the new page than it was on the old one:
+//   · the windows are the artboard's own numbers, transcribed and not chosen;
+//   · age is never read off `updated_at`;
+//   · a tile counts the whole population and never the chip-narrowed list;
+//   · a tile with no store is not drawn.
 
-test('markets draws its strip on the two licences whose first tile is an age band', () => {
-  // Founder's and investor's eight tiles all count a saved deep-dive — an
-  // analysis or a thesis kept with its method and run date. Nothing stores one;
-  // this page reads a signals feed, which is a different object.
-  assert.match(signals, /const MARKETS_STRIP = \{/, 'the per-licence strip table is gone');
-  const table = signals.slice(signals.indexOf('const MARKETS_STRIP = {'));
-  const licences = [...table.slice(0, table.indexOf('\n};')).matchAll(/^ {2}(\w+): \{$/gm)].map((m) => m[1]);
-  assert.deepEqual(licences, ['advisor', 'partner'],
-    'only advisor and partner have a tile with a store; adding a licence needs one too');
-  // The zone route only. `/signals` is a standalone page whose canvas never
-  // asked for this strip, and it must not sprout one.
-  assert.match(signals, /const strip = embedded \? MARKETS_STRIP\[role\] : null;/,
-    'the strip must be gated on the zone route, not drawn on /signals');
+const market = read('frontend/src/pages/research/MarketZone.jsx');
+
+test('the age windows are still the artboard’s own numbers', () => {
+  // `Pages · Partner Research` declares `const STALE_AT = 90, AGE_AT = 30`.
+  // Transcribed, never chosen — and now exported, because the guard below and
+  // the zone's own copy would otherwise be two numbers that can part company.
+  assert.match(market, /export const STALE_AT = 90;/, 'the stale window has moved off its artboard');
+  assert.match(market, /export const AGE_AT = 30;/, 'the ageing window has moved off its artboard');
 });
 
-test('the age windows are still the artboards’ own numbers', () => {
-  // Transcribed, never chosen: `Pages · Advisor Research` declares STALE_AT 120
-  // / AGE_AT 30, `Pages · Partner Research` 90 and 30. The tiles count the same
-  // bands the header chips filter on, so a moved number moves both silently.
-  assert.match(signals, /advisor: \{ ageing: 30, stale: 120 \}/, 'the advisor window has moved off its artboard');
-  assert.match(signals, /partner: \{ ageing: 30, stale: 90 \}/, 'the partner window has moved off its artboard');
+test('age comes from the run date and never from a touched-at column', () => {
+  // `updated_at` moves when a row is edited, so every reading would look
+  // current the moment anyone touched one — the same trap the signals feed had
+  // with its ingestion timestamp, where one run stamped every row it saw.
+  assert.match(market, /const daysSince = \(iso\) => \{/, 'the age helper is gone');
+  assert.match(market, /daysSince\(r\.ran_at\)/, 'age is no longer computed from the run date');
+  assert.doesNotMatch(codeOnly(market), /updated_at/, 'age is being read off a touched-at column');
 });
 
-test('the bands count the whole population, never the rows a chip left showing', () => {
+test('a reading that has never been run is its own answer, not a stale one', () => {
+  // NULL DOES NOT FALL INTO `stale`. A service line nobody has priced the
+  // market for has not gone out of date — there is nothing to have aged — and
+  // bucketing it as stale would tell a firm to re-run a reading it has never
+  // run once.
+  assert.match(market, /if \(days === null\) return null;/,
+    'a never-run reading is being sorted into an age band');
+  const band = market.slice(market.indexOf('export function ageBand('), market.indexOf('const BAND_PILL'));
+  assert.match(band, /if \(days > STALE_AT\) return 'stale';/, 'the stale band no longer uses the artboard’s window');
+  assert.match(band, /if \(days > AGE_AT\) return 'ageing';/, 'the ageing band no longer uses the artboard’s window');
+});
+
+test('the tiles count every reading, never the rows a chip left showing', () => {
   // `visible` is already narrowed by the selected chip, so counting it would
-  // make `Current` read zero the moment a reader clicked `Stale`. A tile that
-  // changes because you looked at it is not reporting what it claims to.
-  assert.match(signals, /const bands = !strip \|\| !window_ \? null : signals\.reduce\(/,
-    'the age bands must be counted over the loaded signals, not the filtered view');
-  const band = signals.slice(signals.indexOf('const bands ='), signals.indexOf('undated: 0 }'));
-  assert.doesNotMatch(band, /\bvisible\b/, 'the band counts must not read the chip-narrowed list');
-  assert.match(band, /if \(days === null\) acc\.undated \+= 1;/,
-    'an undated signal belongs to no band and must be counted apart, as the chip filter treats it');
-});
-
-test('markets draws its two sourced tiles and no unsourced one', () => {
-  const strip = signals.slice(signals.indexOf('{strip && bands && ('));
-  // The two sourced tiles take their label FROM the licence table, never a
-  // literal: `Current` and `Attachable now` count the same band and ask
-  // different questions of it, and one hard-coded word would answer the wrong
-  // one on one of the two licences.
-  assert.match(strip, /label=\{strip\.fresh\.label\}/, 'the fresh tile has been given a literal label');
-  assert.match(strip, /label=\{strip\.stale\.label\}/, 'the stale tile has been given a literal label');
-  assert.match(strip, /value=\{loading && !data \? undefined : bands\.fresh\}/,
-    'the fresh tile no longer counts the fresh band');
-  assert.match(strip, /value=\{loading && !data \? undefined : bands\.stale\}/,
+  // make `Attachable now` read zero the moment a reader clicked `Stale`. A tile
+  // that changes because you looked at it is not reporting what it claims to.
+  const code = codeOnly(market);
+  const tiles = code.slice(code.indexOf('const attachable = rows.filter('), code.indexOf('const openForm ='));
+  assert.ok(tiles.length > 0, 'the tile counts are gone');
+  assert.doesNotMatch(tiles, /\bvisible\b/, 'the tile counts read the chip-narrowed list');
+  assert.match(tiles, /const stale = rows\.filter\(\(r\) => r\.band === 'stale'\);/,
     'the stale tile no longer counts the stale band');
-
-  // REVERSED, DELIBERATELY. The artboards' third and fourth tiles — `Sectors
-  // covered`, `Net revenue retention`, `Widest range`, `Retainer rate` — used
-  // to be rendered from a `gaps` array, each reading the words "Not recorded"
-  // with its reason beneath. This test REQUIRED that. Refusing to model a
-  // figure nobody stores was right and has not changed; printing the refusal
-  // where the figure belongs put commentary about the design on the page.
-  // They are not drawn, and the table's own docblock carries the four reasons.
-  const table = signals.slice(signals.indexOf('const MARKETS_STRIP = {'));
-  const decl = table.slice(0, table.indexOf('\n};'));
-  assert.doesNotMatch(decl, /gaps:/, 'the gaps array is back in the strip table');
-  assert.doesNotMatch(strip, /Not recorded/, 'a tile states its own absence again');
-  // The reasons still have to be recorded somewhere a builder reads.
-  const doc = signalsRaw.slice(signalsRaw.indexOf('* The two strip tiles per licence'),
-    signalsRaw.indexOf('const MARKETS_STRIP = {'));
-  assert.ok(doc.length > 0 && doc.length < 1600, 'the docblock slice must not run away');
-  for (const label of ['Sectors covered', 'Net revenue retention', 'Widest range', 'Retainer rate']) {
-    assert.ok(flat(doc).includes(label), `the record of why "${label}" is absent has been lost`);
-  }
+  assert.match(tiles, /const neverRun = rows\.filter\(\(r\) => r\.band === null\);/,
+    'the never-run tile no longer counts the readings with no run date');
 });
+
+test('age gates attachment rather than labelling it', () => {
+  // The artboard's own subtitle, and the whole composition: a stale reading is
+  // BLOCKED from a proposal, not marked. "A client shown a range from May,
+  // presented as current reasoning behind a September quote, is a worse outcome
+  // than a proposal with no market figure at all."
+  const code = codeOnly(market);
+  assert.match(code, /stale: 'Blocked from proposals'/,
+    'a stale reading is labelled rather than blocked');
+  assert.match(code, /text: 'Re-run before attaching'/,
+    'the attachment column no longer says what to do about a stale reading');
+  // THREE OUTCOMES, NOT TWO. "Nothing to attach" is not a weaker "blocked":
+  // one is a reading that went out of date and one is a service line nobody
+  // has ever priced.
+  assert.match(code, /text: 'Nothing to attach'/,
+    'a never-run reading reads as blocked instead of as never run');
+});
+
+test('the signals feed keeps its own page and loses the zone header', () => {
+  // The machinery that drew a zone header over the feed is gone with the mount
+  // that used it, rather than left behind looking maintained.
+  const sig = codeOnly(read('frontend/src/pages/SignalsPage.jsx'));
+  for (const gone of ['MARKETS_STRIP', 'AGE_WINDOWS', 'function ageInDays', 'zoneActions', 'zoneFilters']) {
+    assert.ok(!sig.includes(gone), `SignalsPage still carries ${gone}, for a mount that no longer exists`);
+  }
+  // And the reason survives where a reader will look for it.
+  assert.match(signalsRaw, /THE ZONE-HEADER MACHINERY THAT STOOD HERE IS GONE/,
+    'the record of why the strip left this page has been deleted with it');
+});
+
 
 test('founder and investor reach no markets tile and no paragraph about one', () => {
   // ALSO REVERSED. This required a `<StatedLimit>` naming the saved deep-dive

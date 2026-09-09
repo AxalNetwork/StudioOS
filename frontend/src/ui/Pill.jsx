@@ -24,6 +24,17 @@ export const PILL_TONES = {
   warn: 'bg-amber-50 text-axal-amber-deep border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800',
   danger: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800',
   info: 'bg-axal-lavender text-axal-violet-deep border-axal-violet/25 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800',
+  // TWO TONES THE PARTNER ARTBOARDS ASK FOR THAT THE FIVE ABOVE CANNOT SAY.
+  // `Pages · Partner {Research,Network}.dc.html` draw a cyan `.seam` mark and
+  // an indigo `.cit`, and both are provenance rather than status: cyan means
+  // "this came from the other party's own record and is read-only to you" —
+  // Client prep's legend spells it out beside `ours` — and indigo means "this
+  // sentence is a citation of a document". Neither is good, bad or pending, so
+  // reaching for `ok` or `info` would put a status colour on a fact about
+  // where a row came from. Semantic names, as the docblock above requires:
+  // a caller asks for `seam`, not for cyan.
+  seam: 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-300 dark:border-cyan-800',
+  cite: 'bg-indigo-50 text-indigo-800 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-800',
 };
 
 const DOTS = {
@@ -32,6 +43,8 @@ const DOTS = {
   warn: 'bg-amber-500',
   danger: 'bg-red-500',
   info: 'bg-axal-violet',
+  seam: 'bg-cyan-500',
+  cite: 'bg-indigo-500',
 };
 
 export default function Pill({

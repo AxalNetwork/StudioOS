@@ -26,6 +26,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { codeOnly } from './_codeOnly.mjs';
+import { escapeRe } from './_escapeRe.mjs';
 import { FOUNDER_ZONE_FILTERS, founderZoneFilters } from '../src/workspaces/founderZoneFilters.js';
 import { INVESTOR_ZONE_FILTERS, investorZoneFilters } from '../src/workspaces/investorZoneFilters.js';
 import { ADVISOR_ZONE_FILTERS, advisorZoneFilters } from '../src/workspaces/advisorZoneFilters.js';
@@ -35,6 +36,7 @@ import { canvasFilterLabels } from '../src/workspaces/zoneFilterBuilder.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
+
 
 /**
  * Zone key → the file that renders that zone's toolbar, for the surfaces four
@@ -77,13 +79,20 @@ const NETWORK_BODIES = {
   partner: {
     'network/relationships': 'frontend/src/pages/RelationshipsPage.jsx',
     'network/introductions': 'frontend/src/pages/IntroductionsPanel.jsx',
+    // The one Network zone this licence does NOT reach through `NetworkPage`:
+    // the workspace dispatches it directly, because the page has no tab for it.
+    'network/organizations': 'frontend/src/pages/partner/OrganizationsZone.jsx',
   },
 };
 
 const RESEARCH_BODIES = {
   'research/ask': 'frontend/src/pages/research/AskZone.jsx',
   'research/library': 'frontend/src/pages/research/LibraryZone.jsx',
-  'research/markets': 'frontend/src/pages/SignalsPage.jsx',
+  // WAS `pages/SignalsPage.jsx`, AND THE ZONE'S OBJECT IS WHY IT MOVED. That
+  // page is the `market_intel_rows` sector feed and keeps its own route at
+  // `/signals`; the `pr3` artboard is about comparable RANGES for the firm's
+  // own service lines, which is what `MarketZone` reads.
+  'research/markets': 'frontend/src/pages/research/MarketZone.jsx',
   'research/companies': 'frontend/src/components/CompetitorAnalysis.jsx',
   'research/funds': 'frontend/src/pages/research/FundsZone.jsx',
   'research/benchmarking': 'frontend/src/pages/research/BenchmarkingZone.jsx',
@@ -242,13 +251,25 @@ const PROFILES = {
     table: PARTNER_ZONE_FILTERS,
     build: partnerZoneFilters,
     call: 'partnerZoneFilters',
-    canvasDirs: ['design/incoming'],
+    // BOTH DIRECTORIES, BECAUSE THE PARTNER SET IS SPLIT ACROSS THEM. Network,
+    // Offers and Research were re-exported into `design/incoming/`; Delivery and
+    // Pipeline were not, and their newest export is the one already in
+    // `design/canvases/integrated/` — verified byte-for-byte against the
+    // artifact the Delivery bucket was specified from. Naming only one
+    // directory made `delivery/board`'s chip row look like labels from nowhere.
+    canvasDirs: ['design/incoming', 'design/canvases/integrated'],
     // `Offers` JOINS THE REGEX, and `canvasDirs` needs no change for it:
     // `design/incoming/Pages · Partner Offers.dc.html` is already in the
     // directory this profile opens, and it is byte-identical on the nineteen
     // labels to the copy in `design/canvases/integrated/` — checked rather than
     // assumed, both name the same five routes in the same order.
-    canvas: /^Pages · Partner (Network|Offers|Research)\.dc\.html$/,
+    // `Pipeline` JOINS THE REGEX, and it is the reader's third canvas shape —
+    // `<section class="ab" id="p1">` markup with the route in `class="ab-sub"`
+    // and the chips behind a `sc-for list="{{ l_views }}"` binding. See
+    // `artboardFilters`. Until it entered scope the whole Pipeline bucket was
+    // absent from `partnerZoneFilters.js`: five zones, five `views([…])` rows on
+    // the artboard, and no chip row anywhere in the product.
+    canvas: /^Pages · Partner (Delivery|Network|Offers|Pipeline|Research)\.dc\.html$/,
     // `pages/partner/offers` IS ITS OWN ENTRY BECAUSE `mountingFile` DOES NOT
     // RECURSE. Three of the five Offers zones have their own file in there and
     // are found by the ordinary search once the directory is listed — which
@@ -258,10 +279,57 @@ const PROFILES = {
     // three in the map to save a line would have handed them that exemption
     // and stopped this file checking the thing it exists to check.
     pages: ['frontend/src/pages/partner', 'frontend/src/pages/partner/offers',
+      'frontend/src/pages/partner/delivery', 'frontend/src/pages/partner/pipeline',
       'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/partnerZoneActions.js',
-    zones: 11,
-    mounted: 11,
+    // Thirteen. The twelfth was `network/organizations` — the zone this
+    // profile's `excluded` list carried until migrations 224 and 226 gave the
+    // book a company name and a relationship to group it by. The thirteenth is
+    // `delivery/board`, which had no row in the filter table at all: it
+    // rendered `EngagementsPage`, which draws `ZoneActions` directly and no
+    // toolbar, so there was nowhere for a chip row to go. It has its own zone
+    // now, reading the five stores migration 208 built for this bucket.
+    // Was 11, then 12, then 13 — and 13 lasted one run: widening the canvas
+    // regex to read `Pages · Partner Delivery` surfaced FOUR MORE artboards
+    // whose chip rows this table did not cover at all. All five Delivery zones
+    // specify one; none had an entry, and the guard could not say so because
+    // the file its labels come from was outside the pattern it read.
+    // Twenty-two. Widening the regex to read `Pages · Partner Pipeline`
+    // surfaced FIVE MORE artboards whose chip rows this table did not cover at
+    // all — the entire bucket. Every one of the five specifies a `views([…])`
+    // row; none had an entry, and the guard could not say so because the canvas
+    // was outside the pattern it read and in a shape it could not parse. Was
+    // 11, then 12, then 13, then 17.
+    zones: 22,
+    // And all thirteen mount their filters: `BoardZone` and `OrganizationsZone`
+    // take the same bound builder their siblings do, and the four other
+    // Delivery zones hoist a `ZoneToolbar` above their `ZoneBody` the way every
+    // newer zone does. Was 11, then 12, then 13.
+    // ALL TWENTY-TWO MOUNT THEIRS, which is the count landing when the last
+    // Pipeline zone was composed. The three that used to be named as exceptions
+    // — `pipeline/negotiations`, `pipeline/retainers`, `pipeline/analytics` —
+    // had their own files and no header row in them; each got one. Two others
+    // joined by ceasing to render a shared page: `pipeline/leads` was the
+    // marketplace board four licences see, `pipeline/proposals` the
+    // proposals-and-invoices view it shared with `delivery/board`.
+    //
+    // Was 11, then 12, then 13, then 17, then 18, then 21. A zone added to this
+    // profile without a chip row now moves this number DOWN, which is the shape
+    // this census is for.
+    mounted: 22,
+    // THE PARTNER SET CARRIES SAMPLES NOW, AND ONLY IN ONE PLACE. Its canvases
+    // were digit-free until `Pages · Partner Pipeline` entered scope, which is
+    // exactly what the "prove the absence" branch of the sample test exists to
+    // catch — and it did, naming all four labels with a figure in them.
+    //
+    // Two of the four are NOT samples and the pattern must not treat them as
+    // such: `Stalled 7d+` and `Renewing 30d` are thresholds this product
+    // implements — seven days without a move, thirty days to a renewal — so the
+    // number IS the filter's meaning rather than a figure from the mock data.
+    // The other two are the quarter the artboard happened to be drawn in, and a
+    // chip reading `Q3 2026` would be wrong for every reader after it, so both
+    // are relabelled positionally: `This quarter`, `Last quarter`.
+    samples: /\b(?:Q[1-4] )?20\d\d\b/,
     // The two that ARE genuinely shared. `ServiceCatalogPage` is mounted for
     // admin, founder, partner and investor and `PerksPage` for those four plus
     // advisor and exploring, both from `frontend/src/pages/` — a directory this
@@ -275,12 +343,16 @@ const PROFILES = {
       'offers/catalog': 'frontend/src/pages/ServiceCatalogPage.jsx',
       'offers/perk-deals': 'frontend/src/pages/PerksPage.jsx',
     },
-    // Same as advisor's, one step further: there is not even a card. This
-    // licence has no organizations panel at all — `NetworkPage`'s
-    // `unservedAlone` suppresses it — so a row here would attach to nothing.
-    excluded: [
-      'network/organizations',
-    ],
+    // NOTHING IS EXCLUDED ON THIS LICENCE ANY MORE, and the entry that was
+    // here is the one this list existed to keep honest. It read: "Same as
+    // advisor's, one step further: there is not even a card. This licence has
+    // no organizations panel at all — `NetworkPage`'s `unservedAlone`
+    // suppresses it — so a row here would attach to nothing." Migrations 224
+    // and 226 gave the book a company name and a relationship, so the zone has
+    // its own body (`pages/partner/OrganizationsZone.jsx`) and its four chips
+    // narrow over it. An exclusion cannot grow by accident and a stale one
+    // cannot linger — this is the second half of that rule doing its work.
+    excluded: [],
     // `Pages · Partner Research` names /research/market; the router and
     // `shellConfig.js` both say `markets`. Same mapping the ops half carries.
     live: (route) => (route === '/research/market' ? 'research/markets' : route.replace(/^\//, '')),
@@ -341,12 +413,28 @@ function canvasFilters(profile) {
  * a board that gains a `sub` and no `views` drops out instead of shifting every
  * later board's chips onto the wrong route.
  *
- * `profile_zone_actions.test.mjs` knows a third shape — `sc-` markup with
- * `class="vm"` ops, which is how `Pages · Partner Pipeline` states its actions.
- * It is deliberately not here: no canvas in any filter profile's scope uses it,
- * and a branch nothing exercises is a branch nobody notices breaking. A canvas
- * in that shape entering scope trips the assertion above, which is the intended
- * way to find out.
+ * SHAPE D — `<section class="ab" id="p1">` markup, where the route sits in the
+ * section's own `class="ab-sub"` (`amber · /pipeline/leads`) and the chips come
+ * from the FIRST `sc-for list="{{ l_views }}"` binding inside it, resolved
+ * against a `l_views: views([…])` in the canvas's data block. `Pages · Partner
+ * Pipeline` is the only one, and until this branch existed it was invisible
+ * here for the same reason `Pages · Founder Validate` was: nothing in the file
+ * matches `route:'…'`, so the loop never ran.
+ *
+ * THE DOCBLOCK HERE USED TO SAY THIS SHAPE WOULD NEVER BE READ, and it is worth
+ * recording why that was right and what changed rather than deleting it. It
+ * read: "`profile_zone_actions.test.mjs` knows a third shape … It is
+ * deliberately not here: no canvas in any filter profile's scope uses it, and a
+ * branch nothing exercises is a branch nobody notices breaking. A canvas in
+ * that shape entering scope trips the assertion above, which is the intended
+ * way to find out." That is exactly what happened — the Pipeline bucket's five
+ * zones had no chip row in `partnerZoneFilters.js` at all, and bringing the
+ * canvas into scope is what proves the five rows added for them are the
+ * artboard's own labels rather than a guess.
+ *
+ * The binding is read PER SECTION rather than by zipping whole-file matches, so
+ * a section that gains a route and no `views` drops out instead of shifting
+ * every later section's chips onto the wrong zone.
  */
 function artboardFilters(src) {
   const out = {};
@@ -360,19 +448,51 @@ function artboardFilters(src) {
     return out;
   }
   const boardsAt = src.search(/\bboards:\s*\[/);
-  if (boardsAt < 0) return out;
-  for (const board of src.slice(boardsAt).split(/\{ id:\s*'/).slice(1)) {
-    const route = board.match(/sub:\s*'[^']*?(\/[a-z0-9/-]+)'/);
-    const views = board.match(/views\(\[([^\]]*)\]\)/);
-    if (!route || !views) continue;
-    out[route[1]] = chips(views[1]);
+  if (boardsAt >= 0) {
+    for (const board of src.slice(boardsAt).split(/\{ id:\s*'/).slice(1)) {
+      const route = board.match(/sub:\s*'[^']*?(\/[a-z0-9/-]+)'/);
+      const views = board.match(/views\(\[([^\]]*)\]\)/);
+      if (!route || !views) continue;
+      out[route[1]] = chips(views[1]);
+    }
+    return out;
+  }
+  for (const section of src.split(/<section class="ab" id="/).slice(1)) {
+    const route = section.match(/class="ab-sub">[^<]*?(\/[a-z0-9/-]+)</);
+    const binding = section.match(/sc-for list="\{\{\s*(\w+_views)\s*\}\}"/);
+    if (!route || !binding) continue;
+    // The binding names a `<name>: views([…])` in the canvas's data block. The
+    // list is looked up rather than assumed from the section's id, because the
+    // prefixes (`l_`, `pr_`, `n_`, `r_`, `a_`) are the canvas author's shorthand
+    // and nothing makes them track the section ids.
+    // BUILT WITH `escapeRe`, NOT INTERPOLATED RAW. `binding[1]` comes out of a
+    // canvas file, and a canvas is an input this repo takes from outside — so a
+    // binding name carrying regex metacharacters would either build a pattern
+    // that means something else or, with the right nesting, one that
+    // backtracks. `\w+` in the match above already constrains it, which is why
+    // this is belt-and-braces rather than a live hole; escaping is still the
+    // right shape, and Semgrep's `detect-non-literal-regexp` is correct to
+    // insist on it (finding 6048).
+    const declared = src.match(new RegExp(`\\b${escapeRe(binding[1])}:\\s*views\\(\\[([^\\]]*)\\]\\)`));
+    if (!declared) continue;
+    out[route[1]] = chips(declared[1]);
   }
   return out;
 }
 
-/** `'All','Deck-eligible','Strong fit'` → the three labels. */
+/**
+ * `'All','Deck-eligible','Strong fit'` → the three labels.
+ *
+ * READ AS QUOTED STRINGS, NOT SPLIT ON COMMAS. A comma inside a label is not a
+ * separator, and one exists: `Pages · Partner Pipeline` draws `'All','Opened,
+ * unanswered','Never opened',…` on its proposals artboard. Splitting turned that
+ * one chip into two — `Opened` and `unanswered` — and then reported the table as
+ * having drifted from a canvas it matched exactly.
+ */
 function chips(list) {
-  return list.split(',').map((one) => one.trim().replace(/^'|'$/g, '')).filter(Boolean);
+  return [...list.matchAll(/'((?:[^'\\]|\\.)*)'/g)]
+    .map((m) => m[1].replace(/\\(.)/g, '$1'))
+    .filter(Boolean);
 }
 
 /**
@@ -631,7 +751,7 @@ for (const [name, profile] of Object.entries(PROFILES)) {
       // page KNOWS the key, not that the predicate behind it is right. What it
         // does close is the hole mutation-checking found — declaring a filter
         // live without touching the page that would have to serve it.
-        const used = new RegExp(`(['"\`]${row.key}['"\`]|\\b${row.key}\\s*:)`);
+        const used = new RegExp(`(['"\`]${escapeRe(row.key)}['"\`]|\\b${escapeRe(row.key)}\\s*:)`);
         assert.ok(
           used.test(code),
           `${zone} declares the live filter '${row.key}' but ${page.path} never uses it`,
@@ -640,6 +760,45 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     }
     assert.equal(mounted, profile.mounted,
       `${mounted} ${name} zones mount their filters; the profile says ${profile.mounted}`);
+  });
+
+  /**
+   * A narrowing a page computes must be a narrowing the page DRAWS.
+   *
+   * `pipeline/negotiations` shipped with `const visible = useMemo(…)` deriving
+   * the chip row's four views — and then rendered its lanes from the unfiltered
+   * list. All four chips were inert: pressing `Stalled 7d+` moved the pill and
+   * left the board exactly as it was. The assertion above passed it, because
+   * naming a key is not using one; CodeQL found it as an unused variable, which
+   * is what an undrawn narrowing looks like from outside the React model.
+   *
+   * So the rule is written the way the defect presents: a binding assigned from
+   * a memo whose body reads the page's filter state, and then referenced
+   * nowhere else, is a chip row wired to nothing. One occurrence is the
+   * declaration; a real narrowing has at least two.
+   *
+   * WHAT THIS CANNOT DO, said plainly: it proves the narrowed list reaches
+   * something, not that the thing it reaches is the list the chips are about.
+   * A page could still draw `visible` in one card and the unfiltered rows in
+   * another. That is a narrower hole than the one this closes, and closing it
+   * would need to know which element each chip governs.
+   */
+  test(`${name}: a page that narrows on a chip renders what it narrowed`, () => {
+    for (const zone of Object.keys(profile.table)) {
+      const page = mountingFile(profile, zone);
+      if (!page) continue;
+      const code = codeOnly(page.src);
+      for (const m of code.matchAll(/const (\w+) = useMemo\(\(\) => \{([\s\S]*?)\n  \}, \[([^\]]*)\]\);/g)) {
+        const [, binding, body, deps] = m;
+        // A memo is a narrowing only if it reads the state a chip row sets —
+        // which every zone here holds as `view`.
+        if (!/\bview\b/.test(deps) && !/\bview ===/.test(body)) continue;
+        const uses = (code.match(new RegExp(`\\b${escapeRe(binding)}\\b`, 'g')) || []).length;
+        assert.ok(uses > 1,
+          `${page.path} narrows into '${binding}' on the chip row and never renders it — `
+          + `the chips on ${zone} select nothing`);
+      }
+    }
   });
 
   test(`${name}: every ZoneToolbar in this profile's pages names this licence`, () => {
@@ -860,10 +1019,15 @@ test('a zone whose row can narrow hands the export the narrowed rows', () => {
     },
     {
       // The render-prop shape: `PartnerBucketRoutes` supplies the columns and
-      // this page supplies the rows, so the call site here is the argument.
+      // this page supplies the rows, so the call site here is the FIRST
+      // argument — the second is the handler bag the page supplies for `New
+      // perk` and `Extend`, which is why the terminator is `[,)]` rather than
+      // `)`. Pinned to argument one deliberately: it is the rows that must be
+      // the narrowed list, and a regex that accepted any argument would pass a
+      // call that handed over `items` and narrowed something else.
       zone: 'offers/perk-deals',
       file: 'frontend/src/pages/PerksPage.jsx',
-      call: /zoneActions\((\w+)\)/,
+      call: /zoneActions\((\w+)[,)]/,
     },
   ];
 

@@ -620,6 +620,31 @@ partnerOffers.post('/proof-consents/:token/respond', async (c) => {
 
 const FIT_KINDS = ['budget_floor', 'sector_declined', 'capability_absent', 'best_fit'];
 
+/**
+ * How strong a fit a PROFILE is, in the firm's own words (migration 229).
+ *
+ * NOT A SCORE, AND `enforcement` STAYS `'none'`. Nothing computes this about
+ * anybody: a firm writes "Series A companies without design leadership —
+ * qualified" the way it writes the sentence beside it. The artboard's own
+ * `Weak intent` row is the point of the field — "pre-product founders read as
+ * weak intent rather than declined, because the honest answer is 'not yet'".
+ */
+const FIT_SIGNALS = ['best_fit', 'qualified', 'weak_intent'];
+
+/**
+ * A signal is meaningful only on a profile row. An exclusion has no strength —
+ * a declined sector is declined — so one sent on any other kind is refused
+ * rather than stored where nothing reads it. Migration 229's CHECK cannot say
+ * this, because a CHECK on an added column may not reference another column.
+ */
+function signalFor(kind: string, raw: unknown): { signal: string | null } | { error: string } {
+  if (raw === null || raw === undefined || raw === '') return { signal: null };
+  const s = String(raw);
+  if (!FIT_SIGNALS.includes(s)) return { error: `Signal must be one of ${FIT_SIGNALS.join(', ')}` };
+  if (kind !== 'best_fit') return { error: 'Only a fit profile carries a signal; an exclusion has no strength' };
+  return { signal: s };
+}
+
 async function ownFitRule(env: Env, partnerId: number, id: number) {
   const row = await env.DB.prepare('SELECT * FROM partner_fit_rules WHERE id = ?')
     .bind(id).first<any>();
@@ -632,6 +657,7 @@ function fitDto(r: any) {
     id: Number(r.id),
     uid: r.uid,
     kind: r.kind,
+    signal: r.signal ?? null,
     floor_cents: r.floor_cents === null || r.floor_cents === undefined ? null : Number(r.floor_cents),
     value: r.value ?? null,
     statement: r.statement ?? null,
@@ -681,12 +707,14 @@ partnerOffers.post('/fit-rules', async (c) => {
     if (kind !== 'budget_floor' && !value) {
       return c.json({ detail: 'Name the sector, capability or fit this rule is about' }, 400);
     }
+    const sig = signalFor(kind, b.signal);
+    if ('error' in sig) return c.json({ detail: sig.error }, 400);
     const ins = await c.env.DB.prepare(
       `INSERT INTO partner_fit_rules
-         (uid, partner_id, kind, floor_cents, value, statement, referred_to, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+         (uid, partner_id, kind, signal, floor_cents, value, statement, referred_to, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
     ).bind(
-      newUid(), partnerId, kind,
+      newUid(), partnerId, kind, sig.signal,
       // A floor is only meaningful on a budget_floor rule; storing one on a
       // declined sector would put an amount where the zone reads a reason.
       kind === 'budget_floor' ? floor.cents : null,
@@ -721,13 +749,23 @@ partnerOffers.patch('/fit-rules/:id', async (c) => {
     if (kind !== 'budget_floor' && !value) {
       return c.json({ detail: 'Name the sector, capability or fit this rule is about' }, 400);
     }
+    // `signal` IS NOT MERGED THE WAY THE OTHER FIELDS ARE, and the difference
+    // matters. A signal the caller SENDS is validated strictly, so an attempt to
+    // put a strength on an exclusion is refused rather than dropped. A signal
+    // the ROW already carries is inherited only while the rule is still a
+    // profile: editing a graded profile into a declined sector clears it, the
+    // same way the floor is cleared one line down, because an exclusion has no
+    // strength and a merge that kept one would refuse the edit outright.
+    const sent = Object.prototype.hasOwnProperty.call(b, 'signal');
+    const sig = signalFor(kind, sent ? b.signal : (kind === 'best_fit' ? row.signal : null));
+    if ('error' in sig) return c.json({ detail: sig.error }, 400);
     await c.env.DB.prepare(
       `UPDATE partner_fit_rules
-          SET kind = ?, floor_cents = ?, value = ?, statement = ?, referred_to = ?,
+          SET kind = ?, signal = ?, floor_cents = ?, value = ?, statement = ?, referred_to = ?,
               is_active = ?, updated_at = ?
         WHERE id = ?`,
     ).bind(
-      kind, kind === 'budget_floor' ? floor.cents : null, value,
+      kind, sig.signal, kind === 'budget_floor' ? floor.cents : null, value,
       trimOrNull(merged.statement, 1000), trimOrNull(merged.referred_to, 300),
       merged.is_active ? 1 : 0, nowIso(), id,
     ).run();

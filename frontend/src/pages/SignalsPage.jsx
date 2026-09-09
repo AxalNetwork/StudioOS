@@ -9,7 +9,6 @@ import SignalKPIStrip from '../components/signals/SignalKPIStrip';
 import SignalEvidencePanel from '../components/signals/SignalEvidencePanel';
 import { AdvisorWorkspaceShell } from './advisor/AdvisorWorkspaceShell';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
-import { Stat } from '../ui';
 
 /**
  * SignalsPage — "Public-market evidence for what to build next".
@@ -35,95 +34,26 @@ import { Stat } from '../ui';
  * which is why the advisor view appeared to work when tested there.
  */
 /**
- * `zoneActions` is a render prop, called with the signals on screen.
- * `/research/markets` is one route for four licences whose zone actions differ,
- * so the caller decides what the row says and this page renders it. `/signals`
- * passes nothing and gets nothing. See `workspaces/zoneActionsByRole.js`.
+ * THE ZONE-HEADER MACHINERY THAT STOOD HERE IS GONE WITH THE MOUNT THAT USED IT.
+ *
+ * `AGE_WINDOWS`, `MARKETS_STRIP` and `ageInDays` existed because
+ * `/research/markets` mounted this page embedded and drew the Partner and
+ * Advisor artboards' age chips and two-tile strip over the signals feed. That
+ * zone is about a different object — comparable RANGES for a firm's own service
+ * lines, attachable to a proposal — and now mounts `pages/research/MarketZone`,
+ * which carries `STALE_AT`/`AGE_AT` and computes age from a reading's own run
+ * date.
+ *
+ * WHAT WAS WORTH KEEPING WENT WITH IT rather than being deleted. The windows
+ * are still the artboards' own numbers, transcribed and not chosen; age is
+ * still never read off `updated_at`, because the ingestion job stamps every row
+ * it touches with one run timestamp and that column cannot tell two things
+ * apart. Both rules live in `MarketZone` now.
+ *
+ * This page is `/signals`: a ranked feed of public-market evidence, mounted
+ * standalone, with no zone header of its own.
  */
-const AGE_WINDOWS = {
-  advisor: { ageing: 30, stale: 120 },
-  partner: { ageing: 30, stale: 90 },
-};
-
-/**
- * THE CANVAS'S STAT STRIP, and the two licences that can draw one.
- *
- * Every Markets artboard specifies four tiles, and the four sets do not agree:
- *
- *   founder  Saved analyses · Sources · Confidence · Excluded input
- *   investor Theses · Sourced from active · Excluded input · Last refreshed
- *   advisor  Current · Stale · Sectors covered · Net revenue retention (nr)
- *   partner  Attachable now · Stale · Widest range · Retainer rate (nr)
- *
- * Founder's and investor's eight tiles are all downstream of the same missing
- * thing: a SAVED DEEP-DIVE — an analysis or a thesis, kept with its method, its
- * sources and its run date. Nothing stores one. This page reads a signals feed,
- * which is a different object: evidence gathered on a schedule, not a piece of
- * work someone saved. So those two licences draw no strip at all. They used to
- * get a paragraph in its place naming what the canvas had asked for — D56's
- * remedy for four tiles that would each read "Not recorded" — which traded four
- * statements of an absence for one, on a page a reader came to for signals. The
- * rule D56 records still holds; a figure with no source is now simply absent.
- *
- * Advisor and partner open with an AGE BAND, and that one is real. `ageInDays`
- * already buckets every signal against `AGE_WINDOWS[role]`, which are the
- * artboards' own `AGE_AT`/`STALE_AT` constants transcribed, and the zone's
- * header chips already filter on exactly those bands. A tile that counts what a
- * chip will return is reading the rows the chip reads. Their other two tiles are
- * about a curated figures register — a source and a run date per figure — which
- * does not exist here, and the fourth is marked `nr:true` on the artboard
- * itself. Neither is drawn; the block below records which and why.
- *
- * The labels are per licence because the artboards' are. `Current` and
- * `Attachable now` count the same band and ask different questions of it, and
- * flattening them to one word would answer the wrong one on one of the two.
- */
-/**
- * The two strip tiles per licence that a signals feed can actually fill.
- *
- * THE OTHER TWO ARE NOT DRAWN, AND USED TO READ "Not recorded". Advisor's
- * artboard asks for `Sectors covered` — the feed is not scoped to a declared
- * sector and nothing here reads Expertise · Profile — and `Net revenue
- * retention`, which the artboard itself marks unrecorded because no source
- * covers enough companies. Partner's asks for `Widest range`, which needs a
- * readings register with a range per row and none is stored, and `Retainer
- * rate`, also marked unrecorded on the artboard and never run.
- *
- * Each shipped as a tile reading "Not recorded" with its reason beneath, and
- * the licences with no strip at all got a paragraph in place of one explaining
- * what the canvas had asked for. Both put commentary about the design where a
- * figure belongs. The reasons live here now; the tiles do not render.
- */
-const MARKETS_STRIP = {
-  advisor: {
-    fresh: { label: 'Current', note: (w) => `newest evidence within ${w.ageing} days` },
-    stale: { label: 'Stale', note: (w) => `nothing dated inside ${w.stale} days` },
-  },
-  partner: {
-    fresh: { label: 'Attachable now', note: (w) => `newest evidence within ${w.ageing} days` },
-    stale: { label: 'Stale', note: (w) => `nothing dated inside ${w.stale} days` },
-  },
-};
-
-/**
- * How old a signal is, from its own evidence — or null when nothing is dated.
- *
- * NOT `updated_at`, WHICH LOOKS RIGHT AND IS NOT. The ingestion job computes one
- * timestamp per run and binds it to every row it touches, so that column would
- * sort every signal into the same bucket and any age filter over it would
- * return the whole feed or none of it. `evidence_items[].observed_at` is the
- * per-item date, and it is what the freshness score decays from.
- */
-function ageInDays(signal) {
-  let newest = null;
-  for (const evidence of signal?.evidence_items || []) {
-    const at = Date.parse(evidence?.observed_at || '');
-    if (Number.isFinite(at) && (newest === null || at > newest)) newest = at;
-  }
-  return newest === null ? null : (Date.now() - newest) / 86400000;
-}
-
-export default function SignalsPage({ user, embedded = false, mode: modeProp = null, zoneActions, zoneFilters, role = 'founder' }) {
+export default function SignalsPage({ user, embedded = false, mode: modeProp = null, role = 'founder' }) {
   const isAdmin = String(user?.role || '').toLowerCase() === 'admin';
   // Two different questions, so two props. `user` answers "who is this?" and
   // gates the admin-only Refresh. `mode` answers "which workspace am I in?"
@@ -139,10 +69,6 @@ export default function SignalsPage({ user, embedded = false, mode: modeProp = n
   // TWO DIFFERENT FILTER SURFACES ON ONE PAGE, and they are not rivals.
   // `filters` above is `SignalFilterBar`'s nine server-driven facets — region,
   // sector, signal type and the rest — sent to the API and narrowed there.
-  // `zoneView` is the zone header row's, which the canvas draws above
-  // everything and which asks one question the facets do not: how old is what I
-  // am looking at. It runs here, over rows already loaded.
-  const [zoneView, setZoneView] = useState('all');
   const [facets, setFacets] = useState(null);
   const [data, setData] = useState(null);
   const [kpis, setKpis] = useState(null);
@@ -210,50 +136,10 @@ export default function SignalsPage({ user, embedded = false, mode: modeProp = n
 
   const signals = data?.signals || [];
 
-  // The age windows are the CANVAS'S OWN, per licence, transcribed rather than
-  // chosen: `Pages · Advisor Research` declares `const STALE_AT = 120, AGE_AT =
-  // 30` and `Pages · Partner Research` declares 90 and 30. Founder and investor
-  // are absent because their artboards ask this zone for a saved deep-dive
-  // instead, which nothing stores — their header row is prose, and no key here
-  // is reachable for them.
-  const window_ = AGE_WINDOWS[role];
-  const visible = !window_ || zoneView === 'all' ? signals : signals.filter((s) => {
-    const days = ageInDays(s);
-    // An undated signal is in no age bucket and stays in `All` — the same call
-    // the artboard makes for the figure whose source has no run date.
-    if (days === null) return false;
-    if (zoneView === 'current') return days <= window_.ageing;
-    if (zoneView === 'ageing') return days > window_.ageing && days <= window_.stale;
-    if (zoneView === 'stale') return days > window_.stale;
-    return true;
-  });
-  const chooseZoneView = (key) => setZoneView((current) => (current === key ? 'all' : key));
-
-  // COUNTED OVER `signals`, NEVER `visible`. `visible` is already narrowed by
-  // the chip the reader has selected, so counting it would make `Current` read
-  // zero the moment they clicked `Stale` — a tile that changes because you
-  // looked at it is not reporting the population it claims to.
-  const strip = embedded ? MARKETS_STRIP[role] : null;
-  const bands = !strip || !window_ ? null : signals.reduce((acc, s) => {
-    const days = ageInDays(s);
-    // An undated signal is in no band, exactly as the chip filter treats it.
-    if (days === null) acc.undated += 1;
-    else if (days <= window_.ageing) acc.fresh += 1;
-    else if (days > window_.stale) acc.stale += 1;
-    else acc.ageing += 1;
-    return acc;
-  }, { fresh: 0, ageing: 0, stale: 0, undated: 0 });
+  const visible = signals;
 
   const content = (
     <div className="space-y-5 pb-10">
-      {zoneActions && (
-        <ZoneToolbar
-          role={role}
-          className="mb-3"
-          filters={zoneFilters ? zoneFilters({ value: zoneView, onChange: chooseZoneView }) : []}
-          actions={zoneActions(visible)}
-        />
-      )}
       {/* Header */}
       {mode !== 'advisor' && !embedded && <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
         <div>
@@ -321,20 +207,6 @@ export default function SignalsPage({ user, embedded = false, mode: modeProp = n
           sourced — and the strip below answers how much of it is still worth
           quoting. The bands are also the counts behind the header chips, so a
           reader can see a chip is empty before clicking it. */}
-      {strip && bands && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Stat
-            label={strip.fresh.label}
-            value={loading && !data ? undefined : bands.fresh}
-            note={strip.fresh.note(window_)}
-          />
-          <Stat
-            label={strip.stale.label}
-            value={loading && !data ? undefined : bands.stale}
-            note={strip.stale.note(window_)}
-          />
-        </div>
-      )}
 
       {/* KPI strip */}
       <SignalKPIStrip kpis={kpis} loading={loading && !kpis} />

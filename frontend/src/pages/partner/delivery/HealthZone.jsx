@@ -3,11 +3,17 @@ import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Pill, Unrecorded,
-  StatCard, Section, Field, SaveNote, NotComputable, SeamRead,
+  // `StatCard` went with the four tiles it drew: the strip is the artboard's
+  // own now, and one of its tiles has to draw an absence rather than a number.
+  Section, Field, SaveNote, NotComputable, SeamRead,
   UnlinkedZone, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
+import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
+import ZoneToolbar from '../../../workspaces/ZoneToolbar';
+import ZoneDraft from '../../../workspaces/ZoneDraft';
+import { Eyebrow, Instrument, Legend, NotRecorded } from '../../../workspaces/canvasKit';
 
 /**
  * Delivery · Health — `/delivery/health`.
@@ -36,10 +42,128 @@ import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
  * already say, and the first time one of them moved the two would disagree.
  * The zone renders the pill and the reasons the worker used — a judgement that
  * cannot be explained is not one a person should act on.
+ *
+ * THREE OF THE ARTBOARD'S ELEMENTS ARE NOT FACTS ABOUT THE WORK, and none of
+ * the five stores could hold them: an OWNER (who at the firm runs it), a SCOPE
+ * ASSESSMENT (a blocker is something stopping the work; drift is the work
+ * quietly becoming a different job) and a SATISFACTION score. Migration 232
+ * holds all three, and each is absent until somebody states it — `scope_state`
+ * in particular is never defaulted to "within", because an engagement nobody
+ * has assessed has not been cleared of drift.
+ *
+ * A SCORE NEVER APPEARS WITHOUT ITS SOURCE. 208:160 made `opened_at` the
+ * client's to set, on the grounds that a partner-side write would be the firm
+ * reporting a metric about itself. Satisfaction is nearly that, and provenance
+ * is the difference: a number typed by the person who wants the renewal, shown
+ * on the renewal-risk page as the client's opinion, is exactly that failure.
+ * 232's CHECK makes a score impossible without a stated source and every row
+ * prints it — a remark somebody heard, not a metric this product measured.
+ *
+ * THE FIRM-WIDE AVERAGE STAYS REFUSED while any live engagement is unscored.
+ * That is the artboard's own rule and its own reason: averaging the rest would
+ * present a few opinions as a fact about all of them.
  */
 
 const HEALTH_TONE = { on_track: 'ok', at_risk: 'warn', blocked: 'danger' };
 const HEALTH_LABEL = { on_track: 'On track', at_risk: 'At risk', blocked: 'Blocked' };
+
+/** The strip tile, in the anatomy the artboards share. */
+function HealthTile({ label, value, note, nr = false }) {
+  return (
+    <div className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+      <Eyebrow>{label}</Eyebrow>
+      <div className="mt-1.5">
+        {nr ? <NotRecorded /> : (
+          <span className="font-mono text-[16px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{value}</span>
+        )}
+      </div>
+      <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
+    </div>
+  );
+}
+
+/**
+ * The three facts nothing derives, written by the firm (migration 232).
+ *
+ * ONE FORM RATHER THAN THREE, because they are one sentence a firm writes about
+ * a client — who runs it, has it drifted, what did they say — and the route
+ * takes them together. Every key is sent explicitly so an omitted one cannot
+ * silently clear another; the route treats an absent key as untouched, and this
+ * form always knows all three.
+ */
+function StatedFacts({ row, roster, busy, onSave, note }) {
+  const [draft, setDraft] = useState({
+    owner_user_id: row.owner_user_id ? String(row.owner_user_id) : '',
+    scope_state: row.scope_state || '',
+    scope_note: row.scope_note || '',
+    satisfaction: row.satisfaction == null ? '' : String(row.satisfaction),
+    satisfaction_source: row.satisfaction_source || '',
+  });
+  useEffect(() => {
+    setDraft({
+      owner_user_id: row.owner_user_id ? String(row.owner_user_id) : '',
+      scope_state: row.scope_state || '',
+      scope_note: row.scope_note || '',
+      satisfaction: row.satisfaction == null ? '' : String(row.satisfaction),
+      satisfaction_source: row.satisfaction_source || '',
+    });
+  }, [row]);
+
+  return (
+    <div>
+      <div className="grid gap-3 md:grid-cols-3">
+        <Field label="Owner" hint="Who at this firm runs it. Your own people only.">
+          <select className={inputClass} value={draft.owner_user_id}
+            onChange={(e) => setDraft({ ...draft, owner_user_id: e.target.value })}>
+            <option value="">Unassigned</option>
+            {roster.map((p) => (
+              <option key={p.user_id} value={p.user_id}>{p.name || p.email}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Scope" hint="Left unset means nobody has assessed it — which is not the same as in scope.">
+          <select className={inputClass} value={draft.scope_state}
+            onChange={(e) => setDraft({ ...draft, scope_state: e.target.value })}>
+            <option value="">Not assessed</option>
+            <option value="within">Within scope</option>
+            <option value="drift">Scope drift</option>
+          </select>
+        </Field>
+        <Field label="What drifted" hint="In your words — “requests beyond SOW §2”.">
+          <input className={inputClass} value={draft.scope_note} maxLength={600}
+            onChange={(e) => setDraft({ ...draft, scope_note: e.target.value })} />
+        </Field>
+        <Field label="Satisfaction" hint="1–5, as the client said it. Empty clears.">
+          <input className={inputClass} value={draft.satisfaction} inputMode="decimal" placeholder="e.g. 4.2"
+            onChange={(e) => setDraft({ ...draft, satisfaction: e.target.value })} />
+        </Field>
+        <Field
+          label="Where they said it"
+          hint="Required beside a score. A number with no source is the firm scoring itself on the page that decides a renewal."
+        >
+          <input className={inputClass} value={draft.satisfaction_source} maxLength={300}
+            placeholder="quarterly review call, 14 Aug"
+            onChange={(e) => setDraft({ ...draft, satisfaction_source: e.target.value })} />
+        </Field>
+        <div className="flex items-end">
+          <button
+            type="button" className={buttonClass} disabled={busy}
+            onClick={() => onSave({
+              owner_user_id: draft.owner_user_id ? Number(draft.owner_user_id) : null,
+              scope_state: draft.scope_state || null,
+              scope_note: draft.scope_note,
+              satisfaction: draft.satisfaction.trim() === '' ? null : Number(draft.satisfaction),
+              satisfaction_source: draft.satisfaction_source,
+            })}
+          >
+            Save
+          </button>
+        </div>
+      </div>
+      <SaveNote note={note} />
+    </div>
+  );
+}
 
 function HealthPill({ health }) {
   if (!health) return <Pill tone="neutral">Not rated</Pill>;
@@ -250,7 +374,7 @@ function BlockerEditor({ engagementId, busy, onChanged, onError }) {
   );
 }
 
-function HealthRow({ row, busy, onChanged, onError, note }) {
+function HealthRow({ row, roster, busy, onChanged, onError, onSaveFacts, note }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -334,6 +458,25 @@ function HealthRow({ row, busy, onChanged, onError, note }) {
                 onChanged={onChanged} onError={onError} />
             </div>
           </div>
+          {/* THE THREE FACTS NOTHING DERIVES. Owner, scope assessment and the
+              client's score are none of them readable from milestones,
+              blockers, deliverables, seats or the retainer record — each is a
+              sentence somebody at the firm states, and this is where they
+              state it. */}
+          <div>
+            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+              What this firm says about it
+            </div>
+            <div className="mt-1">
+              <StatedFacts
+                row={row}
+                roster={roster}
+                busy={busy}
+                note={note?.scope === `facts:${row.engagement_id}` ? note : null}
+                onSave={(data) => onSaveFacts(row, data)}
+              />
+            </div>
+          </div>
           <SaveNote note={note?.scope === `eng:${row.engagement_id}` ? note : null} />
         </div>
       )}
@@ -342,40 +485,106 @@ function HealthRow({ row, busy, onChanged, onError, note }) {
 }
 
 export default function PartnerHealthZone() {
-  const [state, setState] = useState({ loading: true, error: '', data: null });
+  const [state, setState] = useState({ loading: true, error: '', data: null, people: null });
+  const [view, setView] = useState('at_risk');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: '' }));
     try {
-      const r = await api.getPartnerDeliveryHealth();
-      setState({ loading: false, error: '', data: r || {} });
+      // The roster is what the owner picker offers, and it is the firm's own
+      // people only — an owner naming anybody else would be as false as a seat
+      // register naming them.
+      const [r, ppl] = await Promise.all([
+        api.getPartnerDeliveryHealth(),
+        api.listPartnerPeople().catch(() => ({ items: [] })),
+      ]);
+      setState({
+        loading: false, error: '', data: r || {},
+        people: Array.isArray(ppl?.items) ? ppl.items : [],
+      });
     } catch (e) {
-      setState({ loading: false, error: e?.message || 'The delivery record did not load.', data: null });
+      setState({
+        loading: false, error: e?.message || 'The delivery record did not load.',
+        data: null, people: null,
+      });
     }
   }, []);
   useEffect(() => { load(); }, [load]);
 
   const d = state.data;
   const items = Array.isArray(d?.items) ? d.items : [];
+  const roster = state.people || [];
   const counts = items.reduce((acc, r) => {
     acc[r.health || 'unrated'] = (acc[r.health || 'unrated'] || 0) + 1;
     return acc;
   }, {});
+  // The artboard's `At risk` tile names them rather than only counting them:
+  // "Verwood, Thornfield" is a page a reader can act on, "2" is not.
+  const atRiskNames = items
+    .filter((r) => r.health === 'at_risk' || r.health === 'blocked')
+    .map((r) => r.founder_name || r.need_title)
+    .filter(Boolean)
+    .join(', ');
 
   // Hoisted so the gate branch below and the live row draw the SAME row.
   // With nothing loaded the export renders disabled and says so itself,
   // which is what makes a header row over an unreadable store honest.
-  const rowActions = partnerZoneActions('delivery/health', { view: { header: ['Engagement', 'Founder', 'Utilisation %', 'Milestones', 'Deliverables sent', 'Open blockers'], rows: items, cells: (r) => [r.need_title, r.founder_name, r.utilisation_pct, r.milestone_count, r.deliverables_sent, r.open_blockers?.length ?? 0] } });
+  // ══ THE `pd5` CHIP ROW ═══════════════════════════════════════════════════
+  // `At risk` IS THE DEFAULT because the artboard selects it, and it is the two
+  // RATED-bad states rather than "anything not green": an engagement with
+  // nothing recorded is unrated, not at risk, and the read says so separately.
+  //
+  // `Renewing soon` IS THIRTY DAYS, and the date is `partner_retainers
+  // .renews_at` — stored and indexed by migration 208, and returned by the
+  // health read so this chip has something to select on.
+  //
+  // `By owner` WAS PROSE UNTIL MIGRATION 232. Its reason was true and precise:
+  // "nothing records who at the firm owns an engagement; the firm owner
+  // migration 224 added belongs to a book contact, which is a person the firm
+  // knows rather than work it is running." 232 records the second thing, so the
+  // chip becomes a real ordering — UNASSIGNED FIRST, because an engagement
+  // nobody owns is the one this grouping exists to surface, and hiding it under
+  // a "no owner" heading at the bottom would defeat the point.
+  const soon = new Date();
+  soon.setUTCDate(soon.getUTCDate() + 30);
+  const soonIso = soon.toISOString().slice(0, 10);
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const visible = (() => {
+    if (view === 'at_risk') return items.filter((r) => r.health === 'at_risk' || r.health === 'blocked');
+    if (view === 'renewing') {
+      return items.filter((r) => r.renews_at
+        && String(r.renews_at).slice(0, 10) >= todayIso
+        && String(r.renews_at).slice(0, 10) <= soonIso);
+    }
+    if (view === 'owner') {
+      return items.slice().sort((a, b) => {
+        const an = a.owner_name || '';
+        const bn = b.owner_name || '';
+        if (!an !== !bn) return an ? 1 : -1;
+        return an.localeCompare(bn) || String(a.founder_name || '').localeCompare(String(b.founder_name || ''));
+      });
+    }
+    if (view === 'all') return items;
+    return items;
+  })();
+
+  const rowActions = partnerZoneActions('delivery/health', { view: { header: ['Engagement', 'Founder', 'Health', 'Utilisation %', 'Milestones', 'Deliverables sent', 'Open blockers', 'Renews'], rows: visible, cells: (r) => [r.need_title, r.founder_name, r.health, r.utilisation_pct, r.milestone_count, r.deliverables_sent, r.open_blockers?.length ?? 0, r.renews_at] } });
 
   if (isNoPartnerProfile(state.error)) {
     return <UnlinkedZone title="Health" actions={rowActions} />;
   }
 
   return (
+    <>
+      <ZoneToolbar
+        className="mb-3"
+        role="partner"
+        filters={partnerZoneFilters('delivery/health', { value: view, onChange: setView })}
+        actions={rowActions}
+      />
     <ZoneBody
-      actions={rowActions}
       loading={state.loading}
       error={state.error}
       onRetry={load}
@@ -395,28 +604,129 @@ export default function PartnerHealthZone() {
     >
       <div className="space-y-6">
         <ZoneHeading
-          title="Health across the book"
+          title="Engagement health"
           blurb={
-            'Read across five stores at once. An engagement with nothing '
-            + 'recorded is not rated rather than rated healthy — silence is not '
-            + 'good news, and this page will not pretend otherwise.'
+            'The renewal early-warning page: scope drift, utilisation, '
+            + 'satisfaction, blockage. Utilisation here is a read of the retainer '
+            + 'record on Pipeline · Retainers — the same number, not a second one '
+            + 'computed from a different source.'
           }
         />
 
+        {/* ══ THE `pd5` STRIP ═══════════════════════════════════════════════
+            `At risk · Scope drift · Lowest utilisation · Firm satisfaction
+            avg`, each over the whole book rather than the chip-narrowed list. */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <StatCard label="Blocked" value={counts.blocked || 0} hint="something is open against it" />
-          <StatCard label="At risk" value={counts.at_risk || 0} hint="overdue, unopened or off scope" />
-          <StatCard label="On track" value={counts.on_track || 0} hint="nothing overdue or blocked" />
-          <StatCard
-            label="Not rated"
-            value={counts.unrated || 0}
-            hint={counts.unrated ? 'nothing recorded to judge' : 'every engagement has a signal'}
+          <HealthTile
+            label="At risk"
+            value={String(d?.at_risk_count ?? 0)}
+            note={atRiskNames || `${counts.unrated || 0} more rated on nothing at all`}
+          />
+          <HealthTile
+            label="Scope drift"
+            value={String(d?.drift_count ?? 0)}
+            note={d?.scope_unassessed_count
+              ? `${d.scope_unassessed_count} not assessed either way`
+              : 'every engagement assessed'}
+          />
+          {/* LOWEST, NOT AVERAGE. The renewal risk is the one client not using
+              what they pay for, and an average hides them behind four who are. */}
+          <HealthTile
+            label="Lowest utilisation"
+            value={`${d?.lowest_utilisation_pct ?? 0}%`}
+            nr={d?.lowest_utilisation_pct == null}
+            note={d?.lowest_utilisation_client
+              ? `${d.lowest_utilisation_client} · read from retainer record`
+              : 'no retainer records hours yet'}
+          />
+          {/* REFUSED WHILE ANY LIVE ENGAGEMENT IS UNSCORED. Averaging the rest
+              would present a few opinions as a fact about all of them. */}
+          <HealthTile
+            label="Firm satisfaction avg"
+            value={d?.satisfaction_avg == null ? '' : `${d.satisfaction_avg} / 5`}
+            nr={d?.satisfaction_avg == null}
+            note={d?.satisfaction_note
+              || `every engagement scored · ${d?.satisfaction_scored_count ?? 0} of ${d?.satisfaction_scored_count ?? 0}`}
           />
         </div>
 
         {d?.unrated_note && (
           <p className="text-[12.5px] leading-relaxed text-axal-ink-2">{d.unrated_note}</p>
         )}
+
+        {/* THE ARTBOARD'S LEGEND, two entries — drawn only where the table
+            carries the marks it explains. A legend over rows that are all one
+            kind explains a distinction the reader cannot see. */}
+        {(items.some((r) => r.utilisation_pct != null) || items.some((r) => r.seat_scope)) && (
+          <Legend
+            items={[
+              ...(items.some((r) => r.utilisation_pct != null)
+                ? [{ chip: 'Read · Pipeline', tone: 'seam', note: 'utilisation read from the retainer record, not recomputed' }]
+                : []),
+              ...(items.some((r) => r.seat_scope)
+                ? [{ chip: 'Granted · scope', grant: true, note: 'scoped, revocable operator grant' }]
+                : []),
+            ]}
+          />
+        )}
+
+        <Instrument
+          testid="renewal-watch"
+          title="Renewal watch"
+          meta="Utilisation is a read, not a second record"
+          cols="1fr .8fr 1.5fr 1.5fr .9fr .9fr"
+          head={['Client', 'Mode', 'Scope state', 'Utilisation', 'Satisfaction', 'Health']}
+          rows={visible.map((r) => {
+            const clientBlocked = (r.open_blockers || []).some((b) => b.side === 'client');
+            return {
+              key: r.engagement_id,
+              rowClass: r.health === 'at_risk' || r.health === 'blocked'
+                ? 'bg-red-50/40 dark:bg-red-950/10' : '',
+              cells: [
+                r.founder_name ? { text: r.founder_name, sub: r.owner_name ? `owner ${r.owner_name}` : 'unassigned' } : { nr: true },
+                { mode: r.seat_scope ? 'Embedded' : 'Project' },
+                // THREE STATES AND A FOURTH THAT IS NO STATE. Not-assessed is
+                // absent rather than "within scope": an engagement nobody has
+                // looked at has not been cleared of drift.
+                r.scope_state === 'drift'
+                  ? { text: 'Scope drift', pill: 'Drift', pillTone: 'danger', sub: r.scope_note || undefined }
+                  : (clientBlocked
+                    ? { text: 'Client-side block', pill: 'Blocked', pillTone: 'warn' }
+                    : (r.scope_state === 'within' ? { text: 'Within scope' } : { nr: true })),
+                // SEAM-MARKED BECAUSE IT IS A READ. Two pages disagreeing about
+                // one client's utilisation is worse than either number.
+                r.utilisation_pct == null
+                  ? { nr: true }
+                  : { text: `${r.utilisation_pct}%`, seam: 'Read · Pipeline · Retainers', sub: `${r.hours_used}h of ${r.retained_hours}h` },
+                // A SCORE ALWAYS SHOWS ITS SOURCE. It is a remark somebody
+                // heard, not a metric this product measured.
+                r.satisfaction == null
+                  ? { nr: true }
+                  : { text: `${r.satisfaction.toFixed(1)} / 5`, sub: r.satisfaction_source || undefined },
+                r.health
+                  ? { pill: HEALTH_LABEL[r.health], pillTone: HEALTH_TONE[r.health] }
+                  : { nr: true },
+              ],
+            };
+          })}
+          note={'Utilisation is seam-marked because it is read from the retainer record on Pipeline · Retainers rather than recalculated here: two pages disagreeing about the same client’s utilisation is worse than either number, and the lowest one — a client not using what they pay for — is the near-term renewal risk this page exists to surface. Scope state is absent rather than “within scope” where nobody has assessed it, because an engagement no one has looked at has not been cleared of drift. A satisfaction score is shown with where it was said, every time, and the firm-wide average stays refused while any live engagement has none: averaging the rest would present a few opinions as a fact about all of them.'}
+        />
+
+        {items.length > 0 && visible.length === 0 && (
+          <p className="text-[12px] text-axal-ink-2">
+            No engagement is in this state. {items.length} in the book in total.
+          </p>
+        )}
+
+        <ZoneDraft
+          surface="delivery/health"
+          label="Draft · renewal risk read"
+          accept="Accept read"
+          run="Read the book"
+          foot="Utilisation traced to Pipeline · Retainers."
+          empty="Per engagement: drift against the SOW, utilisation against the retainer record, and where satisfaction is absent rather than low — because the two call for different conversations, and only one of them is a renewal one."
+          nothingToDraft="No engagement is in the book, so there is nothing to read."
+        />
 
         <Section title="Engagements">
           <div className="space-y-3">
@@ -432,8 +742,26 @@ export default function PartnerHealthZone() {
                 <HealthRow
                   key={row.engagement_id}
                   row={row}
+                  roster={roster}
                   busy={busy}
                   note={note}
+                  onSaveFacts={async (r, data) => {
+                    setBusy(true);
+                    setNote(null);
+                    try {
+                      await api.savePartnerEngagementHealth(r.engagement_id, data);
+                      setNote({ ok: true, text: 'Saved.', scope: `facts:${r.engagement_id}` });
+                      await load();
+                    } catch (e) {
+                      setNote({
+                        ok: false,
+                        text: e?.message || 'That did not save.',
+                        scope: `facts:${r.engagement_id}`,
+                      });
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
                   onChanged={async () => {
                     setBusy(true);
                     setNote({ ok: true, text: 'Saved.', scope: `eng:${row.engagement_id}` });
@@ -465,6 +793,22 @@ export default function PartnerHealthZone() {
             than either number, so there is one calculation and this page is not
             it.
           </p>
+          <p className="mt-2">
+            <strong>A satisfaction score is a remark, not a measurement.</strong>{' '}
+            Nothing here asks a client anything. A score is what somebody at this
+            firm heard and wrote down, so it cannot be saved without saying where
+            it was said — a number typed by the person who wants the renewal,
+            shown on the page that decides one, is the firm scoring itself. The
+            firm-wide average stays absent while any live engagement has no
+            score, because averaging the rest would present a few opinions as a
+            fact about all of them.
+          </p>
+          <p className="mt-2">
+            <strong>Scope is assessed or it is absent — never “within” by
+            default.</strong> An engagement nobody has looked at has not been
+            cleared of drift, and the strip counts how many those are rather
+            than folding them into the clean side.
+          </p>
           {/* NO “CLIENT HAS GONE QUIET” SIGNAL, AND NO PARAGRAPH ABOUT IT.
               The canvas asks for one. Nothing in this product records contact
               with a client — no message log, no last-touched date — so a quiet
@@ -477,5 +821,6 @@ export default function PartnerHealthZone() {
         </StatedLimit>
       </div>
     </ZoneBody>
+    </>
   );
 }

@@ -102,6 +102,12 @@ function freshDb() {
                      CHECK (fulfilment IN ('code', 'link', 'intro')),
       redeem_url     TEXT,
       claim_cap      INTEGER,
+      -- Migration 228. The CHECK is the migration's own, so a fixture write
+      -- that would fail in D1 fails here too rather than passing on a looser
+      -- shape than production runs.
+      ends_at        TEXT
+                     CHECK (ends_at IS NULL OR ends_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+      grant_scope    TEXT,
       status         TEXT NOT NULL DEFAULT 'draft'
                      CHECK (status IN ('draft', 'in_review', 'live', 'paused', 'rejected')),
       review_note    TEXT,

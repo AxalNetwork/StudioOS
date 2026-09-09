@@ -15,6 +15,25 @@ const SECTIONS = [
   ['Partnerships', 'partnerships'], ['Launch', 'launch'],
 ];
 
+/**
+ * EVERY CARD LINKS TO THE GROW PAGE IT SUMMARISES, and none of them did.
+ *
+ * The chip row above has pointed at `/grow/<slug>` since these seven pages were
+ * built. The CARDS underneath — the summaries of those same seven pages — went
+ * somewhere else entirely: Customers to `/build/discovery`, Talent to
+ * `/build/team?mode=workspace`, Brand to `/spinout-lab/brand`, Capital match to
+ * `/raise/capital/pipeline`, Partnerships and Launch both to `/comarketing`,
+ * and Focus to `/build/metrics`. Six of the seven left the bucket, two of them
+ * landed on the same page as each other, and the `mode=workspace` one is read
+ * by `App.jsx` and rendered as the shared workspace rather than as a page at
+ * all. A reader could summarise their own Grow pages here and reach not one of
+ * them.
+ *
+ * Taken from the same list the chips use, so a slug cannot drift between the
+ * row and the card that names it.
+ */
+const GROW_PAGES = Object.fromEntries(SECTIONS.map(([label, slug]) => [slug, `/grow/${slug}`]));
+
 const list = (value, key) => Array.isArray(value) ? value : (Array.isArray(value?.[key]) ? value[key] : []);
 const text = (value) => String(value || '').trim();
 const linked = (row, project) => {
@@ -24,6 +43,18 @@ const linked = (row, project) => {
   return numericMatch || uidMatch;
 };
 const title = (row, fallback) => text(row?.title || row?.name || row?.label || row?.metric_name) || fallback;
+/**
+ * The name of a metric the summary could not compute.
+ *
+ * `summary.unavailable` is `[{ metric, reason }]` — the worker returns the
+ * REASON on purpose, so a blank KPI tells a founder which input it needs rather
+ * than reading as a zero or a bug (`services/saasMetrics.ts`). This desk used to
+ * `join(', ')` that array of objects straight into a sentence, which rendered
+ * "Derived summary unavailable: [object Object], [object Object], …" — five of
+ * them on a startup with no snapshot, throwing away the one thing the field
+ * exists to carry. `MetricsPage` had it right and this follows it.
+ */
+const metricName = (item) => text(typeof item === 'string' ? item : item?.metric).replace(/_/g, ' ') || 'an unnamed metric';
 
 export default function FounderGrowDesk() {
   const location = useLocation();
@@ -117,13 +148,13 @@ function GrowSections({ data, project, loading, query, state }) {
   const focus = data.snapshots[0];
   const unavailable = Array.isArray(data.summary?.unavailable) ? data.summary.unavailable : [];
   return <div className="a5-sections">
-    <section className="a5-focus" id="a5-focus"><Head icon={Target} title="This month's focus" meta={project?.name || 'Selected startup'} />{loading ? <Skeleton rows={2} /> : !project ? <Empty icon={Target} title="No startup is available." body="Select a startup to read its operating records." /> : <><strong>{focus ? 'Latest stored metric snapshot' : 'No monthly metric recorded'}</strong><div className="a5-focus-numbers"><span>{focus?.snapshot_date ? `Snapshot date ${focus.snapshot_date}` : 'Snapshot date not recorded'}</span><span>Target not recorded</span></div><p>{focus ? 'Open Metrics to inspect the stored snapshot fields.' : 'No metric snapshot is recorded for this startup.'}{unavailable.length ? ` Derived summary unavailable: ${unavailable.join(', ')}.` : ''}</p><DeskLink testid="link-open-grow-focus" to={`/build/metrics${query}`} state={state}>Open metrics</DeskLink></>}</section>
-    <div className="a5-pair"><Card id="customers" icon={Users} title="Customers" meta={`${data.customers.length} discovery records`} loading={loading}><Rows rows={data.customers} empty="No selected-project customer records are recorded." /><DeskLink testid="link-open-grow-customers" to={`/build/discovery${query}`} state={state}>Open customer discovery</DeskLink></Card>
-      <Card id="talent" icon={BriefcaseBusiness} title="Talent" meta={`${data.jobs.length} linked role${data.jobs.length === 1 ? '' : 's'}`} loading={loading}><Rows rows={data.jobs} empty="No roles explicitly linked to this startup are recorded." /><p className="a5-note">Applicant total: Not recorded.</p><DeskLink testid="link-open-grow-talent" to={`/build/team?mode=workspace&project_id=${project?.id || ''}`} state={state}>Open talent workspace</DeskLink></Card></div>
-    <Card id="brand" icon={Sparkles} title="Brand & landing" meta={`${data.pages.length} stored page${data.pages.length === 1 ? '' : 's'}`} loading={loading} wide><div className="a5-brand-status"><b>{text(data.landing?.headline || data.landing?.name) || 'Landing record not recorded'}</b><span>{data.brandWaitlist.length} brand waitlist record{data.brandWaitlist.length === 1 ? '' : 's'}</span></div><Rows rows={data.pages} empty="No brand pages are recorded for this startup." /><DeskLink testid="link-open-grow-brand" to={`/spinout-lab/brand${query}`} state={state}>Open brand workspace</DeskLink></Card>
-    <Card id="capital-match" icon={CircleDot} title="Capital match" meta={`${data.prospects.length} stored prospect${data.prospects.length === 1 ? '' : 's'}`} loading={loading} wide><Rows rows={data.prospects} empty="No stored investor prospects are recorded for this startup." /><p className="a5-note">Stored prospects only. This desk does not claim scored matches.</p><DeskLink testid="link-open-grow-capital" to={`/raise/capital/pipeline${query}`} state={state}>Open capital pipeline</DeskLink></Card>
-    <div className="a5-pair"><Card id="partnerships" icon={Handshake} title="Partnerships" meta={`${data.pitches.length} linked record${data.pitches.length === 1 ? '' : 's'}`} loading={loading}><Rows rows={data.pitches} empty="No project-linked partnership records are recorded." /><DeskLink testid="link-open-grow-partnerships" to={`/comarketing${query}`} state={state}>Open partnerships</DeskLink></Card>
-      <Card id="launch" icon={Rocket} title="Launch calendar" meta={`${data.attributions.length} linked record${data.attributions.length === 1 ? '' : 's'}`} loading={loading}><Rows rows={data.attributions} empty="No project-linked launch records are recorded." /><DeskLink testid="link-open-grow-launch" to={`/comarketing${query}`} state={state}>Open co-marketing</DeskLink></Card></div>
+    <section className="a5-focus" id="a5-focus"><Head icon={Target} title="This month's focus" meta={project?.name || 'Selected startup'} />{loading ? <Skeleton rows={2} /> : !project ? <Empty icon={Target} title="No startup is available." body="Select a startup to read its operating records." /> : <><strong>{focus ? 'Latest stored metric snapshot' : 'No monthly metric recorded'}</strong><div className="a5-focus-numbers"><span>{focus?.snapshot_date ? `Snapshot date ${focus.snapshot_date}` : 'Snapshot date not recorded'}</span><span>Target not recorded</span></div><p>{focus ? 'Open Focus to inspect the stored snapshot fields.' : 'No metric snapshot is recorded for this startup.'}{unavailable.length ? ` ${unavailable.length} derived metric${unavailable.length === 1 ? '' : 's'} cannot be computed yet: ${unavailable.map(metricName).join(', ')}.` : ''}</p>{unavailable.length ? <ul className="a5-unavailable" data-testid="list-grow-unavailable">{unavailable.map((item) => <li key={item.metric || String(item)}><b>{metricName(item)}</b> — {text(item?.reason) || 'No reason recorded.'}</li>)}</ul> : null}<DeskLink testid="link-open-grow-focus" to={`${GROW_PAGES.focus}${query}`} state={state}>Open focus</DeskLink></>}</section>
+    <div className="a5-pair"><Card id="customers" icon={Users} title="Customers" meta={`${data.customers.length} discovery records`} loading={loading}><Rows rows={data.customers} empty="No selected-project customer records are recorded." /><DeskLink testid="link-open-grow-customers" to={`${GROW_PAGES.customers}${query}`} state={state}>Open customers</DeskLink></Card>
+      <Card id="talent" icon={BriefcaseBusiness} title="Talent" meta={`${data.jobs.length} linked role${data.jobs.length === 1 ? '' : 's'}`} loading={loading}><Rows rows={data.jobs} empty="No roles explicitly linked to this startup are recorded." /><p className="a5-note">Applicant total: Not recorded.</p><DeskLink testid="link-open-grow-talent" to={`${GROW_PAGES.talent}${query}`} state={state}>Open talent</DeskLink></Card></div>
+    <Card id="brand" icon={Sparkles} title="Brand & landing" meta={`${data.pages.length} stored page${data.pages.length === 1 ? '' : 's'}`} loading={loading} wide><div className="a5-brand-status"><b>{text(data.landing?.headline || data.landing?.name) || 'Landing record not recorded'}</b><span>{data.brandWaitlist.length} brand waitlist record{data.brandWaitlist.length === 1 ? '' : 's'}</span></div><Rows rows={data.pages} empty="No brand pages are recorded for this startup." /><DeskLink testid="link-open-grow-brand" to={`${GROW_PAGES.brand}${query}`} state={state}>Open brand</DeskLink></Card>
+    <Card id="capital-match" icon={CircleDot} title="Capital match" meta={`${data.prospects.length} stored prospect${data.prospects.length === 1 ? '' : 's'}`} loading={loading} wide><Rows rows={data.prospects} empty="No stored investor prospects are recorded for this startup." /><p className="a5-note">Stored prospects only. This desk does not claim scored matches.</p><DeskLink testid="link-open-grow-capital" to={`${GROW_PAGES['capital-match']}${query}`} state={state}>Open capital match</DeskLink></Card>
+    <div className="a5-pair"><Card id="partnerships" icon={Handshake} title="Partnerships" meta={`${data.pitches.length} linked record${data.pitches.length === 1 ? '' : 's'}`} loading={loading}><Rows rows={data.pitches} empty="No project-linked partnership records are recorded." /><DeskLink testid="link-open-grow-partnerships" to={`${GROW_PAGES.partnerships}${query}`} state={state}>Open partnerships</DeskLink></Card>
+      <Card id="launch" icon={Rocket} title="Launch calendar" meta={`${data.attributions.length} linked record${data.attributions.length === 1 ? '' : 's'}`} loading={loading}><Rows rows={data.attributions} empty="No project-linked launch records are recorded." /><DeskLink testid="link-open-grow-launch" to={`${GROW_PAGES.launch}${query}`} state={state}>Open launch</DeskLink></Card></div>
   </div>;
 }
 function Card({ id, icon, title: heading, meta, loading, children, wide }) { return <section className={`a5-card${wide ? ' a5-wide' : ''}`} id={`a5-${id}`}><Head icon={icon} title={heading} meta={meta} />{loading ? <Skeleton rows={2} /> : children}</section>; }

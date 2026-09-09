@@ -15,7 +15,9 @@ import { isAdmin, isPartner, isFounder, mapError, nowIso, newUid } from './_t13t
 import { issueInvoice, invoiceDto } from '../services/engagementInvoices';
 import {
   analysePipeline, weightedPipeline, analyseDelivery, analyseByShape, analyseByQuarter,
+  analyseLossReasons, inDecisionPeriod, quarterOf,
   type QuoteRow as QuoteAnalyticsRow, type EngagementRow as EngagementAnalyticsRow,
+  type DecisionPeriod,
 } from '../services/bdAnalytics';
 
 // Mirror FastAPI VALID_CATEGORIES (kept loose for forward-compat).
@@ -365,10 +367,43 @@ quotesRouter.get('/me', async (c) => {
  * `by_shape` and `by_quarter` were added for the Pipeline canvas's Analytics
  * zone, which asks for the same rate decomposed two ways. Both are derived
  * from columns the store already holds — a quote's status, its two timestamps
- * and, through the need it answers, that need's `category`. `loss_reasons` is
- * returned as null with its reason attached: nothing records why a quote was
- * rejected, and a taxonomy inferred from a bare status would be a guess.
+ * and, through the need it answers, that need's `category`.
+ *
+ * `loss_reasons` WAS NULL AND IS NOT ANY MORE. It was returned as null with the
+ * reason attached for as long as that was true: nothing recorded why a quote
+ * was rejected, and a taxonomy inferred from a bare status would have been a
+ * guess. Migration 234 added `quotes.loss_reason` and the Proposals zone writes
+ * it against a closed vocabulary, so the count is read. What is still true, and
+ * is why `losses_unstated` comes back beside it, is that nobody is obliged to
+ * record one.
+ *
+ * `?period=` NARROWS WHAT WAS DECIDED, never what is open. The analytics chip
+ * row offers this quarter, last quarter and year to date; an undecided quote
+ * has no decision date to place in any of them, so it stays in every window and
+ * the forecast keeps its meaning when a reader presses a chip. Omitting the
+ * parameter is `all`, which is exactly what the two older consumers
+ * (`/partner/operations/performance` and the Studio home card) already send.
  */
+const PERIOD_LABELS: Record<DecisionPeriod, string> = {
+  all: 'All time',
+  quarter: 'This quarter',
+  prev_quarter: 'Last quarter',
+  ytd: 'Year to date',
+  shape: 'All time, by shape',
+};
+
+/**
+ * The window a reader asked for, or `all`.
+ *
+ * AN UNRECOGNISED VALUE IS `all`, NOT AN ERROR. This endpoint has two older
+ * consumers that send no parameter at all, and a 400 on a stray query string
+ * would take a working dashboard down over a chip that does not exist.
+ */
+function readPeriod(raw: string | undefined): DecisionPeriod {
+  const v = String(raw || 'all');
+  return (Object.prototype.hasOwnProperty.call(PERIOD_LABELS, v) ? v : 'all') as DecisionPeriod;
+}
+
 quotesRouter.get('/analytics', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -376,6 +411,12 @@ quotesRouter.get('/analytics', async (c) => {
       return c.json({ pipeline: null, forecast: null, delivery: null });
     }
     const admin = isAdmin(user);
+    // One clock for the whole response: the window, the current-quarter label
+    // and every quarter key below are read off this instant, so a request that
+    // straddles midnight on the last day of a quarter cannot answer half in one
+    // period and half in the next.
+    const now = new Date();
+    const period = readPeriod(c.req.query('period'));
     // The analytics must answer for the SAME set of rows the lists show, or a
     // partner reads a win rate for one agency beside a pipeline for another.
     const analyticsCompany = admin ? null : await activeCompanyFor(c, user);
@@ -387,19 +428,19 @@ quotesRouter.get('/analytics', async (c) => {
     const quotes = await (
       admin
         ? c.env.DB.prepare(
-            `SELECT q.status, q.price AS amount, q.created_at, q.decided_at, n.category AS shape
+            `SELECT q.status, q.price AS amount, q.created_at, q.decided_at, q.loss_reason, n.category AS shape
                FROM quotes q LEFT JOIN founder_needs n ON n.id = q.need_id
               ORDER BY q.created_at DESC LIMIT 1000`,
           )
         : analyticsCompany !== null
           ? c.env.DB.prepare(
-              `SELECT q.status, q.price AS amount, q.created_at, q.decided_at, n.category AS shape
+              `SELECT q.status, q.price AS amount, q.created_at, q.decided_at, q.loss_reason, n.category AS shape
                  FROM quotes q LEFT JOIN founder_needs n ON n.id = q.need_id
                 WHERE q.partner_id = ? AND (q.company_id = ? OR q.company_id IS NULL)
                 ORDER BY q.created_at DESC LIMIT 1000`,
             ).bind(user.partner_id ?? -1, analyticsCompany)
           : c.env.DB.prepare(
-              `SELECT q.status, q.price AS amount, q.created_at, q.decided_at, n.category AS shape
+              `SELECT q.status, q.price AS amount, q.created_at, q.decided_at, q.loss_reason, n.category AS shape
                  FROM quotes q LEFT JOIN founder_needs n ON n.id = q.need_id
                 WHERE q.partner_id = ? ORDER BY q.created_at DESC LIMIT 1000`,
             ).bind(user.partner_id ?? -1)
@@ -421,18 +462,46 @@ quotesRouter.get('/analytics', async (c) => {
     ).all<EngagementAnalyticsRow>().catch(() => ({ results: [] as EngagementAnalyticsRow[] }));
 
     const q = quotes.results || [];
+    // WHAT THE WINDOW APPLIES TO, and what it deliberately does not.
+    //
+    //   in       what was DECIDED in the window — the rate, the cycle, the
+    //            shape breakdown and the loss pattern
+    //   q        everything, for the forecast (an open quote belongs to no
+    //            quarter) and for the quarter-over-quarter chart (a trend
+    //            narrowed to one quarter is one bar)
+    const inWindow = inDecisionPeriod(q, period, now);
+    const losses = analyseLossReasons(inWindow);
+    const pipeline = analysePipeline(inWindow);
     return c.json({
-      pipeline: analysePipeline(q),
+      pipeline,
       forecast: weightedPipeline(q),
       delivery: analyseDelivery(engagements.results || []),
-      by_shape: analyseByShape(q),
+      by_shape: analyseByShape(inWindow),
+      // NOT NARROWED, on purpose: this IS the time series. Applying the chip to
+      // it would leave a quarter-over-quarter chart with one quarter in it.
       by_quarter: analyseByQuarter(q),
-      // The canvas's third analytic block. Said here rather than only in the
-      // page, so any future consumer of this endpoint reads the same reason.
-      loss_reasons: null,
-      loss_reasons_note:
-        'Quotes record a status and the date it was decided. There is no loss reason, '
-        + 'competitor or losing-price column anywhere, so a loss taxonomy would be inferred rather than read.',
+      period,
+      period_label: PERIOD_LABELS[period],
+      current_quarter: quarterOf(now),
+      decided_in_window: pipeline.accepted + pipeline.rejected,
+      // The canvas's third analytic block, now read rather than refused.
+      loss_reasons: losses.reasons,
+      losses_unstated: losses.unstated,
+      lost_count: losses.losses,
+      on_price_losses: losses.on_price,
+      // A COUNT OVER EXPLAINED LOSSES ONLY, said in the response so a consumer
+      // cannot present it as a share of every loss.
+      loss_reasons_note: losses.losses === 0
+        ? 'Nothing was lost in this window, so there is no loss pattern to read.'
+        : (losses.unstated === losses.losses
+          ? `No reason is recorded against any of the ${losses.losses} losses in this window, so the taxonomy has nothing to count yet.`
+          : (losses.unstated
+            ? `${losses.unstated} of ${losses.losses} losses carry no recorded reason and are counted separately rather than as "other".`
+            : `All ${losses.losses} losses in this window carry a recorded reason.`)),
+      // AN OPEN QUOTE BELONGS TO NO QUARTER, which is why the forecast ignores
+      // the chip row. Said here so a page cannot imply the chip narrowed it.
+      forecast_scope: 'all_open',
+      forecast_scope_note: 'The weighted forecast is over every quote still open. An undecided quote has no decision date, so no period chip can place it.',
     });
   } catch (e) { return mapError(c, e); }
 });

@@ -69,7 +69,14 @@ test('no research route takes an identity from the request', () => {
   // how an owner-scoped table stops being one with no WHERE clause changing.
   assert.doesNotMatch(routes, /query\(['"]user_id['"]\)/);
   assert.doesNotMatch(routes, /param\(['"]user(_?id)?['"]\)/);
-  assert.doesNotMatch(routes, /body\.owner_user_id|b\.owner_user_id/);
+  // `b.owner_user_id` is banned because `b` is this file's habitual name for a
+  // parsed request body. It therefore also refuses a SQL alias spelled `b` on
+  // an owner-scoped table, and that is the right trade: the ban stays exact and
+  // the alias gets a longer name (`bc` in the relationships draft gather). If
+  // this fires on a query rather than on a body, rename the alias — do not
+  // loosen the pattern.
+  assert.doesNotMatch(routes, /body\.owner_user_id|b\.owner_user_id/,
+    'an owner is being taken from the request — or a SQL alias is spelled `b`; see the note above');
 });
 
 test('the diligence read is scoped to the caller as the grantee', () => {

@@ -2,13 +2,18 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import {
+  // `StatCard` went with the four tiles it drew: the strip is the artboard's
+  // own composition now, and `FitTile` below carries the artboard's note under
+  // each figure and can draw an absence as a chip rather than an em dash.
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  StatCard, Section, Field, SaveNote, UnlinkedZone, isNoPartnerProfile,
+  Section, Field, SaveNote, UnlinkedZone, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, moneyCents, dollarsToCents,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
+import ZoneDraft from '../../../workspaces/ZoneDraft';
+import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
 
 /**
  * Offers · Audience fit — `/offers/audience-fit`.
@@ -47,6 +52,43 @@ const KIND_TONE = {
   best_fit: 'ok', budget_floor: 'info', sector_declined: 'neutral', capability_absent: 'neutral',
 };
 
+/**
+ * How strong a fit a PROFILE is (migration 229), in the firm's own words.
+ *
+ * NOT A SCORE ABOUT ANYBODY. The zone still runs nothing: the worker answers
+ * `enforcement: 'none'` and this file does not compute a number against a
+ * founder's need. A firm writing "pre-product founders with a deck — weak
+ * intent" is writing a sentence about a KIND of client, which is the same act
+ * as writing the reason beside it.
+ *
+ * `Weak intent` IS NOT A DECLINE, and the artboard's instNote is the argument:
+ * "the honest answer is 'not yet' — and a match engine that cannot say 'not
+ * yet' ends up saying 'no' to the same founder twice." So a weak profile stays
+ * a profile and never joins the exclusions below it.
+ */
+const SIGNALS = [
+  ['best_fit', 'Best fit'],
+  ['qualified', 'Qualified'],
+  ['weak_intent', 'Weak intent'],
+];
+const SIGNAL_LABEL = Object.fromEntries(SIGNALS);
+const SIGNAL_TONE = { best_fit: 'ok', qualified: 'info', weak_intent: 'warn' };
+
+/** The strip tile, in the anatomy the artboards share. */
+function FitTile({ label, value, note, nr = false }) {
+  return (
+    <div className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+      <Eyebrow>{label}</Eyebrow>
+      <div className="mt-1.5">
+        {nr ? <NotRecorded /> : (
+          <span className="font-mono text-[16px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{value}</span>
+        )}
+      </div>
+      <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
+    </div>
+  );
+}
+
 function RuleForm({ initial, onSubmit, onCancel, busy, submitLabel }) {
   const [kind, setKind] = useState(initial?.kind || 'best_fit');
   const [floor, setFloor] = useState(
@@ -55,9 +97,14 @@ function RuleForm({ initial, onSubmit, onCancel, busy, submitLabel }) {
   const [value, setValue] = useState(initial?.value || '');
   const [statement, setStatement] = useState(initial?.statement || '');
   const [referredTo, setReferredTo] = useState(initial?.referred_to || '');
+  const [signal, setSignal] = useState(initial?.signal || '');
   const [floorError, setFloorError] = useState('');
 
   const isFloor = kind === 'budget_floor';
+  // A strength belongs to a PROFILE. An exclusion has no strength — a declined
+  // sector is declined — and the route refuses one sent on any other kind, so
+  // the control is not drawn where it would be rejected.
+  const isProfile = kind === 'best_fit';
 
   function submit() {
     const parsed = dollarsToCents(floor);
@@ -70,6 +117,7 @@ function RuleForm({ initial, onSubmit, onCancel, busy, submitLabel }) {
       value: isFloor ? (value.trim() || null) : value.trim(),
       statement: statement.trim() || null,
       referred_to: referredTo.trim() || null,
+      signal: isProfile ? (signal || null) : null,
     });
   }
 
@@ -81,6 +129,17 @@ function RuleForm({ initial, onSubmit, onCancel, busy, submitLabel }) {
             {KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </Field>
+        {isProfile && (
+          <Field
+            label="How strong a fit"
+            hint="Your own judgement about this kind of client. Weak intent means “not yet”, which is not a decline."
+          >
+            <select className={inputClass} value={signal} onChange={(e) => setSignal(e.target.value)}>
+              <option value="">Not graded</option>
+              {SIGNALS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </Field>
+        )}
         {isFloor ? (
           <Field label="Floor" hint={floorError || 'The smallest engagement worth starting.'}>
             <input className={inputClass} value={floor} inputMode="decimal" placeholder="e.g. 25000"
@@ -135,6 +194,9 @@ function RuleRow({ rule, onSave, onDelete, busy, note }) {
                 ? (rule.floor_cents != null ? moneyCents(rule.floor_cents) : <Unrecorded>No amount</Unrecorded>)
                 : (rule.value || <Unrecorded>Unnamed</Unrecorded>)}
             </span>
+            {rule.signal && (
+              <Pill tone={SIGNAL_TONE[rule.signal] || 'neutral'}>{SIGNAL_LABEL[rule.signal]}</Pill>
+            )}
             {!rule.is_active && <Pill tone="neutral">Not in use</Pill>}
           </div>
           {rule.statement ? (
@@ -184,11 +246,88 @@ function RuleRow({ rule, onSave, onDelete, busy, note }) {
   );
 }
 
+/**
+ * `Pass reasons`, the artboard's second op.
+ *
+ * ITS REASON WAS WRONG ABOUT ITS OWN STORE. It read "a pass reason is not a
+ * stored field on a fit rule" — and `statement` is exactly that field: the form
+ * labels it "The sentence a pass quotes" and the docblock at the top of this
+ * file calls it the field that matters. Every exclusion the firm has written
+ * already carries the sentence, and `referred_to` carries the alternative.
+ *
+ * SO THIS COMPOSES RATHER THAN GENERATES. Nothing here writes a reason; it
+ * assembles the ones the firm wrote into the text a person would paste, and a
+ * rule with no sentence says so instead of getting one invented for it.
+ */
+function PassReasons({ rules, onClose }) {
+  const [copied, setCopied] = useState('');
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
+      <div className="max-h-[80vh] w-full max-w-xl overflow-y-auto rounded-lg bg-white p-5 shadow-xl dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="text-sm font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Pass reasons</h3>
+          <button type="button" className={ghostButtonClass} onClick={onClose}>Close</button>
+        </div>
+        <p className="mt-2 text-[11.5px] leading-relaxed text-axal-ink-2">
+          The sentence each exclusion would be passed with, assembled from what you wrote.
+          Nothing sends these — a pass is still yours to make and yours to word.
+        </p>
+        {rules.length === 0 ? (
+          <p className="mt-3 text-[12.5px] leading-relaxed text-axal-ink-2">
+            No exclusion is written yet, so a pass has nothing to quote. That is the silence
+            this zone exists to replace.
+          </p>
+        ) : (
+          <div className="mt-3 space-y-3">
+            {rules.map((r) => {
+              const subject = r.kind === 'budget_floor'
+                ? (r.floor_cents != null ? moneyCents(r.floor_cents) : 'the floor')
+                : r.value;
+              const text = r.statement
+                ? `${r.statement}${r.referred_to ? ` We would point you to ${r.referred_to}.` : ''}`
+                : null;
+              return (
+                <div key={r.id} className="rounded-md border border-axal-hairline p-3 dark:border-gray-800">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Pill tone={KIND_TONE[r.kind] || 'neutral'}>{KIND_LABEL[r.kind] || r.kind}</Pill>
+                    <span className="text-[12.5px] font-semibold">{subject}</span>
+                  </div>
+                  {text ? (
+                    <>
+                      <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink-2">{text}</p>
+                      <button
+                        type="button" className={`${ghostButtonClass} mt-2`}
+                        onClick={() => {
+                          navigator.clipboard?.writeText(text)
+                            .then(() => { setCopied(r.id); setTimeout(() => setCopied(''), 1500); })
+                            .catch(() => {});
+                        }}
+                      >
+                        {copied === r.id ? 'Copied' : 'Copy'}
+                      </button>
+                    </>
+                  ) : (
+                    <p className="mt-2 text-[12.5px] leading-relaxed text-amber-700 dark:text-amber-400">
+                      No sentence written. A pass citing this rule would have nothing to say — which
+                      is the one thing this zone asks you not to send.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function PartnerAudienceFitZone() {
   const [state, setState] = useState({ loading: true, error: '', data: null });
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
   const [adding, setAdding] = useState(false);
+  const [showingPasses, setShowingPasses] = useState(false);
   const [view, setView] = useState('all');
 
   const load = useCallback(async () => {
@@ -218,19 +357,52 @@ export default function PartnerAudienceFitZone() {
 
   const d = state.data;
   const items = Array.isArray(d?.items) ? d.items : [];
-  const declines = items.filter(
-    (r) => r.is_active && r.kind !== 'best_fit',
-  );
   const floor = items.find((r) => r.is_active && r.kind === 'budget_floor') || null;
-  // `Best fit` selects on the stored `kind`, which is the only thing on this
-  // artboard that names a RULE rather than a lead. The other two chips the
-  // canvas draws are about leads and have no source; the table says so.
-  const visible = view === 'best_fit' ? items.filter((r) => r.kind === 'best_fit') : items;
+  // The artboard's `Fit profiles` table is who the firm IS for; its `Who we are
+  // not for` card below is the other three kinds. One split, two compositions.
+  const profiles = items.filter((r) => r.kind === 'best_fit');
+  // ALL THREE STRENGTH CHIPS SELECT ON THE STORED `signal` (migration 229), and
+  // they select over the PROFILES rather than over every rule: a chip that
+  // returned a declined sector under `Weak` would be answering a different
+  // question from the one it asks.
+  const visible = view === 'all' ? items : profiles.filter((r) => r.signal === view);
+
+  // ══ THE ARTBOARD'S FOUR TILES ════════════════════════════════════════════
+  // `Best fit · Budget floor · Sectors declined · Capabilities absent`, counted
+  // over the whole record rather than the chip-narrowed list.
+  const bestFit = profiles.filter((r) => r.signal === 'best_fit');
+  const sectors = items.filter((r) => r.is_active && r.kind === 'sector_declined');
+  const absent = items.filter((r) => r.is_active && r.kind === 'capability_absent');
+  // The artboard's anti-persona card, grouped the way it groups: one card per
+  // exclusion KIND, with this firm's own values joined into it.
+  const ANTI = [
+    {
+      k: 'Budget floor',
+      v: floor?.floor_cents != null ? `Under ${moneyCents(floor.floor_cents)}` : null,
+      d: floor?.statement || null,
+      rules: floor ? [floor] : [],
+    },
+    {
+      k: 'Sectors declined',
+      v: sectors.map((r) => r.value).filter(Boolean).join(', ') || null,
+      d: sectors.find((r) => r.statement)?.statement || null,
+      rules: sectors,
+    },
+    {
+      k: 'Capability absent',
+      v: absent.map((r) => r.value).filter(Boolean).join(', ') || null,
+      d: absent.find((r) => r.statement)?.statement || null,
+      rules: absent,
+    },
+  ];
 
   // Hoisted so the gate branch below and the live row draw the SAME row.
   // With nothing loaded the export renders disabled and says so itself,
   // which is what makes a header row over an unreadable store honest.
-  const rowActions = partnerZoneActions('offers/audience-fit', { view: { header: ['Rule', 'Kind', 'Referred to'], rows: visible, cells: (r) => [r.statement, r.kind, r.referred_to] } });
+  const handlers = {
+    passReasons: () => { setNote(null); setShowingPasses(true); },
+  };
+  const rowActions = partnerZoneActions('offers/audience-fit', { handlers, view: { header: ['Profile or exclusion', 'Kind', 'Signal', 'Why', 'Referred to', 'In use'], rows: visible, cells: (r) => [r.kind === 'budget_floor' && r.floor_cents != null ? moneyCents(r.floor_cents) : r.value, r.kind, r.signal, r.statement, r.referred_to, r.is_active] } });
 
   if (isNoPartnerProfile(state.error)) {
     return <UnlinkedZone title="Audience fit" actions={rowActions} />;
@@ -282,20 +454,105 @@ export default function PartnerAudienceFitZone() {
             )}
           />
 
+          {/* ══ THE `po5` STRIP ═════════════════════════════════════════════
+              `Best fit · Budget floor · Sectors declined · Capabilities
+              absent`. `Budget floor` reads absent rather than an em dash when
+              no floor is written: a firm with no floor and a firm whose floor
+              is zero are different, and an em dash reads as the second. */}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <StatCard
+            <FitTile
+              label="Best fit"
+              value={String(bestFit.length)}
+              note={`of ${profiles.length} profile${profiles.length === 1 ? '' : 's'} written`}
+            />
+            <FitTile
               label="Budget floor"
-              value={floor?.floor_cents != null ? moneyCents(floor.floor_cents) : '—'}
-              hint={floor ? 'the smallest engagement worth starting' : 'none recorded'}
+              nr={floor?.floor_cents == null}
+              value={floor?.floor_cents != null ? moneyCents(floor.floor_cents) : ''}
+              note={floor?.referred_to ? `below it, referred to ${floor.referred_to}` : 'below it, referred out by name'}
             />
-            <StatCard label="Rules" value={items.length} hint={`${items.filter((r) => r.is_active).length} in use`} />
-            <StatCard label="Declines" value={declines.length} hint="sectors and capabilities ruled out" />
-            <StatCard
-              label="Without a sentence"
-              value={d?.unstated_count ?? 0}
-              hint={d?.unstated_count ? 'a pass citing these says nothing' : 'every rule can be quoted'}
-            />
+            <FitTile label="Sectors declined" value={String(sectors.length)} note="turned down on principle or on fit" />
+            <FitTile label="Capabilities absent" value={String(absent.length)} note="stated, not stretched" />
           </div>
+
+          {/* THE ARTBOARD'S LINKAGE NOTE, minus a number it has no store for.
+              Its own reads "… produced four explained passes last quarter" —
+              that is its sample, and nothing in this product logs a pass, so
+              the sentence says what the rules are FOR and stops where the
+              record stops. */}
+          <div className="rounded-[10px] border border-cyan-200 bg-cyan-50/50 p-3 text-[11.5px] leading-relaxed text-gray-700 dark:border-cyan-900 dark:bg-cyan-950/20 dark:text-gray-300">
+            <strong className="text-cyan-700 dark:text-cyan-300">Reads through to Pipeline:</strong>{' '}
+            Pipeline · Leads quotes these sentences to pass a lead with a named reason — “under floor,
+            referred to Ostara Studio” rather than silence. Nothing counts how often: no pass is
+            logged anywhere, so the number of explained passes is not a figure this page can show.
+          </div>
+
+          <Instrument
+            testid="fit-profiles"
+            title="Fit profiles"
+            meta="Signals feed lead scoring"
+            cols="1.9fr 1fr 2.4fr"
+            head={['Profile', 'Signal', 'Why']}
+            rows={profiles.map((r) => ({
+              key: r.id,
+              cells: [
+                {
+                  text: r.value || undefined,
+                  sub: r.referred_to ? `Refer instead to ${r.referred_to}` : undefined,
+                  ...(r.value ? {} : { nr: true }),
+                  ...(r.is_active ? {} : { gate: 'Not in use' }),
+                },
+                r.signal
+                  ? { pill: SIGNAL_LABEL[r.signal], pillTone: SIGNAL_TONE[r.signal] }
+                  : { nr: true },
+                // A profile with no sentence is the zone's own failure case, so
+                // it is named rather than left blank — the same call the row
+                // below the table makes in amber.
+                r.statement ? { text: r.statement } : { nr: true },
+              ],
+            }))}
+            note={'A profile graded weak intent is not a decline, and keeping the two apart is what this table is for: the honest answer to a pre-product founder is “not yet”, and a match engine that cannot say “not yet” ends up saying “no” to the same founder twice. The meta line above is the artboard\u2019s and it describes an intention rather than this product: nothing scores a lead against these rows, the worker says so in its own response, and your click is still what passes on anybody. A profile with no sentence reads absent in Why because a pass citing it would have nothing to quote \u2014 which is the silence this whole zone exists to replace.'}
+          />
+
+          {/* ══ THE ARTBOARD'S `Who we are not for` CARD ════════════════════
+              First-class, in fuchsia, three across — its own note calls it
+              "first-class — a pass needs a reason, not a shrug", and that is
+              the zone's argument rather than decoration. A kind the firm has
+              written nothing under says so; it is not dropped, because an
+              exclusion nobody has stated is the reason a pass lands silent. */}
+          <div className="rounded-[10px] border border-fuchsia-200 bg-fuchsia-50/40 p-4 dark:border-fuchsia-900 dark:bg-fuchsia-950/20">
+            <div className="flex flex-wrap items-baseline justify-between gap-3">
+              <span className="text-sm font-extrabold tracking-tight text-fuchsia-800 dark:text-fuchsia-300">
+                Who we are not for
+              </span>
+              <span className="text-[11px] text-gray-600 dark:text-gray-400">
+                First-class — a pass needs a reason, not a shrug
+              </span>
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              {ANTI.map((an) => (
+                <div key={an.k} className="rounded-[9px] border border-fuchsia-200 bg-white p-3 dark:border-fuchsia-900 dark:bg-gray-900">
+                  <Eyebrow className="!text-fuchsia-800 dark:!text-fuchsia-300">{an.k}</Eyebrow>
+                  <div className="mt-1.5 text-[12px] font-bold text-axal-ink dark:text-gray-100">
+                    {an.v || <NotRecorded>Nothing stated</NotRecorded>}
+                  </div>
+                  <div className="mt-1 text-[10.5px] leading-relaxed text-gray-600 dark:text-gray-400">
+                    {an.d || 'No sentence written, so a pass citing this would have nothing to say.'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <ZoneDraft
+            surface="offers/audience-fit"
+            label="Draft · pass reasons"
+            accept="Accept drafts"
+            run="Draft the passes"
+            foot="Reasons read from the fit rules."
+            empty="A short pass note per stated exclusion — the reason, and where you named one, the firm better suited."
+            nothingToDraft="No exclusion is written yet, so there is no reason to draft from."
+          />
 
           {(d?.unstated_count ?? 0) > 0 && (
             <p className="text-[12.5px] leading-relaxed text-amber-700 dark:text-amber-400">
@@ -327,7 +584,9 @@ export default function PartnerAudienceFitZone() {
                 rules", which is the silence this zone exists to replace. */}
             {items.length > 0 && visible.length === 0 && (
               <p className="mb-3 text-[12px] text-axal-ink-2">
-                No rule is written about who the firm is for. {items.length} recorded in total.
+                No profile is graded {SIGNAL_LABEL[view]?.toLowerCase() || view}.{' '}
+                {items.length} rule{items.length === 1 ? '' : 's'} recorded in total,{' '}
+                {profiles.length} of them profiles.
               </p>
             )}
             <div>
@@ -358,6 +617,11 @@ export default function PartnerAudienceFitZone() {
                 up with the sectors a firm would name — a number over those
                 inputs would be a guess wearing a decimal point. Not drawing it
                 was right; explaining the canvas underneath was not. */}
+          {showingPasses && (
+            <PassReasons rules={items.filter((r) => r.is_active && r.kind !== 'best_fit')}
+              onClose={() => setShowingPasses(false)} />
+          )}
+
           <StatedLimit title="What these rules do, and do not">
             <p>
               <strong>Nothing runs these rules.</strong>{' '}

@@ -2,9 +2,16 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
+import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
+import ZoneToolbar from '../../../workspaces/ZoneToolbar';
+import ZoneDraft from '../../../workspaces/ZoneDraft';
+import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  StatCard, Section, Field, SaveNote, NotComputable, UnlinkedZone,
+  // `StatCard` went with the four tiles it drew: the strip is the artboard's
+  // own now, and `On a retainer` was never on it — `Under-consuming` is, and it
+  // is the figure this whole page argues for.
+  Section, Field, SaveNote, NotComputable, UnlinkedZone,
   isNoPartnerProfile, inputClass, buttonClass, ghostButtonClass,
   moneyCents, dollarsToCents, formatDay,
 } from '../kit';
@@ -71,6 +78,21 @@ function currentPeriod(cadence) {
  * the chip carries the worker's own sentence, so the two null cases read
  * differently on the page as well as in the response.
  */
+/** The strip tile, in the anatomy the artboards share. */
+function RetainerTile({ label, value, note, nr = false }) {
+  return (
+    <div className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+      <Eyebrow>{label}</Eyebrow>
+      <div className="mt-1.5">
+        {nr ? <NotRecorded /> : (
+          <span className="font-mono text-[16px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{value}</span>
+        )}
+      </div>
+      <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
+    </div>
+  );
+}
+
 function Utilisation({ pct, note, used, retained }) {
   if (pct === null || pct === undefined) {
     return <NotComputable why={note}>No utilisation</NotComputable>;
@@ -313,6 +335,7 @@ function RetainerRow({ row, onSaveRetainer, onDeleteRetainer, onSaveUsage, onDel
 
 export default function PartnerRetainersZone() {
   const [state, setState] = useState({ loading: true, error: '', data: null });
+  const [view, setView] = useState('all');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
 
@@ -352,24 +375,65 @@ export default function PartnerRetainersZone() {
   const d = state.data;
   const items = Array.isArray(d?.items) ? d.items : [];
   const retainerCount = d?.retainer_count ?? 0;
-  const renewingSoon = useMemo(
-    () => items.filter((r) => {
-      const days = r.retainer?.days_to_renewal;
-      return !r.retainer?.ended_at && days !== null && days !== undefined && days >= 0 && days <= 30;
-    }),
+  // ══ THE `p4` CHIP ROW ════════════════════════════════════════════════════
+  // Three of the four narrow on `utilisation_pct` and `days_to_renewal`, both
+  // of which the WORKER computes — the same helper Delivery · Health reads, so
+  // two pages cannot disagree about one client's utilisation.
+  //
+  // ALL THREE NARROW THE SAME `live` LIST THE WORKER'S OWN COUNTS DO: a
+  // retainer that has ended is in none of them. Without this the tile and its
+  // own chip disagreed — `Over scope` read `over_scope_count`, which the worker
+  // computes over live retainers, while pressing the chip listed ended ones
+  // too, so a reader who clicked a `1` could be shown two rows.
+  //
+  // A RETAINER WITH NO RETAINED HOURS IS IN NEITHER CONSUMPTION CHIP. It has no
+  // utilisation at all — a fee-based deal is a different shape, not a badly
+  // consumed one — and sweeping it into `Under-consuming` would report it as a
+  // churn risk on the strength of a number it does not have.
+  const live = useMemo(
+    () => items.filter((r) => r.retainer && !r.retainer.ended_at),
     [items],
+  );
+  const renewingSoon = useMemo(
+    () => live.filter((r) => {
+      const days = r.retainer.days_to_renewal;
+      return days !== null && days !== undefined && days >= 0 && days <= 30;
+    }),
+    [live],
   );
   const overScope = useMemo(
-    () => items.filter((r) => r.utilisation_pct !== null && r.utilisation_pct > 100),
-    [items],
+    () => live.filter((r) => r.utilisation_pct != null && r.utilisation_pct > 100),
+    [live],
   );
+  const underConsuming = useMemo(
+    () => live.filter((r) => r.utilisation_pct != null && r.utilisation_pct < 60),
+    [live],
+  );
+  // THE ARTBOARD'S MRR NOTE IS A SHAPE BREAKDOWN, not a basis line: "2
+  // retainers · 1 embedded seat". An embedded seat is recurring revenue and is
+  // NOT a retainer, and this is the page that exists to tell those economics
+  // apart — so the note says which, and falls back to the basis sentence when
+  // there is nothing to break down.
+  const shapeNote = useMemo(() => {
+    const c = d?.shape_counts || {};
+    const parts = [];
+    if (c.retainer) parts.push(`${c.retainer} retainer${c.retainer === 1 ? '' : 's'}`);
+    if (c.embedded_seat) parts.push(`${c.embedded_seat} embedded seat${c.embedded_seat === 1 ? '' : 's'}`);
+    return parts.join(' · ');
+  }, [d]);
+  const visible = useMemo(() => {
+    if (view === 'renewing') return renewingSoon;
+    if (view === 'under') return underConsuming;
+    if (view === 'over') return overScope;
+    return items;
+  }, [view, items, renewingSoon, underConsuming, overScope]);
 
   // Hoisted so the gate branch below and the live row draw the SAME row.
   // With nothing loaded the export renders disabled and says so itself,
   // which is what makes a header row over an unreadable store honest.
   const rowActions = partnerZoneActions('pipeline/retainers', { view: {
         header: ['Client', 'Engagement', 'Amount (cents)', 'Cadence', 'Retained hours', 'Used', 'Utilisation %', 'Renews'],
-        rows: items,
+        rows: visible,
         cells: (r) => [r.founder_name, r.need_title, r.retainer?.amount_cents, r.retainer?.cadence,
           r.retained_hours, r.hours_used, r.retainer?.utilisation_pct, r.retainer?.renews_at],
       } });
@@ -379,12 +443,18 @@ export default function PartnerRetainersZone() {
   }
 
   return (
+    <>
+      {/* The schedule is one row per retained engagement: what it bills, on
+          what cadence, how much of the retained time is being used and when it
+          comes up. A row with no retainer carries blanks rather than zeroes —
+          an engagement without one is not an engagement billing nothing. */}
+      <ZoneToolbar
+        className="mb-3"
+        role="partner"
+        filters={partnerZoneFilters('pipeline/retainers', { value: view, onChange: setView })}
+        actions={rowActions}
+      />
     <ZoneBody
-      // The schedule is one row per retained engagement: what it bills, on what
-      // cadence, how much of the retained time is being used and when it comes
-      // up. A row with no retainer carries blanks rather than zeroes — an
-      // engagement without one is not an engagement billing nothing.
-      actions={rowActions}
       loading={state.loading}
       error={state.error}
       onRetry={load}
@@ -403,36 +473,176 @@ export default function PartnerRetainersZone() {
     >
       <div className="space-y-6">
         <ZoneHeading
-          title="Recurring work"
+          title="Retainers"
           blurb={
-            'What each client is on, what they are actually consuming against '
-            + 'what they bought, and when it renews. Every engagement is listed; '
-            + 'the ones that are not retainers say so rather than being hidden.'
+            'The recurring book, renewal dates, and utilisation against scope. '
+            + 'Utilisation is the point: a client using a third of retained hours '
+            + 'is a churn risk no complaint has surfaced yet, and one over a '
+            + 'hundred per cent is unbilled work.'
           }
         />
 
+        {/* ══ THE `p4` STRIP ════════════════════════════════════════════════
+            `MRR · Renewing in 30 d · Under-consuming · Over scope`. The second
+            tile used to read `On a retainer`, which is not on this artboard —
+            and `Under-consuming`, which is, is the figure the whole page argues
+            for. */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <StatCard
-            label="Monthly recurring"
-            value={d?.mrr_cents != null ? moneyCents(d.mrr_cents) : '—'}
-            hint={d?.mrr_basis || d?.mrr_note || 'nothing priced yet'}
+          {/* NULL IS AN EM DASH, NOT $0. A retainer with no amount recorded is
+              skipped from the total rather than counted as free. */}
+          <RetainerTile
+            label="MRR"
+            value={d?.mrr_cents != null ? moneyCents(d.mrr_cents) : ''}
+            nr={d?.mrr_cents == null}
+            note={shapeNote || d?.mrr_basis || d?.mrr_note || 'nothing priced yet'}
           />
-          <StatCard label="On a retainer" value={retainerCount} hint={`of ${items.length} engagements`} />
-          <StatCard
-            label="Renewing in 30d"
-            value={renewingSoon.length}
-            hint={retainerCount ? 'with a recorded renewal date' : 'nothing recorded yet'}
+          <RetainerTile
+            label="Renewing in 30 d"
+            value={String(renewingSoon.length)}
+            note={renewingSoon.length
+              ? renewingSoon
+                .map((r) => `${r.founder_name || r.need_title} (${r.retainer.days_to_renewal}d)`)
+                .join(', ')
+              : (retainerCount ? 'none with a recorded renewal date inside the window' : 'nothing recorded yet')}
           />
-          <StatCard
+          {/* THE CHURN RISK NOBODY HAS COMPLAINED ABOUT. Priced where the
+              retainers carry amounts, and stated absent rather than as $0
+              where they do not. */}
+          <RetainerTile
+            label="Under-consuming"
+            value={String(d?.under_consuming_count ?? underConsuming.length)}
+            note={d?.at_risk_mrr_cents != null
+              ? `${moneyCents(d.at_risk_mrr_cents)}/mo at churn risk`
+              : (underConsuming.length
+                ? 'none of them carries an amount, so the risk cannot be priced'
+                : 'under 60% of retained hours')}
+          />
+          <RetainerTile
             label="Over scope"
-            value={overScope.length}
-            hint={retainerCount ? 'past the retained hours this period' : 'nothing recorded yet'}
+            value={String(d?.over_scope_count ?? overScope.length)}
+            note={retainerCount ? 'unbilled hours to reconcile' : 'nothing recorded yet'}
           />
         </div>
 
         {d?.mrr_note && d?.mrr_cents != null && (
           <p className="text-[12px] leading-relaxed text-axal-ink-2">{d.mrr_note}</p>
         )}
+
+        {/* ══ THE BOOK — the artboard's ledger ══════════════════════════════
+            Six columns and a TOTAL row, which is what makes it a ledger rather
+            than a list: a reader checking the MRR tile against the rows can do
+            the addition. */}
+        <Instrument
+          testid="the-book"
+          title="The book"
+          meta="Utilisation against retained scope · only here"
+          cols="1.05fr .7fr .7fr 1.05fr .75fr .9fr"
+          head={['Client', 'Monthly', 'Hours', 'Utilisation', 'Renews', 'Read']}
+          rows={[
+            ...visible.map((r) => {
+              const u = r.utilisation_pct;
+              const monthly = r.retainer?.amount_cents == null
+                ? null
+                : (r.retainer.cadence === 'quarterly'
+                  ? Math.round(Number(r.retainer.amount_cents) / 3)
+                  : Number(r.retainer.amount_cents));
+              const days = r.retainer?.days_to_renewal;
+              return {
+                key: r.engagement_id,
+                rowClass: u == null ? ''
+                  : (u < 60 ? 'bg-red-50/40 dark:bg-red-950/10'
+                    : (u > 100 ? 'bg-amber-50/40 dark:bg-amber-950/10' : '')),
+                cells: [
+                  r.founder_name ? { text: r.founder_name, sub: r.need_title || undefined } : { nr: true },
+                  // NULL IS ABSENT, NEVER $0. A retainer with no amount is not
+                  // one billing nothing.
+                  monthly == null ? { nr: true } : { text: `${moneyCents(monthly)}/mo` },
+                  // THREE STATES, NOT TWO. No retained hours is a different
+                  // SHAPE of deal; retained hours with nothing logged against
+                  // them is a period nobody has recorded. Neither is "zero
+                  // hours used", which is a claim about the client's month.
+                  r.retained_hours == null
+                    ? { nr: true, sub: 'not sold by the hour' }
+                    : (r.hours_used == null
+                      ? { nr: true, sub: `${r.retained_hours} h retained · nothing logged` }
+                      : { text: `${r.hours_used} / ${r.retained_hours} h` }),
+                  // THE BAR IS THE COLUMN'S POINT, and it caps at 100 so an
+                  // over-scope row reads as full rather than overflowing — the
+                  // number beside it carries the overage.
+                  u == null
+                    ? { nr: true }
+                    : {
+                      text: `${u}%`,
+                      barPct: Math.min(100, u),
+                      barColor: u > 100 ? '#92400e' : (u < 60 ? '#b91c1c' : '#047857'),
+                    },
+                  r.retainer?.renews_at
+                    ? {
+                      text: formatDay(r.retainer.renews_at),
+                      sub: days != null && days >= 0 && days <= 30 ? `${days}d` : undefined,
+                    }
+                    : { nr: true },
+                  // THE READ IS THE ROW'S FINDING, and it is absent where there
+                  // is no utilisation to read.
+                  u == null
+                    ? { nr: true }
+                    : (u > 100
+                      ? { pill: 'Over scope', pillTone: 'warn' }
+                      : (u < 60
+                        ? { pill: 'Churn risk', pillTone: 'danger' }
+                        : { pill: 'Healthy', pillTone: 'ok' })),
+                ],
+              };
+            }),
+            // THE TOTAL ROW, and it totals only what it can. The MRR is the
+            // response's — the same figure the tile shows — rather than a second
+            // sum computed here from the rows that happen to be visible.
+            {
+              key: '__total',
+              rowClass: 'border-t-2 border-axal-hairline font-semibold',
+              cells: [
+                { text: 'Total' },
+                d?.mrr_cents == null ? { nr: true } : { text: `${moneyCents(d.mrr_cents)}/mo` },
+                // THE TOTAL COUNTS WHAT IT CAN AND SAYS SO. A row with no
+                // hours logged is skipped rather than added as zero — the same
+                // rule the MRR total follows for an unpriced retainer — and the
+                // sub line names how many rows are behind the figure.
+                (() => {
+                  const logged = visible.filter((r) => r.hours_used != null);
+                  const retained = visible.filter((r) => r.retained_hours != null);
+                  if (!logged.length) {
+                    return {
+                      nr: true,
+                      sub: retained.length
+                        ? `${retained.reduce((a, r) => a + r.retained_hours, 0)} h retained · nothing logged`
+                        : undefined,
+                    };
+                  }
+                  return {
+                    text: `${logged.reduce((a, r) => a + r.hours_used, 0)} / ${retained.reduce((a, r) => a + r.retained_hours, 0)} h`,
+                    sub: logged.length < retained.length
+                      ? `${logged.length} of ${retained.length} with hours logged`
+                      : undefined,
+                  };
+                })(),
+                { text: '' },
+                { text: '' },
+                { text: '' },
+              ],
+            },
+          ]}
+          note={'Utilisation is the point of this page and the reason it is a ledger rather than a list: a client using a third of what they retained is a churn risk nobody has complained about, and one over a hundred per cent is work being given away. Both readings come from the same figure the row draws, and from the same worker helper Delivery · Health reads — two pages disagreeing about one client’s utilisation would be worse than either number. A retainer sold as a fee rather than by the hour has NO utilisation at all: it is a different shape of deal, not a badly consumed one, so it reads absent in that column and is in neither consumption count. And the monthly total states what it counted — a retainer with no amount recorded is skipped rather than added as zero, because zero would claim the client pays nothing.'}
+        />
+
+        <ZoneDraft
+          surface="pipeline/retainers"
+          label="Proposal · renewal risk"
+          accept="Draft the conversation"
+          run="Read the book"
+          foot="Utilisation read from the retainer record."
+          empty="For the retainer renewing soonest at the lowest consumption: a right-sizing conversation that opens with what the client has not used rather than what they owe — because a renewal notice at the current figure invites them to do the arithmetic themselves."
+          nothingToDraft="No retainer is recorded, so there is no renewal to read."
+        />
 
         <Section title="Engagements">
           <div className="space-y-3">
@@ -488,5 +698,6 @@ export default function PartnerRetainersZone() {
         </StatedLimit>
       </div>
     </ZoneBody>
+    </>
   );
 }

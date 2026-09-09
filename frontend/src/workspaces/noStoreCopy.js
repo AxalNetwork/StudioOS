@@ -109,11 +109,19 @@ export const RESEARCH_STORE_GAPS = {
     what: 'Competitors filed as comparables, and saved analyses narrowed by the relation they describe.',
     why: 'No competitor can be filed as a comparable at all: the form offers direct or adjacent, and the row editor, the AI prompt and three server-side coercions all push anything else back to direct. The relation that does exist sits one level below what this header governs — `competitor_candidates` carries it per competitor, while this row narrows the saved analyses, and an analysis carries no relation of its own. The analyses store is real and readable; whether it holds any is a separate question from whether it exists.',
   },
-  ask: {
-    eyebrow: 'Blocked on a store',
-    blocks: 'a session record',
-    heading: 'Answers are produced. Nothing keeps them.',
-    what: 'The questions you have asked, the answers you kept, and the ones you discarded.',
-    why: 'The ask route searches, answers and returns without writing a row. The only per-question record anywhere is `ai_usage_logs`, which holds token counts and no question text — so no past question, kept answer or discarded one exists to look through, and the canvas’s own "Clear history" has nothing to clear. The library it answers from is a real store; it is the session that is not.',
-  },
 };
+
+/**
+ * `ask` WAS THE THIRD ENTRY AND IS GONE, WHICH IS THE OUTCOME THIS OBJECT IS
+ * FOR. It read "Answers are produced. Nothing keeps them." and named the gap
+ * precisely: the ask route searched, answered and returned without writing a
+ * row. Migration 221 writes the row — session, question, outcome, citations and
+ * the router's own cost receipt — so the sentence stopped being true and the
+ * card went with it, along with the `unbuilt:` prose on four filter chips and
+ * two ops in four tables.
+ *
+ * A gap card outliving its gap is worse than never having written one: it is a
+ * confident, specific, prominent claim that the product cannot do something it
+ * now does. Whoever closes `markets` or `companies` deletes their entry in the
+ * same commit.
+ */

@@ -112,8 +112,14 @@ test('the Network rail never claims read-only over a body that writes', () => {
   assert.match(code, /stance="Stored records only"/);
   assert.match(netWorkspace, /it writes on your click, never on the rail's/);
 
-  // Organizations is covered only where an organisation store is reachable.
-  assert.match(code, /const ORG_BACKED = new Set\(\['founder', 'investor'\]\)/);
+  // Organizations is covered only where a body renders. Partner joined the set
+  // with migration 224's `organization` column on a book contact and 226's
+  // relationship — a company name as text with no organization record behind
+  // it, which is precisely what the `pn3` artboard reports. Advisor is still
+  // out: 403'd from `/api/contacts`, with no book of its own.
+  assert.match(code, /const ORG_BACKED = new Set\(\['founder', 'investor', 'partner'\]\)/);
+  assert.ok(!/ORG_BACKED = new Set\(\[[^\]]*'advisor'/.test(code),
+    'an advisor has no store to roll up and must keep the gap card');
   assert.match(code, /orgGap\s*\?\s*'Organizations · no store behind it on this licence'/,
     'a licence with no organisation store must not be told the zone is covered');
 });
@@ -160,34 +166,39 @@ test('reading referrals is pointless if the page that writes them is shut', () =
     'if this page ever grows a role branch, opening it to advisors needs rethinking');
 });
 
-test('Signals is given both who you are and which workspace you are in', () => {
-  // `user` was never passed on /research/*, so `mode` fell to founder for every
-  // role: no advisor ordering, no advisor strip, no advisor_note — a field the
-  // engine returns already. `isAdmin` was false for admins on the same route.
-  // The rule is that BOTH reach the page, not that the mount has exactly three
-  // props: it grew a fourth (the zone header's action row) and this assertion
-  // failed on correct code. Bounded to the mount's own tag so a `user` three
-  // components away cannot vouch for it.
-  const mount = codeOnly(research).match(/<SignalsPage\b[\s\S]*?\/>/);
-  assert.ok(mount, 'the Research workspace no longer mounts SignalsPage');
-  assert.match(mount[0], /user=\{user\}/, 'the Research workspace must pass the user');
-  assert.match(mount[0], /mode=\{/, 'the Research workspace must pass the mode');
-  assert.match(mount[0], /\bembedded\b/, 'Signals must be told the shell owns the chrome');
-  for (const line of app.split('\n').filter((l) => l.includes('<SignalsPage'))) {
+test('Signals is given who you are wherever it is mounted', () => {
+  // THE RESEARCH MOUNT IS GONE, AND THAT IS THE CHANGE THIS TEST RECORDS. It
+  // required `<SignalsPage>` inside `ResearchWorkspace`, because `/research/markets`
+  // rendered the `market_intel_rows` sector feed. The `pr3` artboard is about a
+  // different object — comparable RANGES for the firm's own service lines,
+  // attachable to a proposal — so that zone mounts `MarketZone` and the feed
+  // keeps its own route.
+  //
+  // THE FINDING THAT PUT THIS TEST HERE IS STILL WORTH HOLDING, one route over.
+  // `user` was dropped at the mount, so `mode` fell to founder for every role:
+  // no advisor ordering, no advisor strip, no `advisor_note` — a field the
+  // engine returns already — and `isAdmin` was false for admins. That must not
+  // recur at `/signals`.
+  const mounts = app.split('\n').filter((l) => l.includes('<SignalsPage'));
+  assert.ok(mounts.length > 0, 'SignalsPage is mounted nowhere — the feed has been dropped, not moved');
+  for (const line of mounts) {
     assert.match(line, /user=\{user\}/, `SignalsPage mounted without a user: ${line.trim()}`);
   }
   for (const line of app.split('\n').filter((l) => l.includes('<ResearchWorkspace'))) {
     assert.match(line, /user=\{user\}/, `ResearchWorkspace mounted without a user: ${line.trim()}`);
   }
+  // And the Research workspace must not quietly mount it again: the zone's
+  // object changed, so a second mount here would put a sector feed back under a
+  // heading about prices.
+  assert.doesNotMatch(codeOnly(research), /<SignalsPage\b/,
+    'the Research workspace mounts the signals feed again, under a zone about comparable ranges');
+  assert.match(codeOnly(research), /<MarketZone\b/, 'the markets zone no longer mounts its own page');
 
   // `mode` is explicit rather than re-derived, because an admin previewing the
   // Advisor role has `user.role === 'admin'` and would otherwise get an advisor
   // shell wrapped around a body that ordered itself for a founder.
   const sig = codeOnly(read('frontend/src/pages/SignalsPage.jsx'));
-  // Destructured props, not an exact signature: this page took a fourth (the
-  // zone header's action row, passed only from `/research/markets`) and the
-  // exact-spelling version failed on correct code.
-  assert.match(sig, /function SignalsPage\(\{[^}]*\buser\b[^}]*\bembedded = false\b[^}]*\bmode: modeProp = null\b[^}]*\}\)/);
+  assert.match(sig, /function SignalsPage\(\{[^}]*\buser\b[^}]*\bmode: modeProp = null\b[^}]*\}\)/);
   assert.match(sig, /const mode = modeProp/);
   // The debug line that logged the signed-in user's role to the browser console
   // on every render is gone and must not come back.

@@ -1409,7 +1409,15 @@ export const api = {
   submitQuote: (needId, data) => request(`/needs/${needId}/quotes`, { method: 'POST', body: JSON.stringify(data) }),
   listQuotesForNeed: (needId) => request(`/needs/${needId}/quotes`),
   myQuotes: () => request('/quotes/me'),
-  quotesAnalytics: () => request('/quotes/analytics'),
+  // `period` is one of all | quarter | prev_quarter | ytd | shape — the
+  // Analytics chip row. Omitted is `all`, which is what the two older callers
+  // (`/partner/operations/performance` and the Studio home card) send, so their
+  // response shape is unchanged. It narrows what was DECIDED; the forecast is
+  // over the open pipeline either way, because an undecided quote sits in no
+  // quarter.
+  quotesAnalytics: (period) => request(
+    period && period !== 'all' ? `/quotes/analytics?period=${encodeURIComponent(period)}` : '/quotes/analytics',
+  ),
   acceptQuote: (id) => request(`/quotes/${id}/accept`, { method: 'POST' }),
   rejectQuote: (id) => request(`/quotes/${id}/reject`, { method: 'POST' }),
   withdrawQuote: (id) => request(`/quotes/${id}/withdraw`, { method: 'POST' }),
@@ -2203,6 +2211,37 @@ export const api = {
 
   partnerSummary: () => request('/partnernet/summary'),
   partnerRelationships: () => request('/partnernet/relationships'),
+
+  // The firm relationship book (migration 224) — people the firm knows at
+  // client companies, each owned by someone at the firm or conspicuously not.
+  // A different object from `partnerRelationships`, which is a partner-to-
+  // partner edge; see the migration for why they are two tables.
+  // What an introduction is — a favour or a referral with a fee — and what came
+  // of it. One side's record on one side's row; the write refuses any
+  // proposition not addressed to the caller.
+  introSetTerms: (uid, data) => request(`/introductions/propositions/${encodeURIComponent(uid)}/terms`, {
+    method: 'PUT', body: JSON.stringify(data || {}),
+  }),
+  partnerBook: () => request('/partnernet/book'),
+  partnerBookAdd: (data) => request('/partnernet/book', { method: 'POST', body: JSON.stringify(data || {}) }),
+  // Who at the firm can be given a row: the caller plus everyone linked to a
+  // company the caller is linked to. The same set the PATCH below accepts, so
+  // the picker cannot offer a choice the write refuses.
+  partnerBookOwners: () => request('/partnernet/book/owners'),
+  // `null` unassigns. An owner who leaves puts the row back at the top of the
+  // book, which is where the page's own finding lives.
+  partnerBookSetOwner: (uid, firmOwnerId) => request(`/partnernet/book/${encodeURIComponent(uid)}/owner`, {
+    method: 'PATCH', body: JSON.stringify({ firm_owner_id: firmOwnerId ?? null }),
+  }),
+  partnerBookLogInteraction: (uid, data) => request(`/partnernet/book/${encodeURIComponent(uid)}/interactions`, {
+    method: 'POST', body: JSON.stringify(data || {}),
+  }),
+  // `client` | `prospect` | `referral_source`, or `null` to clear. Set per
+  // contact because there is no organization record to hang it on — which is
+  // the finding the Organizations zone is about.
+  partnerBookSetRelationship: (uid, relationship) => request(`/partnernet/book/${encodeURIComponent(uid)}/relationship`, {
+    method: 'PATCH', body: JSON.stringify({ relationship: relationship ?? null }),
+  }),
   createRelationship: (data) => request('/partnernet/relationships', { method: 'POST', body: JSON.stringify(data) }),
   updateRelationship: (id, data) => request(`/partnernet/relationships/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   relationshipEvents: (id) => request(`/partnernet/relationships/${id}/events`),
@@ -3136,6 +3175,33 @@ export const api = {
   // for the same reason the advisor block above does not take an advisor id.
   // A quote or engagement belonging to another firm answers 404, not 403 — a
   // non-owner is not told the row exists.
+  // The three sets the Leads zone keeps disjoint: open leads (never bid, never
+  // passed), the passes with their reasons, and — by their absence — the needs
+  // this firm already quoted on, which are proposals.
+  listPartnerLeads: () => request('/partner/pipeline/leads'),
+  // A pass is not a loss: a lost bid is a bid, and this is the record of a bid
+  // never made. `reason` is a closed set; the note is what makes it useful to
+  // the next person who reads the same lead.
+  passPartnerLead: (needId, data) =>
+    request(`/partner/pipeline/leads/${needId}/pass`, { method: 'POST', body: JSON.stringify(data) }),
+  unpassPartnerLead: (needId) =>
+    request(`/partner/pipeline/leads/${needId}/pass`, { method: 'DELETE' }),
+  // Every bid this firm has made, with its version trail and the loss taxonomy.
+  // `read_receipts: 'none'` comes back with it: nothing records that a client
+  // opened a proposal, so a quiet one cannot be told from an unread one.
+  listPartnerProposals: () => request('/partner/pipeline/proposals'),
+  // Append-only and self-numbering — the caller does not choose the version, so
+  // two edits cannot both claim to be v3.
+  addPartnerProposalVersion: (quoteId, data) =>
+    request(`/partner/pipeline/proposals/${quoteId}/versions`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  // From the taxonomy, never typed: free text makes the loss chart unreadable
+  // within a quarter. `loss_reason: null` clears it.
+  setPartnerProposalOutcome: (quoteId, data) =>
+    request(`/partner/pipeline/proposals/${quoteId}/outcome`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
   listPartnerNegotiations: () => request('/partner/pipeline/negotiations'),
   // PUT, not POST: one negotiation per quote is a UNIQUE index, so this is an
   // upsert. `{touch: true}` advances the stalled clock without changing stage.
@@ -3226,6 +3292,20 @@ export const api = {
   // when nothing is recorded — never 'on_track'. There is no method to set it,
   // because green-because-empty is the failure the zone was written against.
   getPartnerDeliveryHealth: () => request('/partner/delivery/health'),
+  // What the firm STATES about an engagement — owner, scope assessment, and
+  // the client's score with where it was said. None of the three is derivable
+  // from the five stores health is read across. An omitted key is untouched;
+  // an explicit null clears.
+  savePartnerEngagementHealth: (engagementId, data) =>
+    request(`/partner/delivery/engagements/${engagementId}/health`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  // The `pd1` board: one row per engagement in whichever of the two modes it
+  // is, with mode, grant, progress and health all derived server-side. See
+  // `routes/partner_delivery.ts` for why none of the four is stored. Mounted at
+  // `/api/partner/delivery`, beside its five siblings — NOT at
+  // `/api/partner-delivery`, which is what the drift guard caught.
+  getPartnerDeliveryBoard: () => request('/partner/delivery/board'),
 
   listPartnerMilestones: (engagementId) =>
     request(`/partner/delivery/engagements/${engagementId}/milestones`),
@@ -3265,10 +3345,19 @@ export const api = {
   deletePartnerDeliverable: (id) =>
     request(`/partner/delivery/deliverables/${id}`, { method: 'DELETE' }),
 
-  // Returns `people`, `seats`, and `cap_hours: null` with the reason — nothing
-  // in this product records the firm's capacity cap, so nothing is "over" it.
+  // Returns `people` (project, seat and internal hours split), `seats`, and
+  // `cap_hours` — the number THIS FIRM stated, or null with the reason. Nothing
+  // is "over" a cap nobody set, so an unconfigured firm still reads null here.
   getPartnerCapacity: (period) =>
     request(`/partner/delivery/capacity${period ? `?period=${encodeURIComponent(period)}` : ''}`),
+  // The firm's own number, or one person's. `weekly_hours: null` clears it —
+  // a cap that could be set and not unset would make the first one permanent.
+  setPartnerCapacityCap: (data) =>
+    request('/partner/delivery/capacity/cap', { method: 'PUT', body: JSON.stringify(data) }),
+  // Hours with no client to bill. `hours: null` removes the statement; zero is
+  // a different answer and stays one.
+  setPartnerInternalHours: (data) =>
+    request('/partner/delivery/capacity/internal-hours', { method: 'PUT', body: JSON.stringify(data) }),
   listPartnerPeople: () => request('/partner/delivery/people'),
   grantPartnerSeat: (engagementId, data) =>
     request(`/partner/delivery/engagements/${engagementId}/seats`, {
@@ -3773,7 +3862,73 @@ export const api = {
     // Returns a short-lived one-time URL, not the bytes.
     downloadUrl: (uid) => request(`/research/documents/${encodeURIComponent(uid)}/download`),
     remove: (uid) => request(`/research/documents/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
-    ask: (question) => request('/research/ask', { method: 'POST', body: JSON.stringify({ question }) }),
+    // `Re-index` in the Library ops row. Only an own document can be re-queued:
+    // a client-sourced one is indexed in their library, not yours, and its uid
+    // is not in your own set.
+    reindex: (uid) => request(`/research/documents/${encodeURIComponent(uid)}/reindex`, { method: 'POST' }),
+    // `session_uid` is optional and the worker falls back to the caller's most
+    // recent thread, so a reader who has just landed can ask without one.
+    ask: (question, sessionUid) => request('/research/ask', {
+      method: 'POST',
+      body: JSON.stringify(sessionUid ? { question, session_uid: sessionUid } : { question }),
+    }),
+    // Ask's thread (migration 221). `scope` is the header chip: 'session' for
+    // `This session`, 'all' for `All history`, 'saved' for the ops row's
+    // `Saved answers`. `Cited` and `Unanswered` narrow whichever slice came
+    // back, in the page, because both are predicates over `reason` and
+    // `citations` rather than a different read.
+    askSessions: (scope = 'session', sessionUid) => {
+      const q = new URLSearchParams({ scope, ...(sessionUid ? { session: sessionUid } : {}) }).toString();
+      return request(`/research/ask/sessions?${q}`);
+    },
+    askNewSession: () => request('/research/ask/sessions', { method: 'POST', body: JSON.stringify({}) }),
+    askSaveAnswer: (uid, saved) => request(`/research/ask/answers/${encodeURIComponent(uid)}`, {
+      method: 'PATCH', body: JSON.stringify({ saved: !!saved }),
+    }),
+
+    // The AI band every Research and Network artboard ends with (migration
+    // 221). `surface` is the zone key and is allow-listed in the worker, so a
+    // page that has not mounted the band cannot spend on it.
+    zoneDrafts: (surface) => request(`/research/drafts?surface=${encodeURIComponent(surface)}`),
+    zoneDraftRun: (surface, scopeKey) => request('/research/drafts', {
+      method: 'POST', body: JSON.stringify({ surface, ...(scopeKey ? { scope_key: scopeKey } : {}) }),
+    }),
+    // Accept, having optionally edited first — one write, because editing then
+    // accepting is the same act with a different body.
+    zoneDraftAccept: (uid, body) => request(`/research/drafts/${encodeURIComponent(uid)}`, {
+      method: 'PATCH', body: JSON.stringify(body ? { body } : {}),
+    }),
+    zoneDraftDiscard: (uid) => request(`/research/drafts/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+
+    // The firm's own half of a client brief (migration 222). `project` is the
+    // project uid; the worker checks a live grant before it writes, so a firm
+    // that never held one cannot keep a file on that founder here.
+    briefNotes: (projectUid) => request(`/research/brief-notes?project=${encodeURIComponent(projectUid)}`),
+    briefNoteCreate: (projectUid, section, body) => request('/research/brief-notes', {
+      method: 'POST', body: JSON.stringify({ project: projectUid, section, body }),
+    }),
+    briefNoteSetOpen: (uid, open) => request(`/research/brief-notes/${encodeURIComponent(uid)}`, {
+      method: 'PATCH', body: JSON.stringify({ open: !!open }),
+    }),
+    briefNoteRemove: (uid) => request(`/research/brief-notes/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+
+    // `Attach to proposal`, shared by Client prep and Market. `kind` is
+    // 'brief' | 'reading' and `ref_key` is whatever that zone calls its thing.
+    attachments: (kind) => request(`/research/attachments?kind=${encodeURIComponent(kind)}`),
+    attach: (kind, refKey, quoteId) => request('/research/attachments', {
+      method: 'POST', body: JSON.stringify({ kind, ref_key: refKey, quote_id: quoteId }),
+    }),
+    detach: (uid) => request(`/research/attachments/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+
+    // Comparable ranges for the firm's own service lines (migration 223). The
+    // list is the catalog joined to the newest reading for each, so a service
+    // line nobody has priced the market for comes back with nulls rather than
+    // being left out — that row is what the zone is about.
+    marketReadings: () => request('/research/market-readings'),
+    marketReadingCreate: (data) => request('/research/market-readings', {
+      method: 'POST', body: JSON.stringify(data || {}),
+    }),
+    marketReadingRemove: (uid) => request(`/research/market-readings/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
 
     // Funds — founder-facing fund research (migration 216). Every read is
     // owner-scoped in the worker; there is no cross-user listing to call.

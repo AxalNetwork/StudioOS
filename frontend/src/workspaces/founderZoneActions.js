@@ -187,10 +187,24 @@ export const FOUNDER_ZONE_ACTIONS = {
   ],
 
   // ── Research ─────────────────────────────────────────────────────────────
+  // `New brief` STARTS A THREAD, and the label is the artboard's own. A brief
+  // on this licence is what a line of questions produces — the closing band is
+  // `Draft · session brief` — so beginning a new one is beginning a new
+  // session, which is the act migration 221 made possible. It was
+  // `unbuilt: 'the question box below starts one'`: true of the box, and never
+  // true of the op, since a box that always appends to one thread cannot start
+  // a second.
+  //
+  // `Clear history` KEEPS A NOTE, AND IT IS A DIFFERENT NOTE. "No session
+  // history is stored to clear" stopped being true with the same migration —
+  // but what replaced it is not a clear button. Nothing deletes an answer,
+  // deliberately: kept-or-not-kept is the only bit the ops row writes, and
+  // erasing a reader's own questions is the one irreversible act on this page.
+  // The reason is now about the refusal rather than about an absent store.
   'research/ask': [
-    { label: 'New brief', unbuilt: 'the question box below starts one' },
+    { label: 'New brief', kind: 'handler', handler: 'newSession' },
     { label: 'Export session', kind: 'export' },
-    { label: 'Clear history', unbuilt: 'no session history is stored to clear' },
+    { label: 'Clear history', unbuilt: 'the history is stored now and nothing deletes from it — an answer is kept or not kept, and erasing a reader’s own questions is the one irreversible act this page declines to offer' },
   ],
   'research/markets': [
     { label: 'New deep-dive', unbuilt: 'signals are gathered on a schedule, not started here' },
@@ -213,8 +227,16 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Brief me', unbuilt: 'no per-fund brief is generated; the thesis is quoted in their words and the reading is yours to write' },
     { label: 'Export', kind: 'export' },
   ],
+  // `Upload` IS THIS LICENCE'S WORD FOR THE SAME OP advisor and partner call
+  // `Add document`, and it opens the same file picker. It was
+  // `unbuilt: 'the add-document form below takes a file or a link'` — true of
+  // the form, never true of the op.
+  //
+  // `New collection` KEEPS ITS NOTE. Collections are still not stored, and
+  // nothing in migration 221 or the library's own store changed that: a
+  // collection is a grouping of documents and there is no table for one.
   'research/library': [
-    { label: 'Upload', unbuilt: 'the add-document form below takes a file or a link' },
+    { label: 'Upload', kind: 'handler', handler: 'addDocument' },
     { label: 'New collection', unbuilt: 'collections are not stored' },
     { label: 'Export', kind: 'export' },
   ],
