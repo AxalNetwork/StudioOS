@@ -25,8 +25,32 @@ test('Crunchbase is beta (connectable), not coming_soon', () => {
   ]);
 });
 
-test('OAuth-app providers that still need a published app stay coming_soon', () => {
-  for (const key of ['carta', 'docusign', 'salesforce', 'affinity']) {
+test('Carta and DocuSign are beta (connectable OAuth), not coming_soon', () => {
+  const carta = getDescriptor('carta');
+  assert.ok(carta, 'carta is in the registry');
+  assert.equal(carta.status, 'beta');
+  assert.equal(carta.auth_type, 'oauth2');
+  assert.equal(carta.tier, 'studio');
+  assert.deepEqual(carta.capabilities, [
+    'Cap-table sync',
+    'Stakeholder import',
+    'Securities import',
+  ]);
+
+  const ds = getDescriptor('docusign');
+  assert.ok(ds, 'docusign is in the registry');
+  assert.equal(ds.status, 'beta');
+  assert.equal(ds.auth_type, 'oauth2');
+  assert.equal(ds.tier, 'studio');
+  assert.deepEqual(ds.capabilities, [
+    'Send envelopes',
+    'Webhook on signed',
+    'Template library',
+  ]);
+});
+
+test('Salesforce and Affinity stay coming_soon', () => {
+  for (const key of ['salesforce', 'affinity']) {
     const d = getDescriptor(key);
     assert.ok(d, `${key} is in the registry`);
     assert.equal(d.status, 'coming_soon', `${key} should remain waitlisted`);

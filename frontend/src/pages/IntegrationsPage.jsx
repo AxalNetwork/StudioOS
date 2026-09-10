@@ -1145,6 +1145,9 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
   const [displayName, setDisplayName] = useState(existing?.display_name || provider.display_name);
   const [configText, setConfigText] = useState(existing?.config ? JSON.stringify(existing.config, null, 2) : '');
   const [sfSandbox, setSfSandbox] = useState(false);
+  // DocuSign demo vs prod. Backend defaults missing ?demo= to demo, so we
+  // always send demo=1|0 explicitly. Default demo matches the worker.
+  const [dsDemo, setDsDemo] = useState(true);
   const [err, setErr] = useState('');
   // HubSpot OAuth is gated behind an "Advanced" disclosure because the
   // public app is pending HubSpot Marketplace review — the PAT (Private
@@ -1182,7 +1185,12 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
   const startOauth = async () => {
     setErr('');
     try {
-      const params = provider.key === 'salesforce' ? { sandbox: sfSandbox ? '1' : '' } : {};
+      const params = {};
+      if (provider.key === 'salesforce') params.sandbox = sfSandbox ? '1' : '';
+      // Always send demo=0|1. Omitting the query makes the worker default
+      // to demo, which would silently send production-account users to
+      // account-d.docusign.com.
+      if (provider.key === 'docusign') params.demo = dsDemo ? '1' : '0';
       const res = await api.integrationsOauthStart(provider.key, params);
       if (res.authorize_url) window.location.href = res.authorize_url;
     } catch (e) {
@@ -1252,9 +1260,23 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
                     </label>
                   </div>
                 )}
+                {provider.key === 'docusign' && (
+                  <div className="mb-3 flex items-center gap-3 text-xs" data-testid="docusign-env-picker">
+                    <span className="text-gray-700 dark:text-gray-300">Account:</span>
+                    <label className="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="radio" name="ds_env" checked={!dsDemo} onChange={() => setDsDemo(false)} />
+                      Production
+                    </label>
+                    <label className="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="radio" name="ds_env" checked={dsDemo} onChange={() => setDsDemo(true)} />
+                      Demo
+                    </label>
+                  </div>
+                )}
                 <button type="button" onClick={startOauth} className="bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium px-3 py-1.5 rounded inline-flex items-center gap-1.5">
                   <ExternalLink size={12} /> Continue with {provider.display_name}
                   {provider.key === 'salesforce' && sfSandbox && <span className="ml-1 opacity-80">(Sandbox)</span>}
+                  {provider.key === 'docusign' && dsDemo && <span className="ml-1 opacity-80">(Demo)</span>}
                 </button>
                 {provider.supports_pat && (
                   <p className="mt-2 text-[11px] text-gray-500">
