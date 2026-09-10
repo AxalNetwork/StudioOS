@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Link } from 'react-router-dom';
 import { reportError } from '../lib/log';
 import { api } from '../lib/api';
 import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check, ShieldCheck, XCircle, CheckCircle2, FileText, Send, Download, Ban, Search, RefreshCw, Sparkles, Loader2, ShieldAlert, KeyRound, Trash2, AlertTriangle, Heart, Eye, EyeOff, BadgeCheck, Ticket, Plus, CreditCard, Package, Zap, GitBranch as Github, Copy, FlaskConical } from 'lucide-react';
@@ -49,13 +51,50 @@ const ROLE_BADGES = {
 function RoleDropdown({ user, onRoleChange }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
+  const menuRef = useRef(null);
+  // Where to paint the portalled menu. Null until it opens.
+  const [at, setAt] = useState(null);
+
+  // Pick the side with more room, and cap the height to what is actually
+  // there. Opening downward unconditionally is what the first version did,
+  // and for a row low in the table the menu ran off the bottom of the window
+  // — where, being `position: fixed`, it cannot be scrolled to. That trades
+  // one unreachable menu for another. Measuring the SPACE rather than the
+  // menu keeps this a single pass: whichever side is chosen, maxHeight makes
+  // the menu fit it, so its own height never has to be known.
+  const place = useCallback(() => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r) return;
+    const below = window.innerHeight - r.bottom;
+    const above = r.top;
+    const GAP = 6;
+    const EDGE = 12;   // never flush against the window edge
+    setAt(below >= above
+      ? { top: r.bottom + GAP, maxHeight: Math.max(96, below - GAP - EDGE), left: r.left + r.width / 2 }
+      : { bottom: window.innerHeight - r.top + GAP, maxHeight: Math.max(96, above - GAP - EDGE), left: r.left + r.width / 2 });
+  }, []);
 
   useEffect(() => {
     if (!open) return;
-    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    place();
+    // The menu is portalled to <body>, so `ref` no longer contains it — both
+    // halves have to be checked or the first click inside the menu closes it.
+    const close = (e) => {
+      if (ref.current?.contains(e.target) || menuRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
     document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [open]);
+    // `position: fixed` does not follow the page, so re-measure rather than
+    // leave the menu behind while the table scrolls under it. Capture phase,
+    // because the scroll happens on the table's own overflow container.
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+  }, [open, place]);
 
   const OPTIONS = [
     { value: 'founder', label: 'Founder' },
@@ -86,11 +125,26 @@ function RoleDropdown({ user, onRoleChange }) {
         {currentLabel}
         <ChevronDown size={11} className={`shrink-0 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
       </button>
-      {open && (
+      {/*
+        PORTALLED TO <body>, because the menu used to be cut in half.
+        It is `absolute` inside a card with `overflow-hidden` (the rounded
+        corners) nested in the table's `overflow-x-auto` — and `overflow-x`
+        alone computes `overflow-y: auto`, so BOTH ancestors clip it. For any
+        row near the bottom of the table the options simply were not there.
+        Fixed positioning off the trigger's own rect is the fix that does not
+        cost the card its corners or the table its horizontal scroll.
+      */}
+      {open && at && createPortal((
         <ul
+          ref={menuRef}
           role="listbox"
           aria-label="Select role"
-          className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 z-50 min-w-[120px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg py-1 overflow-hidden"
+          style={{
+            position: 'fixed', left: at.left, transform: 'translateX(-50%)',
+            ...(at.top === undefined ? { bottom: at.bottom } : { top: at.top }),
+            maxHeight: at.maxHeight, overflowY: 'auto',
+          }}
+          className="z-50 min-w-[150px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg py-1"
         >
           {OPTIONS.map(opt => {
             // Moving OUT of exploring requires a signed binding agreement
@@ -103,7 +157,6 @@ function RoleDropdown({ user, onRoleChange }) {
                 role="option"
                 aria-selected={user.role === opt.value}
                 aria-disabled={disabled}
-                title={disabled ? 'Assign the final role from the Exploring Users queue (requires a signed binding agreement)' : undefined}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (disabled) return;
@@ -125,8 +178,35 @@ function RoleDropdown({ user, onRoleChange }) {
               </li>
             );
           })}
+          {/*
+            THE WHOLE POINT OF #152. Every option above is disabled for an
+            exploring user, and until now the only thing that said why was a
+            `title` on a disabled <li> — invisible to anyone not hovering, and
+            to keyboard and screen-reader users entirely. Since every new
+            signup lands in `exploring` (routes/auth.ts:334), that made this
+            the console's one role control and it read as broken.
+
+            The gate itself stays: moving out of exploring needs a signed
+            binding agreement, checked again server-side
+            (admin_exploring.ts:259). What changes is that the reason and the
+            way through are now on the screen.
+          */}
+          {isExploring && (
+            <li role="presentation" className="mt-1 border-t border-gray-100 px-3 py-2 dark:border-gray-800">
+              <p className="text-[11px] leading-relaxed text-gray-600 dark:text-gray-400">
+                Leaving Exploring needs a signed binding agreement.
+              </p>
+              <Link
+                to="/admin/exploring"
+                onClick={() => setOpen(false)}
+                className="mt-1.5 inline-block text-[11px] font-semibold text-violet-700 hover:underline dark:text-violet-300"
+              >
+                Assign from the Exploring queue →
+              </Link>
+            </li>
+          )}
         </ul>
-      )}
+      ), document.body)}
     </div>
   );
 }
