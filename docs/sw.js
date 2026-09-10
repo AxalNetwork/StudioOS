@@ -3,6 +3,7 @@
  * Strategy matrix:
  *   - precache:        app shell (/, /index.html, manifest, icons, offline)
  *   - cache-first:     same-origin static assets (Vite-fingerprinted /assets/*)
+ *   - never cached:    /api/auth/*  (who you are is not a cacheable fact)
  *   - stale-while-revalidate:  /api/academy/*  +  /api/projects/*  (own data, offline read)
  *   - network-first:   every other /api/* (always prefer fresh)
  *   - navigation:      network-first w/ offline.html fallback
@@ -14,7 +15,11 @@
 // offline.html, manifest, icons) so old caches drop on activate. Vite-built
 // /assets/* files are content-hashed in their filenames, so the cache-first
 // rule is safe across deploys without a version bump.
-const VERSION = 'v15-2026-08-05';
+// v16 is a REQUIRED bump, not a routine one: v15's `studioos-api-v15-…` cache
+// holds `/api/auth/me` bodies, and every browser that ever ran this app is
+// carrying one. Only `activate`'s delete-everything-not-in-this-list pass
+// clears them, and that only runs when a name changes.
+const VERSION = 'v16-2026-09-10';
 const PRECACHE = `studioos-precache-${VERSION}`;
 const RUNTIME_STATIC = `studioos-static-${VERSION}`;
 const RUNTIME_API = `studioos-api-${VERSION}`;
@@ -31,10 +36,36 @@ const PRECACHE_URLS = [
 ];
 
 // API URL patterns we cache for offline read.
+//
+// `/api/auth/me` USED TO BE IN THIS LIST AND MUST NEVER GO BACK.
+// stale-while-revalidate returns the cached body FIRST, and a Cache Storage
+// entry is keyed by URL — `Cache.match` ignores request headers, and the
+// worker sends no `Vary`, so the Authorization header is not part of the key.
+// One `/api/auth/me` body was therefore replayed to whoever asked next,
+// whatever token they were holding: the SPA read the PREVIOUS account's
+// identity. That is the same failure the SPA's identity-change purge
+// (`useAuthSync`, Task #4) exists to clean up after — the purge was treating
+// the symptom while this line kept causing it.
+//
+// Found by driving a support session end-to-end in Chromium: at hand-back the
+// admin's restored session was immediately wiped and replaced by the
+// impersonated founder, signed in with no token at all. No request reached the
+// server; the worker had answered it 65 seconds earlier and this cache kept
+// the answer. See NEVER_CACHE_API below, which is the half that stops
+// network-first storing it too.
 const OFFLINE_API_PATTERNS = [
   /^\/api\/academy(\/|$)/,
   /^\/api\/projects(\/|$|\?)/,
-  /^\/api\/auth\/me$/,
+];
+
+// Who you are is never read from a cache — not stale-while-revalidate, not
+// network-first's offline fallback, and never written to Cache Storage in the
+// first place. Dropping `/api/auth/me` from the list above is not enough on
+// its own: `networkFirst` also `cache.put`s every 200 it sees and replays it
+// whenever the network throws, so the same body would still be handed to the
+// next account, just on the offline path.
+const NEVER_CACHE_API = [
+  /^\/api\/auth(\/|$)/,
 ];
 
 self.addEventListener('install', (event) => {
@@ -58,6 +89,10 @@ self.addEventListener('activate', (event) => {
 
 function isOfflineCachableApi(url) {
   return OFFLINE_API_PATTERNS.some((re) => re.test(url.pathname));
+}
+
+function isNeverCachableApi(url) {
+  return NEVER_CACHE_API.some((re) => re.test(url.pathname));
 }
 
 async function staleWhileRevalidate(req, cacheName) {
@@ -145,6 +180,10 @@ self.addEventListener('fetch', (event) => {
 
   // /api/* routing
   if (url.pathname.startsWith('/api/')) {
+    // Identity first, and straight past every cache. `return` without
+    // respondWith hands the request back to the browser untouched, so there
+    // is no Cache Storage entry to read and none to write.
+    if (isNeverCachableApi(url)) return;
     if (isOfflineCachableApi(url)) {
       event.respondWith(staleWhileRevalidate(request, RUNTIME_API));
     } else {

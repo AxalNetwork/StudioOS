@@ -211,6 +211,81 @@ function RoleDropdown({ user, onRoleChange }) {
   );
 }
 
+/**
+ * Start a support session — canvas H4.
+ *
+ * Impersonation used to be one click with nothing recorded but "who". The
+ * worker now refuses a session without a reason of at least ten characters
+ * (routes/admin.ts), so this is where the reason is collected — and the
+ * three facts beside it are the ones a person needs before they act as
+ * somebody else.
+ *
+ * SCOPE AND EXPIRY ARE STATED, NOT CHOSEN. The canvas offers no alternative
+ * to either and neither does the product: the minted token IS the user, so
+ * the scope is read-and-write by construction, and the expiry is
+ * IMPERSONATION_EXPIRY_MINUTES, enforced in the token rather than here.
+ * Drawing them as pickers would invent options that do not exist.
+ */
+function SupportSessionDialog({ target, busy, onCancel, onBegin }) {
+  const [reason, setReason] = useState('');
+  useEscapeClose(onCancel);
+  const tooShort = reason.trim().length < 10;
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-5 shadow-xl dark:border-gray-800 dark:bg-gray-900">
+        <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">Start a support session</h3>
+        <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">
+          Recorded in Governance
+        </p>
+        <p className="mt-2 text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400">
+          You will be signed in as <strong className="text-gray-800 dark:text-gray-200">{target.name || target.email}</strong> until
+          the session ends. Everything you do is done as them.
+        </p>
+
+        <dl className="mt-4 space-y-2 rounded-lg border border-gray-200 p-3 text-[12px] dark:border-gray-700">
+          <div className="flex justify-between gap-3">
+            <dt className="text-gray-500 dark:text-gray-400">Scope</dt>
+            <dd className="font-medium text-gray-800 dark:text-gray-200">Read and write as user</dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt className="text-gray-500 dark:text-gray-400">Expiry</dt>
+            <dd className="font-medium text-gray-800 dark:text-gray-200">30 minutes · hard</dd>
+          </div>
+        </dl>
+
+        <label htmlFor="support-reason" className="mt-4 block text-[12px] font-medium text-gray-700 dark:text-gray-300">
+          Reason · required
+        </label>
+        <textarea
+          id="support-reason"
+          rows={3}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="What are you helping with? e.g. Password reset, ticket 4821"
+          className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+        />
+        <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+          {tooShort
+            ? 'At least ten characters — this is the line someone reads in the audit later.'
+            : 'This is stored with the session and shown in Governance.'}
+        </p>
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" onClick={onCancel} disabled={busy}
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200">
+            Cancel
+          </button>
+          <button type="button" onClick={() => onBegin(reason.trim())} disabled={busy || tooShort}
+            className="rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50">
+            Begin session
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const STATUS_BADGES = {
   pending: 'bg-amber-100 text-amber-700',
   verified: 'bg-emerald-100 text-emerald-700',
@@ -461,11 +536,21 @@ export default function AdminPage({ onImpersonate, section = null }) {
     } catch (e) { alert(e.message); }
   };
 
-  const handleImpersonate = async (userId) => {
+  // The dialog collects the reason the worker requires; nothing is minted
+  // until Begin session. `handleImpersonate` is the one funnel both View As
+  // buttons already went through, so intercepting here covers both.
+  const [supportTarget, setSupportTarget] = useState(null);
+  const [supportBusy, setSupportBusy] = useState(false);
+  const handleImpersonate = (user) => setSupportTarget(user);
+  const beginSupportSession = async (reason) => {
+    if (!supportTarget) return;
+    setSupportBusy(true);
     try {
-      const res = await api.adminImpersonate(userId);
+      const res = await api.adminImpersonate(supportTarget.id, reason);
+      setSupportTarget(null);
       if (onImpersonate) onImpersonate(res.token, res.user);
-    } catch (e) { alert(e.message); }
+    } catch (e) { alert(e.message || 'The support session could not be started'); }
+    finally { setSupportBusy(false); }
   };
   const handleToggleActive = async (userId) => {
     try { await api.adminToggleActive(userId); loadAll(); } catch (e) { alert(e.message); }
@@ -708,7 +793,7 @@ export default function AdminPage({ onImpersonate, section = null }) {
                                 Admit to Lab
                               </button>
                             )}
-                            <button onClick={() => handleImpersonate(u.id)}
+                            <button onClick={() => handleImpersonate(u)}
                               className="px-2.5 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium transition-colors flex items-center gap-1"
                               title="Login as this user">
                               <LogIn size={12} /> View As
@@ -972,11 +1057,22 @@ export default function AdminPage({ onImpersonate, section = null }) {
         />
       )}
 
+      {/* Mounted beside the drawer, not inside it: the Users table opens a
+          support session directly too, and the drawer closes itself before
+          the dialog appears. */}
+      {supportTarget && (
+        <SupportSessionDialog
+          target={supportTarget}
+          busy={supportBusy}
+          onCancel={() => setSupportTarget(null)}
+          onBegin={beginSupportSession}
+        />
+      )}
       {openUser && (
         <UserDetailModal
           userRow={openUser}
           onClose={() => setOpenUser(null)}
-          onImpersonate={() => { handleImpersonate(openUser.id); setOpenUser(null); }}
+          onImpersonate={() => { handleImpersonate(openUser); setOpenUser(null); }}
           onToggleActive={() => { handleToggleActive(openUser.id); setOpenUser(null); }}
         />
       )}

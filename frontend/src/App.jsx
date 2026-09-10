@@ -597,7 +597,7 @@ function UserDropdown({ user, onLogout }) {
 }
 
 
-function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, impersonatedUser, superAdmin = false, hqView = true }) {
+function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, impersonatedUser, superAdmin = false, hqView = true, supportLeftMs = null, onExtendImpersonation }) {
   const [open, setOpen] = useState(false);
   // "Super Admin" is a VIEW of the admin role, not a role: choosing it browses
   // as admin with the HQ shell, choosing "Admin" browses as admin with the
@@ -623,7 +623,27 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImp
       {isImpersonating ? (
         <div className="ml-2 flex items-center gap-2 bg-amber-500/20 px-3 py-1.5 rounded-lg">
           <Eye size={13} />
-          <span>Impersonating: {impersonatedUser?.name} ({ROLE_LABELS[impersonatedUser?.role]})</span>
+          {/* The canvas's words. "Impersonating" describes what the system
+              is doing; "support session" describes why, and why it ends. */}
+          <span>Viewing as {impersonatedUser?.name} — support session</span>
+          {supportLeftMs !== null && (
+            <span
+              className="tabular-nums font-semibold"
+              title="A support session is thirty minutes. It hands itself back when the timer runs out."
+            >
+              {String(Math.floor(supportLeftMs / 60000)).padStart(2, '0')}
+              :{String(Math.floor((supportLeftMs % 60000) / 1000)).padStart(2, '0')} left
+            </span>
+          )}
+          {onExtendImpersonation && (
+            <button
+              type="button"
+              onClick={onExtendImpersonation}
+              className="rounded-md bg-white/20 px-2 py-0.5 text-xs font-medium hover:bg-white/30"
+            >
+              Extend
+            </button>
+          )}
         </div>
       ) : (
         <div className="ml-2 relative">
@@ -696,7 +716,7 @@ const FULL_BLEED_BY_ROLE = {
   partner: PARTNER_FULL_BLEED,
 };
 
-function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, primaryPersonaId, hqView = true }) {
+function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, primaryPersonaId, hqView = true, supportLeftMs = null, onExtendImpersonation }) {
   const location = useLocation();
   // Active-company context state — owned here so descendants (CompanySwitcher,
   // CompanySettingsPage, etc.) share the same reference without prop drilling.
@@ -844,6 +864,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             impersonatedUser={isImpersonating ? user : null}
             superAdmin={superAdmin}
             hqView={hqView}
+            supportLeftMs={supportLeftMs}
+            onExtendImpersonation={onExtendImpersonation}
           />
         )}
 
@@ -965,7 +987,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   );
 }
 
-function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, hqView = true }) {
+function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, hqView = true, supportLeftMs = null, onExtendImpersonation }) {
   const location = useLocation();
   const { oauthBootstrapping } = useAuth();
   const [kycStatus, setKycStatus] = useState(user?.kyc_status || null);
@@ -1193,6 +1215,8 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
       onImpersonate={onImpersonate}
       primaryPersonaId={primaryPersonaId}
       hqView={hqView}
+      supportLeftMs={supportLeftMs}
+      onExtendImpersonation={onExtendImpersonation}
     >
       {children}
     </ProtectedLayout>
@@ -1301,6 +1325,9 @@ function AppInner() {
     setUser(impersonatedUser);
     setViewMode(impersonatedUser.role);
     localStorage.setItem('viewMode', impersonatedUser.role);
+    // `api.adminImpersonate` has just written this; lifting it into state is
+    // what starts the banner's countdown.
+    try { setImpersonationExpiresAt(localStorage.getItem('impersonationExpiresAt')); } catch { /* storage unavailable */ }
     pendingImpersonationPathRef.current =
       targetPath || ROLE_DEFAULT_PATH[impersonatedUser.role] || '/studio';
     // T20 — bypass the 5-min /me throttle so the impersonated session is
@@ -1327,6 +1354,44 @@ function AppInner() {
     }
   }, [location.pathname]);
 
+  /**
+   * A support session is thirty minutes, and the banner has to say so.
+   *
+   * THE HAND-BACK IS THE LOAD-BEARING PART. The token dies on its own; if
+   * the client simply carried on, the next call would 401, and
+   * `api.request` reads a 401 as a dead session and bounces to /login —
+   * ending the ADMIN's real session, not just the support session. So the
+   * clock is watched here and the session handed back before that happens.
+   */
+  const [impersonationExpiresAt, setImpersonationExpiresAt] = useState(
+    () => { try { return localStorage.getItem('impersonationExpiresAt'); } catch { return null; } },
+  );
+  const [impersonationLeftMs, setImpersonationLeftMs] = useState(null);
+
+  useEffect(() => {
+    if (!isImpersonating || !impersonationExpiresAt) { setImpersonationLeftMs(null); return undefined; }
+    const due = Date.parse(impersonationExpiresAt);
+    if (Number.isNaN(due)) { setImpersonationLeftMs(null); return undefined; }
+    const tick = () => setImpersonationLeftMs(Math.max(0, due - Date.now()));
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [isImpersonating, impersonationExpiresAt]);
+
+  const extendImpersonation = async () => {
+    try {
+      const id = localStorage.getItem('impersonationSessionId');
+      if (!id) return;
+      const res = await api.adminImpersonateExtend(id);
+      if (res?.expires_at) setImpersonationExpiresAt(res.expires_at);
+    } catch (e) {
+      // Extending needs a recent TOTP step-up, which the admin may no
+      // longer have. Say so rather than leaving the countdown running
+      // toward a silent hand-back.
+      alert(e?.message || 'The session could not be extended. It will end when the timer runs out.');
+    }
+  };
+
   const exitImpersonation = () => {
     pendingImpersonationPathRef.current = null;
     const origToken = localStorage.getItem('realToken');
@@ -1341,6 +1406,7 @@ function AppInner() {
         localStorage.removeItem('impersonationSessionId');
         api.adminImpersonateEnd(impSessionId).catch(() => {});
       }
+      localStorage.removeItem('impersonationExpiresAt');
     } catch { /* storage unavailable */ }
     localStorage.removeItem('realUser');
     localStorage.removeItem('realToken');
@@ -1353,10 +1419,29 @@ function AppInner() {
     setHqView(true);
     writeHqView(true);
     navigate(isSuperAdminUser(origUser) ? '/hq' : '/admin');
+    setImpersonationExpiresAt(null);
+    setImpersonationLeftMs(null);
     // T20 — restore the real admin's freshest profile immediately rather
     // than wait for the next throttled re-sync.
     refresh({ force: true });
   };
+
+  // THE HAND-BACK. The support token dies on its own after thirty minutes.
+  // Left alone, the next request would 401 and `api.request` would read that
+  // as a dead session and bounce to /login — ending the ADMIN's own session
+  // rather than just the support session. Handing it back a beat early
+  // restores the real token cleanly instead.
+  //
+  // `exitImpersonation` is deliberately not in the dependency list: it is
+  // rebuilt every render, and depending on it would tear down and re-arm
+  // this effect once a second alongside the countdown.
+  const exitImpersonationRef = useRef(exitImpersonation);
+  exitImpersonationRef.current = exitImpersonation;
+  useEffect(() => {
+    if (!isImpersonating || impersonationLeftMs === null) return;
+    if (impersonationLeftMs > 0) return;
+    exitImpersonationRef.current();
+  }, [isImpersonating, impersonationLeftMs]);
 
   // Task #49 — full session teardown WITHOUT a redirect. Shared by logout()
   // (which redirects afterwards) and the AuthScreen wrapper on /register and
@@ -1461,6 +1546,7 @@ function AppInner() {
   const authProps = {
     user, onLogout: logout, viewMode, onViewModeChange: handleViewModeChange, hqView,
     isImpersonating, onExitImpersonation: exitImpersonation, realUser, onImpersonate: handleImpersonate,
+    supportLeftMs: impersonationLeftMs, onExtendImpersonation: extendImpersonation,
   };
 
   const guard = (roles, component) => (

@@ -1722,14 +1722,41 @@ export const api = {
   },
   adminVoidContractWithReason: (uid, reason) =>
     request(`/admin/contracts/${uid}/void`, { method: 'POST', body: JSON.stringify({ reason }) }),
-  adminImpersonate: async (userId) => {
-    const res = await request(`/admin/impersonate/${userId}`, { method: 'POST' });
+  /**
+   * Open a support session.
+   *
+   * `reason` is REQUIRED — the worker refuses a session without one, and
+   * with fewer than ten characters, because an audit row that says only
+   * "someone impersonated someone" answers nothing. It is sent as
+   * `context`, the column `impersonation_sessions` has always had and that
+   * no caller ever filled.
+   */
+  adminImpersonate: async (userId, reason) => {
+    const res = await request(
+      `/admin/impersonate/${userId}?context=${encodeURIComponent(String(reason || '').trim())}`,
+      { method: 'POST' },
+    );
     // Cohort Timing task — session audit trail. Remember the Worker-issued
     // session id so exitImpersonation can stamp ended_at (best-effort; the
     // dev backend doesn't return one).
     try {
       if (res?.impersonation_session_id) localStorage.setItem('impersonationSessionId', String(res.impersonation_session_id));
       else localStorage.removeItem('impersonationSessionId');
+      // When the token dies. The banner counts down to it and hands the
+      // session back at zero — without this the client would meet the
+      // expiry as a 401, and `request` reads a 401 as a dead session and
+      // bounces to /login, ending the ADMIN's own session too.
+      if (res?.expires_at) localStorage.setItem('impersonationExpiresAt', String(res.expires_at));
+      else localStorage.removeItem('impersonationExpiresAt');
+    } catch { /* storage unavailable */ }
+    return res;
+  },
+  /** Another thirty minutes on a session that is still open. */
+  adminImpersonateExtend: async (sessionId) => {
+    const res = await request(`/admin/impersonate-sessions/${sessionId}/extend`, { method: 'POST' });
+    try {
+      if (res?.token) localStorage.setItem('token', res.token);
+      if (res?.expires_at) localStorage.setItem('impersonationExpiresAt', String(res.expires_at));
     } catch { /* storage unavailable */ }
     return res;
   },
