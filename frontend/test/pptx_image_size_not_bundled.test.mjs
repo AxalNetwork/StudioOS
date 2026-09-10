@@ -1,47 +1,62 @@
 /**
- * `image-size` must not reach the shipped bundle.
+ * `image-size` must not be the vulnerable 1.2.1 tarball, and must not
+ * reach the shipped bundle.
  *
- * Dependabot reports a High advisory against `image-size@1.2.1`: crafted ICNS,
- * JXL and HEIF headers drive its parsers into unbounded work (denial of
- * service). It reaches this repo transitively, in both lockfiles:
+ * Dependabot #161 (CVE-2025-71330 / CVE-2025-71329) reports a High
+ * advisory against official `image-size` through 2.0.2: crafted ICNS,
+ * JXL and HEIF headers drive its parsers into an infinite loop. It
+ * reaches this repo transitively, in both lockfiles:
  *
- *     workspace / frontend  ->  pptxgenjs@4.0.1  ->  image-size@1.2.1
+ *     workspace / frontend  ->  pptxgenjs@4.0.1  ->  image-size@^1.2.1
  *
- * There is NO transitive bump that fixes it. `pptxgenjs@4.0.1` is the latest
- * release and pins `"image-size": "^1.2.1"`; the advisory is fixed in 2.x,
- * outside that caret range. `npm audit --json` offers exactly one "fix" —
- * `pptxgenjs@1.1.5`, `isSemVerMajor: true` — a three-major downgrade that
- * would take the deck export with it. So the lockfile entry stays.
+ * There is NO official patch. `pptxgenjs@4.0.1` is the latest release
+ * and pins `"image-size": "^1.2.1"`; upstream `image-size` is archived
+ * and never published 2.0.3. `npm audit --json` offers exactly one
+ * "fix" — `pptxgenjs@1.1.5`, `isSemVerMajor: true` — a three-major
+ * downgrade that would take the deck export with it.
  *
- * What makes that acceptable is that the vulnerable code is not shipped.
- * `pptxgenjs` declares `image-size` as Node-only and stubs it for browser
- * targets, in its own package.json:
+ * The lockfile fix is an npm override onto the community 1.x fork:
+ *
+ *     "overrides": { "image-size": "npm:image-size-next@1.2.2" }
+ *
+ * 1.2.2 keeps the CJS default-export API pptxgenjs expects and rejects
+ * zero-length ICNS entries / zero-size JXL-HEIF boxes. 2.x of the same
+ * fork is a different API; do not jump to it without checking pptxgenjs.
+ *
+ * Separately, the parsers still must not ship. `pptxgenjs` declares
+ * `image-size` as Node-only and stubs it for browser targets:
  *
  *     "browser": { "fs": false, "https": false, "image-size": false, ... }
  *
- * Vite honours that field for the client build, and PPTX generation in this
- * app runs in the BROWSER — `decks/spinout/buildDeck.js` imports `pptxgen`,
- * the Worker deliberately does not (see `routes/pptx.ts` and
- * `PitchDeckPage.jsx:404`). So the parsers the advisory names are compiled
- * out, and no user-supplied image is ever handed to them.
- *
- * That conclusion is a fact about a build, not about a lockfile, and builds
- * change: a bundler upgrade that stops reading `browser`, a pptxgenjs release
- * that drops the stub, or someone importing `pptxgenjs` on a server path would
- * each quietly make the advisory real while `npm audit` output stayed exactly
- * the same. This test is what notices. It asserts against the committed
- * `docs/` bundle — the artifact the Worker actually serves.
- *
- * If it fails, the advisory has become live: either restore the exclusion, or
- * treat the DoS as reachable and handle it on its merits.
+ * Vite honours that field for the client build, and PPTX generation in
+ * this app runs in the BROWSER — `decks/spinout/buildDeck.js` imports
+ * `pptxgen`, the Worker deliberately does not (see `routes/pptx.ts` and
+ * `PitchDeckPage.jsx:404`). So no user-supplied image is handed to these
+ * parsers in production either. The bundle scan below is what notices if
+ * that exclusion breaks.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { resolve, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const ASSETS = resolve(process.cwd(), 'docs/assets');
-const IMAGE_SIZE = resolve(process.cwd(), 'node_modules/image-size/dist');
+const OVERRIDE = 'npm:image-size-next@1.2.2';
+const VULN_TARBALL = /registry\.npmjs\.org\/image-size\/-\/image-size-/;
+const FORK_TARBALL = 'registry.npmjs.org/image-size-next/-/image-size-next-1.2.2.tgz';
+
+const IMAGE_SIZE_CANDIDATES = [
+  resolve(process.cwd(), 'node_modules/image-size'),
+  resolve(process.cwd(), 'node_modules/pptxgenjs/node_modules/image-size'),
+  resolve(process.cwd(), 'frontend/node_modules/image-size'),
+  resolve(process.cwd(), 'frontend/node_modules/pptxgenjs/node_modules/image-size'),
+];
+
+function installedImageSize() {
+  return IMAGE_SIZE_CANDIDATES.find((p) => existsSync(p)) || null;
+}
 
 /**
  * Markers distinctive to image-size, chosen so a hit means that library and
@@ -79,6 +94,61 @@ function jsFilesUnder(dir) {
   return out;
 }
 
+function readJson(rel) {
+  return JSON.parse(readFileSync(resolve(process.cwd(), rel), 'utf8'));
+}
+
+test('both manifests override image-size onto image-size-next 1.2.2', () => {
+  for (const rel of ['package.json', 'frontend/package.json']) {
+    const pkg = readJson(rel);
+    assert.equal(
+      pkg.overrides?.['image-size'], OVERRIDE,
+      `${rel} must pin ${OVERRIDE} or Dependabot #161 returns`,
+    );
+  }
+});
+
+test('neither lockfile installs the vulnerable image-size tarball', () => {
+  for (const rel of ['package-lock.json', 'frontend/package-lock.json']) {
+    const text = readFileSync(resolve(process.cwd(), rel), 'utf8');
+    assert.doesNotMatch(
+      text, VULN_TARBALL,
+      `${rel} still resolves official image-size — the ICNS DoS is back`,
+    );
+    assert.ok(
+      text.includes(FORK_TARBALL),
+      `${rel} must resolve ${FORK_TARBALL}`,
+    );
+    const lock = JSON.parse(text);
+    const entries = Object.entries(lock.packages || {}).filter(
+      ([key]) => key === 'node_modules/image-size' || key.endsWith('/node_modules/image-size'),
+    );
+    assert.ok(entries.length > 0, `${rel} has no image-size entry`);
+    for (const [key, pkg] of entries) {
+      assert.equal(pkg.name, 'image-size-next', key);
+      assert.equal(pkg.version, '1.2.2', key);
+    }
+  }
+});
+
+test('a zero-length ICNS entry returns instead of hanging', { timeout: 2000 }, () => {
+  // CVE-2025-71330: official image-size <= 2.0.2 never advances the offset
+  // when the ICNS entry length field is 0, so the while loop never exits.
+  const root = installedImageSize();
+  if (!root) return;
+  const req = createRequire(pathToFileURL(join(root, 'package.json')).href);
+  const sizeOf = req('.');
+  const buf = Buffer.alloc(16);
+  buf.write('icns', 0, 4, 'ascii');
+  buf.writeUInt32BE(16, 4);
+  buf.write('ic08', 8, 4, 'ascii');
+  buf.writeUInt32BE(0, 12);
+  assert.throws(
+    () => sizeOf(buf),
+    (err) => err instanceof TypeError && /ICNS/i.test(String(err.message)),
+  );
+});
+
 test('the committed bundle exists to be checked', () => {
   assert.ok(
     jsFilesUnder(ASSETS).length > 0,
@@ -96,7 +166,8 @@ test('pptxgenjs ships, so a hit on it would have been found', () => {
 test('every marker is real — each one appears in image-size itself', () => {
   // Without this, a typo or a renamed internal turns the scan below into a
   // guaranteed pass over a bundle nobody has actually checked.
-  const files = jsFilesUnder(IMAGE_SIZE);
+  const root = installedImageSize();
+  const files = root ? jsFilesUnder(join(root, 'dist')) : [];
   if (files.length === 0) return; // dependency-free checkout; the rest still runs
   const sources = files.map((f) => readFileSync(f, 'utf8'));
   const dead = IMAGE_SIZE_MARKERS.filter((m) => !sources.some((s) => s.includes(m)));
@@ -118,10 +189,9 @@ test('no image-size parser reaches the shipped bundle', () => {
   }
   assert.deepEqual(
     hits, [],
-    'image-size (High: ICNS/JXL/HEIF DoS) is in the browser bundle. It is meant '
+    'image-size parsers are in the browser bundle. They are meant '
     + 'to be stubbed by pptxgenjs\'s `"browser": { "image-size": false }` field. '
-    + 'Either that stub broke or something imports it directly — the advisory is '
-    + 'now reachable and needs handling, not a lockfile note.',
+    + 'Either that stub broke or something imports it directly.',
   );
 });
 
