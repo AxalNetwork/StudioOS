@@ -34,8 +34,21 @@ const bench = read('cloudflare-worker/sql/migrations/217_research_benchmarks.sql
 const preparedTemplates = (src: string): string[] =>
   [...src.matchAll(/prepare\(\s*`([\s\S]*?)`\s*\)/g)].map((m) => m[1]);
 
+function mentionsTable(stmt: string, table: string): boolean {
+  let from = 0;
+  while (from < stmt.length) {
+    const at = stmt.indexOf(table, from);
+    if (at < 0) return false;
+    const prev = at === 0 ? '' : stmt[at - 1];
+    const next = stmt[at + table.length] ?? '';
+    if (!/[A-Za-z0-9_]/.test(prev) && !/[A-Za-z0-9_]/.test(next)) return true;
+    from = at + 1;
+  }
+  return false;
+}
+
 const touching = (src: string, table: string) =>
-  preparedTemplates(src).filter((t) => new RegExp(`\\b${table}\\b`).test(t));
+  preparedTemplates(src).filter((t) => mentionsTable(t, table));
 
 for (const table of ['research_funds', 'research_benchmarks']) {
   test(`every ${table} read, update and delete filters on owner_user_id`, () => {

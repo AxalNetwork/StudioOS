@@ -72,8 +72,8 @@ test('the six dead client methods are gone, not merely unused', () => {
   for (const m of ['getKybStatus', 'submitKyb', 'getAccreditationStatus', 'uploadAccreditation',
                    'reviewAccreditation', 'getAccreditationBadge', 'getNdaPreview', 'signNda',
                    'getNdaStatus']) {
-    assert.doesNotMatch(API, new RegExp(`\\b${m}\\s*:`), `${m} still exists in api.js`);
-    assert.doesNotMatch(PAGE, new RegExp(`\\bapi\\.${m}\\b`), `${m} is still called`);
+    assert.ok(!API.includes(`${m}:`), `${m} still exists in api.js`);
+    assert.ok(!PAGE.includes(`api.${m}`), `${m} is still called`);
   }
 });
 
@@ -194,10 +194,14 @@ test('the three statuses that used to render grey now read correctly', () => {
     PAGE.indexOf('const STATUS_TONE = {'),
     PAGE.indexOf('};', PAGE.indexOf('const STATUS_TONE = {')),
   );
-  const toneOf = (k) => (block.match(new RegExp(`^\\s{2}${k}:\\s*'([a-z]+)'`, 'm')) || [])[1];
-  assert.equal(toneOf('active'), 'ok', 'an in-force NDA must not read as neutral');
-  assert.equal(toneOf('revoked'), 'bad', 'a revoked NDA must not read as neutral');
-  assert.equal(toneOf('cancelled'), 'bad', 'a cancelled NDA must not read as neutral');
+  const toneOf = {
+    active: (block.match(/^\s{2}active:\s*'([a-z]+)'/m) || [])[1],
+    revoked: (block.match(/^\s{2}revoked:\s*'([a-z]+)'/m) || [])[1],
+    cancelled: (block.match(/^\s{2}cancelled:\s*'([a-z]+)'/m) || [])[1],
+  };
+  assert.equal(toneOf.active, 'ok', 'an in-force NDA must not read as neutral');
+  assert.equal(toneOf.revoked, 'bad', 'a revoked NDA must not read as neutral');
+  assert.equal(toneOf.cancelled, 'bad', 'a cancelled NDA must not read as neutral');
 });
 
 test('waived reads the same way the score counts it', () => {
