@@ -38,6 +38,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { fork } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -135,22 +136,71 @@ test('neither lockfile installs the vulnerable image-size tarball', () => {
   }
 });
 
-test('a zero-length ICNS entry returns instead of hanging', { timeout: 2000 }, () => {
+if (process.argv[2] === '--icns-loop-check-child') {
+  const root = process.argv[3];
+  try {
+    const req = createRequire(pathToFileURL(join(root, 'package.json')).href);
+    const sizeOf = req('.');
+    const buf = Buffer.alloc(16);
+    buf.write('icns', 0, 4, 'ascii');
+    buf.writeUInt32BE(16, 4);
+    buf.write('ic08', 8, 4, 'ascii');
+    buf.writeUInt32BE(0, 12);
+
+    try {
+      sizeOf(buf);
+      process.send?.({ ok: false, reason: 'did-not-throw' });
+    } catch (err) {
+      const ok = err instanceof TypeError && /ICNS/i.test(String(err.message));
+      process.send?.({ ok, reason: ok ? null : 'unexpected-error', message: String(err && err.message) });
+    }
+  } catch (err) {
+    process.send?.({ ok: false, reason: 'child-setup-failed', message: String(err && err.message) });
+  } finally {
+    process.exit(0);
+  }
+}
+
+test('a zero-length ICNS entry returns instead of hanging', async () => {
   // CVE-2025-71330: official image-size <= 2.0.2 never advances the offset
   // when the ICNS entry length field is 0, so the while loop never exits.
   const root = installedImageSize();
   if (!root) return;
-  const req = createRequire(pathToFileURL(join(root, 'package.json')).href);
-  const sizeOf = req('.');
-  const buf = Buffer.alloc(16);
-  buf.write('icns', 0, 4, 'ascii');
-  buf.writeUInt32BE(16, 4);
-  buf.write('ic08', 8, 4, 'ascii');
-  buf.writeUInt32BE(0, 12);
-  assert.throws(
-    () => sizeOf(buf),
-    (err) => err instanceof TypeError && /ICNS/i.test(String(err.message)),
-  );
+
+  await new Promise((resolvePromise, rejectPromise) => {
+    const child = fork(new URL(import.meta.url), ['--icns-loop-check-child', root], {
+      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+    });
+
+    let settled = false;
+    const done = (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (err) rejectPromise(err);
+      else resolvePromise();
+    };
+
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      done(new Error('sizeOf(buf) hung in child process'));
+    }, 2000);
+
+    child.once('message', (msg) => {
+      if (!msg?.ok) {
+        done(new Error(`ICNS regression check failed: ${msg?.reason || 'unknown'}`));
+        return;
+      }
+      done();
+    });
+
+    child.once('error', (err) => done(err));
+    child.once('exit', (code, signal) => {
+      if (!settled && (code !== 0 || signal)) {
+        done(new Error(`ICNS check child exited unexpectedly (code=${code}, signal=${signal})`));
+      }
+    });
+  });
 });
 
 test('the committed bundle exists to be checked', () => {
