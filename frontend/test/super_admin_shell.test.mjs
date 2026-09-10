@@ -46,17 +46,22 @@ test('every row points at a route that is actually registered', () => {
   );
 });
 
-test('all nine rows are present, in canvas order', () => {
+test('all eleven rows are present, in canvas order', () => {
   // The canvas order is Home, Licences, Funds, Contracts, Team, Revenue,
-  // Support, Security, Settings. "Security", not "Governance" — decision A4.
+  // Content, Platform, Support, Security, Settings. "Security", not
+  // "Governance" — decision A4.
   //
-  // REVENUE IS THE NINTH AND ITS POSITION IS READ OFF THE ARTBOARD, not
-  // chosen: the H5 nav in `Admin · Super.dc.html` runs Home, Licenses,
-  // Accounts, Revenue, Content, Governance — so Revenue sits straight after
-  // Accounts, which ships as Team. Content and Platform are the two rows
-  // still to come (canvas H6); this array goes to eleven when they land.
-  assert.deepEqual(rows.map((r) => r.label), ['Home', 'Licences', 'Funds', 'Contracts', 'Team', 'Revenue', 'Support', 'Security', 'Settings']);
+  // THE LAST THREE POSITIONS ARE READ OFF THE ARTBOARD, not chosen: the nav
+  // in `Admin · Super.dc.html` runs Home, Licenses, Accounts, Revenue,
+  // Content, Governance — so Revenue, Content and Platform sit straight
+  // after Accounts, which ships as Team. That completes the H5/H6 rows;
+  // the eight-row shell this array started as came from the newer
+  // `Support Security · Super.dc.html`.
+  assert.deepEqual(rows.map((r) => r.label), ['Home', 'Licences', 'Funds', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Support', 'Security', 'Settings']);
   assert.equal(rows.find((r) => r.label === 'Revenue')?.to, '/admin/revenue');
+  assert.equal(rows.find((r) => r.label === 'Content')?.to, '/admin/content',
+    'Content is the HQ pipeline view, not /admin/articles (the plain-admin Content Queue)');
+  assert.equal(rows.find((r) => r.label === 'Platform')?.to, '/admin/platform');
   const licences = rows.find((r) => r.to === '/admin/licences');
   assert.ok(licences, 'the franchise console must be reachable from the HQ shell');
   assert.equal(rows.find((r) => r.label === 'Team')?.to, '/admin/accounts',

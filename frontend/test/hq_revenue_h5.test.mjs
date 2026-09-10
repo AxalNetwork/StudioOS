@@ -77,7 +77,13 @@ test('no absent figure is defaulted to a number', () => {
   for (const label of ['Margin', 'Owed by subsidiaries', 'Budget left']) {
     const at = SRC.indexOf(`label="${label}"`);
     assert.ok(at >= 0, `the ${label} stat is gone`);
-    assert.match(SRC.slice(at, at + 160), /value=\{null\}/,
+    // Bounded to this element's own `/>`. A character-count window runs into
+    // the next <Stat> and matches ITS value={null}, so the mutation that
+    // gives this one a number escapes. Caught on the H6 page, fixed here
+    // too before it could rot.
+    const end = SRC.indexOf('/>', at);
+    assert.ok(end > at, `the ${label} stat is not a self-closing element any more`);
+    assert.match(SRC.slice(at, end), /value=\{null\}/,
       `the ${label} stat acquired a value — there is no source for one`);
   }
 });

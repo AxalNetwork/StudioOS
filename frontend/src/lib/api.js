@@ -2775,6 +2775,11 @@ export const api = {
   // through adminBillingListDisputes, read separately so an outage there
   // costs one zone rather than the page.
   hqRevenue: () => request('/admin/revenue/summary'),
+  // HQ · Content and Platform (canvas H6). Two reads, two pages: the
+  // content pipeline over `articles` + `admin_publications`, and the
+  // platform view over `integrations` + `cron_run_history`.
+  hqContent: () => request('/admin/content/summary'),
+  hqPlatform: () => request('/admin/platform/summary'),
   // HQ · Security. The overview is read-only; force re-auth signs every
   // active account out everywhere (the caller included) and needs a TOTP
   // session with a recent step-up, which lib/api.js prompts for on the 403.

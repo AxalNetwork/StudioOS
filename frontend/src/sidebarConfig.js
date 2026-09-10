@@ -23,7 +23,7 @@ import {
   MessageSquare, Package, Calendar, Heart, Bookmark, Megaphone, Send,
   Gamepad2, ShieldAlert,
   Inbox, Radar, Wallet, Landmark,
-  Mail, Gift, Map, UserCog, Coins,
+  Mail, Gift, Map, UserCog, Coins, FileStack, SlidersHorizontal,
 } from 'lucide-react';
 
 // `workspaces/shellConfig.js` is a pure leaf module — it imports nothing — so
@@ -107,6 +107,11 @@ export const SIDEBAR_GROUPS = {
       // Canvas H5. The artboard's own nav puts Revenue straight after
       // Accounts (= Team), which is where it goes here.
       { to: '/admin/revenue', icon: Coins, label: 'Revenue' },
+      // Canvas H6, in the artboard's own nav order: Revenue, Content,
+      // then Platform. NOT to be confused with `/admin/articles`, the
+      // plain-admin Content Queue that reviews one piece at a time.
+      { to: '/admin/content', icon: FileStack, label: 'Content' },
+      { to: '/admin/platform', icon: SlidersHorizontal, label: 'Platform' },
       { to: '/help', icon: Inbox, label: 'Support' },
       // "Security", not "Governance" (ASSUMPTIONS_LOG A4): the audit log is
       // what someone finds inside, not what they come for.
