@@ -198,7 +198,14 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'This period', key: 'period' },
     { canvas: 'Overdue', key: 'overdue' },
     { canvas: 'Parse review', unbuilt: NO_EXTRACTION_LAYER },
-    { canvas: 'Rules', unbuilt: NO_EXTRACTION_LAYER },
+    // `Rules` WAS `NO_EXTRACTION_LAYER` TOO, and that reason is true about the
+    // rules which would produce an extraction — but it is not the only rule set
+    // in play. `portfolio_kpi_definitions` stores the KPIs companies are held
+    // to, with the wording, the cadence and whether each is required, and
+    // `GET /positions/kpi-compliance` has been returning it as `kpi_set` on
+    // every load of this page. The chip was marked unbuilt over data already in
+    // hand. Editing them is still unoffered — see the ops row.
+    { canvas: 'Rules', key: 'rules' },
   ],
 
   // Four live chips over a page that makes no `api.*` call at all — the same

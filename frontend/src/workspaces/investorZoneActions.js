@@ -141,8 +141,21 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Add follow-on', unbuilt: 'a follow-on is a round on the position itself, and recording one is an admin write — this book is the investor’s read of it' },
   ],
   'portfolio/updates': [
-    { label: 'Chase all overdue', unbuilt: 'nothing on this desk sends mail' },
-    { label: 'Edit rules', unbuilt: 'no reminder rules are stored' },
+    // CHECKED, AND THE OLD REASON WAS TOO BROAD BY ONE CALL. "Nothing on this
+    // desk sends mail" reads as: this route never reaches a mail path. It does
+    // — `notifyProjectFollowers` runs on create and on submit, and `notify()`
+    // dispatches to email. What it does NOT do is address the company that
+    // stayed silent: the fan-out fires when an update ARRIVES, goes to the
+    // startup's followers, and excludes the author. So the chase is genuinely
+    // unbuilt, for a narrower reason than the one that was written down, and
+    // the narrower reason is the one that stays true if a chase is ever built.
+    { label: 'Chase all overdue', unbuilt: 'nothing here reaches a company that stayed silent — the only outbound on this desk fires when an update arrives, and it notifies the startup’s followers' },
+    // WAS 'no reminder rules are stored', which is true and describes a
+    // different object. The rules this desk actually has are the KPI
+    // definitions companies are held to, and they ARE stored — firm-wide,
+    // with no per-firm write path exposed. The Rules chip shows them; nothing
+    // edits them.
+    { label: 'Edit rules', unbuilt: 'the KPI set companies are held to is stored firm-wide and read-only here; no per-firm rule is kept for this book to edit' },
     { label: 'Export', kind: 'export' },
   ],
   'portfolio/value-add': [

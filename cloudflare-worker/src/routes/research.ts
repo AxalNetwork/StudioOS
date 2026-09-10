@@ -2439,6 +2439,111 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  'portfolio/updates': {
+    // IP2's band: "Proposal · parse N updates ... arriving as editable
+    // proposals. Where a figure is ambiguous the extractor flags rather than
+    // guesses."
+    //
+    // HALF OF THAT BAND HAS SOMEWHERE TO LAND AND HALF DOES NOT, so half is
+    // built. A proposal queue would need a store for the proposal, its
+    // ambiguity state and its acceptance; none exists, and `POST /drafts/accept`
+    // stamps the draft and writes nowhere else. What DOES exist is both halves
+    // of the comparison: `portfolio_kpi_definitions` is what companies were
+    // asked for, `portfolio_updates.kpis_json` is what arrived. So the draft
+    // reads one against the other and names the gaps. It fills none in.
+    //
+    // THE ONE FAILURE MODE WORTH THE WHOLE INSTRUCTION. Asked which figures are
+    // missing, a model will find them in the narrative — "a team of ~12" becomes
+    // a headcount of 12, and an approximation a founder hedged enters the record
+    // as a reported figure. The artboard's own note is about exactly this
+    // company. Naming the sentence is the deliverable; converting it is the
+    // defect.
+    //
+    // SECOND: a blank is not a zero and not a denial. A KPI absent from an
+    // update means that update does not carry it. It does not mean the company
+    // has none, and it does not make the company late — lateness needs a
+    // deadline, and these rows carry a period, not a due date.
+    instruction: [
+      'Compare what portfolio companies were asked to report against what their stored updates actually carry, using only the rows below.',
+      'For each company, name the required KPIs its stored update does not carry, and name any figure that arrived as prose rather than as a value under its key — quote the wording and stop there. NEVER convert a phrase into a number: an approximation a founder hedged ("about", "~", "roughly", "a team of ~12") is not a reported figure, and writing one as if it were is the single thing this read exists to avoid.',
+      'A KPI absent from an update means that update does not carry it. It does not mean the company has none, it is not a zero, and it does not make the company late — the rows carry the period an update speaks for, never a due date, so never call anything late or overdue.',
+      'Add no figure the rows below do not carry, do not compute a rate or a trend across periods, and do not forecast.',
+      'If the rule set below is empty, say that nothing is recorded as asked-for rather than judging the updates against your own idea of what a KPI set should contain.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
+        .bind(userId).first<{ id: number; role: string | null }>();
+      const role = String(me?.role || '');
+      if (role !== 'admin' && role !== 'partner' && role !== 'investor') return [];
+      // Same scope as every read in `routes/positions.ts` and the same
+      // short-circuit: the CSV predicate reads NULL as "all rows", so an empty
+      // accessible set must never reach the query.
+      const ids = await investorProjectIds(c.env, { id: userId, role } as any, null);
+      if (ids != null && ids.length === 0) return [];
+      const csv = ids == null ? null : ids.join(',');
+      // EVERY CADENCE, unlike the page's own read. The page renders one cadence
+      // at a time because its compliance figure is per-period; a draft asked
+      // what is missing must see the whole of what was asked for, or it reports
+      // a gap-free month against a quarterly-only rule set.
+      const [defs, updates] = await Promise.all([
+        c.env.DB.prepare(
+          `SELECT kpi_key, name, unit, cadence, required, applies_to
+             FROM portfolio_kpi_definitions
+            WHERE fund_id IS NULL
+            ORDER BY cadence, sort_order`
+        ).all<Record<string, unknown>>().catch(() => ({ results: [] as Record<string, unknown>[] })),
+        c.env.DB.prepare(
+          `SELECT u.period, u.title, u.body, u.kpis_json,
+                  COALESCE(u.submitted_at, u.updated_at) AS at,
+                  p.name AS project_name
+             FROM portfolio_updates u
+             JOIN projects p ON p.id = u.project_id AND p.deleted_at IS NULL
+            WHERE u.status = 'submitted'
+              AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(u.project_id AS TEXT) || ',') > 0)
+            ORDER BY COALESCE(u.submitted_at, u.updated_at) DESC
+            LIMIT 24`
+        ).bind(csv, csv).all<Record<string, unknown>>(),
+      ]);
+      const stored = (updates.results || []) as Record<string, unknown>[];
+      // No update is nothing to read, whatever the rule set says. The reverse
+      // is not true: updates with an empty rule set still produce a draft, and
+      // the instruction above tells it to report that nothing is asked for
+      // rather than inventing a standard to judge them by.
+      if (!stored.length) return [];
+      const rules = ((defs.results || []) as Record<string, unknown>[]).map((d) => (
+        `ASKED FOR: ${d.name || d.kpi_key} (key ${d.kpi_key})`
+        + `; unit ${d.unit || 'not recorded'}`
+        + `; ${d.cadence || 'cadence not recorded'}`
+        + `; ${Number(d.required) ? 'required' : 'optional'}`
+        + `; applies to ${d.applies_to || 'not recorded'}`
+      ));
+      const arrived = stored.map((u) => {
+        // The keys and values as stored, with no coercion. A value that is
+        // blank stays visible AS blank: an asked-for figure that arrived empty
+        // is a gap, and dropping it would hide the gap being asked about.
+        let carried = 'none recorded';
+        try {
+          const parsed = JSON.parse(String(u.kpis_json || '{}'));
+          const entries = parsed && typeof parsed === 'object' ? Object.entries(parsed) : [];
+          if (entries.length) {
+            carried = entries.map(([k, v]) => (
+              `${k}=${v === null || v === undefined || String(v).trim() === '' ? 'BLANK' : String(v).slice(0, 60)}`
+            )).join(', ');
+          }
+        } catch { carried = 'unreadable'; }
+        return (
+          `ARRIVED: ${u.project_name || 'company not recorded'}`
+          + `; period ${u.period || 'not recorded'}`
+          + `; stored ${String(u.at || 'date not recorded').slice(0, 10)}`
+          + `; title ${u.title || 'not recorded'}`
+          + `; values carried ${carried}`
+          + `; narrative ${String(u.body || '').replace(/\s+/g, ' ').slice(0, 400) || 'not recorded'}`
+        );
+      });
+      return rules.length ? [...rules, ...arrived] : ['ASKED FOR: no KPI is recorded as asked for.', ...arrived];
+    },
+  },
+
   // ── FOUNDER SURFACES ────────────────────────────────────────────────────
   //
   // The first non-partner entries in this table. Everything above scopes on
