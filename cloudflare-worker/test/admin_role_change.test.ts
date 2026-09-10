@@ -61,17 +61,27 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
  * Anchored on a line-start `CREATE TABLE <name> (` so `REFERENCES users(id)`
  * in a dozen other tables cannot match — the baseline mentions `users`
  * thirteen times and only one of them is its definition.
+ *
+ * A LITERAL SEARCH, not a built regex. The first version interpolated `name`
+ * into `new RegExp`, which Semgrep flagged (alert 6065,
+ * `detect-non-literal-regexp`). No caller passes anything but a hardcoded
+ * table name, so there was no ReDoS here — but the regex was not buying
+ * anything either: the baseline contains no `CREATE TABLE IF NOT EXISTS` at
+ * all and all three of these are the plain form, so `indexOf` is shorter,
+ * exact, and cannot be made to mean something else by a future caller.
  */
 const BASELINE = readFileSync(
   resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8',
 );
 function ddl(name: string): string {
-  const re = new RegExp(`^CREATE TABLE (?:IF NOT EXISTS )?${name}\\s*\\(`, 'm');
-  const m = re.exec(BASELINE);
-  assert.ok(m, `${name} is no longer defined in schema_baseline.sql`);
-  const end = BASELINE.indexOf(');', m.index);
-  assert.ok(end > m.index, `${name}'s definition in the baseline is unterminated`);
-  return BASELINE.slice(m.index, end + 2);
+  // The leading newline is the line anchor. Searching a prepended copy so a
+  // definition on line 1 would still be found.
+  const at = `\n${BASELINE}`.indexOf(`\nCREATE TABLE ${name} (`);
+  assert.ok(at >= 0, `${name} is no longer defined in schema_baseline.sql as a plain CREATE TABLE`);
+  const start = at;   // index into the prepended copy === index into BASELINE
+  const end = BASELINE.indexOf(');', start);
+  assert.ok(end > start, `${name}'s definition in the baseline is unterminated`);
+  return BASELINE.slice(start, end + 2);
 }
 
 function freshDb() {

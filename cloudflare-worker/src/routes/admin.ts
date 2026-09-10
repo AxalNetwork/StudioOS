@@ -3,7 +3,7 @@ import { clampLimit, parseOffset } from '../util/pagination';
 import { hashEmail } from '../util/hashEmail';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAdmin, createJWT, hashToken, requireFactor, requireStepUp, isSuperAdmin, hydrateSuperAdmin } from '../auth';
+import { requireAdmin, createJWT, hashToken, requireFactor, requireStepUp, isSuperAdmin, hydrateSuperAdmin, IMPERSONATION_EXPIRY_MINUTES } from '../auth';
 import {
   serializeTranscriptCsv,
   classifyOnboardingEmpty,
@@ -1444,6 +1444,22 @@ admin.post('/impersonate/:userId', async (c) => {
   await requireStepUp(c); // BLOCK-AUTH-03 — require a RECENT TOTP, not just a TOTP-minted session
   const adminUser = await requireAdmin(c);
   const userId = parseInt(c.req.param('userId'));
+
+  // THE REASON IS REQUIRED, and required HERE rather than only in the dialog.
+  // `context` has existed since the cohort-timing work but was an optional
+  // query param no SPA caller ever sent, so every support session in the
+  // audit read "someone impersonated someone" with no why. The canvas draws
+  // it as "Reason · required, free text"; a UI-only rule would be a
+  // convention, not a control, and this is the one field that makes the
+  // audit trail answer the question it exists to answer.
+  const reason = String(c.req.query('context') || '').trim().slice(0, 200);
+  if (reason.length < 10) {
+    return c.json({
+      error: 'A reason of at least 10 characters is required to open a support session.',
+      code: 'impersonation_reason_required',
+    }, 400);
+  }
+
   const sql = getSQL(c.env);
   const rows = await sql`SELECT * FROM users WHERE id = ${userId}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'User not found' }, 404); }
@@ -1463,7 +1479,12 @@ admin.post('/impersonate/:userId', async (c) => {
       code: 'cannot_impersonate_super_admin',
     }, 403);
   }
-  const token = await createJWT(c.env, target.id, target.email, target.role, adminUser.id);
+  // Thirty minutes, not the ordinary 24 hours. See IMPERSONATION_EXPIRY_MINUTES.
+  const token = await createJWT(
+    c.env, target.id, target.email, target.role, adminUser.id, undefined,
+    `${IMPERSONATION_EXPIRY_MINUTES}m`,
+  );
+  const expiresAt = new Date(Date.now() + IMPERSONATION_EXPIRY_MINUTES * 60_000).toISOString();
   // Epic 11 — actor is email_hash, details references user_id only.
   const impAdminHash = await hashEmail(adminUser.email);
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('admin_impersonate', ${`Admin ${adminUser.name} impersonated user ${target.name} (user_id=${target.id})`}, ${impAdminHash}, ${adminUser.id})`;
@@ -1476,13 +1497,74 @@ admin.post('/impersonate/:userId', async (c) => {
   try {
     const { ensureCohortTimingSchema } = await import('../services/cohortTiming');
     await ensureCohortTimingSchema(c.env);
-    const ctx = (c.req.query('context') || '').slice(0, 200) || null;
+    const ctx = reason;
     const ins = await c.env.DB.prepare(
       `INSERT INTO impersonation_sessions (admin_user_id, target_user_id, context) VALUES (?, ?, ?)`,
     ).bind(adminUser.id, target.id, ctx).run();
     impersonationSessionId = Number(ins.meta?.last_row_id ?? 0) || null;
   } catch (e) { console.warn('[admin/impersonate] session audit failed', e); }
-  return c.json({ token, user: { id: target.id, email: target.email, name: target.name, role: target.role }, impersonation_session_id: impersonationSessionId });
+  return c.json({
+    token,
+    user: { id: target.id, email: target.email, name: target.name, role: target.role },
+    impersonation_session_id: impersonationSessionId,
+    // The client shows the remaining time and hands the session back at zero.
+    // Without this it would discover the expiry as a 401, and api.request
+    // treats a 401 as "session expired" and bounces to /login — which would
+    // end the ADMIN's real session, not just the support session.
+    expires_at: expiresAt,
+    expires_in_minutes: IMPERSONATION_EXPIRY_MINUTES,
+  });
+});
+
+// Extend a live support session by another thirty minutes.
+//
+// The alternative to this route is an admin being dropped mid-task and
+// re-authenticating with TOTP to get back in, which trains people to open
+// long sessions "just in case" — the habit the short expiry exists to break.
+// Extending is deliberate, costs a fresh token, and is recorded, so the
+// audit shows how long support actually held the account.
+//
+// It re-checks everything the original grant checked: a recent TOTP, that
+// the caller is the admin who opened THIS session, and that the session is
+// still open. An ended session cannot be revived; that is a new session with
+// its own reason.
+admin.post('/impersonate-sessions/:id/extend', async (c) => {
+  await requireFactor(c, 'totp');
+  await requireStepUp(c);
+  const adminUser = await requireAdmin(c);
+  const id = parseInt(c.req.param('id')) || 0;
+
+  const row = await c.env.DB.prepare(
+    `SELECT * FROM impersonation_sessions WHERE id = ? AND admin_user_id = ? AND ended_at IS NULL`,
+  ).bind(id, adminUser.id).first<any>();
+  if (!row) return c.json({ error: 'No open support session with that id', code: 'session_not_open' }, 404);
+
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT * FROM users WHERE id = ${row.target_user_id}`;
+  if (rows.length === 0) { await sql.end(); return c.json({ error: 'User not found' }, 404); }
+  const target = rows[0];
+  // The same escalation guard as the grant. A holder's elevation could have
+  // been granted since the session opened.
+  await hydrateSuperAdmin(c.env, target as any);
+  if (isSuperAdmin(target as any) && !isSuperAdmin(adminUser as any)) {
+    await sql.end();
+    return c.json({
+      error: 'Only a Super Admin can impersonate a Super Admin.',
+      code: 'cannot_impersonate_super_admin',
+    }, 403);
+  }
+  const token = await createJWT(
+    c.env, target.id, target.email, target.role, adminUser.id, undefined,
+    `${IMPERSONATION_EXPIRY_MINUTES}m`,
+  );
+  const extAdminHash = await hashEmail(adminUser.email);
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('admin_impersonate_extend', ${`Admin ${adminUser.name} extended a support session on user_id=${target.id} by ${IMPERSONATION_EXPIRY_MINUTES} minutes`}, ${extAdminHash}, ${adminUser.id})`;
+  await sql.end();
+  return c.json({
+    token,
+    expires_at: new Date(Date.now() + IMPERSONATION_EXPIRY_MINUTES * 60_000).toISOString(),
+    expires_in_minutes: IMPERSONATION_EXPIRY_MINUTES,
+  });
 });
 
 // Close an impersonation session (audit end timestamp). Fired best-effort

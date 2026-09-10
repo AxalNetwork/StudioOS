@@ -81,6 +81,21 @@ function getSecretKey(env: Env) {
   return new TextEncoder().encode(env.JWT_SECRET || '');
 }
 
+/**
+ * A support session is thirty minutes, not a day.
+ *
+ * Until 2026-09-10 `POST /admin/impersonate/:userId` minted the ORDINARY
+ * 24-hour token, so an admin who opened a support session kept a credential
+ * that acts AS that person for the rest of the day — long after the support
+ * ended, and with nothing on screen saying so. The Admin · Super canvas draws
+ * "Expiry · 30 minutes · hard" on that flow; this is the number that makes
+ * the label true rather than the label being a claim about a control that
+ * did not exist. Extending is a deliberate act that mints a fresh token and
+ * is recorded, so the audit trail shows how long support actually held the
+ * account rather than one open-ended entry.
+ */
+export const IMPERSONATION_EXPIRY_MINUTES = 30;
+
 export async function createJWT(
   env: Env,
   userId: number,
@@ -88,6 +103,9 @@ export async function createJWT(
   role: string,
   impersonatedBy?: number,
   jti?: string,
+  // Only the impersonation paths pass this. Everything else keeps the
+  // ordinary session length, so the ~460 existing call sites are untouched.
+  expiresIn: string = `${JWT_EXPIRY_HOURS}h`,
 ) {
   const payload: Record<string, unknown> = {
     user_id: userId,
@@ -103,7 +121,7 @@ export async function createJWT(
   return new SignJWT(payload)
     .setProtectedHeader({ alg: JWT_ALGORITHM })
     .setIssuedAt()
-    .setExpirationTime(`${JWT_EXPIRY_HOURS}h`)
+    .setExpirationTime(expiresIn)
     .sign(getSecretKey(env));
 }
 

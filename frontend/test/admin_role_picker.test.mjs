@@ -137,8 +137,11 @@ test('a portalled menu still closes on an outside click, and follows the row', (
     'the menu does not follow the table when it scrolls');
   assert.match(d, /window\.addEventListener\('resize', place\)/,
     'the menu does not re-place on resize');
-  for (const ev of ['scroll', 'resize']) {
-    assert.match(d, new RegExp(`window\\.removeEventListener\\('${ev}'`),
-      `the ${ev} listener is never removed`);
-  }
+  // Written out rather than built in a loop: `new RegExp` on an interpolated
+  // value is what Semgrep's detect-non-literal-regexp rule exists for, and
+  // with two events a loop was saving one line and costing a finding.
+  assert.match(d, /window\.removeEventListener\('scroll', place, true\)/,
+    'the scroll listener is never removed');
+  assert.match(d, /window\.removeEventListener\('resize', place\)/,
+    'the resize listener is never removed');
 });
