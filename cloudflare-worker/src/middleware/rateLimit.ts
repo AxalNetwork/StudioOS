@@ -1,4 +1,10 @@
-import { MiddlewareHandler } from 'hono';
+// `import type`, not a value import — every sibling middleware (csrf,
+// lastActive, cfAccess) already writes it this way and this file was the
+// outlier. Node's --experimental-strip-types erases annotations without
+// resolving types, so a plain named import of a type stays in the output and
+// the module throws "does not provide an export named 'MiddlewareHandler'"
+// the moment anything imports it under `npm run test:worker`'s loader.
+import type { MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
 import { getCurrentUser } from '../auth';
 
@@ -14,6 +20,12 @@ type Bucket = {
   // can't be bypassed by knocking out KV.
   failClosed?: boolean;
 };
+
+// The two company-invitation routes that put a link in somebody's inbox:
+// `/api/company/<uid>/invitations` and `.../invitations/<inviteUid>/resend`.
+// Anchored at both ends so it cannot widen to a path that merely contains
+// the word, and `[^/]+` rather than `.+` so it cannot span a segment.
+export const COMPANY_INVITE_SEND = /^\/api\/company\/[^/]+\/invitations(\/[^/]+\/resend)?$/;
 
 const BUCKETS: Bucket[] = [
   // 5 spin-out executions / hour, admin/partner only
@@ -74,6 +86,26 @@ const BUCKETS: Bucket[] = [
     limit: 10,
     windowSec: 3600,
     test: (p, m) => m === 'POST' && (p === '/api/legal/esign/send' || p === '/api/esign/send'),
+    scope: 'user',
+    failClosed: true,
+  },
+  // Task #121 — company invitations. Same shape as `esign_send` above and
+  // the same reasoning: POST /api/company/:uid/invitations and its /resend
+  // sibling send an Axal-BRANDED EMAIL TO AN ARBITRARY RECIPIENT ADDRESS
+  // typed into a form. Left on the generic 60/min/user bucket that is an
+  // outbound-mail relay at 3,600 messages an hour, fail-OPEN, and any member
+  // whose role is Owner/Admin/Founder of any company can drive it.
+  //
+  // 10/hour/user is far above a real workflow — inviting a team is a handful
+  // of addresses, and a resend is a rare correction — and far below anything
+  // worth abusing. GET is excluded: reading the pending list sends nothing.
+  // failClosed, because a limit that a KV outage removes is not a limit on
+  // the surface it is protecting.
+  {
+    name: 'company_invite_send',
+    limit: 10,
+    windowSec: 3600,
+    test: (p, m) => m === 'POST' && COMPANY_INVITE_SEND.test(p),
     scope: 'user',
     failClosed: true,
   },
