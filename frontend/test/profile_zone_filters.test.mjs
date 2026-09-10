@@ -1102,9 +1102,19 @@ function mountingFile(profile, zone) {
   // there the workspace calls `zoneFiltersFor(role, 'research/markets', …)` and
   // hands the BODY a bound builder, so the body never names the zone and the
   // workspace never names the licence. Two further reasons the search would
-  // miss them anyway: it does not recurse, and advisor's Network zones live in
-  // `pages/advisor/network/`; and partner's is the loose file
-  // `pages/NetworkPage.jsx`, in none of its `pages` entries.
+  // miss them anyway: advisor's Network zones live in `pages/advisor/network/`,
+  // and partner's is the loose file `pages/NetworkPage.jsx`, in none of its
+  // `pages` entries.
+  //
+  // IT USED TO SEARCH ONE LEVEL DEEP, AND THAT WAS A SILENT EXEMPTION. Canvas
+  // ID1's body landed at `pages/investor/deals/PipelineZone.jsx` — one folder
+  // below the profile's `pages` entry — and the zone dropped straight out of
+  // `mounted`: the count fell to 15 against a profile that says 16, and every
+  // assertion about that zone's chips stopped running rather than failing.
+  // `bodies` was the wrong place to fix it, because an entry there means
+  // SHARED ACROSS LICENCES and is what `roleMountVerdict` keys off to demand
+  // `role={role}`; a single-licence body one folder down is not that. The walk
+  // recurses now, which is what it should always have done.
   //
   // So a shared zone declares its body outright. Written down rather than
   // fuzzy-matched, for the same reason `live()` is — a body that moves fails
@@ -1112,12 +1122,13 @@ function mountingFile(profile, zone) {
   const declared = profile.bodies?.[zone];
   if (declared) return { path: declared, src: read(declared) };
   const needle = `${profile.call}('${zone}'`;
-  for (const entry of profile.pages) {
+  const walk = (entry) => {
     const full = resolve(root, entry);
-    const files = statSync(full).isDirectory()
-      ? readdirSync(full).filter((f) => /\.jsx?$/.test(f)).map((f) => `${entry}/${f}`)
-      : [entry];
-    for (const rel of files) {
+    if (!statSync(full).isDirectory()) return /\.jsx?$/.test(entry) ? [entry] : [];
+    return readdirSync(full).flatMap((f) => walk(`${entry}/${f}`));
+  };
+  for (const entry of profile.pages) {
+    for (const rel of walk(entry)) {
       const src = read(rel);
       if (src.includes(needle)) return { path: rel, src };
     }

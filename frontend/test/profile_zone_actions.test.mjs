@@ -583,7 +583,14 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     // esbuild bundles it happily, and this repo has no lint step to catch it.
     // It shipped into one of the founder pages and only a browser found it.
     const KNOWN = new Set(['true', 'false', 'null', 'undefined', 'Number', 'String',
-      'Boolean', 'Array', 'Object', 'Math', 'JSON', 'Date', profile.call]);
+      'Boolean', 'Array', 'Object', 'Math', 'JSON', 'Date', profile.call,
+      // OPERATORS ARE NOT VARIABLES. `typeof d.days === 'number'` in an export
+      // cell read as a global named `typeof` and failed a page that is
+      // correct — the identifier scan cannot tell a keyword from a name, so
+      // the keywords that can legally appear in an expression are listed. A
+      // false alarm here is worse than a gap: it is the thing that gets a
+      // guard weakened instead of fixed.
+      'typeof', 'instanceof', 'in', 'new', 'void', 'delete', 'await']);
     let checked = 0;
     for (const f of pageFiles(profile)) {
       const src = read(f);
@@ -615,8 +622,21 @@ for (const [name, profile] of Object.entries(PROFILES)) {
             .flatMap((m) => m[1].split(',').map((x) => x.trim()))
             .filter(Boolean),
         );
+        // MULTI-LINE IMPORTS COUNT AS DECLARATIONS, AND THEY DID NOT.
+        // The single-line regex below cannot cross a newline, so a name bound
+        // by a wrapped `import { A,\n  B } from '…'` read as an undeclared
+        // global — a false positive on code that is correct, which is the
+        // failure mode that makes a guard get loosened rather than trusted.
+        // Every binding inside an import's braces is collected first; a name
+        // found there IS declared, so this only ever removes false alarms.
+        const imported = new Set(
+          [...src.matchAll(/import\s*(?:[\w$]+\s*,\s*)?\{([^}]*)\}\s*from/g)]
+            .flatMap((m) => m[1].split(','))
+            .map((x) => x.trim().split(/\s+as\s+/).pop().trim())
+            .filter(Boolean),
+        );
         for (const id of new Set([...bare.matchAll(/[A-Za-z_$][\w$]*/g)].map((m) => m[0]))) {
-          if (KNOWN.has(id) || params.has(id)) continue;
+          if (KNOWN.has(id) || params.has(id) || imported.has(id)) continue;
           const declared = new RegExp(`(const|let|var|function|import)[^\\n;]*\\b${id}\\b`).test(src);
           assert.ok(declared, `${f} passes \`${id}\` to its zone row, and never declares it`);
           checked += 1;

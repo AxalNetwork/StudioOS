@@ -202,7 +202,13 @@ test('every bucket root can be linked to by section', () => {
   // `/portfolio` still go to `/portfolio/positions` and its siblings.
   const anchors = {
     InvestorPortfolioCanvas: ['portfolio-positions', 'portfolio-updates', 'portfolio-value-add'],
-    InvestorDealsWorkspace: ['deals-pipeline', 'deals-screening', 'deals-commit', 'deals-closing'],
+    // `deals-pipeline` IS NOT HERE ANY MORE, AND ITS ABSENCE IS THE POINT.
+    // Canvas ID1 gave `/deals/pipeline` its own body — `pages/investor/deals/
+    // PipelineZone.jsx` — so the section a link would have scrolled to is now
+    // a route a link can simply open. An anchor kept beside it would have to
+    // be on a card this workspace no longer draws. The other three stay until
+    // ID2–ID4 land and take theirs the same way.
+    InvestorDealsWorkspace: ['deals-screening', 'deals-commit', 'deals-closing'],
   };
   for (const [name, ids] of Object.entries(anchors)) {
     const page = codeOnly(read(`${investorDir}/${name}.jsx`));
