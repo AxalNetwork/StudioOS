@@ -47,7 +47,14 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // graduated to `canvases/integrated/` when the store each was waiting for
   // shipped. The queue's own pipeline requires a ROUTE_MAP row per canvas and
   // neither had ever had one; part 5 of ROUTE_MAP holds them.
-  assert.equal(recs.length, 109);
+  //
+  // 110 as of 2026-09-10. `Calendar.dc.html` — the canvas for `/calendar`,
+  // asked for three times and never landed, because all three asks pointed at
+  // a `claude.ai/code/artifact` link and nothing was ever committed to compare
+  // the page against. It is a bundled export, so it had to be decoded out of a
+  // gzipped `__bundler/template` before it could sit in `design/incoming/`
+  // like the rest.
+  assert.equal(recs.length, 110);
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
     assert.ok(r.status.length > 0, `row "${r.canvas}" has no status`);
