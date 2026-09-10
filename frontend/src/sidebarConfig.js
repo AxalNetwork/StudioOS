@@ -23,7 +23,7 @@ import {
   MessageSquare, Package, Calendar, Heart, Bookmark, Megaphone, Send,
   Gamepad2, ShieldAlert,
   Inbox, Radar, Wallet, Landmark,
-  Mail, Gift, Map, UserCog,
+  Mail, Gift, Map, UserCog, Coins,
 } from 'lucide-react';
 
 // `workspaces/shellConfig.js` is a pure leaf module — it imports nothing — so
@@ -104,6 +104,9 @@ export const SIDEBAR_GROUPS = {
       // Super canvas draws above it has no store; the page says so.
       { to: '/admin/contracts', icon: FileText, label: 'Contracts' },
       { to: '/admin/accounts', icon: Users, label: 'Team' },
+      // Canvas H5. The artboard's own nav puts Revenue straight after
+      // Accounts (= Team), which is where it goes here.
+      { to: '/admin/revenue', icon: Coins, label: 'Revenue' },
       { to: '/help', icon: Inbox, label: 'Support' },
       // "Security", not "Governance" (ASSUMPTIONS_LOG A4): the audit log is
       // what someone finds inside, not what they come for.

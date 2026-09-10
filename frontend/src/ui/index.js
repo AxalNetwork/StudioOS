@@ -56,6 +56,10 @@ export { eadwynConfig, observedRunCost, ASSIST_SURFACES, EADWYN_GUARDRAIL } from
 export { default as SidebarNav } from './SidebarNav';
 export { default as CompanySwitcher } from './CompanySwitcher';
 
+// The two ways a page says it does not know something. One pair, because
+// four copies had already drifted apart in their wording — see Honesty.jsx.
+export { Unrecorded, Unreadable } from './Honesty';
+
 // Pre-existing, re-exported so `ui/` is the one import surface.
 export { default as EmptyState } from '../components/EmptyState';
 export { default as ErrorState } from '../components/ErrorState';

@@ -2771,6 +2771,10 @@ export const api = {
   // HQ · Home. One payload for the franchisor's overview; the page's tenant
   // switcher narrows it client-side and sends nothing back (routes/admin_hq.ts).
   hqOverview: () => request('/admin/hq/overview'),
+  // HQ · Revenue (canvas H5). D1 only — open disputes come from Stripe
+  // through adminBillingListDisputes, read separately so an outage there
+  // costs one zone rather than the page.
+  hqRevenue: () => request('/admin/revenue/summary'),
   // HQ · Security. The overview is read-only; force re-auth signs every
   // active account out everywhere (the caller included) and needs a TOTP
   // session with a recent step-up, which lib/api.js prompts for on the 403.

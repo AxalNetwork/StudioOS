@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Globe, CircleAlert, RefreshCw, Landmark } from 'lucide-react';
+import { Globe, Landmark } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
-import { Card, WorkerRail } from '../../ui';
-import { Unrecorded } from '../advisor/expertise/kit';
+import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 
 /**
  * HQ · Home — the whole business on one screen (Admin · Super canvas, H1).
@@ -70,19 +69,6 @@ function Tile({ label, value, note, tone = 'text-axal-ink' }) {
       <div className={`mt-1.5 text-xl font-extrabold tracking-tight tabular-nums ${tone}`}>{value ?? <Unrecorded />}</div>
       {note && <div className="mt-1 text-[10.5px] text-axal-ink-3">{note}</div>}
     </Card>
-  );
-}
-
-function Unreadable({ what, onRetry }) {
-  return (
-    <p className="flex items-center gap-2 text-[12px] text-red-700 dark:text-red-300" role="alert">
-      <CircleAlert size={13} /> {what} could not be read. This is not a claim that none exist.
-      {onRetry && (
-        <button type="button" onClick={onRetry} className="ml-1 inline-flex items-center gap-1 underline">
-          <RefreshCw size={11} /> Retry
-        </button>
-      )}
-    </p>
   );
 }
 
@@ -191,7 +177,7 @@ export default function HqHomePage() {
           </p>
         </header>
 
-        {data === UNAVAILABLE && <div className="mt-4"><Unreadable what="The HQ overview" onRetry={load} /></div>}
+        {data === UNAVAILABLE && <div className="mt-4"><Unreadable what="The HQ overview" claim="This is not a claim that none exist." onRetry={load} /></div>}
 
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
           <Tile label="Accounts" value={ready ? accountsTotal : null} note="active, platform-wide" />

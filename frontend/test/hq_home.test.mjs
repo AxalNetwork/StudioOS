@@ -60,8 +60,21 @@ test('every per-subsidiary figure renders Not recorded, and nothing renders an i
 });
 
 test('a failed request is unreadable, not an empty platform', () => {
+  // THE SENTENCE NOW SPANS TWO FILES, so this checks both halves rather
+  // than one string. `Unreadable` moved into `ui/Honesty.jsx` — it had been
+  // written out locally here and in SecurityPage, and the two copies had
+  // already drifted in their closing clause. The shared component owns
+  // "<what> could not be read."; the clause that differs per zone is passed
+  // as `claim`. Asserting only the prop would pass if the component stopped
+  // rendering it, so the component is checked too.
   assert.match(PAGE, /const UNAVAILABLE = Symbol\('unavailable'\)/);
-  assert.match(PAGE, /could not be read\. This is not a claim that none exist\./);
+  assert.match(PAGE, /<Unreadable/, 'a failed read no longer renders Unreadable');
+  assert.match(PAGE, /claim="This is not a claim that none exist\."/);
+  assert.match(
+    read('frontend/src/ui/Honesty.jsx'),
+    /\{what\} could not be read\. \{claim\}/,
+    'the shared Unreadable no longer renders the claim it is handed',
+  );
   assert.match(PAGE, /No licences have been issued yet\. The ledger is empty, which is a different fact/);
 });
 
