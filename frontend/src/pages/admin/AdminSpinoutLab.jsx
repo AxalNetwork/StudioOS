@@ -699,9 +699,25 @@ export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
   useEffect(() => { load(); }, [load]);
 
   const openWorkspace = async (p) => {
+    // A REASON, because opening a participant's workspace is a support
+    // session like any other and the worker refuses one without a reason
+    // of at least ten characters (routes/admin.ts). A prompt rather than a
+    // hardcoded default: "spinout_lab_review" on every row would satisfy
+    // the field and tell a later reader nothing, which is the state the
+    // requirement exists to end.
+    const reason = window.prompt(
+      `Why are you opening ${p.name || 'this participant'}'s workspace?\n\n`
+      + 'Recorded in Governance with the session. At least ten characters.',
+      '',
+    );
+    if (reason === null) return;                  // cancelled
+    if (reason.trim().length < 10) {
+      alert('A reason of at least ten characters is required to open a support session.');
+      return;
+    }
     setOpeningId(p.user_id);
     try {
-      const res = await api.adminImpersonate(p.user_id);
+      const res = await api.adminImpersonate(p.user_id, reason.trim());
       if (onImpersonate) {
         // Third arg = target path. The App-level handler owns the
         // navigation (including the role-guard redirect that fires while
