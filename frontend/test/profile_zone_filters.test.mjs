@@ -168,44 +168,30 @@ const PROFILES = {
     canvas: /^Pages · Investor (Deals|Fund|Network|Portfolio|Research)\.dc\.html$/,
     pages: ['frontend/src/pages/investor', 'frontend/src/workspaces/investor', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/investorZoneActions.js',
-    zones: 18,
-    mounted: 18,
+    zones: 19,
+    mounted: 19,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.investor },
     // Fund, Portfolio and Deals' pipeline. Every other canvas route, with why
     // it is not here yet:
-    excluded: [
-      // Deals' three DECISION zones. Their canvas filters all describe LIST
-      // surfaces — `All decisions`, `Pass reasons`, `Documents` — and each of
-      // these three renders a single-record panel (`screeningRows[0]`,
-      // `grouped.commit[0]`, `grouped.closing[0]`). Filtering a one-record
-      // panel narrows nothing, so honouring these means building the lists the
-      // canvas draws, which is body work.
-      //
-      // AND THE EASY VERSION WOULD SHIP FOUR FALSE SENTENCES. Every "nothing
-      // is stored" note these zones would need was checked against the schema
-      // and is wrong: `ic_decisions` and `ic_votes` exist and `api.icList` is
-      // investor-callable (scoped by `icDecisionScope` since migration 219 —
-      // see the correction below); `dd_findings` carries a severity
-      // enum through `critical`; `api.dealDocuments(id)` is a method; and
-      // `pass_reason` is a stored, CHECKed taxonomy the pipeline zone now
-      // reads. A deferral that says so is worth more than a row that lies.
-      //
-      // `deals/screening` AND `deals/commit` ARE OFF THIS LIST NOW — ID2 and
-      // ID3 did the body work the note above called for, and in both cases the
-      // store was larger than the deferral assumed. `score_snapshots` carries
-      // six dimensions, `admin_review_status` and `anomaly_flags`;
-      // `ic_decisions`/`ic_votes` carry a tally, a stage and a rationale per
-      // vote, so Commit gets two live keys (`This deal`, `All decisions`) and
-      // two honest `unbuilt` reasons rather than four.
-      //
-      // AND ONE LINE OF THE NOTE ABOVE HAS GONE STALE, which is worth saying
-      // rather than quietly deleting: it says `api.icList` "returns every
-      // decision in the system unscoped". Migration 219 and `icDecisionScope`
-      // closed that (task #106) — the predicate is now in the WHERE clause of
-      // every `ic_decisions` query, read and write. A deferral that has itself
-      // gone out of date is the same defect it was written to prevent.
-      'deals/closing',
-    ],
+    // EMPTY, AND THE COUNT PROVES IT RATHER THAN AGREEING WITH IT — the same
+    // shape founder reached. Every route on all five investor canvases has a
+    // filter row now.
+    //
+    // WHAT THE LIST USED TO SAY, KEPT BECAUSE THE REASON IT GAVE WAS RIGHT AND
+    // ITS PREMISE WAS NOT. It deferred Deals' three DECISION zones because each
+    // rendered a single-record panel — `screeningRows[0]`, `grouped.commit[0]`,
+    // `grouped.closing[0]` — and filtering a one-record panel narrows nothing.
+    // True, and honouring the canvas meant building the lists it draws.
+    //
+    // It also warned that the easy version would ship four FALSE sentences, and
+    // it was more right than it knew. Every store it checked was real —
+    // `ic_decisions`, `ic_votes`, `dd_findings`, `api.dealDocuments`,
+    // `pass_reason` — and when ID2, ID3 and ID4 came to build the bodies, the
+    // `unbuilt` reasons ALREADY SHIPPING were false in three separate places:
+    // "no scoring run is stored", "no vote is opened here", "no closing
+    // templates are stored". A deferral that names its reason survives being
+    // wrong about the schema; one that says "nothing is stored" does not.
+    excluded: [],
     // `Call 3` names one specific stored record rather than welding a count
     // onto a filter, so `{n}` is not its repair and founder's `/\b(14|2026)\b/`
     // would not even see it. `Aug 2026` recurs on the Portfolio canvas.

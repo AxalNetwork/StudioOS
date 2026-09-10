@@ -208,18 +208,28 @@ test('every bucket root can be linked to by section', () => {
     // a route a link can simply open. An anchor kept beside it would have to
     // be on a card this workspace no longer draws. The other three stay until
     // ID2–ID4 land and take theirs the same way.
-    // `deals-screening` and `deals-commit` followed `deals-pipeline` off this
-    // list for the same reason: ID2 and ID3 gave those routes their own bodies,
-    // so the section a link would have scrolled to is a route a link can open.
-    // Closing keeps its anchor until ID4 lands and takes it the same way — at
-    // which point this entry is one id, and then none.
-    InvestorDealsWorkspace: ['deals-closing'],
+    // AND NOW IT IS NONE. All four Deals sections became routes — ID1 through
+    // ID4 — so `InvestorDealsWorkspace` has no section anchor left to check and
+    // is off this map entirely. The check that replaces it is the inverse, just
+    // below: the workspace must not draw a stage section AT ALL, because a
+    // second copy of one would mount a zone row twice.
   };
   for (const [name, ids] of Object.entries(anchors)) {
     const page = codeOnly(read(`${investorDir}/${name}.jsx`));
     for (const id of ids) {
       assert.ok(page.includes(`id="${id}"`), `${name} has no section anchor #${id}`);
     }
+  }
+  // THE INVERSE, for the workspace that has none left. Its four sections are
+  // four routes, and a stage anchor reappearing here would mean the panel came
+  // back beside the zone that replaced it — two chip rows and two export
+  // buttons for one route, which is the defect `profile_zone_actions` catches
+  // one layer up. Checked as an id, not as a word: the file DISCUSSES the four
+  // slugs in comments, and must go on being able to.
+  const deals = codeOnly(read(`${investorDir}/InvestorDealsWorkspace.jsx`));
+  for (const slug of ['pipeline', 'screening', 'commit', 'closing']) {
+    assert.ok(!deals.includes(`id="deals-${slug}"`),
+      `InvestorDealsWorkspace draws #deals-${slug} again — that section is a route now`);
   }
 });
 

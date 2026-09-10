@@ -89,9 +89,16 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Close vote', unbuilt: 'closing a vote is served by the API — recording a decision against it moves it to decided — but no screen offers the form yet' },
   ],
   'deals/closing': [
-    { label: 'Apply template', unbuilt: 'no closing templates are stored' },
-    { label: 'Export packet', unbuilt: 'no closing packet is assembled from these records' },
-    { label: 'Record wire', unbuilt: 'wires are not a stored record' },
+    // WAS: 'no closing templates are stored'. False — legal_templates ships the
+    // SAFE, stock-purchase and subscription agreements with merge fields and
+    // versions. The gap is one layer above them: nothing stores a closing
+    // CHECKLIST for a template to be applied to.
+    { label: 'Apply template', unbuilt: 'the SAFE, stock-purchase and subscription templates are stored; what is missing is a closing checklist for one to be applied to' },
+    { label: 'Export packet', unbuilt: 'the documents and signature envelopes are stored, but nothing assembles them into a packet' },
+    // WAS: 'wires are not a stored record'. True, and imprecise enough to cost
+    // the next reader a lookup — capital_calls DOES carry an amount and a paid
+    // date. It is the other direction.
+    { label: 'Record wire', unbuilt: 'no transfer OUT to a company is recorded; capital_calls is an LP paying into the fund, which is the other direction' },
   ],
 
   // ── Fund ─────────────────────────────────────────────────────────────────

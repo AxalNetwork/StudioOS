@@ -21,6 +21,7 @@ const ZONES = {
   pipeline: lazy(() => import('../../pages/investor/deals/PipelineZone')),
   screening: lazy(() => import('../../pages/investor/deals/ScreeningZone')),
   commit: lazy(() => import('../../pages/investor/deals/CommitZone')),
+  closing: lazy(() => import('../../pages/investor/deals/ClosingZone')),
 };
 
 /**
@@ -89,7 +90,12 @@ export default function InvestorDealsRoutes() {
     // is the ledger: every vote with the reason its author wrote.
     commit: 'Every vote on the decision, with the reason its author wrote beside it. '
       + 'A tally without reasons is not a record a fund can defend.',
-    closing: 'Signed terms, wired capital, and what is still outstanding.',
+    // WAS "signed terms, wired capital, and what is still outstanding" — over
+    // three hard-coded rows, one of which said wired capital is not recorded
+    // here. ID4 is the paper: every envelope raised against a deal at
+    // closing, with its signature state.
+    closing: 'Every document raised against a deal at closing, and how far through signature it is. '
+      + 'The platform records the movement of money; it does not move it.',
   };
 
   return (

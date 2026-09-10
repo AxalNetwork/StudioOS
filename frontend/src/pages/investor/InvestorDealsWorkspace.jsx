@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  AlertTriangle, ArrowUpRight, CheckCircle2, Circle,
+  AlertTriangle, ArrowUpRight,
   Loader2, RefreshCw, ThumbsDown, ThumbsUp,
 } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -10,81 +10,35 @@ import { WorkerRail } from '../../ui';
 import ZoneNav from '../../workspaces/ZoneNav';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
-import { investorZoneActions } from '../../workspaces/investorZoneActions';
-import { slaBand } from '../../lib/dealFlow';
-
-const STAGES = [
-  { id: 'sourcing', label: 'Sourcing' },
-  { id: 'screening', label: 'Screening' },
-  { id: 'diligence', label: 'Diligence' },
-  { id: 'commit', label: 'Commit' },
-  { id: 'closing', label: 'Closing' },
-];
-
-const money = (value) => {
-  const number = Number(value);
-  if (!Number.isFinite(number) || number <= 0) return null;
-  if (number >= 1_000_000) return `$${(number / 1_000_000).toFixed(1)}M`;
-  if (number >= 1_000) return `$${Math.round(number / 1_000)}K`;
-  return `$${number.toLocaleString()}`;
-};
 
 /**
- * THE THREE FIELDS THE PIPELINE FILTERS READ, NAMED WHERE THE DEAL IS SHAPED.
+ * WHAT THIS FILE STOPPED DOING, AND WHERE THAT KNOWLEDGE WENT.
  *
- * The canvas asks this board for `Unassigned`, `Stale` and `Passed`, and the
- * easy answer was that none of them is stored. All three are:
+ * It used to shape every deal for four decision panels — a stage ladder, an SLA
+ * band, a money format, an assigned flag, a pass flag. ID1-ID4 gave each panel
+ * its own artboard under `pages/investor/deals/`, and ID4 removed the last
+ * consumer: the deals array is now read for its LENGTH alone, once for the
+ * error gate and once for the rail's coverage line. Computing eight fields
+ * nobody reads is not free and is not honest, so the shaping is gone.
  *
- *   `assigned` — `deals.lead_partner_id`, which the list query already selects
- *                alongside `lead_partner_name`.
- *   `stale`    — `days_in_stage`, computed and returned on every row by the
- *                worker's `enrichDeal`. The threshold is not chosen here:
- *                `slaBand` bands it against the canvas's own SLA presets, so
- *                "sat too long" means one thing across the product. An unknown
- *                age bands to 'ok' rather than red, which is `slaBand`'s own
- *                call — it will not invent urgency the data does not support.
- *   `passed`   — `status === 'rejected'`, which is how the worker records a
- *                pass (`PASSED_STATUS`, written by `POST /api/deals/:id/pass`
- *                with a reason from a CHECKed enum).
+ * None of it lived only here, and the version that survives is the better one:
  *
- * A PASSED DEAL HAS NO STAGE, and pretending otherwise was already a defect.
- * The `stage` ladder below has no branch for `rejected`, so a passed deal fell
- * through to Commit or Diligence and sat in the funnel as though it were still
- * live — counted in "N live deals" in the section header. It is excluded from
- * the funnel now and reachable through its own filter, where it is shown as a
- * list with its recorded reason rather than as a card under a stage it is not
- * in.
+ *   the stage ladder  -> `dealStage` in `lib/dealFlow.js`. ID1 extracted it so
+ *                        four zones could not disagree about where a deal is,
+ *                        AND it fixed the defect the ladder here carried:
+ *                        `rejected` had no branch, so a passed deal fell
+ *                        through to Commit or Diligence and was counted as
+ *                        live. `dealStage` returns null for it.
+ *   the SLA band      -> `slaBand`, same module, against the canvas's own
+ *                        presets, so "sat too long" means one thing product-wide.
+ *   the money format  -> `dealMoney` / `dealMoneyExact`, same module.
+ *   assigned / passed -> `lead_partner_id` and `status === 'rejected'`, read
+ *                        directly by the zone that filters on them.
+ *
+ * `frontend/test/investor_deals_id1.test.mjs` drives `dealStage` with real rows,
+ * so the ladder is tested as behaviour where it lives rather than described here.
  */
-function normalizeDeal(deal) {
-  const committed = Number(deal.capital_committed) || 0;
-  const stage = deal.status === 'applied'
-    ? 'sourcing'
-    : deal.status === 'scored'
-      ? 'screening'
-      : deal.status === 'funded'
-        ? 'closing'
-        : committed > 0
-          ? 'commit'
-          : 'diligence';
-  return {
-    id: deal.id,
-    name: deal.project_name || `Deal #${deal.id}`,
-    sector: deal.project_sector || null,
-    stage,
-    source: deal.project_id ? 'Founder-sourced round' : 'Permissioned shared deal',
-    target: money(deal.target_raise),
-    committed: money(committed),
-    assigned: Boolean(deal.lead_partner_id),
-    stale: slaBand(deal.days_in_stage) === 'red',
-    passed: deal.status === 'rejected',
-    passReason: deal.pass_reason || null,
-    raw: deal,
-  };
-}
 
-function Empty({ children }) {
-  return <div className="investor-deals-empty">{children}</div>;
-}
 
 function SectionHeading({ id, title, detail, filters = [], actions = [] }) {
   // Each zone's row belongs to its own heading. On `/deals/<slug>` the page
@@ -104,34 +58,6 @@ function SectionHeading({ id, title, detail, filters = [], actions = [] }) {
   );
 }
 
-function DealCard({ deal, onOpen }) {
-  return (
-    <button type="button" className="investor-deal-card" onClick={() => onOpen(deal.id)}>
-      <strong>{deal.name}</strong>
-      {(deal.sector || deal.target) && <span>{[deal.sector, deal.target].filter(Boolean).join(' · ')}</span>}
-      <small><i />{deal.source}</small>
-    </button>
-  );
-}
-
-// `embedded` is set by InvestorDealsRoutes on /deals/{pipeline,screening,
-// commit,closing}, where WorkspaceShell is already drawing the heading, the
-// zone row and the rail. Without it the page draws a second h1, a second pill
-// row and a second rail inside the first — the doubled chrome the user saw.
-/**
- * `zone`: which single section this render is for, or null for the bucket root.
- *
- * The four stages are four zone ROUTES, and until now all four rendered the
- * same page and differed only in what `InvestorDealsRoutes` scrolled to. This
- * is the narrowing `InvestorNetworkWorkspace` already does — one component, one
- * `load()`, one set of derivations, one section per route — and it is not a
- * split: every section still derives from the same `api.listDeals` call, so
- * `/deals` stacks all four as the overview and nothing is fetched twice.
- *
- * `known` guards against a slug this page has no section for: an unrecognised
- * zone shows everything rather than nothing, because a blank page is the worse
- * failure and the shell above has already decided the route is legitimate.
- */
 export default function InvestorDealsWorkspace({ embedded = false, zone = null }) {
   const known = zone === 'pipeline' || zone === 'screening' || zone === 'commit' || zone === 'closing';
   const shows = (section) => !known || zone === section;
@@ -157,7 +83,7 @@ export default function InvestorDealsWorkspace({ embedded = false, zone = null }
     setInvitationError(invitationsResult.status === 'rejected');
     setState({
       deals: dealsResult.status === 'fulfilled' && Array.isArray(dealsResult.value)
-        ? dealsResult.value.map(normalizeDeal) : [],
+        ? dealsResult.value : [],
       invitations: invitationsResult.status === 'fulfilled' && Array.isArray(invitationsResult.value)
         ? invitationsResult.value : [],
     });
@@ -176,20 +102,11 @@ export default function InvestorDealsWorkspace({ embedded = false, zone = null }
   const deals = state.deals;
   const bucket = bucketForPath('investor', '/deals');
 
-  // The funnel is the deals still in it. Everything the four sections derive —
-  // the stage columns, the screening desk, the commit and closing panels — now
-  // reads from `funnel`, so a deal the fund has passed on stops appearing as
-  // the deal on the desk.
-  const funnel = useMemo(() => deals.filter((deal) => !deal.passed), [deals]);
-  const grouped = useMemo(
-    () => Object.fromEntries(STAGES.map((stage) => [stage.id, funnel.filter((deal) => deal.stage === stage.id)])),
-    [funnel],
-  );
-  // ONE PANEL LEFT. `screening` and `commit` were the one-record panels ID2 and
-  // ID3 replaced with their artboards; their bindings went with them. The
-  // unused-import check does not see plain locals (task #156), so a dead
-  // `const` here is invisible to CI — removed by hand rather than left.
-  const closing = grouped.closing[0] || null;
+  // NO PANELS LEFT, SO NO GROUPING. `funnel` and `grouped` existed to feed the
+  // four decision panels; ID4 took the last of them, and the deals array is now
+  // read for its LENGTH alone — once for the error gate, once for the rail's
+  // coverage line. `check-unused-imports` catches the imports that died with
+  // them; it does not see plain locals (task #156), so these went by hand.
   const invited = state.invitations.filter((item) => item.status === 'invited');
 
   const respond = async (invitation, response) => {
@@ -260,32 +177,15 @@ export default function InvestorDealsWorkspace({ embedded = false, zone = null }
             files declaring `deals/pipeline` means two chip rows and two export
             buttons for one route, and whichever rendered second would have
             been the one nobody maintained. */}
-        {shows('closing') && <div className="investor-deals-decisions">
-          {/* THE SCREENING AND COMMIT SECTIONS MOVED, THEY DID NOT GO AWAY.
-              Canvas ID2 draws `/deals/screening` as a desk over the whole score
-              history and ID3 draws `/deals/commit` as the vote ledger over
-              `ic_decisions`/`ic_votes` — `pages/investor/deals/ScreeningZone.jsx`
-              and `CommitZone.jsx` — rather than the one-record panels that stood
-              here. The commit panel in particular showed three DEAL columns
-              (status, committed, target) under a heading that said "Commit
-              room", and never read the committee record at all.
+        {/* AND THE LAST ONE WENT WITH ID4. `/deals/closing` is
+            `pages/investor/deals/ClosingZone.jsx` now. What stood here was
+            three hard-coded rows — a tick and two circles — that read the same
+            on every deal at closing, one of which said wire confirmation was
+            "Not recorded here". ID4 reads the signature envelopes instead and
+            says where the record actually stops.
 
-              Keeping either panel as well would mount the same zone row twice,
-              which is what `profile_zone_actions.test.mjs` catches. */}
-          <div className="investor-deals-stack">
-            <section className="investor-deals-card">
-              <SectionHeading id="deals-closing" title="Closing" detail={closing?.name} actions={investorZoneActions('deals/closing')} />
-              {closing ? (
-                <div className="investor-closing-list">
-                  <div><CheckCircle2 size={14} /> Deal reached closing <span>Recorded</span></div>
-                  <div><Circle size={14} /> Signatures and documents <span>Check deal room</span></div>
-                  <div><Circle size={14} /> Wire confirmation <span>Not recorded here</span></div>
-                  <button type="button" onClick={() => navigate(`/deals/${closing.id}`)}>Open closing details</button>
-                </div>
-              ) : <Empty>No deals are currently closing.</Empty>}
-            </section>
-          </div>
-        </div>}
+            All four decision panels are gone. This file now draws only what no
+            artboard does: the deal-invitation queue above. */}
       </div>
 
       {!embedded && (
