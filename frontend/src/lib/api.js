@@ -3740,6 +3740,22 @@ export const api = {
   positionsAnalytics: (asOf) => request(`/positions/analytics${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ''}`),
   positionsKpiCompliance: (cadence = 'quarterly') =>
     request(`/positions/kpi-compliance?cadence=${encodeURIComponent(cadence)}`),
+  // ── Portfolio support ledger (IP3, migration 237) ───────────────────────
+  // The desk's whole store. `list` returns the entries, the per-company
+  // rollup, and the companies in the book carrying no entry at all — the last
+  // one anti-joined against `portfolio_positions` server-side, so "no support"
+  // is two stored sets compared rather than the ledger's silence read as an
+  // answer.
+  portfolioSupportList: () => request('/portfolio-support'),
+  // Logging is open to an investor for a company already in their book, not
+  // admin-only like the valuation writes: a ledger the workers cannot write to
+  // stays empty, which is the state IP3 existed in.
+  portfolioSupportLog: (data) =>
+    request('/portfolio-support', { method: 'POST', body: JSON.stringify(data) }),
+  // Delivering or withdrawing a promise. Without this the `state` column would
+  // freeze at 'promised' exactly as `investor_introductions`'s does.
+  portfolioSupportUpdate: (uid, data) =>
+    request(`/portfolio-support/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data) }),
   positionMarkCreate: (projectUid, data) =>
     request(`/positions/${projectUid}/marks`, { method: 'POST', body: JSON.stringify(data) }),
   positionDistributionCreate: (projectUid, data) =>

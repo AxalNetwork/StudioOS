@@ -32,6 +32,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/capital       → capital.ts
 /api/tickets       → tickets.ts
 /api/deals         → deals.ts
+/api/portfolio-support → portfolio_support.ts  (the IP3 value-add ledger, D70)
 /api/users         → users.ts
 /api/market-intel  → market_intel.ts
 /api/market-intel-public → market_intel_public.ts

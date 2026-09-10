@@ -2544,6 +2544,81 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  'portfolio/value-add': {
+    // IP3's band: "Proposal · quarterly support summary", footed "Feeds the LP
+    // reporting pack." The artboard's own words are that it should be "written
+    // for the LP report rather than for internal comfort, so the unmade
+    // promises appear rather than being rounded away".
+    //
+    // WHICH IS THE WHOLE INSTRUCTION. A model asked to summarise a quarter's
+    // support will do three flattering things unless told not to: read a
+    // promised entry as work done, invent an outcome for an entry that records
+    // none, and total the hours as though the untimed entries were zeroes. Each
+    // makes the report better and the record false, and the third is the one a
+    // reader cannot catch by eye.
+    //
+    // FOURTH, AND IT IS THE POINT OF THE ZONE: a company with no entry. The
+    // ledger says nothing was RECORDED for it, which is not the same as nothing
+    // being done — and it is still the row an LP report needs, so it is named,
+    // with that distinction attached rather than dropped.
+    instruction: [
+      'Write a quarterly support summary for the LP reporting pack, from the ledger rows below and nothing else.',
+      'A PROMISED entry is not work done. Report it as still owed, with what was promised and when, and never describe it as delivered, underway, or in progress. A WITHDRAWN entry was retired: say so rather than omitting it, because a promise that was dropped is part of the record.',
+      'Report an outcome only where one is recorded. An entry with no outcome is work whose result is not yet recorded — never invent a result, and never imply one from the description of what was done.',
+      'Hours: total ONLY the entries that carry an hour count, and state how many entries carry none. An entry with no hours is untimed, not zero hours, so never fold it into the total and never report a total as though it covered every entry.',
+      'A company with no entry has nothing RECORDED against it. Name it as such — not as neglected, not as unsupported in fact — because the ledger records what was written down, not everything that happened.',
+      'Add no figure the rows below do not carry, and do not forecast.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
+        .bind(userId).first<{ id: number; role: string | null }>();
+      const role = String(me?.role || '');
+      if (role !== 'admin' && role !== 'partner' && role !== 'investor') return [];
+      // The same scope and the same short-circuit as every Portfolio read: the
+      // CSV predicate reads NULL as "all rows", so an empty accessible set must
+      // never reach the query.
+      const ids = await investorProjectIds(c.env, { id: userId, role } as any, null);
+      if (ids != null && ids.length === 0) return [];
+      const csv = ids == null ? null : ids.join(',');
+      const [entries, book] = await Promise.all([
+        c.env.DB.prepare(
+          `SELECT s.kind, s.state, s.hours, s.promised_at, s.delivered_at, s.withdrawn_at,
+                  s.summary, s.outcome, p.name AS project_name
+             FROM portfolio_support_entries s
+             LEFT JOIN projects p ON p.id = s.project_id AND p.deleted_at IS NULL
+            WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(s.project_id AS TEXT) || ',') > 0)
+            ORDER BY s.created_at DESC LIMIT 60`
+        ).bind(csv, csv).all<Record<string, unknown>>().catch(() => ({ results: [] as Record<string, unknown>[] })),
+        c.env.DB.prepare(
+          `SELECT DISTINCT pp.project_id, pr.name AS project_name
+             FROM portfolio_positions pp
+             LEFT JOIN projects pr ON pr.id = pp.project_id AND pr.deleted_at IS NULL
+             LEFT JOIN portfolio_support_entries s ON s.project_id = pp.project_id
+            WHERE s.id IS NULL
+              AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(pp.project_id AS TEXT) || ',') > 0)`
+        ).bind(csv, csv).all<Record<string, unknown>>().catch(() => ({ results: [] as Record<string, unknown>[] })),
+      ]);
+      const rows = (entries.results || []) as Record<string, unknown>[];
+      if (!rows.length) return [];
+      const lines = rows.map((s) => (
+        `${s.project_name || 'company not recorded'} — ${s.kind || 'kind not recorded'}`
+        + `; ${String(s.state || 'state not recorded').toUpperCase()}`
+        // UNTIMED, spelled out, so the model has a word for it that is not a
+        // number. `0` here would be indistinguishable from a measured zero.
+        + `; hours ${s.hours == null ? 'UNTIMED' : s.hours}`
+        + `; promised ${s.promised_at || 'date not recorded'}`
+        + `; delivered ${s.delivered_at || (s.state === 'delivered' ? 'date not recorded' : 'NOT DELIVERED')}`
+        + `${s.withdrawn_at ? `; withdrawn ${s.withdrawn_at}` : ''}`
+        + `; what happened ${String(s.summary || '').replace(/\s+/g, ' ').slice(0, 300)}`
+        + `; outcome ${s.outcome ? String(s.outcome).replace(/\s+/g, ' ').slice(0, 300) : 'NONE RECORDED'}`
+      ));
+      for (const b of (book.results || []) as Record<string, unknown>[]) {
+        lines.push(`${b.project_name || 'company not recorded'} — NO ENTRY RECORDED against this company in the book.`);
+      }
+      return lines;
+    },
+  },
+
   // ── FOUNDER SURFACES ────────────────────────────────────────────────────
   //
   // The first non-partner entries in this table. Everything above scopes on

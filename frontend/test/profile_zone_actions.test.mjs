@@ -86,10 +86,13 @@ const PROFILES = {
     buckets: /^(deals|funds|portfolio|network|research)\//,
     zones: 19,
     links: 1,
-    exports: 13,
-    // Three page-supplied ops: `research/ask`'s `New brief`,
-    // `research/library`'s `Upload`, and `portfolio/positions`'s
-    // `Mark history`. Was 0, then 2.
+    // Fourteenth export: `portfolio/value-add`'s. Was a gap reading "there is
+    // no support history to export", which was TRUE — see the handler note.
+    exports: 14,
+    // Five page-supplied ops: `research/ask`'s `New brief`,
+    // `research/library`'s `Upload`, `portfolio/positions`'s `Mark history`,
+    // and `portfolio/value-add`'s `Log support` and `Per-company view`. Was 0,
+    // then 2, then 3.
     //
     // THE THIRD ONE WAS A GAP THAT SHOULD NEVER HAVE BEEN ONE. It carried the
     // reason "only the current mark is stored; there is no history to open",
@@ -97,7 +100,16 @@ const PROFILES = {
     // `GET /positions/:projectUid` was already returning to the very readers
     // looking at the disabled button. A gap becoming a handler is the shape
     // this ledger should move in; the reverse needs an argument.
-    handlers: 3,
+    //
+    // THE FOURTH AND FIFTH MOVED FOR THE OPPOSITE REASON, AND IT IS WORTH THE
+    // DISTINCTION. `portfolio/value-add`'s three reasons were checked the same
+    // way and all three were true: no table in the schema records an investor
+    // doing work for a company, only gaining access to one. So these did not
+    // become handlers because a reason was wrong — migration 237 built the
+    // store the reason correctly said was missing. A gap closed by building is
+    // a different event from a gap that was never real, and this file should
+    // not blur them.
+    handlers: 5,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
