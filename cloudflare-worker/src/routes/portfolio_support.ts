@@ -202,10 +202,11 @@ r.post('/', async (c) => {
     if (!summary) return c.json({ detail: 'summary required' }, 400);
 
     const kind = SUPPORT_KINDS.has(String(body.kind)) ? String(body.kind) : 'other';
-    const state = SUPPORT_STATES.has(String(body.state)) ? String(body.state) : 'promised';
-    if (state === 'withdrawn') {
-      return c.json({ detail: 'an entry cannot be logged as already withdrawn' }, 400);
+    const requestedState = body.state == null ? null : String(body.state);
+    if (requestedState != null && requestedState !== 'promised') {
+      return c.json({ detail: 'new entries must start in promised state' }, 400);
     }
+    const state = 'promised';
 
     const proj = await c.env.DB.prepare(
       'SELECT id FROM projects WHERE uid = ? AND deleted_at IS NULL',
