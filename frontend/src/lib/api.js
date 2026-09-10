@@ -2784,6 +2784,12 @@ export const api = {
   // active account out everywhere (the caller included) and needs a TOTP
   // session with a recent step-up, which lib/api.js prompts for on the 403.
   hqSecurityOverview: () => request('/admin/security/overview'),
+  // Canvas H7's privileged-action feed, unioned across the four stores that
+  // record one. Filtered SERVER-side: the feed is a merged page of 60, so a
+  // client-side filter would quietly show a handful of rows and read as
+  // "that is all there is".
+  hqGovernance: (filter) =>
+    request(`/admin/security/governance?filter=${encodeURIComponent(filter || 'all')}`),
   hqSecurityForceReauth: (reason) =>
     request('/admin/security/force-reauth', { method: 'POST', body: JSON.stringify({ reason }) }),
   licence: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}`),
