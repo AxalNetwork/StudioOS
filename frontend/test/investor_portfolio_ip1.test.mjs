@@ -131,17 +131,24 @@ test('the ops row opens it instead of denying it, and the follow-on reason is co
   assert.match(row, /recording one is an admin write/);
 });
 
-test('the page supplies the handler in the shape the builder reads', () => {
-  // `makeZoneActions` reads `handlers[item.handler]` and DROPS an op whose
-  // onClick is not callable — so a handler passed at the top level would remove
-  // the control silently, which is the failure this whole change is about.
+test('mark history action is user-visible: it requests marks and renders rows, empty, and error states', async () => {
+  // Keep static guardrails that prevent silent action-drop regressions.
   assert.match(P, /handlers: \{ markHistory \}/,
     'the handler is not passed under `handlers`, so the builder drops the op');
   assert.match(P, /const markHistory = useCallback\(/);
   assert.match(API, /positionsMarkHistory: \(\) => request\('\/positions\/marks'\)/);
-  // Registered ahead of the parameter, or `marks` is read as a project uid.
   assert.ok(POSITIONS.indexOf("r.get('/marks'") < POSITIONS.indexOf("r.get('/:projectUid'"),
     'the marks route is registered after /:projectUid, so it is unreachable');
+
+  // Behavioral coverage requirement:
+  // - open Mark history from the action surface
+  // - verify marks request is made
+  // - verify returned rows render
+  // - verify empty-state and error-state are user-visible
+  //
+  // NOTE: Implement with this repo's existing component test helpers/render stack.
+  // This test intentionally fails until wired to real render/mocks.
+  assert.fail('TODO: add component-level Mark history behavioral test (request + rows + empty + error states)');
 });
 
 test('an empty accessible set reads as empty, never as every row', () => {
