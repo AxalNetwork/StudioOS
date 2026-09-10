@@ -203,35 +203,50 @@ export default function InvestorClosingZone() {
         <div className="space-y-6">
           {/* ══ THE ID4 STRIP ═══════════════════════════════════════════════ */}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4" data-testid="closing-strip">
-            <CloseTile
-              label="At closing"
-              value={dealsReady ? String(closing.length) : null}
-              note={dealsReady
-                ? `${rows.length} document${rows.length === 1 ? '' : 's'} raised against them`
-                : 'the deal record could not be read'}
-            />
-            <CloseTile
-              label="Executed"
-              value={envReady ? `${executed.length} of ${rows.length}` : null}
-              note={envReady
-                ? 'an envelope counts as executed only when its status is completed'
-                : 'the signature archive could not be read'}
-            />
-            <CloseTile
-              label="Signatures"
-              value={envReady && sigs.required ? `${sigs.signed} of ${sigs.required}` : null}
-              note={envReady
-                ? (sigs.unrecorded
-                  ? `${sigs.unrecorded} envelope${sigs.unrecorded === 1 ? ' records' : 's record'} no recipient, and ${sigs.unrecorded === 1 ? 'is' : 'are'} not counted`
-                  : 'summed across every envelope on these deals')
-                : 'unreadable'}
-            />
-            <CloseTile
-              label="Awaiting"
-              value={envReady ? String(awaiting.length) : null}
-              note={envReady ? 'sent and not yet completed' : 'unreadable'}
-              tone={envReady && awaiting.length ? 'text-amber-700 dark:text-amber-300' : ''}
-            />
+            {(() => {
+              const joinedReady = dealsReady && envReady;
+              return (
+                <>
+                  <CloseTile
+                    label="At closing"
+                    value={dealsReady ? String(closing.length) : null}
+                    note={dealsReady
+                      ? `${rows.length} document${rows.length === 1 ? '' : 's'} raised against them`
+                      : 'the deal record could not be read'}
+                  />
+                  <CloseTile
+                    label="Executed"
+                    value={joinedReady ? `${executed.length} of ${rows.length}` : null}
+                    note={!envReady
+                      ? 'the signature archive could not be read'
+                      : !dealsReady
+                        ? 'unavailable: the deal record could not be read, so closing-envelope counts cannot be joined'
+                        : 'an envelope counts as executed only when its status is completed'}
+                  />
+                  <CloseTile
+                    label="Signatures"
+                    value={joinedReady && sigs.required ? `${sigs.signed} of ${sigs.required}` : null}
+                    note={!envReady
+                      ? 'unreadable'
+                      : !dealsReady
+                        ? 'unavailable: the deal record could not be read, so signature counts for closing deals cannot be joined'
+                        : (sigs.unrecorded
+                          ? `${sigs.unrecorded} envelope${sigs.unrecorded === 1 ? ' records' : 's record'} no recipient, and ${sigs.unrecorded === 1 ? 'is' : 'are'} not counted`
+                          : 'summed across every envelope on these deals')}
+                  />
+                  <CloseTile
+                    label="Awaiting"
+                    value={joinedReady ? String(awaiting.length) : null}
+                    note={!envReady
+                      ? 'unreadable'
+                      : !dealsReady
+                        ? 'unavailable: the deal record could not be read, so awaiting counts cannot be joined'
+                        : 'sent and not yet completed'}
+                    tone={joinedReady && awaiting.length ? 'text-amber-700 dark:text-amber-300' : ''}
+                  />
+                </>
+              );
+            })()}
           </div>
 
           {/* ══ THE COLLECTION THIS STAGE ACTUALLY HAS ══════════════════════ */}
