@@ -98,3 +98,69 @@ export function fmtDays(v) {
   if (v === null || v === undefined || !Number.isFinite(Number(v))) return NOT_RECORDED;
   return `${Number(v)}d`;
 }
+
+/**
+ * The five stages the Deals bucket names, and the deal record they translate.
+ *
+ * LIFTED OUT OF `InvestorDealsWorkspace` SO THE ZONE PAGES CANNOT DISAGREE
+ * WITH IT. Canvas ID1 draws a Stage column and ID2/ID3/ID4 each count deals at
+ * a stage; four files deriving a stage from `deals.status` four times is four
+ * chances for the Pipeline board and the Commit room to disagree about where
+ * the same deal is.
+ *
+ * `deals.status` is a CHECKed set of five — applied | scored | active | funded
+ * | rejected — and the bucket's five stages are not the same five. The mapping
+ * below is the whole translation, and it is deliberately NOT a rename:
+ *
+ *   applied  → Sourced      nobody has looked at it yet
+ *   scored   → Screening    it has been through the desk
+ *   funded   → Closing      the money is agreed
+ *   active   → Commit if capital is committed against it, else Diligence.
+ *                           `active` covers both halves of the middle, and the
+ *                           committed figure is the only thing in the record
+ *                           that separates them.
+ *   rejected → NO STAGE.    A passed deal is not at a stage, and giving it one
+ *                           put it back in the funnel — counted as live, drawn
+ *                           in a column it is not in. It is excluded from the
+ *                           board and reachable through its own filter.
+ */
+export const DEAL_STAGES = [
+  { id: 'sourcing', label: 'Sourced' },
+  { id: 'screening', label: 'Screening' },
+  { id: 'diligence', label: 'Diligence' },
+  { id: 'commit', label: 'Commit' },
+  { id: 'closing', label: 'Closing' },
+];
+
+export const DEAL_STAGE_LABEL = Object.fromEntries(DEAL_STAGES.map((s) => [s.id, s.label]));
+
+/** `null` for a passed deal — see DEAL_STAGES. Never a fallback stage. */
+export function dealStage(deal) {
+  const status = String(deal?.status || '');
+  if (status === 'rejected') return null;
+  if (status === 'applied') return 'sourcing';
+  if (status === 'scored') return 'screening';
+  if (status === 'funded') return 'closing';
+  return Number(deal?.capital_committed) > 0 ? 'commit' : 'diligence';
+}
+
+/**
+ * Money, in the shorthand the artboards use, or null.
+ *
+ * Zero returns null rather than `$0`: a deal with no recorded ask has not
+ * asked for nothing.
+ */
+export function dealMoney(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  if (n >= 1_000) return `$${Math.round(n / 1_000)}K`;
+  return `$${n.toLocaleString()}`;
+}
+
+/** Whole dollars with separators — the artboard's `$2,985,000` form. */
+export function dealMoneyExact(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return `$${Math.round(n).toLocaleString('en-US')}`;
+}

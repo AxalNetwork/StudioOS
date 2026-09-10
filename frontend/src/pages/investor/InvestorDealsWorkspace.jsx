@@ -11,8 +11,7 @@ import ZoneNav from '../../workspaces/ZoneNav';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
-import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
-import { slaBand, passReasonLabel } from '../../lib/dealFlow';
+import { slaBand } from '../../lib/dealFlow';
 
 const STAGES = [
   { id: 'sourcing', label: 'Sourcing' },
@@ -136,7 +135,6 @@ function DealCard({ deal, onOpen }) {
 export default function InvestorDealsWorkspace({ embedded = false, zone = null }) {
   const known = zone === 'pipeline' || zone === 'screening' || zone === 'commit' || zone === 'closing';
   const shows = (section) => !known || zone === section;
-  const [pipelineView, setPipelineView] = useState('all');
   const navigate = useNavigate();
   const [state, setState] = useState({ deals: [], invitations: [] });
   const [loading, setLoading] = useState(true);
@@ -186,16 +184,6 @@ export default function InvestorDealsWorkspace({ embedded = false, zone = null }
   const grouped = useMemo(
     () => Object.fromEntries(STAGES.map((stage) => [stage.id, funnel.filter((deal) => deal.stage === stage.id)])),
     [funnel],
-  );
-  const pipelineRows = useMemo(() => {
-    if (pipelineView === 'passed') return deals.filter((deal) => deal.passed);
-    if (pipelineView === 'unassigned') return funnel.filter((deal) => !deal.assigned);
-    if (pipelineView === 'stale') return funnel.filter((deal) => deal.stale);
-    return funnel;
-  }, [deals, funnel, pipelineView]);
-  const pipelineGrouped = useMemo(
-    () => Object.fromEntries(STAGES.map((stage) => [stage.id, pipelineRows.filter((deal) => deal.stage === stage.id)])),
-    [pipelineRows],
   );
   const screeningRows = [...grouped.screening, ...grouped.diligence];
   const screening = screeningRows[0] || null;
@@ -260,49 +248,17 @@ export default function InvestorDealsWorkspace({ embedded = false, zone = null }
           </section>
         )}
 
-        {shows('pipeline') && <section className="investor-deals-card">
-          {/* `funnel.length`, not `deals.length`: a passed deal is not a live
-              one, and this line said it was. */}
-          <SectionHeading
-            id="deals-pipeline"
-            title="Pipeline"
-            detail={`${funnel.length} live deal${funnel.length === 1 ? '' : 's'}`}
-            filters={investorZoneFilters('deals/pipeline', { value: pipelineView, onChange: setPipelineView })}
-            actions={investorZoneActions('deals/pipeline', { view: { header: ['Deal', 'Stage', 'Sector', 'Target', 'Committed'], rows: pipelineRows, cells: (d) => [d.name, d.stage, d.sector, d.target, d.committed] } })}
-          />
-          {/* A passed deal has no stage, so it is never drawn into a stage
-              column. The list says what was decided and why instead — the same
-              row treatment the closing list uses, named for what it holds
-              rather than borrowing the other section's class. */}
-          {pipelineView === 'passed' ? (
-            <div className="investor-passed-list" data-testid="list-deals-passed">
-              {pipelineRows.length
-                ? pipelineRows.map((deal) => (
-                  <div key={`${deal.id}:${deal.name}`}>
-                    <ThumbsDown size={14} /> {deal.name}
-                    <span>{deal.passReason ? passReasonLabel(deal.passReason) : 'Reason not recorded'}</span>
-                    <button type="button" onClick={() => navigate(`/deals/${deal.id}`)}>Open deal</button>
-                  </div>
-                ))
-                : <Empty>No deal on this board has been passed on.</Empty>}
-            </div>
-          ) : (
-            <div className="investor-pipeline-grid">
-              {STAGES.map((stage) => (
-                <div className="investor-pipeline-column" key={stage.id}>
-                  <div><span>{stage.label}</span><b>{pipelineGrouped[stage.id].length}</b></div>
-                  <div>
-                    {pipelineGrouped[stage.id].length
-                      ? pipelineGrouped[stage.id].map((deal) => <DealCard key={`${deal.id}:${deal.name}`} deal={deal} onOpen={(id) => navigate(`/deals/${id}`)} />)
-                      : <Empty>No deals</Empty>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          <p className="investor-deals-note">Pipeline labels translate the existing deal stages for this workspace; no backend stage or record is changed.</p>
-        </section>}
+        {/* THE PIPELINE SECTION MOVED, IT DID NOT GO AWAY. Canvas ID1 draws
+            `/deals/pipeline` as a full composition — a four-up strip, a
+            six-column instrument with an SLA band per row, the note, and the
+            AI band — and `pages/investor/deals/PipelineZone.jsx` is that page.
+            `InvestorDealsRoutes` sends the slug there.
 
+            Keeping the card here as well would have mounted the SAME zone row
+            twice, which is what `profile_zone_actions.test.mjs` caught: two
+            files declaring `deals/pipeline` means two chip rows and two export
+            buttons for one route, and whichever rendered second would have
+            been the one nobody maintained. */}
         {(shows('screening') || shows('commit') || shows('closing')) && <div className="investor-deals-decisions">
           {shows('screening') && <section className="investor-deals-card investor-screening">
             <SectionHeading id="deals-screening" title="Screening desk" detail={screening?.name} actions={investorZoneActions('deals/screening', { view: { header: ['Deal', 'Stage', 'Sector', 'Target', 'Committed'], rows: screeningRows, cells: (d) => [d.name, d.stage, d.sector, d.target, d.committed] } })} />

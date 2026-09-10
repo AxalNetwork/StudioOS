@@ -23,6 +23,12 @@ the generic route wrapper once a canvas has graduated.
   `MarketIntelPage`) on the same route.
 - The CSS files beside each component are route-scoped for the same reason as
   `../founder/`'s: dense canvas layouts should not leak into shared tools.
+- `deals/` holds one file per Deals artboard (ID1–ID4), each a full
+  composition — strip, instrument, note, AI band — rather than the single card
+  `InvestorDealsWorkspace.jsx` draws for that zone. Its own README carries the
+  registry and the rule for adding to it; a zone with no file there still falls
+  through to the workspace, which serves the bucket root at `/deals` either
+  way.
 
 `/network` and `/market-intel` are role-branched on one route rather than
 split into two — see the comment above each `<Route>` in `App.jsx` before

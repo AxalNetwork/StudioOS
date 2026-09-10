@@ -154,7 +154,22 @@ test('investor Deals does not ship illustrative canvas data as live data', () =>
 });
 
 test('investor Deals exposes only canonical deal-room IDs and partial source failures', () => {
-  assert.match(deals, /navigate\(`\/deals\/\$\{id\}`\)/);
+  // WAS `navigate(`/deals/${id}`)` — the DealCard's own handler, which went to
+  // `pages/investor/deals/PipelineZone.jsx` with the rest of canvas ID1. What
+  // the assertion is FOR survives the move: a deal room is reached by the
+  // record's own id and never by a slug, a name or a sample. So both files are
+  // asked the same question — every `/deals/…` destination interpolates an
+  // expression — and each must have at least one, which is what stops this
+  // passing vacuously on a page that stopped linking to deal rooms at all.
+  const PIPELINE_ZONE = read('frontend/src/pages/investor/deals/PipelineZone.jsx');
+  for (const [what, src] of [['the workspace', deals], ['the pipeline zone', PIPELINE_ZONE]]) {
+    const links = [...src.matchAll(/`\/deals\/\$\{([^}]+)\}`/g)].map((m) => m[1].trim());
+    assert.ok(links.length > 0, `${what} no longer links to a deal room at all`);
+    for (const expr of links) {
+      assert.match(expr, /^[A-Za-z_$][\w$]*(\.[\w$]+)*$/,
+        `${what} builds a deal-room URL from ${expr}, which is not a record id`);
+    }
+  }
   assert.match(deals, /invitations could not be loaded/);
   assert.match(deals, /if \(dealsResult\.status === 'rejected'\)/);
   // A real Link, not an imperative navigate: it is middle-clickable and

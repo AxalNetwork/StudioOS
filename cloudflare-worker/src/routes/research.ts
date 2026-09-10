@@ -2153,6 +2153,66 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  // ── INVESTOR SURFACES ───────────────────────────────────────────────────
+  //
+  // Scoped by ROLE rather than by a firm column: `deals` carries no investor
+  // id, and the deal list an investor reads is the firm-wide funnel by design
+  // — browsing open deals is the marketplace half of this product. So the
+  // gather below refuses a caller who is not privileged and reads the same
+  // rows `GET /api/deals` would have returned them, rather than inventing a
+  // narrower scope that the page they are looking at does not have.
+
+  'deals/pipeline': {
+    // ID1's band: "One note per stale deal: last recorded activity, what is
+    // blocking, and the honest option — assign an owner or pass and record the
+    // reason."
+    //
+    // The instruction that matters is the last clause. A model handed a stale
+    // deal will write a chase note; the artboard's whole argument is that the
+    // honest options are two, and that one of them is to stop. The second is
+    // the unassigned case: a deal with no owner is not slow, it is unowned,
+    // and telling its owner to hurry would be advice to nobody.
+    instruction: [
+      'Draft one short note per deal below, addressed to whoever owns it.',
+      'Say how long it has sat and what the record shows was last done, then give two options and no third: assign an owner and move it, or pass and record the reason.',
+      'Where a deal has no owner, say that first — an unowned deal is not a slow one, and there is nobody to chase.',
+      'Use only the figures given. Never state an activity, a blocker or a next step the rows do not carry, and never propose a valuation or a decision.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT role FROM users WHERE id = ?')
+        .bind(userId).first<{ role: string | null }>();
+      const role = String(me?.role || '');
+      if (role !== 'admin' && role !== 'partner' && role !== 'investor') return [];
+      // Amber at 14 days, which is `slaPreset('standard')` in the SPA's
+      // `lib/dealFlow.js` — the same threshold the strip counts and the chip
+      // row filters on, so the band never drafts about a deal the page does
+      // not call stale.
+      const rows = await c.env.DB.prepare(
+        `SELECT p.name AS company, p.sector AS sector, d.status AS status,
+                d.target_raise AS ask, d.amount AS amount,
+                d.stage_changed_at AS since, lp.name AS owner
+           FROM deals d
+           LEFT JOIN projects p ON p.id = d.project_id
+           LEFT JOIN users lp ON lp.id = d.lead_partner_id
+          WHERE d.status <> 'rejected'
+            AND (p.id IS NULL OR p.deleted_at IS NULL)
+            AND d.stage_changed_at IS NOT NULL
+            AND d.stage_changed_at <= datetime('now', '-14 days')
+          ORDER BY d.stage_changed_at ASC LIMIT 40`
+      ).bind().all<Record<string, unknown>>();
+      return (rows.results || []).map((r) => {
+        const days = Math.floor(
+          (Date.now() - Date.parse(String(r.since).replace(' ', 'T') + 'Z')) / 86_400_000,
+        );
+        const ask = Number(r.ask) || Number(r.amount) || 0;
+        return `${r.company || 'company not recorded'} — ${r.sector || 'sector not recorded'}; `
+          + `status ${r.status}; ${Number.isFinite(days) ? `${days} days in stage` : 'time in stage not recorded'}; `
+          + `${ask > 0 ? `asking $${Math.round(ask).toLocaleString('en-US')}` : 'ask not recorded'}; `
+          + `${r.owner ? `owned by ${r.owner}` : 'NO OWNER RECORDED'}`;
+      });
+    },
+  },
+
   // ── FOUNDER SURFACES ────────────────────────────────────────────────────
   //
   // The first non-partner entries in this table. Everything above scopes on

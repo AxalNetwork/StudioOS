@@ -5,6 +5,21 @@ import WorkspaceShell from '../WorkspaceShell';
 import { bucketForPath, bucketTitle, zoneForPath } from '../shellConfig';
 
 const InvestorDealsWorkspace = lazy(() => import('../../pages/investor/InvestorDealsWorkspace'));
+/**
+ * ONE ZONE AT A TIME, AS EACH ARTBOARD LANDS.
+ *
+ * `Pages · Investor Deals.dc.html` draws four artboards, ID1–ID4, and each is
+ * a full composition: a four-up strip, an instrument with its own columns, the
+ * note that carries the finding, and the AI band. The workspace below renders
+ * all four zones as one card each, which is what shipped and what the artboards
+ * are not. They are replaced one at a time rather than in one commit, so a zone
+ * is either its artboard or the card that preceded it — never a half-built
+ * page. `ZONES` is the registry; a slug that is not in it falls through to the
+ * workspace.
+ */
+const ZONES = {
+  pipeline: lazy(() => import('../../pages/investor/deals/PipelineZone')),
+};
 
 /**
  * Deals — the four stages, as four routes.
@@ -53,8 +68,16 @@ export default function InvestorDealsRoutes() {
   const isRoot = Boolean(bucket) && location.pathname === bucket.prefix;
   const zone = zoneForPath(bucket, location.pathname);
 
+  // The bucket root still stacks all four sections from the workspace, so a
+  // zone component is chosen only on its own route.
+  const Zone = ZONES[zone?.slug];
+
   const INTRO = {
-    pipeline: 'Every live deal by stage, and how long each has been sitting where it is.',
+    // The stale flag is the sentence the artboard's note is entirely about, and
+    // it belongs on the one line the shell prints — the zone below says it once
+    // or not at all.
+    pipeline: 'Every live deal by stage, and how long each has been sitting where it is. '
+      + 'The stale flag is the product: a stage count cannot say who stopped moving.',
     screening: 'The deal on the desk now — what it claims, and what has been checked.',
     commit: 'What the committee decided, and what the decision was based on.',
     closing: 'Signed terms, wired capital, and what is still outstanding.',
@@ -89,7 +112,9 @@ export default function InvestorDealsRoutes() {
           all four stack — the same two props, for the same two reasons, that
           `NetworkWorkspace` passes `InvestorNetworkWorkspace`. */}
       <Suspense fallback={<div className="space-y-3"><Skeleton className="h-8" /><Skeleton className="h-64" /></div>}>
-        <InvestorDealsWorkspace embedded zone={isRoot ? null : zone?.slug} />
+        {Zone && !isRoot
+          ? <Zone />
+          : <InvestorDealsWorkspace embedded zone={isRoot ? null : zone?.slug} />}
       </Suspense>
     </WorkspaceShell>
   );
