@@ -1265,9 +1265,31 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
                 )}
               </div>
             )}
+            {provider.auth_type === 'api_key' && provider.key === 'crunchbase' && !existing && (
+              <div className="bg-violet-50 border border-violet-200 rounded-lg p-3 text-xs text-violet-900 dark:bg-violet-950/40 dark:border-violet-800 dark:text-violet-100">
+                <p className="font-medium mb-1">Crunchbase Basic user key</p>
+                <p>
+                  Create one at <strong>data.crunchbase.com</strong> → API. Paste the <code className="bg-white px-1 rounded dark:bg-gray-900">user_key</code> below.
+                  Connect runs a live org search to validate it before saving. Daily Basic quota is 200 calls.
+                </p>
+              </div>
+            )}
             {provider.auth_type === 'api_key' && (
-              <Field label={existing ? 'New API key (leave blank to keep current)' : 'API key'}>
-                <input type="password" className={inputCls} value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={existing?.api_key_preview || ''} required={!existing} />
+              <Field label={
+                provider.key === 'crunchbase'
+                  ? (existing ? 'New user_key (leave blank to keep current)' : 'Crunchbase user_key')
+                  : (existing ? 'New API key (leave blank to keep current)' : 'API key')
+              }>
+                <input
+                  type="password"
+                  className={inputCls}
+                  value={apiKey}
+                  onChange={e => setApiKey(e.target.value)}
+                  placeholder={provider.key === 'crunchbase' ? (existing?.api_key_preview || 'user_key') : (existing?.api_key_preview || '')}
+                  required={!existing}
+                  autoComplete="off"
+                  data-testid={provider.key === 'crunchbase' ? 'crunchbase-user-key' : undefined}
+                />
               </Field>
             )}
             {provider.auth_type === 'oauth2' && provider.supports_pat && !existing && (

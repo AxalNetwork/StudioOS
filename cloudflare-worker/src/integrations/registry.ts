@@ -273,8 +273,13 @@ export const REGISTRY: ProviderDescriptor[] = [
     display_name: 'Crunchbase',
     integration_type: 'data_feed',
     description: 'Auto-enrich projects with Crunchbase company data — funding, headcount, sector tags. BETA: Crunchbase Basic API only (read-only org search + lookup); deeper investor / round / people endpoints require Crunchbase Enterprise and ship later.',
-    // 2026-05-14 — parked as coming_soon by product (see Salesforce).
-    status: 'coming_soon',
+    // 2026-09-10 — unparked to 'beta'. The provider, /api/crunchbase/*
+    // routes, ProjectDetail lookup/apply, and Market Intel competitor
+    // fetch were already live; coming_soon only blocked Connect so
+    // enrichment always 412'd. Per-user Basic user_key (no OAuth app).
+    // Carta / DocuSign / Salesforce stay coming_soon — those still
+    // need a published OAuth app.
+    status: 'beta',
     tier: 'growth',
     auth_type: 'api_key',
     capabilities: ['Company enrichment', 'Funding history', 'Competitor lookup'],
