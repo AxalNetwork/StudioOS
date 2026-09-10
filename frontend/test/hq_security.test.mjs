@@ -23,10 +23,21 @@ const PAGE = codeOnly(read('frontend/src/pages/hq/SecurityPage.jsx'));
 const ROUTE = codeOnly(read('cloudflare-worker/src/routes/admin_security.ts'));
 const APP = read('frontend/src/App.jsx');
 
-test('the Security row is the seventh of eight, labelled Security, and /admin/security is HQ-only', () => {
+test('the Security row sits between Support and Settings, and /admin/security is HQ-only', () => {
+  // WAS "the seventh of eight" AND PINNED INDEX 6. Revenue landed as the
+  // ninth row (canvas H5) directly after Team, which is where the H5 nav
+  // puts it, so Security moved to index 7 — and it will move again when
+  // Content and Platform land from H6. What decision A4 actually settled is
+  // the row's NAME and its NEIGHBOURS, not its ordinal, so that is what is
+  // pinned now: a position-independent assertion that says the same thing
+  // and survives the next row. `super_admin_shell.test.mjs` holds the full
+  // ordered array, so the order is still pinned exactly once.
   const rows = (SIDEBAR_GROUPS.super_admin || []).flatMap((g) => g.items || []);
-  assert.equal(rows[6]?.label, 'Security', 'decision A4: Security, not Governance, between Support and Settings');
-  assert.equal(rows[6]?.to, '/admin/security');
+  const at = rows.findIndex((r) => r.to === '/admin/security');
+  assert.ok(at >= 0, 'the Security row is gone');
+  assert.equal(rows[at].label, 'Security', 'decision A4: Security, not Governance');
+  assert.equal(rows[at - 1]?.label, 'Support', 'Security no longer follows Support');
+  assert.equal(rows[at + 1]?.label, 'Settings', 'Security no longer precedes Settings');
   const line = APP.split('\n').find((l) => l.includes('path="/admin/security"'));
   assert.ok(line, '/admin/security must be registered');
   assert.match(line, /hqOnly\(/, 'an admin without the elevation gets the notice');
@@ -55,7 +66,17 @@ test('an unreadable store is reported, not zeroed, on both sides', () => {
   assert.match(ROUTE, /impersonations = absent\(/);
   assert.match(ROUTE, /sessions = absent\(/);
   assert.match(PAGE, /const UNAVAILABLE = Symbol\('unavailable'\)/);
-  assert.match(PAGE, /could not be read\. This is not a claim that nothing happened\./);
+  // Two files now, for the reason hq_home.test.mjs records: `Unreadable`
+  // was local here and in HqHomePage, the two had drifted, and it lives in
+  // `ui/Honesty.jsx`. The clause that differs is the prop; the component
+  // has to still render it, so both are checked.
+  assert.match(PAGE, /<Unreadable/, 'a failed read no longer renders Unreadable');
+  assert.match(PAGE, /claim="This is not a claim that nothing happened\."/);
+  assert.match(
+    read('frontend/src/ui/Honesty.jsx'),
+    /\{what\} could not be read\. \{claim\}/,
+    'the shared Unreadable no longer renders the claim it is handed',
+  );
 });
 
 test('the deletion clock is statutory, computed server-side, and unknown when unparseable', () => {

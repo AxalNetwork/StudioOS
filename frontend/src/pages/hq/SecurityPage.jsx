@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ShieldCheck, CircleAlert, RefreshCw, AlertTriangle, Loader2 } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
-import { Card, WorkerRail } from '../../ui';
-import { Unrecorded } from '../advisor/expertise/kit';
+import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 
 /**
  * HQ · Security (Support Security · Super canvas, Y2; the row Governance
@@ -55,19 +54,6 @@ function Stat({ label, value, note, tone = 'text-axal-ink' }) {
       <div className={`mt-1 text-lg font-extrabold tracking-tight tabular-nums ${tone}`}>{value ?? <Unrecorded />}</div>
       {note && <div className="mt-0.5 text-[10px] text-axal-ink-3">{note}</div>}
     </div>
-  );
-}
-
-function Unreadable({ what, onRetry }) {
-  return (
-    <p className="flex items-center gap-2 text-[12px] text-red-700 dark:text-red-300" role="alert">
-      <CircleAlert size={13} /> {what} could not be read. This is not a claim that nothing happened.
-      {onRetry && (
-        <button type="button" onClick={onRetry} className="ml-1 inline-flex items-center gap-1 underline">
-          <RefreshCw size={11} /> Retry
-        </button>
-      )}
-    </p>
   );
 }
 
@@ -193,7 +179,7 @@ export default function HqSecurityPage() {
           </p>
         </header>
 
-        {data === UNAVAILABLE && <div className="mt-4"><Unreadable what="The security overview" onRetry={load} /></div>}
+        {data === UNAVAILABLE && <div className="mt-4"><Unreadable what="The security overview" claim="This is not a claim that nothing happened." onRetry={load} /></div>}
 
         <div className="mt-4 space-y-4">
           <Zone title="Security events and auth anomalies" sub="the canvas's one real backend build" tone="border-red-200 dark:border-red-900/50">

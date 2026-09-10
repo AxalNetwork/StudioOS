@@ -119,7 +119,7 @@ canvas behind it still shows up here.
 | Home | Messages | `/messages` | — (no canvas; shipped ahead of the design corpus) |
 | Account | My Profile | `/profile` | — (no canvas; shipped ahead of the design corpus) |
 
-## `super_admin` — 8 destinations in 1 group
+## `super_admin` — 9 destinations in 1 group
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
@@ -128,13 +128,14 @@ canvas behind it still shows up here.
 | HQ | Funds | `/funds` | Funds · Fabric |
 | HQ | Contracts | `/admin/contracts` | Admin · Super, Contracts · Super |
 | HQ | Team | `/admin/accounts` | Admin · Super |
+| HQ | Revenue | `/admin/revenue` | — (no canvas; shipped ahead of the design corpus) |
 | HQ | Support | `/help` | Support Security · Super |
 | HQ | Security | `/admin/security` | Support Security · Super |
 | HQ | Settings | `/account` | — (no canvas; shipped ahead of the design corpus) |
 
 ## Destinations with no canvas
 
-57 of the 89 sidebar rows above are not claimed
+58 of the 90 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
@@ -196,6 +197,7 @@ rather than merely absent.
 - exploring · Home · Spin-Out Lab (`/spinout-lab`)
 - exploring · Home · Messages (`/messages`)
 - exploring · Account · My Profile (`/profile`)
+- super_admin · HQ · Revenue (`/admin/revenue`)
 - super_admin · HQ · Settings (`/account`)
 
 **Canvas corpus:** 110. **Workspace assignments:** 130.

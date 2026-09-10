@@ -46,10 +46,17 @@ test('every row points at a route that is actually registered', () => {
   );
 });
 
-test('all eight rows are present, in canvas order', () => {
-  // The canvas order is Home, Licences, Funds, Contracts, Team, Support,
-  // Security, Settings. "Security", not "Governance" — decision A4.
-  assert.deepEqual(rows.map((r) => r.label), ['Home', 'Licences', 'Funds', 'Contracts', 'Team', 'Support', 'Security', 'Settings']);
+test('all nine rows are present, in canvas order', () => {
+  // The canvas order is Home, Licences, Funds, Contracts, Team, Revenue,
+  // Support, Security, Settings. "Security", not "Governance" — decision A4.
+  //
+  // REVENUE IS THE NINTH AND ITS POSITION IS READ OFF THE ARTBOARD, not
+  // chosen: the H5 nav in `Admin · Super.dc.html` runs Home, Licenses,
+  // Accounts, Revenue, Content, Governance — so Revenue sits straight after
+  // Accounts, which ships as Team. Content and Platform are the two rows
+  // still to come (canvas H6); this array goes to eleven when they land.
+  assert.deepEqual(rows.map((r) => r.label), ['Home', 'Licences', 'Funds', 'Contracts', 'Team', 'Revenue', 'Support', 'Security', 'Settings']);
+  assert.equal(rows.find((r) => r.label === 'Revenue')?.to, '/admin/revenue');
   const licences = rows.find((r) => r.to === '/admin/licences');
   assert.ok(licences, 'the franchise console must be reachable from the HQ shell');
   assert.equal(rows.find((r) => r.label === 'Team')?.to, '/admin/accounts',
