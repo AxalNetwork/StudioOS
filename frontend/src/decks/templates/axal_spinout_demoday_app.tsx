@@ -69,7 +69,7 @@ export const FONT_PAIRING_OPTIONS: Array<{ value: FontPairingId; label: string }
 const PXIN = 144;                 // 1 inch  → 144 px  (1920 / 13.33)
 const inch = (n: number) => n * PXIN;
 const pt = (n: number) => n * 2;  // 1 point → 2 px    (1920 / 960pt)
-const W = 13.33, MARGIN = 0.7, CW = W - MARGIN * 2;
+const W = 13.33, MARGIN = 0.7;
 const ML = MARGIN;
 
 /* Palette. DERIVED from `THEME.color` in ../spinout/deckData — not a second
