@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Stat } from '../ui';
 
@@ -109,12 +109,33 @@ async function fetchMarkdown(url) {
  */
 const COMPANIES_STRIP_LICENCES = new Set(['founder']);
 
+/**
+ * A FAILED READ IS NOT AN EMPTY LIST, and this component could not tell them
+ * apart.
+ *
+ * Both `competitors.list()` calls caught into `{ analyses: [] }`, and the
+ * saved-analyses card rendered only when it HAD rows — so a server error and a
+ * first-time reader produced the identical screen: nothing at all, with a
+ * "Saved analyses 0" tile above it reading as a fact about the reader rather
+ * than about the request. `/research/companies` is one of the two zones a
+ * recent audit measured at zero rows on production and recorded as "empty, not
+ * unbuilt, a different fact with a different fix"; this is that fix.
+ *
+ * The sentinel is module-level rather than a second piece of state because
+ * there are two await sites, and a flag set beside each is how one of them
+ * gets fixed and the other left.
+ */
+const READ_FAILED = Symbol('competitors.list failed');
+
 export default function CompetitorAnalysis({ project = null, embedded = false, chromeless = false, zoneActions, zoneFilters, role = 'founder' }) {
   // Page furniture only. Never gate data or controls on this.
   const bare = embedded || chromeless;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const sectionRef = useRef(null);
+  // The run form, so the first-run card can send a reader to the control that
+  // actually puts a row in this store rather than describing it.
+  const formRef = useRef(null);
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState(embedded && project ? String(project.id) : '');
   const [mode, setMode] = useState(embedded ? 'startup' : 'custom'); // startup | custom
@@ -122,12 +143,27 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState(null);
   const [saved, setSaved] = useState([]);
+  // 'loading' until the first answer, then 'ready' or 'failed'. Four screens,
+  // because the reader's next move differs in each.
+  const [savedState, setSavedState] = useState('loading');
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
   const [savingEdits, setSavingEdits] = useState(false);
   const [manual, setManual] = useState({ name: '', url: '', category: 'direct', crawl: true, summary: '' });
   const [showManual, setShowManual] = useState(false);
   const [dirty, setDirty] = useState(false);
+
+  const applySaved = useCallback((list) => {
+    if (list === READ_FAILED) { setSavedState('failed'); return; }
+    setSaved(list?.analyses || []);
+    setSavedState('ready');
+  }, []);
+
+  /** Retry, for the failed state — the one button that can clear it. */
+  const reloadSaved = useCallback(async () => {
+    setSavedState('loading');
+    applySaved(await api.competitors.list().catch(() => READ_FAILED));
+  }, [applySaved]);
 
   useEffect(() => {
     let alive = true;
@@ -136,19 +172,19 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
         // Embedded: locked to the current startup — don't fetch the project
         // list or auto-select; just load this caller's saved analyses.
         if (embedded) {
-          const list = await api.competitors.list().catch(() => ({ analyses: [] }));
+          const list = await api.competitors.list().catch(() => READ_FAILED);
           if (!alive) return;
-          setSaved(list?.analyses || []);
+          applySaved(list);
           return;
         }
         const [projs, list] = await Promise.all([
           api.listProjects().catch(() => []),
-          api.competitors.list().catch(() => ({ analyses: [] })),
+          api.competitors.list().catch(() => READ_FAILED),
         ]);
         if (!alive) return;
         const ps = Array.isArray(projs) ? projs : projs?.projects || [];
         setProjects(ps);
-        setSaved(list?.analyses || []);
+        applySaved(list);
         if (ps.length) {
           setMode('startup');
           setProjectId(String(ps[0].id));
@@ -216,8 +252,8 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
       const full = await api.competitors.analyze(payload);
       setAnalysis(full);
       setDirty(false);
-      const list = await api.competitors.list().catch(() => null);
-      if (list) setSaved(list.analyses || []);
+      // A successful run clears a failed read: the list just answered.
+      applySaved(await api.competitors.list().catch(() => READ_FAILED));
     } catch (e) {
       setError(e.message || 'Analysis failed. Try again or reduce depth.');
     } finally {
@@ -366,8 +402,16 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
               row this counts is an analysis you ran, and one analysis covers
               several companies. Counting analyses under a label that says
               companies would report the wrong number under the right word. */}
-          <Stat label="Saved analyses" value={visibleSaved.length}
-            note={`across ${visibleSaved.length === 1 ? 'one run' : 'your runs'}`} />
+          {/* "across your runs" under a zero described runs that had not
+              happened. With nothing read yet the tile has no figure to give
+              at all — a 0 there is a claim about the reader, and until the
+              list answers it is a claim about the request. */}
+          <Stat label="Saved analyses"
+            value={savedState === 'ready' ? visibleSaved.length : 'Not recorded'}
+            note={savedState === 'failed' ? 'the list could not be read'
+              : savedState === 'loading' ? 'reading your analyses'
+              : visibleSaved.length === 0 ? 'nothing run yet'
+              : `across ${visibleSaved.length === 1 ? 'one run' : 'your runs'}`} />
           {lastRefreshed > 0 && (
             <Stat label="Last refreshed" mono={false}
               value={new Date(lastRefreshed).toISOString().slice(0, 10)}
@@ -397,7 +441,7 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
       )}
 
       {/* Inputs form */}
-      <div className={`${CARD} p-5 mb-5`}>
+      <div ref={formRef} className={`${CARD} p-5 mb-5`}>
         {!embedded && (
           <div className="mb-4">
             <div className={LABEL}>Mode</div>
@@ -517,8 +561,53 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
         />
       )}
 
-      {/* Saved analyses */}
-      {visibleSaved.length > 0 && (
+      {/* SAVED ANALYSES — four states, because this card used to have one.
+          `{visibleSaved.length > 0 && …}` meant a failed read, a still-loading
+          page and an empty store all rendered nothing, and nothing is the one
+          thing that cannot be told apart from the others. */}
+      {savedState === 'failed' && (
+        <div className={`${CARD} p-5 mt-6`} role="alert">
+          <div className="font-semibold text-gray-900 dark:text-gray-100">Your saved analyses could not be read.</div>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            This is a problem with the request, not with your account — anything you have run is still stored.
+            Running a new analysis below will also refresh this list.
+          </p>
+          <button type="button" onClick={reloadSaved}
+            className="mt-3 inline-flex items-center gap-1.5 rounded border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800">
+            Try again
+          </button>
+        </div>
+      )}
+
+      {savedState === 'ready' && visibleSaved.length === 0 && (
+        <div className={`${CARD} border-dashed p-5 mt-6`}>
+          <div className="font-semibold text-gray-900 dark:text-gray-100">
+            {embedded && saved.length > 0
+              ? 'No analyses for this startup yet.'
+              : 'No saved analyses yet.'}
+          </div>
+          {/* THE STORE IS EMPTY, NOT MISSING, and the difference is the whole
+              point of this card. `competitor_analyses` is keyed on the person
+              who ran the analysis, so an empty list means this reader has not
+              run one — not that the feature is unbuilt, which is what a blank
+              space said. The embedded case is a third sentence again: rows
+              exist, just none against this startup. */}
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            {embedded && saved.length > 0
+              ? `You have ${saved.length === 1 ? 'one analysis' : `${saved.length} analyses`} saved against other startups. `
+                + 'Analyses are stored per startup, so this one starts empty.'
+              : 'An analysis maps the players in a market, the gaps between them and where you sit. '
+                + 'They are stored against you, so this list stays empty until you run the first one.'}
+          </p>
+          <button type="button"
+            onClick={() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+            className="mt-3 inline-flex items-center gap-1.5 rounded border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800">
+            Run the first one
+          </button>
+        </div>
+      )}
+
+      {savedState === 'ready' && visibleSaved.length > 0 && (
         <div className={`${CARD} p-5 mt-6`}>
           <div className="font-semibold text-gray-900 dark:text-gray-100 mb-3">Saved analyses</div>
           <div className="divide-y divide-gray-100 dark:divide-gray-800">
