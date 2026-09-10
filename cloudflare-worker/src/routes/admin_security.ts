@@ -256,6 +256,73 @@ const stamp = (v: unknown) => (v ? String(v).slice(0, 16).replace('T', ' ') : nu
 /** Whole minutes between two epochs, floored at zero. */
 const minutesBetween = (a: number, b: number) => Math.max(0, Math.round((b - a) / 60000));
 
+/**
+ * THE SIX READS, EACH A COMPLETE LITERAL.
+ *
+ * The first version of this handler assembled them from `cols`/`from`/`order`
+ * fragments and an `IN (${marks})` built from the arrays above, and
+ * `scripts/check-sql-prepare.mjs` failed the build for it — correctly. A
+ * `${…}` inside `DB.prepare(\`…\`)` lands in the query TEXT where no binding
+ * protects it, and "this particular one is only a column list" is exactly the
+ * argument that stops being true two edits later. Duplicating a SELECT list is
+ * the cheaper half of that trade: every statement below can be read in one
+ * piece and grepped for as it appears here.
+ *
+ * The placeholder counts in the two IN-lists are pinned by a test against the
+ * arrays that fill them, so shortening `ACTOR_SIDE_ACTIONS` without editing
+ * its statement fails the suite rather than the request.
+ */
+const FEED_AUDIT_ALL_SQL = `SELECT a.id, a.action, a.report_type, a.format, a.filters_json, a.exported_at,
+          u.name AS admin_name, u.email AS admin_email, a.admin_user_id,
+          t.name AS target_name, t.email AS target_email, a.viewed_user_id
+     FROM admin_audit_log a
+     LEFT JOIN users u ON u.id = a.admin_user_id
+     LEFT JOIN users t ON t.id = a.viewed_user_id
+    ORDER BY a.exported_at DESC, a.id DESC LIMIT ?`;
+
+const FEED_AUDIT_EXPORTS_SQL = `SELECT a.id, a.action, a.report_type, a.format, a.filters_json, a.exported_at,
+          u.name AS admin_name, u.email AS admin_email, a.admin_user_id,
+          t.name AS target_name, t.email AS target_email, a.viewed_user_id
+     FROM admin_audit_log a
+     LEFT JOIN users u ON u.id = a.admin_user_id
+     LEFT JOIN users t ON t.id = a.viewed_user_id
+    WHERE a.action LIKE '%export%'
+    ORDER BY a.exported_at DESC, a.id DESC LIMIT ?`;
+
+/** Eight placeholders, one per entry in ACTOR_SIDE_ACTIONS. */
+const FEED_ACTIVITY_ACTOR_SIDE_SQL = `SELECT l.id, l.action, l.details, l.created_at, l.user_id,
+          u.name AS actor_name, u.email AS actor_email
+     FROM activity_logs l
+     LEFT JOIN users u ON u.id = l.user_id
+    WHERE l.action IN (?, ?, ?, ?, ?, ?, ?, ?)
+    ORDER BY l.created_at DESC, l.id DESC LIMIT ?`;
+
+/** One placeholder, one per entry in SUSPENSION_ACTIVITY_ACTIONS. */
+const FEED_ACTIVITY_SUSPENSIONS_SQL = `SELECT l.id, l.action, l.details, l.created_at, l.user_id,
+          u.name AS actor_name, u.email AS actor_email
+     FROM activity_logs l
+     LEFT JOIN users u ON u.id = l.user_id
+    WHERE l.action IN (?)
+    ORDER BY l.created_at DESC, l.id DESC LIMIT ?`;
+
+const FEED_LICENCE_ALL_SQL = `SELECT e.id, e.event, e.note, e.created_at, e.actor_user_id,
+          u.name AS actor_name, u.email AS actor_email,
+          l.licence_ref, l.brand_name
+     FROM licence_events e
+     LEFT JOIN users u ON u.id = e.actor_user_id
+     LEFT JOIN territory_licences l ON l.id = e.licence_id
+    ORDER BY e.created_at DESC, e.id DESC LIMIT ?`;
+
+/** Two placeholders, one per entry in SUSPENSION_LICENCE_EVENTS. */
+const FEED_LICENCE_SUSPENSIONS_SQL = `SELECT e.id, e.event, e.note, e.created_at, e.actor_user_id,
+          u.name AS actor_name, u.email AS actor_email,
+          l.licence_ref, l.brand_name
+     FROM licence_events e
+     LEFT JOIN users u ON u.id = e.actor_user_id
+     LEFT JOIN territory_licences l ON l.id = e.licence_id
+    WHERE e.event IN (?, ?)
+    ORDER BY e.created_at DESC, e.id DESC LIMIT ?`;
+
 type ImpersonationRow = Record<string, unknown>;
 
 r.get('/governance', async (c) => {
@@ -308,18 +375,9 @@ r.get('/governance', async (c) => {
   // ── admin_audit_log ───────────────────────────────────────────────────
   if (readAudit) {
     try {
-      const cols = `a.id, a.action, a.report_type, a.format, a.filters_json, a.exported_at,
-                    u.name AS admin_name, u.email AS admin_email, a.admin_user_id,
-                    t.name AS target_name, t.email AS target_email, a.viewed_user_id`;
-      const from = `FROM admin_audit_log a
-                    LEFT JOIN users u ON u.id = a.admin_user_id
-                    LEFT JOIN users t ON t.id = a.viewed_user_id`;
-      // Two whole statements rather than an interpolated WHERE: every SQL
-      // string in this file stays literal and greppable.
-      const res = await (filter === 'exports'
-        ? env.DB.prepare(`SELECT ${cols} ${from} WHERE a.action LIKE '%export%' ORDER BY a.exported_at DESC, a.id DESC LIMIT ?`)
-        : env.DB.prepare(`SELECT ${cols} ${from} ORDER BY a.exported_at DESC, a.id DESC LIMIT ?`)
-      ).bind(FEED_LIMIT).all<Record<string, unknown>>();
+      const res = await env.DB
+        .prepare(filter === 'exports' ? FEED_AUDIT_EXPORTS_SQL : FEED_AUDIT_ALL_SQL)
+        .bind(FEED_LIMIT).all<Record<string, unknown>>();
       const got = res.results || [];
       for (const a of got) {
         const action = String(a.action || '');
@@ -350,16 +408,11 @@ r.get('/governance', async (c) => {
   // ── activity_logs, admin-side rows only ───────────────────────────────
   if (readActivity) {
     try {
-      const allow = filter === 'suspensions' ? SUSPENSION_ACTIVITY_ACTIONS : ACTOR_SIDE_ACTIONS;
-      const marks = allow.map(() => '?').join(',');
-      const res = await env.DB.prepare(
-        `SELECT l.id, l.action, l.details, l.created_at, l.user_id,
-                u.name AS actor_name, u.email AS actor_email
-           FROM activity_logs l
-           LEFT JOIN users u ON u.id = l.user_id
-          WHERE l.action IN (${marks})
-          ORDER BY l.created_at DESC, l.id DESC LIMIT ?`,
-      ).bind(...allow, FEED_LIMIT).all<Record<string, unknown>>();
+      const suspensionsOnly = filter === 'suspensions';
+      const allow = suspensionsOnly ? SUSPENSION_ACTIVITY_ACTIONS : ACTOR_SIDE_ACTIONS;
+      const res = await env.DB
+        .prepare(suspensionsOnly ? FEED_ACTIVITY_SUSPENSIONS_SQL : FEED_ACTIVITY_ACTOR_SIDE_SQL)
+        .bind(...allow, FEED_LIMIT).all<Record<string, unknown>>();
       const got = res.results || [];
       for (const l of got) {
         const action = String(l.action || '');
@@ -412,18 +465,10 @@ r.get('/governance', async (c) => {
   // ── licence_events — the one store that can name a tenant ─────────────
   if (readLicences) {
     try {
-      const cols = `e.id, e.event, e.note, e.created_at, e.actor_user_id,
-                    u.name AS actor_name, u.email AS actor_email,
-                    l.licence_ref, l.brand_name`;
-      const from = `FROM licence_events e
-                    LEFT JOIN users u ON u.id = e.actor_user_id
-                    LEFT JOIN territory_licences l ON l.id = e.licence_id`;
-      const order = 'ORDER BY e.created_at DESC, e.id DESC LIMIT ?';
-      const marks = SUSPENSION_LICENCE_EVENTS.map(() => '?').join(',');
       const res = filter === 'suspensions'
-        ? await env.DB.prepare(`SELECT ${cols} ${from} WHERE e.event IN (${marks}) ${order}`)
+        ? await env.DB.prepare(FEED_LICENCE_SUSPENSIONS_SQL)
           .bind(...SUSPENSION_LICENCE_EVENTS, FEED_LIMIT).all<Record<string, unknown>>()
-        : await env.DB.prepare(`SELECT ${cols} ${from} ${order}`)
+        : await env.DB.prepare(FEED_LICENCE_ALL_SQL)
           .bind(FEED_LIMIT).all<Record<string, unknown>>();
       const got = res.results || [];
       for (const e of got) {

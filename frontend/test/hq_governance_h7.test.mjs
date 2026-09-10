@@ -95,13 +95,22 @@ test('the five filters are the artboard\'s five, and the server applies them', (
 });
 
 test('the feed is a union of four stores, not the one Y2 read', () => {
-  // The trailing space matters: `FROM activity_logs` is a prefix of
-  // `FROM activity_logs_disabled`, and a substring check let exactly that
-  // rename through. Each read is `FROM <table> <alias>`.
-  for (const [store, alias] of [['admin_audit_log', 'a'], ['activity_logs', 'l'],
-                                ['impersonation_sessions', 'i'], ['licence_events', 'e']]) {
-    assert.ok(ROUTE.includes(`FROM ${store} ${alias}`), `the feed no longer reads ${store}`);
-  }
+  // Asserted as the WHOLE SET of tables the file reads, not as four
+  // substring checks. Two earlier shapes of this were too weak: plain
+  // `includes('FROM activity_logs')` passed a rename to
+  // `activity_logs_disabled` on a prefix match, and adding the alias only
+  // moved the problem — each store is now read by two statements, so
+  // renaming one of the pair still left the other matching. Reading the set
+  // means a renamed table shows up as an unexpected NAME, wherever it is.
+  const tables = new Set(
+    [...ROUTE.matchAll(/\b(?:FROM|JOIN)\s+([a-z_]+)/g)].map((m) => m[1]),
+  );
+  assert.deepEqual([...tables].sort(), [
+    // The feed's four stores…
+    'activity_logs', 'admin_audit_log', 'impersonation_sessions', 'licence_events',
+    // …the two it joins for names, and the one /overview reads for sessions.
+    'territory_licences', 'user_sessions', 'users',
+  ], 'the set of tables this route reads changed');
   // And the page shows WHICH stores answered, so a silently-dropped store is
   // visible rather than indistinguishable from a quiet week.
   assert.match(P, /data-testid="hq-gov-sources"/, 'the page no longer says which stores were read');

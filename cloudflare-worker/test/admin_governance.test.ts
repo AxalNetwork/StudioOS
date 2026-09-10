@@ -428,6 +428,54 @@ test('the guardrail sentence is one constant, not two literals that can drift', 
   assert.equal(src.split('absent(NO_AI_SAFETY_STORE)').length - 1, 2);
 });
 
+test('each IN-list has exactly as many placeholders as the array that fills it', () => {
+  // The reads are complete literals because `check-sql-prepare.mjs` fails the
+  // build on a `${…}` inside DB.prepare — correctly, since that lands in the
+  // query TEXT with no binding over it. The cost of writing `IN (?, ?)` by
+  // hand is that shortening the array beside it silently unbalances the bind,
+  // which D1 answers at RUNTIME. This turns that into a test failure.
+  const src = readFileSync(
+    resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_security.ts'), 'utf8',
+  );
+  /** The array literal's element count, read off the source. */
+  const arrayLen = (name: string) => {
+    const at = src.indexOf(`const ${name} = [`);
+    assert.ok(at >= 0, `${name} is gone`);
+    const end = src.indexOf('];', at);
+    assert.ok(end > at, `${name} is unterminated`);
+    return (src.slice(at, end).match(/'/g) || []).length / 2;
+  };
+  /** The `IN (…)` placeholder count in one named statement. */
+  const marks = (name: string) => {
+    const at = src.indexOf(`const ${name} = \``);
+    assert.ok(at >= 0, `${name} is gone`);
+    const end = src.indexOf('`;', at);
+    assert.ok(end > at, `${name} is unterminated`);
+    const m = /IN \(([^)]*)\)/.exec(src.slice(at, end));
+    assert.ok(m, `${name} no longer has an IN list`);
+    return (m[1].match(/\?/g) || []).length;
+  };
+  assert.equal(marks('FEED_ACTIVITY_ACTOR_SIDE_SQL'), arrayLen('ACTOR_SIDE_ACTIONS'));
+  assert.equal(marks('FEED_ACTIVITY_SUSPENSIONS_SQL'), arrayLen('SUSPENSION_ACTIVITY_ACTIONS'));
+  assert.equal(marks('FEED_LICENCE_SUSPENSIONS_SQL'), arrayLen('SUSPENSION_LICENCE_EVENTS'));
+  // And the arrays are not empty, which would make all three equal at zero
+  // and the assertions vacuous.
+  for (const n of ['ACTOR_SIDE_ACTIONS', 'SUSPENSION_ACTIVITY_ACTIONS', 'SUSPENSION_LICENCE_EVENTS']) {
+    assert.ok(arrayLen(n) > 0, `${n} is empty`);
+  }
+});
+
+test('no read in this file interpolates into its own query text', () => {
+  // The guard `scripts/check-sql-prepare.mjs` enforces this repo-wide against
+  // a baseline; asserted here too so a regression in THIS file names itself.
+  const src = readFileSync(
+    resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_security.ts'), 'utf8',
+  );
+  for (const m of src.matchAll(/\.prepare\(\s*`([^`]*)`/g)) {
+    assert.doesNotMatch(m[1], /\$\{/, `a query interpolates: ${m[1].slice(0, 80)}`);
+  }
+});
+
 test('every filter is one the artboard draws, and the payload names what each reads', async () => {
   const db = freshDb();
   const r = await call(db, SUPER);
