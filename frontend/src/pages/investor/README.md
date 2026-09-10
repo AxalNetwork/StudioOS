@@ -74,3 +74,60 @@ offer it. A permissions reason, not a modelling one.
 Guard: `frontend/test/investor_portfolio_ip1.test.mjs`, 26 mutants. It checks
 the SCHEMA and the EXISTING ROUTE rather than the corrected sentence, because a
 sentence can be rewritten without any of those facts changing.
+
+## IP2 · Updates — two rule sets, and the reason only described one
+
+`portfolio/updates` marked its `Rules` chip unbuilt for want of an extraction
+layer. That reason is true about extraction and beside the point about rules,
+because two different rule sets are in play and only one of them is missing:
+
+- **Collection rules are stored.** `portfolio_kpi_definitions` holds the KPI set
+  companies are held to — the key, the name, the wording, the unit, the cadence,
+  whether each is required and who it applies to — seeded firm-wide by migration
+  168. `GET /positions/kpi-compliance` has returned the whole set as `kpi_set`
+  on **every load of this page** since the page was written. Nothing rendered
+  it.
+- **Extraction rules are not.** Nothing stores how *"a team of ~12"* becomes a
+  headcount, so there is no parse-review state, no ambiguity flag and no
+  proposal queue. Those four stay absent and the strip keeps labelling them.
+
+So the chip was dark over data already in hand while the sentence explaining why
+described a different object. This is milder than IP1's — that reason denied a
+store that existed *and* a read already serving it to the same reader; this one
+named a real gap and generalised one word too far.
+
+**`Rules` is a view, not a row predicate.** `This period` and `Overdue` narrow
+the inbox; there is no way to narrow an inbox *by* a rule set, and a chip that
+emptied it would read as "no update breaks a rule" — which is why the two dead
+`return false` predicates were removed in the first place. So it swaps the body
+for the rule set and leaves the strip alone.
+
+**Three states, not two.** An unreadable compliance source (`null`) is not an
+empty rule set (`[]`): the first says nothing about what companies owe, the
+second says they owe nothing. **And the table is always a slice** — the route
+filters `cadence = ?` and the page reads one cadence — so the panel says which
+slice it is rather than presenting its rows as the whole of what is asked for.
+
+**"Carried by" is not a compliance rate.** It counts the stored updates on the
+page, each company's latest whatever period it speaks for. A key present with a
+blank value is *not* carried: an asked-for figure that arrived empty is the gap
+the column exists to show.
+
+**Half the AI band is mounted.** The artboard drafts "parse N updates … arriving
+as editable proposals". The flag-don't-guess half reads what arrived against
+what was asked for and names the gaps; the proposal half has no store to land
+in, and accepting a draft stamps the draft and writes nowhere else. So the label
+promises a read, and the instruction refuses the one substitution that would
+make it dangerous — turning a hedged phrase into a reported figure.
+
+**Two ops reasons were rewritten.** `Edit rules` said "no reminder rules are
+stored", which is true of an object this desk does not have; the set it *does*
+have is stored firm-wide with no write path anywhere, so the reason now names
+that. `Chase all overdue` said "nothing on this desk sends mail" — too broad by
+one call: `notifyProjectFollowers` runs on create and on submit and `notify()`
+does dispatch email. What is missing is anything addressed to the company that
+stayed silent, which is the narrower reason that stays true if a chase is built.
+
+Guard: `frontend/test/investor_portfolio_ip2.test.mjs`, 43 mutants. Like IP1's
+it reads the schema, the seed and the existing route rather than the corrected
+sentence.
