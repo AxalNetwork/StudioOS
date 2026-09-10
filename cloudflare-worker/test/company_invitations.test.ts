@@ -126,13 +126,27 @@ async function call(db: any, userId: number, path: string, init: RequestInit = {
 
 // The Gmail call is the only network in this path. Stubbing fetch keeps the
 // send observable AND proves the route reports a refusal rather than throwing.
+//
+// MATCHED BY HOSTNAME, EXACTLY. This read `url.includes('googleapis.com')`
+// and then `url.includes('oauth2') || url.includes('token')` — CodeQL called
+// the first one (alert 6064) and it was right about a test harness too, for a
+// sharper reason than the usual one: a substring stub swallows requests it was
+// never meant to answer (`https://evil.test/?x=googleapis.com`), and an inner
+// `includes('token')` would route the SEND call to the token branch the moment
+// a token appears in the send URL. Either one makes a test pass for the wrong
+// reason, which is the failure this whole suite exists to catch. The mailer
+// calls exactly two known hosts, so compare against them and nothing else.
+const GMAIL_TOKEN_HOST = 'oauth2.googleapis.com';   // services/email.ts:4
+const GMAIL_SEND_HOST = 'gmail.googleapis.com';     // services/email.ts:321
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: any, init: any) => {
-  const url = String(input?.url || input);
-  if (url.includes('googleapis.com')) {
-    if (url.includes('oauth2') || url.includes('token')) {
-      return new Response(JSON.stringify({ access_token: 'stub' }), { status: 200 });
-    }
+  const href = String(input?.url || input);
+  let host = '';
+  try { host = new URL(href).hostname; } catch { /* not a URL — pass it through */ }
+  if (host === GMAIL_TOKEN_HOST) {
+    return new Response(JSON.stringify({ access_token: 'stub' }), { status: 200 });
+  }
+  if (host === GMAIL_SEND_HOST) {
     const raw = JSON.parse(String(init?.body || '{}')).raw || '';
     const decoded = atob(raw.replace(/-/g, '+').replace(/_/g, '/'));
     // The two bodies are themselves base64 INSIDE the multipart envelope, so

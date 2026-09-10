@@ -255,7 +255,6 @@ const BrandBuilderPage = lazy(() => import('./pages/BrandBuilderPage'));
 const CompetitorAnalysisPage = lazy(() => import('./pages/CompetitorAnalysisPage'));
 const FinancialsPage = lazy(() => import('./pages/FinancialsPage'));
 const DiscoveryPage = lazy(() => import('./pages/DiscoveryPage'));
-const RoadmapPage = lazy(() => import('./pages/RoadmapPage'));
 const MetricsPage = lazy(() => import('./pages/MetricsPage'));
 const SignalsPage = lazy(() => import('./pages/SignalsPage'));
 const CapTablePage = lazy(() => import('./pages/CapTablePage'));
@@ -295,9 +294,6 @@ const FounderGrowCapitalMatch = lazy(() => import('./pages/founder/FounderGrowCa
 const FounderGrowBrand = lazy(() => import('./pages/founder/FounderGrowBrand'));
 const FounderGrowLaunch = lazy(() => import('./pages/founder/FounderGrowLaunch'));
 const FounderNetworkDesk = lazy(() => import('./pages/founder/FounderNetworkDesk'));
-const FounderNetworkRelationships = lazy(() => import('./pages/founder/FounderNetworkRelationships'));
-const FounderNetworkIntroductions = lazy(() => import('./pages/founder/FounderNetworkIntroductions'));
-const FounderNetworkOrganizations = lazy(() => import('./pages/founder/FounderNetworkOrganizations'));
 const FounderResearchDesk = lazy(() => import('./pages/founder/FounderResearchDesk'));
 const ServiceCatalogPage = lazy(() => import('./pages/ServiceCatalogPage'));
 const PartnerInsightsPage = lazy(() => import('./pages/PartnerInsightsPage'));
