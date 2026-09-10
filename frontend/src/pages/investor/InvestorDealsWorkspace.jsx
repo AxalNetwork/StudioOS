@@ -60,7 +60,6 @@ function SectionHeading({ id, title, detail, filters = [], actions = [] }) {
 
 export default function InvestorDealsWorkspace({ embedded = false, zone = null }) {
   const known = zone === 'pipeline' || zone === 'screening' || zone === 'commit' || zone === 'closing';
-  const shows = (section) => !known || zone === section;
   const navigate = useNavigate();
   const [state, setState] = useState({ deals: [], invitations: [] });
   const [loading, setLoading] = useState(true);
