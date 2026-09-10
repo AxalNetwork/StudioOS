@@ -168,8 +168,8 @@ const PROFILES = {
     canvas: /^Pages · Investor (Deals|Fund|Network|Portfolio|Research)\.dc\.html$/,
     pages: ['frontend/src/pages/investor', 'frontend/src/workspaces/investor', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/investorZoneActions.js',
-    zones: 17,
-    mounted: 17,
+    zones: 18,
+    mounted: 18,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.investor },
     // Fund, Portfolio and Deals' pipeline. Every other canvas route, with why
     // it is not here yet:
@@ -184,19 +184,27 @@ const PROFILES = {
       // AND THE EASY VERSION WOULD SHIP FOUR FALSE SENTENCES. Every "nothing
       // is stored" note these zones would need was checked against the schema
       // and is wrong: `ic_decisions` and `ic_votes` exist and `api.icList` is
-      // investor-callable (though it returns every decision in the system
-      // unscoped, which is its own problem); `dd_findings` carries a severity
+      // investor-callable (scoped by `icDecisionScope` since migration 219 —
+      // see the correction below); `dd_findings` carries a severity
       // enum through `critical`; `api.dealDocuments(id)` is a method; and
       // `pass_reason` is a stored, CHECKed taxonomy the pipeline zone now
       // reads. A deferral that says so is worth more than a row that lies.
       //
-      // `deals/screening` IS OFF THIS LIST NOW — canvas ID2 did the body work
-      // the note above called for, and the store it found was larger than the
-      // deferral assumed: `score_snapshots` carries six dimensions,
-      // `admin_review_status` and `anomaly_flags`, so all four of its chips
-      // are live keys rather than reasons. Commit and Closing stay for exactly
-      // the stated cause until ID3 and ID4 build their lists.
-      'deals/commit', 'deals/closing',
+      // `deals/screening` AND `deals/commit` ARE OFF THIS LIST NOW — ID2 and
+      // ID3 did the body work the note above called for, and in both cases the
+      // store was larger than the deferral assumed. `score_snapshots` carries
+      // six dimensions, `admin_review_status` and `anomaly_flags`;
+      // `ic_decisions`/`ic_votes` carry a tally, a stage and a rationale per
+      // vote, so Commit gets two live keys (`This deal`, `All decisions`) and
+      // two honest `unbuilt` reasons rather than four.
+      //
+      // AND ONE LINE OF THE NOTE ABOVE HAS GONE STALE, which is worth saying
+      // rather than quietly deleting: it says `api.icList` "returns every
+      // decision in the system unscoped". Migration 219 and `icDecisionScope`
+      // closed that (task #106) — the predicate is now in the WHERE clause of
+      // every `ic_decisions` query, read and write. A deferral that has itself
+      // gone out of date is the same defect it was written to prevent.
+      'deals/closing',
     ],
     // `Call 3` names one specific stored record rather than welding a count
     // onto a filter, so `{n}` is not its repair and founder's `/\b(14|2026)\b/`

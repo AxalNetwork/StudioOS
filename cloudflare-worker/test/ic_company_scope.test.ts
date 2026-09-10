@@ -236,6 +236,11 @@ const OUTSIDER_MATRIX: Array<{
     body: { vote: 'no', rationale: 'from outside the firm' },
     why: 'the write that was open longest — a vote into another committee\'s tally',
   },
+  {
+    route: '/commit-room', method: 'GET', path: '/commit-room', expect: 200,
+    why: 'the widest read in the file — every decision WITH its votes and every '
+      + 'rationale, in one response, so an unscoped version leaks more than /:uid does',
+  },
 ];
 
 for (const row of OUTSIDER_MATRIX) {
@@ -244,6 +249,20 @@ for (const row of OUTSIDER_MATRIX) {
     assert.equal(r.status, row.expect);
     if (row.method === 'GET' && row.path === '/') {
       assert.deepEqual(uids(r.body), [], 'the list must be empty for a firm with no decisions');
+    }
+    // 200 IS NOT THE ASSERTION FOR THIS ONE. `/commit-room` answers every
+    // caller who holds the licence — there is no uid to 404 on — so the refusal
+    // has to be read out of the BODY: no decision, no vote and no rationale
+    // belonging to firm A may appear in it. An unscoped version would return
+    // 200 here too, and only this check would notice.
+    if (row.path === '/commit-room') {
+      assert.deepEqual((r.body?.decisions?.rows || []).map((d: any) => d.uid), [],
+        'another firm\'s decision reached the commit room');
+      assert.equal(r.body?.current, null, 'another firm\'s decision was named as current');
+      assert.equal(r.body?.rationale?.total, 0, 'another firm\'s votes were counted');
+      const blob = JSON.stringify(r.body);
+      assert.ok(!blob.includes(DEC_A), 'firm A\'s decision uid is in the response');
+      assert.ok(!blob.includes('Firm A memo'), 'firm A\'s memo is in the response');
     }
   });
 
@@ -256,9 +275,10 @@ for (const row of OUTSIDER_MATRIX) {
 }
 
 test('every endpoint under /api/ic is in the outsider matrix', () => {
-  // Read from the router itself. A sixth endpoint added to ic.ts without a row
+  // Read from the router itself. A seventh endpoint added to ic.ts without a row
   // above fails here rather than shipping unasserted — which is exactly how the
-  // vote endpoint came to be the least-guarded of the five.
+  // vote endpoint came to be the least-guarded of the five, and exactly what
+  // caught `GET /commit-room` on the day it was written.
   const declared = new Set(
     (ic as any).routes
       .filter((r: any) => r.method !== 'ALL')
@@ -269,7 +289,7 @@ test('every endpoint under /api/ic is in the outsider matrix', () => {
     [...declared].filter((k) => !covered.has(k as string)).sort(), [],
     'an /api/ic endpoint has no outsider assertion',
   );
-  assert.equal(covered.size, 5, 'the matrix itself must not shrink silently');
+  assert.equal(covered.size, 6, 'the matrix itself must not shrink silently');
 });
 
 // ---------------------------------------------------------------------------

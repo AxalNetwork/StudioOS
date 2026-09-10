@@ -20,6 +20,7 @@ const InvestorDealsWorkspace = lazy(() => import('../../pages/investor/InvestorD
 const ZONES = {
   pipeline: lazy(() => import('../../pages/investor/deals/PipelineZone')),
   screening: lazy(() => import('../../pages/investor/deals/ScreeningZone')),
+  commit: lazy(() => import('../../pages/investor/deals/CommitZone')),
 };
 
 /**
@@ -83,7 +84,11 @@ export default function InvestorDealsRoutes() {
     // rather than the artboard. ID2 is a desk over every scored deal, its
     // flags and the fund's pass memory.
     screening: 'Every deal that has been scored, what the rubric said, and every pass the fund has recorded.',
-    commit: 'What the committee decided, and what the decision was based on.',
+    // WAS "what the committee decided, and what the decision was based on",
+    // over a panel that showed three deal columns and no vote at all. ID3
+    // is the ledger: every vote with the reason its author wrote.
+    commit: 'Every vote on the decision, with the reason its author wrote beside it. '
+      + 'A tally without reasons is not a record a fund can defend.',
     closing: 'Signed terms, wired capital, and what is still outstanding.',
   };
 

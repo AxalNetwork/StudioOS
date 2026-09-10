@@ -242,6 +242,13 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Pass reasons', key: 'passes' },
   ],
 
+  'deals/commit': [
+    { canvas: 'This deal', key: 'current' },
+    { canvas: 'All decisions', key: 'decisions' },
+    { canvas: 'Conditions', unbuilt: 'a condition is not a stored record; ic_decisions carries a memo and a free-text terms blob, and neither is something a later stage could block on' },
+    { canvas: 'Minutes', unbuilt: 'no minutes are stored — ic_meetings carries an agenda, which is written before the room rather than after it' },
+  ],
+
   'deals/pipeline': [
     { canvas: 'All stages', key: 'all' },
     { canvas: 'Mine', unbuilt: ALREADY_MINE },

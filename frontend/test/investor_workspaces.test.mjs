@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { routeBlock } from './_routes.mjs';
+import { codeOnly } from './_codeOnly.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const app = read('frontend/src/App.jsx');
@@ -140,7 +141,30 @@ test('investor Deals implements the I3 hierarchy with live sources', () => {
   assert.match(deals, /api\.respondDealInvitation/);
   assert.doesNotMatch(deals, /api\.pipelineActive\(\)/, 'investors must not consume the studio-wide pipeline source');
   assert.match(deals, /committed > 0[\s\S]{0,80}'commit'/);
-  assert.match(deals, /Total committed to deal/);
+  // WAS `assert.match(deals, /Total committed to deal/)` — the label on the
+  // three-field panel canvas ID3 replaced. What the assertion is FOR is that
+  // committed capital is a LIVE figure this product reads and shows, and both
+  // halves survive the move; they just live in two different files now.
+  //
+  //   read  — the line above: `committed > 0` is still what separates Commit
+  //           from Diligence, in this workspace.
+  //   shown — `DealRoomPage`, which draws it against the target with a
+  //           percentage and owns the figure.
+  //
+  // The Commit zone deliberately does NOT restate it. Its subject is the
+  // committee — votes and the reasons behind them — and a second copy of a
+  // money figure under a vote ledger is a number that can drift from the one
+  // that owns it. So the zone links to the deal room instead, and this asks
+  // for exactly that: the figure has a home, and the zone reaches it rather
+  // than reprinting it.
+  const DEAL_ROOM = read('frontend/src/pages/DealRoomPage.jsx');
+  assert.match(DEAL_ROOM, /capital_committed/,
+    'the deal room stopped showing committed capital, so nothing shows it');
+  const COMMIT_ZONE = read('frontend/src/pages/investor/deals/CommitZone.jsx');
+  assert.match(COMMIT_ZONE, /`\/deals\/\$\{id\}`/,
+    'the commit zone no longer reaches the deal room that owns the figure');
+  assert.ok(!codeOnly(COMMIT_ZONE).includes('Total committed'),
+    'the commit zone reprints a money figure the deal room owns');
 });
 
 test('investor Deals does not ship illustrative canvas data as live data', () => {

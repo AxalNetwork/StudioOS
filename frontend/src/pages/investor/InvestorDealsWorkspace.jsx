@@ -185,9 +185,10 @@ export default function InvestorDealsWorkspace({ embedded = false, zone = null }
     () => Object.fromEntries(STAGES.map((stage) => [stage.id, funnel.filter((deal) => deal.stage === stage.id)])),
     [funnel],
   );
-  const screeningRows = [...grouped.screening, ...grouped.diligence];
-  const screening = screeningRows[0] || null;
-  const commit = grouped.commit[0] || null;
+  // ONE PANEL LEFT. `screening` and `commit` were the one-record panels ID2 and
+  // ID3 replaced with their artboards; their bindings went with them. The
+  // unused-import check does not see plain locals (task #156), so a dead
+  // `const` here is invisible to CI — removed by hand rather than left.
   const closing = grouped.closing[0] || null;
   const invited = state.invitations.filter((item) => item.status === 'invited');
 
@@ -259,25 +260,20 @@ export default function InvestorDealsWorkspace({ embedded = false, zone = null }
             files declaring `deals/pipeline` means two chip rows and two export
             buttons for one route, and whichever rendered second would have
             been the one nobody maintained. */}
-        {(shows('screening') || shows('commit') || shows('closing')) && <div className="investor-deals-decisions">
-          {/* THE SCREENING SECTION MOVED, IT DID NOT GO AWAY. Canvas ID2 draws
-              `/deals/screening` as a desk over the whole score history —
-              `pages/investor/deals/ScreeningZone.jsx` — rather than the
-              one-record panel that stood here. Keeping the panel as well would
-              mount the same zone row twice, which is what
-              `profile_zone_actions.test.mjs` catches. */}
-          {(shows('commit') || shows('closing')) && <div className="investor-deals-stack">
-            {shows('commit') && <section className="investor-deals-card">
-              <SectionHeading id="deals-commit" title="Commit room" detail={commit?.name} actions={investorZoneActions('deals/commit')} />
-              {commit ? (
-                <dl className="investor-facts compact">
-                  <div><dt>Deal status</dt><dd>{commit.raw.status || 'Not recorded'}</dd></div>
-                  <div><dt>Total committed to deal</dt><dd>{commit.committed || 'Not recorded'}</dd></div>
-                  <div><dt>Target</dt><dd>{commit.target || 'Not recorded'}</dd></div>
-                </dl>
-              ) : <Empty>No deals are currently at commit.</Empty>}
-            </section>}
-            {shows('closing') && <section className="investor-deals-card">
+        {shows('closing') && <div className="investor-deals-decisions">
+          {/* THE SCREENING AND COMMIT SECTIONS MOVED, THEY DID NOT GO AWAY.
+              Canvas ID2 draws `/deals/screening` as a desk over the whole score
+              history and ID3 draws `/deals/commit` as the vote ledger over
+              `ic_decisions`/`ic_votes` — `pages/investor/deals/ScreeningZone.jsx`
+              and `CommitZone.jsx` — rather than the one-record panels that stood
+              here. The commit panel in particular showed three DEAL columns
+              (status, committed, target) under a heading that said "Commit
+              room", and never read the committee record at all.
+
+              Keeping either panel as well would mount the same zone row twice,
+              which is what `profile_zone_actions.test.mjs` catches. */}
+          <div className="investor-deals-stack">
+            <section className="investor-deals-card">
               <SectionHeading id="deals-closing" title="Closing" detail={closing?.name} actions={investorZoneActions('deals/closing')} />
               {closing ? (
                 <div className="investor-closing-list">
@@ -287,8 +283,8 @@ export default function InvestorDealsWorkspace({ embedded = false, zone = null }
                   <button type="button" onClick={() => navigate(`/deals/${closing.id}`)}>Open closing details</button>
                 </div>
               ) : <Empty>No deals are currently closing.</Empty>}
-            </section>}
-          </div>}
+            </section>
+          </div>
         </div>}
       </div>
 
