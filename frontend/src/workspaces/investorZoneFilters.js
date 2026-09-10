@@ -225,6 +225,23 @@ export const INVESTOR_ZONE_FILTERS = {
   // `Stale` reuses `slaBand` from `lib/dealFlow.js` rather than picking a
   // number here: the thresholds are the canvas's own SLA presets, and one
   // definition of "sat too long" for the whole product beats two.
+  // ── Screening ────────────────────────────────────────────────────────────
+  // FOUR LIVE CHIPS OUT OF FOUR, and the reason this row could be written at
+  // all is that the store was there the whole time. This zone was deliberately
+  // excluded while it rendered a one-record panel — filtering one record
+  // narrows nothing — and canvas ID2 is the body work that deferral named.
+  //
+  // Each key narrows a real collection: `scored` and `flags` come from
+  // `score_snapshots` (six dimensions, `admin_review_status`, `anomaly_flags`),
+  // `rubric` shows the six dimensions the scorer writes, and `passes` is the
+  // CHECKed pass taxonomy `GET /api/deals/pass-analytics` already served.
+  'deals/screening': [
+    { canvas: 'Scored', key: 'scored' },
+    { canvas: 'Rubric', key: 'rubric' },
+    { canvas: 'Red flags', key: 'flags' },
+    { canvas: 'Pass reasons', key: 'passes' },
+  ],
+
   'deals/pipeline': [
     { canvas: 'All stages', key: 'all' },
     { canvas: 'Mine', unbuilt: ALREADY_MINE },

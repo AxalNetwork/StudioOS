@@ -61,9 +61,21 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Save view', unbuilt: 'filters reset between visits; no saved view is stored' },
     { label: 'Export', kind: 'export' },
   ],
+  // TWO OF THESE REASONS WERE FALSE, and canvas ID2 is what found it. They
+  // said no scoring run and no rubric were stored. `score_snapshots` is a
+  // stored scoring run with SIX dimensions — market, team, product, capital,
+  // fit, distribution — each with its sub-scores and a total, plus
+  // `anomaly_flags` and `admin_review_status`, which is a red-flag store under
+  // another name. `POST /api/scoring/score` writes one and locks it.
+  //
+  // What is actually missing is narrower and is now said accurately: a run is
+  // started against ONE project and nothing batches it, and the WEIGHTS are
+  // fixed in code with no per-firm store to edit. An unbuilt reason that
+  // overstates the gap is as misleading as a control that does nothing — it
+  // tells the next reader not to look.
   'deals/screening': [
-    { label: 'New batch run', unbuilt: 'no scoring run is stored — this desk reads the deal record' },
-    { label: 'Edit rubric', unbuilt: 'no rubric is stored' },
+    { label: 'New batch run', unbuilt: 'scoring runs are stored, but a run is started against one project — nothing batches them' },
+    { label: 'Edit rubric', unbuilt: 'the six dimensions are real and their weights are fixed in code; no per-firm rubric is stored to edit' },
     { label: 'Export', kind: 'export' },
   ],
   'deals/commit': [

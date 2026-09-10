@@ -2213,6 +2213,66 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  'deals/screening': {
+    // ID2's band: "Drafted against the six-dimension rubric with page
+    // references back into the deck, so every claim in the memo can be
+    // checked. Where the deck is silent on a dimension the memo says so
+    // rather than scoring it zero."
+    //
+    // The page references are the half this product cannot honour — nothing
+    // stores which page of a deck a sub-score came from — so the instruction
+    // asks for the dimension totals as the citation instead, and forbids the
+    // invention of a page number. The second clause is the one that matters
+    // most: a model handed six numbers will fill a gap with a zero, and a
+    // zero on a dimension nobody scored is a verdict the record never gave.
+    instruction: [
+      'Draft one screening memo for the highest-scoring deal below, organised by the six rubric dimensions in the order given.',
+      'Cite the dimension total for every claim. Never cite a page, a slide or a document — nothing records which part of a deck a sub-score came from, and a page reference here would be invented.',
+      'Where a dimension has no recorded total, say the rubric is silent on it. Do NOT score it zero: a zero is a verdict, and nobody gave it.',
+      'Where the snapshot is flagged for review, open with that and say what kind of flag it is — a flag is the scorer disagreeing with itself, never a finding about the company.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT role FROM users WHERE id = ?')
+        .bind(userId).first<{ role: string | null }>();
+      const role = String(me?.role || '');
+      if (role !== 'admin' && role !== 'partner' && role !== 'investor') return [];
+      // The newest OFFICIAL snapshot per project. A sandbox run is a rehearsal
+      // and must not reach a memo — see the /deals/screening docblock.
+      const rows = await c.env.DB.prepare(
+        `SELECT p.name AS company, p.sector AS sector,
+                s.total_score, s.tier, s.admin_review_status, s.anomaly_flags,
+                s.market_total, s.team_total, s.product_total,
+                s.capital_total, s.fit_total, s.distribution_total
+           FROM deals d
+           JOIN projects p ON p.id = d.project_id
+           JOIN (SELECT project_id, MAX(created_at) AS created_at, total_score, tier,
+                        admin_review_status, anomaly_flags,
+                        market_total, team_total, product_total,
+                        capital_total, fit_total, distribution_total
+                   FROM score_snapshots WHERE is_sandbox = 0 GROUP BY project_id) s
+                ON s.project_id = d.project_id
+          WHERE d.status <> 'rejected' AND p.deleted_at IS NULL
+          ORDER BY s.total_score DESC LIMIT 12`
+      ).bind().all<Record<string, unknown>>();
+      const DIMS = ['market', 'team', 'product', 'capital', 'fit', 'distribution'];
+      return (rows.results || []).map((r) => {
+        const dims = DIMS.map((d) => {
+          const v = r[`${d}_total`];
+          return `${d} ${v === null || v === undefined ? 'NOT SCORED' : v}`;
+        }).join(', ');
+        let flagged = '';
+        if (r.admin_review_status === 'flagged') {
+          let parsed: Array<{ type?: string; severity?: string }> = [];
+          try { parsed = JSON.parse(String(r.anomaly_flags || '[]')); } catch { parsed = []; }
+          flagged = `; FLAGGED FOR REVIEW (${(Array.isArray(parsed) ? parsed : [])
+            .map((f) => `${f?.type || 'unnamed'}/${f?.severity || 'unrecorded'}`).join(', ') || 'flags not readable'})`;
+        }
+        return `${r.company || 'company not recorded'} — ${r.sector || 'sector not recorded'}; `
+          + `total ${r.total_score ?? 'not recorded'}, tier ${r.tier || 'not recorded'}; ${dims}${flagged}`;
+      });
+    },
+  },
+
   // ── FOUNDER SURFACES ────────────────────────────────────────────────────
   //
   // The first non-partner entries in this table. Everything above scopes on

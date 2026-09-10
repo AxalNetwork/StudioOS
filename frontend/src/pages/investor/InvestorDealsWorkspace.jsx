@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  AlertTriangle, ArrowUpRight, CheckCircle2, Circle, Database,
+  AlertTriangle, ArrowUpRight, CheckCircle2, Circle,
   Loader2, RefreshCw, ThumbsDown, ThumbsUp,
 } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -260,23 +260,12 @@ export default function InvestorDealsWorkspace({ embedded = false, zone = null }
             buttons for one route, and whichever rendered second would have
             been the one nobody maintained. */}
         {(shows('screening') || shows('commit') || shows('closing')) && <div className="investor-deals-decisions">
-          {shows('screening') && <section className="investor-deals-card investor-screening">
-            <SectionHeading id="deals-screening" title="Screening desk" detail={screening?.name} actions={investorZoneActions('deals/screening', { view: { header: ['Deal', 'Stage', 'Sector', 'Target', 'Committed'], rows: screeningRows, cells: (d) => [d.name, d.stage, d.sector, d.target, d.committed] } })} />
-            {screening ? (
-              <>
-                <div className="investor-provenance"><Database size={13} /><strong>{screening.source}</strong><span>Only fields shared with you are shown.</span></div>
-                <dl className="investor-facts">
-                  <div><dt>Stage</dt><dd>{STAGES.find((stage) => stage.id === screening.stage)?.label}</dd></div>
-                  <div><dt>Sector</dt><dd>{screening.sector || 'Not recorded'}</dd></div>
-                  <div><dt>Target</dt><dd>{screening.target || 'Not recorded'}</dd></div>
-                </dl>
-                <button type="button" className="investor-primary-action" onClick={() => navigate(`/deals/${screening.id}`)}>
-                  Open deal room <ArrowUpRight size={14} />
-                </button>
-              </>
-            ) : <Empty>No deals are currently in screening or diligence.</Empty>}
-          </section>}
-
+          {/* THE SCREENING SECTION MOVED, IT DID NOT GO AWAY. Canvas ID2 draws
+              `/deals/screening` as a desk over the whole score history —
+              `pages/investor/deals/ScreeningZone.jsx` — rather than the
+              one-record panel that stood here. Keeping the panel as well would
+              mount the same zone row twice, which is what
+              `profile_zone_actions.test.mjs` catches. */}
           {(shows('commit') || shows('closing')) && <div className="investor-deals-stack">
             {shows('commit') && <section className="investor-deals-card">
               <SectionHeading id="deals-commit" title="Commit room" detail={commit?.name} actions={investorZoneActions('deals/commit')} />
