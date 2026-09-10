@@ -43,9 +43,14 @@ test('the Security row sits between Support and Settings, and /admin/security is
   assert.match(line, /hqOnly\(/, 'an admin without the elevation gets the notice');
 });
 
-test('the page reads one endpoint and writes through one, and nothing else', () => {
+test('the page reads two endpoints and writes through one, and nothing else', () => {
+  // WAS one read. Canvas H7's feed is a second: it is filtered server-side
+  // over a merged page of sixty rows from four stores, so it cannot ride on
+  // the overview payload and cannot be filtered in the browser. The point of
+  // this assertion is unchanged — the page reaches for NOTHING else, and a
+  // page that starts calling a fifth endpoint has grown a second job.
   const calls = [...new Set([...PAGE.matchAll(/api\.(\w+)\(/g)].map((m) => m[1]))].sort();
-  assert.deepEqual(calls, ['hqSecurityForceReauth', 'hqSecurityOverview']);
+  assert.deepEqual(calls, ['hqGovernance', 'hqSecurityForceReauth', 'hqSecurityOverview']);
 });
 
 test('the four zones with no store render Not recorded in their own zone, from the payload\'s reason', () => {
@@ -87,7 +92,15 @@ test('the deletion clock is statutory, computed server-side, and unknown when un
 
 test('every read is super-admin only and the write carries the impersonation bar plus a stored reason', () => {
   assert.doesNotMatch(ROUTE, /\brequireAdmin\b/);
-  assert.equal((ROUTE.match(/await requireSuperAdmin\(c\)/g) || []).length, 2, 'both handlers gate on the elevation');
+  // WAS a hardcoded 2. That number is not the rule — the rule is that EVERY
+  // handler in this file gates on the elevation — and a literal count fails
+  // the moment a third handler is added correctly, which is what happened
+  // when /governance landed. Counting handlers and gates and comparing them
+  // says the actual thing and needs no edit next time.
+  const handlers = ROUTE.match(/^r\.(get|post|put|patch|delete)\(/gm) || [];
+  const gates = ROUTE.match(/await requireSuperAdmin\(c\)/g) || [];
+  assert.ok(handlers.length >= 3, `expected at least three handlers, found ${handlers.length}`);
+  assert.equal(gates.length, handlers.length, 'every handler gates on the elevation');
   const write = ROUTE.slice(ROUTE.indexOf("r.post('/force-reauth'"));
   assert.ok(write.indexOf("requireFactor(c, 'totp')") < write.indexOf('requireStepUp(c)'), 'factor before step-up');
   assert.ok(write.indexOf('requireStepUp(c)') < write.indexOf('requireSuperAdmin(c)'), 'step-up before the elevation');
