@@ -55,7 +55,16 @@ type SupportRow = {
 function isoDate(v: unknown): string | null {
   if (v == null || v === '') return null;
   const s = String(v).slice(0, 10);
-  return /^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(Date.parse(s)) ? s : null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+
+  const [yStr, mStr, dStr] = s.split('-');
+  const y = Number(yStr);
+  const m = Number(mStr);
+  const d = Number(dStr);
+  if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) return null;
+
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() + 1 === m && dt.getUTCDate() === d ? s : null;
 }
 
 /**
@@ -202,10 +211,11 @@ r.post('/', async (c) => {
     if (!summary) return c.json({ detail: 'summary required' }, 400);
 
     const kind = SUPPORT_KINDS.has(String(body.kind)) ? String(body.kind) : 'other';
-    const state = SUPPORT_STATES.has(String(body.state)) ? String(body.state) : 'promised';
-    if (state === 'withdrawn') {
-      return c.json({ detail: 'an entry cannot be logged as already withdrawn' }, 400);
+    const requestedState = body.state == null ? null : String(body.state);
+    if (requestedState != null && requestedState !== 'promised') {
+      return c.json({ detail: 'new entries must start in promised state' }, 400);
     }
+    const state = 'promised';
 
     const proj = await c.env.DB.prepare(
       'SELECT id FROM projects WHERE uid = ? AND deleted_at IS NULL',
