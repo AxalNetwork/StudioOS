@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 109 canonical canvases at `design/canvases/`, listed
-129 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 110 canonical canvases at `design/canvases/`, listed
+130 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -167,12 +167,13 @@ it, where in their nav, and how do they get there.*
 | PartnerRail | — | — (not routed) | Embedded rail | Not reachable yet | UPGRADE | Low |
 | System Sheet | — | — (not routed) | Reference (no surface) | Not reachable yet | NEW | Low |
 
-## Shared (multi-workspace) — 15 canvases
+## Shared (multi-workspace) — 16 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | Account | `/account` · `/account/:section` · `/settings` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Auth and Onboarding | `/login` · `/register` · `/onboarding/chat` · `/onboarding/persona` · `/onboarding/founder\|investor\|partner` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Calendar | `/calendar` | — (no nav entry) | Full page | Deep link / in-page action | LIVE (built 2026-09-10) | Medium |
 | Emails | — | — (not routed) | Templates (no surface) | Not reachable yet | UPGRADE | Low |
 | Events | `/events` · `/events/:slug` · `/my/events` · `/events/new` · `/events/:id/edit` · `/events/:id/manage` · `/invite/:token` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Help Center | `/help` · `/help/tickets` · `/help/tickets/:id` · `/help/admin/*` · `/help/:id` · `/docs` · `/docs/admin/*` · `/support` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
@@ -211,7 +212,7 @@ it, where in their nav, and how do they get there.*
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
 | High | 67 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 33 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| Medium | 34 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 29 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts

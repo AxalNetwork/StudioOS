@@ -413,3 +413,55 @@ governs **`/docs`** — not `/help`, which is `TicketsPage`. D39 renamed the men
 label "Support" to "Help Center" and moved `/tickets` to `/help`; the component
 was never touched. Anyone reading that design at `/help` is reading it at the
 wrong address.
+
+## Landed 2026-09-10 — Calendar, and why it took three asks
+
+`Calendar.dc.html` governs **`/calendar`** on every licence. It is here because
+the owner asked for it more than once — *"I told you many times to integrate
+the new Calendar page … which was never done"* — and the reason it kept not
+happening is recorded in step 1 of the pipeline above: **the canvas was never
+landed.** Three requests each pointed at a `claude.ai/code/artifact` link, and
+every one of them was worked from the link or not at all, so there was nothing
+in the repository to compare the page against and no file for a guard to parse.
+
+**It is a bundled export, which is why it did not decode like the others.** The
+artifact ships as a loader plus a gzipped `__bundler/manifest`: sixteen assets,
+fourteen of them Inter `woff2` faces, and the design itself as a 34 KB
+`__bundler/template` string. Decompressed, that template is byte-for-byte the
+shape every other file in this folder has — `<x-dc>`, a `helmet` with
+`design_doc_mode: canvas`, and one `text/x-dc` script. The published bundle also
+appends a "Made with Claude Design" branding widget, which is host chrome rather
+than canvas source and is not in the committed file.
+
+| Canvas | Governs | Grade | Still outstanding |
+| --- | --- | --- | --- |
+| `Calendar.dc.html` | `/calendar`, all five licences | UPGRADE — **built 2026-09-10** | Six boards (C1–C6) are **states of one page**, not per-profile designs; the only role variation drawn is whether the viewer may create an IC meeting, which matches `canScheduleIc` exactly. All six states are now in `CalendarPage.jsx` and parsed back out of this file by `frontend/test/calendar_page_c1.test.mjs`. **Two deliberate departures, both recorded there:** the page draws six kinds where the canvas draws five (see below), and it withholds the push control on a Calendly event, which the canvas draws and `PUSHABLE_KINDS` refuses with a 400. |
+
+**The canvas caught a bug that was actually there.** It says its kind list
+exists *"so `partner_office_hour` cannot lose its chip again"* — and on
+`CalendarPage.jsx:366` it has: the filter row lists `advisor_booking`,
+`ic_meeting`, `founder_checkin` and `calendly_event`, and office hours are
+reachable only under **All**. The kinds are hardcoded in three separate places
+in that file (`KIND_LABEL`, `KIND_COLOR`, the filter array), which is how one of
+them drifted.
+
+**And one claim in it is wrong about this repository**, which is worth writing
+down because the canvas states it as fact: *"expert_booking is in the type union
+and produced by nothing, so it is absent here."* It **is** produced —
+`services/wellbeing/bookings.ts:267` writes a `calendar_events` row on a
+confirmed booking. It never arrives, but for a different reason: that INSERT
+names four columns the table does not have and omits three `NOT NULL` ones, so
+it throws.
+
+**So the built page draws six kinds, not five** — migration 235 gave
+`calendar_events` the four columns those writers name, and with the row
+arriving the kind is real, so it gets a chip, a legend row and a dot. Its mark
+is derived in the canvas's own idiom rather than borrowed: a distinct shape
+first (`0 50% 0 50%`, against the drawn circle / square / pill / hard square /
+teardrop) and one low-saturation hue second (`#be123c`, lifting to `#fda4af`
+in dark), asserted by the guard to reuse neither a drawn shape, nor a drawn
+hue, nor the violet accent. The guard also re-reads the canvas's own sentence
+about `expert_booking`, so if this file is ever re-exported saying something
+different, the note above stops being true out loud instead of quietly.
+
+See the `ROUTE_MAP.md` row for the rest.

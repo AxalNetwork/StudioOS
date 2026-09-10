@@ -243,37 +243,46 @@ export async function mirrorBookingToCalendar(env: Env, bookingId: number): Prom
       b.founder_email ? { email: b.founder_email, name: b.founder_name, role: 'founder' } : null,
       b.expert_email ? { email: b.expert_email, name: b.expert_name, role: 'expert' } : null,
     ].filter(Boolean));
-    // calendar_events table shape mirrors what services/calendar.ts emits.
-    await env.DB.prepare(
-      `CREATE TABLE IF NOT EXISTS calendar_events (
-         id INTEGER PRIMARY KEY AUTOINCREMENT,
-         uid TEXT UNIQUE NOT NULL,
-         kind TEXT NOT NULL,
-         source_id INTEGER NOT NULL,
-         source_uid TEXT NOT NULL,
-         title TEXT NOT NULL,
-         start_at TEXT NOT NULL,
-         end_at TEXT NOT NULL,
-         status TEXT NOT NULL DEFAULT 'confirmed',
-         location_kind TEXT,
-         location_uri TEXT,
-         organizer_email TEXT,
-         attendees_json TEXT,
-         notes TEXT,
-         created_at TEXT NOT NULL DEFAULT (datetime('now'))
-       )`,
-    ).run();
+    // THIS WRITE THREW ON EVERY CONFIRMED BOOKING UNTIL MIGRATION 235.
+    //
+    // It used to declare its own `calendar_events` first — a shape mirroring
+    // the `CalendarEvent` INTERFACE in services/calendar.ts, which is a
+    // TypeScript type and not this table. The table has existed since
+    // migration 018 as the Calendly projection, so that declaration was a
+    // no-op under its own IF NOT EXISTS and the INSERT below then named four
+    // columns that did not exist (`kind`, `source_id`, `source_uid`,
+    // `attendees_json`) while omitting three that did and are NOT NULL
+    // (`user_id`, `source`, `external_uri`). A founder paid for a session and
+    // it never reached their calendar or their .ics feed.
+    //
+    // Migration 235 adds the four. The three NOT NULL columns are supplied
+    // here: `user_id` is the booker (`expert_bookings.user_id` — NOT
+    // `founder_user_id`, which this row does not have; the query aliases only
+    // the booker's email and name), because this table is read per-user and a
+    // row nobody owns is a row nobody sees; `source` is 'axal' rather than
+    // 'calendly', which is what keeps this row out of `calendlyEvents()`; and
+    // `external_uri` carries the same uid the row is keyed on, since there is
+    // no external provider URI for a session booked here.
+    //
+    // ONE ROW, FOR THE BOOKER. `calendar_events` is keyed to a single
+    // `user_id`, so the expert does not get a copy on their own /calendar —
+    // a second row would need its own uid scheme, and `uid` is UNIQUE. The
+    // Google/Outlook sync below already writes to both attendees' external
+    // calendars, so this is a gap in the in-app view only. Stated rather than
+    // silently chosen.
     await env.DB.prepare(
       `INSERT INTO calendar_events
-         (uid, kind, source_id, source_uid, title, start_at, end_at, status,
-          location_kind, location_uri, organizer_email, attendees_json, notes)
-       VALUES (?, 'expert_booking', ?, ?, ?, ?, ?, 'confirmed', 'video', ?, ?, ?, ?)
+         (uid, user_id, source, external_uri, kind, source_id, source_uid, title,
+          start_at, end_at, status, location_kind, location_uri, organizer_email,
+          attendees_json, notes)
+       VALUES (?, ?, 'axal', ?, 'expert_booking', ?, ?, ?, ?, ?, 'confirmed', 'video', ?, ?, ?, ?)
        ON CONFLICT(uid) DO UPDATE SET
          title = excluded.title, start_at = excluded.start_at, end_at = excluded.end_at,
          status = excluded.status, location_uri = excluded.location_uri,
          attendees_json = excluded.attendees_json, notes = excluded.notes`,
     ).bind(
-      `expert_booking:${b.uid}`, b.id, b.uid, title, startIso, endIso,
+      `expert_booking:${b.uid}`, b.user_id, `axal:expert_booking:${b.uid}`,
+      b.id, b.uid, title, startIso, endIso,
       meetLink, b.expert_email || null, attendees, b.booker_note || null,
     ).run();
 

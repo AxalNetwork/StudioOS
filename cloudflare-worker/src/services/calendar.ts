@@ -400,6 +400,13 @@ export interface CalendarEvent {
   notes: string | null;
   deal_id?: number | null;
   project_id?: number | null;
+  /**
+   * Providers this exact event has already been copied to, from
+   * `calendar_sync_records`. Only `GET /calendar/events` fills it in
+   * (`attachPushRecords`); the readers above do not, because .ics export and
+   * the push lookup have no use for it and it costs a query.
+   */
+  pushed_to?: string[];
 }
 
 function addMinutes(iso: string, mins: number): string {
@@ -663,24 +670,214 @@ async function calendlyEvents(env: Env, userId: number, isAdmin: boolean,
   }
 }
 
+/**
+ * Rows written straight into `calendar_events` by a feature that owns no
+ * table of its own — today only `expert_booking`, from a confirmed wellbeing
+ * session.
+ *
+ * SEPARATE FROM `calendlyEvents` BECAUSE THE FILTER IS THE POINT. That reader
+ * takes `source = 'calendly'`; these rows carry `source = 'axal'`, so the two
+ * never see each other's rows and neither needs to know the other's kinds.
+ * Reading by `kind` is what makes this generic: a second such feature adds a
+ * `KNOWN_KINDS` entry and nothing here changes.
+ */
+async function directEvents(env: Env, userId: number, isAdmin: boolean,
+                            fromIso: string, toIso: string,
+                            kind: string): Promise<CalendarEvent[]> {
+  try {
+    const where = isAdmin
+      ? "source <> 'calendly' AND kind = ? AND start_at >= ? AND start_at <= ?"
+      : "source <> 'calendly' AND kind = ? AND user_id = ? AND start_at >= ? AND start_at <= ?";
+    const stmt = isAdmin
+      ? env.DB.prepare(`SELECT * FROM calendar_events WHERE ${where}`).bind(kind, fromIso, toIso)
+      : env.DB.prepare(`SELECT * FROM calendar_events WHERE ${where}`).bind(kind, userId, fromIso, toIso);
+    const res = await stmt.all<{
+      id: number; uid: string; kind: string; source_id: number | null; source_uid: string | null;
+      title: string | null; start_at: string; end_at: string; status: string;
+      location_kind: string | null; location_uri: string | null;
+      organizer_email: string | null; attendees_json: string | null; notes: string | null;
+    }>();
+    return (res.results || []).map(r => {
+      let attendees: CalendarEvent['attendees'] = [];
+      // A malformed blob costs the row its attendee list, never the row.
+      try {
+        const parsed = JSON.parse(r.attendees_json || '[]');
+        if (Array.isArray(parsed)) attendees = parsed;
+      } catch { /* keep the empty list */ }
+      return {
+        id: `${r.kind}:${r.source_id ?? r.id}`,
+        kind: r.kind as CalendarEvent['kind'],
+        source_id: r.source_id ?? r.id,
+        source_uid: r.source_uid ?? r.uid,
+        title: r.title || 'Session',
+        start_at: r.start_at,
+        end_at: r.end_at,
+        status: r.status,
+        location_kind: r.location_kind || 'video',
+        location_uri: r.location_uri,
+        organizer_email: r.organizer_email,
+        attendees,
+        notes: r.notes,
+        project_id: null,
+      };
+    });
+  } catch (e) {
+    if (isMissingTableError(e) || isMissingColumnError(e)) return [];
+    throw e;
+  }
+}
+
+/**
+ * EVERY KIND THIS PRODUCT CAN PUT ON A CALENDAR, in one place.
+ *
+ * The default set below used to be a five-element array literal that had to be
+ * kept in step with the `CalendarEvent` union above and with three separate
+ * hardcoded lists on the page. It was not: `partner_office_hour` had no filter
+ * chip on `/calendar`, so office hours were reachable only under "All", and
+ * `expert_booking` was in the union with nothing reading it. Exporting the set
+ * lets the page derive its filters from what the server can actually emit
+ * rather than from a list someone remembered to update.
+ */
+type CalendarReader = (
+  env: Env, userId: number, isAdmin: boolean, fromIso: string, toIso: string,
+) => Promise<CalendarEvent[]>;
+
+/**
+ * EVERY KIND THIS PRODUCT CAN PUT ON A CALENDAR, AND THE READER THAT PRODUCES IT.
+ *
+ * `Record<CalendarEvent['kind'], …>` is the point of the shape: tsc refuses a
+ * union member with no reader and a reader with no union member, so the two
+ * cannot drift. What used to sit here was a five-element array literal kept in
+ * step with the union by hand, alongside three more hardcoded kind lists on
+ * `/calendar`. They were not in step: `partner_office_hour` had no filter chip,
+ * so office hours were reachable only under "All", and `expert_booking` was in
+ * the union with nothing reading it.
+ */
+const READERS: Readonly<Record<CalendarEvent['kind'], CalendarReader>> = {
+  ic_meeting: icEvents,
+  founder_checkin: checkinEvents,
+  advisor_booking: advisorBookingEvents,
+  partner_office_hour: partnerOfficeHourEvents,
+  calendly_event: calendlyEvents,
+  expert_booking: (env, userId, isAdmin, from, to) => directEvents(env, userId, isAdmin, from, to, 'expert_booking'),
+};
+
+export const KNOWN_KINDS = Object.keys(READERS) as readonly CalendarEvent['kind'][];
+
+/** Whether one source answered, so a page can say which of the six did not. */
+export interface CalendarSourceStatus {
+  kind: CalendarEvent['kind'];
+  ok: boolean;
+  error: string | null;
+}
+
+/**
+ * ONE SOURCE FAILING USED TO BLANK THE WHOLE CALENDAR.
+ *
+ * Each reader swallows only "the table is not there yet" and rethrows anything
+ * else, which is right — but the aggregator awaited them in a row with no catch
+ * of its own, so a single unreadable source turned the entire agenda into a 500.
+ * A founder with five working sources saw nothing at all, and nothing on the
+ * page could say which one was at fault.
+ *
+ * This gathers per source instead and reports each one. The two contracts built
+ * on it are deliberately different, because a page and a file want opposite
+ * things from a partial answer:
+ *
+ *   · `fetchUserEventsWithSources` degrades — the agenda renders what loaded and
+ *     names what did not.
+ *   · `fetchUserEvents` rethrows — an .ics feed or a push lookup that quietly
+ *     dropped a source would write a wrong calendar into someone's client, or
+ *     report an event as "not found" when the truth is that its source broke.
+ */
+async function gather(
+  env: Env, userId: number, role: string, fromIso: string, toIso: string,
+  kinds?: string[],
+): Promise<{ events: CalendarEvent[]; sources: CalendarSourceStatus[] }> {
+  const isAdmin = role.toLowerCase() === 'admin';
+  const wanted = new Set<string>(kinds && kinds.length ? kinds : KNOWN_KINDS);
+  const events: CalendarEvent[] = [];
+  const sources: CalendarSourceStatus[] = [];
+  for (const kind of KNOWN_KINDS) {
+    if (!wanted.has(kind)) continue;
+    try {
+      events.push(...await READERS[kind](env, userId, isAdmin, fromIso, toIso));
+      sources.push({ kind, ok: true, error: null });
+    } catch (e) {
+      console.warn('[calendar] source failed', { kind, user_id: userId }, e);
+      sources.push({ kind, ok: false, error: String((e as Error)?.message || e).slice(0, 200) });
+    }
+  }
+  events.sort((a, b) => a.start_at.localeCompare(b.start_at));
+  return { events, sources };
+}
+
+/** The degrading read: whatever loaded, plus which sources answered. */
+export async function fetchUserEventsWithSources(
+  env: Env, userId: number, role: string, fromIso: string, toIso: string,
+  kinds?: string[],
+): Promise<{ events: CalendarEvent[]; sources: CalendarSourceStatus[] }> {
+  return gather(env, userId, role, fromIso, toIso, kinds);
+}
+
+/** The strict read: a source that failed is an error, not a shorter list. */
 export async function fetchUserEvents(
   env: Env, userId: number, role: string, fromIso: string, toIso: string,
   kinds?: string[],
 ): Promise<CalendarEvent[]> {
-  const isAdmin = role.toLowerCase() === 'admin';
-  const wanted = new Set(
-    kinds && kinds.length
-      ? kinds
-      : ['advisor_booking', 'ic_meeting', 'founder_checkin', 'partner_office_hour', 'calendly_event'],
-  );
-  const out: CalendarEvent[] = [];
-  if (wanted.has('advisor_booking')) out.push(...await advisorBookingEvents(env, userId, isAdmin, fromIso, toIso));
-  if (wanted.has('ic_meeting')) out.push(...await icEvents(env, userId, isAdmin, fromIso, toIso));
-  if (wanted.has('founder_checkin')) out.push(...await checkinEvents(env, userId, isAdmin, fromIso, toIso));
-  if (wanted.has('partner_office_hour')) out.push(...await partnerOfficeHourEvents(env, userId, isAdmin, fromIso, toIso));
-  if (wanted.has('calendly_event')) out.push(...await calendlyEvents(env, userId, isAdmin, fromIso, toIso));
-  out.sort((a, b) => a.start_at.localeCompare(b.start_at));
-  return out;
+  const { events, sources } = await gather(env, userId, role, fromIso, toIso, kinds);
+  const failed = sources.find((s) => !s.ok);
+  if (failed) throw new Error(`calendar source ${failed.kind} failed: ${failed.error}`);
+  return events;
+}
+
+/**
+ * Stamp each event with the providers it has already been copied to.
+ *
+ * WHY THE PAGE NEEDS THIS AND COULD NOT HAVE IT. `/calendar` draws a
+ * "Pushed to Google" pill so a reader can tell a copied event from one that
+ * still needs pushing — push is one-time per event, so without the pill the
+ * only way to find out is to press the button again. The record has always
+ * existed in `calendar_sync_records` (written by the sync on every successful
+ * push, keyed on user + provider + source_kind + source_id); nothing ever read
+ * it back out to the feed.
+ *
+ * ONE QUERY FOR THE WHOLE PAGE, not one per event: a user has few of these
+ * rows, so the whole set is read and matched in memory rather than joined per
+ * kind across six readers with six different base tables.
+ *
+ * A row whose `last_error` is set is still counted as pushed — that column
+ * records a CANCEL that the provider refused (migration 181), which means the
+ * copy is, if anything, more certainly still sitting on their calendar.
+ */
+export async function attachPushRecords(
+  env: Env, userId: number, events: CalendarEvent[],
+): Promise<CalendarEvent[]> {
+  if (!events.length) return events;
+  try {
+    const sql = getSQL(env);
+    const rows = await sql`
+      SELECT provider, source_kind, source_id FROM calendar_sync_records WHERE user_id = ${userId}
+    ` as { provider: string; source_kind: string; source_id: number }[];
+    if (!rows.length) return events;
+    const byKey = new Map<string, string[]>();
+    for (const r of rows) {
+      const key = `${r.source_kind}:${r.source_id}`;
+      const list = byKey.get(key);
+      if (list) { if (!list.includes(r.provider)) list.push(r.provider); }
+      else byKey.set(key, [r.provider]);
+    }
+    return events.map((e) => {
+      const hit = byKey.get(`${e.kind}:${e.source_id}`);
+      return hit ? { ...e, pushed_to: hit } : e;
+    });
+  } catch (e) {
+    // The pill is an extra, not the page. If the mapping table cannot be read
+    // the agenda still renders; it just cannot say what was already pushed.
+    if (isMissingTableError(e) || isMissingColumnError(e)) return events;
+    console.warn('[calendar] push records unreadable', { user_id: userId }, e);
+    return events;
+  }
 }
 
 // ===========================================================================

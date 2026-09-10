@@ -198,4 +198,4 @@ rather than merely absent.
 - exploring · Account · My Profile (`/profile`)
 - super_admin · HQ · Settings (`/account`)
 
-**Canvas corpus:** 109. **Workspace assignments:** 129.
+**Canvas corpus:** 110. **Workspace assignments:** 130.

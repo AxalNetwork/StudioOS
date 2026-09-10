@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="8b18d601-1de0-4fe0-94d6-95fffbf1794b"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+  <meta name="design_doc_mode" content="canvas">
+  <style>/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("cd78ed2e-ad85-47cb-97e7-d4d01fb62224") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("a7c5968f-0333-4901-b87c-8c5227e6578a") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("64ecef7b-f794-468c-998a-da9815c688c2") format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("6b0d64ab-be19-48a9-888f-28101240a879") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("83b4192c-c720-4715-828a-dacfabe7d449") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("c727e6fe-e42d-4efd-a376-ec6d7ce5912d") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("c44f2235-e8d2-4144-83e4-4c6a934736cf") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("cd78ed2e-ad85-47cb-97e7-d4d01fb62224") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("a7c5968f-0333-4901-b87c-8c5227e6578a") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("64ecef7b-f794-468c-998a-da9815c688c2") format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("6b0d64ab-be19-48a9-888f-28101240a879") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("83b4192c-c720-4715-828a-dacfabe7d449") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("c727e6fe-e42d-4efd-a376-ec6d7ce5912d") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("c44f2235-e8d2-4144-83e4-4c6a934736cf") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("cd78ed2e-ad85-47cb-97e7-d4d01fb62224") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("a7c5968f-0333-4901-b87c-8c5227e6578a") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("64ecef7b-f794-468c-998a-da9815c688c2") format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("6b0d64ab-be19-48a9-888f-28101240a879") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("83b4192c-c720-4715-828a-dacfabe7d449") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("c727e6fe-e42d-4efd-a376-ec6d7ce5912d") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("c44f2235-e8d2-4144-83e4-4c6a934736cf") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("cd78ed2e-ad85-47cb-97e7-d4d01fb62224") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("a7c5968f-0333-4901-b87c-8c5227e6578a") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("64ecef7b-f794-468c-998a-da9815c688c2") format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("6b0d64ab-be19-48a9-888f-28101240a879") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("83b4192c-c720-4715-828a-dacfabe7d449") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("c727e6fe-e42d-4efd-a376-ec6d7ce5912d") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("c44f2235-e8d2-4144-83e4-4c6a934736cf") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("cd78ed2e-ad85-47cb-97e7-d4d01fb62224") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("a7c5968f-0333-4901-b87c-8c5227e6578a") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("64ecef7b-f794-468c-998a-da9815c688c2") format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("6b0d64ab-be19-48a9-888f-28101240a879") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("83b4192c-c720-4715-828a-dacfabe7d449") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("c727e6fe-e42d-4efd-a376-ec6d7ce5912d") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("c44f2235-e8d2-4144-83e4-4c6a934736cf") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("cd78ed2e-ad85-47cb-97e7-d4d01fb62224") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("a7c5968f-0333-4901-b87c-8c5227e6578a") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("64ecef7b-f794-468c-998a-da9815c688c2") format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("6b0d64ab-be19-48a9-888f-28101240a879") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("83b4192c-c720-4715-828a-dacfabe7d449") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("c727e6fe-e42d-4efd-a376-ec6d7ce5912d") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("c44f2235-e8d2-4144-83e4-4c6a934736cf") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("7f81e8c6-63ee-488d-9a09-0d62101c83d2") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("5fb33889-d925-4405-a522-8dfd6d309a76") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("1133b25d-3868-4279-899a-df1b157cce70") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("378e3787-0612-4619-b309-f1e2c38205ef") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("a9466ba8-9fec-44d2-a7d1-87215a82537b") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fc6dc988-08b6-4bfa-99f5-19c7cc3b8f35") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("7f81e8c6-63ee-488d-9a09-0d62101c83d2") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("5fb33889-d925-4405-a522-8dfd6d309a76") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("1133b25d-3868-4279-899a-df1b157cce70") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("378e3787-0612-4619-b309-f1e2c38205ef") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("a9466ba8-9fec-44d2-a7d1-87215a82537b") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("fc6dc988-08b6-4bfa-99f5-19c7cc3b8f35") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("7f81e8c6-63ee-488d-9a09-0d62101c83d2") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("5fb33889-d925-4405-a522-8dfd6d309a76") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("1133b25d-3868-4279-899a-df1b157cce70") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("378e3787-0612-4619-b309-f1e2c38205ef") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("a9466ba8-9fec-44d2-a7d1-87215a82537b") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("fc6dc988-08b6-4bfa-99f5-19c7cc3b8f35") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("7f81e8c6-63ee-488d-9a09-0d62101c83d2") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("5fb33889-d925-4405-a522-8dfd6d309a76") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("1133b25d-3868-4279-899a-df1b157cce70") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("378e3787-0612-4619-b309-f1e2c38205ef") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("a9466ba8-9fec-44d2-a7d1-87215a82537b") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("fc6dc988-08b6-4bfa-99f5-19c7cc3b8f35") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+</style>
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#e9e8ec;color:#141118;-webkit-font-smoothing:antialiased}
+    a{color:#6d28d9;text-decoration:none}
+    button:focus-visible,[tabindex]:focus-visible{outline:2px solid #7c3aed;outline-offset:2px;border-radius:6px}
+    .ab{padding:42px 46px 36px;border-bottom:1px solid rgba(20,17,24,.08);min-width:1536px}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px;flex-wrap:wrap}
+    .ab-id{font:700 10px 'Roboto Mono',ui-monospace,monospace;padding:4px 8px;background:#141118;color:#fff;border-radius:5px}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:#6b6577;max-width:1040px;margin:0 0 18px}
+    .fr{width:1440px;min-width:1440px;flex:none;border-radius:12px;overflow:hidden;border:1px solid rgba(20,17,24,.14)}
+    .mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .cap{font:400 12.5px/1.6 Inter,system-ui,sans-serif;color:#6b6577;margin-top:14px;max-width:1440px}
+    .eb{font-family:'Roboto Mono',ui-monospace,monospace;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.13em}
+    .btn{display:inline-flex;align-items:center;gap:7px;padding:9px 15px;border-radius:9px;font-size:12.5px;font-weight:700;border:1px solid transparent;cursor:pointer;font-family:inherit;white-space:nowrap}
+    .chip{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:99px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit;border:1px solid transparent;white-space:nowrap}
+    .kd{width:9px;height:9px;flex:none}
+    .ev{padding:8px 9px;border-radius:8px;cursor:pointer;display:flex;flex-direction:column;gap:3px;text-align:left;font-family:inherit;border:1px solid transparent;width:100%;box-sizing:border-box}
+    .nr{font-family:'Roboto Mono',ui-monospace,monospace;font-size:9.5px;font-weight:600;border-radius:5px;padding:2px 6px;white-space:nowrap}
+    .lim{border-radius:9px;padding:10px 12px;font-size:11.5px;line-height:1.55}
+  </style>
+</helmet>
+
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="6">
+  <section class="ab" id="{{ b.id }}">
+    <div class="ab-hd"><a class="ab-id" href="#{{ b.id }}">{{ b.tag }}</a><span class="ab-nm">{{ b.name }}</span><span class="eb" style="{{ b.themeTag }}">{{ b.theme }}</span></div>
+    <div class="ab-sub">{{ b.blurb }}</div>
+
+    <div class="fr" style="{{ b.t.shell }}">
+      <!-- ── header ── -->
+      <div style="padding:18px 24px;border-bottom:1px solid {{ b.t.hair }};display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.025em;{{ b.t.ink }}">Calendar</h1>
+          <div style="font-size:12.5px;line-height:1.55;margin-top:5px;max-width:600px;{{ b.t.mut }}">{{ b.explainer }}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <sc-if value="{{ b.canIC }}"><button class="btn" style="{{ b.t.btnP }}">New IC meeting</button></sc-if>
+          <button class="btn" style="{{ b.t.btnO }}">New check-in</button>
+          <button class="btn" style="{{ b.t.btnO }}" aria-label="Subscribe or export as iCalendar">Subscribe · .ics</button>
+        </div>
+      </div>
+
+      <!-- ── gate note when IC creation is unavailable ── -->
+      <sc-if value="{{ b.gateNote }}">
+        <div style="padding:11px 24px;border-bottom:1px solid {{ b.t.hair }};{{ b.t.limBg }};display:flex;align-items:center;gap:9px">
+          <span class="eb" style="{{ b.t.limEb }}">Not available to you</span>
+          <span style="font-size:12px;line-height:1.5;{{ b.t.mut }}">{{ b.gateNote }}</span>
+        </div>
+      </sc-if>
+
+      <!-- ── controls: range + kind filters, derived from the kind list ── -->
+      <div style="padding:13px 24px;border-bottom:1px solid {{ b.t.hair }};display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:2px;border-radius:9px;padding:2px;{{ b.t.seg }}">
+            <sc-for list="{{ b.ranges }}" as="r" hint-placeholder-count="3"><button class="btn" style="{{ r.style }}">{{ r.label }}</button></sc-for>
+          </div>
+          <span class="mono" style="font-size:12px;font-weight:700;{{ b.t.ink }}">{{ b.rangeLabel }}</span>
+          <span style="font-size:11.5px;{{ b.t.mut }}">{{ b.rangeMeta }}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <button class="chip" style="{{ b.allChip }}">All<span class="mono" style="font-size:10px;opacity:.72">{{ b.total }}</span></button>
+          <sc-for list="{{ b.kinds }}" as="k" hint-placeholder-count="5">
+            <button class="chip" style="{{ k.style }}" aria-pressed="{{ k.on }}"><span class="kd" style="{{ k.dot }}"></span>{{ k.label }}<span class="mono" style="font-size:10px;opacity:.72">{{ k.count }}</span></button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:stretch">
+        <!-- ══ MAIN: agenda ══ -->
+        <div style="flex:1;min-width:0;padding:18px 24px 26px">
+          <!-- empty range -->
+          <sc-if value="{{ b.emptyRange }}">
+            <div style="border-radius:12px;padding:36px 30px;text-align:center;{{ b.t.card }}">
+              <div class="eb" style="{{ b.t.mutEb }}">Nothing scheduled</div>
+              <div style="font-size:15px;font-weight:800;letter-spacing:-.02em;margin-top:8px;{{ b.t.ink }}">No events between {{ b.rangeLabel }}.</div>
+              <div style="font-size:12.5px;line-height:1.6;margin-top:7px;max-width:440px;margin-left:auto;margin-right:auto;{{ b.t.mut }}">All five sources answered and returned nothing for this range. Widen the range, or create the first event.</div>
+              <div style="display:flex;gap:8px;justify-content:center;margin-top:16px;flex-wrap:wrap">
+                <button class="btn" style="{{ b.t.btnO }}">Show next 30 days</button>
+                <button class="btn" style="{{ b.t.btnO }}">New check-in</button>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- degraded source banner -->
+          <sc-if value="{{ b.degraded }}">
+            <div style="border-radius:11px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:flex-start;gap:11px;{{ b.t.warnBg }}">
+              <span class="eb" style="{{ b.t.warnEb }};flex:none;margin-top:2px">1 of 5 sources</span>
+              <div style="min-width:0">
+                <div style="font-size:12.5px;font-weight:700;{{ b.t.ink }}">{{ b.degraded.head }}</div>
+                <div style="font-size:11.5px;line-height:1.55;margin-top:4px;{{ b.t.mut }}">{{ b.degraded.body }}</div>
+              </div>
+              <button class="btn" style="{{ b.t.btnO }};margin-left:auto;flex:none">Retry this source</button>
+            </div>
+          </sc-if>
+
+          <sc-for list="{{ b.days }}" as="d" hint-placeholder-count="4">
+            <div style="margin-bottom:18px">
+              <div style="display:flex;align-items:baseline;gap:10px;padding-bottom:8px;border-bottom:1px solid {{ b.t.hair }}">
+                <span class="mono" style="font-size:12.5px;font-weight:700;{{ b.t.ink }}">{{ d.date }}</span>
+                <span style="font-size:11.5px;{{ b.t.mut }}">{{ d.rel }}</span>
+                <span class="mono" style="font-size:10.5px;margin-left:auto;{{ b.t.mut }}">{{ d.count }}</span>
+              </div>
+              <div style="display:grid;gap:7px;margin-top:9px">
+                <sc-for list="{{ d.events }}" as="e" hint-placeholder-count="3">
+                  <div style="display:grid;grid-template-columns:74px 1fr;gap:12px;align-items:start">
+                    <div style="padding-top:9px"><span class="mono" style="font-size:11.5px;font-weight:700;{{ b.t.ink }}">{{ e.time }}</span><div class="mono" style="font-size:10px;margin-top:2px;{{ b.t.mut }}">{{ e.dur }}</div></div>
+                    <button class="ev" style="{{ e.card }}">
+                      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                        <span class="kd" style="{{ e.dot }}"></span>
+                        <span class="eb" style="{{ e.kindStyle }}">{{ e.kindLabel }}</span>
+                        <sc-if value="{{ e.statusPill }}"><span class="nr" style="{{ e.statusStyle }}">{{ e.statusPill }}</span></sc-if>
+                        <sc-if value="{{ e.pushed }}"><span class="nr" style="{{ b.t.okPill }}">{{ e.pushed }}</span></sc-if>
+                      </div>
+                      <div style="font-size:13.5px;font-weight:700;letter-spacing:-.01em;line-height:1.35;{{ b.t.ink }}">{{ e.title }}</div>
+                      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px">
+                        <span style="font-size:11.5px;{{ b.t.mut }}">{{ e.where }}</span>
+                        <sc-if value="{{ e.whereNr }}"><span class="nr" style="{{ b.t.nrPill }}">Not recorded</span></sc-if>
+                        <sc-if value="{{ e.rsvp }}"><span style="font-size:11.5px;{{ b.t.mut }}">{{ e.rsvp }}</span></sc-if>
+                      </div>
+                      <sc-if value="{{ e.nrWhy }}"><div style="font-size:11px;line-height:1.5;margin-top:3px;{{ b.t.mut }}">{{ e.nrWhy }}</div></sc-if>
+                      <sc-if value="{{ e.actions }}">
+                        <div style="display:flex;align-items:center;gap:7px;margin-top:8px;flex-wrap:wrap">
+                          <sc-for list="{{ e.actions }}" as="a" hint-placeholder-count="3"><span class="btn" style="{{ a.style }}">{{ a.label }}</span></sc-for>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ e.pushLim }}"><div class="lim" style="margin-top:8px;{{ b.t.limBg }};{{ b.t.mut }}">{{ e.pushLim }}</div></sc-if>
+                    </button>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- ══ RAIL ══ -->
+        <div style="width:328px;flex:none;border-left:1px solid {{ b.t.hair }};padding:18px 20px 26px;{{ b.t.rail }}">
+          <!-- connected calendars -->
+          <div class="eb" style="{{ b.t.mutEb }}">Connected calendars</div>
+          <div style="display:grid;gap:9px;margin-top:10px">
+            <sc-for list="{{ b.providers }}" as="p" hint-placeholder-count="2">
+              <div style="border-radius:11px;padding:12px 13px;{{ p.box }}">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:9px">
+                  <span style="font-size:13px;font-weight:800;letter-spacing:-.01em;{{ b.t.ink }}">{{ p.name }}</span>
+                  <span class="nr" style="{{ p.pill }}">{{ p.state }}</span>
+                </div>
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-top:8px">
+                  <span style="font-size:11px;{{ b.t.mut }}">Last sync</span>
+                  <sc-if value="{{ p.syncNr }}"><span class="nr" style="{{ b.t.nrPill }}">Not recorded</span></sc-if>
+                  <sc-if value="{{ p.sync }}"><span class="mono" style="font-size:11px;font-weight:700;{{ b.t.ink }}">{{ p.sync }}</span></sc-if>
+                </div>
+                <div style="font-size:11px;line-height:1.55;margin-top:6px;{{ b.t.mut }}">{{ p.why }}</div>
+                <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+                  <sc-for list="{{ p.actions }}" as="a" hint-placeholder-count="2"><span class="btn" style="{{ a.style }}">{{ a.label }}</span></sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <!-- two promises -->
+          <div style="border-radius:11px;padding:12px 13px;margin-top:14px;{{ b.t.card }}">
+            <div class="eb" style="{{ b.t.mutEb }}">Two different promises</div>
+            <div style="display:grid;gap:9px;margin-top:9px">
+              <div><div style="font-size:12px;font-weight:700;{{ b.t.ink }}">Sync a calendar</div><div style="font-size:11px;line-height:1.55;margin-top:3px;{{ b.t.mut }}">Ongoing, per provider. Every StudioOS event appears there and keeps up to date.</div></div>
+              <div style="border-top:1px solid {{ b.t.hair }};padding-top:9px"><div style="font-size:12px;font-weight:700;{{ b.t.ink }}">Push one event</div><div style="font-size:11px;line-height:1.55;margin-top:3px;{{ b.t.mut }}">One-time, per event. A copy is written once; later changes here do not follow it.</div></div>
+              <div style="border-top:1px solid {{ b.t.hair }};padding-top:9px"><div style="font-size:12px;font-weight:700;{{ b.t.ink }}">Subscribe · .ics</div><div style="font-size:11px;line-height:1.55;margin-top:3px;{{ b.t.mut }}">Read-only feed for any client. No account connection, no write access.</div></div>
+            </div>
+          </div>
+
+          <!-- what is on this calendar -->
+          <div style="border-radius:11px;padding:12px 13px;margin-top:12px;{{ b.t.card }}">
+            <div class="eb" style="{{ b.t.mutEb }}">What is on this calendar</div>
+            <div style="display:grid;gap:7px;margin-top:9px">
+              <sc-for list="{{ b.kinds }}" as="k" hint-placeholder-count="5">
+                <div style="display:flex;align-items:center;gap:9px"><span class="kd" style="{{ k.dot }}"></span><span style="font-size:11.5px;flex:1;min-width:0;{{ b.t.ink }}">{{ k.label }}</span><span class="mono" style="font-size:10.5px;{{ b.t.mut }}">{{ k.src }}</span></div>
+              </sc-for>
+            </div>
+            <div style="font-size:10.5px;line-height:1.55;margin-top:9px;{{ b.t.mut }}">Five sources, five kinds. Filters are generated from this list, so a kind cannot exist without a way to reach it.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="cap">{{ b.cap }}</div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    // ══ THEMES. Both first-class: every token has a light and a dark value, and the boards
+    // below are generated from the same data, so neither theme can drift from the other. ══
+    const LIGHT = {
+      shell:'background:#faf9fc', rail:'background:#f4f3f7', hair:'#e8e6ee',
+      ink:'color:#141118', mut:'color:#6b6577', mutEb:'color:#6b6577',
+      card:'background:#fff;border:1px solid #e8e6ee',
+      seg:'background:#f0eff3;border:1px solid #e8e6ee',
+      btnP:'background:#6d28d9;color:#fff;border-color:#6d28d9',
+      btnO:'background:#fff;color:#141118;border-color:#dedce4',
+      btnQ:'background:transparent;color:#4a4553;border-color:transparent',
+      nrPill:'background:#f0eff3;color:#6b6577;border:1px solid #e8e6ee',
+      okPill:'background:#ecfdf5;color:#047857;border:1px solid #a7f3d0',
+      warnBg:'background:#fffbeb;border:1px solid #fde68a', warnEb:'color:#92400e',
+      limBg:'background:#f4f3f7;border:1px solid #e8e6ee', limEb:'color:#b45309',
+      evBase:'background:#fff;border-color:#e8e6ee', evHair:'#e8e6ee'
+    };
+    const DARK = {
+      shell:'background:#17141d', rail:'background:#1c1824', hair:'#2e2839',
+      ink:'color:#f4f2f7', mut:'color:#9a93a8', mutEb:'color:#9a93a8',
+      card:'background:#1f1b28;border:1px solid #2e2839',
+      seg:'background:#221d2c;border:1px solid #2e2839',
+      btnP:'background:#7c3aed;color:#fff;border-color:#7c3aed',
+      btnO:'background:#241f30;color:#e8e4ef;border-color:#3a3247',
+      btnQ:'background:transparent;color:#9a93a8;border-color:transparent',
+      nrPill:'background:#241f30;color:#9a93a8;border:1px solid #3a3247',
+      okPill:'background:#0c2b22;color:#6ee7b7;border:1px solid #14523f',
+      warnBg:'background:#2a2011;border:1px solid #5c4415', warnEb:'color:#fcd34d',
+      limBg:'background:#221d2c;border:1px solid #322b3d', limEb:'color:#fcd34d',
+      evBase:'background:#1f1b28;border-color:#2e2839', evHair:'#2e2839'
+    };
+
+    // ══ FIVE KINDS. The single source of truth: filters, legend and event marks all derive
+    // from this array, so partner_office_hour cannot lose its chip again. expert_booking is
+    // in the type union and produced by nothing, so it is absent here. ══
+    const KINDS = [
+      { id:'ic_meeting',          label:'IC meeting',   src:'ic_meetings',      hue:'#6d28d9', dHue:'#a78bfa', shape:'50%' },
+      { id:'founder_checkin',     label:'Check-in',     src:'founder_checkins', hue:'#0f766e', dHue:'#5eead4', shape:'2px' },
+      { id:'advisor_booking',     label:'Advisor',      src:'advisor_bookings',  hue:'#b45309', dHue:'#fcd34d', shape:'99px' },
+      { id:'partner_office_hour', label:'Office hour',  src:'office_hours',      hue:'#1d4ed8', dHue:'#93c5fd', shape:'0' },
+      { id:'calendly_event',      label:'Calendly',     src:'calendly',          hue:'#86198f', dHue:'#f0abfc', shape:'50% 50% 50% 0' }
+    ];
+    // Kinds read apart by dot SHAPE first and a single low-saturation hue second — five
+    // saturated colours would compete with the violet accent and with each other.
+    const dotFor = (k, dark) => 'background:' + (dark ? k.dHue : k.hue) + ';border-radius:' + k.shape;
+
+    // ══ EVENTS. One flat list, exactly the server's shape, grouped by day for display. ══
+    const EV = [
+      { kind:'ic_meeting', title:'IC · Halyard Security, Series A bridge', day:0, time:'09:30', dur:'60m', status:'confirmed',
+        loc:'Video · Meet', rsvp:'RSVP 4 of 5 · you: yes', deal:true, actions:['rsvp','push'] },
+      { kind:'founder_checkin', title:'Weekly check-in · Meridian Robotics', day:0, time:'11:00', dur:'30m', status:'confirmed',
+        loc:'Video · Meet', actions:['push','cancel'] },
+      { kind:'advisor_booking', title:'Pricing session · Priya Nair', day:0, time:'14:00', dur:'60m', status:'confirmed',
+        loc:'Video', actions:['push'] },
+      { kind:'partner_office_hour', title:'Office hour · Perkins Coie, formation', day:0, time:'16:30', dur:'30m', status:'confirmed',
+        loc:'Video', actions:['push'] },
+      { kind:'calendly_event', title:'Intro call · Thornbury Capital', day:1, time:'10:00', dur:'30m', status:'confirmed',
+        locNr:true, nrWhy:'Calendly did not return a location for this booking. It is not a video call by default — check the invitation.', actions:['push'] },
+      { kind:'ic_meeting', title:'IC · Kelp Bio, pre-seed', day:1, time:'15:00', dur:'45m', status:'tentative',
+        loc:'Room 2 · Geneva', rsvp:'RSVP 2 of 5 · you: not yet', deal:true, actions:['rsvp','push'] },
+      { kind:'founder_checkin', title:'Weekly check-in · LoopSense', day:2, time:'11:00', dur:'30m', status:'cancelled',
+        loc:'Video · Meet', cancelled:'Cancelled by organiser' },
+      { kind:'partner_office_hour', title:'Office hour · Ashurst, cross-border IP', day:2, time:'13:00', dur:'60m', status:'confirmed',
+        loc:'Video', pushed:'Pushed to Google', actions:['pushed'] },
+      { kind:'advisor_booking', title:'GTM session · Marcus Chen', day:3, time:'09:00', dur:'60m', status:'confirmed',
+        loc:'Video', actions:['push'] },
+      { kind:'calendly_event', title:'Partner intro · Verity Health', day:3, time:'16:00', dur:'30m', status:'confirmed',
+        loc:'Video · Zoom', actions:['push'] }
+    ];
+    const DAYS = [
+      { date:'Mon 7 Sep', rel:'Today' }, { date:'Tue 8 Sep', rel:'Tomorrow' },
+      { date:'Wed 9 Sep', rel:'in 2 days' }, { date:'Thu 10 Sep', rel:'in 3 days' }
+    ];
+    // Per-board counts are derived inside build() from one in-range list, never from the raw
+    // fixture — three figures on a board (All, each kind, the day groups) must come from the
+    // same list or one of them will eventually contradict the others.
+
+    // ══ BOARD BUILDER. One function, six boards — the states are variations of one page. ══
+    const build = (o) => {
+      const dark = o.dark, t = dark ? DARK : LIGHT;
+      const canIC = o.canIC !== false;
+      const active = o.active || null; // null = All
+      // Provider reachability and source reachability are both derived from what the board
+      // already declares — no separate flag to forget to wire. A push needs at least one
+      // connected provider; an unreachable source contributes no events to the range.
+      const gConn = (o.google || 'connected') === 'connected';
+      const mConn = (o.microsoft || 'off') === 'connected';
+      const noProvider = !gConn && !mConn;
+      // A past push is a historical record; only a live push depends on the connection working
+      // today. A provider whose token expired was demonstrably connected once.
+      const everConnected = (o.google || 'connected') !== 'off' || (o.microsoft || 'off') !== 'off';
+      const unreachable = o.unreachable || null;
+      // The one list every figure AND every event on this board reads from.
+      const inRange = o.emptyRange ? [] : EV.filter(e => e.kind !== unreachable);
+      // An unreachable source keeps its last-known count under the banner's disclosed
+      // staleness; every other chip counts what is actually in range.
+      const counts = KINDS.map(k => k.id === unreachable
+        ? EV.filter(e => e.kind === k.id).length
+        : inRange.filter(e => e.kind === k.id).length);
+      const kinds = KINDS.map((k, i) => {
+        const on = active === k.id;
+        return { label:k.label, src:k.src, count:String(counts[i]), on: on ? 'true' : 'false',
+          dot: dotFor(k, dark),
+          style: on
+            ? 'background:' + (dark ? '#2c2140' : '#f4f0fe') + ';color:' + (dark ? '#ddd6fe' : '#6d28d9') + ';border-color:' + (dark ? '#4c3575' : '#ddd6fe') + ';font-weight:700'
+            : (dark ? 'background:#221d2c;color:#c9c2d6;border-color:#322b3d' : 'background:#fff;color:#4a4553;border-color:#e8e6ee') };
+      });
+      const allOn = !active;
+      const allChip = allOn
+        ? 'background:' + (dark ? '#2c2140' : '#f4f0fe') + ';color:' + (dark ? '#ddd6fe' : '#6d28d9') + ';border-color:' + (dark ? '#4c3575' : '#ddd6fe') + ';font-weight:700'
+        : (dark ? 'background:#221d2c;color:#c9c2d6;border-color:#322b3d' : 'background:#fff;color:#4a4553;border-color:#e8e6ee');
+
+      const RANGES = ['Week','Month','Agenda'];
+      const sel = o.range || 'Agenda';
+      const ranges = RANGES.map(label => ({ label,
+        style: label === sel
+          ? (dark ? 'background:#2f2840;color:#f4f2f7;border-color:transparent' : 'background:#fff;color:#141118;border-color:#dedce4')
+          : t.btnQ }));
+
+      // Events, filtered by the active kind, then grouped.
+      const pool = active ? inRange.filter(e => e.kind === active) : inRange;
+      const actFor = (e) => {
+        const map = {
+          rsvp:{ label:'RSVP', style:t.btnP },
+          push:{ label:'Push to calendar', style:t.btnO },
+          pushed:{ label:'Push again', style:t.btnO },
+          cancel:{ label:'Cancel', style:t.btnQ }
+        };
+        // With no connected provider the push controls are not drawn at all; the limit note
+        // renders in their place. RSVP and Cancel are unaffected — they need no calendar.
+        const usable = (e.actions || []).filter(a => !(noProvider && (a === 'push' || a === 'pushed')));
+        return usable.map(a => map[a]).filter(Boolean);
+      };
+      // An empty range means the sources answered with nothing, so there are no day groups to
+      // build. Gating here rather than in the template keeps the one board about emptiness from
+      // being able to render ten events beneath its own "0 events".
+      const days = (inRange.length ? DAYS : []).map((d, di) => {
+        const evs = pool.filter(e => e.day === di).map(e => {
+          const k = KINDS.find(x => x.id === e.kind), ki = KINDS.indexOf(k);
+          const cancelled = e.status === 'cancelled';
+          return {
+            time:e.time, dur:e.dur, title:e.title, dot: dotFor(k, dark), kindLabel:k.label,
+            kindStyle:'color:' + (dark ? k.dHue : k.hue),
+            card: t.evBase + (cancelled ? ';opacity:.6' : '') + (e.kind === 'ic_meeting' ? ';box-shadow:inset 3px 0 0 ' + (dark ? k.dHue : k.hue) : ''),
+            where: e.locNr ? 'Location' : e.loc, whereNr: !!e.locNr, nrWhy: e.nrWhy || null,
+            rsvp: e.rsvp || null,
+            statusPill: cancelled ? e.cancelled : (e.status === 'tentative' ? 'Tentative' : null),
+            statusStyle: cancelled ? t.nrPill : t.limBg + ';' + (dark ? 'color:#fcd34d' : 'color:#92400e'),
+            // A push record cannot exist for a calendar that was never connected.
+            pushed: (e.pushed && everConnected) ? e.pushed : null,
+            actions: cancelled ? null : actFor(e),
+            // The note names the actual remedy: a provider that has never connected needs
+            // connecting, one whose token expired needs reconnecting.
+            pushLim: (noProvider && !cancelled)
+              ? (o.google === 'failed'
+                ? 'Push needs a working connection. Google\u2019s token expired — reconnect it in the rail, then this event can be copied there once.'
+                : 'Push needs a connected calendar. Connect Google or Outlook in the rail, then this event can be copied there once.')
+              : null
+          };
+        });
+        return evs.length ? { date:d.date, rel:d.rel, count: evs.length + (evs.length === 1 ? ' event' : ' events'), events:evs } : null;
+      }).filter(Boolean);
+
+      // Providers. Each state names the reason, never a bare dash.
+      const prov = (name, st) => {
+        const S = {
+          connected:{ state:'Connected', pill:t.okPill, sync:'2 min ago', why:'Every StudioOS event appears in this calendar and stays up to date.', actions:[{label:'Sync now',style:t.btnO},{label:'Disconnect',style:t.btnQ}] },
+          failed:{ state:'Sync failed', pill:t.limBg + ';' + (dark ? 'color:#fcd34d' : 'color:#92400e'), sync:'4 hrs ago', why:'The last sync was refused — the access token expired. Events already pushed remain; nothing new has been written since.', actions:[{label:'Reconnect',style:t.btnP},{label:'Disconnect',style:t.btnQ}] },
+          off:{ state:'Not connected', pill:t.nrPill, syncNr:true, why:'Nothing has synced, so there is no last-sync time to show. Connect to push events automatically.', actions:[{label:'Connect',style:t.btnO}] }
+        }[st];
+        return Object.assign({ name, box:t.card, sync:null, syncNr:false }, S);
+      };
+
+      return {
+        id:o.id, tag:o.tag, name:o.name, theme: dark ? 'Dark' : 'Light',
+        themeTag: dark ? 'color:#4a4553;background:#e2dfe8;border-radius:4px;padding:2px 7px' : 'color:#6b6577;background:#f0eff3;border-radius:4px;padding:2px 7px',
+        blurb:o.blurb, cap:o.cap, t, canIC,
+        gateNote: canIC ? null : 'Creating an IC meeting is limited to admins and investors, so the control is not drawn. Check-ins are open to everyone.',
+        explainer:'Investment-committee meetings, founder check-ins, advisor sessions, partner office hours, and anything synced in from Calendly. Nothing else is aggregated here.',
+        ranges, rangeLabel:o.rangeLabel || '7 – 13 Sep 2026', rangeMeta:o.rangeMeta || 'five sources · all answered',
+        // The All chip advertises what clicking it would show — the unfiltered list — not the
+        // current pool. Per-kind counts stay unfiltered for the same reason.
+        kinds, allChip, total: String(inRange.length),
+        days, emptyRange: o.emptyRange || false, degraded: o.degraded || null,
+        providers:[ prov('Google Calendar', o.google || 'connected'), prov('Microsoft Outlook', o.microsoft || 'off') ]
+      };
+    };
+
+    return { boards: [
+      build({ id:'c1', tag:'C1', name:'Calendar · agenda, populated', dark:false, active:null,
+        blurb:'Agenda is the one view done well: five sources arrive as a flat list of timed events, and a grid would spend most of its area on empty cells. Week and Month remain available; neither is a mini-map of the other.',
+        cap:'Kinds read apart by dot shape first — circle, square, pill, hard square, teardrop — with one low-saturation hue each, so five kinds never compete with the violet accent. Filter chips are generated from the kind list, so partner_office_hour has a chip by construction rather than by memory. The explainer names exactly the five sources that exist: no filings, because no filing source exists.' }),
+      build({ id:'c2', tag:'C2', name:'Calendar · agenda, populated', dark:true, active:null,
+        blurb:'The same board in dark. Every token has both values — surfaces, hairlines, pill fills, the four kind hues brightened for a dark ground — so neither theme is a variant of the other.',
+        cap:'Dark is not the light board with an inverted background: the kind hues lift to their #a78bfa / #5eead4 / #fcd34d / #93c5fd / #f0abfc pairs to hold contrast, and the "Not recorded" and warning pills use dark-ground fills rather than translucency.' }),
+      build({ id:'c3', tag:'C3', name:'Calendar · one kind filtered, viewer cannot create IC', dark:false, active:'partner_office_hour', canIC:false,
+        rangeLabel:'7 – 13 Sep 2026', rangeMeta:'filtered · office hours only',
+        blurb:'Office hours filtered — the kind the current page can only reach under "All". This viewer is a founder, so the IC-meeting control is not drawn and the limit is stated where it would have been.',
+        cap:'Two rules at once: a control that would refuse the viewer is absent rather than disabled, and the reason sits in a strip under the header. The filtered count on each chip comes from the same list the events do, so a chip can never advertise events the filter cannot show.' }),
+      build({ id:'c4', tag:'C4', name:'Calendar · no events in range', dark:false, emptyRange:true, rangeMeta:'five sources · all answered · 0 events',
+        blurb:'Empty range. The distinction that matters: all five sources answered and returned nothing. That is different from a source failing, and the copy says so.',
+        cap:'An empty range states that the sources answered, so the founder knows the calendar is working rather than broken. Two exits — widen the range, or create the one event any viewer is permitted to create.' }),
+      build({ id:'c5', tag:'C5', name:'Calendar · no calendar connected', dark:true, google:'off', microsoft:'off',
+        blurb:'Neither provider connected. Last sync reads "Not recorded" with the reason — nothing has ever synced, so there is no time to show — and every per-event push states what it needs instead of failing on click.',
+        cap:'Absent is not empty: "Not recorded" plus a reason, never a plausible zero or an em-dash. The .ics subscription stays in the header, because it needs no connection at all — a read-only feed is a third promise, distinct from syncing and from pushing.' }),
+      build({ id:'c6', tag:'C6', name:'Calendar · sync failed, one source degraded', dark:false, google:'failed',
+        rangeMeta:'four of five sources answered',
+        unreachable:'calendly_event',
+        degraded:{ head:'Calendly did not respond. The other four sources loaded.',
+          body:'Events synced from Calendly are missing from this range — the rest of the calendar is complete. The count on the Calendly chip is from the last successful load and may be stale.' },
+        blurb:'Two failures at once, kept apart: Google\u2019s token expired (a provider problem, in the rail) and Calendly did not respond (a source problem, above the agenda).',
+        cap:'The page degrades the card rather than blanking: four sources render normally, the fifth is named with what is missing and a retry scoped to it. A failed sync says what survived — events already pushed remain — because "sync failed" alone leaves the founder guessing whether their calendar is now wrong.' })
+    ] };
+  }
+}
+</script>
+</body></html>

@@ -427,8 +427,16 @@ test('a collision counts only when neither definition can host the other', () =>
       assert.ok(p.aNeeds.length && p.bNeeds.length, 'one-directional pairs must not be reported');
     }
   }
+  // `calendar_events` LEFT THIS LIST on 2026-09-10, and that is the point of
+  // pinning it: the collision was `services/wellbeing/bookings.ts` declaring
+  // its own version of the table — `kind`/`source_id`/`source_uid`/
+  // `attendees_json`, no `user_id` — against migration 018's Calendly
+  // projection, which has `user_id`/`source`/`external_uri` NOT NULL. Neither
+  // could host the other, so whichever ran first won and the loser's writer
+  // threw on every call. Migration 235 adds the four columns to the real
+  // table and the phantom declaration is gone, so there is one shape again.
   assert.deepEqual([...all.keys()].sort(), [
-    'advisor_bookings', 'calendar_events', 'capital_calls', 'founder_checkins',
+    'advisor_bookings', 'capital_calls', 'founder_checkins',
     'ic_meetings', 'metrics_snapshots', 'service_offerings', 'wellbeing_resources',
   ]);
 });

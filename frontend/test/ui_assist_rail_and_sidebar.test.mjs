@@ -497,12 +497,44 @@ test('no page hand-builds an AI rail of its own', () => {
   // none had a meter, a cap or a figure of any kind — "it does show anything,
   // it looks blank, probably not connected to anything", filed once per
   // licence. This is a SHAPE check on the file, which is what sees them.
+  //
+  // A PAGE COLUMN IS NOT AN AI RAIL, and until 2026-09-10 this check had no way
+  // to say so. `/calendar`'s canvas draws a 328px column holding the connected
+  // -calendar cards, the sync/push/.ics distinction and the source legend —
+  // no model, no meter, no assistant anywhere near it. Renaming that column to
+  // slip past a shape check would teach the next person to rename theirs too,
+  // and would leave this check no better at telling the two apart. So the shape
+  // check stands for every page, and the one page with a legitimate side column
+  // is recorded here WITH AN EXTRA CONSTRAINT rather than merely excused: it
+  // must contain none of the vocabulary that made the thirty-nine offenders
+  // what they were. Put a model picker or a spend figure in it and this fails.
+  const OWN_COLUMN = new Map([
+    ['frontend/src/pages/CalendarPage.jsx',
+      'the Calendar canvas\'s 328px rail — connected calendars, the three promises, the source legend'],
+  ]);
+  // The identifiers a hand-built AI rail has to spell — its headings, the
+  // shared parts it would otherwise import, and the spend vocabulary. Bare
+  // "token" is deliberately NOT here: /calendar is full of OAuth refresh
+  // tokens, which is a different word wearing the same letters, and a check
+  // that cannot tell those apart would be back to matching on shape.
+  const ASSISTANT = /Worker AI|Deals AI|Eadwyn|AssistRail|WorkerRail|AssistLayout|useAiSpend|assistCost|railModels|\bspend\b|tokens (?:left|used|remaining)|per-?token/i;
   const offenders = [];
   for (const f of walkJs('frontend/src/pages')) {
-    if (/<aside[^>]*className="[^"]*rail/.test(scan(read(f)))) offenders.push(f);
+    if (!/<aside[^>]*className="[^"]*rail/.test(scan(read(f)))) continue;
+    if (!OWN_COLUMN.has(f)) { offenders.push(f); continue; }
+    assert.doesNotMatch(read(f), ASSISTANT,
+      `${f} is on record as a plain page column, and has grown assistant vocabulary — `
+      + 'it is a hand-built AI rail now, so mount the shared WorkerRail or take the words out');
   }
   assert.deepEqual(offenders, [],
     'these pages declare their own AI rail instead of mounting the shared WorkerRail');
+  // The record cannot go stale: a named file that no longer has the column it
+  // is named for is an exemption nobody is using, and it would silently cover
+  // a rail added to that file later.
+  for (const [f, why] of OWN_COLUMN) {
+    assert.match(scan(read(f)), /<aside[^>]*className="[^"]*rail/,
+      `${f} no longer has ${why} — delete its entry rather than leaving a standing exemption`);
+  }
 });
 
 test('an embedded page does not mount a second rail', () => {

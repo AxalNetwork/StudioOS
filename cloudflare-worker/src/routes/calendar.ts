@@ -22,7 +22,7 @@ import {
   buildGoogleAuthUrl, buildMicrosoftAuthUrl,
   exchangeGoogleCode, exchangeMicrosoftCode,
   fetchGoogleUserinfo, fetchMicrosoftUserinfo,
-  fetchUserEvents, eventsToIcs,
+  fetchUserEvents, fetchUserEventsWithSources, attachPushRecords, eventsToIcs,
   syncUserToGoogle, syncUserToMicrosoft,
   preflightOAuthSecrets,
 } from '../services/calendar';
@@ -160,15 +160,24 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
     return c.json({ detail: 'Invalid from/to ISO datetime' }, 400);
   }
   const kinds = kindsQ ? kindsQ.split(',').map(s => s.trim()).filter(Boolean) : undefined;
-  const events = await fetchUserEvents(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), kinds);
+  // THE DEGRADING READ, deliberately — see `gather` in services/calendar.ts.
+  // Until now one unreadable source turned the whole agenda into a 500 and
+  // nothing in the response could say which one. `sources` reports every kind
+  // that was asked for and whether it answered, so the page can render the four
+  // that loaded and name the fifth instead of blanking.
+  const { events, sources } = await fetchUserEventsWithSources(
+    c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), kinds,
+  );
+  const items = await attachPushRecords(c.env, user.id, events);
   await ensureCalendarOAuthSchema(c.env);
   const sql = getSQL(c.env);
   const tok = (await sql`SELECT 1 FROM google_oauth_tokens WHERE user_id = ${user.id}` as any[])[0];
   return c.json({
-    items: events,
+    items,
     from: fromDt.toISOString(),
     to: toDt.toISOString(),
     google_connected: !!tok,
+    sources,
   });
 }));
 
@@ -1172,12 +1181,19 @@ calendar.post('/events', async (c) => {
   if (!title || !startAt) return c.json({ detail: 'title and start_at required' }, 400);
   const source = body?.source ? String(body.source).slice(0, 40) : 'manual';
   const kind = body?.kind ? String(body.kind).slice(0, 40) : 'other';
-  const externalUri = `axal:manual:${crypto.randomUUID()}`;
+  // TWO REASONS THIS THREW ON EVERY CALL BEFORE MIGRATION 235.
+  //   · `kind` was not a column. Migration 062's header promised the add "in a
+  //     separate migration in follow-up Task #58"; it was never written, and no
+  //     `ALTER TABLE calendar_events` existed anywhere. 235 adds it.
+  //   · `uid` is NOT NULL UNIQUE and nothing supplied one, so even with `kind`
+  //     present the row could not be written. It is minted here from the same
+  //     value as `external_uri`, which is the identity this row actually has.
+  const uid = `axal:manual:${crypto.randomUUID()}`;
   const r = await c.env.DB.prepare(
-    `INSERT INTO calendar_events (user_id, source, kind, external_uri, title, start_at, end_at, status,
+    `INSERT INTO calendar_events (uid, user_id, source, kind, external_uri, title, start_at, end_at, status,
                                    notes, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, datetime('now'), datetime('now'))`,
-  ).bind(user.id, source, kind, externalUri, title.slice(0, 240),
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, datetime('now'), datetime('now'))`,
+  ).bind(uid, user.id, source, kind, uid, title.slice(0, 240),
          startAt, endAt, body?.notes ? String(body.notes).slice(0, 4000) : null).run();
   return c.json({ id: r.meta.last_row_id, ok: true });
 });
