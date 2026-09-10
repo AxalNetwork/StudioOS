@@ -15,14 +15,58 @@
 // offline.html, manifest, icons) so old caches drop on activate. Vite-built
 // /assets/* files are content-hashed in their filenames, so the cache-first
 // rule is safe across deploys without a version bump.
-// v16 is a REQUIRED bump, not a routine one: v15's `studioos-api-v15-…` cache
+// v16 was a REQUIRED bump, not a routine one: v15's `studioos-api-v15-…` cache
 // holds `/api/auth/me` bodies, and every browser that ever ran this app is
 // carrying one. Only `activate`'s delete-everything-not-in-this-list pass
 // clears them, and that only runs when a name changes.
-const VERSION = 'v16-2026-09-10';
+// v17 is required for the same reason one step further out: v16 still kept
+// ONE API bucket for the whole origin, so it holds one signed-in person's
+// API bodies where the next signed-in person can be handed them.
+const VERSION = 'v17-2026-09-10';
 const PRECACHE = `studioos-precache-${VERSION}`;
 const RUNTIME_STATIC = `studioos-static-${VERSION}`;
-const RUNTIME_API = `studioos-api-${VERSION}`;
+
+// THE API CACHE IS PER SIGNED-IN ACCOUNT, and the name is where that is
+// enforced. There used to be one `studioos-api-<VERSION>` bucket for the whole
+// origin, and a Cache Storage entry is keyed by URL alone — `Cache.match`
+// does not look at request headers and the worker sends no `Vary`. So on any
+// browser two people sign in to, person B could be handed person A's private
+// API bodies: `offline.html` promises "your own project data", and the code
+// had no idea whose data it was holding.
+//
+// Splitting the BUCKET rather than the key means sign-out can drop a person's
+// cached API data in one call (`clearSessionState` in App.jsx does), instead
+// of enumerating entries and hoping the filter is right.
+const API_CACHE_PREFIX = `studioos-api-${VERSION}-`;
+
+/**
+ * Which bucket a request's response may be read from and written to.
+ *
+ * The identity travels ON THE REQUEST, set by `api.js` from the signed-in
+ * user. That is deliberate over the two obvious alternatives:
+ *
+ *   - A worker-global set by `postMessage` dies with the worker, and a
+ *     service worker is terminated and restarted constantly. It would read
+ *     stale or empty on exactly the sign-in and sign-out boundaries that
+ *     matter, which is where the bug lives.
+ *   - `Vary: Authorization` from the server does not separate the primary
+ *     sign-in path at all: `studioos_auth` is an httpOnly cookie (auth.ts
+ *     treats it as the freshest sign-in), so two cookie-authenticated people
+ *     both send NO Authorization header and would still share a key.
+ *
+ * A per-request header cannot go stale, has no lifecycle, and is the same
+ * fact the server itself uses to decide what to return.
+ *
+ * Anything without a usable identity — a request the SPA did not make, or a
+ * signed-out visitor — gets the `anon` bucket. It never shares one with a
+ * signed-in account. The value is checked against a digits-only pattern
+ * before it is interpolated so a header can only ever name a bucket, never
+ * escape into another cache's name.
+ */
+function apiCacheName(request) {
+  const raw = request.headers.get('X-StudioOS-Identity') || '';
+  return API_CACHE_PREFIX + (/^[0-9]{1,15}$/.test(raw) ? raw : 'anon');
+}
 
 // Do NOT precache '/' or '/index.html'. The navigation handler is network-first
 // and falls back to '/offline.html' on failure — precaching the SPA shell pins
@@ -78,10 +122,14 @@ self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
     await Promise.all(keys.map((k) => {
-      if (![PRECACHE, RUNTIME_STATIC, RUNTIME_API].includes(k)) {
-        return caches.delete(k);
+      // The API buckets are one per account, so they cannot be listed — they
+      // are kept by prefix. The prefix carries VERSION, so every earlier
+      // build's buckets still fall through to the delete, which is what
+      // clears the single shared bucket v16 and earlier wrote into.
+      if (k === PRECACHE || k === RUNTIME_STATIC || k.startsWith(API_CACHE_PREFIX)) {
+        return null;
       }
-      return null;
+      return caches.delete(k);
     }));
     await self.clients.claim();
   })());
@@ -111,15 +159,20 @@ async function staleWhileRevalidate(req, cacheName) {
 }
 
 async function networkFirst(req, cacheName) {
+  const cache = await caches.open(cacheName);
   try {
     const res = await fetch(req);
     if (res && res.status === 200 && req.method === 'GET') {
-      const cache = await caches.open(cacheName);
       cache.put(req, res.clone()).catch(() => {});
     }
     return res;
   } catch (err) {
-    const cached = await caches.match(req);
+    // `cache.match`, NOT the global `caches.match`. The global one searches
+    // EVERY bucket in the origin and returns the first hit, so with one
+    // bucket per account it would walk straight into somebody else's and
+    // hand their body back — undoing the split above on the exact path the
+    // split exists for, the offline one.
+    const cached = await cache.match(req);
     if (cached) return cached;
     throw err;
   }
@@ -184,10 +237,13 @@ self.addEventListener('fetch', (event) => {
     // respondWith hands the request back to the browser untouched, so there
     // is no Cache Storage entry to read and none to write.
     if (isNeverCachableApi(url)) return;
+    // One bucket per signed-in account, resolved from this request rather
+    // than from any state the worker is holding.
+    const apiCache = apiCacheName(request);
     if (isOfflineCachableApi(url)) {
-      event.respondWith(staleWhileRevalidate(request, RUNTIME_API));
+      event.respondWith(staleWhileRevalidate(request, apiCache));
     } else {
-      event.respondWith(networkFirst(request, RUNTIME_API).catch(() => new Response(
+      event.respondWith(networkFirst(request, apiCache).catch(() => new Response(
         JSON.stringify({ offline: true }), { status: 503, headers: { 'Content-Type': 'application/json' } }
       )));
     }

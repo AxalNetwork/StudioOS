@@ -2,9 +2,36 @@ import { reportError } from './log';
 
 const BASE = '/api';
 
+/**
+ * Who is asking — for the server, and for the service worker.
+ *
+ * `X-StudioOS-Identity` is not read by the worker; it exists so `sw.js` can
+ * put each account's cached API responses in their OWN Cache Storage bucket.
+ * A cache entry is keyed by URL alone, so before this the origin had one API
+ * bucket and the next person to sign in on the same browser could be handed
+ * the previous person's private bodies. The service worker cannot read
+ * localStorage and a worker-global set by postMessage dies with the worker,
+ * so the identity rides on the request instead, where it cannot go stale.
+ *
+ * It is the numeric user id, which the server already knows from the token
+ * or cookie — no new fact is disclosed, and no address is ever sent. During
+ * a support session this is the IMPERSONATED user, which is correct: the
+ * responses are that account's data and belong in that account's bucket.
+ */
+function getIdentityHeader() {
+  try {
+    const raw = localStorage.getItem('user');
+    if (!raw) return {};
+    const id = JSON.parse(raw)?.id;
+    return Number.isInteger(id) && id > 0 ? { 'X-StudioOS-Identity': String(id) } : {};
+  } catch {
+    return {};                      // unparseable or storage disabled → anon bucket
+  }
+}
+
 function getAuthHeaders() {
   const token = localStorage.getItem('token');
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  return { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...getIdentityHeader() };
 }
 
 // T6 — read the JS-readable CSRF cookie and mirror it into the X-CSRF-Token
