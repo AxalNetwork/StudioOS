@@ -267,6 +267,161 @@ deals.get('/stage-analytics', async (c) => {
   });
 });
 
+/**
+ * Deals · Screening — canvas **ID2**, the desk behind `/deals/screening`.
+ *
+ * THE OPS ROW SAID THERE WAS NOTHING HERE, AND IT WAS WRONG TWICE.
+ * `investorZoneActions` marked `New batch run` unbuilt because "no scoring run
+ * is stored — this desk reads the deal record", and `Edit rubric` because "no
+ * rubric is stored". Both claims fail against the schema:
+ *
+ *   `score_snapshots` IS a stored scoring run, with SIX dimensions — market,
+ *   team, product, capital, fit, distribution — each carrying its sub-scores
+ *   and a total beside `total_score` and `tier`. That is exactly the
+ *   artboard's "Rubric · 6 dims". It also carries `anomaly_flags` and
+ *   `admin_review_status`, which is a red-flag store under another name.
+ *
+ * WHAT IS ACTUALLY NOT BUILT, and is stated rather than drawn: the WEIGHTS are
+ * fixed in `services/scoring.ts` and no store makes them editable, so `Edit
+ * rubric` stays unbuilt for the accurate reason; and there are no red-flag
+ * RULES a person can write — `detectAnomalies` produces flags from fixed
+ * heuristics, and a rules editor over that would be a screen for a table
+ * nobody has.
+ *
+ * A SANDBOX SCORE IS NOT A SCREENING RESULT. `score_snapshots.is_sandbox`
+ * marks a practice run, and `official_week` is NULL for those so the weekly
+ * unique index ignores them. Counting one as "scored" would let a rehearsal
+ * change the desk's numbers, so they are excluded here and the exclusion is
+ * reported rather than silent.
+ *
+ * ONE SNAPSHOT PER PROJECT, THE LATEST. Scoring appends; the desk reads the
+ * newest official row per project. `MAX(created_at)` with a GROUP BY picks the
+ * row it came from under SQLite's bare-column rule, which is what is wanted.
+ */
+deals.get('/screening', async (c) => {
+  const user = await requireAuth(c);
+  if (!isPrivilegedRole(user.role as string)) return c.json({ detail: 'Forbidden' }, 403);
+  const sql = getSQL(c.env);
+
+  /** The six the scorer writes, in the order it writes them. */
+  const RUBRIC = [
+    { key: 'market', label: 'Market', parts: ['size', 'urgency', 'trend'] },
+    { key: 'team', label: 'Team', parts: ['expertise', 'execution', 'network'] },
+    { key: 'product', label: 'Product', parts: ['mvp_time', 'complexity', 'dependency'] },
+    { key: 'capital', label: 'Capital', parts: ['cost_mvp', 'time_revenue', 'burn_traction'] },
+    { key: 'fit', label: 'Fit', parts: ['alignment', 'synergy'] },
+    { key: 'distribution', label: 'Distribution', parts: ['channels', 'virality'] },
+  ];
+
+  let scored: unknown;
+  let flags: unknown;
+  try {
+    const rows = await sql`
+      SELECT d.id AS deal_id, d.status AS deal_status,
+             p.name AS company, p.sector AS sector,
+             s.total_score, s.tier, s.created_at AS scored_at,
+             s.admin_review_status, s.anomaly_flags,
+             s.market_total, s.team_total, s.product_total,
+             s.capital_total, s.fit_total, s.distribution_total
+        FROM deals d
+        LEFT JOIN projects p ON p.id = d.project_id
+        LEFT JOIN (
+              SELECT project_id, MAX(created_at) AS created_at, total_score, tier,
+                     admin_review_status, anomaly_flags,
+                     market_total, team_total, product_total,
+                     capital_total, fit_total, distribution_total
+                FROM score_snapshots
+               WHERE is_sandbox = 0
+               GROUP BY project_id
+             ) s ON s.project_id = d.project_id
+       WHERE (p.id IS NULL OR p.deleted_at IS NULL)
+       ORDER BY s.created_at DESC, d.created_at DESC
+       LIMIT 200`;
+
+    const list = (rows as any[]).map((r) => {
+      // `anomaly_flags` is JSON written by detectAnomalies: [{type, severity}].
+      // Malformed JSON is treated as no flags rather than taking the read down;
+      // the row still reports its review status, which is the stored fact.
+      let parsed: Array<{ type?: string; severity?: string }> = [];
+      try { parsed = r.anomaly_flags ? JSON.parse(String(r.anomaly_flags)) : []; } catch { parsed = []; }
+      return {
+        deal_id: Number(r.deal_id),
+        company: r.company ?? null,
+        sector: r.sector ?? null,
+        deal_status: r.deal_status ?? null,
+        total_score: r.total_score === null || r.total_score === undefined ? null : Number(r.total_score),
+        tier: r.tier ?? null,
+        scored_at: r.scored_at ?? null,
+        review_status: r.admin_review_status ?? null,
+        flags: Array.isArray(parsed) ? parsed : [],
+        // The six, in the rubric's order, so the page never re-derives it.
+        dimensions: RUBRIC.map((dim) => ({
+          key: dim.key,
+          total: r[`${dim.key}_total`] === null || r[`${dim.key}_total`] === undefined
+            ? null : Number(r[`${dim.key}_total`]),
+        })),
+      };
+    });
+
+    const withScore = list.filter((r) => r.total_score !== null);
+    scored = {
+      available: true,
+      total_deals: list.length,
+      scored_deals: withScore.length,
+      unscored_deals: list.length - withScore.length,
+      rows: list,
+      // Said outright: a rehearsal must not move the desk's numbers.
+      sandbox_excluded: true,
+      sandbox_note: 'Sandbox snapshots are practice runs and are excluded. A rehearsal is not a screening result.',
+    };
+
+    const flagged = withScore.filter((r) => r.review_status === 'flagged');
+    const bySeverity: Record<string, number> = {};
+    for (const r of flagged) {
+      for (const f of r.flags) {
+        const key = String(f?.severity || 'unrecorded');
+        bySeverity[key] = (bySeverity[key] || 0) + 1;
+      }
+    }
+    flags = {
+      available: true,
+      open: flagged.length,
+      by_severity: bySeverity,
+      rows: flagged.map((r) => ({
+        deal_id: r.deal_id, company: r.company, tier: r.tier,
+        total_score: r.total_score, flags: r.flags,
+      })),
+    };
+  } catch {
+    scored = { available: false, reason: 'The score history could not be read.' };
+    flags = { available: false, reason: 'The score history could not be read, so open flags cannot be counted.' };
+  }
+  await sql.end();
+
+  return c.json({
+    scored,
+    flags,
+    rubric: {
+      available: true,
+      dimensions: RUBRIC,
+      // The dimensions are real and the WEIGHTS are not editable — two
+      // different facts, and collapsing them into "no rubric is stored" is
+      // what the ops row did.
+      editable: false,
+      editable_reason:
+        'The six dimensions and their weights are fixed in services/scoring.ts. Nothing stores a per-firm '
+        + 'rubric, so there is no weighting to edit — a rubric editor would write to a table that does not exist.',
+    },
+    // The one thing on this artboard with no store at all.
+    red_flag_rules_available: false,
+    red_flag_rules_reason:
+      'Flags come from fixed heuristics in services/scoreIntegrity.ts — a jump in inputs, a jump against '
+      + 'practice runs — and carry a type and a severity. No rule is written by a person and none can be, so '
+      + 'the rules editor the artboard draws would be a screen over a table nobody has.',
+    ...DEAL_METRIC_UNAVAILABLE,
+  });
+});
+
 deals.post('/', async (c) => {
   const user = await requireAuth(c);
   const data = await c.req.json();

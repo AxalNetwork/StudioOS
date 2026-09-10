@@ -168,8 +168,8 @@ const PROFILES = {
     canvas: /^Pages · Investor (Deals|Fund|Network|Portfolio|Research)\.dc\.html$/,
     pages: ['frontend/src/pages/investor', 'frontend/src/workspaces/investor', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/investorZoneActions.js',
-    zones: 16,
-    mounted: 16,
+    zones: 17,
+    mounted: 17,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.investor },
     // Fund, Portfolio and Deals' pipeline. Every other canvas route, with why
     // it is not here yet:
@@ -189,7 +189,14 @@ const PROFILES = {
       // enum through `critical`; `api.dealDocuments(id)` is a method; and
       // `pass_reason` is a stored, CHECKed taxonomy the pipeline zone now
       // reads. A deferral that says so is worth more than a row that lies.
-      'deals/screening', 'deals/commit', 'deals/closing',
+      //
+      // `deals/screening` IS OFF THIS LIST NOW — canvas ID2 did the body work
+      // the note above called for, and the store it found was larger than the
+      // deferral assumed: `score_snapshots` carries six dimensions,
+      // `admin_review_status` and `anomaly_flags`, so all four of its chips
+      // are live keys rather than reasons. Commit and Closing stay for exactly
+      // the stated cause until ID3 and ID4 build their lists.
+      'deals/commit', 'deals/closing',
     ],
     // `Call 3` names one specific stored record rather than welding a count
     // onto a filter, so `{n}` is not its repair and founder's `/\b(14|2026)\b/`

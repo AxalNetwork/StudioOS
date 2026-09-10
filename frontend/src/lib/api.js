@@ -1084,6 +1084,12 @@ export const api = {
   // Task #4 — Deal Flow: funnel aggregates, admin drafting, Deal Room
   // (documents / data room / commitments / activity) and investor invitations.
   dealFunnel: () => request('/deals/funnel'),
+  // Canvas ID2's desk — the score history and its flags. The pass taxonomy is
+  // a SEPARATE call (`dealPassAnalytics`, already declared below beside the
+  // write that produces it): two stores, read apart so a screening read that
+  // fails costs its own zone rather than taking the fund's pass memory with
+  // it — the same split RevenuePage made for disputes.
+  dealScreening: () => request('/deals/screening'),
   draftDeal: (data) => request('/deals/draft', { method: 'POST', body: JSON.stringify(data) }),
   advanceDeal: (id) => request(`/deals/${id}/advance`, { method: 'POST' }),
   // Task #127 — the only write path to the terminal stage. `reason` must be a

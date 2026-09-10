@@ -19,6 +19,7 @@ const InvestorDealsWorkspace = lazy(() => import('../../pages/investor/InvestorD
  */
 const ZONES = {
   pipeline: lazy(() => import('../../pages/investor/deals/PipelineZone')),
+  screening: lazy(() => import('../../pages/investor/deals/ScreeningZone')),
 };
 
 /**
@@ -78,7 +79,10 @@ export default function InvestorDealsRoutes() {
     // or not at all.
     pipeline: 'Every live deal by stage, and how long each has been sitting where it is. '
       + 'The stale flag is the product: a stage count cannot say who stopped moving.',
-    screening: 'The deal on the desk now — what it claims, and what has been checked.',
+    // WAS "the deal on the desk now", which described the one-record panel
+    // rather than the artboard. ID2 is a desk over every scored deal, its
+    // flags and the fund's pass memory.
+    screening: 'Every deal that has been scored, what the rubric said, and every pass the fund has recorded.',
     commit: 'What the committee decided, and what the decision was based on.',
     closing: 'Signed terms, wired capital, and what is still outstanding.',
   };
