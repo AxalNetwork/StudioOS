@@ -79,9 +79,14 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
   ],
   'deals/commit': [
-    { label: 'Export minutes', unbuilt: 'no vote minutes are stored to export' },
-    { label: 'Add condition', unbuilt: 'conditions are not a stored record' },
-    { label: 'Close vote', unbuilt: 'no vote is opened here, so none can be closed' },
+    { label: 'Export minutes', unbuilt: 'no minutes are stored to export; ic_meetings carries an agenda, written before the room rather than after it' },
+    { label: 'Add condition', unbuilt: 'conditions are not a stored record — the memo and terms are free text, and neither can block a later stage' },
+    // WAS: 'no vote is opened here, so none can be closed'. False — a vote
+    // opens when the first one is cast (POST /api/ic/:uid/vote moves draft →
+    // voting) and closes when a decision is set (PUT /api/ic/:uid forces
+    // decided and stamps decided_at). What is missing is the screen, which is
+    // the same shape as the LP row below: served, not offered.
+    { label: 'Close vote', unbuilt: 'closing a vote is served by the API — recording a decision against it moves it to decided — but no screen offers the form yet' },
   ],
   'deals/closing': [
     { label: 'Apply template', unbuilt: 'no closing templates are stored' },

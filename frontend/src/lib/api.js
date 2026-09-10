@@ -3701,6 +3701,9 @@ export const api = {
   icGet: (uid) => request(`/ic/${uid}`),
   icUpdate: (uid, data) => request(`/ic/${uid}`, { method: 'PUT', body: JSON.stringify(data) }),
   icVote: (uid, data) => request(`/ic/${uid}/vote`, { method: 'POST', body: JSON.stringify(data) }),
+  // Canvas ID3 — the whole Commit room in one scoped read. Registered ahead of
+  // `/ic/:uid` in the worker so the literal is not swallowed by the parameter.
+  icCommitRoom: () => request('/ic/commit-room'),
 
   // ---------- LP Reporting (Support) ----------
   lpReportsList: (opts = {}) => {

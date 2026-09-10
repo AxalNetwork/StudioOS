@@ -42,6 +42,11 @@ type DecisionRow = {
   created_at: string; updated_at: string;
 };
 
+export type VoteRow = {
+  vote: string; rationale: string | null; user_id: number;
+  created_at: string; user_name: string | null;
+};
+
 function canUseIc(user: User): boolean {
   return isAdmin(user) || isInvestor(user) || isPartner(user);
 }
@@ -67,6 +72,47 @@ async function loadDecision(env: Env, user: User, uid: string): Promise<Decision
   const where = `d.uid = ? AND ${scope.sql}`;
   return env.DB.prepare(`SELECT d.* FROM ic_decisions d WHERE ${where}`)
     .bind(uid, ...scope.binds).first<DecisionRow>();
+}
+
+/**
+ * The newest decisions this caller may see, with their votes — the ONE scoped
+ * list read of `ic_decisions`, exported so the second caller does not write a
+ * second copy of the predicate.
+ *
+ * `routes/research.ts` needs exactly this for the `deals/commit` AI band: the
+ * decision to draft an IC memo from, and the votes to attribute reasons to. It
+ * could have run its own `SELECT ... WHERE ${scope.sql}`, and that is precisely
+ * what this file's header warns against — "three copies of a query is three
+ * chances for the next one to be written without the predicate". A draft
+ * surface reading `ic_decisions` unscoped would hand another committee's
+ * deliberations to a model on this caller's behalf: the hole migration 219
+ * closed, reopened through a side door.
+ *
+ * It also keeps the `${where}` interpolation in the one file whose entry
+ * `scripts/sql-prepare-baseline.json` already carries. That is a consequence of
+ * the design rather than the reason for it, but the gate and the rule agree
+ * here, which is the point of the gate.
+ */
+export async function scopedDecisions(
+  env: Env, user: User, limit = 100,
+): Promise<Array<DecisionRow & { votes: VoteRow[] }>> {
+  const scope = icDecisionScope(user);
+  const where = scope.sql;
+  // `limit` is a clamped integer from this module's own callers, never from a
+  // request, and it is bound rather than interpolated regardless.
+  const rows = await env.DB.prepare(
+    `SELECT d.* FROM ic_decisions d WHERE ${where} ORDER BY d.updated_at DESC LIMIT ?`
+  ).bind(...scope.binds, Math.max(1, Math.min(500, Math.trunc(limit)))).all<DecisionRow>();
+  const out: Array<DecisionRow & { votes: VoteRow[] }> = [];
+  for (const d of ((rows.results || []) as DecisionRow[])) {
+    const votes = await env.DB.prepare(
+      `SELECT v.vote, v.rationale, v.user_id, v.created_at, u.name AS user_name
+         FROM ic_votes v LEFT JOIN users u ON u.id = v.user_id
+        WHERE v.ic_decision_id = ? ORDER BY v.created_at ASC`
+    ).bind(d.id).all<VoteRow>();
+    out.push({ ...d, votes: (votes.results || []) as VoteRow[] });
+  }
+  return out;
 }
 
 async function tally(env: Env, decisionId: number): Promise<{ yes: number; no: number; abstain: number }> {
@@ -206,6 +252,191 @@ r.post('/', async (c) => {
     const d = await c.env.DB.prepare('SELECT * FROM ic_decisions WHERE id = ?')
       .bind((ins as any).meta?.last_row_id).first<DecisionRow>();
     return c.json(await dto(c.env, d!, { votes: true }), 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/ic/commit-room — canvas ID3, the desk behind `/deals/commit`.
+//
+// REGISTERED BEFORE `/:uid` ON PURPOSE. Hono matches in registration order, so
+// a literal that lands after a parameter is unreachable — `commit-room` would
+// be read as a uid and 404. Same ordering care `/deals/screening` needs ahead
+// of `/deals/:id`.
+//
+// AND IT LIVES IN THIS FILE RATHER THAN `deals.ts` FOR ONE REASON: the scope.
+// `icDecisionScope` is what stands between one firm's memo and another's, and
+// this file's own header says three copies of a query is three chances for the
+// next one to be written without the predicate. A commit-room read in a file
+// that does not import the scope helper is exactly how that hole gets reopened.
+//
+// THE OPS ROW UNDER THIS ARTBOARD CARRIED A FALSE REASON, the same defect ID2
+// found one zone earlier. `investorZoneActions` marked `Close vote` unbuilt
+// because "no vote is opened here, so none can be closed". A vote is opened
+// and closed, both stored and both served:
+//
+//   `POST /api/ic/:uid/vote` moves a decision from `draft` to `voting` on the
+//   first vote cast. `PUT /api/ic/:uid` with a `decision` forces `decided`
+//   and stamps `decided_at`.
+//
+// What is missing is a SCREEN, which is a much narrower claim and the one the
+// table now makes.
+//
+// WHAT THE ARTBOARD DRAWS THAT NO STORE HOLDS, reported rather than invented:
+// recusal, conditions, quorum and minutes. Each is returned as an explicit
+// unavailable-with-reason rather than omitted, so the page states the gap
+// instead of rendering a plausible number in its place.
+//
+// RECUSAL IS THE ONE THAT MUST NOT BE FAKED. `ic_votes.vote` is
+// `yes | no | abstain`, and an abstention is a vote CAST — the voter was
+// counted and declined. A recusal is a declared conflict that removes the
+// voter from the DENOMINATOR. The artboard's own note makes that distinction
+// load-bearing ("excluded from the denominator — cast of eligible, not of
+// PARTNERS.length"), so mapping `abstain` onto it would put a false statement
+// about a conflict of interest on a fund's screen.
+// ---------------------------------------------------------------------------
+r.get('/commit-room', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!canUseIc(user)) return c.json({ detail: 'Forbidden' }, 403);
+
+    // THE SAME LIST READ `research.ts` USES, not a second copy of it. That is
+    // the whole reason `scopedDecisions` is exported rather than inlined here.
+    const list = await scopedDecisions(c.env, user, 100);
+
+    const byStatus: Record<string, number> = { draft: 0, voting: 0, decided: 0 };
+    const summaries: any[] = [];
+    let rationalesRecorded = 0;
+    let votesTotal = 0;
+
+    for (const d of list) {
+      if (d.status in byStatus) byStatus[d.status] += 1;
+      const cast = d.votes;
+      votesTotal += cast.length;
+      // A rationale is NOT NULL-able in the column and not required by the
+      // vote endpoint, so "how many carry one" is a real, countable fact —
+      // and it is the fact the artboard's `Rationale required` claim needs
+      // checking against. Blank-but-present counts as absent: a rationale of
+      // spaces is not a reason.
+      rationalesRecorded += cast.filter((v) => String(v.rationale || '').trim().length > 0).length;
+      const proj = d.project_id
+        ? await c.env.DB.prepare('SELECT name FROM projects WHERE id = ? AND deleted_at IS NULL')
+          .bind(d.project_id).first<{ name: string }>().catch(() => null)
+        : null;
+      summaries.push({
+        uid: d.uid,
+        title: d.title,
+        project_name: proj?.name ?? null,
+        deal_id: d.deal_id ?? null,
+        status: d.status,
+        decision: d.decision ?? null,
+        decided_at: d.decided_at ?? null,
+        votes_cast: cast.length,
+        rationales: cast.filter((v) => String(v.rationale || '').trim().length > 0).length,
+        tally: await tally(c.env, d.id),
+        votes: cast.map((v) => ({
+          user_id: v.user_id,
+          user_name: v.user_name ?? null,
+          vote: v.vote,
+          rationale: String(v.rationale || '').trim() || null,
+          created_at: v.created_at,
+        })),
+      });
+    }
+
+    // The newest decision in scope is what the artboard's first chip shows.
+    // "This deal" on a page that is not scoped to one deal means the decision
+    // most recently touched, and the page says so rather than implying the
+    // reader picked it.
+    const current = summaries[0] ?? null;
+
+    // WHO WAS IN THE ROOM, WHICH IS NOT WHO MAY VOTE. `ic_meeting_attendees`
+    // is a real invited roster with an RSVP, joined to a deal through
+    // `ic_meetings.deal_id`. It is the closest thing the schema has to the
+    // artboard's "Eligible voters", and it is NOT that: an invitation is not
+    // a voting entitlement, and labelling it as one would invent a governance
+    // rule the product does not enforce.
+    let room: any = {
+      available: false,
+      reason: 'No IC meeting is linked to this decision’s deal, so no attendee roster can be read.',
+    };
+    if (current?.deal_id != null) {
+      const meeting = await c.env.DB.prepare(
+        `SELECT id, title, start_at, status FROM ic_meetings
+          WHERE deal_id = ? ORDER BY start_at DESC LIMIT 1`
+      ).bind(current.deal_id).first<any>().catch(() => null);
+      if (meeting) {
+        const att = await c.env.DB.prepare(
+          'SELECT rsvp, COUNT(*) AS n FROM ic_meeting_attendees WHERE meeting_id = ? GROUP BY rsvp'
+        ).bind(meeting.id).all<{ rsvp: string; n: number }>().catch(() => null);
+        const byRsvp: Record<string, number> = {};
+        let invited = 0;
+        for (const a of ((att?.results || []) as any[])) {
+          byRsvp[String(a.rsvp)] = Number(a.n) || 0;
+          invited += Number(a.n) || 0;
+        }
+        room = {
+          available: true,
+          invited,
+          by_rsvp: byRsvp,
+          meeting_title: meeting.title ?? null,
+          starts_at: meeting.start_at ?? null,
+          status: meeting.status ?? null,
+          note: 'An invitation to the meeting, not an entitlement to vote. No voting roster is stored.',
+        };
+      }
+    }
+
+    return c.json({
+      decisions: {
+        available: true,
+        total: list.length,
+        by_status: byStatus,
+        rows: summaries,
+      },
+      current,
+      // The artboard says "Rationale required". The store does not require it,
+      // and the vote endpoint accepts a vote without one. Both facts are
+      // reported so the page can say which it is rather than repeating the
+      // artboard's claim as though the column enforced it.
+      rationale: {
+        recorded: rationalesRecorded,
+        total: votesTotal,
+        enforced: false,
+        note: 'ic_votes.rationale is nullable and POST /api/ic/:uid/vote accepts a vote without one. '
+          + 'The count is what was actually written, not what a rule guarantees.',
+      },
+      room,
+      recusal: {
+        available: false,
+        reason: 'ic_votes.vote is yes | no | abstain. An abstention is a vote cast; a recusal is a declared '
+          + 'conflict that leaves the denominator. Nothing stores the second, so no vote is shown as recused '
+          + 'and no denominator is reduced.',
+      },
+      conditions: {
+        available: false,
+        reason: 'No condition is stored. ic_decisions carries a free-text memo and a terms blob, and neither '
+          + 'is a condition another stage could block a wire on.',
+      },
+      minutes: {
+        available: false,
+        reason: 'No minutes are stored. ic_meetings carries an agenda, which is written before the room rather '
+          + 'than after it, and nothing records what the room concluded beyond the votes themselves.',
+      },
+      quorum: {
+        available: false,
+        reason: 'No quorum is stored. The IC charter template states one in prose, but that is a document body — '
+          + 'no number the product can check a tally against.',
+      },
+      // The correction this artboard is really about, carried in the payload so
+      // the page states it from the record rather than from a comment.
+      close_vote: {
+        served: true,
+        screen: false,
+        note: 'A vote opens when the first vote is cast (POST /api/ic/:uid/vote moves draft → voting) and closes '
+          + 'when a decision is set (PUT /api/ic/:uid forces decided and stamps decided_at). Both are served; '
+          + 'no screen offers the form yet.',
+      },
+    });
   } catch (e) { return mapError(c, e); }
 });
 

@@ -40,6 +40,7 @@ import { mintDownloadToken } from '../services/signedDownload';
 import { searchSemantic, deleteChunkedEntity, researchNamespace } from '../services/vectorize';
 import { run as runAI } from '../services/aiRouter';
 import { companyScope } from '../services/tenancyScope';
+import { scopedDecisions } from './ic';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
 // The perk lifecycle window lives in ONE place. `offers/perk-deals`'s gather
 // below decides what is expiring, and it has to agree with what the zone shows
@@ -2270,6 +2271,59 @@ const DRAFT_SURFACES: Record<string, {
         return `${r.company || 'company not recorded'} — ${r.sector || 'sector not recorded'}; `
           + `total ${r.total_score ?? 'not recorded'}, tier ${r.tier || 'not recorded'}; ${dims}${flagged}`;
       });
+    },
+  },
+
+  'deals/commit': {
+    // ID3's band: "Proposal · IC memo from the pipeline — assembled from
+    // everything the pipeline already holds ... Every figure traces to the row
+    // it came from, so the memo can be audited rather than trusted."
+    //
+    // THE ARTBOARD'S OWN MEMO SAYS "1 recused" AND "Approved with conditions",
+    // and neither is a thing this store can say. `ic_votes.vote` is
+    // yes|no|abstain — an abstention is a vote CAST, a recusal is a declared
+    // conflict that leaves the denominator — and no condition is stored
+    // anywhere. A model handed a tally and asked for an IC memo will reach for
+    // both, because that is what IC memos say, so both are forbidden outright
+    // rather than left to judgement.
+    //
+    // The rationale instruction is the other half. A vote with no reason is
+    // the most tempting gap in this material: the model knows the vote and can
+    // write a plausible reason for it, and a plausible reason attributed to a
+    // named partner is a fabricated quote in a governance record.
+    instruction: [
+      'Draft one investment-committee memo for the decision below, from the votes and their rationales.',
+      'Attribute every reason to the partner who wrote it, quoting only what is given. Where a vote carries NO RATIONALE, say the vote was cast without a recorded reason. Never write the reason yourself: a reason put in a named partner’s mouth is a fabricated quote in a governance record.',
+      'Never describe any vote as recused and never reduce the denominator: the record holds yes, no and abstain, an abstention is a vote cast rather than a conflict declared, and nothing stores a recusal.',
+      'Never state a condition, a quorum or an approval-with-conditions: none of the three is stored, so any of them would be invented.',
+      'Where the decision is still open, say so and do not predict the outcome.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT role FROM users WHERE id = ?')
+        .bind(userId).first<{ role: string | null }>();
+      const role = String(me?.role || '');
+      if (role !== 'admin' && role !== 'partner' && role !== 'investor') return [];
+      // SCOPED THROUGH THE ONE HELPER THAT OWNS THE PREDICATE.
+      // `scopedDecisions` is `routes/ic.ts`'s single list read; a draft surface
+      // running its own `SELECT ... FROM ic_decisions` would be the second copy
+      // that file's header warns about, and an unscoped one would hand another
+      // committee's deliberations to a model on this caller's behalf — the hole
+      // migration 219 closed, reopened through a side door.
+      const found = await scopedDecisions(c.env, { id: userId, role } as any, 1);
+      const d = found[0];
+      if (!d) return [];
+      const company = d.project_id
+        ? await c.env.DB.prepare('SELECT name FROM projects WHERE id = ? AND deleted_at IS NULL')
+          .bind(d.project_id).first<{ name: string }>().catch(() => null)
+        : null;
+      const head = `DECISION: ${d.title || 'title not recorded'}`
+        + ` — ${company?.name || 'company not recorded'}; stage ${d.status || 'not recorded'}`
+        + `; outcome ${d.decision || 'NOT CLOSED'}; ${d.votes.length} vote(s) cast`;
+      return [head, ...d.votes.map((v) => {
+        const reason = String(v.rationale || '').trim();
+        return `${v.user_name || 'partner not recorded'} voted ${v.vote}`
+          + ` — ${reason || 'NO RATIONALE RECORDED'}`;
+      })];
     },
   },
 

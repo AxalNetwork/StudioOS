@@ -208,11 +208,12 @@ test('every bucket root can be linked to by section', () => {
     // a route a link can simply open. An anchor kept beside it would have to
     // be on a card this workspace no longer draws. The other three stay until
     // ID2–ID4 land and take theirs the same way.
-    // `deals-screening` followed `deals-pipeline` off this list for the same
-    // reason: canvas ID2 gave `/deals/screening` its own body, so the section
-    // a link would have scrolled to is a route a link can open. Commit and
-    // Closing keep theirs until ID3 and ID4 land.
-    InvestorDealsWorkspace: ['deals-commit', 'deals-closing'],
+    // `deals-screening` and `deals-commit` followed `deals-pipeline` off this
+    // list for the same reason: ID2 and ID3 gave those routes their own bodies,
+    // so the section a link would have scrolled to is a route a link can open.
+    // Closing keeps its anchor until ID4 lands and takes it the same way — at
+    // which point this entry is one id, and then none.
+    InvestorDealsWorkspace: ['deals-closing'],
   };
   for (const [name, ids] of Object.entries(anchors)) {
     const page = codeOnly(read(`${investorDir}/${name}.jsx`));
