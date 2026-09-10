@@ -2595,6 +2595,23 @@ export const api = {
   // A picker must never hardcode these — see services/teamAuthority.ts.
   teamVocabulary: () => request('/company/team-vocabulary'),
 
+  // Task #121 — a real invitation, as opposed to `addCompanyMember`, which
+  // links an EXISTING account without asking it and 404s on anyone who has
+  // not signed up. These five drive `company_invitations`: the first mails a
+  // hashed, expiring token, and the last is the invitee's own accept. `addCompanyMember` stays: it is the direct add for someone
+  // who has already agreed, and the admin console still uses it.
+  inviteCompanyMember: (uid, data) =>
+    request(`/company/${uid}/invitations`, { method: 'POST', body: JSON.stringify(data) }),
+  listCompanyInvitations: (uid) => request(`/company/${uid}/invitations`),
+  // A NEW token — nothing stored can reproduce the old one, which is the
+  // point of storing only its hash.
+  resendCompanyInvitation: (uid, inviteUid) =>
+    request(`/company/${uid}/invitations/${inviteUid}/resend`, { method: 'POST' }),
+  revokeCompanyInvitation: (uid, inviteUid) =>
+    request(`/company/${uid}/invitations/${inviteUid}`, { method: 'DELETE' }),
+  acceptCompanyInvitation: (token) =>
+    request('/company/invitations/accept', { method: 'POST', body: JSON.stringify({ token }) }),
+
   // ---------- Personas (Epic 1) ----------
   getPersonaTaxonomy: () => request('/personas/taxonomy'),
   getMyPersonas: () => request('/personas/me'),

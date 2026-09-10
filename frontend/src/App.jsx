@@ -52,6 +52,7 @@ const PitchWorkspacePage = lazy(() => import('./pages/PitchWorkspacePage'));
 const CapitalWorkspacePage = lazy(() => import('./pages/CapitalWorkspacePage'));
 const LegalEnginePage = lazy(() => import('./pages/LegalEnginePage'));
 const AcceptInvitePage = lazy(() => import('./pages/AcceptInvitePage'));
+const AcceptCompanyInvitePage = lazy(() => import('./pages/AcceptCompanyInvitePage'));
 const LegalPage = lazy(() => import('./pages/LegalPage'));
 const IncorporatePage = lazy(() => import('./pages/IncorporatePage'));
 const IncorporateSuccessPage = lazy(() => import('./pages/IncorporateSuccessPage'));
@@ -254,7 +255,6 @@ const BrandBuilderPage = lazy(() => import('./pages/BrandBuilderPage'));
 const CompetitorAnalysisPage = lazy(() => import('./pages/CompetitorAnalysisPage'));
 const FinancialsPage = lazy(() => import('./pages/FinancialsPage'));
 const DiscoveryPage = lazy(() => import('./pages/DiscoveryPage'));
-const RoadmapPage = lazy(() => import('./pages/RoadmapPage'));
 const MetricsPage = lazy(() => import('./pages/MetricsPage'));
 const SignalsPage = lazy(() => import('./pages/SignalsPage'));
 const CapTablePage = lazy(() => import('./pages/CapTablePage'));
@@ -294,9 +294,6 @@ const FounderGrowCapitalMatch = lazy(() => import('./pages/founder/FounderGrowCa
 const FounderGrowBrand = lazy(() => import('./pages/founder/FounderGrowBrand'));
 const FounderGrowLaunch = lazy(() => import('./pages/founder/FounderGrowLaunch'));
 const FounderNetworkDesk = lazy(() => import('./pages/founder/FounderNetworkDesk'));
-const FounderNetworkRelationships = lazy(() => import('./pages/founder/FounderNetworkRelationships'));
-const FounderNetworkIntroductions = lazy(() => import('./pages/founder/FounderNetworkIntroductions'));
-const FounderNetworkOrganizations = lazy(() => import('./pages/founder/FounderNetworkOrganizations'));
 const FounderResearchDesk = lazy(() => import('./pages/founder/FounderResearchDesk'));
 const ServiceCatalogPage = lazy(() => import('./pages/ServiceCatalogPage'));
 const PartnerInsightsPage = lazy(() => import('./pages/PartnerInsightsPage'));
@@ -1683,6 +1680,10 @@ function AppInner() {
           acceptance. Public route; the page bounces logged-out visitors to
           sign-in with a `?next=` return path, then POSTs the bound token. */}
       <Route path="/projects/invitations/accept" element={<AcceptInvitePage />} />
+      {/* Task #121 — public like its project sibling: the invitee may have no
+          account yet, and the page bounces them to sign-in with a ?next= that
+          returns here. Guarding it would send them somewhere with no way back. */}
+      <Route path="/company/invitations/accept" element={<AcceptCompanyInvitePage />} />
       {/* Task #9 (X-2) — Public token-gated partner onboarding wizard.
           Mounted at the path embedded in admin-emailed magic links AND a
           query-string variant for fallback share-by-link channels. */}

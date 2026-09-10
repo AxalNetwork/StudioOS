@@ -9,12 +9,13 @@
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
-import { requireAuth } from '../auth';
+import { requireAuth, generateToken } from '../auth';
 import {
   isTitle, isAuthority, normalizeCarryBps, teamVocabulary,
 } from '../services/teamAuthority';
 import { isAdmin, mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { clampLimit, parseOffset } from '../util/pagination';
+import { hashInviteToken } from '../services/projectAccess';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -502,6 +503,314 @@ r.patch('/company/me', async (c) => {
     url.pathname = `/api/company/${company.uid}`;
     const proxied = new Request(url, { method: 'PATCH', headers: c.req.raw.headers, body });
     return await r.fetch(proxied, c.env, c.executionCtx);
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// Invitations — Task #121, and the comment this replaces was the bug report.
+//
+// `CompanySettingsPage` said it in its own docblock: "Invite by email is not an
+// invite. The backend resolves the address to an EXISTING user and 404s
+// otherwise — there is no invitation record and no email is sent." Writing
+// that down was right; leaving it true was not. Two people could not be
+// reached at all by the control that claimed to reach them: anyone who has not
+// signed up, and anyone whose address is not the one on their account. And a
+// registered user was LINKED to a company without ever being asked.
+//
+// So there is an invitation now: a row, a hashed token, an email, and an
+// accept step that the invitee takes. `POST /company/:uid/members` is
+// deliberately left alone — it is the direct add an admin performs on someone
+// who has already agreed, and removing it would break the admin console that
+// uses it. What changed is that the settings page no longer calls it.
+//
+// THE SHAPE IS `project_member_invitations`, ON PURPOSE. That table already
+// solved token hashing, expiry, revoke and the accept binding in this codebase;
+// a second invitation flow inventing its own vocabulary would make two things
+// that behave alike read differently. Where this one differs it is because a
+// company invitation is always addressed to an email (there is no bare share
+// link) and carries the three axes migration 191 separated.
+// ---------------------------------------------------------------------------
+
+/** Trim + lower-case, so the unique index and the accept-time match agree. */
+function normEmail(v: unknown): string {
+  return String(v || '').trim().toLowerCase();
+}
+// Deliberately loose: the mailer is the real check, and a regex that rejects a
+// deliverable address is worse than one that accepts an undeliverable one.
+function looksLikeEmail(v: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) && v.length <= 254;
+}
+
+/**
+ * The role, clamped the way `PATCH /company/:uid/members/:userId` clamps it.
+ * Accepting writes this straight into `user_company_links`, so an invitation
+ * that stored a longer one would seat a member with a role the edit control
+ * can never reproduce.
+ */
+function roleFrom(v: unknown): string {
+  const s = String(v ?? '').trim().slice(0, 80);
+  return s || 'Member';
+}
+
+/** What a caller may see. The token is NOT in here — it is shown once, at creation. */
+function invitationDto(row: any): any {
+  return {
+    uid: row.uid,
+    email: row.email,
+    role_in_company: row.role_in_company,
+    title: row.title ?? null,
+    authority: row.authority ?? null,
+    status: row.status,
+    // Whether the message actually left. An invitation nobody was told about
+    // is a different thing from one that is merely unanswered, and the page
+    // draws them differently.
+    email_sent: !!row.email_sent,
+    invited_by: row.invited_by_name || null,
+    created_at: row.created_at,
+    expires_at: row.expires_at,
+    accepted_at: row.accepted_at ?? null,
+  };
+}
+
+async function listInvitations(env: Env, companyId: number): Promise<any[]> {
+  const rows = await env.DB.prepare(
+    `SELECT ci.*, u.name AS invited_by_name
+       FROM company_invitations ci
+       LEFT JOIN users u ON u.id = ci.invited_by_user_id
+      WHERE ci.company_id = ?
+      ORDER BY ci.created_at DESC`,
+  ).bind(companyId).all<any>();
+  return (rows.results || []).map(invitationDto);
+}
+
+/**
+ * Mint a token, store only its hash, and try to send the mail.
+ *
+ * Returns the raw token so the caller can put it in a link ONCE. Nothing
+ * persists it, so a lost invitation is resent (a new token) rather than
+ * recovered — which is the property that makes the stored hash worth having.
+ */
+async function issueInvitationEmail(
+  env: Env, company: Company, inviter: User, email: string, token: string,
+): Promise<boolean> {
+  const base = String((env as any).PUBLIC_BASE_URL || (env as any).APP_URL || 'https://axal.vc').replace(/\/+$/, '');
+  const link = `${base}/company/invitations/accept?token=${encodeURIComponent(token)}`;
+  try {
+    const { sendCompanyInvitationEmail } = await import('../services/email');
+    return await sendCompanyInvitationEmail(env, email, company.company_name, inviter.name || 'A teammate', link);
+  } catch (e) {
+    console.warn('[company] invitation email failed', { company_id: company.id }, e);
+    return false;
+  }
+}
+
+// POST /company/:uid/invitations — invite by email, whether or not they have
+// an account. This is what the settings page calls now.
+r.post('/company/:uid/invitations', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const company = await getCompanyOr404(c.env, c.req.param('uid'));
+    if (!company) return c.json({ detail: 'Company not found' }, 404);
+    if (!(await canEdit(c.env, company, user))) return c.json({ detail: 'Not authorized to manage members' }, 403);
+
+    const body = await c.req.json().catch(() => ({} as any));
+    const email = normEmail(body.email);
+    if (!looksLikeEmail(email)) return c.json({ detail: 'A valid email address is required' }, 400);
+
+    // Already a member? Say so rather than sending an invitation that would
+    // 409 on accept — the reader's next move is different in each case.
+    const existing = await c.env.DB.prepare(
+      `SELECT ucl.id FROM user_company_links ucl
+         JOIN users u ON u.id = ucl.user_id
+        WHERE ucl.company_id = ? AND lower(u.email) = ?`,
+    ).bind(company.id, email).first();
+    if (existing) return c.json({ detail: 'That person is already a member of this company' }, 409);
+
+    const title = body.title && isTitle(String(body.title)) ? String(body.title) : null;
+    const authority = body.authority && isAuthority(String(body.authority)) ? String(body.authority) : null;
+
+    const token = generateToken();
+    const tokenHash = await hashInviteToken(token);
+    try {
+      await c.env.DB.prepare(
+        `INSERT INTO company_invitations
+           (uid, company_id, email, role_in_company, title, authority, token_hash,
+            status, invited_by_user_id, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, datetime('now', '+14 days'))`,
+      ).bind(newUid(), company.id, email, roleFrom(body.role_in_company),
+             title, authority, tokenHash, user.id).run();
+    } catch (e) {
+      // The partial unique index, not a lost race to check first. Resending is
+      // the right answer to "there is already one pending", and the caller is
+      // told which so the page can offer it.
+      if (String((e as Error)?.message || '').includes('UNIQUE')) {
+        return c.json({ detail: 'An invitation to that address is already pending', code: 'already_pending' }, 409);
+      }
+      throw e;
+    }
+
+    const sent = await issueInvitationEmail(c.env, company, user, email, token);
+    if (sent) {
+      await c.env.DB.prepare(
+        `UPDATE company_invitations SET email_sent = 1, updated_at = datetime('now') WHERE token_hash = ?`,
+      ).bind(tokenHash).run();
+    }
+    return c.json({
+      ok: true,
+      email_sent: sent,
+      // Shown once. With no mailer configured this is the only way the
+      // inviter can pass the invitation on, so the page renders it rather
+      // than reporting a success nobody can act on.
+      accept_path: `/company/invitations/accept?token=${encodeURIComponent(token)}`,
+      invitations: await listInvitations(c.env, company.id),
+      company: await detailDto(c.env, company, user),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// GET /company/:uid/invitations — the pending list the settings page draws.
+r.get('/company/:uid/invitations', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const company = await getCompanyOr404(c.env, c.req.param('uid'));
+    if (!company) return c.json({ detail: 'Company not found' }, 404);
+    // An invitation names a person's email address, so reading the list is
+    // gated on the same right as managing one — not on mere membership.
+    if (!(await canEdit(c.env, company, user))) return c.json({ detail: 'Not authorized to manage members' }, 403);
+    return c.json({ invitations: await listInvitations(c.env, company.id) });
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /company/:uid/invitations/:inviteUid/resend — a NEW token, not the old
+// one. Nothing stored can reproduce the original, and re-sending a link the
+// server cannot recompute would be a button that does nothing.
+r.post('/company/:uid/invitations/:inviteUid/resend', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const company = await getCompanyOr404(c.env, c.req.param('uid'));
+    if (!company) return c.json({ detail: 'Company not found' }, 404);
+    if (!(await canEdit(c.env, company, user))) return c.json({ detail: 'Not authorized to manage members' }, 403);
+    const inv = await c.env.DB.prepare(
+      `SELECT * FROM company_invitations WHERE uid = ? AND company_id = ?`,
+    ).bind(c.req.param('inviteUid'), company.id).first<any>();
+    if (!inv) return c.json({ detail: 'Invitation not found' }, 404);
+    if (inv.status !== 'pending') {
+      return c.json({ detail: 'That invitation is no longer pending', code: inv.status }, 409);
+    }
+    const token = generateToken();
+    const tokenHash = await hashInviteToken(token);
+    // The clock restarts with the token: the old link stops working the moment
+    // this row's hash changes, so leaving the old expiry would shorten an
+    // invitation that was just re-sent.
+    await c.env.DB.prepare(
+      `UPDATE company_invitations
+          SET token_hash = ?, email_sent = 0, expires_at = datetime('now', '+14 days'),
+              updated_at = datetime('now')
+        WHERE id = ?`,
+    ).bind(tokenHash, inv.id).run();
+    const sent = await issueInvitationEmail(c.env, company, user, inv.email, token);
+    if (sent) {
+      await c.env.DB.prepare(
+        `UPDATE company_invitations SET email_sent = 1, updated_at = datetime('now') WHERE id = ?`,
+      ).bind(inv.id).run();
+    }
+    return c.json({
+      ok: true,
+      email_sent: sent,
+      accept_path: `/company/invitations/accept?token=${encodeURIComponent(token)}`,
+      invitations: await listInvitations(c.env, company.id),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// DELETE /company/:uid/invitations/:inviteUid — revoke. The row stays so the
+// address can be invited again later and the history of who asked whom
+// survives; only the status and the clock change.
+r.delete('/company/:uid/invitations/:inviteUid', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const company = await getCompanyOr404(c.env, c.req.param('uid'));
+    if (!company) return c.json({ detail: 'Company not found' }, 404);
+    if (!(await canEdit(c.env, company, user))) return c.json({ detail: 'Not authorized to manage members' }, 403);
+    const res = await c.env.DB.prepare(
+      `UPDATE company_invitations
+          SET status = 'revoked', revoked_at = datetime('now'), updated_at = datetime('now')
+        WHERE uid = ? AND company_id = ? AND status = 'pending'`,
+    ).bind(c.req.param('inviteUid'), company.id).run();
+    if (!res.meta.changes) return c.json({ detail: 'No pending invitation with that id' }, 404);
+    return c.json({ ok: true, invitations: await listInvitations(c.env, company.id) });
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /company/invitations/accept — the invitee's own act.
+//
+// It cannot collide with `/company/:uid/invitations` despite the equal segment
+// count: that pattern requires the THIRD segment to be the literal
+// `invitations`, and here the third is `accept`. No ordering dependency.
+r.post('/company/invitations/accept', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const body = await c.req.json().catch(() => ({} as any));
+    const token = String(body.token || '').trim();
+    if (!token) return c.json({ detail: 'token is required' }, 400);
+    const inv = await c.env.DB.prepare(
+      `SELECT * FROM company_invitations WHERE token_hash = ?`,
+    ).bind(await hashInviteToken(token)).first<any>();
+    if (!inv) return c.json({ detail: 'Invitation not found' }, 404);
+    if (inv.status !== 'pending') {
+      return c.json({ detail: 'This invitation is no longer valid', code: inv.status }, 410);
+    }
+    // Expiry is checked in SQL so both sides are the same `datetime()` format,
+    // and stamped when found so the list stops calling it pending.
+    const exp = await c.env.DB.prepare(
+      `SELECT CASE WHEN expires_at < datetime('now') THEN 1 ELSE 0 END AS expired
+         FROM company_invitations WHERE id = ?`,
+    ).bind(inv.id).first<{ expired: number }>();
+    if (Number(exp?.expired) === 1) {
+      await c.env.DB.prepare(
+        `UPDATE company_invitations SET status = 'expired', updated_at = datetime('now') WHERE id = ?`,
+      ).bind(inv.id).run();
+      return c.json({ detail: 'This invitation has expired', code: 'expired' }, 410);
+    }
+    // THE BINDING. An invitation is addressed to an address, and the account
+    // accepting it must be that address — otherwise a forwarded link would
+    // join the forwarder to a company they were never invited to.
+    if (normEmail(user.email) !== normEmail(inv.email)) {
+      return c.json({
+        detail: 'This invitation was sent to a different email address',
+        code: 'wrong_account',
+        invited_email: inv.email,
+      }, 403);
+    }
+    const company = await c.env.DB.prepare(
+      'SELECT * FROM company_profiles WHERE id = ?',
+    ).bind(inv.company_id).first<Company>();
+    if (!company) return c.json({ detail: 'That company no longer exists' }, 404);
+
+    const already = await getLink(c.env, company.id, user.id);
+    if (!already) {
+      await c.env.DB.prepare(
+        `INSERT INTO user_company_links
+           (uid, company_id, user_id, role_in_company, is_primary_admin, title, authority, created_at)
+         VALUES (?, ?, ?, ?, 0, ?, ?, ?)`,
+      ).bind(newUid(), company.id, user.id, inv.role_in_company,
+             inv.title, inv.authority, nowIso()).run();
+    }
+    // An invitation accepted by someone who was added directly in the meantime
+    // is still accepted — the outcome it asked for is the outcome that holds.
+    await c.env.DB.prepare(
+      `UPDATE company_invitations
+          SET status = 'accepted', accepted_by_user_id = ?, accepted_at = datetime('now'),
+              updated_at = datetime('now')
+        WHERE id = ?`,
+    ).bind(user.id, inv.id).run();
+    return c.json({
+      ok: true,
+      company_uid: company.uid,
+      company_name: company.company_name,
+      role_in_company: inv.role_in_company,
+      already_member: !!already,
+    });
   } catch (e) { return mapError(c, e); }
 });
 

@@ -182,9 +182,30 @@ test('companies counts analyses under a label that says analyses', () => {
     'the strip draws a tile the store cannot fill, or has lost one it can');
   assert.ok(!strip.includes('label="Tracked"'),
     '`Tracked` counts companies and this row is an analysis — the label must not come back');
-  assert.match(tiles['Saved analyses'], /value=\{visibleSaved\.length\}/,
-    'the analyses tile no longer counts the analyses actually loaded');
-  assert.doesNotMatch(strip, /Not recorded/, 'a tile states its own absence again');
+  // THE TILE WITHHOLDS ITS FIGURE UNTIL THE LIST HAS ANSWERED. This assertion
+  // read `value={visibleSaved.length}` until 2026-09-10, which was true of the
+  // code and false of the screen: BOTH `api.competitors.list()` call sites
+  // caught a failed read into `{ analyses: [] }`, so a 500 rendered
+  // `Saved analyses 0` — the reader told they had run nothing when the server
+  // had simply not answered. The rule did not change, the code did; the
+  // replacement is strictly stronger, because the old one permitted the zero.
+  assert.match(tiles['Saved analyses'],
+    /value=\{savedState === 'ready' \? visibleSaved\.length : 'Not recorded'\}/,
+    'the analyses tile reports a figure before the list has answered');
+  // ...and never bare (D68). Both non-ready states say WHICH one they are:
+  // "could not be read" and "still reading" are different facts, and only one
+  // of them is worth waiting on.
+  for (const state of ['failed', 'loading']) {
+    assert.match(tiles['Saved analyses'], new RegExp(`savedState === '${state}' \\?`),
+      `the tile does not say why it is withholding the count while ${state}`);
+  }
+  // The two tiles whose STORE does not exist stay UNDRAWN — a product gap is
+  // not the reader's missing fact and cannot borrow its wording (D56/D68).
+  // That is what the old blanket ban on the phrase in this strip protected;
+  // it is pinned per tile now, since one tile legitimately uses it above.
+  assert.deepEqual(Object.keys(tiles).filter((k) => tiles[k].includes('Not recorded')),
+    ['Saved analyses'],
+    'a tile with no store states its own absence instead of staying undrawn');
   for (const label of ['Changed this month', 'Comparables']) {
     assert.ok(!strip.includes(`label="${label}"`), `${label} has no source and is drawn anyway`);
   }
