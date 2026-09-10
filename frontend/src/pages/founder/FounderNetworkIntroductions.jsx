@@ -55,7 +55,7 @@ const stateLabel = (row) => {
   if (status === 'connected') return 'Connected';
   if (status === 'expired') return 'Stalled';
   if (['pending', 'invited', 'viewed'].includes(status)) return 'In motion';
-  return pretty(status, 'Not recorded');
+  return pretty(status);
 };
 
 export default function FounderNetworkIntroductions({ embedded = false, role = 'founder', zoneFilters = null }) {
