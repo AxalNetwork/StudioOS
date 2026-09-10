@@ -22,7 +22,7 @@ import {
   buildGoogleAuthUrl, buildMicrosoftAuthUrl,
   exchangeGoogleCode, exchangeMicrosoftCode,
   fetchGoogleUserinfo, fetchMicrosoftUserinfo,
-  fetchUserEvents, eventsToIcs,
+  fetchUserEvents, fetchUserEventsWithSources, attachPushRecords, eventsToIcs,
   syncUserToGoogle, syncUserToMicrosoft,
   preflightOAuthSecrets,
 } from '../services/calendar';
@@ -160,15 +160,24 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
     return c.json({ detail: 'Invalid from/to ISO datetime' }, 400);
   }
   const kinds = kindsQ ? kindsQ.split(',').map(s => s.trim()).filter(Boolean) : undefined;
-  const events = await fetchUserEvents(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), kinds);
+  // THE DEGRADING READ, deliberately — see `gather` in services/calendar.ts.
+  // Until now one unreadable source turned the whole agenda into a 500 and
+  // nothing in the response could say which one. `sources` reports every kind
+  // that was asked for and whether it answered, so the page can render the four
+  // that loaded and name the fifth instead of blanking.
+  const { events, sources } = await fetchUserEventsWithSources(
+    c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), kinds,
+  );
+  const items = await attachPushRecords(c.env, user.id, events);
   await ensureCalendarOAuthSchema(c.env);
   const sql = getSQL(c.env);
   const tok = (await sql`SELECT 1 FROM google_oauth_tokens WHERE user_id = ${user.id}` as any[])[0];
   return c.json({
-    items: events,
+    items,
     from: fromDt.toISOString(),
     to: toDt.toISOString(),
     google_connected: !!tok,
+    sources,
   });
 }));
 

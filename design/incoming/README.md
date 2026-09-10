@@ -435,7 +435,7 @@ than canvas source and is not in the committed file.
 
 | Canvas | Governs | Grade | Still outstanding |
 | --- | --- | --- | --- |
-| `Calendar.dc.html` | `/calendar`, all five licences | UPGRADE | Six boards (C1–C6) are **states of one page**, not per-profile designs; the only role variation drawn is whether the viewer may create an IC meeting, which matches `canScheduleIc` exactly. The shipped page has the providers, the push, the .ics feed and both create-flows already wired — what it lacks is the canvas's composition, and one live defect the canvas itself names. |
+| `Calendar.dc.html` | `/calendar`, all five licences | UPGRADE — **built 2026-09-10** | Six boards (C1–C6) are **states of one page**, not per-profile designs; the only role variation drawn is whether the viewer may create an IC meeting, which matches `canScheduleIc` exactly. All six states are now in `CalendarPage.jsx` and parsed back out of this file by `frontend/test/calendar_page_c1.test.mjs`. **Two deliberate departures, both recorded there:** the page draws six kinds where the canvas draws five (see below), and it withholds the push control on a Calendly event, which the canvas draws and `PUSHABLE_KINDS` refuses with a 400. |
 
 **The canvas caught a bug that was actually there.** It says its kind list
 exists *"so `partner_office_hour` cannot lose its chip again"* — and on
@@ -451,4 +451,17 @@ and produced by nothing, so it is absent here."* It **is** produced —
 `services/wellbeing/bookings.ts:267` writes a `calendar_events` row on a
 confirmed booking. It never arrives, but for a different reason: that INSERT
 names four columns the table does not have and omits three `NOT NULL` ones, so
-it throws. See the `ROUTE_MAP.md` row for what that means for the build.
+it throws.
+
+**So the built page draws six kinds, not five** — migration 235 gave
+`calendar_events` the four columns those writers name, and with the row
+arriving the kind is real, so it gets a chip, a legend row and a dot. Its mark
+is derived in the canvas's own idiom rather than borrowed: a distinct shape
+first (`0 50% 0 50%`, against the drawn circle / square / pill / hard square /
+teardrop) and one low-saturation hue second (`#be123c`, lifting to `#fda4af`
+in dark), asserted by the guard to reuse neither a drawn shape, nor a drawn
+hue, nor the violet accent. The guard also re-reads the canvas's own sentence
+about `expert_booking`, so if this file is ever re-exported saying something
+different, the note above stops being true out loud instead of quietly.
+
+See the `ROUTE_MAP.md` row for the rest.

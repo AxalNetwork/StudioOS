@@ -32,7 +32,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { fetchUserEvents, KNOWN_KINDS } from '../src/services/calendar.ts';
+import { attachPushRecords, fetchUserEvents, fetchUserEventsWithSources, KNOWN_KINDS } from '../src/services/calendar.ts';
 import { mirrorBookingToCalendar } from '../src/services/wellbeing/bookings.ts';
 import calendar from '../src/routes/calendar.ts';
 import { SignJWT } from 'jose';
@@ -268,9 +268,131 @@ test('KNOWN_KINDS is every kind the aggregator can emit, and the union agrees', 
   assert.deepEqual([...KNOWN_KINDS].sort(), declared,
     'KNOWN_KINDS and the CalendarEvent union have diverged');
 
-  // And every one of them is actually dispatched in fetchUserEvents.
-  const body = src.slice(src.indexOf('export async function fetchUserEvents'));
-  for (const k of KNOWN_KINDS) {
-    assert.ok(body.includes(`wanted.has('${k}')`), `${k} is in KNOWN_KINDS but nothing fetches it`);
-  }
+  // WAS a scan of `fetchUserEvents` for a `wanted.has('<kind>')` line per kind.
+  // That aggregator was a run of six hand-written `if`s and the scan was the
+  // only thing holding them in step with the union. It is now a
+  // `Record<CalendarEvent['kind'], CalendarReader>` that tsc will not let
+  // drift, and KNOWN_KINDS is its key list — so the check is that every kind
+  // resolves to a reader, which the string scan could never actually prove.
+  const readers = src.match(/const READERS: Readonly<Record<CalendarEvent\['kind'\], CalendarReader>> = \{([\s\S]*?)\n\};/)?.[1] || '';
+  const wired = [...readers.matchAll(/^ {2}([a-z_]+):/gm)].map((m) => m[1]).sort();
+  assert.deepEqual(wired, declared, 'a kind in the union has no reader, or a reader has no kind');
+});
+
+test('one unreadable source degrades the agenda instead of blanking it', async () => {
+  // Before this, every reader ran inside one un-caught await chain, so a
+  // single broken source turned the whole request into a 500 — a founder with
+  // five working sources saw nothing, and nothing in the response could say
+  // which one was at fault.
+  const db = freshDb();
+  db.prepare(
+    `INSERT INTO calendar_events (uid, user_id, source, external_uri, kind, source_id, source_uid,
+                                  title, start_at, end_at, status)
+     VALUES (?, ?, 'axal', ?, 'expert_booking', 7, 'bk1', 'Expert session', ?, ?, 'confirmed')`,
+  ).run('expert_booking:bk1', FOUNDER, 'axal:expert_booking:bk1',
+        '2026-06-01T09:00:00Z', '2026-06-01T10:00:00Z');
+  // `ic_meetings` is deliberately NOT created, so that reader throws for a
+  // reason the readers' own missing-table catch does not swallow.
+  const { events, sources } = await fetchUserEventsWithSources(
+    env(db), FOUNDER, 'founder', WINDOW[0], WINDOW[1], ['expert_booking', 'ic_meeting'],
+  );
+  assert.equal(events.length, 1, 'the source that worked was dropped along with the one that did not');
+  assert.equal(events[0].kind, 'expert_booking');
+  assert.deepEqual(sources.map((s) => [s.kind, s.ok]).sort(),
+    [['expert_booking', true], ['ic_meeting', false]].sort(),
+    'the response does not say which source failed');
+  const bad = sources.find((s) => !s.ok);
+  assert.ok(bad && bad.error && bad.error.length > 0, 'a failed source carries no reason');
+  assert.ok(sources.every((s) => s.ok || s.error), 'a source is marked failed with nothing to show for it');
+  assert.equal(sources.find((s) => s.ok)?.error, null, 'a source that answered carries an error');
+});
+
+test('the strict read still refuses a partial answer', async () => {
+  // .ics export and the push lookup use `fetchUserEvents`, and both would be
+  // WRONG with a shorter list: a feed that quietly dropped a source writes an
+  // incomplete calendar into someone's client, and a push lookup would report
+  // "event not found" when the truth is that its source broke.
+  const db = freshDb();
+  await assert.rejects(
+    () => fetchUserEvents(env(db), FOUNDER, 'founder', WINDOW[0], WINDOW[1], ['ic_meeting']),
+    /calendar source ic_meeting failed/,
+    'the strict read swallowed a source failure',
+  );
+});
+
+test('an event says which calendars it has already been copied to', async () => {
+  // `calendar_sync_records` has recorded every push since Task #52 and nothing
+  // ever read it back to the feed, so `/calendar` could not tell a copied
+  // event from one still to push — and push is one-time, so the only way to
+  // find out was to press the button again.
+  const db = freshDb();
+  db.exec(`
+    CREATE TABLE calendar_sync_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, provider TEXT NOT NULL,
+      source_kind TEXT NOT NULL, source_id INTEGER NOT NULL, external_event_id TEXT NOT NULL,
+      last_synced_at TEXT, last_error TEXT
+    );
+  `);
+  const ev: any = {
+    id: 'expert_booking:7', kind: 'expert_booking', source_id: 7, source_uid: 'bk1',
+    title: 'Expert session', start_at: '2026-06-01T09:00:00Z', end_at: '2026-06-01T10:00:00Z',
+    status: 'confirmed', location_kind: 'video', location_uri: null, organizer_email: null,
+    attendees: [], notes: null,
+  };
+  const other: any = { ...ev, id: 'expert_booking:8', source_id: 8 };
+
+  const ins = db.prepare(
+    `INSERT INTO calendar_sync_records (user_id, provider, source_kind, source_id, external_event_id, last_error)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  );
+  ins.run(FOUNDER, 'google', 'expert_booking', 7, 'g-1', null);
+  // A record whose CANCEL was refused (migration 181). The copy is still on
+  // their calendar, so it counts as pushed — filtering these out would tell a
+  // reader the event is not there when it demonstrably is.
+  ins.run(FOUNDER, 'microsoft', 'expert_booking', 7, 'm-1', 'graph said no');
+  // Another user's push must not leak onto this reader's event.
+  ins.run(OTHER, 'google', 'expert_booking', 8, 'g-2', null);
+
+  const [a, b] = await attachPushRecords(env(db), FOUNDER, [ev, other]);
+  assert.deepEqual([...(a.pushed_to || [])].sort(), ['google', 'microsoft'],
+    'a pushed event does not report both providers');
+  assert.equal(b.pushed_to, undefined, 'an event nobody pushed is reported as pushed');
+});
+
+test('a reader who has never pushed anything still gets their agenda', async () => {
+  // THE COMMON CASE, and the one a mutation slipped through: with the table
+  // present but empty there is an early return, and returning the wrong thing
+  // from it would empty the calendar for every user who has never pressed
+  // push — which is most of them.
+  const db = freshDb();
+  db.exec(`
+    CREATE TABLE calendar_sync_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, provider TEXT NOT NULL,
+      source_kind TEXT NOT NULL, source_id INTEGER NOT NULL, external_event_id TEXT NOT NULL,
+      last_synced_at TEXT, last_error TEXT
+    );
+  `);
+  const ev: any = {
+    id: 'expert_booking:7', kind: 'expert_booking', source_id: 7, source_uid: 'bk1',
+    title: 'Expert session', start_at: '2026-06-01T09:00:00Z', end_at: '2026-06-01T10:00:00Z',
+    status: 'confirmed', location_kind: 'video', location_uri: null, organizer_email: null,
+    attendees: [], notes: null,
+  };
+  const out = await attachPushRecords(env(db), FOUNDER, [ev]);
+  assert.equal(out.length, 1, 'an empty push ledger emptied the agenda');
+  assert.equal(out[0].id, 'expert_booking:7');
+  assert.equal(out[0].pushed_to, undefined, 'an event nobody pushed claims to be pushed');
+});
+
+test('a missing sync-record table costs the pill, never the agenda', async () => {
+  const db = freshDb();
+  const ev: any = {
+    id: 'expert_booking:7', kind: 'expert_booking', source_id: 7, source_uid: 'bk1',
+    title: 'Expert session', start_at: '2026-06-01T09:00:00Z', end_at: '2026-06-01T10:00:00Z',
+    status: 'confirmed', location_kind: 'video', location_uri: null, organizer_email: null,
+    attendees: [], notes: null,
+  };
+  const out = await attachPushRecords(env(db), FOUNDER, [ev]);
+  assert.equal(out.length, 1, 'the event was lost with the table');
+  assert.equal(out[0].pushed_to, undefined);
 });
