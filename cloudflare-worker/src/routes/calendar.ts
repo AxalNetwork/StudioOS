@@ -1172,12 +1172,19 @@ calendar.post('/events', async (c) => {
   if (!title || !startAt) return c.json({ detail: 'title and start_at required' }, 400);
   const source = body?.source ? String(body.source).slice(0, 40) : 'manual';
   const kind = body?.kind ? String(body.kind).slice(0, 40) : 'other';
-  const externalUri = `axal:manual:${crypto.randomUUID()}`;
+  // TWO REASONS THIS THREW ON EVERY CALL BEFORE MIGRATION 235.
+  //   · `kind` was not a column. Migration 062's header promised the add "in a
+  //     separate migration in follow-up Task #58"; it was never written, and no
+  //     `ALTER TABLE calendar_events` existed anywhere. 235 adds it.
+  //   · `uid` is NOT NULL UNIQUE and nothing supplied one, so even with `kind`
+  //     present the row could not be written. It is minted here from the same
+  //     value as `external_uri`, which is the identity this row actually has.
+  const uid = `axal:manual:${crypto.randomUUID()}`;
   const r = await c.env.DB.prepare(
-    `INSERT INTO calendar_events (user_id, source, kind, external_uri, title, start_at, end_at, status,
+    `INSERT INTO calendar_events (uid, user_id, source, kind, external_uri, title, start_at, end_at, status,
                                    notes, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, datetime('now'), datetime('now'))`,
-  ).bind(user.id, source, kind, externalUri, title.slice(0, 240),
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, datetime('now'), datetime('now'))`,
+  ).bind(uid, user.id, source, kind, uid, title.slice(0, 240),
          startAt, endAt, body?.notes ? String(body.notes).slice(0, 4000) : null).run();
   return c.json({ id: r.meta.last_row_id, ok: true });
 });

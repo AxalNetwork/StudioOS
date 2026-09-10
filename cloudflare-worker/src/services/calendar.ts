@@ -663,22 +663,92 @@ async function calendlyEvents(env: Env, userId: number, isAdmin: boolean,
   }
 }
 
+/**
+ * Rows written straight into `calendar_events` by a feature that owns no
+ * table of its own — today only `expert_booking`, from a confirmed wellbeing
+ * session.
+ *
+ * SEPARATE FROM `calendlyEvents` BECAUSE THE FILTER IS THE POINT. That reader
+ * takes `source = 'calendly'`; these rows carry `source = 'axal'`, so the two
+ * never see each other's rows and neither needs to know the other's kinds.
+ * Reading by `kind` is what makes this generic: a second such feature adds a
+ * `KNOWN_KINDS` entry and nothing here changes.
+ */
+async function directEvents(env: Env, userId: number, isAdmin: boolean,
+                            fromIso: string, toIso: string,
+                            kind: string): Promise<CalendarEvent[]> {
+  try {
+    const where = isAdmin
+      ? "source <> 'calendly' AND kind = ? AND start_at >= ? AND start_at <= ?"
+      : "source <> 'calendly' AND kind = ? AND user_id = ? AND start_at >= ? AND start_at <= ?";
+    const stmt = isAdmin
+      ? env.DB.prepare(`SELECT * FROM calendar_events WHERE ${where}`).bind(kind, fromIso, toIso)
+      : env.DB.prepare(`SELECT * FROM calendar_events WHERE ${where}`).bind(kind, userId, fromIso, toIso);
+    const res = await stmt.all<{
+      id: number; uid: string; kind: string; source_id: number | null; source_uid: string | null;
+      title: string | null; start_at: string; end_at: string; status: string;
+      location_kind: string | null; location_uri: string | null;
+      organizer_email: string | null; attendees_json: string | null; notes: string | null;
+    }>();
+    return (res.results || []).map(r => {
+      let attendees: CalendarEvent['attendees'] = [];
+      // A malformed blob costs the row its attendee list, never the row.
+      try {
+        const parsed = JSON.parse(r.attendees_json || '[]');
+        if (Array.isArray(parsed)) attendees = parsed;
+      } catch { /* keep the empty list */ }
+      return {
+        id: `${r.kind}:${r.source_id ?? r.id}`,
+        kind: r.kind as CalendarEvent['kind'],
+        source_id: r.source_id ?? r.id,
+        source_uid: r.source_uid ?? r.uid,
+        title: r.title || 'Session',
+        start_at: r.start_at,
+        end_at: r.end_at,
+        status: r.status,
+        location_kind: r.location_kind || 'video',
+        location_uri: r.location_uri,
+        organizer_email: r.organizer_email,
+        attendees,
+        notes: r.notes,
+        project_id: null,
+      };
+    });
+  } catch (e) {
+    if (isMissingTableError(e) || isMissingColumnError(e)) return [];
+    throw e;
+  }
+}
+
+/**
+ * EVERY KIND THIS PRODUCT CAN PUT ON A CALENDAR, in one place.
+ *
+ * The default set below used to be a five-element array literal that had to be
+ * kept in step with the `CalendarEvent` union above and with three separate
+ * hardcoded lists on the page. It was not: `partner_office_hour` had no filter
+ * chip on `/calendar`, so office hours were reachable only under "All", and
+ * `expert_booking` was in the union with nothing reading it. Exporting the set
+ * lets the page derive its filters from what the server can actually emit
+ * rather than from a list someone remembered to update.
+ */
+export const KNOWN_KINDS: readonly CalendarEvent['kind'][] = [
+  'advisor_booking', 'ic_meeting', 'founder_checkin',
+  'partner_office_hour', 'calendly_event', 'expert_booking',
+];
+
 export async function fetchUserEvents(
   env: Env, userId: number, role: string, fromIso: string, toIso: string,
   kinds?: string[],
 ): Promise<CalendarEvent[]> {
   const isAdmin = role.toLowerCase() === 'admin';
-  const wanted = new Set(
-    kinds && kinds.length
-      ? kinds
-      : ['advisor_booking', 'ic_meeting', 'founder_checkin', 'partner_office_hour', 'calendly_event'],
-  );
+  const wanted = new Set<string>(kinds && kinds.length ? kinds : KNOWN_KINDS);
   const out: CalendarEvent[] = [];
   if (wanted.has('advisor_booking')) out.push(...await advisorBookingEvents(env, userId, isAdmin, fromIso, toIso));
   if (wanted.has('ic_meeting')) out.push(...await icEvents(env, userId, isAdmin, fromIso, toIso));
   if (wanted.has('founder_checkin')) out.push(...await checkinEvents(env, userId, isAdmin, fromIso, toIso));
   if (wanted.has('partner_office_hour')) out.push(...await partnerOfficeHourEvents(env, userId, isAdmin, fromIso, toIso));
   if (wanted.has('calendly_event')) out.push(...await calendlyEvents(env, userId, isAdmin, fromIso, toIso));
+  if (wanted.has('expert_booking')) out.push(...await directEvents(env, userId, isAdmin, fromIso, toIso, 'expert_booking'));
   out.sort((a, b) => a.start_at.localeCompare(b.start_at));
   return out;
 }
