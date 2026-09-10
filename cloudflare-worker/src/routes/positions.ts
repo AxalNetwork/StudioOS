@@ -148,6 +148,88 @@ r.get('/', async (c) => {
 // latest portfolio_marks row per project. Everything is GROSS of fees
 // and carry — `basis: 'gross'` rides along in the payload so the UI
 // cannot silently present these as net-to-LP figures.
+/**
+ * GET /api/positions/marks — canvas IP1's `Mark history`, book-wide.
+ *
+ * REGISTERED BEFORE `/:projectUid`. Hono matches in registration order, so a
+ * literal that lands after a parameter is unreachable — `marks` would be read
+ * as a project uid and 404.
+ *
+ * THE OPS ROW SAID THIS DID NOT EXIST, AND IT WAS WRONG TWICE.
+ * `investorZoneActions` marked `Mark history` unbuilt because "only the current
+ * mark is stored; there is no history to open". `portfolio_marks` is a HISTORY
+ * table — one row per marking event, each carrying the `as_of_date` it speaks
+ * for, the `event` that caused it, the `basis` it was arrived at on and free
+ * text `source` provenance. And `GET /positions/:projectUid` was ALREADY
+ * returning that history, to the same `canViewLpData` readers who were looking
+ * at the disabled button.
+ *
+ * So this route adds no access and no store. It answers the one question the
+ * per-project read cannot: what happened across the whole book, in one call,
+ * ordered by when it happened. Fetching that by looping the per-project
+ * endpoint would be an N+1 for a page whose first job is a list.
+ *
+ * THE BASIS COLUMN IS WHY THE HISTORY MATTERS. `portfolio_marks.basis` is
+ * `round_price | secondary | gp_estimate | write_down | cost`, and the schema's
+ * own comment says why it is there: "a round-priced mark and a GP estimate must
+ * never look alike to an LP". A book that shows only the latest FMV hides
+ * exactly that distinction.
+ *
+ * Scoped identically to every other read in this file — `canViewLpData` then
+ * `investorProjectIds`, through the same CSV predicate `latestMarksByProject`
+ * uses, with both sides bound.
+ */
+r.get('/marks', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const projectIds = await investorProjectIds(c.env, user, await investorActiveCompany(c, user));
+    const scopeCsv = projectIds == null ? null : projectIds.join(',');
+    // A book with no accessible projects reads as empty rather than as
+    // unscoped: `investorProjectIds` returning [] must not become "all rows".
+    if (projectIds != null && projectIds.length === 0) {
+      return c.json({ items: [], projects: 0, basis_counts: {} });
+    }
+    const rows = await c.env.DB.prepare(
+      `SELECT m.uid, m.project_id, m.as_of_date, m.fmv, m.post_money,
+              m.event, m.basis, m.source, m.note, m.created_at,
+              p.name AS project_name, p.uid AS project_uid
+         FROM portfolio_marks m
+         JOIN projects p ON p.id = m.project_id AND p.deleted_at IS NULL
+        WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(m.project_id AS TEXT) || ',') > 0)
+        ORDER BY m.as_of_date DESC, m.created_at DESC
+        LIMIT 500`,
+    ).bind(scopeCsv, scopeCsv).all<any>();
+    const items = (rows.results || []).map((m: any) => ({
+      uid: m.uid,
+      project_id: Number(m.project_id),
+      project_uid: m.project_uid ?? null,
+      project_name: m.project_name ?? null,
+      as_of_date: m.as_of_date ?? null,
+      fmv: m.fmv === null || m.fmv === undefined ? null : Number(m.fmv),
+      post_money: m.post_money === null || m.post_money === undefined ? null : Number(m.post_money),
+      event: m.event ?? null,
+      // Never defaulted. The column has a DEFAULT of 'gp_estimate', so a NULL
+      // here means a row written before that default existed — reporting it as
+      // a GP estimate would be inventing the provenance the column exists to
+      // record.
+      basis: m.basis ?? null,
+      source: m.source ?? null,
+      note: m.note ?? null,
+    }));
+    const basisCounts: Record<string, number> = {};
+    for (const m of items) {
+      const key = m.basis || 'unrecorded';
+      basisCounts[key] = (basisCounts[key] || 0) + 1;
+    }
+    return c.json({
+      items,
+      projects: new Set(items.map((m) => m.project_id)).size,
+      basis_counts: basisCounts,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
 r.get('/analytics', async (c) => {
   try {
     const user = await requireAuth(c);

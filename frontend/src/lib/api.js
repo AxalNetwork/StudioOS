@@ -3727,6 +3727,10 @@ export const api = {
 
   // ---------- Cap Table / Ownership (Support) ----------
   positionsList: () => request('/positions'),
+  // Canvas IP1's `Mark history`. Every marking event across the accessible
+  // book in one call — the per-project read already returned this history, but
+  // looping it for a list page would be an N+1.
+  positionsMarkHistory: () => request('/positions/marks'),
   positionsByProject: (projectUid) => request(`/positions/${projectUid}`),
   positionCreate: (data) => request('/positions', { method: 'POST', body: JSON.stringify(data) }),
   // Build queue #125 — real portfolio performance. `analytics` returns

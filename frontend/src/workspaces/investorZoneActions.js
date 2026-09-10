@@ -126,8 +126,19 @@ export const INVESTOR_ZONE_ACTIONS = {
   // ── Portfolio ────────────────────────────────────────────────────────────
   'portfolio/positions': [
     { label: 'Export', kind: 'export' },
-    { label: 'Mark history', unbuilt: 'only the current mark is stored; there is no history to open' },
-    { label: 'Add follow-on', unbuilt: 'follow-ons are recorded on the deal, not from the ledger' },
+    // WAS: 'only the current mark is stored; there is no history to open'.
+    // False twice. `portfolio_marks` is a history table — one row per marking
+    // event with the date it speaks for, the event behind it, the basis it was
+    // arrived at on and its provenance — and `GET /positions/:projectUid` was
+    // ALREADY returning that history to the same readers looking at this
+    // disabled button. It opens now.
+    { label: 'Mark history', kind: 'handler', handler: 'markHistory' },
+    // WAS: 'follow-ons are recorded on the deal, not from the ledger', which
+    // has the modelling backwards — a follow-on IS a ledger row
+    // (`portfolio_positions.round_name`, one per round) and POST /positions
+    // creates it. What is true is that the write is admin-only, so an
+    // investor's book does not offer it.
+    { label: 'Add follow-on', unbuilt: 'a follow-on is a round on the position itself, and recording one is an admin write — this book is the investor’s read of it' },
   ],
   'portfolio/updates': [
     { label: 'Chase all overdue', unbuilt: 'nothing on this desk sends mail' },
