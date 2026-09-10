@@ -3291,6 +3291,7 @@ const PROVIDER_LABELS = {
   crunchbase: 'Crunchbase',
   affinity: 'Affinity',
   telegram: 'Telegram',
+  gcip: 'Google Identity (SMS)',
 };
 const PROVIDER_HINTS = {
   slack: 'Get Client ID + Client Secret from api.slack.com → your app → Basic Information.',
@@ -3304,6 +3305,7 @@ const PROVIDER_HINTS = {
   crunchbase: 'API key — paste a label (e.g. "default") into Client ID and the user_key into Secret. Provision the key at data.crunchbase.com.',
   affinity: 'API key — put your team subdomain (e.g. "acme") into Client ID and the Affinity API key into Secret. Generate at affinity.co → Settings → API.',
   telegram: 'Bot token — put the bot username (e.g. "axalvc_bot") into Client ID and the BotFather token into Secret. Get the token from @BotFather on Telegram.',
+  gcip: 'SMS backup 2FA — put the GCP project id into Client ID and the Identity Platform / Firebase Web API key into Secret. Enable Phone authentication on the project first. Google Cloud Console → APIs & Services → Credentials.',
 };
 const PROVIDER_ENV_NAMES = {
   slack: ['SLACK_CLIENT_ID', 'SLACK_CLIENT_SECRET'],
@@ -3317,6 +3319,7 @@ const PROVIDER_ENV_NAMES = {
   crunchbase: ['CRUNCHBASE_USER_KEY_ID', 'CRUNCHBASE_API_KEY'],
   affinity: ['AFFINITY_TEAM_DOMAIN', 'AFFINITY_API_KEY'],
   telegram: ['TELEGRAM_BOT_USERNAME', 'TELEGRAM_BOT_TOKEN'],
+  gcip: ['GCIP_PROJECT_ID', 'GCIP_API_KEY'],
 };
 
 // Admin-managed Service Provider Directory approval (Task #53).

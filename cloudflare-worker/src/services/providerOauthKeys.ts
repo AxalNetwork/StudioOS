@@ -27,7 +27,8 @@ export type ManagedProviderKey =
   | 'carta'
   | 'crunchbase'
   | 'affinity'
-  | 'telegram';
+  | 'telegram'
+  | 'gcip';
 
 export const MANAGED_PROVIDERS: ManagedProviderKey[] = [
   'slack',
@@ -41,6 +42,7 @@ export const MANAGED_PROVIDERS: ManagedProviderKey[] = [
   'crunchbase',
   'affinity',
   'telegram',
+  'gcip',
 ];
 
 export interface ProviderEnvVarPair {
@@ -71,6 +73,10 @@ export const PROVIDER_ENV_VARS: Record<ManagedProviderKey, { id: string; secret:
   crunchbase: { id: 'CRUNCHBASE_USER_KEY_ID',  secret: 'CRUNCHBASE_API_KEY' },
   affinity:   { id: 'AFFINITY_TEAM_DOMAIN',    secret: 'AFFINITY_API_KEY' },
   telegram:   { id: 'TELEGRAM_BOT_USERNAME',   secret: 'TELEGRAM_BOT_TOKEN' },
+  // SMS backup 2FA — Identity Platform web API key. Client ID slot is
+  // the GCP project id (used by the disable-flow admin API). Secret is
+  // the Firebase/Identity Platform Web API key that sends SMS codes.
+  gcip:       { id: 'GCIP_PROJECT_ID',         secret: 'GCIP_API_KEY' },
 };
 
 interface CacheEntry {

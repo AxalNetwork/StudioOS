@@ -91,19 +91,19 @@ sms.get('/factors', async (c) => {
   await sql.end();
   // Always return the same shape regardless of whether the user exists, to
   // avoid a leak via response-shape diff. Booleans are false on miss.
-  if (!rows.length) return c.json({ totp: false, sms: false, sms_available: isGcipConfigured(c.env) });
+  if (!rows.length) return c.json({ totp: false, sms: false, sms_available: await isGcipConfigured(c.env) });
   const uid = Number(rows[0].id);
   const [totp, sms_] = await Promise.all([
     hasTotpConfigured(c.env, uid),
     hasSmsConfigured(c.env, uid),
   ]);
-  return c.json({ totp: !!totp, sms: !!sms_, sms_available: isGcipConfigured(c.env) });
+  return c.json({ totp: !!totp, sms: !!sms_, sms_available: await isGcipConfigured(c.env) });
 });
 
 // -------- enrollment (authenticated) ----------------------------------------
 
 sms.post('/sms/start-enrollment', async (c) => {
-  if (!isGcipConfigured(c.env)) return gcip503(c);
+  if (!(await isGcipConfigured(c.env))) return gcip503(c);
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
   const phone = String(body?.phone || '').trim();
@@ -132,7 +132,7 @@ sms.post('/sms/start-enrollment', async (c) => {
 });
 
 sms.post('/sms/confirm-enrollment', async (c) => {
-  if (!isGcipConfigured(c.env)) return gcip503(c);
+  if (!(await isGcipConfigured(c.env))) return gcip503(c);
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
   const sessionInfo = String(body?.session_info || '');
@@ -208,7 +208,7 @@ sms.post('/sms/disable', async (c) => {
 // -------- login challenge (unauthenticated; mirrors /login) -----------------
 
 sms.post('/sms/start-challenge', async (c) => {
-  if (!isGcipConfigured(c.env)) return gcip503(c);
+  if (!(await isGcipConfigured(c.env))) return gcip503(c);
   const body = await c.req.json().catch(() => ({} as any));
   const email = String(body?.email || '').toLowerCase().trim();
   const recaptcha = body?.recaptcha_token ? String(body.recaptcha_token) : null;
@@ -241,7 +241,7 @@ sms.post('/sms/start-challenge', async (c) => {
 });
 
 sms.post('/sms/verify-challenge', async (c) => {
-  if (!isGcipConfigured(c.env)) return gcip503(c);
+  if (!(await isGcipConfigured(c.env))) return gcip503(c);
   const body = await c.req.json().catch(() => ({} as any));
   const email = String(body?.email || '').toLowerCase().trim();
   const sessionInfo = String(body?.session_info || '');
@@ -316,7 +316,7 @@ sms.get('/sms/status', async (c) => {
     country: row?.country || null,
     enrolled_at: row?.enrolledAt || null,
     factors: await getUserFactors(c.env, user.id),
-    sms_available: isGcipConfigured(c.env),
+    sms_available: await isGcipConfigured(c.env),
   });
 });
 
