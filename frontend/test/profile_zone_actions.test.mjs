@@ -87,9 +87,17 @@ const PROFILES = {
     zones: 19,
     links: 1,
     exports: 13,
-    // Two page-supplied ops: `research/ask`'s `New brief` and
-    // `research/library`'s `Upload`. Was 0.
-    handlers: 2,
+    // Three page-supplied ops: `research/ask`'s `New brief`,
+    // `research/library`'s `Upload`, and `portfolio/positions`'s
+    // `Mark history`. Was 0, then 2.
+    //
+    // THE THIRD ONE WAS A GAP THAT SHOULD NEVER HAVE BEEN ONE. It carried the
+    // reason "only the current mark is stored; there is no history to open",
+    // and `portfolio_marks` is a history table whose rows
+    // `GET /positions/:projectUid` was already returning to the very readers
+    // looking at the disabled button. A gap becoming a handler is the shape
+    // this ledger should move in; the reverse needs an argument.
+    handlers: 3,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,

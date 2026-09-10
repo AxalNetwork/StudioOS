@@ -39,3 +39,38 @@ same lines.
 Shell migration status and the investor zone inventory live in
 [`documentation/architecture/SHELL_MIGRATION.md`](../../../documentation/architecture/SHELL_MIGRATION.md).
 Guard tests: `investor_shell.test.mjs`, `investor_shell_canvas.test.mjs`.
+
+## IP1 · Positions — check the claim before you repeat it
+
+`portfolio/positions` carried an `unbuilt` reason saying *"only the current mark
+is stored; there is no history to open"*, and the page carried a card repeating
+it: *"History remains read-only on this collection."* Both were false, and the
+store had been contradicting them the whole time:
+
+- `portfolio_marks` is a **history** table — one row per marking event with the
+  `as_of_date` it speaks for, the `event` behind it, the `basis` it was arrived
+  at on and free-text `source` provenance.
+- `GET /positions/:projectUid` was **already returning that history**, under
+  `canViewLpData`, to the same readers looking at the disabled button.
+
+So the store existed, the read existed, and the reader was entitled. Only the
+control was missing. `GET /positions/marks` adds no access and no store — it
+answers the one question the per-project read cannot (what happened across the
+whole book, in one call) without an N+1.
+
+**The `basis` column is why the history matters.** It is
+`round_price | secondary | gp_estimate | write_down | cost`, and the schema says
+why: *a round-priced mark and a GP estimate must never look alike to an LP.* A
+book showing only the latest FMV hides exactly that. A NULL basis renders as
+unrecorded, never as the column's default — reporting it as a GP estimate would
+invent the provenance the column exists to record.
+
+**The follow-on reason had the modelling backwards.** It said follow-ons are
+"recorded on the deal, not from the ledger". A follow-on **is** a ledger row —
+`portfolio_positions.round_name`, one per round — and `POST /positions` creates
+it. What is true is that the write is admin-only, so an investor's book does not
+offer it. A permissions reason, not a modelling one.
+
+Guard: `frontend/test/investor_portfolio_ip1.test.mjs`, 26 mutants. It checks
+the SCHEMA and the EXISTING ROUTE rather than the corrected sentence, because a
+sentence can be rewritten without any of those facts changing.

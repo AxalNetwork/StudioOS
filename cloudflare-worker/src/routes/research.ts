@@ -41,6 +41,7 @@ import { searchSemantic, deleteChunkedEntity, researchNamespace } from '../servi
 import { run as runAI } from '../services/aiRouter';
 import { companyScope, esignEnvelopeScope } from '../services/tenancyScope';
 import { scopedDecisions } from './ic';
+import { investorProjectIds } from './_investorProjectScope';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
 // The perk lifecycle window lives in ONE place. `offers/perk-deals`'s gather
 // below decides what is expiring, and it has to agree with what the zone shows
@@ -2379,6 +2380,62 @@ const DRAFT_SURFACES: Record<string, {
           + ` (deal ${e.deal_id}) — state ${e.status || 'not recorded'}; ${sigs};`
           + ` ${e.completed_at ? `completed ${e.completed_at}` : 'NOT EXECUTED'}`;
       });
+    },
+  },
+
+  'portfolio/positions': {
+    // IP1's band: "Proposal · explain the quarter's TVPI move", footed
+    // "Traces to the mark-history rows."
+    //
+    // THE FOOTNOTE IS THE WHOLE DESIGN. A multiple moves because a MARK moved,
+    // and `portfolio_marks` records each one with the date it speaks for, the
+    // event behind it and the basis it was arrived at on. So the gather is the
+    // mark history, and the instruction forbids the two ways a model turns that
+    // into something the record did not say.
+    //
+    // FIRST: blending TVPI and DPI. The artboard's own note says why — an
+    // unrealised multiple is a mark and a realised one is cash. A sentence that
+    // adds them is a sentence about money that does not exist.
+    //
+    // SECOND: momentum. Given a list of marks a model will narrate a trend, and
+    // a position held at last round did not move. Naming it as part of the
+    // change turns two events into portfolio-wide drift.
+    instruction: [
+      'Explain how the portfolio multiple moved, from the marking events below and nothing else.',
+      'Name the specific events that moved it, each with the company, the date the mark speaks for and its basis. A position with no mark in the period did NOT move: never describe it as contributing, and never call the change momentum or a trend when it rests on a handful of events.',
+      'Never blend an unrealised multiple with a realised one — a mark is not cash. If you mention both, report them separately and say which is which.',
+      'A mark whose basis is UNRECORDED has no stated provenance: say so rather than treating it as a GP estimate, which is what the column would otherwise default to.',
+      'Add no figure the rows below do not carry, and do not forecast.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
+        .bind(userId).first<{ id: number; role: string | null }>();
+      const role = String(me?.role || '');
+      if (role !== 'admin' && role !== 'partner' && role !== 'investor') return [];
+      // The same scope every read in `routes/positions.ts` uses. An empty
+      // accessible set means an empty draft, never an unscoped one — the CSV
+      // predicate treats NULL as "all rows", so [] must short-circuit here
+      // rather than reach the query.
+      const ids = await investorProjectIds(c.env, { id: userId, role } as any, null);
+      if (ids != null && ids.length === 0) return [];
+      const csv = ids == null ? null : ids.join(',');
+      const rows = await c.env.DB.prepare(
+        `SELECT m.as_of_date, m.fmv, m.post_money, m.event, m.basis, m.source,
+                p.name AS project_name
+           FROM portfolio_marks m
+           JOIN projects p ON p.id = m.project_id AND p.deleted_at IS NULL
+          WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(m.project_id AS TEXT) || ',') > 0)
+          ORDER BY m.as_of_date DESC LIMIT 40`
+      ).bind(csv, csv).all<Record<string, unknown>>();
+      const list = (rows.results || []) as Record<string, unknown>[];
+      if (!list.length) return [];
+      return list.map((m) => (
+        `${m.project_name || 'company not recorded'} — marked ${m.as_of_date || 'date not recorded'}`
+        + `; FMV ${m.fmv ?? 'not recorded'}${m.post_money != null ? `, post-money ${m.post_money}` : ''}`
+        + `; event ${m.event || 'not recorded'}`
+        + `; basis ${m.basis || 'UNRECORDED'}`
+        + `${m.source ? `; source ${m.source}` : ''}`
+      ));
     },
   },
 
