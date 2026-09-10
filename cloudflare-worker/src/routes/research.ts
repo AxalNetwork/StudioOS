@@ -39,7 +39,7 @@ import { Jobs } from '../models/jobs';
 import { mintDownloadToken } from '../services/signedDownload';
 import { searchSemantic, deleteChunkedEntity, researchNamespace } from '../services/vectorize';
 import { run as runAI } from '../services/aiRouter';
-import { companyScope } from '../services/tenancyScope';
+import { companyScope, esignEnvelopeScope } from '../services/tenancyScope';
 import { scopedDecisions } from './ic';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
 // The perk lifecycle window lives in ONE place. `offers/perk-deals`'s gather
@@ -2324,6 +2324,61 @@ const DRAFT_SURFACES: Record<string, {
         return `${v.user_name || 'partner not recorded'} voted ${v.vote}`
           + ` — ${reason || 'NO RATIONALE RECORDED'}`;
       })];
+    },
+  },
+
+  'deals/closing': {
+    // ID4's band: "A one-page cover for counsel: what is executed, what
+    // remains, and the single condition holding the transfer. States plainly
+    // that the platform records the wire and the banks move it — the packet is
+    // evidence, not a payment instruction."
+    //
+    // THE CONDITION IS THE HALF THIS PRODUCT CANNOT HONOUR, and the artboard
+    // makes it the whole point of the note. Nothing stores an IC condition
+    // (see the deals/commit surface above), so a model asked for "the single
+    // condition holding the transfer" would write one — a fabricated legal
+    // impediment in a document going to counsel. Forbidden outright.
+    //
+    // The second instruction is the artboard's own honesty and it must survive
+    // the draft: this is a record of paper, not an instrument of payment. A
+    // cover note that reads as a payment instruction is a different kind of
+    // document with a different kind of consequence.
+    instruction: [
+      'Draft a one-page closing cover note for counsel from the envelopes below: what is executed, what is still out, and what the record does not cover.',
+      'An envelope counts as executed ONLY where its state is completed. A signature count that has reached its recipient count is not the same thing, and an envelope with NO RECIPIENT RECORDED is not partially signed — say its recipients are unrecorded.',
+      'Never state a condition, a blocker or anything holding the transfer: no condition is stored anywhere in this product, so any you name would be invented — and an invented legal impediment in a note to counsel is worse than an omission.',
+      'Say plainly that the platform records the movement of money and does not move it. This note is evidence of paper, never a payment instruction.',
+      'Add nothing the rows below do not support, and do not estimate a closing date.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
+        .bind(userId).first<{ id: number; role: string | null }>();
+      const role = String(me?.role || '');
+      if (role !== 'admin' && role !== 'partner' && role !== 'investor') return [];
+      // The SAME predicate `esign.get('/')` puts in its WHERE clause, from the
+      // same shared helper — not a second copy of it. An envelope carries the
+      // executed paper of a deal; an unscoped read here would hand one firm's
+      // signed instruments to another firm's model.
+      const scope = esignEnvelopeScope({ id: userId, role } as any);
+      const rows = await c.env.DB.prepare(
+        `SELECT e.document_title, e.document_type, e.status, e.completed_at, e.deal_id,
+                (SELECT COUNT(*) FROM esign_recipients WHERE envelope_id = e.id) AS recipient_count,
+                (SELECT COUNT(*) FROM esign_recipients WHERE envelope_id = e.id AND status = 'signed') AS signed_count
+           FROM esign_envelopes e
+          WHERE ${scope.sql} AND e.deal_id IS NOT NULL
+          ORDER BY e.created_at DESC LIMIT 40`
+      ).bind(...scope.binds).all<Record<string, unknown>>();
+      const list = (rows.results || []) as Record<string, unknown>[];
+      if (!list.length) return [];
+      return list.map((e) => {
+        const need = Number(e.recipient_count);
+        const sigs = (Number.isFinite(need) && need > 0)
+          ? `${Number(e.signed_count) || 0} of ${need} signed`
+          : 'NO RECIPIENT RECORDED';
+        return `${e.document_title || e.document_type || 'document not titled'}`
+          + ` (deal ${e.deal_id}) — state ${e.status || 'not recorded'}; ${sigs};`
+          + ` ${e.completed_at ? `completed ${e.completed_at}` : 'NOT EXECUTED'}`;
+      });
     },
   },
 

@@ -242,6 +242,13 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Pass reasons', key: 'passes' },
   ],
 
+  'deals/closing': [
+    { canvas: 'This close', key: 'close' },
+    { canvas: 'Blocking', unbuilt: 'a blocking item is a Commit condition, and no condition is stored on either side of that hand-off' },
+    { canvas: 'Documents', key: 'documents' },
+    { canvas: 'Wires', unbuilt: 'no transfer out to a company is recorded — capital_calls is an LP paying into the fund' },
+  ],
+
   'deals/commit': [
     { canvas: 'This deal', key: 'current' },
     { canvas: 'All decisions', key: 'decisions' },

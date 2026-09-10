@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { routeBlock } from './_routes.mjs';
 import { codeOnly } from './_codeOnly.mjs';
+import { DEAL_STAGES, dealStage } from '../src/lib/dealFlow.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const app = read('frontend/src/App.jsx');
@@ -123,9 +124,20 @@ test('investor visual system includes source provenance, responsive layout, and 
 });
 
 test('investor Deals implements the I3 hierarchy with live sources', () => {
-  for (const label of ['Find and close investments', 'Pipeline', 'Screening', 'Commit', 'Closing']) {
-    assert.match(deals, new RegExp(label));
+  // THE HIERARCHY IS NO LONGER IN THIS FILE, AND THAT IS THE FIX RATHER THAN
+  // THE BREAKAGE. It used to be a `STAGES` const beside a bucket tagline, both
+  // typed here; ID1-ID4 moved the four zones into the shell config (where
+  // `ZoneNav` composes their routes, so a label cannot drift from where it
+  // points) and the five FUNNEL stages into `lib/dealFlow.js` (so four zones
+  // cannot disagree about where a deal is). Asserted where each now lives.
+  const SHELL = read('frontend/src/workspaces/shellConfig.js');
+  const bucket = SHELL.slice(SHELL.indexOf("prefix: '/deals'"), SHELL.indexOf("prefix: '/portfolio'"));
+  assert.match(bucket, /tagline: 'Find and close investments'/);
+  for (const label of ['Pipeline', 'Screening', 'Commit', 'Closing']) {
+    assert.match(bucket, new RegExp(`label: '${label}'`), `the Deals bucket lost its ${label} zone`);
   }
+  // And the workspace renders that config rather than a second copy of it.
+  assert.match(deals, /<ZoneNav bucket=\{bucket\}/, 'the bucket root stopped rendering its zone row');
   // The heading here read "Deals AI" — one of four different headings across
   // twelve bespoke investor rails, and the only one that did not say "Worker
   // AI" at all. It now comes from the shared component, so every licence and
@@ -133,23 +145,30 @@ test('investor Deals implements the I3 hierarchy with live sources', () => {
   assert.match(deals, /<WorkerRail[\s\S]*?workspace="Deals"[\s\S]*?role="investor"/,
     'investor Deals must mount the shared Worker AI rail');
   assert.ok(!deals.includes('Deals AI'), 'the bespoke "Deals AI" heading is back');
-  for (const stage of ['Sourcing', 'Screening', 'Diligence', 'Commit', 'Closing']) {
-    assert.match(deals, new RegExp(`label: '${stage}'`));
-  }
+  // The five funnel stages, in `lib/dealFlow.js` where ID1 put them. Driven as
+  // BEHAVIOUR rather than matched as text — a source assertion cannot tell a
+  // correct branch from one that merely contains the right words.
+  assert.deepEqual(DEAL_STAGES.map((s2) => s2.id),
+    ['sourcing', 'screening', 'diligence', 'commit', 'closing'],
+    'the funnel vocabulary changed');
   assert.match(deals, /api\.listDeals\(undefined, 'mine'\)/);
   assert.match(deals, /api\.myDealInvitations\(\)/);
   assert.match(deals, /api\.respondDealInvitation/);
   assert.doesNotMatch(deals, /api\.pipelineActive\(\)/, 'investors must not consume the studio-wide pipeline source');
-  assert.match(deals, /committed > 0[\s\S]{0,80}'commit'/);
-  // WAS `assert.match(deals, /Total committed to deal/)` — the label on the
-  // three-field panel canvas ID3 replaced. What the assertion is FOR is that
-  // committed capital is a LIVE figure this product reads and shows, and both
-  // halves survive the move; they just live in two different files now.
+  // WAS two source matches in this file — `committed > 0 … 'commit'` and
+  // `Total committed to deal`. What they were FOR is that committed capital is
+  // a LIVE figure this product reads and shows, and both halves survive; they
+  // just live in two other files now.
   //
-  //   read  — the line above: `committed > 0` is still what separates Commit
-  //           from Diligence, in this workspace.
+  //   read  — `dealStage`, driven here with real rows rather than regexed.
   //   shown — `DealRoomPage`, which draws it against the target with a
   //           percentage and owns the figure.
+  //
+  assert.equal(dealStage({ status: 'active', capital_committed: 1 }), 'commit',
+    'committed capital no longer separates commit from diligence');
+  assert.equal(dealStage({ status: 'active' }), 'diligence');
+  assert.equal(dealStage({ status: 'rejected', capital_committed: 900 }), null,
+    'a passed deal with money against it is back in the funnel');
   //
   // The Commit zone deliberately does NOT restate it. Its subject is the
   // committee — votes and the reasons behind them — and a second copy of a
