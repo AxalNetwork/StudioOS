@@ -62,7 +62,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
-    "wrangler": "^4.127.1"
+    "wrangler": "^4.131.0"
   },
   "overrides": {
     "image-size": "npm:image-size-next@1.2.2"
