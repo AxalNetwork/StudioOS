@@ -162,14 +162,26 @@ function relativeDay(date, today) {
  * The host word for a meeting link, derived from the URI rather than assumed.
  * A link this page cannot name is still shown as a link — it just says
  * "Video" without claiming which service it is.
+ *
+ * EXACT HOST, OR A REAL SUBDOMAIN OF IT. This was four `endsWith` checks, and
+ * `endsWith('meet.google.com')` is also true of `evilmeet.google.com` —
+ * CodeQL's "incomplete URL substring sanitization", and correct. The label is
+ * cosmetic, so the reachable harm was small, but a name printed beside a link
+ * is exactly the thing a reader trusts, and the right comparison costs
+ * nothing. `us02web.zoom.us` is why the subdomain arm exists at all.
  */
+const MEETING_HOSTS = [
+  ['meet.google.com', 'Meet'],
+  ['zoom.us', 'Zoom'],
+  ['teams.microsoft.com', 'Teams'],
+  ['whereby.com', 'Whereby'],
+];
 function hostWord(uri) {
   try {
     const h = new URL(uri).hostname.toLowerCase();
-    if (h.endsWith('meet.google.com')) return 'Meet';
-    if (h.endsWith('zoom.us')) return 'Zoom';
-    if (h.endsWith('teams.microsoft.com')) return 'Teams';
-    if (h.endsWith('whereby.com')) return 'Whereby';
+    for (const [host, word] of MEETING_HOSTS) {
+      if (h === host || h.endsWith(`.${host}`)) return word;
+    }
     return null;
   } catch { return null; }
 }

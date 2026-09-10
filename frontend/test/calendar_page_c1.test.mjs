@@ -41,6 +41,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { escapeRe } from './_escapeRe.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 
@@ -59,6 +60,13 @@ const route = raw('cloudflare-worker/src/routes/calendar.ts');
  * string that belongs to a different board.
  */
 const TEMPLATE = CANVAS.slice(CANVAS.indexOf('<sc-for list="{{ boards }}"'), CANVAS.indexOf('<script type="text/x-dc" data-dc-script=""'));
+// nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
+// -- `CANVAS` is a design file read off disk by `readFileSync` in a Node test.
+// It is sliced into strings and matched with regexes; nothing here renders,
+// reaches a DOM, or takes external input, so the XSS the rule describes has
+// nowhere to happen. The literal is a SEARCH TERM for the end of the canvas's
+// data block, which is the tightest bound available and the one this file's
+// header insists every slice must have.
 const SCRIPT = CANVAS.slice(CANVAS.lastIndexOf('class Component extends DCLogic'), CANVAS.lastIndexOf('</script>'));
 const KINDS_BLOCK = SCRIPT.slice(SCRIPT.indexOf('══ FIVE KINDS'), SCRIPT.indexOf('const dotFor'));
 const BOARDS = SCRIPT.slice(SCRIPT.indexOf('return { boards: ['), SCRIPT.length);
@@ -107,12 +115,12 @@ test('the five kinds the canvas draws keep its labels, sources, hues and dot sha
     assert.equal(mine.label, k.label, `${k.id} is labelled differently from the canvas`);
     assert.equal(mine.src, k.src, `${k.id} names a different source from the canvas`);
     // Hue and shape live in the stylesheet, one rule per kind, both themes.
-    assert.match(css, new RegExp(`--k-${k.id}: ${k.hue};`), `${k.id} lost its light hue`);
-    assert.match(css, new RegExp(`--k-${k.id}: ${k.dHue};`), `${k.id} lost its dark hue`);
-    const dot = css.match(new RegExp(`\\.cal-dot\\[data-kind='${k.id}'\\] \\{([^}]*)\\}`))?.[1] || '';
-    assert.match(dot, new RegExp(`border-radius: ${k.shape.replace(/[%]/g, '%')};`),
+    assert.match(css, new RegExp(`--k-${escapeRe(k.id)}: ${escapeRe(k.hue)};`), `${k.id} lost its light hue`);
+    assert.match(css, new RegExp(`--k-${escapeRe(k.id)}: ${escapeRe(k.dHue)};`), `${k.id} lost its dark hue`);
+    const dot = css.match(new RegExp(`\\.cal-dot\\[data-kind='${escapeRe(k.id)}'\\] \\{([^}]*)\\}`))?.[1] || '';
+    assert.match(dot, new RegExp(`border-radius: ${escapeRe(k.shape)};`),
       `${k.id}'s dot is no longer the shape the canvas draws`);
-    assert.match(dot, new RegExp(`background: var\\(--k-${k.id}\\)`), `${k.id}'s dot stopped using its own hue`);
+    assert.match(dot, new RegExp(`background: var\\(--k-${escapeRe(k.id)}\\)`), `${k.id}'s dot stopped using its own hue`);
   }
 });
 
@@ -318,8 +326,8 @@ test('both themes are first class — every token has two values and no colour i
   assert.deepEqual(stray, [], `a rule hardcodes a colour instead of using a token: ${stray.join(', ')}`);
   // Dark lifts the kind hues rather than reusing the light ones.
   for (const k of pageKinds) {
-    const l = light.match(new RegExp(`--k-${k.id}: (#[0-9a-f]{6})`))?.[1];
-    const d = dark.match(new RegExp(`--k-${k.id}: (#[0-9a-f]{6})`))?.[1];
+    const l = light.match(new RegExp(`--k-${escapeRe(k.id)}: (#[0-9a-f]{6})`))?.[1];
+    const d = dark.match(new RegExp(`--k-${escapeRe(k.id)}: (#[0-9a-f]{6})`))?.[1];
     assert.ok(l && d && l !== d, `${k.id} does not lift to a dark hue`);
   }
 });
@@ -364,6 +372,45 @@ test('no sentence splices a kind label in where a lower-case noun belongs', () =
   assert.match(page, /This event cannot be copied one at a time/,
     'the unpushable note no longer reads as a sentence');
   assert.doesNotMatch(page, /\bA \{KIND_LABEL/, 'a kind label is being spliced in after an article again');
+});
+
+test('a meeting service is named only on its exact host or a real subdomain', () => {
+  // WAS `h.endsWith('meet.google.com')`, which is also true of
+  // `evilmeet.google.com`. CodeQL called it incomplete URL substring
+  // sanitization and was right: the word sits directly beside the link a
+  // reader is about to click, which is the worst place to be approximately
+  // correct. `us02web.zoom.us` is why the subdomain arm has to exist at all,
+  // and the leading dot is the whole fix.
+  const table = page.match(/const MEETING_HOSTS = \[([\s\S]*?)\n\];/)?.[1] || '';
+  const hosts = [...table.matchAll(/\['([^']+)', '([^']+)'\]/g)].map((m) => m[1]);
+  assert.deepEqual(hosts.sort(), ['meet.google.com', 'teams.microsoft.com', 'whereby.com', 'zoom.us'],
+    'the meeting-host table changed without this guard');
+  assert.match(page, /if \(h === host \|\| h\.endsWith\(`\.\$\{host\}`\)\) return word;/,
+    'a meeting host is matched without an exact-or-dot-boundary test');
+  // And no bare suffix test survives anywhere on the page: `.endsWith('x')`
+  // against a hostname is the shape of the bug, whatever it is comparing.
+  assert.doesNotMatch(page, /\bh\.endsWith\('/, 'a hostname is being matched by bare suffix again');
+});
+
+test('every value read out of the canvas is escaped before it becomes a pattern', () => {
+  // `_escapeRe.mjs` exists for these sites and says why. One of them had also
+  // grown `.replace(/[%]/g, '%')` — a replacement of a substring with itself,
+  // which CodeQL flagged: `%` is not a regex metacharacter and never needed
+  // escaping, while `{`, `(` and `$` do and a border-radius is one edit from
+  // carrying one.
+  const built = [...page.matchAll(/new RegExp\(`[^`]*`\)/g)].map((m) => m[0]);
+  assert.ok(built.length === 0, 'the page itself should build no RegExp from interpolated values');
+  const guard = raw('frontend/test/calendar_page_c1.test.mjs');
+  for (const site of guard.match(/new RegExp\(`[^`]*\$\{[^`]*`\)/g) || []) {
+    for (const interp of site.match(/\$\{([^}]*)\}/g) || []) {
+      // A `.replace(...)` standing in for escapeRe fails here too, which is
+      // what brings back the self-replacement CodeQL flagged. Asserting
+      // against that literal directly cannot work: this file reads its own
+      // source, so the assertion would match itself.
+      assert.match(interp, /escapeRe\(/,
+        `this pattern interpolates a raw value: ${site}`);
+    }
+  }
 });
 
 test('the page prints none of the canvas fixture', () => {

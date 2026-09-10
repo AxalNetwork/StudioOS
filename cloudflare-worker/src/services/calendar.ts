@@ -804,7 +804,7 @@ async function gather(
       events.push(...await READERS[kind](env, userId, isAdmin, fromIso, toIso));
       sources.push({ kind, ok: true, error: null });
     } catch (e) {
-      console.warn(`[calendar] source ${kind} failed for user=${userId}`, e);
+      console.warn('[calendar] source failed', { kind, user_id: userId }, e);
       sources.push({ kind, ok: false, error: String((e as Error)?.message || e).slice(0, 200) });
     }
   }
@@ -875,7 +875,7 @@ export async function attachPushRecords(
     // The pill is an extra, not the page. If the mapping table cannot be read
     // the agenda still renders; it just cannot say what was already pushed.
     if (isMissingTableError(e) || isMissingColumnError(e)) return events;
-    console.warn(`[calendar] push records unreadable for user=${userId}`, e);
+    console.warn('[calendar] push records unreadable', { user_id: userId }, e);
     return events;
   }
 }
