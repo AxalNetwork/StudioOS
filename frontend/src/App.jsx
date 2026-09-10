@@ -1487,6 +1487,27 @@ function AppInner() {
     preserveReloadGuards(() => {
       try { sessionStorage.clear(); } catch (e) { /* ignore */ }
     });
+    // AND the API responses the service worker put on disk. localStorage and
+    // sessionStorage were the only two places sign-out swept, so a signed-out
+    // account's own project and academy bodies stayed in Cache Storage —
+    // readable by the next person on this browser the moment the network
+    // blinked. `sw.js` names those buckets `studioos-api-<VERSION>-<id>`;
+    // dropping every one of them costs nothing but a re-fetch, and dropping
+    // them ALL rather than just this account's means a bucket left by an
+    // earlier build or an earlier account goes too.
+    //
+    // Not awaited and never fatal: sign-out must not hang or fail on a
+    // browser that refuses Cache Storage (private windows, blocked site
+    // data), where `caches` is absent or every call throws.
+    try {
+      if (typeof caches !== 'undefined' && caches?.keys) {
+        caches.keys()
+          .then((names) => Promise.all(
+            names.filter((n) => n.startsWith('studioos-api-')).map((n) => caches.delete(n)),
+          ))
+          .catch(() => {});
+      }
+    } catch (e) { /* Cache Storage unavailable */ }
     setUser(null);
     setRealUser(null);
     // T6 — revoke the server-side session + clear the httpOnly auth/CSRF

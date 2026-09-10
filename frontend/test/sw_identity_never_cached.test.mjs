@@ -80,15 +80,28 @@ test('the refusal happens before either strategy runs', () => {
 });
 
 test('the cache names changed, so the poisoned ones are dropped', () => {
-  // `activate` deletes every cache whose name is not one of the current
-  // three. Fixing the strategy without renaming would leave every existing
-  // browser reading its old `studioos-api-v15-…` entries forever.
+  // `activate` deletes every cache whose name is not current. Fixing the
+  // strategy without renaming would leave every existing browser reading
+  // its old `studioos-api-v15-…` entries forever.
+  //
+  // TWO ASSERTIONS HERE WERE REWRITTEN, and not because they were
+  // inconvenient. They pinned `const RUNTIME_API = ...` and an `activate`
+  // sweep over exactly three names. The single shared API bucket those
+  // described is gone: it is now one bucket per signed-in account
+  // (`API_CACHE_PREFIX` + identity, see sw_api_cache_per_user.test.mjs),
+  // because one bucket for the whole origin meant the next person to sign
+  // in on a browser could be served the previous person's API bodies. Those
+  // names cannot be listed, so the sweep keeps them by prefix. What both
+  // assertions were FOR is unchanged and is what they check now: the API
+  // cache name carries VERSION, so bumping it drops what came before.
   const m = SW.match(/const VERSION = '([^']+)'/);
   assert.ok(m, 'VERSION is gone');
-  assert.notEqual(m[1], 'v15-2026-08-05',
-    'VERSION still names the build whose API cache holds /api/auth/me bodies');
-  assert.match(SW, /const RUNTIME_API = `studioos-api-\$\{VERSION\}`/,
+  for (const stale of ['v15-2026-08-05', 'v16-2026-09-10']) {
+    assert.notEqual(m[1], stale,
+      `VERSION still names build ${stale}, whose API cache holds other accounts' bodies`);
+  }
+  assert.match(SW, /const API_CACHE_PREFIX = `studioos-api-\$\{VERSION\}-`/,
     'the API cache name no longer carries VERSION, so a bump would not clear it');
-  assert.match(SW, /if \(!\[PRECACHE, RUNTIME_STATIC, RUNTIME_API\]\.includes\(k\)\)/,
-    'activate no longer deletes caches outside the current three');
+  assert.match(SW, /k === PRECACHE \|\| k === RUNTIME_STATIC \|\| k\.startsWith\(API_CACHE_PREFIX\)/,
+    'activate no longer keeps exactly the current caches — it drops the live ones or keeps the stale ones');
 });
