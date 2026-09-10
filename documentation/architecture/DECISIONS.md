@@ -3773,3 +3773,64 @@ does* — the backend did. Both assertions were rewritten to hold the new truth
 with the docblock explaining the flip, because a guard silently deleted the
 week its premise changes is how a codebase loses the reason it was ever
 careful.
+
+## D70 — The support ledger is the one gap this series built rather than reworded, and its write is not admin-only
+
+Six investor zones were audited the same way in September 2026: read the schema
+before trusting the sentence on the disabled control. Five of the six
+`unbuilt` reasons turned out to be false — a scoring run that *was* stored
+(ID2), a vote that *could* be closed two lines from the button that said
+otherwise (ID3), closing templates that *did* include the SAFE (ID4), a mark
+history *already being served* to the same reader (IP1), a KPI rule set
+arriving on every page load and never rendered (IP2).
+
+**IP3's three reasons were true, and that is why this one is a migration.**
+`/portfolio/value-add` said no support ledger existed. Every table joining an
+investor to a company records the investor **gaining access** to one:
+
+| Table | What it actually records |
+| --- | --- |
+| `investor_introductions` | an investor **requesting** an intro to a founder, against a paid quarterly quota. `status` is written `'pending'` by the one INSERT and updated by **nothing** in the worker; `_investorProjectScope` unions it with dealroom membership to decide which projects an investor may *see*. |
+| `intro_propositions`, `intro_credit_ledger` | the Network peer-matching engine and the credits spent accepting a match. |
+| `investor_dealroom_members`, `deal_invitations`, `data_room_grants` | three more ways in. |
+| `engagements`, `engagement_hours` | a **partner's** paid delivery — born of a need and a quote, carrying a price. |
+
+Reading any of them as value-add would relabel access, matching, or billed
+consulting as support given. The licence axiom is invest in **and support**
+companies; the artboard's own words are that this desk is *"where the second
+half becomes auditable"*, and it could not be without somewhere to write.
+Migration 237 adds `portfolio_support_entries`.
+
+**`state` defaults to `'promised'`, and delivering is a write.** The artboard is
+explicit that *"an intro offered in June and never made is worse than one never
+offered, and only a record shows the difference"*. A ledger of completed work
+would lose exactly the fact worth keeping. `PATCH /portfolio-support/:uid` is
+therefore not a convenience: without a transition the column would freeze at
+`promised` precisely as `investor_introductions`'s does, and this table would
+reproduce the defect that disqualified it. `'withdrawn'` is a real terminal
+state so a promise can be retired honestly rather than left pending forever or
+quietly re-labelled delivered; both destinations are terminal, and re-opening
+one is a 409.
+
+**`hours` is nullable and NULL is never 0.** Most support is not timed. The read
+returns the recorded sum **and** `entries_without_hours` beside it, the tile
+reads "Not recorded" rather than "0 h" when nothing was timed, and the AI
+instruction refuses to fold the untimed entries into a total (D56/D68).
+
+**The write is open to an investor, unlike every other write in the Portfolio
+bucket.** `routes/positions.ts` gates all four of its writes on `requireAdmin`,
+correctly: a mark changes what an LP is told a position is worth, which is a
+governed assertion. A support entry is not a valuation — it is a record of what
+a person did. An admin-only ledger stays empty, because the people doing the
+work cannot write to it, which is the state IP3 was already in. So an investor
+may log against a project **already in their own accessible book**, checked
+against the same `investorProjectIds` scope as the read, and nobody gains a
+project they could not already see. `cloudflare-worker/test/portfolio_support_scope.test.ts`
+drives that gate against real SQLite rather than asserting it from source text.
+
+**A company counts as supported only from a recorded entry.** The third of the
+three original reasons stayed true after the store landed, so it became a rule
+instead: "no support at all" is an anti-join between the ledger and
+`portfolio_positions` — two stored sets compared — never the ledger's silence
+read as an answer, and never inferred from an update, an introduction row, or
+book membership.

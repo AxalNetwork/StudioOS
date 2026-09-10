@@ -43,8 +43,6 @@ const NO_LEDGER_LINES =
   'the fund analytics contract returns totals, not the journal, fee movements or audit rows behind them';
 const NO_EXTRACTION_LAYER =
   'the update feed returns submitted values and narratives, never the extraction proposal behind them or the rules that would produce one';
-const NO_SUPPORT_LEDGER =
-  'no value-add ledger exists, so no support entry, delivery state, hour or outcome is recorded against any company';
 // The third kind of reason, and the founder table never needed one. `Mine` is
 // not a gap and it is not live either: the board is ALREADY scoped, so a chip
 // would narrow nothing while appearing to, and "no owner is recorded" would be
@@ -212,11 +210,22 @@ export const INVESTOR_ZONE_FILTERS = {
   // shape as `/funds/calls`, and the same repair. `By company` is not a dynamic
   // group here: the companies exist, but there is nothing to group BY them, so
   // the missing thing is the ledger and not the names.
+  // ALL FOUR WERE DARK BEHIND `NO_SUPPORT_LEDGER`, AND THAT REASON WAS TRUE.
+  // It is the only one in this series that survived the schema check: every
+  // table joining an investor to a company records the investor gaining ACCESS
+  // to one, never doing work for one (migration 237's header lists them, and
+  // why each fails). So this zone was not corrected, it was built — the ledger
+  // now exists, and `state` is what these three predicates read.
+  //
+  // `By company` is the fourth and it is a VIEW, like `portfolio/updates`'s
+  // `Rules`: a rollup per company rather than a narrower row set. The ops row's
+  // `Per-company view` selects the same thing, which is how the artboard draws
+  // it — one view, reachable from either half of the header.
   'portfolio/value-add': [
-    { canvas: 'All', unbuilt: NO_SUPPORT_LEDGER },
-    { canvas: 'Delivered', unbuilt: NO_SUPPORT_LEDGER },
-    { canvas: 'Outstanding', unbuilt: NO_SUPPORT_LEDGER },
-    { canvas: 'By company', unbuilt: NO_SUPPORT_LEDGER },
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Delivered', key: 'delivered' },
+    { canvas: 'Outstanding', key: 'outstanding' },
+    { canvas: 'By company', key: 'company' },
   ],
 
   // ── Deals ────────────────────────────────────────────────────────────────
