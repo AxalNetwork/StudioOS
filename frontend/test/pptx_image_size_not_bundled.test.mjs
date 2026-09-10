@@ -44,8 +44,12 @@ import { pathToFileURL } from 'node:url';
 
 const ASSETS = resolve(process.cwd(), 'docs/assets');
 const OVERRIDE = 'npm:image-size-next@1.2.2';
-const VULN_TARBALL = /registry\.npmjs\.org\/image-size\/-\/image-size-/;
-const FORK_TARBALL = 'registry.npmjs.org/image-size-next/-/image-size-next-1.2.2.tgz';
+// Integrity of official image-size@1.2.1 (the Dependabot #161 tarball) and of
+// the image-size-next@1.2.2 replacement. Hashes, not hostnames — CodeQL's
+// js/regex/missing-regexp-anchor and incomplete-url-sanitization rules treat
+// a registry hostname in a test as if it were a URL allow-list.
+const VULN_INTEGRITY = 'sha512-rH+46sQJ2dlwfjfhCyNx5thzrv+dtmBIhPHk0zgRUukHzZ/kRueTJXoYYsclBaKcSMBWuGbOFXtioLpzTb5euw==';
+const FORK_INTEGRITY = 'sha512-Pd3CJ2+Ifk2H2jWikkoz2BSZgnuF3Qsea4gQmj2gtiOtYpGWBl7elj8EXnFMiY5PaYNruTTLD0hQ0UWK7pz9xA==';
 
 const IMAGE_SIZE_CANDIDATES = [
   resolve(process.cwd(), 'node_modules/image-size'),
@@ -111,13 +115,13 @@ test('both manifests override image-size onto image-size-next 1.2.2', () => {
 test('neither lockfile installs the vulnerable image-size tarball', () => {
   for (const rel of ['package-lock.json', 'frontend/package-lock.json']) {
     const text = readFileSync(resolve(process.cwd(), rel), 'utf8');
-    assert.doesNotMatch(
-      text, VULN_TARBALL,
-      `${rel} still resolves official image-size — the ICNS DoS is back`,
+    assert.ok(
+      !text.includes(VULN_INTEGRITY),
+      `${rel} still pins official image-size@1.2.1 — the ICNS DoS is back`,
     );
     assert.ok(
-      text.includes(FORK_TARBALL),
-      `${rel} must resolve ${FORK_TARBALL}`,
+      text.includes(FORK_INTEGRITY),
+      `${rel} must pin image-size-next@1.2.2`,
     );
     const lock = JSON.parse(text);
     const entries = Object.entries(lock.packages || {}).filter(
