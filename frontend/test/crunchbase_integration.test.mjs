@@ -35,7 +35,10 @@ test('Integrations connect modal has a Crunchbase user_key field', () => {
   const src = readFileSync(resolve(root, 'frontend/src/pages/IntegrationsPage.jsx'), 'utf8');
   assert.match(src, /data-testid=\{provider\.key === 'crunchbase' \? 'crunchbase-user-key'/);
   assert.match(src, /Crunchbase Basic user key/);
-  assert.match(src, /data\.crunchbase\.com/);
+  // String includes, not a hostname regex — CodeQL flags unanchored
+  // /data\.crunchbase\.com/ as js/incomplete-hostname-regexp even though
+  // this is a source-file guard, not a URL allowlist.
+  assert.ok(src.includes('data.crunchbase.com'), 'connect modal cites data.crunchbase.com');
 });
 
 test('DocuSign connect modal sends demo=0|1 and has an account picker', () => {
