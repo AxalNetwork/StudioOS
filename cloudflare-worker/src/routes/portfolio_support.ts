@@ -55,7 +55,16 @@ type SupportRow = {
 function isoDate(v: unknown): string | null {
   if (v == null || v === '') return null;
   const s = String(v).slice(0, 10);
-  return /^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(Date.parse(s)) ? s : null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+
+  const [yStr, mStr, dStr] = s.split('-');
+  const y = Number(yStr);
+  const m = Number(mStr);
+  const d = Number(dStr);
+  if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) return null;
+
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() + 1 === m && dt.getUTCDate() === d ? s : null;
 }
 
 /**
