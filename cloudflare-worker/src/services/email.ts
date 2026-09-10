@@ -426,6 +426,99 @@ ${noteBlock}
 }
 
 /**
+ * Task #121 — a company invitation, which until now did not exist.
+ *
+ * `POST /company/:uid/members` resolved an address to an existing account and
+ * 404'd otherwise, so nobody was ever emailed and nobody was ever asked. This
+ * is the message that makes the settings page's "Invite" true.
+ *
+ * IT RETURNS FALSE RATHER THAN THROWING, like every sender in this file, and
+ * the caller stores the answer: `company_invitations.email_sent`. An
+ * invitation nobody was told about is a real state — no Gmail credentials in
+ * this environment is the ordinary cause — and the settings page draws it
+ * differently from one that is merely unanswered, offering the link instead.
+ *
+ * Every interpolated value is escaped. `companyName` and `inviterName` are
+ * typed by a user, and this is HTML going to a third party's inbox.
+ */
+export async function sendCompanyInvitationEmail(
+  env: Env,
+  to: string,
+  companyName: string,
+  inviterName: string,
+  link: string,
+): Promise<boolean> {
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
+    console.error('[EMAIL] Gmail credentials missing — company invitation not sent');
+    return false;
+  }
+  try {
+    const accessToken = await getGmailAccessToken(env);
+    const co = escapeHtml(companyName);
+    const who = escapeHtml(inviterName);
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:40px 20px;">
+<tr><td align="center">
+<table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;border:1px solid #e5e7eb;overflow:hidden;">
+<tr><td style="padding:32px 32px 20px;border-bottom:1px solid #f3f4f6;">
+  <table cellpadding="0" cellspacing="0"><tr>
+    <td style="vertical-align:middle;padding-right:10px;">
+      <img src="https://axal.vc/axal-mark.png" alt="Axal VC" width="36" height="36" style="display:block;border:0;border-radius:8px;" />
+    </td>
+    <td style="vertical-align:middle;">
+      <span style="font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.01em;">Axal VC</span>
+      <div style="font-size:11px;color:#9ca3af;margin-top:2px;">StudioOS</div>
+    </td>
+  </tr></table>
+</td></tr>
+<tr><td style="padding:28px 32px 0;">
+  <h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;letter-spacing:-0.02em;">${who} invited you to ${co}</h1>
+  <p style="font-size:14px;color:#374151;margin:0 0 18px;line-height:1.65;">
+    Accepting adds you to ${co} on Axal VC StudioOS, where you will be able to see and work on
+    what the team keeps there. If you do not have an account yet, the link will help you make one first.
+  </p>
+</td></tr>
+<tr><td style="padding:0 32px;">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:8px 0 24px;">
+    <a href="${link}" style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;padding:16px 32px;border-radius:14px;">Join ${co}</a>
+  </td></tr></table>
+</td></tr>
+<tr><td style="padding:0 32px 32px;">
+  <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:14px;padding:16px 18px;">
+    <p style="margin:0 0 8px;color:#6b7280;font-size:13px;">Or paste this link into your browser:</p>
+    <a href="${link}" style="color:#2563eb;word-break:break-all;font-size:12px;">${link}</a>
+  </div>
+  <p style="font-size:11px;color:#9ca3af;margin:20px 0 0;line-height:1.6;">
+    This invitation expires in 14 days, and works only for this email address.
+    If you were not expecting it, you can ignore it — nothing happens until you accept.
+  </p>
+</td></tr>
+</table></td></tr></table></body></html>`;
+    const text = `${inviterName} invited you to join ${companyName} on Axal VC StudioOS.\n\n`
+      + `Accept here: ${link}\n\nThis invitation expires in 14 days and works only for this email `
+      + `address. If you were not expecting it, you can ignore it — nothing happens until you accept.\n\n— Axal VC`;
+    const rawEmail = buildRawEmail(to, `${inviterName} invited you to ${companyName}`, html, text, 'Axal VC <noreply@axal.vc>');
+    const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw }),
+    });
+    if (!res.ok) {
+      const err: any = await res.json().catch(() => ({}));
+      console.error('[EMAIL] Company invitation send failed:', err);
+      return false;
+    }
+    return true;
+  } catch (e: any) {
+    console.error(`[EMAIL] Company invitation failed for ${to}: ${e?.message || 'Unknown error'}`);
+    return false;
+  }
+}
+
+/**
  * Task #5 — build the raw MIME for a network/referral invite.
  *
  * The From address stays on Axal's authenticated domain (noreply@axal.vc) so

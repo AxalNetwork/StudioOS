@@ -3693,3 +3693,83 @@ template and only the data differs. This repo already carries three copies of
 one CSV escaper that disagree with each other; seven copies of a table would be
 the same mistake at seven times the size. Copy stays on the page that draws it,
 where a reader comparing artboard to screen can see both.
+
+## D69 — An invitation is a row and a hashed token; the direct link stays, on the one surface that means it
+
+Task #121 said Company Settings should "actually invite a member instead of
+linking one". The control was labelled **Invite by email** and posted to
+`POST /company/:uid/members`, which resolves the address to an **existing**
+account, writes `user_company_links`, and 404s otherwise. Two failures in one
+button: somebody without an account could not be reached at all, and somebody
+with one was joined to a company **without being asked**. The page's own
+docblock said so — which was the right thing to write down and the wrong thing
+to leave true.
+
+**The store is a new table, not a status column on the link.** A pending
+invitation is not a member in a lesser state: it has no `user_id` (that is the
+point — the invitee may not exist yet), it has a hashed token and an expiry,
+and it survives being revoked. Migration 236 gives it
+`company_invitations`, FK'd to **`company_profiles(id)`** — `companies` is the
+unused table from migration 034 and D65 already established which one is real.
+
+**One pending invitation per address, enforced by the index, not by a read.**
+
+```sql
+CREATE UNIQUE INDEX IF NOT EXISTS idx_company_invitations_one_pending
+  ON company_invitations(company_id, email) WHERE status = 'pending';
+```
+
+A partial unique index rather than a check-then-insert, because two clicks half
+a second apart on a form with a spinner is not a hypothetical race — it is the
+ordinary way people use a button that appears not to have worked. Revoked and
+accepted rows fall out of the index, which is exactly what lets an address be
+invited again after either one.
+
+**The token is returned once and stored as a hash**, matching
+`project_member_invitations` (`hashInviteToken`, SHA-256 hex). Consequences the
+UI has to carry rather than hide:
+
+- **Resend issues a NEW token** and restarts the 14-day clock. It cannot
+  re-send the old link, because nothing stored can reproduce it. A "resend"
+  that quietly did nothing would be a button that lies, so the previous link
+  stops working and the control says so.
+- **`email_sent: false` is a normal 200.** Every sender in `services/email.ts`
+  returns `false` with no Gmail credentials, which is the state of most
+  environments. The page hands the link over once, in an amber card that says
+  it cannot be recovered afterwards, instead of flashing a green tick over a
+  message nobody received. The row records the same fact, so the pending list
+  can distinguish *sent and unanswered* from *never sent* — only one of those
+  is the invitee's move.
+- **Revoke keeps the row.** Deleting it would lose who invited whom and when,
+  and the partial index already frees the address.
+
+**Accept is bound to the address, not to the account.** `POST
+/company/invitations/accept` compares the caller's email to `invitations.email`
+and refuses a mismatch with `wrong_account` **plus the address it was for** —
+without that last field the reader cannot tell which of their accounts to use,
+which is the only thing they need to know. A forwarded invitation is an
+ordinary thing to receive; joining the forwarder is not an acceptable outcome.
+`already_member` is a **success**: somebody added directly while their
+invitation was in flight has the outcome the invitation asked for, and calling
+that a failure would be false.
+
+**`api.addCompanyMember` stays.** The obvious tidy-up — delete the endpoint
+that caused the problem — would break the surface where it is honest:
+`CompanyProfilePanel`'s **"Add team member"** modal, which is titled *Add*, not
+*Invite*, and states *"User must already have a StudioOS account."* The defect
+was never the endpoint; it was one page calling it under a label describing
+something else. Company Settings no longer reaches for it, and a guard asserts
+that page-by-page rather than repo-wide.
+
+**Two guards were rewritten, not deleted, and this is the interesting part.**
+`frontend/test/company_settings_members.test.mjs` asserted the OPPOSITE copy:
+
+> The add-member copy must not promise an invitation. […] A UI that says
+> "invite" would be describing a feature the backend does not have.
+
+That was correct when it was written and is the reason the honest caveat had
+been there for two weeks. The rule did not change — *say what the backend
+does* — the backend did. Both assertions were rewritten to hold the new truth
+with the docblock explaining the flip, because a guard silently deleted the
+week its premise changes is how a codebase loses the reason it was ever
+careful.

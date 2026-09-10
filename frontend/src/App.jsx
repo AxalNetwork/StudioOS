@@ -52,6 +52,7 @@ const PitchWorkspacePage = lazy(() => import('./pages/PitchWorkspacePage'));
 const CapitalWorkspacePage = lazy(() => import('./pages/CapitalWorkspacePage'));
 const LegalEnginePage = lazy(() => import('./pages/LegalEnginePage'));
 const AcceptInvitePage = lazy(() => import('./pages/AcceptInvitePage'));
+const AcceptCompanyInvitePage = lazy(() => import('./pages/AcceptCompanyInvitePage'));
 const LegalPage = lazy(() => import('./pages/LegalPage'));
 const IncorporatePage = lazy(() => import('./pages/IncorporatePage'));
 const IncorporateSuccessPage = lazy(() => import('./pages/IncorporateSuccessPage'));
@@ -1683,6 +1684,10 @@ function AppInner() {
           acceptance. Public route; the page bounces logged-out visitors to
           sign-in with a `?next=` return path, then POSTs the bound token. */}
       <Route path="/projects/invitations/accept" element={<AcceptInvitePage />} />
+      {/* Task #121 — public like its project sibling: the invitee may have no
+          account yet, and the page bounces them to sign-in with a ?next= that
+          returns here. Guarding it would send them somewhere with no way back. */}
+      <Route path="/company/invitations/accept" element={<AcceptCompanyInvitePage />} />
       {/* Task #9 (X-2) — Public token-gated partner onboarding wizard.
           Mounted at the path embedded in admin-emailed magic links AND a
           query-string variant for fallback share-by-link channels. */}

@@ -10,10 +10,16 @@
  *
  * Two things this pins beyond "the UI exists":
  *
- *   1. The add-member copy must not promise an invitation. The worker resolves
- *      the address to an EXISTING user and 404s otherwise — no invitation row
- *      is written and no mail is sent. A UI that says "invite" would be
- *      describing a feature the backend does not have.
+ *   1. The add-member copy says what the backend actually does. It used to
+ *      read "does not send an invitation", because the worker resolved the
+ *      address to an EXISTING user and 404'd otherwise — no row, no mail.
+ *      **Task #121 built the missing half** (`company_invitations`, a hashed
+ *      14-day token, accept bound to the invited address), so the honest copy
+ *      is now the opposite one and this guard was rewritten to hold it. The
+ *      rule did not change; the backend did. `api.addCompanyMember` still
+ *      exists and is still the direct add for an account that already exists
+ *      — `CompanyProfilePanel`'s "Add team member" modal, which says so — but
+ *      Company Settings no longer reaches for it.
  *   2. The last primary admin cannot be demoted or removed. The worker enforces
  *      both; the UI must not offer a control that can only fail.
  */
@@ -36,19 +42,76 @@ test('the members list is actually rendered from the loaded company', () => {
 
 test('every member mutation the backend offers has a control', () => {
   const s = read(PAGE);
-  for (const m of ['addCompanyMember', 'updateCompanyMember', 'removeCompanyMember']) {
+  for (const m of ['updateCompanyMember', 'removeCompanyMember', 'inviteCompanyMember',
+                   'listCompanyInvitations', 'resendCompanyInvitation', 'revokeCompanyInvitation']) {
     assert.ok(s.includes(`api.${m}(`), `${m} has no UI — that was the RESKIN`);
   }
+  // `addCompanyMember` was the whole defect: it joins an existing account to
+  // the company WITHOUT asking, and 404s anyone who has no account. Task #121
+  // replaced it here. It stays in api.js for the surface that still means it.
+  assert.doesNotMatch(s, /api\.addCompanyMember\(/,
+    'Company Settings is linking an account again instead of inviting one');
 });
 
-test('the add-member copy does not promise an invitation', () => {
-  // The worker 404s an unregistered address. Saying "invite" here would
-  // describe a flow that does not exist.
+test('the add-member copy promises exactly the invitation that now exists', () => {
   const s = read(PAGE);
-  assert.match(
-    s, /does not send an invitation/i,
-    'the caveat that this links an existing account must stay',
-  );
+  // The retired caveat. Leaving it would understate a flow that now works.
+  assert.doesNotMatch(s, /does not send an invitation/i,
+    'the page still says it sends no invitation, which is no longer true');
+  // The four facts the route actually implements, each of which someone
+  // decides something on: no account needed (so the address can be a stranger),
+  // fourteen days (migration 236's expires_at), bound to the address (accept
+  // compares the caller's email), and nothing happens until they accept (no
+  // user_company_links row is written at invite time).
+  assert.match(s, /do not need an Axal VC account/i, 'the no-account-needed promise is gone');
+  assert.match(s, /expires in 14 days/i, 'the 14-day expiry is not stated');
+  assert.match(s, /works only for this address/i, 'the address binding is not stated');
+  assert.match(s, /nothing changes here until they accept/i,
+    'the page does not say the member list is unchanged until acceptance');
+  assert.match(s, /Send invitation/, 'the button no longer says what it does');
+});
+
+test('an invitation that was never emailed is not reported as sent', () => {
+  const s = read(PAGE);
+  // `email_sent: false` is the ORDINARY outcome with no Gmail credentials, and
+  // the route returns 200 for it. A page that flashed success on the status
+  // code would leave someone waiting on an email that was never sent.
+  assert.match(s, /r\?\.email_sent/, 'the invite result no longer reads email_sent');
+  assert.match(s, /could not be sent/i, 'nothing tells the reader the email failed');
+  // ...and the link is handed over instead, once, because the server keeps
+  // only a hash and cannot show it again. BOTH senders, sliced apart: a single
+  // whole-file match passes while either one alone still calls setHandoff, and
+  // a resend whose mail failed strands the reader exactly as badly as a first
+  // invitation that did.
+  for (const [fn, from, to] of [
+    ['invite', '  const invite = async () => {', '  const inviteAction = async'],
+    ['inviteAction', '  const inviteAction = async (fn, okMsg, addr) => {', '\n  return ('],
+  ]) {
+    const a = s.indexOf(from);
+    assert.ok(a >= 0, `${fn}() is gone from the page`);
+    const b = s.indexOf(to, a + from.length);
+    assert.ok(b > a, `${fn}()'s end marker is gone — this slice would run past the function`);
+    assert.match(s.slice(a, b), /setHandoff\(\{ email: addr, path: r\?\.accept_path \|\| null \}\)/,
+      `${fn}() no longer hands the link over when the email did not send`);
+  }
+  assert.match(s, /cannot be recovered afterwards/i,
+    'the page does not say the link is shown only once');
+});
+
+test('pending invitations are drawn, and only for someone who may manage members', () => {
+  const s = read(PAGE);
+  // Without this list an invitation is a thing you do and then cannot see.
+  assert.match(s, /Invitations \(\{invites\.items\.filter/,
+    'the pending-invitation list is gone');
+  assert.match(s, /\{rights\.canEdit && \(\s*\n\s*<div className="mt-4">/,
+    'the invitation rows are not gated on canEdit — they carry other people’s email addresses');
+  // Failed, empty and loading are three different facts, exactly as the
+  // Companies zone had to learn.
+  assert.match(s, /invites\.state === 'failed'/, 'a failed invitation read has no state of its own');
+  assert.match(s, /invites\.state === 'ready' && invites\.items\.length > 0/,
+    'the list no longer distinguishes ready-and-empty from still-loading');
+  assert.doesNotMatch(s, /catch \{\s*setInvites\(\{ state: 'ready'/,
+    'a failed invitation read is being turned into an empty list');
 });
 
 test('the empty state offers the action its backend supports, and only that', () => {

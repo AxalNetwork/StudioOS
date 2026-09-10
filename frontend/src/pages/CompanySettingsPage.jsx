@@ -675,9 +675,16 @@ function DangerZoneCard({ uid, row, rights, flash }) {
 // (PATCH /company/:uid/members/:userId, added alongside this).
 //
 // Two honesty points the canvas glosses over and this UI does not:
-//   • "Invite by email" is not an invite. The backend resolves the address to
-//     an EXISTING user and 404s otherwise — there is no invitation record and
-//     no email is sent. The copy says so rather than implying a pending invite.
+//   • "Invite by email" WAS NOT AN INVITE, and now it is. This said: "The
+//     backend resolves the address to an EXISTING user and 404s otherwise —
+//     there is no invitation record and no email is sent. The copy says so
+//     rather than implying a pending invite." Writing that down was right;
+//     leaving it true was not. Task #121 adds `company_invitations` (migration
+//     236), a hashed expiring token, an email, and an accept step the invitee
+//     takes — so nobody is joined to a company without being asked, and
+//     someone who has never signed up can be reached at all.
+//     `api.addCompanyMember` still exists and is still the direct add for
+//     someone who has already agreed; this page no longer calls it.
 //   • Every mutation returns the refreshed company detail, so the list below is
 //     the server's answer, never a local guess about what the write did.
 /**
@@ -704,12 +711,31 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
   const [role, setRole] = useState('Member');
   const [busy, setBusy] = useState(false);
   const [vocab, setVocab] = useState(null);
+  // 'loading' until the first answer, then 'ready' or 'failed' — the same
+  // three-way the rest of this codebase now uses, because an invitation list
+  // that failed to load and one that is empty are different facts.
+  const [invites, setInvites] = useState({ state: 'loading', items: [] });
+  // The accept link for an invitation whose EMAIL DID NOT SEND. Held only in
+  // this render: the server keeps a hash, so once the page reloads nobody can
+  // reproduce it and the answer is Resend.
+  const [handoff, setHandoff] = useState(null);
 
   useEffect(() => {
     let off = false;
     api.teamVocabulary().then((v) => { if (!off) setVocab(v); }).catch(() => {});
     return () => { off = true; };
   }, []);
+
+  const loadInvites = useCallback(async () => {
+    if (!rights.canEdit) { setInvites({ state: 'ready', items: [] }); return; }
+    try {
+      const r = await api.listCompanyInvitations(uid);
+      setInvites({ state: 'ready', items: Array.isArray(r?.invitations) ? r.invitations : [] });
+    } catch {
+      setInvites({ state: 'failed', items: [] });
+    }
+  }, [uid, rights.canEdit]);
+  useEffect(() => { loadInvites(); }, [loadInvites]);
 
   const members = row.members || [];
   const primaryAdmins = members.filter((m) => m.is_primary_admin).length;
@@ -727,14 +753,48 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
     }
   };
 
-  const add = () => {
+  /**
+   * Send an invitation. NOT `addCompanyMember` — see the note above.
+   *
+   * The result is reported by what actually happened, not by the request
+   * succeeding: `email_sent` false means the row exists and nobody was told,
+   * which is the ordinary outcome with no mailer configured, and the reader
+   * gets the link to pass on instead of a green tick over a silent failure.
+   */
+  const invite = async () => {
     const addr = email.trim().toLowerCase();
     if (!addr) { flash('Enter the teammate’s email', 'error'); return; }
-    run(async () => {
-      const r = await api.addCompanyMember(uid, { email: addr, role_in_company: role });
+    setBusy(true); setHandoff(null);
+    try {
+      const r = await api.inviteCompanyMember(uid, { email: addr, role_in_company: role });
       setEmail('');
-      return r;
-    }, `${addr} added`);
+      if (r?.company?.members) setRow(r.company);
+      setInvites({ state: 'ready', items: Array.isArray(r?.invitations) ? r.invitations : [] });
+      if (r?.email_sent) {
+        flash(`Invitation sent to ${addr}`);
+      } else {
+        setHandoff({ email: addr, path: r?.accept_path || null });
+        flash(`Invitation created for ${addr} — the email could not be sent`, 'error');
+      }
+    } catch (e) {
+      flash(e?.message || 'That did not work', 'error');
+    } finally { setBusy(false); }
+  };
+
+  const inviteAction = async (fn, okMsg, addr) => {
+    setBusy(true); setHandoff(null);
+    try {
+      const r = await fn();
+      setInvites({ state: 'ready', items: Array.isArray(r?.invitations) ? r.invitations : [] });
+      if (r && Object.prototype.hasOwnProperty.call(r, 'email_sent') && !r.email_sent) {
+        setHandoff({ email: addr, path: r?.accept_path || null });
+        flash(`The email could not be sent to ${addr}`, 'error');
+      } else {
+        flash(okMsg);
+      }
+    } catch (e) {
+      flash(e?.message || 'That did not work', 'error');
+    } finally { setBusy(false); }
   };
 
   return (
@@ -913,7 +973,7 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
           <input
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') invite(); }}
             placeholder="teammate@company.com"
             disabled={busy}
             className={inputCls}
@@ -923,22 +983,116 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
             onChange={(e) => setRole(e.target.value)}
             placeholder="Role"
             disabled={busy}
-            aria-label="Role for the new member"
+            aria-label="Role for the invited member"
             className="sm:w-32 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
           />
           <button
-            onClick={add}
+            onClick={invite}
             disabled={busy}
             className="px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 whitespace-nowrap"
           >
-            Add member
+            Send invitation
           </button>
         </div>
         <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-2">
-          The address must already belong to an Axal VC account — this links an
-          existing user, it does not send an invitation.
+          They do not need an Axal VC account yet. We email a link that expires in 14 days and
+          works only for this address; nothing changes here until they accept.
         </p>
+
+        {/* THE EMAIL DID NOT SEND, so the link is handed over instead of a
+            green tick over a silent failure. It is shown once — the server
+            keeps only a hash of it, which is why leaving this page means
+            Resend rather than "show it again". */}
+        {handoff && (
+          <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+            <p className="text-[11px] leading-relaxed text-amber-900 dark:text-amber-200">
+              The invitation for <strong>{handoff.email}</strong> was created, but the email could not
+              be sent from this environment. {handoff.path
+                ? 'Send them this link yourself — it is shown once and cannot be recovered afterwards:'
+                : 'No link was returned, so use Resend below once mail is working.'}
+            </p>
+            {handoff.path && (
+              <code className="mt-2 block break-all rounded bg-white p-2 text-[11px] text-gray-800 dark:bg-gray-900 dark:text-gray-200">
+                {`${window.location.origin}${handoff.path}`}
+              </code>
+            )}
+          </div>
+        )}
         </>
+        )}
+
+        {/* PENDING INVITATIONS — the half of this feature that did not exist,
+            and without which an invitation is a thing you do and then cannot
+            see. Only drawn for someone who may manage members: the rows carry
+            other people's email addresses. */}
+        {rights.canEdit && (
+          <div className="mt-4">
+            {invites.state === 'failed' && (
+              <div className="rounded-lg border border-gray-200 p-3 dark:border-gray-700" role="alert">
+                <p className="text-[11px] text-gray-600 dark:text-gray-400">
+                  Pending invitations could not be read. Anything already sent is unaffected.
+                </p>
+                <button onClick={loadInvites} disabled={busy}
+                  className="mt-2 text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600">
+                  Try again
+                </button>
+              </div>
+            )}
+            {invites.state === 'ready' && invites.items.length > 0 && (
+              <>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
+                  Invitations ({invites.items.filter((i) => i.status === 'pending').length} pending)
+                </div>
+                <div className="rounded-lg border border-gray-200 divide-y divide-gray-100 dark:border-gray-700 dark:divide-gray-800">
+                  {invites.items.map((i) => (
+                    <div key={i.uid} className="flex flex-wrap items-center gap-2 p-2.5">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm text-gray-900 dark:text-gray-100 truncate">{i.email}</div>
+                        <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                          {i.role_in_company}
+                          {i.invited_by ? ` · invited by ${i.invited_by}` : ''}
+                          {/* Sent and unanswered is not the same as never sent,
+                              and only one of the two is the invitee's move. */}
+                          {i.status === 'pending' && !i.email_sent ? ' · the email did not send' : ''}
+                        </div>
+                      </div>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                        i.status === 'pending' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
+                          : i.status === 'accepted' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
+                            : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}`}>
+                        {i.status}
+                      </span>
+                      {i.status === 'pending' && (
+                        <>
+                          <button
+                            onClick={() => inviteAction(
+                              () => api.resendCompanyInvitation(uid, i.uid),
+                              `Invitation resent to ${i.email}`, i.email,
+                            )}
+                            disabled={busy}
+                            title="Sends a new link. The previous one stops working."
+                            className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 disabled:opacity-50"
+                          >
+                            Resend
+                          </button>
+                          <button
+                            onClick={() => inviteAction(
+                              () => api.revokeCompanyInvitation(uid, i.uid),
+                              `Invitation to ${i.email} revoked`, i.email,
+                            )}
+                            disabled={busy}
+                            className="text-xs px-2 py-1 rounded-lg border border-gray-300 text-gray-600 hover:border-red-400 hover:text-red-600 dark:border-gray-600 dark:text-gray-300 disabled:opacity-50"
+                          >
+                            Revoke
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         )}
       </div>
     </Card>
