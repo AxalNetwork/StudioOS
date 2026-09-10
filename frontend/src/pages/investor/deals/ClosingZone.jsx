@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { investorZoneActions } from '../../../workspaces/investorZoneActions';
@@ -96,20 +96,43 @@ export default function InvestorClosingZone() {
   const [deals, setDeals] = useState(null);
   const [envelopes, setEnvelopes] = useState(null);
   const [view, setView] = useState('close');
+  const loadGenRef = useRef(0);
 
   const load = useCallback(() => {
+    const gen = ++loadGenRef.current;
     setDeals(null);
     setEnvelopes(null);
     api.listDeals(undefined, 'mine').then(
-      (r) => setDeals(Array.isArray(r) ? r : (r?.items || [])),
-      () => setDeals(UNAVAILABLE),
+      (r) => {
+        if (loadGenRef.current === gen) {
+          setDeals(Array.isArray(r) ? r : (r?.items || []));
+        }
+      },
+      () => {
+        if (loadGenRef.current === gen) {
+          setDeals(UNAVAILABLE);
+        }
+      },
     );
     api.esignList().then(
-      (r) => setEnvelopes(r?.envelopes || []),
-      () => setEnvelopes(UNAVAILABLE),
+      (r) => {
+        if (loadGenRef.current === gen) {
+          setEnvelopes(r?.envelopes || []);
+        }
+      },
+      () => {
+        if (loadGenRef.current === gen) {
+          setEnvelopes(UNAVAILABLE);
+        }
+      },
     );
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    return () => {
+      loadGenRef.current += 1;
+    };
+  }, [load]);
 
   const dealsReady = deals !== null && deals !== UNAVAILABLE;
   const envReady = envelopes !== null && envelopes !== UNAVAILABLE;
