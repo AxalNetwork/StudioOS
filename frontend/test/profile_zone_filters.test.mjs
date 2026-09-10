@@ -466,17 +466,13 @@ function artboardFilters(src) {
     // list is looked up rather than assumed from the section's id, because the
     // prefixes (`l_`, `pr_`, `n_`, `r_`, `a_`) are the canvas author's shorthand
     // and nothing makes them track the section ids.
-    // BUILT WITH `escapeRe`, NOT INTERPOLATED RAW. `binding[1]` comes out of a
-    // canvas file, and a canvas is an input this repo takes from outside — so a
-    // binding name carrying regex metacharacters would either build a pattern
-    // that means something else or, with the right nesting, one that
-    // backtracks. `\w+` in the match above already constrains it, which is why
-    // this is belt-and-braces rather than a live hole; escaping is still the
-    // right shape, and Semgrep's `detect-non-literal-regexp` is correct to
-    // insist on it (finding 6048).
-    const declared = src.match(new RegExp(`\\b${escapeRe(binding[1])}:\\s*views\\(\\[([^\\]]*)\\]\\)`));
+    // LOOKED UP WITH indexOf, NOT new RegExp. Semgrep's detect-non-literal-regexp
+    // (#6052) is right that a constructor built from a canvas token is the
+    // ReDoS shape even when `\w+` already constrains the name. A bounded
+    // indexOf cannot change meaning if the token grows a metacharacter.
+    const declared = viewsListFor(src, binding[1]);
     if (!declared) continue;
-    out[route[1]] = chips(declared[1]);
+    out[route[1]] = chips(declared);
   }
   return out;
 }
@@ -490,6 +486,31 @@ function artboardFilters(src) {
  * one chip into two — `Opened` and `unanswered` — and then reported the table as
  * having drifted from a canvas it matched exactly.
  */
+function viewsListFor(src, name) {
+  const key = `${name}:`;
+  let from = 0;
+  while (from < src.length) {
+    const at = src.indexOf(key, from);
+    if (at < 0) return null;
+    const prev = at === 0 ? '' : src[at - 1];
+    if (prev && /[A-Za-z0-9_]/.test(prev)) {
+      from = at + 1;
+      continue;
+    }
+    let i = at + key.length;
+    while (i < src.length && (src[i] === ' ' || src[i] === '\t' || src[i] === '\n')) i += 1;
+    if (!src.startsWith('views([', i)) {
+      from = at + 1;
+      continue;
+    }
+    const innerStart = i + 'views(['.length;
+    const innerEnd = src.indexOf(']', innerStart);
+    if (innerEnd < 0) return null;
+    return src.slice(innerStart, innerEnd);
+  }
+  return null;
+}
+
 function chips(list) {
   return [...list.matchAll(/'((?:[^'\\]|\\.)*)'/g)]
     .map((m) => m[1].replace(/\\(.)/g, '$1'))

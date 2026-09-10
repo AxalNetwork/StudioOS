@@ -102,7 +102,26 @@ const KNOWN_DRIFT_ALLOWLIST = new Set([
   '/network-introductions',
 ]);
 
-const HTTP_VERBS = 'get|post|put|patch|delete|all';
+function declaresIdent(src, ident) {
+  for (const kind of ['const ', 'let ', 'var ']) {
+    const needle = kind + ident;
+    let from = 0;
+    while (from < src.length) {
+      const at = src.indexOf(needle, from);
+      if (at < 0) break;
+      const prev = at === 0 ? '' : src[at - 1];
+      if (prev && /[A-Za-z0-9_]/.test(prev)) {
+        from = at + 1;
+        continue;
+      }
+      let i = at + needle.length;
+      while (i < src.length && (src[i] === ' ' || src[i] === '\t' || src[i] === '\n')) i += 1;
+      if (src[i] === '=') return true;
+      from = at + 1;
+    }
+  }
+  return false;
+}
 
 // ---------------------------------------------------------------------------
 // Path normalisation. Both sides collapse to the same shape so they compare:
@@ -180,12 +199,11 @@ function buildRouteTable() {
     visited.add(key);
     const src = readFileSync(file, 'utf8');
     const imports = importMap(src, dirname(file));
-    const declaresMounted = mountedIdent
-      && new RegExp(`(?:const|let|var)\\s+${mountedIdent}\\s*=`).test(src);
+    const declaresMounted = mountedIdent && declaresIdent(src, mountedIdent);
     const ident = declaresMounted ? mountedIdent : defaultExportIdent(src);
     if (!ident) return;
 
-    const verbRe = new RegExp(`(\\w+)\\s*\\.\\s*(${HTTP_VERBS})\\(\\s*['"\`]([^'"\`]*)['"\`]`, 'g');
+    const verbRe = /(\w+)\s*\.\s*(get|post|put|patch|delete|all)\(\s*['"`]([^'"`]*)['"`]/g;
     let m;
     while ((m = verbRe.exec(src)) !== null) {
       if (m[1] !== ident) continue;
@@ -205,7 +223,7 @@ function buildRouteTable() {
   const imports = importMap(idx, WORKER_SRC);
 
   // Routes declared directly on the root app (health checks, webhooks, …).
-  const rootVerbRe = new RegExp(`app\\s*\\.\\s*(${HTTP_VERBS})\\(\\s*['"\`](\\/api[^'"\`]*)['"\`]`, 'g');
+  const rootVerbRe = /app\s*\.\s*(get|post|put|patch|delete|all)\(\s*['"`](\/api[^'"`]*)['"`]/g;
   let m;
   while ((m = rootVerbRe.exec(idx)) !== null) routes.push([m[1].toUpperCase(), m[2]]);
 
