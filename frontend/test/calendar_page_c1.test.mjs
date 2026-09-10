@@ -324,6 +324,48 @@ test('both themes are first class — every token has two values and no colour i
   }
 });
 
+test('the explainer above the agenda names only sources that exist', () => {
+  // FOUND BY LOADING THE BUILT PAGE IN A BROWSER, not by reading it. The
+  // shared explainer for this page promised "office hours, board meetings,
+  // filings — alongside your personal events": there is no board-meeting
+  // source, no filing source, and the sync is ONE-WAY, so nothing the reader
+  // keeps on Google is ever read back in. Three false claims sitting on the
+  // one page whose whole rule is not making them.
+  const explainers = raw('frontend/src/lib/explainers.js');
+  const entry = explainers.match(/\n  calendar: \{([\s\S]*?)\n  \},/)?.[1] || '';
+  assert.ok(entry.includes('body:'), 'the calendar explainer entry did not parse');
+  for (const claim of ['board meeting', 'filing', 'alongside your personal events']) {
+    assert.ok(!entry.toLowerCase().includes(claim),
+      `the calendar explainer still promises "${claim}", which this page has no source for`);
+  }
+  // And every source it does name is one of the six.
+  assert.match(entry, /events you keep there are not read back in/i,
+    'the explainer no longer says the sync is one-way');
+  const externalReader = service.includes("kind: 'google_external'") || service.includes("kind: 'microsoft_external'");
+  assert.equal(externalReader, false,
+    'the worker now emits external events — the explainer may say so again, and a chip is owed');
+});
+
+test('the explainer sits outside the header row, so the canvas actions stay beside the title', () => {
+  // Inside the header's left column it stretched the flex row and pushed the
+  // three actions onto a line of their own — visible only in a browser.
+  const head = page.slice(page.indexOf('className="cal-head"'), page.indexOf('className="cal-explainer"'));
+  assert.ok(head.length > 100, 'the header no longer precedes the explainer strip');
+  assert.ok(!head.includes('PageExplainer'), 'the explainer is back inside the header row');
+  assert.match(page, /<div className="cal-explainer"><PageExplainer pageKey="calendar" \/><\/div>/,
+    'the explainer strip is gone — the page would lose its explainer entirely');
+  assert.match(css, /\.cal-explainer \{ padding: 12px 24px 0; \}/, 'the strip lost its gutter');
+});
+
+test('no sentence splices a kind label in where a lower-case noun belongs', () => {
+  // "A Expert session event cannot be copied…" — wrong article and a label
+  // capitalised mid-sentence, because the copy interpolated KIND_LABEL into
+  // running prose. Labels are chips and eyebrows; prose says "this event".
+  assert.match(page, /This event cannot be copied one at a time/,
+    'the unpushable note no longer reads as a sentence');
+  assert.doesNotMatch(page, /\bA \{KIND_LABEL/, 'a kind label is being spliced in after an article again');
+});
+
 test('the page prints none of the canvas fixture', () => {
   assert.doesNotMatch(pageRaw, /Halyard Security|Meridian Robotics|Priya Nair|Perkins Coie|Thornbury Capital|Kelp Bio|LoopSense|Ashurst|Marcus Chen|Verity Health|7 – 13 Sep 2026|2 min ago|4 hrs ago/);
 });

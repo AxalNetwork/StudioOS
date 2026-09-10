@@ -183,3 +183,10 @@
   .cal-rail { padding: 16px; }
   .cal-row { grid-template-columns: 58px 1fr; gap: 9px; }
 }
+
+/* The page explainer, as its own full-width strip between the header and the
+   gate. It is not part of the canvas; it belongs to the product's shared
+   explainer system and every page carries one. */
+.cal-explainer { padding: 12px 24px 0; }
+.cal-explainer:empty { display: none; }
+@media (max-width: 600px) { .cal-explainer { padding-left: 16px; padding-right: 16px; } }

@@ -52,6 +52,16 @@
  * (some sources answered; the banner names which did not and its chip count is
  * disclosed as stale), and a failed request (nothing answered at all).
  *
+ * A PUSH RECORD SURVIVES A DISCONNECT, which is the third and smallest place
+ * this page departs from the canvas. The canvas suppresses its "Pushed to …"
+ * pill when no provider was ever connected, reasoning that such a record could
+ * not exist. Here it can and does: `pushed_to` is read from
+ * `calendar_sync_records`, so the pill states a fact rather than inferring one
+ * — and a reader who disconnected Google still has that copy sitting on their
+ * Google calendar, which is exactly what the disconnect prompt tells them
+ * ("Already-pushed events stay on Google"). Hiding it would be the dishonest
+ * reading.
+ *
  * WHAT IS NOT DRAWN, AND WHY. A provider-level sync failure is not persisted
  * anywhere: `google_oauth_tokens` / `microsoft_oauth_tokens` carry
  * `last_synced_at` and no error column, and `calendar_sync_records.last_error`
@@ -460,7 +470,6 @@ export default function CalendarPage() {
             hours, expert sessions booked through wellbeing, and anything synced in from Calendly.
             Nothing else is aggregated here.
           </p>
-          <PageExplainer pageKey="calendar" />
         </div>
         <div className="cal-head-actions">
           {canIC && (
@@ -484,6 +493,12 @@ export default function CalendarPage() {
           </button>
         </div>
       </header>
+
+      {/* Its own full-width strip, like the gate below it. Inside the header's
+          left column it stretched the flex row and pushed the canvas's three
+          actions onto a line of their own, left-aligned, which is not the
+          header the canvas draws. */}
+      <div className="cal-explainer"><PageExplainer pageKey="calendar" /></div>
 
       {!canIC && (
         <div className="cal-gate">
@@ -807,9 +822,9 @@ function EventRow({ ev, myEmail, role, canPush, pushRemedy, onChanged }) {
         {pushNote && <div className="cal-ev-note">{pushNote}</div>}
         {unpushable && (
           <div className="cal-ev-note">
-            A {KIND_LABEL[ev.kind] || ev.kind} event cannot be copied one at a time — it did not
-            originate here, so there is nothing for StudioOS to write. Sync the calendar it came
-            from, or subscribe to the .ics feed.
+            This event cannot be copied one at a time — it did not originate here, so there is
+            nothing for StudioOS to write. Sync the calendar it came from, or subscribe to the
+            .ics feed.
           </div>
         )}
         {said && <p className="cal-ev-said">{said}</p>}

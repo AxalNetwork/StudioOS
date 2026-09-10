@@ -177,9 +177,18 @@ export const EXPLAINERS = {
     body: 'Run joint launches with partners — shared assets, dual-tracked attribution and a single dashboard both sides can read.',
     docPath: 'network/partners',
   },
+  // CORRECTED 2026-09-10. This said "office hours, board meetings, filings —
+  // alongside your personal events", and three of those four claims were not
+  // true of the page it sits on: there is no board-meeting source and no
+  // filing source at all, and the sync is ONE-WAY — StudioOS events are pushed
+  // out to the provider, and nothing reads the reader's own events back in.
+  // The external→Axal mirror is a future follow-up, which is what the
+  // `calendar.readonly` scope in services/calendar.ts is reserved for. Naming
+  // sources that do not exist on the one page whose design rule is not doing
+  // that was the worst place in the product for it.
   calendar: {
-    title: 'Unified calendar',
-    body: 'Connect Google or Outlook once and we surface every Axal VC commitment — office hours, board meetings, filings — alongside your personal events.',
+    title: 'One agenda, six sources',
+    body: 'IC meetings, founder check-ins, advisor and expert sessions, partner office hours, and Calendly bookings, in one list. Connect Google or Outlook to copy them out to your own calendar — events you keep there are not read back in.',
     docPath: 'account/notifications',
   },
   financials: {
