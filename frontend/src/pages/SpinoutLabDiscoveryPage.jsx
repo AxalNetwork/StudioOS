@@ -42,6 +42,7 @@ import {
 } from 'lucide-react';
 import LogInterviewModal, { ICP_FIT_OPTIONS } from '../components/discovery/LogInterviewModal';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 import { api, spinoutLab } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
@@ -381,7 +382,7 @@ export default function SpinoutLabDiscoveryPage() {
   const icpLabel = (v) => ICP_FIT_OPTIONS.find((o) => o.value === v)?.label || null;
 
   return (
-    <div className="w-full px-2 sm:px-4 py-3" data-testid="page-spinout-discovery">
+    <LabPageShell width="full" spaceY="" testId="page-spinout-discovery">
       {/* Header */}
       <LabPageHeader
         className="mb-5"
@@ -866,6 +867,6 @@ export default function SpinoutLabDiscoveryPage() {
         onClose={() => setLogModal(null)}
         onSave={saveInterview}
       />
-    </div>
+    </LabPageShell>
   );
 }

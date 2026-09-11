@@ -830,10 +830,12 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     || activeRole === 'advisor'
     // `/spinout-lab` itself is no longer hand-typed here: it went into
     // SHARED_FULL_BLEED, and fullBleedSurface above already implies full
-    // width. The sub-routes stay — the Lab's tool pages are full width but
-    // keep the shell's padding.
+    // width. Sub-routes are full width too.
     || location.pathname.startsWith('/spinout-lab/');
-  const flushSurface = fullBleedSurface;
+  // Spin-Out Lab sub-routes flush the shell padding — each page owns gutters
+  // via LabPageShell / LAB_PAGE_PAD so overview and tool pages share rails.
+  const flushSurface = fullBleedSurface
+    || location.pathname.startsWith('/spinout-lab/');
   const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user, hqView);
 
   // Auto-logout after 20 minutes of inactivity, with a 60-second warning modal.

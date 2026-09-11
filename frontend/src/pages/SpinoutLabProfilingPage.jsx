@@ -83,6 +83,7 @@ import { reportError } from '../lib/log';
 import { archetypeMeta } from '../lib/assessmentMeta';
 import { FOUNDER_DIMENSIONS, buildFounderSkillsModel } from '../lib/founderDimensions';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
 const CARD = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm';
@@ -523,7 +524,7 @@ export default function SpinoutLabProfilingPage() {
   };
 
   return (
-    <div className="w-full px-2 sm:px-4 py-3 space-y-5" data-testid="page-spinout-profiling">
+    <LabPageShell width="full" testId="page-spinout-profiling">
       {/* Header — shared Lab header. The phase stripe (design: 3px violet bar
           across the top of the tool) is LabPageHeader's `topRule`. */}
       <LabPageHeader
@@ -1082,6 +1083,6 @@ export default function SpinoutLabProfilingPage() {
           </div>
         </div>
       </div>
-    </div>
+    </LabPageShell>
   );
 }

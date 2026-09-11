@@ -37,6 +37,7 @@ import {
   X,
 } from 'lucide-react';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 import { api, spinoutLab } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { useAuth } from '../hooks/useAuthSync';
@@ -583,7 +584,7 @@ export default function SpinoutLabMarketPage() {
   const youDot = { x: POS_W * 0.72, y: POS_H * 0.28 };
 
   const page = (
-    <div className="w-full px-2 sm:px-4 py-3" data-testid="page-spinout-market">
+    <LabPageShell width="full" spaceY="" testId="page-spinout-market">
       {/* Header — brand rule, back control inline with the title, and the tool
           icon in its violet tile (design handoff). */}
       <LabPageHeader
@@ -1398,7 +1399,7 @@ export default function SpinoutLabMarketPage() {
           </div>
         </div>
       )}
-    </div>
+    </LabPageShell>
   );
 
   return <AssistLayout surface="market">{page}</AssistLayout>;

@@ -35,6 +35,7 @@ import { pickLabProject } from './SpinoutLabStartupPage';
 import { buildCertificateViewModel, certificateFilename } from '../lib/graduationCertificate';
 import { exportCertificatePdf } from '../lib/graduationCertificatePdf';
 import LabPageHeader from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -162,7 +163,7 @@ export default function SpinoutLabCertificatePage() {
   const { cert } = vm;
 
   return (
-    <div className="w-full px-2 sm:px-4 py-3" data-testid="page-spinout-certificate">
+    <LabPageShell width="full" spaceY="" testId="page-spinout-certificate">
       {/* Header — the shared Lab header. The single merged "Unlocked · Wk 4"
           chip is the week chip (there is no separate status chip on this
           page), and Wk 4 stays the literal it has always been. */}
@@ -510,6 +511,6 @@ export default function SpinoutLabCertificatePage() {
           </div>
         </div>
       )}
-    </div>
+    </LabPageShell>
   );
 }

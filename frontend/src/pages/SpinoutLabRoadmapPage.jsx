@@ -32,6 +32,7 @@ import { markMilestone } from '../lib/spinoutLabHooks';
 import { reportError } from '../lib/log';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
 const CARD = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm';
@@ -311,7 +312,7 @@ export default function SpinoutLabRoadmapPage() {
   const { high, low, confidence, timeline } = derived;
 
   return (
-    <div className="w-full px-2 sm:px-4 py-3" data-testid="page-spinout-roadmap">
+    <LabPageShell width="full" spaceY="" testId="page-spinout-roadmap">
       {/* Header — canonical Lab header (LabPageHeader owns the back link, the
           icon tile, the status chip and the action cluster). The page root has
           no space-y-*, so the header carries its own bottom margin. */}
@@ -610,6 +611,6 @@ export default function SpinoutLabRoadmapPage() {
           </div>
         </div>
       )}
-    </div>
+    </LabPageShell>
   );
 }

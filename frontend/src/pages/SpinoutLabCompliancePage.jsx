@@ -40,6 +40,7 @@ import { api, spinoutLab } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 import LabPageHeader from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 import LabPageIcon from '../components/spinout/LabPageIcon';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import { TOOL_INFO, WEEK_DEFS, milestoneKeySet } from './SpinoutLabWorkspace';
@@ -243,14 +244,14 @@ export default function SpinoutLabCompliancePage() {
 
   if (status === 'loading') {
     return (
-      <div className="max-w-[1200px] mx-auto px-4 py-6" data-testid="page-spinout-compliance">
+      <LabPageShell width="full" spaceY="" testId="page-spinout-compliance">
         <div className="flex items-center gap-2 text-sm text-gray-500"><Loader2 size={15} className="animate-spin" /> Loading compliance…</div>
-      </div>
+      </LabPageShell>
     );
   }
 
   return (
-    <div className="w-full px-2 sm:px-4 py-3 space-y-5" data-testid="page-spinout-compliance">
+    <LabPageShell width="full" testId="page-spinout-compliance">
       <LabPageHeader
         icon={ShieldCheck}
         title="Compliance"
@@ -588,6 +589,6 @@ export default function SpinoutLabCompliancePage() {
           </div>
         </>
       )}
-    </div>
+    </LabPageShell>
   );
 }

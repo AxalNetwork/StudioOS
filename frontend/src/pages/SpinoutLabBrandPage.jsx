@@ -32,6 +32,7 @@ import {
   Monitor, Smartphone, LayoutGrid, List, Trash2, Link2,
 } from 'lucide-react';
 import LabPageHeader from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 import ShareButtons from '../components/ShareButtons';
 import { api } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
@@ -1008,7 +1009,7 @@ export default function SpinoutLabBrandPage() {
   }
 
   const page = (
-    <div className="w-full px-2 sm:px-4 py-3" data-testid="spinout-brand-page">
+    <LabPageShell width="full" spaceY="" testId="spinout-brand-page">
       {toast && (
         <div className={`fixed bottom-6 right-6 z-50 px-4 py-2 rounded-lg shadow-lg text-sm ${
           toast.kind === 'ok' ? 'bg-emerald-600 text-white'
@@ -1794,7 +1795,7 @@ export default function SpinoutLabBrandPage() {
           </div>
         );
       })()}
-    </div>
+    </LabPageShell>
   );
 
   return <AssistLayout surface="brand">{page}</AssistLayout>;

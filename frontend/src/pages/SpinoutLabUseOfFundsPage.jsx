@@ -34,6 +34,7 @@ import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import { FUND_SECTIONS } from '../components/FundAllocator';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -513,7 +514,7 @@ export default function SpinoutLabUseOfFundsPage() {
   };
 
   return (
-    <div className="w-full px-2 sm:px-4 py-3 space-y-5" data-testid="page-spinout-uof">
+    <LabPageShell width="full" testId="page-spinout-uof">
       {/* Header — canonical Lab header. The old second row (description +
           four quick actions) collapses into `subtitle` + `actions`. */}
       <LabPageHeader
@@ -895,6 +896,6 @@ export default function SpinoutLabUseOfFundsPage() {
           </div>
         </div>
       )}
-    </div>
+    </LabPageShell>
   );
 }
