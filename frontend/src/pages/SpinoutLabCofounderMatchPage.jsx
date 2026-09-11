@@ -214,7 +214,7 @@ export default function SpinoutLabCofounderMatchPage() {
     : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400');
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6" data-testid="page-spinout-cofounder-match">
+    <div className="w-full px-2 sm:px-4 py-3" data-testid="page-spinout-cofounder-match">
       {/* Header */}
       <LabPageHeader
         className="mb-5"

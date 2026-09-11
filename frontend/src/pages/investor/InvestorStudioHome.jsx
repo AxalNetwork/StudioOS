@@ -73,7 +73,7 @@ export default function InvestorStudioHome({
   return (
     <section className="is-root" data-testid="investor-studio-home">
       <header className="is-context">
-        <div><span className="is-kicker">Axal Studio / Investor cockpit</span><h1 data-testid="text-investor-studio-title">Thesis in motion.</h1><p>{previewing ? 'Investor workspace preview · private investor records are withheld' : `${first}'s allocation view · live records only`}</p></div>
+        <div><h1 data-testid="text-investor-studio-title">Thesis in motion.</h1><p>{previewing ? 'Investor workspace preview · private investor records are withheld' : `${first}'s allocation view · live records only`}</p></div>
         <button type="button" className="is-refresh" onClick={refreshContext} data-testid="button-refresh-investor-studio"><RefreshCw size={14} />Refresh context</button>
       </header>
       {previewing && <div className="is-source-note" data-testid="status-investor-preview"><CircleAlert size={15} />You are previewing the Investor workspace as an administrator. Investor-scoped values are withheld because this session is not an investor identity.</div>}

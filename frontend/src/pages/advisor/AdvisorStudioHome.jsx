@@ -207,7 +207,6 @@ export default function AdvisorStudioHome({
 
       <header className="advisor-studio__masthead">
         <div>
-          <div className="advisor-eyebrow">Advisor practice</div>
           <div className="advisor-studio__title"><h1>Studio</h1><Status tone="violet">Advisor</Status><span>Good to see you, {firstName(profile?.name || user?.name)}.</span></div>
         </div>
         <time>{new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' }).format(new Date())}</time>
