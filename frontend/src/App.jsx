@@ -883,7 +883,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               <Menu size={18} />
             </button>
             <div className="flex items-center gap-2.5 dark:rounded-lg dark:bg-white/95 dark:px-2 dark:py-1">
-              <AxalLogo size="sm" />
+              {/* onLight: this island is white in dark mode. Default AxalLogo
+                  ink is dark:text-gray-100 and would disappear on it. */}
+              <AxalLogo size="sm" onLight />
             </div>
           </div>
           <div className="ml-auto flex items-center gap-2">
