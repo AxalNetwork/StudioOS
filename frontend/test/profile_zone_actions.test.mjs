@@ -256,9 +256,12 @@ const PROFILES = {
     canvasDirs: ['design/incoming', 'design/canvases/integrated'],
     canvas: /^(Pages · Advisor |Advisor Detail · Practice)/,
     buckets: /^(expertise|network|research|practice)\//,
-    zones: 11,
+    // 12 and 12 as of canvas PR1: `practice/opportunities` is the first
+    // Practice artboard to land, so it left `excluded` below and took its
+    // place here with one export ("Export decision log").
+    zones: 12,
     links: 1,
-    exports: 11,
+    exports: 12,
     // Four page-supplied ops — the same set partner has, because `AskZone` and
     // `LibraryZone` are each one file serving both. Was 0.
     handlers: 4,
@@ -277,11 +280,15 @@ const PROFILES = {
     // off a page that was already asking for them.
     //
     //
-    // FOUR PRACTICE ZONES ARE NEW HERE and are deferrals rather than refusals:
-    // the canvas specifies ops for each, and each leaves this list as its
-    // artboard lands (task #151, one PR per artboard). They are listed so the
-    // gap is counted rather than invisible — which is the whole point of this
-    // key, and what the unreadable canvas was denying it.
+    // THE REMAINING PRACTICE ZONES are deferrals rather than refusals: the
+    // canvas specifies ops for each, and each leaves this list as its artboard
+    // lands (task #151, one PR per artboard). They are listed so the gap is
+    // counted rather than invisible — which is the whole point of this key,
+    // and what the unreadable canvas was denying it.
+    //
+    // `practice/opportunities` LEFT ON PR1, the first to do so, which is the
+    // list working as intended: four became three because an artboard landed,
+    // not because anyone edited the count.
     //
     // `practice/earnings` IS NOT AMONG THEM, and the canvas says why in its own
     // words: PR5 "is drawn at full fidelity on the system canvas as D4 … listed
@@ -292,7 +299,7 @@ const PROFILES = {
     // that and this guard caught it.
     excluded: [
       'expertise/visibility', 'network/organizations',
-      'practice/opportunities', 'practice/engagements', 'practice/delivery',
+      'practice/engagements', 'practice/delivery',
       'practice/sessions',
     ],
     live: (route) => route.replace(/^\//, ''),

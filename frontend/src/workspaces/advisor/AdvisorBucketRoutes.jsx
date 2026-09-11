@@ -15,6 +15,7 @@ const AdvisorAdvisoryWorkspace = lazy(() => import('../../pages/advisor/advisory
 const CohortsFoundersZone = lazy(() => import('../../pages/advisor/cohorts/FoundersZone'));
 const CohortsThisWeekZone = lazy(() => import('../../pages/advisor/cohorts/ThisWeekZone'));
 const CohortsOutcomesZone = lazy(() => import('../../pages/advisor/cohorts/OutcomesZone'));
+const PracticeOpportunitiesZone = lazy(() => import('../../pages/advisor/practice/OpportunitiesZone'));
 const PracticeSessionsZone = lazy(() => import('../../pages/advisor/practice/SessionsZone'));
 const PracticeEarningsZone = lazy(() => import('../../pages/advisor/practice/EarningsZone'));
 const ExpertiseProfileZone = lazy(() => import('../../pages/advisor/expertise/ProfileZone'));
@@ -116,7 +117,11 @@ const ZONE_BLURB = {
 // Zones served by the legacy five-tab Advisory workspace, which carries its
 // own shell and must therefore be mounted `embedded`.
 const LIVE = {
-  '/practice': new Set(['opportunities', 'engagements', 'delivery']),
+  // `opportunities` LEFT THIS SET when PR1 landed. The Advisory tab it pointed
+  // at was an inbox — pending requests plus a slot editor — and the artboard
+  // asks for a decision LOG over every request that ever arrived. Both read
+  // `advisor_bookings`; only one of them answers the canvas.
+  '/practice': new Set(['engagements', 'delivery']),
 };
 
 // One page per zone, each over the store its migration created. These render a
@@ -131,6 +136,7 @@ const ZONE = {
     outcomes: CohortsOutcomesZone,
   },
   '/practice': {
+    opportunities: PracticeOpportunitiesZone,
     sessions: PracticeSessionsZone,
     earnings: PracticeEarningsZone,
   },
