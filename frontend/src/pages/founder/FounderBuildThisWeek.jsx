@@ -90,7 +90,7 @@ export default function FounderBuildThisWeek() {
           <header className="fb-week-header">
             <div className="fb-week-crumb"><Link to="/execution" data-testid="link-week-back"><ArrowLeft size={13} /> Execution</Link><span>/</span><strong>This week</strong></div>
             <div className="fb-week-title-row">
-              <div><p className="fb-week-kicker">Founder / Build</p><h1>This week · {weekRange()}</h1><p className="fb-week-subtitle">Current commitments read from the selected startup's roadmap.</p></div>
+              <div><h1>This week · {weekRange()}</h1><p className="fb-week-subtitle">Current commitments read from the selected startup's roadmap.</p></div>
               {projects.length > 1 && <label className="fb-week-picker"><span>Startup</span><select data-testid="select-week-project" value={selectedId || ''} onChange={(event) => { const id = Number(event.target.value); setSelectedId(id); setParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(id)); return next; }, { replace: true }); }}><option value="" disabled>Select a startup</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>}
             </div>
             <nav className="fb-week-zone-nav" aria-label="Build sections">

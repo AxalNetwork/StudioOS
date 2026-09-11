@@ -86,10 +86,13 @@ const PROFILES = {
     buckets: /^(deals|funds|portfolio|network|research)\//,
     zones: 19,
     links: 1,
-    exports: 13,
-    // Three page-supplied ops: `research/ask`'s `New brief`,
-    // `research/library`'s `Upload`, and `portfolio/positions`'s
-    // `Mark history`. Was 0, then 2.
+    // Fourteenth export: `portfolio/value-add`'s. Was a gap reading "there is
+    // no support history to export", which was TRUE — see the handler note.
+    exports: 14,
+    // Five page-supplied ops: `research/ask`'s `New brief`,
+    // `research/library`'s `Upload`, `portfolio/positions`'s `Mark history`,
+    // and `portfolio/value-add`'s `Log support` and `Per-company view`. Was 0,
+    // then 2, then 3.
     //
     // THE THIRD ONE WAS A GAP THAT SHOULD NEVER HAVE BEEN ONE. It carried the
     // reason "only the current mark is stored; there is no history to open",
@@ -97,7 +100,16 @@ const PROFILES = {
     // `GET /positions/:projectUid` was already returning to the very readers
     // looking at the disabled button. A gap becoming a handler is the shape
     // this ledger should move in; the reverse needs an argument.
-    handlers: 3,
+    //
+    // THE FOURTH AND FIFTH MOVED FOR THE OPPOSITE REASON, AND IT IS WORTH THE
+    // DISTINCTION. `portfolio/value-add`'s three reasons were checked the same
+    // way and all three were true: no table in the schema records an investor
+    // doing work for a company, only gaining access to one. So these did not
+    // become handlers because a reason was wrong — migration 237 built the
+    // store the reason correctly said was missing. A gap closed by building is
+    // a different event from a gap that was never real, and this file should
+    // not blur them.
+    handlers: 5,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -227,17 +239,29 @@ const PROFILES = {
     table: 'frontend/src/workspaces/advisorZoneActions.js',
     pages: ['frontend/src/pages/advisor', 'frontend/src/workspaces'],
     call: 'advisorZoneActions',
-    // The only advisor artboard set that carries an `ops:` array. `Advisor
-    // Detail · Practice`, `Advisor Canvas` and the backlog Cohorts export are
-    // rendered HTML with no header actions on any artboard, and this reader
-    // does not open `design/incoming/` for the other two profiles either — so
-    // it must for this one, since Expertise ships from there.
-    canvasDirs: ['design/incoming'],
-    canvas: /^Pages · Advisor /,
-    buckets: /^(expertise|network|research)\//,
-    zones: 11,
+    // TWO SHAPES AND TWO DIRECTORIES. `Pages · Advisor {Expertise,Network,
+    // Research}` ship from `design/incoming/` and carry an `ops:` array;
+    // `Advisor Detail · Practice` ships from the integrated set and is shape B
+    // markup. This reader does not open `design/incoming/` for the other two
+    // profiles, so it must for this one.
+    //
+    // THIS COMMENT USED TO SAY THE PRACTICE CANVAS HAD NO HEADER ACTIONS ON
+    // ANY ARTBOARD. It has eight, and has had since it was committed — the
+    // reader could not see them because they are `class="bulk"` rather than
+    // `class="vm"`, which is fixed above. The claim was written from the
+    // reader's blind spot rather than from the canvas, which is precisely the
+    // mistake `canvasOps`' own docblock records for `Pages · Partner
+    // Pipeline`. It cost the same thing both times: five zones with no header
+    // row and a sentence explaining why they did not need one.
+    canvasDirs: ['design/incoming', 'design/canvases/integrated'],
+    canvas: /^(Pages · Advisor |Advisor Detail · Practice)/,
+    buckets: /^(expertise|network|research|practice)\//,
+    // 12 and 12 as of canvas PR1: `practice/opportunities` is the first
+    // Practice artboard to land, so it left `excluded` below and took its
+    // place here with one export ("Export decision log").
+    zones: 12,
     links: 1,
-    exports: 11,
+    exports: 12,
     // Four page-supplied ops — the same set partner has, because `AskZone` and
     // `LibraryZone` are each one file serving both. Was 0.
     handlers: 4,
@@ -254,7 +278,30 @@ const PROFILES = {
     // was the one case where it had stopped being true: the zone got a real
     // body with the advisor grant, and the exclusion kept three specified ops
     // off a page that was already asking for them.
-    excluded: ['expertise/visibility', 'network/organizations'],
+    //
+    //
+    // THE REMAINING PRACTICE ZONES are deferrals rather than refusals: the
+    // canvas specifies ops for each, and each leaves this list as its artboard
+    // lands (task #151, one PR per artboard). They are listed so the gap is
+    // counted rather than invisible — which is the whole point of this key,
+    // and what the unreadable canvas was denying it.
+    //
+    // `practice/opportunities` LEFT ON PR1, the first to do so, which is the
+    // list working as intended: four became three because an artboard landed,
+    // not because anyone edited the count.
+    //
+    // `practice/earnings` IS NOT AMONG THEM, and the canvas says why in its own
+    // words: PR5 "is drawn at full fidelity on the system canvas as D4 … listed
+    // here so the Practice set reads as complete rather than as four of five".
+    // It carries no crumb and no ops, so this profile's canvas set does not
+    // specify it, and listing it here would claim a deferral against an
+    // artboard that is not there. The first draft of this list did exactly
+    // that and this guard caught it.
+    excluded: [
+      'expertise/visibility', 'network/organizations',
+      'practice/engagements', 'practice/delivery',
+      'practice/sessions',
+    ],
     live: (route) => route.replace(/^\//, ''),
   },
 };
@@ -365,8 +412,17 @@ function artboardOps(src) {
     const from = crumbs[i].index;
     const to = i + 1 < crumbs.length ? crumbs[i + 1].index : src.length;
     const segment = src.slice(from, to);
+    // TWO CLASSES, AND THE SECOND ONE COST FIVE ZONES. `Pages · Partner
+    // Pipeline` marks its ops `class="vm"`; `Advisor Detail · Practice` marks
+    // all eight of its own `class="bulk"`. This selector knew only the first,
+    // so it read the Practice canvas as eight artboards with no header
+    // actions — and the advisor profile below carried a comment asserting
+    // exactly that, in the same words this file's own shape-B docblock uses to
+    // describe the Partner Pipeline mistake. Same failure, same file, a
+    // different canvas: a guard that cannot read a canvas reports it empty,
+    // and the reader believes the guard.
     out[`/${slug(crumbs[i][1])}/${slug(crumbs[i][2])}`] =
-      [...segment.matchAll(/class="vm"[^>]*>([^<]+)</g)].map((m) => m[1].trim());
+      [...segment.matchAll(/class="(?:vm|bulk)"[^>]*>([^<]+)</g)].map((m) => m[1].trim());
   }
   return literal(out);
 }
@@ -414,6 +470,21 @@ function canvasOps(profile) {
       assert.ok(Object.keys(found).length,
         `${dir}/${f} matched ${profile.canvas} and yielded no artboard — ` +
         'it is in none of the three known shapes, or one of them has changed');
+      // THE THIRD WAY A CANVAS FAILS TO BE READ, and the one that actually
+      // happened. A shape-B canvas whose op class this reader does not know
+      // parses into real routes carrying EMPTY op arrays: not empty, not full
+      // of bindings, so neither assert above nor `literal()` says a word. That
+      // is how `Advisor Detail · Practice` read as four artboards with no
+      // header actions for as long as it has existed, and how the profile
+      // below came to assert in a comment that it had none.
+      //
+      // A whole file yielding zero ops across every one of its artboards means
+      // the selector missed, not that eight designed controls are absent. A
+      // canvas that genuinely specifies none can have this revisited — with
+      // the canvas quoted, which is what was missing last time.
+      assert.ok(Object.values(found).some((ops) => ops.length),
+        `${dir}/${f} parsed into ${Object.keys(found).length} artboard(s) and not one op — ` +
+        'the shape was recognised but its ops were not; check the op class this canvas marks');
       for (const [route, ops] of Object.entries(found)) out[profile.live(route)] = ops;
       routes += Object.keys(found).length;
     }
@@ -513,6 +584,15 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     for (const skip of excluded) {
       assert.ok(canvas[skip], `${skip} is excluded but no artboard specifies it`);
       assert.ok(!table[skip], `${skip} is both excluded and declared`);
+      // AND IT MUST BE A ZONE THIS PROFILE ACTUALLY COVERS. `specified` is
+      // filtered by `buckets` before the exact-set comparison, so an exclusion
+      // outside them is checked against nothing: narrowing `buckets` would
+      // silently retire every deferral it drops, and the exact-set assertion
+      // would still pass. Mutation-checking found this by removing `practice`
+      // from the advisor profile's buckets — four recorded deferrals became
+      // unenforced and no assertion moved.
+      assert.ok(profile.buckets.test(skip),
+        `${skip} is excluded but sits outside this profile's buckets, so nothing enforces it`);
     }
   });
 

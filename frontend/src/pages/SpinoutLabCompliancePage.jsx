@@ -250,7 +250,7 @@ export default function SpinoutLabCompliancePage() {
   }
 
   return (
-    <div className="max-w-[1200px] mx-auto px-4 py-6 space-y-5" data-testid="page-spinout-compliance">
+    <div className="w-full px-2 sm:px-4 py-3 space-y-5" data-testid="page-spinout-compliance">
       <LabPageHeader
         icon={ShieldCheck}
         title="Compliance"

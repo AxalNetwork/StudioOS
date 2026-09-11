@@ -940,13 +940,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             <div className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
           )}
 
-          {/* A COLUMN, so the footer sits at the bottom of a short page.
-              This was `flex-1 overflow-y-auto` with no direction, so the
-              footer rendered immediately under the content and every page
-              whose body ended early — the Validate zones, Research · Library,
-              the investor Network zones — left several hundred pixels of bare
-              grey beneath it. `flex-col` plus `flex-1` on the content pushes
-              the footer down without pinning it over a long page. */}
+          {/* A COLUMN, so the footer stays at the bottom on short pages while
+              still following long page content inside the scroll container. */}
           <main className="flex flex-1 flex-col overflow-y-auto bg-gray-50 dark:bg-gray-950">
             {/* Keyed on the active company so a switch REMOUNTS every page
                 below the sidebar. Pages do not read the company from context —
@@ -956,10 +951,10 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 happened to refetch. `savedCompanyId` is the id restored before
                 first render, so a reload that lands on the same company does
                 not remount once the switcher confirms it. */}
-            <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main data-density-target className={`flex-1 ${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto w-full'}`}>
+            <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main data-density-target className={`${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto w-full'}`}>
               {children}
             </div>
-            <footer className="border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 md:px-6 py-4">
+            <footer className="mt-auto shrink-0 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 md:px-6 py-4">
               <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-gray-400 dark:text-gray-500">
                 <span>
                   © Copyright {new Date().getFullYear()}, Axal VC Management LLC. Axal VC Holdings LLC. All rights reserved.

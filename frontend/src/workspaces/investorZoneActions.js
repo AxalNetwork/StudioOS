@@ -158,10 +158,23 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Edit rules', unbuilt: 'the KPI set companies are held to is stored firm-wide and read-only here; no per-firm rule is kept for this book to edit' },
     { label: 'Export', kind: 'export' },
   ],
+  // THE ONLY ROW IN THIS FILE WHOSE REASONS WERE ALL TRUE. Checked the same way
+  // as the five before it — read the schema, not the sentence — and there was
+  // genuinely no store: `investor_introductions` is an investor REQUESTING an
+  // intro to a founder against a paid quota, and `_investorProjectScope` unions
+  // it with dealroom membership to decide what an investor may SEE.
+  // `intro_propositions` and `intro_credit_ledger` are the peer matching
+  // engine. `engagement_hours` belongs to a partner's PAID delivery. Reading
+  // any of them as value-add would relabel access, matching or billed work as
+  // support given.
+  //
+  // So migration 237 builds the ledger, and all three ops become real. The
+  // third one is the artboard's own duplicate of the `By company` chip: one
+  // view, reachable from either half of the header row.
   'portfolio/value-add': [
-    { label: 'Log support', unbuilt: 'no support ledger exists to write to' },
-    { label: 'Export', unbuilt: 'there is no support history to export' },
-    { label: 'Per-company view', unbuilt: 'a company is never counted as supported from the position book alone' },
+    { label: 'Log support', kind: 'handler', handler: 'logSupport' },
+    { label: 'Export', kind: 'export' },
+    { label: 'Per-company view', kind: 'handler', handler: 'byCompany' },
   ],
 
   // ── Network ──────────────────────────────────────────────────────────────

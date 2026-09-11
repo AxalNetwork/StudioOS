@@ -271,6 +271,7 @@ import ddRoutes from './routes/dd';
 import ic from './routes/ic';
 import lpReports from './routes/lp_reports';
 import portfolioUpdates from './routes/portfolio_updates';
+import portfolioSupport from './routes/portfolio_support';
 import positions from './routes/positions';
 import contacts from './routes/contacts';
 import track from './routes/track';
@@ -790,6 +791,11 @@ app.route('/api/dd', ddRoutes);
 app.route('/api/ic', ic);
 app.route('/api/lp-reports', lpReports);
 app.route('/api/portfolio-updates', portfolioUpdates);
+// The support ledger (IP3) is NOT in STUDIO_PREFIXES, unlike /api/positions
+// beside it. A founder reaching an investor's value-add desk has not hit a
+// paywall, they have hit someone else's surface, and 402 "upgrade to see this"
+// would be the wrong sentence. `canViewLpData` answers 403 in-route instead.
+app.route('/api/portfolio-support', portfolioSupport);
 app.route('/api/positions', positions);
 // Contacts — unified inbound relationship hub (founder CRM). Role-gated
 // in-route (founder/admin); no paywall prefix so it's core-available.

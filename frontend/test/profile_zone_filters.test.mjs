@@ -224,12 +224,19 @@ const PROFILES = {
     // both through a `canvasDirs` key since the Expertise bucket landed there;
     // this file hardcoded the integrated directory until now, which is why I
     // reported these two licences as having no canvas at all. They have four.
-    canvasDirs: ['design/incoming'],
-    canvas: /^Pages · Advisor (Network|Research)\.dc\.html$/,
+    // WIDENED ON CANVAS PR1, and it had to be: this profile could not see
+    // `Advisor Detail · Practice.dc.html` at all — wrong directory and a name
+    // the regex did not match — so it reported the Practice bucket as
+    // specifying no filters. That is the same blind spot PR0 fixed in
+    // `profile_zone_actions.test.mjs`, one file later.
+    canvasDirs: ['design/incoming', 'design/canvases/integrated'],
+    canvas: /^(Pages · Advisor (Network|Research)\.dc\.html$|Advisor Detail · Practice)/,
     pages: ['frontend/src/pages/advisor', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/advisorZoneActions.js',
-    zones: 7,
-    mounted: 7,
+    // 7 → 8: `practice/opportunities` is the first Practice artboard to land
+    // (canvas PR1) and brings the bucket's first live filter row.
+    zones: 8,
+    mounted: 8,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.advisor },
     // THE ONE EXCLUSION THAT IS NOT A DEFERRAL. Founder and investor left this
     // list; advisor and partner do not follow, and the reason is not that their
@@ -241,6 +248,18 @@ const PROFILES = {
     // founder and advisor mount DIFFERENT files for organizations.
     excluded: [
       'network/organizations',
+      // THREE DEFERRALS, NOT REFUSALS, and they arrived here as a side effect
+      // worth stating. Widening `canvasDirs`/`canvas` above to see the
+      // Practice canvas pulls ALL FOUR of its artboards into scope at once —
+      // `specified` is not bucket-filtered — so the three whose pages have not
+      // been built yet have to be named now or the exact-set check below
+      // fails. Each leaves this list as its artboard lands: PR2 engagements,
+      // PR3 delivery, PR4 sessions.
+      //
+      // `practice/earnings` is absent for the same reason it is absent from
+      // the actions ledger: the canvas draws no chips for it, so nothing
+      // specifies a filter row there to defer.
+      'practice/engagements', 'practice/delivery', 'practice/sessions',
     ],
     // No `samples`: not one advisor label carries a figure, and the assertion
     // below proves that rather than taking it on trust — a canvas that gains an
@@ -466,17 +485,13 @@ function artboardFilters(src) {
     // list is looked up rather than assumed from the section's id, because the
     // prefixes (`l_`, `pr_`, `n_`, `r_`, `a_`) are the canvas author's shorthand
     // and nothing makes them track the section ids.
-    // BUILT WITH `escapeRe`, NOT INTERPOLATED RAW. `binding[1]` comes out of a
-    // canvas file, and a canvas is an input this repo takes from outside — so a
-    // binding name carrying regex metacharacters would either build a pattern
-    // that means something else or, with the right nesting, one that
-    // backtracks. `\w+` in the match above already constrains it, which is why
-    // this is belt-and-braces rather than a live hole; escaping is still the
-    // right shape, and Semgrep's `detect-non-literal-regexp` is correct to
-    // insist on it (finding 6048).
-    const declared = src.match(new RegExp(`\\b${escapeRe(binding[1])}:\\s*views\\(\\[([^\\]]*)\\]\\)`));
+    // LOOKED UP WITH indexOf, NOT new RegExp. Semgrep's detect-non-literal-regexp
+    // (#6052) is right that a constructor built from a canvas token is the
+    // ReDoS shape even when `\w+` already constrains the name. A bounded
+    // indexOf cannot change meaning if the token grows a metacharacter.
+    const declared = viewsListFor(src, binding[1]);
     if (!declared) continue;
-    out[route[1]] = chips(declared[1]);
+    out[route[1]] = chips(declared);
   }
   return out;
 }
@@ -490,6 +505,31 @@ function artboardFilters(src) {
  * one chip into two — `Opened` and `unanswered` — and then reported the table as
  * having drifted from a canvas it matched exactly.
  */
+function viewsListFor(src, name) {
+  const key = `${name}:`;
+  let from = 0;
+  while (from < src.length) {
+    const at = src.indexOf(key, from);
+    if (at < 0) return null;
+    const prev = at === 0 ? '' : src[at - 1];
+    if (prev && /[A-Za-z0-9_]/.test(prev)) {
+      from = at + 1;
+      continue;
+    }
+    let i = at + key.length;
+    while (i < src.length && (src[i] === ' ' || src[i] === '\t' || src[i] === '\n')) i += 1;
+    if (!src.startsWith('views([', i)) {
+      from = at + 1;
+      continue;
+    }
+    const innerStart = i + 'views(['.length;
+    const innerEnd = src.indexOf(']', innerStart);
+    if (innerEnd < 0) return null;
+    return src.slice(innerStart, innerEnd);
+  }
+  return null;
+}
+
 function chips(list) {
   return [...list.matchAll(/'((?:[^'\\]|\\.)*)'/g)]
     .map((m) => m[1].replace(/\\(.)/g, '$1'))

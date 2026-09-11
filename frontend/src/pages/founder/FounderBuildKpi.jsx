@@ -128,7 +128,7 @@ export default function FounderBuildKpi() {
           <header className="fb-kpi-header">
             <div className="fb-kpi-crumb"><Link to="/execution" data-testid="link-kpi-back"><ArrowLeft size={13} /> Execution</Link><span>/</span><strong>KPI entry</strong></div>
             <div className="fb-kpi-title-row">
-              <div><p className="fb-kpi-kicker">Founder / Build</p><h1>KPI entry</h1><p className="fb-kpi-subtitle">Bulk entry, imports, metric definitions, targets and history from the selected startup's stored ledger.</p></div>
+              <div><h1>KPI entry</h1><p className="fb-kpi-subtitle">Bulk entry, imports, metric definitions, targets and history from the selected startup's stored ledger.</p></div>
               {projects.length > 1 && <label className="fb-kpi-picker"><span>Startup</span><select data-testid="select-kpi-project" value={projectId || ''} onChange={(event) => selectProject(event.target.value)}><option value="" disabled>Select a startup</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>}
             </div>
             <nav className="fb-kpi-zone-nav" aria-label="Build sections">

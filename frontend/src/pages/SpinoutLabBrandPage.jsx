@@ -1008,7 +1008,7 @@ export default function SpinoutLabBrandPage() {
   }
 
   const page = (
-    <div className="max-w-[1200px] mx-auto px-4 py-6" data-testid="spinout-brand-page">
+    <div className="w-full px-2 sm:px-4 py-3" data-testid="spinout-brand-page">
       {toast && (
         <div className={`fixed bottom-6 right-6 z-50 px-4 py-2 rounded-lg shadow-lg text-sm ${
           toast.kind === 'ok' ? 'bg-emerald-600 text-white'

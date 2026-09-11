@@ -39,6 +39,7 @@
     "vite": "^8.2.2"
   },
   "overrides": {
-    "postcss": "^8.5.10"
+    "postcss": "^8.5.10",
+    "image-size": "npm:image-size-next@1.2.2"
   }
 }

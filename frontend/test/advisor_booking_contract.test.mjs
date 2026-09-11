@@ -139,6 +139,76 @@ test('the two callers that were broken now go through the shared adapter', () =>
   assert.doesNotMatch(opps, /const slotStart = /, 'the private adapters must not come back');
 });
 
+/** One route handler's source, so a key can be pinned to its audience. */
+function handlerBody(method, path) {
+  const start = worker.indexOf(`advisors.${method}('${path}',`);
+  assert.ok(start > -1, `${method.toUpperCase()} ${path} must exist in routes/advisors.ts`);
+  const end = worker.indexOf('\nadvisors.', start + 1);
+  return worker.slice(start, end === -1 ? worker.length : end);
+}
+
+test("migration 205's money reaches the advisor's own list and stops there", () => {
+  // THE SAME CLASS OF BUG THIS FILE WAS WRITTEN FOR, one layer down.
+  // `bookingDto` is a whitelist, so `amount_cents` and `billing_state` were
+  // selected by `GET /me/bookings` and dropped on the way out — a valid
+  // property access on an object that simply lacks the key, which nothing
+  // else can catch. SessionsZone then showed "Not recorded" over stored
+  // prices and its editor overwrote them with a blank.
+  const money = dtoKeys('advisorMoney');
+  const shared = dtoKeys('bookingDto');
+  for (const k of ['amount_cents', 'billing_state']) {
+    assert.ok(money.has(k), `advisorMoney must emit ${k} — SessionsZone reads it off every row`);
+    // The other direction, and it is a disclosure rather than a display bug:
+    // three of bookingDto's call sites answer the founder or either party,
+    // and migration 205 calls billing_state the advisor's own bookkeeping.
+    // Putting it back in the shared DTO tells a client their advisor wrote
+    // the session off.
+    assert.ok(!shared.has(k), `${k} is back in the shared bookingDto — that is the client's copy too`);
+  }
+  assert.match(handlerBody('get', '/me/bookings'), /advisorMoney\(/,
+    "the advisor's own list must carry it");
+  assert.doesNotMatch(handlerBody('get', '/bookings/me'), /advisorMoney\(/,
+    'the founder list must not');
+  const transition = worker.slice(worker.indexOf('async function transition('));
+  assert.doesNotMatch(transition.slice(0, transition.indexOf('\n}')), /advisorMoney\(/,
+    'nor a lifecycle move, which answers whichever side made it');
+});
+
+test('no Practice page gates on a booking status the worker cannot write', () => {
+  // The `'requested'` bug at the top of this file, generalised. Every status
+  // a page compares against `b.status` has to be one the worker actually
+  // writes, or the branch is dead and the page silently renders nothing.
+  const written = new Set(['pending']);           // the INSERT default
+  for (const m of worker.matchAll(/nextStatus: '([a-z_]+)'/g)) written.add(m[1]);
+  assert.deepEqual([...written].sort(),
+    ['cancelled', 'completed', 'confirmed', 'no_show', 'pending'],
+    'the vocabulary moved — every page that names a status needs re-reading');
+
+  for (const f of readdirSync(resolve(process.cwd(), 'frontend/src/pages/advisor/practice'))) {
+    if (!f.endsWith('.jsx')) continue;
+    const src = codeOnly(read(`frontend/src/pages/advisor/practice/${f}`));
+    for (const m of src.matchAll(/\[([^\]]*)\]\.includes\(b\.status\)|b\.status === '([a-z_]+)'/g)) {
+      for (const lit of (m[1] ?? m[2] ?? '').matchAll(/'([a-z_]+)'/g)) {
+        assert.ok(written.has(lit[1]), `${f} gates on status '${lit[1]}', which nothing writes`);
+      }
+      if (m[2]) assert.ok(written.has(m[2]), `${f} gates on status '${m[2]}', which nothing writes`);
+    }
+  }
+});
+
+test('Sessions does not tell an advisor about a status called "held"', () => {
+  // It said so three times — in its docblock, its empty state and the note
+  // under the list ("Only confirmed and held sessions are listed"). There is
+  // no `held`; the filter is completed|confirmed and it drops `pending`
+  // without saying so, which is the one the sentence should have named.
+  // `codeOnly`, because the comment in the page explaining that there is no
+  // such status names it — the self-matching trap this helper exists for.
+  const src = codeOnly(read('frontend/src/pages/advisor/practice/SessionsZone.jsx'));
+  const claims = [...src.matchAll(/\bheld\b/g)];
+  assert.equal(claims.length, 0, 'a status the API cannot produce is not a thing to explain');
+  assert.match(src, /Only confirmed and completed sessions are listed/);
+});
+
 test('a failed availability read is not rendered as an empty schedule', () => {
   const page = codeOnly(read('frontend/src/pages/AdvisorsPage.jsx'));
   // `.catch(() => setSlots([]))` rendered "No open slots — check back later",

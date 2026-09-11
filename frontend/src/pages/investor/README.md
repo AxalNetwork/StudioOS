@@ -131,3 +131,49 @@ stayed silent, which is the narrower reason that stays true if a chase is built.
 Guard: `frontend/test/investor_portfolio_ip2.test.mjs`, 43 mutants. Like IP1's
 it reads the schema, the seed and the existing route rather than the corrected
 sentence.
+
+## IP3 · Value-add — the one whose reasons were true, so it was built
+
+`portfolio/value-add` said *"no support ledger exists to write to"*, *"there is
+no support history to export"*, and *"a company is never counted as supported
+from the position book alone"*. All three were checked the way IP1 and IP2's
+were — read the schema, not the sentence — and **all three held**. Every table
+joining an investor to a company records the investor **gaining access** to one,
+never doing work for one: `investor_introductions` is an intro *requested*
+against a paid quota (with a `status` written once and updated by nothing, and
+used by `_investorProjectScope` to decide what an investor may *see*),
+`intro_propositions` and `intro_credit_ledger` are the peer-matching engine, and
+`engagements`/`engagement_hours` are a **partner's paid delivery**. The full
+table and the reasoning are in `DECISIONS.md` D70 and migration 237's header.
+
+So this page was not corrected, it was built: `portfolio_support_entries`,
+`/api/portfolio-support`, and four chips that finally have something to filter.
+
+**`promised` is the default state, and delivering is a write.** The artboard's
+point is that *"an intro offered in June and never made is worse than one never
+offered"*. Without `PATCH /portfolio-support/:uid` the column would freeze at
+`promised` exactly as `investor_introductions`'s does — the defect that
+disqualified that table in the first place. `withdrawn` is a real terminal state
+so a promise can be retired honestly; both destinations are terminal and
+re-opening one is a 409.
+
+**Hours are nullable and NULL is never 0.** The tile reads "Not recorded" rather
+than "0 h" when nothing was timed, the route returns `entries_without_hours`
+beside the sum, and the blank form field is sent as *absent* rather than zero.
+
+**The write is not admin-only, unlike every write in `positions.ts`.** A mark is
+a governed valuation assertion; a support entry is a record of what a person
+did, and an admin-only ledger stays empty. An investor may log against a company
+already in their accessible book — same scope as the read — and nobody gains a
+project they could not already see.
+
+**`By company` is a view, not a predicate**, the same shape as IP2's `Rules`;
+the ops row's `Per-company view` selects it, which is how the artboard draws it.
+A company with no entry appears in that rollup rather than being omitted: it is
+the row an LP report needs most and the one a ledger of activity naturally
+drops.
+
+Guards: `frontend/test/investor_portfolio_ip3.test.mjs` and
+`cloudflare-worker/test/portfolio_support_scope.test.ts` — 56 mutants between
+them, all caught. The worker one drives the access rules against real SQLite,
+because the widened write gate is the riskiest part of the change.

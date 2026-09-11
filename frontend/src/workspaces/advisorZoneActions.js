@@ -52,6 +52,25 @@ export const ADVISOR_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
   ],
 
+  // ── Practice ─────────────────────────────────────────────────────────────
+  //
+  // `Bulk: decline with template` IS TWO MISSING THINGS, NOT ONE, and the
+  // reason names the one that actually blocks it. There is no store of decline
+  // wordings to pick from — `advisor_services` holds what an advisor SELLS, not
+  // what they say when refusing — and `POST /advisors/bookings/:id/cancel`
+  // takes one booking at a time, so a bulk action would be a loop the reader
+  // cannot see the failure modes of. Either alone would be enough.
+  // `canvas:` IS PROVENANCE AND `label:` IS WHAT RENDERS — the split
+  // `founderZoneActions.js:56` already uses, and its docblock asks that each
+  // use say why. Here: the canvas string is 27 characters against a cap of 24
+  // (`zone_label_contract.test.mjs`), and shortening it in place is not
+  // available because the canvas-order guard deep-equals the canvas verbatim.
+  // The rendered label keeps both ideas the canvas carries, bulk and template.
+  'practice/opportunities': [
+    { canvas: 'Bulk: decline with template', label: 'Bulk: templated decline', unbuilt: 'no decline wording is stored to pick from, and a cancellation is written one request at a time' },
+    { label: 'Export decision log', kind: 'export' },
+  ],
+
   // ── Network ──────────────────────────────────────────────────────────────
   'network/relationships': [
     { label: 'Log interaction', unbuilt: 'no interaction log is stored' },
