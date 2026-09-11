@@ -185,7 +185,7 @@ export default function SpinoutLabInvestorPage() {
     <div className="mx-auto max-w-[1240px] px-5 sm:px-8 pt-4 md:pt-6 pb-20" data-testid="spinout-investor-page">
 
       {/* ============ HERO ============ */}
-      <div className="relative overflow-hidden rounded-3xl border border-gray-200 dark:border-gray-800">
+      <div className="relative -mx-5 -mt-4 overflow-hidden rounded-3xl border border-gray-200 dark:border-gray-800 sm:-mx-8 md:-mt-6">
         <img src="/axal-vc-future.png" alt="" aria-hidden="true" className="absolute inset-0 h-full w-full object-cover object-[center_30%]" />
         <div className="absolute inset-0 bg-gradient-to-r from-gray-50/[.97] via-violet-50/[.94] to-violet-100/[.86] dark:from-gray-950/[.97] dark:via-gray-950/[.93] dark:to-violet-950/[.85]" />
         <div className="relative px-6 py-12 sm:px-12 sm:py-16">
