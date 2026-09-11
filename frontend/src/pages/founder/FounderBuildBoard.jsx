@@ -132,7 +132,7 @@ export default function FounderBuildBoard() {
           <header className="fb-board-header">
             <div className="fb-board-crumb"><Link to="/execution" data-testid="link-board-back"><ArrowLeft size={13} /> Execution</Link><span>/</span><strong>Board</strong></div>
             <div className="fb-title-row">
-              <div><p className="fb-kicker">Founder / Build</p><h1>Execution board</h1><p className="fb-subtitle">The stored work record for this startup. Read-only for founder accounts.</p></div>
+              <div><h1>Execution board</h1><p className="fb-subtitle">The stored work record for this startup. Read-only for founder accounts.</p></div>
               {projects.length > 1 && <label className="fb-project-picker"><span>Startup</span><select data-testid="select-board-project" value={selectedId || ''} onChange={(event) => { const id = Number(event.target.value); setSelectedId(id); setParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(id)); return next; }, { replace: true }); }}><option value="" disabled>Select a startup</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>}
             </div>
             <nav className="fb-zone-nav" aria-label="Build sections">
