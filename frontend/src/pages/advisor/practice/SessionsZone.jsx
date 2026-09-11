@@ -13,9 +13,9 @@ import { bookingView, formatDateTime, slotMinutes } from '../advisory/kit';
  *
  * WHAT THIS ZONE OWNS, and the boundary is the whole design. Bookings are
  * already worked in two places, and both work: Opportunities takes the inbound
- * request and holds Confirm/Decline; Engagements runs the lifecycle — held,
- * no-show, cancelled. A third page rendering the same rows would be exactly
- * what the empty card that used to sit here warned against.
+ * request and holds Confirm/Decline; Engagements runs the lifecycle —
+ * complete, no-show, cancel. A third page rendering the same rows would be
+ * exactly what the empty card that used to sit here warned against.
  *
  * What NOTHING reads is the money. Migration 205 added `amount_cents` and
  * `billing_state` to `advisor_bookings` and nothing has ever displayed them.
@@ -155,9 +155,12 @@ export default function SessionsZone() {
 
   const onSaved = useCallback(() => { setEditing(null); load(); }, [load]);
 
-  // Only sessions that actually happened can carry money. A cancelled or
-  // no-show session has no amount to record, and offering the editor on one
-  // would invite a figure that means nothing.
+  // Only a session the advisor has agreed to can carry money, and the status
+  // vocabulary is `pending|confirmed|completed|cancelled|no_show` — there is
+  // no `held`, whatever three pieces of copy on this page used to say.
+  // `pending` is dropped as deliberately as the other two: a request the
+  // advisor has not answered yet has no agreed session to price. Offering the
+  // editor on any of the three would invite a figure that means nothing.
   const billable = useMemo(
     () => state.items.filter((b) => ['completed', 'confirmed'].includes(b.status)),
     [state.items],
@@ -167,7 +170,7 @@ export default function SessionsZone() {
   const empty = (
     <NothingYet
       title="No sessions to price yet"
-      body="Sessions appear here once a booking is confirmed. Availability is published under Opportunities, and the lifecycle — held, no-show, cancelled — is run from Engagements. This zone records only what each session was worth."
+      body="Sessions appear here once a booking is confirmed. Availability is published under Opportunities, and the lifecycle — complete, no-show, cancel — is run from Engagements. This zone records only what each session was worth."
       action={(
         <p className="flex flex-wrap gap-3 text-[12px]">
           <Link to="/practice/opportunities" className="text-emerald-700 underline">Publish availability →</Link>
@@ -221,8 +224,9 @@ export default function SessionsZone() {
             </Card>
           ))}
           <p className="text-[11px] leading-relaxed text-axal-ink-3">
-            Only confirmed and held sessions are listed — a cancelled or no-show session has no
-            amount to record. The full booking history, including those, is under{' '}
+            Only confirmed and completed sessions are listed. A request you have not answered yet
+            has no agreed session to price, and a cancelled or no-show session has no amount to
+            record. The full booking history, including all three, is under{' '}
             <Link to="/practice/engagements" className="text-emerald-700 underline">Engagements</Link>.
           </p>
         </div>
