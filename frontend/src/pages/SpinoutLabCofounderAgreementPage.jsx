@@ -437,7 +437,7 @@ export default function SpinoutLabCofounderAgreementPage() {
   );
 
   return (
-    <div className="max-w-[1100px] mx-auto px-4 py-6 space-y-5" data-testid="page-spinout-cofounder">
+    <div className="w-full px-2 sm:px-4 py-3 space-y-5" data-testid="page-spinout-cofounder">
       <LabPageHeader
         icon={FileSignature}
         title="Co-founder Agreement"
