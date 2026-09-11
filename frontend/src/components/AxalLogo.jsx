@@ -44,6 +44,7 @@ export default function AxalLogo({
   size = 'md',
   markOnly = false,
   onDark = false,
+  onLight = false,
   className = '',
   ...props
 }) {
@@ -69,11 +70,14 @@ export default function AxalLogo({
       {icon}
       {/* `onDark` used to wrap the PNG in a white badge so its navy pixels stayed
           legible on the login photo. Real text needs no badge — it just changes
-          colour, which also matches the note set beside it in AuthShell. */}
+          colour, which also matches the note set beside it in AuthShell.
+          `onLight` is the inverse: the app header still paints a white island
+          in dark mode so the colourful mark stays on a light chip. Default
+          `dark:text-gray-100` would then vanish on that chip. */}
       <span
         style={{ fontFamily: 'var(--font-display)' }}
         className={`${scale.text} font-bold tracking-tight ${
-          onDark ? 'text-white' : 'text-gray-900 dark:text-gray-100'
+          onDark ? 'text-white' : onLight ? 'text-gray-900 dark:text-gray-900' : 'text-gray-900 dark:text-gray-100'
         }`}
       >
         Axal VC
