@@ -179,13 +179,12 @@ export default function SpinoutLabInvestorPage() {
   const liveTiles = proofStudio.filter((t) => t.live).length;
 
   return (
-    // pt-4 md:pt-6 is not decoration: `/spinout-lab` is in SHARED_FULL_BLEED
-    // (sidebarConfig.js) so the shell wrapper renders p-0, and this page had
-    // no top padding of its own — the hero would butt against the app header.
+    // Keep the page content padded below the hero, but let the hero bleed
+    // through both this wrapper's padding and the shell's p-4/md:p-6 surface.
     <div className="mx-auto max-w-[1240px] px-5 sm:px-8 pt-4 md:pt-6 pb-20" data-testid="spinout-investor-page">
 
       {/* ============ HERO ============ */}
-      <div className="relative -mx-5 -mt-4 overflow-hidden rounded-3xl border border-gray-200 dark:border-gray-800 sm:-mx-8 md:-mt-6">
+      <div className="relative -mx-9 -mt-8 overflow-hidden border border-gray-200 dark:border-gray-800 sm:-mx-12 md:-mx-14 md:-mt-12">
         <img src="/axal-vc-future.png" alt="" aria-hidden="true" className="absolute inset-0 h-full w-full object-cover object-[center_30%]" />
         <div className="absolute inset-0 bg-gradient-to-r from-gray-50/[.97] via-violet-50/[.94] to-violet-100/[.86] dark:from-gray-950/[.97] dark:via-gray-950/[.93] dark:to-violet-950/[.85]" />
         <div className="relative px-6 py-12 sm:px-12 sm:py-16">
