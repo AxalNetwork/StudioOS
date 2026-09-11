@@ -279,7 +279,13 @@ export default function SpinoutLabScoringPage() {
       // milestones are user-scoped, so only the project's own founder marks
       // it (same ownership guard as the roadmap OKR milestone).
       const owns = !!(user?.founder_id && project?.founder_id && user.founder_id === project.founder_id);
-      if (owns) await markMilestone(user, 'scoring_run_completed');
+      if (owns) {
+        try {
+          await markMilestone(user, 'scoring_run_completed');
+        } catch (milestoneErr) {
+          console.warn('[spinout-scoring:milestone:scoring_run_completed]', milestoneErr);
+        }
+      }
       // If the post-run refresh fails, keep the history we already have
       // rather than wiping it to a fake empty state.
       const scores = await api.getScores(project.id, { includeSandbox: true }).catch(() => null);
@@ -290,7 +296,11 @@ export default function SpinoutLabScoringPage() {
         // the fresh snapshot.
         const fresh = scores[0];
         if (fresh && owns && buildDimensions(fresh).filter((d) => d.pct >= 70).length >= 5) {
-          await markMilestone(user, 'scoring_confidence_70');
+          try {
+            await markMilestone(user, 'scoring_confidence_70');
+          } catch (milestoneErr) {
+            console.warn('[spinout-scoring:milestone:scoring_confidence_70]', milestoneErr);
+          }
         }
       }
       setFormOpen(false);
