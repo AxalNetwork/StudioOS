@@ -148,11 +148,16 @@ const SpinoutLabCofounderMatchPage = lazy(() => import('./pages/SpinoutLabCofoun
 const SpinoutLabCertificatePage = lazy(() => import('./pages/SpinoutLabCertificatePage'));
 const SpinoutLabApplyPage = lazy(() => import('./pages/SpinoutLabApplyPage'));
 const SpinoutLabBriefPage = lazy(() => import('./pages/SpinoutLabBriefPage'));
-const RegisterPage = lazy(() => import('./pages/RegisterPage'));
-const LoginPage = lazy(() => import('./pages/LoginPage'));
-const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
+// Auth surfaces are imported eagerly — not lazy — so /login never depends on a
+// second hashed chunk that can 404 after a deploy. That missing chunk was the
+// stale-deploy case behind Safari's "This webpage was reloaded because a problem
+// occurred" banner: logout and session expiry hard-navigate here, the lazy
+// import fails, and three independent reload recoveries stack on top of each other.
+import RegisterPage from './pages/RegisterPage';
+import LoginPage from './pages/LoginPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
 const NetworkIntroReviewPage = lazy(() => import('./pages/NetworkIntroReviewPage'));
-const RecoverPage = lazy(() => import('./pages/RecoverPage'));
+import RecoverPage from './pages/RecoverPage';
 const ESignPage = lazy(() => import('./pages/ESignPage'));
 // Send for signature — the non-admin origination page. POST /legal/esign/send
 // stopped being admin-only in task #156; this is the UI that finally matches.

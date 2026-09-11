@@ -153,10 +153,9 @@ test('a guard write that throws never falls through to a reload', () => {
   assert.doesNotMatch(main, /catch \{[^}]*\}\s*\n\s*window\.location\.reload\(\)/,
     'a reload must not sit directly after a swallowed storage failure');
 
-  // RouteErrorBoundary already had this right and is the reference: its reload
-  // is inside the try, so a blocked write falls through to the error card.
-  assert.match(boundary, /sessionStorage\.setItem\(RELOAD_GUARD_KEY[\s\S]{0,200}?window\.location\.reload\(\)/,
-    'the boundary must keep its reload inside the guarded block');
+  // RouteErrorBoundary uses the shared reload budget for automatic recovery.
+  assert.match(boundary, /reloadWithinBudget\(RELOAD_GUARD_KEY, RELOAD_GUARD_PARAM/,
+    'the boundary must reload through the shared budget');
 });
 
 test('the boot watchdog keeps at least one loop guard', () => {
