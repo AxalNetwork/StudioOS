@@ -34,6 +34,15 @@ const SettingsContext = createContext({
 });
 
 function applyTheme(theme) {
+  // Auth/marketing surfaces that call useForcedLightTheme() pin light mode for
+  // their mount lifetime. Without this guard SettingsContext re-applies the
+  // user's saved dark theme on every appearance refresh — a DOM flip on /login
+  // that Safari treats as instability when stacked with reload recovery.
+  if (document.documentElement.dataset.axalForcedTheme === 'light') {
+    document.documentElement.dataset.theme = 'light';
+    document.documentElement.classList.remove('dark');
+    return 'light';
+  }
   const effective = normalizeTheme(theme);
   document.documentElement.dataset.theme = effective;
   document.documentElement.classList.toggle('dark', effective === 'dark');
