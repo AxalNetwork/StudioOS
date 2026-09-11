@@ -90,14 +90,20 @@ test('every Practice zone is served — none is left claiming a store that exist
     .map((r) => r.slice('/practice/'.length));
   assert.deepEqual(zones, ['opportunities', 'engagements', 'delivery', 'sessions', 'earnings']);
 
-  // Three come from the legacy Advisory workspace, two from their own pages.
+  // Two come from the legacy Advisory workspace, three from their own pages.
   // Together that must be all five: Practice has no unbacked zone left.
+  //
+  // `opportunities` MOVED on canvas PR1. It rendered the legacy five-tab
+  // Advisory workspace `embedded` — a pending-request queue, honest but not
+  // the artboard, which asks for a decision LOG covering every request that
+  // ever arrived. Engagements and Delivery are still the legacy workspace and
+  // move the same way as their own artboards land (PR2, PR3).
   const live = bucketRoutes.slice(bucketRoutes.indexOf('const LIVE = {'),
     bucketRoutes.indexOf('const ZONE = {'));
   const fromWorkspace = zones.filter((z) => live.includes(`'${z}'`));
   const fromOwnPage = dispatchMap()['/practice'] || [];
-  assert.deepEqual(fromWorkspace, ['opportunities', 'engagements', 'delivery']);
-  assert.deepEqual(fromOwnPage, ['sessions', 'earnings']);
+  assert.deepEqual(fromWorkspace, ['engagements', 'delivery']);
+  assert.deepEqual(fromOwnPage.slice().sort(), ['earnings', 'opportunities', 'sessions']);
   assert.deepEqual([...fromWorkspace, ...fromOwnPage].sort(), [...zones].sort());
 
   // And the copy that said they had "no store at all" is gone. It was true

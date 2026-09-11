@@ -2619,6 +2619,93 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  // ── ADVISOR SURFACES ────────────────────────────────────────────────────
+  //
+  // The first entry for this licence. Scope is the advisor's own row rather
+  // than a company or a project set: `advisors.user_id` is the caller, and a
+  // caller with no advisor row gets [] — never another advisor's inbox.
+
+  'practice/opportunities': {
+    // PR1's band: "Proposal · engagement", drafted from a waiting request
+    // against the advisor's own stored services.
+    //
+    // WHAT IT MAY AND MAY NOT DO. The gather carries two real things — the
+    // request as the founder wrote it, and the services this advisor actually
+    // defined, with the prices and scopes they actually set. Everything a set
+    // of terms needs is therefore on the page already, which is the only
+    // reason a draft here is grounded rather than invented.
+    //
+    // THE PRICE IS THE FAILURE MODE. Asked for terms, a model will name a
+    // number: the request's stated budget, a round figure, or something
+    // "market". Each would be the advisor's own price quoted back to a client
+    // by a machine that made it up. The instruction forbids any figure that is
+    // not one of the advisor's stored prices, and forbids inventing a scope
+    // line the service does not carry.
+    //
+    // AND IT IS A DRAFT, NOT A SEND. Accepting stamps the draft. Nothing here
+    // confirms a booking, writes a decline, or reaches the requester — the
+    // page says so beneath the band, and the label promises terms rather than
+    // an answer.
+    instruction: [
+      'Draft a set of engagement terms for one waiting request, using only the request and the advisor’s own stored services below.',
+      'NEVER invent a price. Use only a price the advisor has actually stored against a service; if none of their services carries a price, say the price is not set rather than proposing one. A budget the requester mentioned is what THEY said they would pay, never what this advisor charges — quote it as theirs if at all, and never as the fee.',
+      'Do not invent scope. The terms may only contain what the chosen service’s stored scope says plus what the request asked for; if the two do not meet, say which part is not covered rather than widening the service to fit.',
+      'Say which stored service the terms are built on, by name. If no service is defined, say that terms cannot be drafted from a template that does not exist.',
+      'This is a draft for the advisor to read. Do not write it as a message to the requester, do not promise a start date the slot does not carry, and do not state that anything has been accepted or sent.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
+        .bind(userId).first<{ id: number; role: string | null }>();
+      const role = String(me?.role || '');
+      if (role !== 'admin' && role !== 'advisor') return [];
+      // The caller's OWN advisor row. No row means no practice, which means an
+      // empty gather and a 409 — never a fallback to whichever advisor sorted
+      // first.
+      const advisor = await c.env.DB.prepare('SELECT id FROM advisors WHERE user_id = ?')
+        .bind(userId).first<{ id: number }>();
+      if (!advisor?.id) return [];
+      const [waiting, services] = await Promise.all([
+        c.env.DB.prepare(
+          `SELECT b.topic, b.notes, b.created_at, u.name AS requester,
+                  s.starts_at AS slot_starts_at
+             FROM advisor_bookings b
+             LEFT JOIN users u ON u.id = b.founder_user_id
+             LEFT JOIN advisor_office_hour_slots s ON s.id = b.slot_id
+            WHERE b.advisor_id = ? AND b.status = 'pending'
+            ORDER BY COALESCE(s.starts_at, b.created_at) ASC
+            LIMIT 12`
+        ).bind(advisor.id).all<Record<string, unknown>>(),
+        c.env.DB.prepare(
+          `SELECT title, kind, duration_note, price_cents, currency, scope
+             FROM advisor_services
+            WHERE advisor_id = ? AND is_active = 1
+            ORDER BY created_at ASC LIMIT 12`
+        ).bind(advisor.id).all<Record<string, unknown>>().catch(() => ({ results: [] as Record<string, unknown>[] })),
+      ]);
+      const asks = (waiting.results || []) as Record<string, unknown>[];
+      // No waiting request is nothing to draft terms FOR. Services alone would
+      // produce a price list, which is not what the band offers.
+      if (!asks.length) return [];
+      const lines = asks.map((b) => (
+        `REQUEST: ${b.requester || 'requester not recorded'}`
+        + `; arrived ${String(b.created_at || 'not recorded').slice(0, 10)}`
+        + `; slot ${b.slot_starts_at ? String(b.slot_starts_at).slice(0, 16) : 'not recorded'}`
+        + `; asked for ${String(b.topic || '').replace(/\s+/g, ' ').slice(0, 300) || 'not recorded'}`
+        + `; notes ${String(b.notes || '').replace(/\s+/g, ' ').slice(0, 300) || 'none'}`
+      ));
+      const defs = ((services.results || []) as Record<string, unknown>[]).map((s) => (
+        `YOUR SERVICE: ${s.title || 'untitled'}`
+        + `; kind ${s.kind || 'not recorded'}`
+        // The price is spelled as unset rather than zeroed: 0 is a price an
+        // advisor may genuinely mean, and the instruction turns on this word.
+        + `; price ${s.price_cents == null ? 'NOT SET' : `${Number(s.price_cents) / 100} ${s.currency || 'USD'}`}`
+        + `; duration ${s.duration_note || 'not recorded'}`
+        + `; scope ${String(s.scope || '').replace(/\s+/g, ' ').slice(0, 400) || 'not recorded'}`
+      ));
+      return defs.length ? [...lines, ...defs] : [...lines, 'YOUR SERVICE: none is defined.'];
+    },
+  },
+
   // ── FOUNDER SURFACES ────────────────────────────────────────────────────
   //
   // The first non-partner entries in this table. Everything above scopes on

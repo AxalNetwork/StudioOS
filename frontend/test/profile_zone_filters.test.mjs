@@ -224,12 +224,19 @@ const PROFILES = {
     // both through a `canvasDirs` key since the Expertise bucket landed there;
     // this file hardcoded the integrated directory until now, which is why I
     // reported these two licences as having no canvas at all. They have four.
-    canvasDirs: ['design/incoming'],
-    canvas: /^Pages · Advisor (Network|Research)\.dc\.html$/,
+    // WIDENED ON CANVAS PR1, and it had to be: this profile could not see
+    // `Advisor Detail · Practice.dc.html` at all — wrong directory and a name
+    // the regex did not match — so it reported the Practice bucket as
+    // specifying no filters. That is the same blind spot PR0 fixed in
+    // `profile_zone_actions.test.mjs`, one file later.
+    canvasDirs: ['design/incoming', 'design/canvases/integrated'],
+    canvas: /^(Pages · Advisor (Network|Research)\.dc\.html$|Advisor Detail · Practice)/,
     pages: ['frontend/src/pages/advisor', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/advisorZoneActions.js',
-    zones: 7,
-    mounted: 7,
+    // 7 → 8: `practice/opportunities` is the first Practice artboard to land
+    // (canvas PR1) and brings the bucket's first live filter row.
+    zones: 8,
+    mounted: 8,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.advisor },
     // THE ONE EXCLUSION THAT IS NOT A DEFERRAL. Founder and investor left this
     // list; advisor and partner do not follow, and the reason is not that their
@@ -241,6 +248,18 @@ const PROFILES = {
     // founder and advisor mount DIFFERENT files for organizations.
     excluded: [
       'network/organizations',
+      // THREE DEFERRALS, NOT REFUSALS, and they arrived here as a side effect
+      // worth stating. Widening `canvasDirs`/`canvas` above to see the
+      // Practice canvas pulls ALL FOUR of its artboards into scope at once —
+      // `specified` is not bucket-filtered — so the three whose pages have not
+      // been built yet have to be named now or the exact-set check below
+      // fails. Each leaves this list as its artboard lands: PR2 engagements,
+      // PR3 delivery, PR4 sessions.
+      //
+      // `practice/earnings` is absent for the same reason it is absent from
+      // the actions ledger: the canvas draws no chips for it, so nothing
+      // specifies a filter row there to defer.
+      'practice/engagements', 'practice/delivery', 'practice/sessions',
     ],
     // No `samples`: not one advisor label carries a figure, and the assertion
     // below proves that rather than taking it on trust — a canvas that gains an
