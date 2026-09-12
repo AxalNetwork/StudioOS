@@ -696,7 +696,7 @@ authGoogle.get('/callback', async (c) => {
     // picker; the client-side gate still nudges un-profiled users there
     // on their next navigation.
     const requested = sanitizeRedirect(state.redirect);
-    const landing = newSignup && requested === '/dashboard' ? '/onboarding/licence' : requested;
+    const landing = newSignup && requested === '/dashboard' ? '/onboarding' : requested;
     const url = `${appUrl(c.env)}${landing}${landing.includes('?') ? '&' : '?'}google=ok${newSignup ? '&google_signup=1' : ''}`;
     return c.redirect(url, 302);
   } catch (e: any) {

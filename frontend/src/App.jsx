@@ -1119,7 +1119,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
 
   // Auth v2 — licence picker gate (A2). Fresh signups must choose a licence
   // before entering a role wizard or the exploring holding state.
-  const onLicencePath = location.pathname === '/onboarding/licence';
+  const onLicencePath = location.pathname === '/onboarding';
   if (
     onboardingLoaded &&
     onboardingFlow === 'licence' &&
@@ -1131,7 +1131,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     !isImpersonating &&
     accessLevel !== 'limited'
   ) {
-    return <Navigate to="/onboarding/licence" replace />;
+    return <Navigate to="/onboarding" replace />;
   }
 
   // Phase 0.2 / Task #23 — wizard resume gate.
@@ -1145,7 +1145,13 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   };
   const wizardRole = (serverRole === 'exploring' ? (suggestedRole || user?.suggested_role) : (serverRole || user.role));
   const myWizard = WIZARD_FOR_LICENCE[wizardRole] || null;
-  const onWizardPath = location.pathname.startsWith('/onboarding/');
+  // The bare `/onboarding` has to count. Before the licence picker moved
+  // there it sat at `/onboarding/licence`, which this prefix matched for
+  // free; `'/onboarding'.startsWith('/onboarding/')` is false, so leaving
+  // the prefix alone would let THIS gate bounce a user straight back off
+  // the licence picker the gate above just sent them to.
+  const onWizardPath = location.pathname === '/onboarding'
+    || location.pathname.startsWith('/onboarding/');
   const needsWizard = !onboardingComplete && (
     onboardingFlow === null ||
     onboardingFlow === user.role ||
@@ -1817,7 +1823,14 @@ function AppInner() {
       <Route path="/exploring" element={guard(['admin', 'exploring'], <ExploringDashboard />)} />
       <Route path="/dashboard" element={<DashboardRedirect />} />
       <Route path="/onboarding/chat" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'pending', 'exploring'], <OnboardingChatPage />)} />
-      <Route path="/onboarding/licence" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'pending', 'exploring'], <ChooseLicencePage />)} />
+      <Route path="/onboarding" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'pending', 'exploring'], <ChooseLicencePage />)} />
+      {/* The licence picker answers "which adventure", not "which licence",
+          so it lives at /onboarding. The old path stays as a redirect rather
+          than a second mount: a welcome email, an OAuth callback or a
+          bookmark sent before the rename must not 404, and two live mounts
+          of the same page would let the gate and the links disagree about
+          which one is canonical. */}
+      <Route path="/onboarding/licence" element={<Navigate to="/onboarding" replace />} />
       <Route path="/onboarding/persona" element={guard(['admin', 'founder', 'partner', 'investor'], <OnboardingPersonaPage />)} />
       <Route path="/onboarding/founder" element={guard(['admin', 'founder', 'exploring'], <OnboardingFounderPage />)} />
       <Route path="/onboarding/investor" element={guard(['admin', 'investor', 'exploring'], <OnboardingInvestorPage />)} />
