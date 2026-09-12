@@ -256,12 +256,14 @@ const PROFILES = {
     canvasDirs: ['design/incoming', 'design/canvases/integrated'],
     canvas: /^(Pages · Advisor |Advisor Detail · Practice)/,
     buckets: /^(expertise|network|research|practice)\//,
-    // 12 and 12 as of canvas PR1: `practice/opportunities` is the first
-    // Practice artboard to land, so it left `excluded` below and took its
-    // place here with one export ("Export decision log").
-    zones: 12,
+    // 13 and 13 as of canvas PR2: `practice/engagements` is the second Practice
+    // artboard to land, leaving `excluded` below and taking its place here with
+    // one export ("Export contract pack"). PR1 did the same before it with
+    // "Export decision log". Both counts move together because each Practice
+    // artboard so far draws exactly two ops, one of them an export.
+    zones: 13,
     links: 1,
-    exports: 12,
+    exports: 13,
     // Four page-supplied ops — the same set partner has, because `AskZone` and
     // `LibraryZone` are each one file serving both. Was 0.
     handlers: 4,
@@ -288,7 +290,8 @@ const PROFILES = {
     //
     // `practice/opportunities` LEFT ON PR1, the first to do so, which is the
     // list working as intended: four became three because an artboard landed,
-    // not because anyone edited the count.
+    // not because anyone edited the count. `practice/engagements` LEFT ON PR2
+    // the same way, and three became two.
     //
     // `practice/earnings` IS NOT AMONG THEM, and the canvas says why in its own
     // words: PR5 "is drawn at full fidelity on the system canvas as D4 … listed
@@ -299,8 +302,7 @@ const PROFILES = {
     // that and this guard caught it.
     excluded: [
       'expertise/visibility', 'network/organizations',
-      'practice/engagements', 'practice/delivery',
-      'practice/sessions',
+      'practice/delivery', 'practice/sessions',
     ],
     live: (route) => route.replace(/^\//, ''),
   },

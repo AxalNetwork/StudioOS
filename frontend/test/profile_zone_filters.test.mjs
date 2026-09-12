@@ -233,10 +233,10 @@ const PROFILES = {
     canvas: /^(Pages · Advisor (Network|Research)\.dc\.html$|Advisor Detail · Practice)/,
     pages: ['frontend/src/pages/advisor', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/advisorZoneActions.js',
-    // 7 → 8: `practice/opportunities` is the first Practice artboard to land
-    // (canvas PR1) and brings the bucket's first live filter row.
-    zones: 8,
-    mounted: 8,
+    // 7 → 8 → 9: `practice/opportunities` brought the bucket's first live filter
+    // row on canvas PR1, `practice/engagements` its second on PR2.
+    zones: 9,
+    mounted: 9,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.advisor },
     // THE ONE EXCLUSION THAT IS NOT A DEFERRAL. Founder and investor left this
     // list; advisor and partner do not follow, and the reason is not that their
@@ -248,18 +248,18 @@ const PROFILES = {
     // founder and advisor mount DIFFERENT files for organizations.
     excluded: [
       'network/organizations',
-      // THREE DEFERRALS, NOT REFUSALS, and they arrived here as a side effect
+      // TWO DEFERRALS, NOT REFUSALS, and they arrived here as a side effect
       // worth stating. Widening `canvasDirs`/`canvas` above to see the
       // Practice canvas pulls ALL FOUR of its artboards into scope at once —
-      // `specified` is not bucket-filtered — so the three whose pages have not
-      // been built yet have to be named now or the exact-set check below
-      // fails. Each leaves this list as its artboard lands: PR2 engagements,
-      // PR3 delivery, PR4 sessions.
+      // `specified` is not bucket-filtered — so the ones whose pages have not
+      // been built yet have to be named or the exact-set check below fails.
+      // Each leaves this list as its artboard lands: `practice/engagements`
+      // left on PR2, and PR3 delivery and PR4 sessions remain.
       //
       // `practice/earnings` is absent for the same reason it is absent from
       // the actions ledger: the canvas draws no chips for it, so nothing
       // specifies a filter row there to defer.
-      'practice/engagements', 'practice/delivery', 'practice/sessions',
+      'practice/delivery', 'practice/sessions',
     ],
     // No `samples`: not one advisor label carries a figure, and the assertion
     // below proves that rather than taking it on trust — a canvas that gains an

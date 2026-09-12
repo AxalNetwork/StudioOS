@@ -2269,13 +2269,17 @@ function AppInner() {
       <Route path="/advisor/network/organizations" element={<Navigate to="/network" replace />} />
 
       {/* ── Advisor · Practice, Cohorts, Expertise ───────────────────────────
-          Three of Practice's five zones mount the live /advisor/advisory
-          workspace; Sessions and Earnings have no store and say so. Cohorts is
-          entirely new and reads Spin-Out Lab data read-only — it owns no Lab
-          route and writes nothing back. Expertise mounts the live workspace
-          that /office-hours already serves. The legacy /advisor/advisory/* and
-          /office-hours routes stay: Clients and Contracts are working tabs the
-          canvas has no zone for. */}
+          ONE of Practice's five zones still mounts the live /advisor/advisory
+          workspace — Delivery, until canvas PR3 lands. Opportunities (PR1),
+          Engagements (PR2), Sessions and Earnings all have their own pages over
+          real stores; the clause here that said "Sessions and Earnings have no
+          store and say so" was stale from migration 205 onward and is gone.
+          Cohorts is entirely new and reads Spin-Out Lab data read-only — it owns
+          no Lab route and writes nothing back. Expertise mounts the live
+          workspace that /office-hours already serves. The legacy
+          /advisor/advisory/* routes stay for Clients and Contracts, which are
+          working tabs the canvas has no zone for; the three it DOES have zones
+          for redirect as each artboard lands. */}
       <Route path="/practice" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/practice/opportunities" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/practice/engagements" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
@@ -2310,10 +2314,18 @@ function AppInner() {
       <Route path="/expertise/thinking" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/expertise/visibility" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
 
-      <Route path="/advisor/advisory" element={<Navigate to="/advisor/advisory/opportunities" replace />} />
-      <Route path="/advisor/advisory/opportunities" element={guard(['admin', 'advisor'], advisorPrivateWorkspace(<AdvisorAdvisoryWorkspace />))} />
+      {/* THE LEGACY WORKSPACE'S DEFAULT TAB IS NOW `clients`, because
+          `opportunities` is a redirect below and a default that redirects makes
+          /advisor/advisory a two-hop bounce. Clients is the first tab the canvas
+          has no zone for, which is what this route now exists to serve. */}
+      <Route path="/advisor/advisory" element={<Navigate to="/advisor/advisory/clients" replace />} />
+      {/* TWO REDIRECTS, ONE PER ARTBOARD THAT HAS LANDED. The opportunities one
+          was owed by PR1 and missed — the zone shipped, the legacy inbox stayed
+          reachable at its old URL, and two pages answered the same question with
+          different instruments. Delivery keeps the workspace until PR3. */}
+      <Route path="/advisor/advisory/opportunities" element={<Navigate to="/practice/opportunities" replace />} />
+      <Route path="/advisor/advisory/engagements" element={<Navigate to="/practice/engagements" replace />} />
       <Route path="/advisor/advisory/clients" element={guard(['admin', 'advisor'], advisorPrivateWorkspace(<AdvisorAdvisoryWorkspace />))} />
-      <Route path="/advisor/advisory/engagements" element={guard(['admin', 'advisor'], advisorPrivateWorkspace(<AdvisorAdvisoryWorkspace />))} />
       <Route path="/advisor/advisory/delivery" element={guard(['admin', 'advisor'], advisorPrivateWorkspace(<AdvisorAdvisoryWorkspace />))} />
       <Route path="/advisor/advisory/contracts" element={guard(['admin', 'advisor'], advisorPrivateWorkspace(<AdvisorAdvisoryWorkspace />))} />
       {/* documentation/architecture/DECISIONS.md D12 — the Research row is /market-intel and nothing else.
