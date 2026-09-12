@@ -8,13 +8,57 @@
  *
  * Everything here is additive + IF NOT EXISTS, so it is safe to run against a
  * DB where migration 083 has already been applied (and vice-versa).
+ *
+ * AND IT IS BOUNDED, because it sits in front of /magic/start. Eleven sequential
+ * D1 statements is a cheap bootstrap and an expensive stall: the memo only lands
+ * on success, so a D1 that answers slowly (or not at all) made every request
+ * re-run all eleven and wait again. Now the whole bootstrap shares one deadline
+ * and a cooldown, and sign-in proceeds without it rather than behind it.
  */
 import type { Env } from '../types';
+import { withDeadline } from '../util/deadline';
+
+// Eleven sequential D1 statements on the most latency-sensitive route in the
+// product. On a migrated database every one is a no-op that still costs a round
+// trip, so the whole bootstrap gets one budget rather than eleven: past this,
+// sign-in proceeds without it.
+const BOOTSTRAP_DEADLINE_MS = 3_000;
+// ...and once it has blown the budget, stop re-paying it on every request for a
+// while. `_ready` is only set on success, so without this a slow D1 makes every
+// single request fire all eleven statements again and wait again — the failure
+// compounds instead of degrading.
+const BOOTSTRAP_COOLDOWN_MS = 60_000;
 
 let _ready = false;
+let _skipUntil = 0;
 
+/**
+ * Lazily create the auth-blockers tables, WITHOUT letting that hold up a
+ * sign-in. Callers must treat this as best-effort: it is a self-healing net for
+ * a database where migration 083 was never applied, and on production (where it
+ * was) the tables already exist. A route that actually needs one of them still
+ * has its own try/catch around the statement that touches it, which is what
+ * reports a genuinely missing table — this function's silence never does.
+ */
 export async function ensureAuthBlockersSchema(env: Env): Promise<void> {
   if (_ready) return;
+  if (Date.now() < _skipUntil) return;
+  try {
+    await withDeadline(bootstrap(env), BOOTSTRAP_DEADLINE_MS, 'authBlockersSchema');
+  } catch (e) {
+    _skipUntil = Date.now() + BOOTSTRAP_COOLDOWN_MS;
+    // Literal format string, value as an argument — Semgrep's
+    // unsafe-formatstring rule, and it is right on principle even though this
+    // particular value is a module constant: a log line has no reason to build
+    // its format from anything but a literal, and the next edit to this call
+    // might interpolate something that is not.
+    console.error(
+      '[ensureAuthBlockersSchema] bootstrap abandoned; skipping for (ms):', BOOTSTRAP_COOLDOWN_MS, e,
+    );
+  }
+}
+
+async function bootstrap(env: Env): Promise<void> {
   const db = env.DB;
 
   try {

@@ -39,6 +39,16 @@ import {
   getUserFactors, setUserFactor, clearUserFactor, isCountryAllowed,
 } from '../services/authSms';
 import { isGcipConfigured, sendVerificationCode, signInWithPhoneNumber, deleteGcipPhone } from '../services/gcip';
+import { withDeadline } from '../util/deadline';
+
+// A stall is an outage, and this limiter fails closed on an outage. Both KV
+// calls carry a deadline because KV takes no AbortSignal: without one the catch
+// below — correct, deliberate, and the whole point of the audit-M1 posture —
+// simply never runs, and the request hangs instead of being denied. Denying in
+// two seconds is the declared policy arriving on time; hanging for thirty is the
+// policy not arriving at all.
+const RATE_KV_DEADLINE_MS = 2_000;
+
 
 const sms = new Hono<{ Bindings: Env }>();
 
@@ -50,9 +60,12 @@ async function rate(env: Env, key: string, max: number, windowSec: number): Prom
     const now = Math.floor(Date.now() / 1000);
     const slot = Math.floor(now / windowSec);
     const k = `rl:${key}:${slot}`;
-    const cur = parseInt((await env.RATE_LIMITS.get(k)) || '0', 10);
+    const cur = parseInt((await withDeadline(env.RATE_LIMITS.get(k), RATE_KV_DEADLINE_MS, 'rate-get')) || '0', 10);
     if (cur >= max) return false;
-    await env.RATE_LIMITS.put(k, String(cur + 1), { expirationTtl: windowSec + 5 });
+    await withDeadline(
+      env.RATE_LIMITS.put(k, String(cur + 1), { expirationTtl: windowSec + 5 }),
+      RATE_KV_DEADLINE_MS, 'rate-put',
+    );
     return true;
   } catch (e) {
     // Fail-CLOSED on KV outage (audit M1): SMS OTP enroll/challenge/verify are
@@ -123,11 +136,11 @@ sms.post('/sms/start-enrollment', async (c) => {
   }
   // Stash the candidate {phone, country} in KV against the sessionInfo so
   // the confirm step doesn't have to trust the client to round-trip these.
-  await c.env.RATE_LIMITS.put(
+  await withDeadline(c.env.RATE_LIMITS.put(
     `sms-enroll:${user.id}:${r.sessionInfo}`,
     JSON.stringify({ phone, country, ts: Date.now() }),
     { expirationTtl: 600 },
-  );
+  ), RATE_KV_DEADLINE_MS, 'stash-put');
   return c.json({ session_info: r.sessionInfo });
 });
 
@@ -138,7 +151,7 @@ sms.post('/sms/confirm-enrollment', async (c) => {
   const sessionInfo = String(body?.session_info || '');
   const code = String(body?.code || '').trim();
   if (!sessionInfo || !code) return c.json({ error: 'session_info and code required' }, 400);
-  const stashed = await c.env.RATE_LIMITS.get(`sms-enroll:${user.id}:${sessionInfo}`);
+  const stashed = await withDeadline(c.env.RATE_LIMITS.get(`sms-enroll:${user.id}:${sessionInfo}`), RATE_KV_DEADLINE_MS, 'stash-get');
   if (!stashed) return c.json({ error: 'session_expired', message: 'Verification session expired. Restart enrollment.' }, 410);
   let country: string;
   try {
@@ -153,7 +166,7 @@ sms.post('/sms/confirm-enrollment', async (c) => {
   // The stash is only authoritative for the country/jurisdiction binding.
   await persistSmsEnrollment(c.env, user.id, v.phoneNumber, country, v.localId);
   await setUserFactor(c.env, user.id, 'sms');
-  await c.env.RATE_LIMITS.delete(`sms-enroll:${user.id}:${sessionInfo}`);
+  await withDeadline(c.env.RATE_LIMITS.delete(`sms-enroll:${user.id}:${sessionInfo}`), RATE_KV_DEADLINE_MS, 'stash-delete');
   try {
     const eh = await hashEmail(user.email);
     await c.env.DB.prepare(
@@ -232,11 +245,11 @@ sms.post('/sms/start-challenge', async (c) => {
   if (!r.ok) return c.json({ error: r.code, message: r.message }, r.code === 'recaptcha_required' ? 412 : 502);
   // Bind the sessionInfo to (email, userId) so verify can't be replayed
   // against a different account.
-  await c.env.RATE_LIMITS.put(
+  await withDeadline(c.env.RATE_LIMITS.put(
     `sms-login:${r.sessionInfo}`,
     JSON.stringify({ user_id: userId, email, ts: Date.now() }),
     { expirationTtl: 600 },
-  );
+  ), RATE_KV_DEADLINE_MS, 'stash-put');
   return c.json({ session_info: r.sessionInfo, last4: sms_.last4 });
 });
 
@@ -249,7 +262,7 @@ sms.post('/sms/verify-challenge', async (c) => {
   if (!email || !sessionInfo || !code) return c.json({ error: 'Missing parameters' }, 400);
   if (!(await rate(c.env, `sms-verify-email:${email}`, 5, 300))) return c.json({ error: 'Too many attempts. Try again later.' }, 429);
 
-  const stashed = await c.env.RATE_LIMITS.get(`sms-login:${sessionInfo}`);
+  const stashed = await withDeadline(c.env.RATE_LIMITS.get(`sms-login:${sessionInfo}`), RATE_KV_DEADLINE_MS, 'stash-get');
   if (!stashed) return c.json({ error: 'session_expired' }, 410);
   let bound: { user_id: number; email: string };
   try { bound = JSON.parse(stashed); }
@@ -266,7 +279,7 @@ sms.post('/sms/verify-challenge', async (c) => {
   if (!stored || stored.phone !== v.phoneNumber) {
     return c.json({ error: 'phone_mismatch' }, 401);
   }
-  await c.env.RATE_LIMITS.delete(`sms-login:${sessionInfo}`);
+  await withDeadline(c.env.RATE_LIMITS.delete(`sms-login:${sessionInfo}`), RATE_KV_DEADLINE_MS, 'stash-delete');
 
   // Mint the session JWT — same code path as the TOTP login flow but with
   // factor='sms' so requireFactor('totp') will refuse high-risk routes.

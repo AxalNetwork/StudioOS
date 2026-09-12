@@ -26,6 +26,8 @@ import type { Context, Next } from 'hono';
 import { jwtVerify, importJWK, type JWK } from 'jose';
 import type { Env } from '../types';
 
+const JWKS_FETCH_TIMEOUT_MS = 5_000;
+
 interface JwksCacheEntry {
   fetchedAt: number;
   keys: Record<string, CryptoKey>;
@@ -40,7 +42,13 @@ async function loadJwks(teamDomain: string): Promise<Record<string, CryptoKey>> 
     return cached.keys;
   }
   const url = `https://${teamDomain}/cdn-cgi/access/certs`;
-  const res = await fetch(url, { cf: { cacheTtl: 300, cacheEverything: true } } as RequestInit);
+  // Bounded: a JWKS endpoint that never answers would hang the admin request
+  // rather than refuse it, and the caller already treats a fetch failure as "no
+  // keys" — which denies.
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(JWKS_FETCH_TIMEOUT_MS),
+    cf: { cacheTtl: 300, cacheEverything: true },
+  } as RequestInit);
   if (!res.ok) throw new Error(`CF Access JWKS fetch failed: ${res.status}`);
   const body = (await res.json()) as { keys: JWK[] };
   const out: Record<string, CryptoKey> = {};

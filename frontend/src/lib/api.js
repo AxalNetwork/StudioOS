@@ -608,7 +608,17 @@ export const api = {
     // records no suggested role, unlike every other signup path.
     if (params.lane) qs.set('lane', params.lane);
     const q = qs.toString();
-    return request(`/auth/google/start${q ? `?${q}` : ''}`, { headers: { accept: 'application/json' } });
+    // `timeoutMs` is forwarded because LoginPage calls this TWICE for different
+    // reasons: once on mount, only to find out whether the button should exist,
+    // and once when someone clicks it. The first is a probe whose answer decides
+    // what the page CLAIMS, so it needs a deadline short enough that a stalled
+    // worker becomes a stated absence rather than a silently shorter list of
+    // options — that is exactly what went wrong on 2026-09-12. The click keeps
+    // the default.
+    return request(`/auth/google/start${q ? `?${q}` : ''}`, {
+      headers: { accept: 'application/json' },
+      ...(params.timeoutMs !== undefined ? { timeoutMs: params.timeoutMs } : {}),
+    });
   },
   getConnectedAccounts: () => request('/settings/connected-accounts'),
   unlinkGoogle: () => request('/settings/connected-accounts/google/unlink', { method: 'POST' }),

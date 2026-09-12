@@ -4109,3 +4109,122 @@ has exactly one write, and that the write carries the `opened_at IS NULL` guard.
 sign-off and no page renders one — so a control would save a fact nothing reads.
 The founder's card says so rather than leaving the gap silent, and the test holds
 the column unwritten on both sides.
+
+## D74 — A remote call has three outcomes, not two: nothing in the auth path may await one without a deadline
+
+**2026-09-12. Sign-in stopped working, and the reason was that nothing had
+failed.** Two reports minutes apart: *"The server did not respond within 30s.
+Nothing was changed"* — the SPA's own message, from
+`frontend/src/lib/api.js::timeoutError`, because the worker never answered at all
+— and, separately, that **Continue with Google had disappeared from `/login`**
+while the card still read "Google, passkey, and authenticator codes are also
+available."
+
+Two reads of the production D1 bounded the problem before any code was touched:
+`magic_link_tokens` held four rows, newest **2026-08-03**, and the attempt wrote
+none — so the request never reached the INSERT that is the *first* thing
+`/magic/start` does after its gates. `users` was current to 2026-09-09, so D1 was
+reachable and writable. Every `cloudflare-worker-deploy` run was green. And
+`checkRateLimit` fails **closed**, which returns a 429 in milliseconds, not a
+thirty-second silence. What remained was the shape of the gates themselves.
+
+**A REMOTE CALL CAN SUCCEED, FAIL, OR NEVER ANSWER, and this codebase had
+carefully handled the first two everywhere.** `rateLimitMiddleware` catches a KV
+error and takes the bucket's declared policy — fail-open by default, 503 for the
+abuse-prone buckets. `checkRateLimit` catches and denies. `turnstile` returns
+`false`. `auth_google` falls back to the binding cookie. Every one of those
+branches was already written, already reviewed, already right — **and unreachable
+the entire time the call was pending**, because a stall throws nothing. The bug
+was not a missing error path. It was an unreachable one, and that is a category
+that no amount of care inside the `catch` can fix.
+
+**So every await on that path is now bounded**, and the bound is expressed in
+whichever way the call admits. `fetch` takes an `AbortSignal`, so it gets
+`AbortSignal.timeout(ms)` directly: fifteen of them, across `services/email.ts`
+(12), `services/email/gmail.ts` (2), `services/turnstile.ts`,
+`routes/auth_google.ts`'s token exchange and `middleware/cfAccess.ts`'s JWKS
+read. KV and D1 cannot be cancelled at all, so they get `util/deadline.ts` —
+`withDeadline(work, ms, label)`, a race that stops *waiting* without pretending
+to stop the work, swallowing the straggler's later rejection so it cannot surface
+as an unhandled rejection after the response has gone. It **throws**
+`DeadlineExceeded` rather than returning a sentinel, precisely so the `catch` that
+already implements the policy covers the stall too and there is no second branch
+to keep in step with the first.
+
+**A stall condemns the namespace for the whole request, not just one bucket.**
+Several buckets match a typical path — a specific one plus the global 1000/min
+burst — and a per-call deadline would otherwise be paid again for each, turning a
+2s stall into 6s on the one route where the budget is 30s and already shared with
+two more limiters and a schema bootstrap. So the matching buckets are resolved up
+front; on a `DeadlineExceeded` the request is decided from what the **remaining**
+matching buckets declare. Reading them all is what keeps the posture exact: a
+fail-open bucket early in the list cannot smuggle a request past a fail-closed one
+later in it.
+
+**`/magic/start` no longer makes sign-in wait on Gmail.** The token row is
+committed before the mail goes out, so the link is valid whether or not Google's
+API answers — and the 202 says only "a link is on its way", which is true the
+moment the row exists. Awaiting the send made *the availability of sign-in equal
+to the availability of Gmail*: two bounded fetches at ten seconds each, on top of
+the limiters and the bootstrap, is already past the thirty seconds the browser
+waits. The send moves to `c.executionCtx.waitUntil`, keeping its `catch`, because
+a failed send must still be logged.
+
+**`ensureAuthBlockersSchema` was a cheap bootstrap and an expensive stall.**
+Eleven sequential D1 statements sit in front of `/magic/start`; on a migrated
+database every one is a no-op that still costs a round trip, and the memo landed
+only on success — so a slow D1 made *every* request re-run all eleven and wait
+again. The failure compounded instead of degrading. It now shares one deadline and
+sets a 60s cooldown when it blows it. It is explicitly best-effort: a route that
+needs one of those tables still has its own `try`/`catch` around the statement
+that touches it, and that is what reports a genuinely missing table.
+
+**A KV OUTAGE IS NOT THE USER'S FAULT, AND MUST NOT BE REPORTED AS THOUGH IT
+WERE.** `checkRateLimit` returned a boolean, so a KV failure and a real limit hit
+were the same answer, and both reached the browser as *"Too many requests. Please
+wait a minute and try again."* — advice that would never come true, sending
+someone away to wait on a queue that was not the problem. It now returns
+`'allow' | 'deny' | 'unavailable'`; all nine call sites render the third as a
+**503** with `code: 'rate_limiter_unavailable'` saying the limiter is what failed,
+and `/magic/verify`, which answers with a redirect rather than JSON, bounces
+`?magic_error=limiter` with its own copy. The fail-closed posture from audit M1 is
+unchanged — the request is still refused — only the reason is now true.
+
+**The same rule holds on the client, and this is why the outage looked cosmetic.**
+`LoginPage` probes `/api/auth/google/start` on mount and rendered the button only
+if the probe resolved. The probe was hanging, so the button vanished — under a
+sentence that still promised Google. That is **D56/D68 in its user-facing form: a
+promise with no control under it**, and it is worse than a blank space, because a
+blank space makes someone look for another way in while a promise makes them look
+for a button that is not there. The same sentence also promised a passkey on every
+browser without WebAuthn, and the collapsed toggle named one too. Three changes:
+the probe is a **tri-state** (`'probing' | 'yes' | 'no'`), because a boolean
+initialised `false` cannot tell "not asked yet" from "the server said no" and both
+rendered as silence; the sentence is **derived** from the same conditions that
+render the controls, so anything named is offered and anything offered is named;
+and a refused probe leaves a **stated absence** where the button was, saying that
+the server did not confirm it, that it may be either unconfigured or unanswering,
+and which ways in still work.
+
+**The probe gets its own six-second deadline, and rendering is what found that.**
+Source assertions all passed while the browser showed, for the hanging case, a
+silently shorter list of options and no note at all — for the full thirty seconds
+of the module default. A probe whose only job is to decide what the page may
+*claim* must not be allowed to leave that claim pending, so `api.googleStartUrl`
+now forwards a `timeoutMs` and the probe passes a short one. The real click keeps
+the default: a person who chose Google should not inherit a probe's budget.
+
+**What this decision does NOT claim.** Converting a silence into a named error is
+not the same as proving the outage is gone. The stall was never reproduced against
+production — this sandbox has no egress — and the middleware remains the leading
+explanation rather than a confirmed one, on the strength of a falsifiable
+prediction: **`/api/auth/me` is exempt and kept answering; `/api/auth/magic/start`
+and `/api/auth/google/start` are not exempt and both failed.** Two curls and one
+`wrangler tail` settle it. Exempting those two paths would also have hidden the
+symptom, and that is the wrong fix — `/magic/start` carries its own stricter
+per-IP and per-email limiters and must keep them — so
+`cloudflare-worker/test/auth_path_bounded.test.mjs` pins them as **not** exempt,
+alongside its scan for a bare `fetch` or an unbounded KV await anywhere on the
+path, and live tests that run the middleware against a namespace whose promises
+never settle and require an answer inside the deadline, with the bucket's declared
+policy.

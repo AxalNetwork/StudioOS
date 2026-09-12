@@ -1,7 +1,16 @@
 import type { Env } from '../types';
 
+// A DEADLINE ON EVERY OUTBOUND CALL IN THE MAIL PATH. `/magic/start` awaits the
+// send inline, so a Google endpoint that never answers holds a person's sign-in
+// open until the browser gives up — which is what "The server did not respond
+// within 30s" was on 2026-09-12. Ten seconds is well above a healthy send and
+// well below the client's patience, and every caller here already handles a
+// thrown failure by logging and reporting the send as failed.
+const MAIL_FETCH_TIMEOUT_MS = 10_000;
+
 async function getGmailAccessToken(env: Env): Promise<string> {
   const res = await fetch('https://oauth2.googleapis.com/token', {
+    signal: AbortSignal.timeout(MAIL_FETCH_TIMEOUT_MS),
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -319,6 +328,7 @@ export async function sendAgreementAssignedEmail(
     const rawEmail = buildRawEmail(to, subject, html, text, 'Axal Deals <deal@axal.vc>');
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      signal: AbortSignal.timeout(MAIL_FETCH_TIMEOUT_MS),
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ raw }),
@@ -409,6 +419,7 @@ ${noteBlock}
     const rawEmail = buildRawEmail(to, subject, html, text, 'Axal VC <noreply@axal.vc>');
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      signal: AbortSignal.timeout(MAIL_FETCH_TIMEOUT_MS),
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ raw }),
@@ -502,6 +513,7 @@ export async function sendCompanyInvitationEmail(
     const rawEmail = buildRawEmail(to, `${inviterName} invited you to ${companyName}`, html, text, 'Axal VC <noreply@axal.vc>');
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      signal: AbortSignal.timeout(MAIL_FETCH_TIMEOUT_MS),
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ raw }),
@@ -575,6 +587,7 @@ export async function sendReferralInviteEmail(
     const rawEmail = buildReferralInviteRaw(to, recipientName, senderName, senderEmail, link, code, personalMessage);
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      signal: AbortSignal.timeout(MAIL_FETCH_TIMEOUT_MS),
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ raw }),
@@ -693,6 +706,7 @@ export async function sendContactInviteEmail(
     const rawEmail = buildContactInviteRaw(to, recipientName, senderName, senderEmail, projectName, link, personalMessage);
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      signal: AbortSignal.timeout(MAIL_FETCH_TIMEOUT_MS),
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ raw }),
@@ -775,6 +789,7 @@ export async function sendFlaggedScoreEmail(
     const rawEmail = buildRawEmail(to, subject, html, text, 'Axal Alerts <noreply@axal.vc>');
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      signal: AbortSignal.timeout(MAIL_FETCH_TIMEOUT_MS),
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ raw }),
@@ -857,6 +872,7 @@ export async function sendFlaggedScoreDigestEmail(
     const rawEmail = buildRawEmail(to, subject, html, text, 'Axal Alerts <noreply@axal.vc>');
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      signal: AbortSignal.timeout(MAIL_FETCH_TIMEOUT_MS),
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ raw }),
@@ -901,6 +917,7 @@ export async function sendNotificationEmail(
     const rawEmail = buildRawEmail(to, subject, html, body || subject, opts?.from);
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      signal: AbortSignal.timeout(MAIL_FETCH_TIMEOUT_MS),
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ raw }),
@@ -924,6 +941,7 @@ export async function sendVerificationEmail(env: Env, to: string, name: string, 
     const rawEmail = buildRawEmail(to, 'Verify your email — Axal VC', html, text);
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      signal: AbortSignal.timeout(MAIL_FETCH_TIMEOUT_MS),
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ raw }),
@@ -1013,6 +1031,7 @@ ${noteBlock}
     );
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      signal: AbortSignal.timeout(MAIL_FETCH_TIMEOUT_MS),
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ raw }),
@@ -1146,6 +1165,7 @@ ${hostedBtn}
       : buildRawEmail(opts.to, subject, html, text, from);
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      signal: AbortSignal.timeout(MAIL_FETCH_TIMEOUT_MS),
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ raw }),
