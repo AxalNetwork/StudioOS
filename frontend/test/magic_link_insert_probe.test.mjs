@@ -39,11 +39,24 @@ const MAIL_WF = '.github/workflows/magic-link-probe.yml';
 const INSERT_SCRIPT = 'scripts/check-magic-link-insert.mjs';
 const MAIL_SCRIPT = 'scripts/check-magic-link-live.mjs';
 
-/** An `X || 1234` default read out of a script, so a test cannot hold a stale copy. */
+/**
+ * An `X || 1234` default read out of a script, so a test cannot hold a stale copy.
+ *
+ * LOOKED UP WITH `indexOf`, NOT `new RegExp`. Semgrep's
+ * `detect-non-literal-regexp` fires when the interpolated value is a function
+ * parameter, and `name` is one — it raised alert 6081 on the first version of
+ * this helper. `profile_zone_filters.test.mjs` records the same fix for the same
+ * rule. The digit scan below is a LITERAL regex over the slice, which is what
+ * the rule is asking for; nothing here is built from an argument.
+ */
 function defaultOf(name, file = INSERT_SCRIPT) {
-  const hit = new RegExp(`${name} \\|\\| ([\\d_]+)`).exec(read(file));
-  assert.ok(hit, `could not read the default for ${name} out of ${file}`);
-  return Number(hit[1].replace(/_/g, ''));
+  const src = read(file);
+  const needle = `${name} || `;
+  const at = src.indexOf(needle);
+  assert.ok(at > 0, `could not read the default for ${name} out of ${file}`);
+  const digits = /^[\d_]+/.exec(src.slice(at + needle.length));
+  assert.ok(digits, `${name} in ${file} has no numeric default after its \`||\``);
+  return Number(digits[0].replace(/_/g, ''));
 }
 
 /** A passing send row, so a test about one verdict is not failed by another. */
