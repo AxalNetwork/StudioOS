@@ -3276,6 +3276,23 @@ export const api = {
   recordMyAdvisorEngagementRenewal: (id, data) =>
     request(`/advisors/me/engagements/${id}/renewal`, { method: 'POST', body: JSON.stringify(data) }),
 
+  // Migration 239 — what you sent a client, and whether they opened it.
+  //
+  // THERE IS NO METHOD HERE THAT MARKS SOMETHING OPENED, and that is the point
+  // rather than an omission. `opened_at` is the client's to set; the founder
+  // side writes it through `/advisor-grants`. D72.
+  listMyAdvisorDeliverables: () => request('/advisors/me/deliverables'),
+  createMyAdvisorDeliverable: (data) =>
+    request('/advisors/me/deliverables', { method: 'POST', body: JSON.stringify(data) }),
+  updateMyAdvisorDeliverable: (id, data) =>
+    request(`/advisors/me/deliverables/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  addMyAdvisorDeliverableVersion: (id, data) =>
+    request(`/advisors/me/deliverables/${id}/versions`, { method: 'POST', body: JSON.stringify(data) }),
+  // Refuses a client with no Axal account (409) — a version nobody can open
+  // would sit in Unopened forever and bias the median.
+  sendMyAdvisorDeliverableVersion: (id, version) =>
+    request(`/advisors/me/deliverables/${id}/versions/${version}/send`, { method: 'POST' }),
+
   // The attester's own answer. Unauthenticated on purpose — the token is the
   // credential, and an attester is usually not a user of this product.
   respondToAdvisorProofConsent: (token, data) =>
