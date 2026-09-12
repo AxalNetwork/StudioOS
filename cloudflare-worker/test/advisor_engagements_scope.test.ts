@@ -459,14 +459,24 @@ test('the route vocabularies are exactly the migration CHECK constraints', async
   // not the other is either a 400 on a legal state or a 500 on an illegal one,
   // and neither is visible from reading either file alone.
   const sql = migration('238_advisor_engagements');
-  const checked = (col: string) => {
-    const m = new RegExp(`CHECK \\(${col} IN \\(([^)]*)\\)`).exec(sql.replace(/\s+/g, ' '));
-    assert.ok(m, `${col} must carry a CHECK`);
-    return [...m![1].matchAll(/'([a-z_]+)'/g)].map((x) => x[1]).sort();
-  };
-  assert.deepEqual([...ENGAGEMENT_LANES].sort(), checked('lane'));
-  assert.deepEqual([...ENGAGEMENT_SHAPES].sort(), checked('shape'));
-  // `outcome` is guarded rather than plain, because NULL is one of its values.
+  // EVERY plain `CHECK (col IN (…))` in the file, read in one pass with one
+  // LITERAL regex. Building the pattern per column from an interpolated name
+  // was the first shape of this test and Semgrep was right to flag it
+  // (`detect-non-literal-regexp`): the repo already fixed one of those on main,
+  // and a constructed pattern is not distinguishable by reading from an unsafe
+  // one. Reading them all at once is also the stronger test — see the size
+  // assertion below.
+  const checks = new Map(
+    [...sql.replace(/\s+/g, ' ').matchAll(/CHECK \((\w+) IN \(([^)]*)\)/g)]
+      .map((m) => [m[1], [...m[2].matchAll(/'([a-z_]+)'/g)].map((x) => x[1]).sort()] as const),
+  );
+  assert.deepEqual([...ENGAGEMENT_LANES].sort(), checks.get('lane'));
+  assert.deepEqual([...ENGAGEMENT_SHAPES].sort(), checks.get('shape'));
+  // Exactly two, and `outcome` is deliberately not among them: its CHECK is
+  // GUARDED (`outcome IS NULL OR outcome IN …`) because NULL is one of its
+  // values, so the pattern above cannot match it. Pinning the count means a
+  // third enumerated column cannot be added later with no route validating it.
+  assert.equal(checks.size, 2, [...checks.keys()].join(', '));
   assert.match(sql, /CHECK \(outcome IS NULL\s*\n?\s*OR outcome IN \('active', 'renewed', 'ended'\)\)/);
 });
 
