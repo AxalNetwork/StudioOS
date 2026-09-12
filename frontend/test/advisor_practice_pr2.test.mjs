@@ -206,12 +206,27 @@ test('a tile note names one client and counts several, rather than printing a li
 // ---------------------------------------------------------------------------
 // One record, three projections
 // ---------------------------------------------------------------------------
-test('there is ONE fetch, because the canvas says one record', () => {
+test('ONE engagement record feeds every instrument, and the second read feeds none', () => {
   // "ONE engagement record: the board, renewal history and scope all derive
   // from it." Three fetches would let the three views disagree.
+  //
+  // PR3C ADDED A SECOND READ AND IT IS NOT A SECOND SOURCE OF TRUTH. The client
+  // link may only name an account this advisor already has a relationship with,
+  // so the control offers the people who have booked them — `listMyAdvisorBookings`
+  // fills a `<select>`, not an instrument, and nothing on the board derives from
+  // it. Widening this to "at most two reads" would have let a real second
+  // projection in, so the allowed set is named instead.
   const calls = [...P.matchAll(/api\.(\w+)\(/g)].map((m) => m[1]);
   const reads = calls.filter((n) => n.startsWith('list') || n.startsWith('get'));
-  assert.deepEqual(reads, ['listMyAdvisorEngagements']);
+  assert.deepEqual(reads.slice().sort(), ['listMyAdvisorBookings', 'listMyAdvisorEngagements']);
+
+  // AND THE SECOND ONE IS TOLERATED, so an advisor whose bookings will not load
+  // still has a contract board: no `.catch` there and one failing feed takes the
+  // whole zone down.
+  assert.match(P, /api\.listMyAdvisorBookings\(\)\.catch\(\(\) => null\)/);
+  // Only the engagement read is allowed to set the page's error state.
+  const load = P.slice(P.indexOf('const load = useCallback'), P.indexOf('useEffect(() => { load(); }'));
+  assert.equal((load.match(/api\.listMyAdvisorEngagements\(\)/g) || []).length, 1);
 });
 
 test('every write the page makes is a method the api layer actually has', () => {

@@ -44,6 +44,15 @@ const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const ADVISOR_USER = 70;
 const OTHER_ADVISOR_USER = 71;
 const FOUNDER_USER = 72;
+// Two more accounts, for the link rule PR3c tightened: one related to Ada only
+// by an active grant, one related to her not at all.
+const GRANT_ONLY_USER = 73;
+const STRANGER_USER = 74;
+// A grant that is no longer live is not a relationship. Mutation-checking found
+// this: `g.status = 'active'` could be loosened to `IS NOT NULL` and every test
+// still passed, because the fixture only ever held a live grant.
+const REVOKED_USER = 75;
+const EXPIRED_USER = 76;
 
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
@@ -110,6 +119,21 @@ function freshDb() {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE (slot_id, founder_user_id)
     );
+    -- MIGRATION 218's GRANT TABLE, here because PR3c made it part of the client
+    -- link: an engagement may only name an account this advisor already has a
+    -- relationship with, and an active grant is one of the two facts that
+    -- counts. Only the columns the resolver reads.
+    CREATE TABLE advisor_client_grants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
+      project_id INTEGER NOT NULL, advisor_user_id INTEGER NOT NULL,
+      granted_by_user_id INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active', expires_at TEXT,
+      scope_project INTEGER NOT NULL DEFAULT 1,
+      scope_data_room INTEGER NOT NULL DEFAULT 0,
+      scope_sessions INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `);
   // Verbatim from the migration. If it stops parsing, these tests stop running.
   db.exec(migration('238_advisor_engagements'));
@@ -118,11 +142,37 @@ function freshDb() {
   u.run(ADVISOR_USER, 'advisor', 1, 'Ada', 'ada@example.com');
   u.run(OTHER_ADVISOR_USER, 'advisor', 2, 'Grace', 'grace@example.com');
   u.run(FOUNDER_USER, 'founder', null, 'Fran', 'fran@example.com');
+  u.run(GRANT_ONLY_USER, 'founder', null, 'Gus', 'gus@example.com');
+  u.run(STRANGER_USER, 'founder', null, 'Stel', 'stel@example.com');
+  u.run(REVOKED_USER, 'founder', null, 'Rex', 'rex@example.com');
+  u.run(EXPIRED_USER, 'founder', null, 'Elle', 'elle@example.com');
 
   const a = db.prepare(
     'INSERT INTO advisors (id, uid, user_id, display_name, email) VALUES (?,?,?,?,?)');
   a.run(1, 'adv-1', ADVISOR_USER, 'Ada', 'ada@example.com');
   a.run(2, 'adv-2', OTHER_ADVISOR_USER, 'Grace', 'grace@example.com');
+
+  // THE RELATIONSHIP THAT MAKES A CLIENT LINKABLE, and the fixture needs it
+  // because PR3c stopped `engagementClientUser` accepting any id in the users
+  // table. Fran has booked Ada; that is the first of the two facts the resolver
+  // counts. `GRANT_ONLY_USER` has the other one and no booking, and
+  // `STRANGER_USER` has neither — so the three cases are distinguishable.
+  db.prepare(
+    `INSERT INTO advisor_office_hour_slots (id, uid, advisor_id, starts_at, ends_at)
+     VALUES (1, 'slot-1', 1, '2026-08-01T10:00:00Z', '2026-08-01T11:00:00Z')`
+  ).run();
+  db.prepare(
+    `INSERT INTO advisor_bookings (id, uid, slot_id, advisor_id, founder_user_id, status)
+     VALUES (1, 'bk-1', 1, 1, ?, 'completed')`
+  ).run(FOUNDER_USER);
+  const g = db.prepare(
+    `INSERT INTO advisor_client_grants (uid, project_id, advisor_user_id, granted_by_user_id, status, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?)`);
+  g.run('grant-1', 1, ADVISOR_USER, GRANT_ONLY_USER, 'active', null);
+  // Revoked, and expired-but-active: both are grants that were, and neither is a
+  // live relationship.
+  g.run('grant-2', 2, ADVISOR_USER, REVOKED_USER, 'revoked', null);
+  g.run('grant-3', 3, ADVISOR_USER, EXPIRED_USER, 'active', '2020-01-01T00:00:00Z');
 
   return db;
 }
@@ -488,17 +538,65 @@ test('a malformed date is dropped rather than stored', async () => {
   assert.equal(ok.body.term_ends_at, '2026-11-04');
 });
 
-test('the client link is only written when it resolves to a real account', async () => {
+test('the client link is only written for an account this advisor already knows', async () => {
   // The client is a NAME first and a user second — migration 238 inverts how
   // `advisor_bookings` keys a counterparty on purpose. A dangling id would
   // make the join to a booking history silently empty.
+  //
+  // PR3c TIGHTENED THIS FROM "a real account" TO "a real account with a
+  // relationship", and the reason is what the link buys: a linked client can be
+  // SENT a work product, and Delivery's nudge can open a message thread with
+  // them. Accepting any id in the users table meant an advisor who guessed one
+  // could attach a stranger to their own contract and then message them — while
+  // having no way to learn a real id, so the column was unusable and
+  // over-trusting at once.
   const e = env(freshDb());
+
+  // A BOOKING COUNTS. Fran has booked Ada, which is a fact neither of them can
+  // manufacture alone.
   const linked = await create(e, ada, { founder_user_id: FOUNDER_USER });
   assert.equal(linked.founder_user_id, FOUNDER_USER);
-  const dangling = await create(e, ada, { client_name: 'Halverton', founder_user_id: 99999 });
-  assert.equal(dangling.founder_user_id, null, 'and the name still carries the card');
+
+  // AN ACTIVE GRANT COUNTS TOO. Gus never booked her; he opened his record to
+  // her, which is the other half of migration 218's relationship.
+  const viaGrant = await create(e, ada, { client_name: 'Gus Ltd', founder_user_id: GRANT_ONLY_USER });
+  assert.equal(viaGrant.founder_user_id, GRANT_ONLY_USER);
+
+  // A STRANGER DOES NOT, and the card keeps its name rather than erroring —
+  // the same outcome a dangling id has always had, so there is one rule here
+  // and not two.
+  const stranger = await create(e, ada, { client_name: 'Halverton', founder_user_id: STRANGER_USER });
+  assert.equal(stranger.founder_user_id, null, 'and the name still carries the card');
+  assert.equal(stranger.client_name, 'Halverton');
+  const dangling = await create(e, ada, { client_name: 'Verwood', founder_user_id: 99999 });
+  assert.equal(dangling.founder_user_id, null);
+
+  // A GRANT THAT IS NO LONGER LIVE IS NOT A RELATIONSHIP. Both halves of
+  // `activeGrant`'s own condition are load-bearing, and a fixture holding only a
+  // live grant cannot tell: mutation-checking turned `status = 'active'` into
+  // `status IS NOT NULL` and nothing failed until these two rows existed.
+  const revoked = await create(e, ada, { client_name: 'Rex Co', founder_user_id: REVOKED_USER });
+  assert.equal(revoked.founder_user_id, null, 'a revoked grant is a grant that was');
+  const expired = await create(e, ada, { client_name: 'Elle Ltd', founder_user_id: EXPIRED_USER });
+  assert.equal(expired.founder_user_id, null, 'an expired grant reads nothing, so it links nothing');
+
+  // THE RELATIONSHIP IS PER ADVISOR. Fran booked Ada, not Grace, so Grace
+  // cannot claim her.
+  const graceTried = await call(e, 'POST', '/me/engagements', grace,
+    { client_name: 'Fran Inc', shape: 'retainer', founder_user_id: FOUNDER_USER });
+  assert.equal(graceTried.status, 201);
+  assert.equal(graceTried.body.founder_user_id, null,
+    'another advisor\'s counterparty is not this advisor\'s to link');
+
+  // And PATCH obeys the same rule in both directions.
   const cleared = await call(e, 'PATCH', `/me/engagements/${linked.id}`, ada, { founder_user_id: null });
   assert.equal(cleared.body.founder_user_id, null);
+  const relinked = await call(e, 'PATCH', `/me/engagements/${linked.id}`, ada,
+    { founder_user_id: FOUNDER_USER });
+  assert.equal(relinked.body.founder_user_id, FOUNDER_USER);
+  const patchedStranger = await call(e, 'PATCH', `/me/engagements/${linked.id}`, ada,
+    { founder_user_id: STRANGER_USER });
+  assert.equal(patchedStranger.body.founder_user_id, null, 'PATCH may not smuggle one in');
 });
 
 // ---------------------------------------------------------------------------

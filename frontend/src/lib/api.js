@@ -3293,6 +3293,13 @@ export const api = {
   sendMyAdvisorDeliverableVersion: (id, version) =>
     request(`/advisors/me/deliverables/${id}/versions/${version}/send`, { method: 'POST' }),
 
+  // The CLIENT's half of 239 — the only writer of `opened_at` in the product.
+  // These two are read and called by the FOUNDER, not the advisor: the receipt
+  // is theirs to give, and the pair above deliberately has no equivalent. D73.
+  listReceivedDeliverables: () => request('/advisors/received/deliverables'),
+  openReceivedDeliverableVersion: (uid) =>
+    request(`/advisors/received/deliverables/${encodeURIComponent(uid)}/open`, { method: 'POST' }),
+
   // The attester's own answer. Unauthenticated on purpose — the token is the
   // credential, and an attester is usually not a user of this product.
   respondToAdvisorProofConsent: (token, data) =>

@@ -3951,9 +3951,12 @@ sent stamp, an opened stamp, or a work product the advisor owns.
 **THE SPLIT. Migration 208's header states the rule this store inherits:**
 *"`opened_at` and `signed_off_at` are the CLIENT's to set. Only the founder side
 can truthfully say a thing was read, so a partner-side write to either would be
-the firm reporting a metric about itself."* So no route in `routes/advisors.ts`
-writes either column; the founder side does, through
-`routes/advisor_grants.ts`. The test asserts this **against the SQL** — every
+the firm reporting a metric about itself."* So no ADVISOR route writes either
+column; the founder side does. **This paragraph named the wrong file for it —
+`routes/advisor_grants.ts` — and D73 corrects that**: no grant is involved, the
+relationship carrying a deliverable is the engagement, so the client's two routes
+live beside the founder-facing half of `routes/advisors.ts`. The test asserts this
+**against the SQL** — every
 `UPDATE advisor_deliverable_versions SET …` clause and every `INSERT INTO
 advisor_deliverable_versions (…)` column list — rather than against behaviour,
 because the failure mode is someone adding a convenient `SET opened_at = ?`
@@ -4028,3 +4031,81 @@ reading it as recording consent would be inventing the recording. Building the
 band needs five pieces — columns, consent capture, an audio MIME allowlist and
 R2 prefix, a transcribe route, a summarise route — and the schema supplies zero.
 The zone says that rather than drawing a dead control.
+
+## D73 — The receipt is the client's to give, and the link that makes one possible is chosen rather than typed
+
+D72 built the deliverables store and refused every advisor-side write to
+`opened_at`. This is the other half: the two routes that let the founder record
+having read something, and the one finding that had to be fixed first.
+
+**THE CHAIN WAS DEAD, AND ONE GREP PROVED IT.** D72's send rule refuses a version
+whose engagement has no linked client account. Nothing in the product set that
+link:
+
+| Link in the chain | State before this decision |
+| --- | --- |
+| `POST /me/deliverables/:id/versions/:v/send` | 409 unless `advisor_engagements.founder_user_id` joins to a real account |
+| writers of `founder_user_id` | `POST /me/engagements` and `PATCH /me/engagements/:id`, both through `engagementClientUser` |
+| UI that sets it | **none** — one mention in the whole SPA, `DeliveryZone.jsx` rendering the read-only label "(no account — cannot be sent)" |
+
+So every engagement in production carried NULL, every send 409'd, nothing could
+ever be opened, and a founder surface shipped on its own would have been
+structurally empty for ever. **A rule with no way to satisfy it is not a rule, it
+is a wall** — and PR3a built one without noticing, which is why this series keeps
+re-checking its own claims and not only the schema's.
+
+**THE RELATIONSHIP IS THE PERMISSION.** `engagementClientUser` used to accept any
+existing `users.id`, which was wrong in both directions at once: an advisor has no
+way to learn another account's numeric id, so the column was unusable by a human;
+and an advisor who guessed one could attach a stranger to their own contract and
+then open a message thread with them through Delivery's nudge. It now requires one
+of two facts the product already records — the account has **booked** this advisor
+(`advisor_bookings`), or it holds an **active grant** to them (`advisor_client_grants`,
+migration 218). Neither can be manufactured by the advisor alone. An unrelated
+account resolves to `null`, exactly as a dangling id always did, so the engagement
+keeps its client NAME and simply stays unsendable: one rule, one outcome, and no
+new error path. The control on Engagements offers precisely that set, following
+`DocumentShares`' own reasoning — *"offering an address the API would refuse is
+how a control teaches the wrong model."*
+
+**THE TWO ROUTES ARE IN `routes/advisors.ts`, NOT `routes/advisor_grants.ts`, and
+D72's forward-looking sentence saying otherwise was wrong.** It read "the founder
+side does, through `routes/advisor_grants.ts`", written before the founder side
+existed. The schema settles it: **no grant is involved.** The relationship that
+carries a deliverable is the ENGAGEMENT, so a grant-scoped route would hide every
+work product from a founder who never opened a record — which is most of them.
+`advisors.ts` already holds the founder-facing half of this router (`/`, `/match`,
+`/:uid`, `/:uid/slots`, `/slots/:id/book`, `/bookings/:id/*`), so
+`GET /received/deliverables` and `POST /received/deliverables/:uid/open` join it
+there.
+
+**SENT VERSIONS ONLY, and that is a privacy rule rather than a filter.** A version
+with no `sent_at` is the advisor's work in progress; a client who could see it
+would be reading a draft that was never handed over, and a client who could *stamp*
+it would make `median_to_open_hours` measure an interval that never happened. A
+work product whose every version is unsent does not appear at all.
+
+**FIRST OPEN WINS, ENFORCED IN SQL.** The UPDATE carries `WHERE … AND opened_at IS
+NULL`, so the guarantee is a property of the statement rather than of the
+handler's control flow: a founder reloading cannot move the stamp and two
+concurrent opens cannot race. The second call is **not** a 409 — reading something
+twice is not an error — it returns the row with the original stamp. The receipt is
+therefore a first-read time, and the advisor's median measures the wait that
+actually happened.
+
+**404, NEVER 403**, for a version under someone else's engagement: the scope is a
+join, and comparing after the load is what makes another client's row
+indistinguishable from one that does not exist. The same join refuses the ADVISOR
+on this route, so the store has exactly one writer of `opened_at` and it is the
+person who read the thing.
+
+**The invariant test got stronger rather than looser.** It asserted "no route in
+`advisors.ts` writes `opened_at`"; it now splits the file at the client's handler
+and asserts that the advisor's half writes neither stamp, that the client's half
+has exactly one write, and that the write carries the `opened_at IS NULL` guard.
+
+**`signed_off_at` still has no writer, deliberately.** 208 names it alongside
+`opened_at` as the client's and 239 carries the column, but no artboard draws a
+sign-off and no page renders one — so a control would save a fact nothing reads.
+The founder's card says so rather than leaving the gap silent, and the test holds
+the column unwritten on both sides.
