@@ -3,6 +3,9 @@
  *
  *   GET    /api/trust/me               — obligations + summary for caller
  *   GET    /api/trust/agreements       — signed + pending NDAs touching caller
+ *   GET    /api/trust/agreements/:envelope_uuid/history
+ *                                      — that envelope's Sent/Viewed/Signed
+ *                                        trail, recipients only
  *   POST   /api/trust/intro/request    — investor → founder; auto-issues NDA
  *   GET    /api/trust/intro/status     — pair NDA status check
  *   POST   /api/trust/obligation/:key/start
@@ -26,6 +29,10 @@ import {
   getPairwiseNda,
   hasActivePairwiseNda,
   upsertPairwiseNda,
+  obligationSource,
+  trustScoreOf,
+  recordAndCompareScore,
+  envelopeHistory,
   type ObligationKey,
 } from '../services/trust';
 import { getSQL } from '../db';
@@ -45,16 +52,44 @@ trust.get('/me', async (c) => {
   await seedObligations(c.env, user.id, user.role);
   const rows: any = await c.env.DB.prepare(
     `SELECT obligation_key, required, status, expires_at, evidence_envelope_uuid,
-            updated_at, created_at
+            evidence_meta, updated_at, created_at
        FROM legal_obligations WHERE user_id = ? ORDER BY required DESC, obligation_key`,
   ).bind(user.id).all();
-  const obligations = (rows?.results || []) as any[];
+  const obligations = ((rows?.results || []) as any[]).map(o => ({
+    ...o,
+    // PROVENANCE, which Trust Center v2 draws under every obligation row as
+    // "Synced from …" / "From envelope …". The fact was already in the table —
+    // `evidence_meta` has carried `{"source":"kyc_provider",…}` since the KYC
+    // sync landed — it simply never left the worker, so the page had nothing to
+    // render and drew the row bare. Derived here rather than in the client
+    // because `evidence_meta` is an opaque JSON blob whose shape is this
+    // module's business, and shipping the raw blob would make every consumer
+    // re-learn it.
+    source: obligationSource(o),
+  }));
   const requiredOpen = obligations.filter(o => o.required && o.status !== 'satisfied' && o.status !== 'waived');
+
+  // The score, and what it was the last month we have on record.
+  //
+  // Computed HERE and not read back from the client: this value is written to
+  // `trust_score_snapshots`, and a history a caller can set is not a history.
+  // `trustScoreOf` is the worker's copy of the frontend's `computeTrustScore`;
+  // `cloudflare-worker/test/trust_score_parity.test.ts` runs both over the
+  // same fixtures and fails if they ever disagree.
+  const score = trustScoreOf(obligations);
+  const history = await recordAndCompareScore(c.env, user.id, score);
+
   return c.json({
     role: user.role,
     obligations,
     required_open_count: requiredOpen.length,
     fully_compliant: requiredOpen.length === 0,
+    score,
+    // null when this is the first month on record. The page states that
+    // absence instead of rendering a zero delta — an account with no prior
+    // month has not "held steady", it has no comparison (D56/D68).
+    previous_score: history.previousScore,
+    previous_month: history.previousMonth,
   });
 });
 
@@ -262,6 +297,32 @@ trust.get('/agreements/:envelope_uuid/my_signing_url', async (c) => {
     status: 'pending',
     signing_url: `${appUrl}/esign/${row.signing_token}`,
   });
+});
+
+// ---------------------------------------------------------------------------
+// GET /agreements/:envelope_uuid/history — Trust Center v2's timeline.
+//
+// The per-agreement Sent / Viewed / Signed trail the canvas draws when a row
+// is expanded. Fetched on expand rather than folded into /agreements: that
+// endpoint already returns up to 200 pairwise rows, 100 pending envelopes and
+// 100 documents, and almost none of them are ever opened.
+//
+// SECURITY: `envelopeHistory` returns null unless the caller is a recipient,
+// and strips `ip` / `ua` / `signer_email` / `meta` from every event. 404 on
+// not-a-recipient, matching /my_signing_url — this must not become the oracle
+// that confirms an envelope exists.
+// ---------------------------------------------------------------------------
+trust.get('/agreements/:envelope_uuid/history', async (c) => {
+  const user = await requireAuth(c);
+  const envelopeUuid = c.req.param('envelope_uuid');
+  if (!envelopeUuid || envelopeUuid.length > 64) {
+    return c.json({ error: 'invalid_envelope' }, 400);
+  }
+  const history = await envelopeHistory(c.env, envelopeUuid, user);
+  if (history === null) return c.json({ error: 'not_a_recipient' }, 404);
+  // An empty array is a real answer — a legacy envelope with no recorded
+  // events — and the page says so rather than drawing an empty box.
+  return c.json({ history });
 });
 
 // ---------------------------------------------------------------------------

@@ -11,48 +11,25 @@
  * Plus a couple of guard-rail cases (waived counts as satisfied,
  * non-required rows are ignored, empty input is safe).
  *
- * The function lives in `frontend/src/components/TrustScoreBadge.jsx`
- * alongside a React component that imports `lucide-react`. We slice
- * out the pure function with a regex+brace-balance walk so this test
- * needs zero React/JSX/Vite tooling.
+ * The function USED TO live in `frontend/src/components/TrustScoreBadge.jsx`,
+ * beside a React component importing `lucide-react`, so this file sliced it
+ * out of the source with a regex and a brace-balance walk to avoid pulling
+ * React in. It now lives in the pure `frontend/src/lib/trustCenter.js` and is
+ * simply imported — the surgery is gone, and with it the class of failure
+ * where a reformat of the source breaks the extractor rather than the rule.
+ *
+ * The move happened because the WORKER needs the same rule (it writes the
+ * monthly snapshot in migration 243) and the two copies have to be runnable
+ * side by side; `cloudflare-worker/test/trust_score_parity.test.ts` does that.
+ * `TrustScoreBadge.jsx` still re-exports it, so no caller changed.
  *
  * Run with:  node --test frontend/test/trust_score.test.mjs
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-async function loadComputeTrustScore() {
-  const srcPath = resolve(__dirname, '../src/components/TrustScoreBadge.jsx');
-  const src = await readFile(srcPath, 'utf8');
-  const start = src.indexOf('export function computeTrustScore(');
-  assert.notEqual(start, -1, 'computeTrustScore not found in TrustScoreBadge.jsx');
-
-  // Skip past the `(...)` param list, then balance the function-body braces.
-  let parenDepth = 0, j = src.indexOf('(', start);
-  for (; j < src.length; j++) {
-    if (src[j] === '(') parenDepth++;
-    else if (src[j] === ')') { parenDepth--; if (parenDepth === 0) { j++; break; } }
-  }
-  let depth = 0, i = src.indexOf('{', j), end = -1;
-  for (; i < src.length; i++) {
-    if (src[i] === '{') depth++;
-    else if (src[i] === '}') { depth--; if (depth === 0) { end = i + 1; break; } }
-  }
-  assert.notEqual(end, -1, 'failed to balance braces around computeTrustScore');
-
-  const body = src.slice(start, end).replace(/^export\s+/, '');
-  // Pure JS already — no transpile needed. Wrap in IIFE so the function
-  // declaration survives top-level evaluation under `new Function`.
-  return new Function(`${body}; return computeTrustScore;`)();
-}
+import { computeTrustScore } from '../src/lib/trustCenter.js';
 
 test('zero required obligations → 100 (vacuously compliant)', async () => {
-  const computeTrustScore = await loadComputeTrustScore();
   // Empty list.
   assert.equal(computeTrustScore([]), 100);
   // No-args defaults to [].
@@ -65,7 +42,6 @@ test('zero required obligations → 100 (vacuously compliant)', async () => {
 });
 
 test('all required obligations satisfied → 100', async () => {
-  const computeTrustScore = await loadComputeTrustScore();
   const score = computeTrustScore([
     { obligation_key: 'tos_v1',          required: 1, status: 'satisfied' },
     { obligation_key: 'privacy_v1',      required: 1, status: 'satisfied' },
@@ -76,7 +52,6 @@ test('all required obligations satisfied → 100', async () => {
 });
 
 test('mixed satisfied + pending → rounded percent of required satisfied', async () => {
-  const computeTrustScore = await loadComputeTrustScore();
   // 2 of 4 required satisfied → 50.
   assert.equal(
     computeTrustScore([
@@ -117,7 +92,6 @@ test('mixed satisfied + pending → rounded percent of required satisfied', asyn
 });
 
 test('expired counts as NOT satisfied (must re-prove the obligation)', async () => {
-  const computeTrustScore = await loadComputeTrustScore();
   // 1 of 2 required actually satisfied — the expired row drops out.
   assert.equal(
     computeTrustScore([
@@ -147,7 +121,6 @@ test('expired counts as NOT satisfied (must re-prove the obligation)', async () 
 });
 
 test('waived counts as satisfied (admin-cleared obligations)', async () => {
-  const computeTrustScore = await loadComputeTrustScore();
   // ToS satisfied + investor_nda waived → both count.
   assert.equal(
     computeTrustScore([

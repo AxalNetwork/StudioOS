@@ -121,6 +121,20 @@ export async function ensureTrustSchema(env: Env): Promise<void> {
     )`,
     `CREATE INDEX IF NOT EXISTS idx_legal_obligations_user   ON legal_obligations(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_legal_obligations_status ON legal_obligations(status)`,
+    // Migration 243 creates this on a fresh build; it is repeated here for the
+    // same reason every other table in this list is — `ensureTrustSchema` is
+    // the runtime self-heal for a D1 that predates the migration, and
+    // `recordAndCompareScore` must not be the thing that discovers the table
+    // is missing.
+    `CREATE TABLE IF NOT EXISTS trust_score_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      captured_month TEXT NOT NULL,
+      score INTEGER NOT NULL CHECK (score >= 0 AND score <= 100),
+      captured_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_trust_score_snapshots_month ON trust_score_snapshots(user_id, captured_month)`,
+    `CREATE INDEX IF NOT EXISTS idx_trust_score_snapshots_user ON trust_score_snapshots(user_id, captured_month DESC)`,
     `CREATE TABLE IF NOT EXISTS pairwise_ndas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       party_a_user_id INTEGER NOT NULL,
@@ -508,4 +522,231 @@ export async function resyncKycKyb(env: Env): Promise<{ scanned: number; updated
   }
 
   return { scanned, updated };
+}
+
+// ---------------------------------------------------------------------------
+// Trust Center v2 — provenance, the score, and its history.
+// ---------------------------------------------------------------------------
+
+/**
+ * The one-line "where this status came from" the v2 canvas draws under an
+ * obligation row.
+ *
+ * The fact was never missing, only unexposed: `evidence_meta` has carried
+ * `{"source":"kyc_provider","synced_at":…}` since the KYC sync landed, and
+ * `evidence_envelope_uuid` names the signed envelope. `/me` simply never
+ * returned either, so the page had nothing to render.
+ *
+ * Returns null rather than a filler string when there is no evidence — an
+ * obligation nobody has satisfied yet HAS no provenance, and "Added manually"
+ * over a row nothing touched would be an invention (D56/D68).
+ */
+export function obligationSource(row: any): string | null {
+  const uuid = row?.evidence_envelope_uuid;
+  if (uuid) return `Signed envelope ${String(uuid).slice(0, 8)}`;
+  const raw = row?.evidence_meta;
+  if (!raw) return null;
+  let meta: any = null;
+  try { meta = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return null; }
+  const src = meta && typeof meta.source === 'string' ? meta.source.trim() : '';
+  if (!src) return null;
+  // The two writers in `resyncKycKyb` are the only producers today; anything
+  // else is shown verbatim rather than dropped, so a new writer surfaces
+  // instead of silently rendering nothing.
+  const LABEL: Record<string, string> = {
+    kyc_provider: 'Synced from identity verification',
+    kyb_provider: 'Synced from entity verification',
+  };
+  return LABEL[src] || `Synced from ${src.replace(/_/g, ' ')}`;
+}
+
+/**
+ * The worker's copy of the frontend's `computeTrustScore`.
+ *
+ * DUPLICATED ON PURPOSE, AND GUARDED. The score has to be computed here
+ * because it is written to `trust_score_snapshots` and a history the caller
+ * can set is not a history. Production code never imports across the
+ * `frontend/src` ↔ `cloudflare-worker/src` line in this repo, so the rule
+ * exists twice — and `cloudflare-worker/test/trust_score_parity.test.ts`
+ * imports BOTH (this one and `frontend/src/lib/trustCenter.js`), runs them
+ * over the same fixtures, and fails if they ever disagree. The frontend's
+ * copy had to move out of `TrustScoreBadge.jsx` for that to be possible: a
+ * rule exported from a `.jsx` drags React into any test that imports it.
+ *
+ * A user with no REQUIRED obligations scores 100: nothing is being asked of
+ * them, so nothing is outstanding. That is the frontend's rule too, and the
+ * parity test pins it.
+ */
+export function trustScoreOf(obligations: any[]): number {
+  const required = (obligations || []).filter(o => o.required);
+  if (required.length === 0) return 100;
+  const satisfied = required.filter(
+    o => o.status === 'satisfied' || o.status === 'waived',
+  ).length;
+  return Math.round((satisfied / required.length) * 100);
+}
+
+/** '2026-09' for the instant given — a calendar label, never re-parsed. */
+export function monthLabel(d: Date): string {
+  // UTC deliberately: the label keys a row that must be stable for a user
+  // whatever timezone they read from, and a local-month boundary would give
+  // two readers on the same day different months.
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Record this month's score (once) and report the most recent EARLIER month
+ * on file.
+ *
+ * The write is `INSERT OR IGNORE` against the UNIQUE (user_id, captured_month)
+ * index, so the first read in a month records it and every later read that
+ * month is a no-op — the stored number is the score as it stood when the month
+ * was first observed, not the last.
+ *
+ * The comparison is against the most recent month STRICTLY BEFORE this one,
+ * and the month is returned alongside the number, because a user who did not
+ * open the page for a while is being compared with whenever they last did —
+ * calling that "last month" when it was four months ago would be wrong. The
+ * page names the month it found.
+ *
+ * Never throws: a missing table on a stale D1 degrades to "no history", which
+ * renders as the stated absence, not as a zero delta.
+ */
+export async function recordAndCompareScore(
+  env: Env,
+  userId: number,
+  score: number,
+  now: Date = new Date(),
+): Promise<{ previousScore: number | null; previousMonth: string | null }> {
+  const month = monthLabel(now);
+  try {
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO trust_score_snapshots (user_id, captured_month, score)
+       VALUES (?, ?, ?)`,
+    ).bind(userId, month, score).run();
+  } catch (e) {
+    console.error('[trust] score snapshot write failed', e);
+  }
+  try {
+    const prev: any = await env.DB.prepare(
+      `SELECT captured_month, score FROM trust_score_snapshots
+        WHERE user_id = ? AND captured_month < ?
+        ORDER BY captured_month DESC LIMIT 1`,
+    ).bind(userId, month).first();
+    if (!prev) return { previousScore: null, previousMonth: null };
+    return {
+      previousScore: Number(prev.score),
+      previousMonth: String(prev.captured_month),
+    };
+  } catch (e) {
+    console.error('[trust] score history read failed', e);
+    return { previousScore: null, previousMonth: null };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Envelope history — Trust Center v2's per-agreement timeline.
+// ---------------------------------------------------------------------------
+
+/**
+ * One row of the timeline the canvas draws when an agreement is expanded.
+ * Deliberately narrow: a label and an instant, nothing else.
+ */
+export interface EnvelopeEvent { action: string; at: string }
+
+/**
+ * The audit actions `routes/esign.ts` actually appends, and nothing else.
+ *
+ * The canvas draws Sent / Viewed / Signed, and all three are real here —
+ * `envelope_created`, `envelope_viewed` and `envelope_signed` are written by
+ * `appendAudit` on the live signing flow. Nothing had to be invented, which
+ * is why this is a timeline and not a derivation from two timestamps.
+ *
+ * An action NOT on this list is still returned, humanised, for the same
+ * reason `obligationSource` shows an unknown provenance: a new writer should
+ * surface on the page rather than be silently dropped by a stale list.
+ */
+export const ENVELOPE_EVENT_LABELS: Record<string, string> = {
+  envelope_created: 'Sent',
+  envelope_viewed: 'Viewed',
+  envelope_signed: 'Signed',
+  envelope_rejected: 'Declined',
+  // Not an audit action — synthesised below from `esign_envelopes.completed_at`,
+  // which the last signature sets and nothing appends an event for.
+  envelope_completed: 'Completed',
+  document_downloaded: 'Downloaded',
+  document_downloaded_by_recipient: 'Downloaded',
+  document_forwarded: 'Forwarded',
+};
+
+/**
+ * The caller's own timeline for one envelope.
+ *
+ * AUTHORISATION, and the shape of what is NOT returned:
+ *
+ *   - The caller must be a recipient of the envelope. Matched on
+ *     `r.user_id` OR the lowercased email, because `recipient_user_id` is not
+ *     set on legacy rows — the same join `/agreements` uses to build the
+ *     pending list, so a row that appears there can always be expanded.
+ *   - A non-recipient gets `null`, which the route turns into a 404 rather
+ *     than a 403: the existing `/my_signing_url` handler already refuses to
+ *     confirm that an envelope exists, and this must not become the oracle
+ *     that one isn't.
+ *   - `esign_audit_events` carries `ip`, `ua`, `signer_email` and `meta`.
+ *     NONE of them leave the worker. A counterparty's IP address is not part
+ *     of what the canvas draws and not something this page has any reason to
+ *     disclose; the full trail stays available to admins through
+ *     `GET /api/legal/esign/:id`.
+ *
+ * Legacy rows fall back to the `audit_log` JSON column, which was the source
+ * of truth before `esign_audit_events` existed and is described in
+ * `routes/esign.ts` as "kept for backward compatibility but no longer written
+ * to". Without the fallback every envelope created before that switch would
+ * expand to an empty timeline and look as though nothing had happened to it.
+ */
+export async function envelopeHistory(
+  env: Env,
+  envelopeUuid: string,
+  caller: { id: number; email?: string | null },
+): Promise<EnvelopeEvent[] | null> {
+  const row: any = await env.DB.prepare(
+    `SELECT e.id, e.completed_at, e.audit_log
+       FROM esign_envelopes e
+       JOIN esign_recipients r ON r.envelope_id = e.id
+      WHERE e.envelope_uuid = ?
+        AND (r.user_id = ? OR LOWER(IFNULL(r.recipient_email,'')) = LOWER(?))
+      LIMIT 1`,
+  ).bind(envelopeUuid, caller.id, caller.email || '').first().catch(() => null);
+  if (!row) return null;
+
+  const events: EnvelopeEvent[] = [];
+  try {
+    const res: any = await env.DB.prepare(
+      `SELECT action, ts FROM esign_audit_events
+        WHERE envelope_id = ? ORDER BY ts ASC, id ASC LIMIT 200`,
+    ).bind(row.id).all();
+    for (const e of (res?.results || []) as any[]) {
+      if (e?.action && e?.ts) events.push({ action: String(e.action), at: String(e.ts) });
+    }
+  } catch { /* table absent on a stale D1 — fall through to the JSON column */ }
+
+  if (events.length === 0 && row.audit_log) {
+    try {
+      const legacy = JSON.parse(String(row.audit_log));
+      if (Array.isArray(legacy)) {
+        for (const e of legacy) {
+          if (e?.action && e?.ts) events.push({ action: String(e.action), at: String(e.ts) });
+        }
+      }
+    } catch { /* a malformed blob is no history, not a 500 */ }
+  }
+
+  // `completed_at` is set by the LAST signature and has no audit action of
+  // its own, so the timeline would otherwise end on "Signed" for an envelope
+  // that is finished. Appended rather than synthesised from the signatures:
+  // it is a stored column, not a guess about what the events imply.
+  if (row.completed_at) events.push({ action: 'envelope_completed', at: String(row.completed_at) });
+
+  events.sort((a, b) => (Date.parse(a.at) || 0) - (Date.parse(b.at) || 0));
+  return events;
 }

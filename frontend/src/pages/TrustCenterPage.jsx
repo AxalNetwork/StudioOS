@@ -12,10 +12,17 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ShieldCheck, Lock, FileText, CheckCircle2, AlertCircle, Loader2,
   Globe, IdCard, Building2, BadgeCheck, FileSignature, Search,
+  Link2 as LinkIcon,
 } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, getActiveCompanyId } from '../lib/api';
 import { safeReadJSON } from '../lib/storage';
 import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
+import {
+  SCORE_BANDS, bandOf, verdictFor, scoreLine, obligationSummary,
+  outstandingCounts, waitingOn, deltaNote, NO_HISTORY_NOTE,
+  collapseEnvelopeHistory, envelopeEventLabel, envelopeEventTone,
+  envelopeEventWhen, NO_ENVELOPE_HISTORY_NOTE,
+} from '../lib/trustCenter';
 
 // Task #25 — these personas are KYC-eligible, so the Identity tab is always
 // shown for them rather than only when the obligation matrix happens to surface
@@ -96,14 +103,23 @@ const TONE = {
   ok: {
     pill: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-200 dark:border-emerald-800',
     bar: 'border-l-emerald-500',
+    // v2's score panel: the ring stroke and the card edge. Separate keys
+    // rather than rewriting `bar` at the call site — a class name built by
+    // string surgery is invisible to Tailwind's scanner and ships unstyled.
+    ring: 'stroke-emerald-500',
+    edge: 'border-emerald-200 dark:border-emerald-900',
   },
   prog: {
     pill: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-200 dark:border-amber-800',
     bar: 'border-l-amber-500',
+    ring: 'stroke-amber-500',
+    edge: 'border-amber-200 dark:border-amber-900',
   },
   bad: {
     pill: 'bg-red-100 text-red-800 border-red-300 dark:bg-red-950 dark:text-red-200 dark:border-red-800',
     bar: 'border-l-red-500',
+    ring: 'stroke-red-500',
+    edge: 'border-red-200 dark:border-red-900',
   },
   neutral: {
     pill: 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600',
@@ -375,14 +391,28 @@ function NdaCard({ items, onChanged }) {
  * "0 blocked" and "no blocked row exists" are the same fact stated two ways and
  * the second one reads as an achievement.
  */
+/**
+ * The tally beside the obligations list.
+ *
+ * COUNTED BY `waitingOn`, NOT BY THE PILL TONE — and the render is what
+ * caught it. Splitting on `toneOf` puts `pending` under "in progress", so
+ * with three untouched obligations and one under review the pills read
+ * "4 in progress" inches from a sentence reading "1 in progress", in the
+ * same frame, about the same five rows. Both were defensible on their own
+ * terms and together they were a contradiction.
+ *
+ * So there is now ONE split on this page — `outstandingCounts` — and these
+ * pills are the same two numbers the two sentences are built from, plus the
+ * settled remainder. The severity tones stay: bad for what waits on the
+ * reader, amber for what is moving, green for what is done.
+ */
 function ToneCounts({ obligations }) {
-  const n = { bad: 0, prog: 0, ok: 0, neutral: 0 };
-  for (const o of obligations) n[toneOf(o.status)] += 1;
+  const { needs, inProgress } = outstandingCounts(obligations);
+  const settled = obligations.filter(o => waitingOn(o.status) === 'settled').length;
   const shown = [
-    ['bad', n.bad, 'blocked'],
-    ['prog', n.prog, 'in progress'],
-    ['ok', n.ok, 'satisfied'],
-    ['neutral', n.neutral, 'not started'],
+    ['bad', needs, 'need action'],
+    ['prog', inProgress, 'in progress'],
+    ['ok', settled, 'satisfied'],
   ].filter(([, c]) => c > 0);
   if (!shown.length) return null;
   return (
@@ -392,6 +422,178 @@ function ToneCounts({ obligations }) {
           <span className="font-bold tabular-nums">{c}</span> {label}
         </span>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Trust Center v2's score panel — the left column of the Overview.
+ *
+ * The page already drew a `TrustScoreBadge`; what the canvas draws is a
+ * card: a large ring, "of 100", the verdict, a line explaining what is
+ * outstanding, the month-over-month move, and the three bands with the
+ * current one lit. Every value comes from `lib/trustCenter.js`, which is
+ * pure and unit-tested in both directions.
+ *
+ * THE DELTA IS THE PART THAT CAN LIE, so it is the part with a rule. The
+ * canvas fakes it from a per-role literal and falls back to "Unchanged from
+ * last month" when it has none — which would tell a brand-new account its
+ * score held steady across a month it did not exist for. `deltaNote` returns
+ * null when the server reports no earlier month, and the panel says so.
+ */
+function ScorePanel({ score, previousScore, previousMonth, obligations }) {
+  const band = bandOf(score);
+  const verdict = verdictFor(score);
+  // Counted by WHO THE ROW WAITS ON, not by the pill's colour. `toneOf` gives
+  // `pending` the amber `prog` tone, and splitting on that told a reader with
+  // three untouched obligations "3 in progress — nothing needs action from
+  // you". `waitingOn` is the separate question, and `lib/trustCenter.js`
+  // explains why the canvas's own split cannot be copied.
+  const { needs, inProgress } = outstandingCounts(obligations);
+  const delta = deltaNote(score, previousScore, previousMonth);
+
+  const RING = 158;
+  const R = 66;
+  const CIRC = 2 * Math.PI * R;
+  const dash = (Math.max(0, Math.min(100, score)) / 100) * CIRC;
+
+  return (
+    <div className={`rounded-2xl border p-6 text-center bg-white dark:bg-slate-900 ${TONE[band].edge}`}>
+      <div className="relative mx-auto" style={{ width: RING, height: RING }}>
+        <svg viewBox="0 0 160 160" width={RING} height={RING} className="block -rotate-90">
+          <circle cx="80" cy="80" r={R} fill="none" strokeWidth="15" className="stroke-slate-200 dark:stroke-slate-700" />
+          <circle
+            cx="80" cy="80" r={R} fill="none" strokeWidth="15" strokeLinecap="round"
+            strokeDasharray={`${dash.toFixed(1)} ${CIRC.toFixed(1)}`}
+            className={TONE[band].ring}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <div className="text-[46px] font-extrabold leading-none tracking-tight tabular-nums text-slate-900 dark:text-slate-100">
+            {score}
+          </div>
+          <div className="mt-1 text-[10px] font-medium uppercase tracking-widest text-slate-500 dark:text-slate-400">
+            of 100
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 text-[17px] font-extrabold tracking-tight text-slate-900 dark:text-slate-100">{verdict}</div>
+      <div className="mt-1.5 text-[12.5px] leading-relaxed text-slate-600 dark:text-slate-400">
+        {scoreLine({ needs, inProgress })}
+      </div>
+
+      {delta ? (
+        <div className={`mt-1.5 text-[11.5px] font-semibold tabular-nums ${
+          delta.tone === 'ok' ? 'text-emerald-700 dark:text-emerald-400'
+            : delta.tone === 'bad' ? 'text-red-700 dark:text-red-400'
+              : 'text-slate-500 dark:text-slate-400'}`}>
+          {delta.text}
+        </div>
+      ) : (
+        <div className="mt-1.5 text-[11.5px] text-slate-500 dark:text-slate-400">{NO_HISTORY_NOTE}</div>
+      )}
+
+      <div className="mt-4 flex justify-center gap-1.5 border-t border-slate-100 dark:border-slate-800 pt-4">
+        {SCORE_BANDS.map(b => (
+          <span
+            key={b.key}
+            className={`rounded-full px-2.5 py-1 text-[11px] font-bold border ${
+              b.key === band ? TONE[b.key].pill : 'border-transparent bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}
+          >
+            {b.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Trust Center v2's envelope history — the timeline under an expanded
+ * agreement row.
+ *
+ * Fetched on expand, not with the list: `/trust/agreements` already returns
+ * up to 400 rows and almost none of them are ever opened. Fetched ONCE per
+ * envelope and kept, because a timeline of past events does not change while
+ * the reader looks at it.
+ *
+ * The canvas draws Sent → Viewed → Signed with a dot per step and the last
+ * one accented. All three are real audit actions (`routes/esign.ts` appends
+ * `envelope_created`, `envelope_viewed`, `envelope_signed`), so nothing here
+ * is derived from a guess about what two timestamps imply.
+ */
+function EnvelopeHistory({ envelopeUuid }) {
+  const [state, setState] = useState({ phase: 'loading', events: [], error: null });
+
+  useEffect(() => {
+    let live = true;
+    setState({ phase: 'loading', events: [], error: null });
+    api.trustAgreementHistory(envelopeUuid)
+      .then(res => {
+        if (!live) return;
+        setState({ phase: 'ready', events: collapseEnvelopeHistory(res?.history || []), error: null });
+      })
+      .catch(e => {
+        if (!live) return;
+        // A failed read is stated as a failed read. An empty timeline here
+        // would say "nothing ever happened to this envelope", which is a
+        // different and much worse claim.
+        setState({ phase: 'error', events: [], error: e?.message || 'Could not load this envelope’s history' });
+      });
+    return () => { live = false; };
+  }, [envelopeUuid]);
+
+  return (
+    <div className="mt-2 border-t border-slate-200 dark:border-slate-700 pt-3 pl-7">
+      <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2.5">
+        Envelope history
+      </div>
+      {state.phase === 'loading' && (
+        <div className="flex items-center gap-2 text-xs text-slate-500">
+          <Loader2 size={12} className="animate-spin" /> Loading…
+        </div>
+      )}
+      {state.phase === 'error' && (
+        <div className="text-xs text-red-700 dark:text-red-300">{state.error}</div>
+      )}
+      {state.phase === 'ready' && state.events.length === 0 && (
+        <div className="text-xs text-slate-500 dark:text-slate-400">{NO_ENVELOPE_HISTORY_NOTE}</div>
+      )}
+      {state.phase === 'ready' && state.events.map((e, i) => {
+        const tone = envelopeEventTone(e.action);
+        const last = i === state.events.length - 1;
+        const when = envelopeEventWhen(e.at);
+        return (
+          // NOT `items-start`. The dot column is a flex column whose connector
+          // is `flex-1`, and under `items-start` the column shrinks to the
+          // dot and the line resolves to zero height — the timeline rendered
+          // as four loose dots. Stretching is the default; saying nothing is
+          // the fix.
+          <div key={`${e.action}-${e.at}-${i}`} className="flex gap-2.5">
+            <div className="flex flex-none flex-col items-center">
+              <span className={`mt-1.5 h-2 w-2 rounded-full ${
+                tone === 'bad' ? 'bg-red-500'
+                  : last ? 'bg-violet-600 dark:bg-violet-400'
+                    : 'bg-slate-300 dark:bg-slate-600'}`} />
+              {/* The connector stops at the last dot — a line trailing past
+                  the final event would imply something is still to come. */}
+              {!last && <span className="w-px flex-1 bg-slate-200 dark:bg-slate-700" />}
+            </div>
+            <div className="min-w-0 pb-3">
+              <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                {envelopeEventLabel(e.action)}
+                {e.count > 1 && (
+                  <span className="ml-1 font-semibold text-slate-500 dark:text-slate-400">×{e.count}</span>
+                )}
+              </div>
+              {/* No time rather than "Invalid Date" — the row still records
+                  that the event happened. */}
+              {when && <div className="mt-0.5 text-[11px] tabular-nums text-slate-500 dark:text-slate-400">{when}</div>}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -426,6 +628,17 @@ function ObligationList({ obligations, emptyText, onStart }) {
                     </span>
                   )}
                 </div>
+                {/* PROVENANCE — Trust Center v2 draws "where this status came
+                    from" under every row. `source` is derived server-side from
+                    `evidence_meta` / `evidence_envelope_uuid`; it is null for a
+                    row nothing has satisfied, and a row with no evidence shows
+                    no line rather than a filler claim about its origin. */}
+                {o.source && (
+                  <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                    <LinkIcon size={11} className="shrink-0" aria-hidden="true" />
+                    <span className="truncate">{o.source}</span>
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -493,6 +706,10 @@ function AgreementsTab({ obligations, onStart, role }) {
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState({});  // { [pairId]: 'resend'|'void' }
   const [info, setInfo] = useState(null);
+  // One row open at a time, as the canvas draws it. Keyed by envelope uuid
+  // rather than by pair id so the open row survives a `reload()` that
+  // renumbers nothing but re-fetches everything.
+  const [expandedEnvelope, setExpandedEnvelope] = useState(null);
   const isAdmin = role === 'admin';
 
   async function reload() {
@@ -581,11 +798,13 @@ function AgreementsTab({ obligations, onStart, role }) {
                 try { return Array.isArray(a.signers_json) ? a.signers_json : JSON.parse(a.signers_json || '[]'); }
                 catch { return []; }
               })();
+              const open = expandedEnvelope === a.nda_envelope_uuid;
               return (
                 <li
                   key={a.id}
-                  className={`flex items-center justify-between bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 border-l-4 ${TONE[toneOf(display)].bar} rounded px-3 py-2 gap-2 flex-wrap`}
+                  className={`bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 border-l-4 ${TONE[toneOf(display)].bar} rounded px-3 py-2`}
                 >
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-3 min-w-0">
                     <Lock size={16} className="text-slate-500 dark:text-slate-400 shrink-0" />
                     <div className="min-w-0">
@@ -608,6 +827,22 @@ function AgreementsTab({ obligations, onStart, role }) {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    {/* v2's expander. Only offered where there is an envelope
+                        to have a history — a pairwise row with no
+                        `nda_envelope_uuid` predates the e-sign flow, and a
+                        control that always answers "nothing recorded" is
+                        worse than no control. */}
+                    {a.nda_envelope_uuid && (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedEnvelope(open ? null : a.nda_envelope_uuid)}
+                        aria-expanded={open}
+                        className="flex h-6 w-6 items-center justify-center rounded border border-slate-300 text-sm font-bold leading-none text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                      >
+                        <span aria-hidden="true">{open ? '−' : '+'}</span>
+                        <span className="sr-only">{open ? 'Hide' : 'Show'} envelope history</span>
+                      </button>
+                    )}
                     <StatusPill status={display} />
                     {canSign && <PairwiseSignButton envelopeUuid={a.nda_envelope_uuid} />}
                     {canAdminAct && (
@@ -627,6 +862,8 @@ function AgreementsTab({ obligations, onStart, role }) {
                       </>
                     )}
                   </div>
+                  </div>
+                  {open && <EnvelopeHistory envelopeUuid={a.nda_envelope_uuid} />}
                 </li>
               );
             })}
@@ -900,16 +1137,35 @@ export default function TrustCenterPage({ chromeless = false }) {
 
   const overview = (
     <Section icon={Globe} title="Overview" subtitle="Everything required for your role at a glance.">
-      <div className="flex items-start gap-6 mb-4">
-        <TrustScoreBadge size="lg" score={score} missing={missing} label="Trust score" />
-        <div className="text-sm text-slate-600 dark:text-slate-400">
-          {missing.length === 0
-            ? <span className="text-emerald-700 dark:text-emerald-400 font-medium">Fully compliant — every required obligation is satisfied.</span>
-            : <span>You have <strong>{missing.length}</strong> open requirement{missing.length === 1 ? '' : 's'}. Hover the score for details.</span>}
-          <ToneCounts obligations={obligations} />
+      {/* v2's two-column Overview: the score panel, then the obligations.
+          One column on a phone — the ring is 158px and will not sit beside
+          anything at 400px. */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-[300px_1fr] md:items-start">
+        <ScorePanel
+          score={score}
+          previousScore={matrix?.previous_score ?? null}
+          previousMonth={matrix?.previous_month ?? null}
+          obligations={obligations}
+        />
+        <div>
+          {/* The canvas's obligations-header sentence. It used to repeat the
+              panel's verdict word for word, and then tell the reader to hover
+              a badge that the two-column layout had already moved out of this
+              column. Same two counts as the panel, different thing said about
+              them. */}
+          <div className="text-sm text-slate-600 dark:text-slate-400">
+            {obligationSummary(outstandingCounts(obligations))}
+            <ToneCounts obligations={obligations} />
+          </div>
+          <div className="mt-4">
+            <ObligationList
+              obligations={obligations}
+              emptyText="No obligations outstanding for this role. Nothing is required of you right now."
+              onStart={startObligation}
+            />
+          </div>
         </div>
       </div>
-      <ObligationList obligations={obligations} emptyText="No obligations required for your role." onStart={startObligation} />
     </Section>
   );
 
@@ -1060,6 +1316,11 @@ export default function TrustCenterPage({ chromeless = false }) {
     // they cannot take.
     if (!items.length) return null;
 
+    // Read at render rather than held in state: the company switcher writes it
+    // synchronously and this list is re-rendered by the switch, so state would
+    // only add a way for the badge to lag the workspace it names.
+    const activeCompanyId = getActiveCompanyId();
+
     return (
       <div className="mt-4">
         <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">Your companies</h4>
@@ -1078,18 +1339,42 @@ export default function TrustCenterPage({ chromeless = false }) {
                   : 'Not started'}
               </div>
             </div>
-            {row.is_primary_admin
-              ? <span className="text-[11px] text-slate-500 dark:text-slate-400">You administer this company</span>
-              : <span className="text-[11px] text-slate-400">{row.role_in_company}</span>}
+            <div className="flex flex-none items-center gap-2">
+              {/* v2 marks which of these rows is the workspace you are
+                  currently in. Without it a reader with three companies
+                  cannot tell which record the rest of the app is acting on.
+                  Compared as strings: the id arrives from localStorage as
+                  text and from the API as a number. */}
+              {String(row.company_id) === String(activeCompanyId) && (
+                <span className="rounded border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-widest text-violet-700 dark:border-violet-900 dark:bg-violet-950 dark:text-violet-300">
+                  Active workspace
+                </span>
+              )}
+              {row.is_primary_admin
+                ? <span className="text-[11px] text-slate-500 dark:text-slate-400">You administer this company</span>
+                : <span className="text-[11px] text-slate-400">{row.role_in_company}</span>}
+            </div>
           </div>
         ))}
+        {/* This page reports; Account Settings is where an entity record is
+            changed. The canvas puts the way out at the foot of the list. */}
+        <a
+          href="/account"
+          className="mt-3 inline-block text-xs font-semibold text-violet-700 hover:underline dark:text-violet-400"
+        >
+          Edit in Account Settings &rarr;
+        </a>
       </div>
     );
   }
 
   const accreditation = role === 'investor' && (
     <Section icon={BadgeCheck} title="Accredited investor verification" subtitle="Your accreditation obligation and its current status.">
-      <ManagedElsewhere cta="Open account settings →" href="/account">
+      {/* Wording is the canvas's: v2 says "Manage in Account Settings" here
+          and "Edit in Account Settings" on Entity. They are different verbs
+          on purpose — accreditation is an ongoing status you maintain, an
+          entity record is a document you amend. */}
+      <ManagedElsewhere cta="Manage in Account Settings →" href="/account">
         Basis and supporting evidence are submitted from your account profile.
       </ManagedElsewhere>
       <ObligationList

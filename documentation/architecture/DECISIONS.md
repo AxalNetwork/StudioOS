@@ -4321,3 +4321,111 @@ payout ledger: 175's table paid platform credit under a rewards scheme, and
 connected account — same noun, different transaction, which is why every row
 here carries a `provider_payout_id` that can be reconciled against the
 processor.
+
+## D76 — Trust Center v2's month-over-month delta gets a real history, and its "needs action" split cannot be copied from the canvas
+
+**2026-09-12.** Task #148 asks for `/trust` to match
+`design/canvases/integrated/Trust Center v2.dc.html` (T2: v2 supersedes v1).
+Two of its score-panel elements cannot be built as drawn, for opposite
+reasons — one has no data behind it, the other has data that means something
+different here.
+
+### The delta had nothing behind it
+
+The canvas prints a month-over-month move under the ring, backed by
+`PREV_SCORE = { founder: 47, investor: 58, … }` — a literal keyed by role —
+and, when a role is missing from it, falls back to `prevScore = score` and
+renders **"Unchanged from last month."** No score history existed anywhere in
+the repo, so shipping that fallback would tell a brand-new account its score
+held steady across a month it did not exist for. D56/D68: an absence is
+stated, never rendered as a plausible zero.
+
+**Decision: migration 243 adds `trust_score_snapshots`, written by the worker
+on read.** `GET /trust/me` calls `recordAndCompareScore`, which does an
+`INSERT OR IGNORE` keyed on `(user_id, captured_month)` and then reads the
+most recent **earlier** month. No cron: the row is stamped by the first visit
+in a calendar month, which is also what makes the comparison meaningful — the
+snapshot is what the score WAS when the month was first observed, and a later
+visit that month must not move it.
+
+Three consequences worth stating:
+
+- **The worker computes the score, not the client.** A history a caller can
+  set is not a history. The rule therefore exists twice — `trustScoreOf` in
+  `services/trust.ts` and `computeTrustScore` in `lib/trustCenter.js` — because
+  production code never imports across the `frontend/src` ↔
+  `cloudflare-worker/src` line in this repo. `test/trust_score_parity.test.ts`
+  imports and RUNS both over shared fixtures; asserting the two files merely
+  look alike would pass the day someone edited one into agreement with itself.
+- **No history returns `null`, and the page says so** rather than drawing a
+  zero delta (`NO_HISTORY_NOTE`).
+- **The month is named** ("since May 2026"), because "last month" is false for
+  a reader who last opened the page five months ago. `captured_month` is a
+  calendar LABEL and is formatted by splitting on the hyphen — `new Date('2026-09')`
+  is midnight UTC and renders as August for every reader west of Greenwich.
+
+### "Needs action" is a different question from the pill's colour
+
+The canvas splits its obligation counts with its own `toneOf`: neutral + bad
+is "needs action", `prog` is "in progress". That works **in its vocabulary**,
+where the fixtures carry `'Pending'` and `'Not started'` as separate statuses.
+
+`legal_obligations` has no `not_started`. Its untouched state **is** `pending`,
+and `POST /obligation/:key/start` transitions `pending → in_review`. Copying
+the canvas's split — `STATUS_TONE.pending` is the amber `prog` tone, correctly,
+because amber means "wants attention" — made the page tell a reader with three
+untouched obligations *"3 in progress — nothing needs action from you."*
+
+**Decision: `waitingOn(status)` in `lib/trustCenter.js` answers the separate
+question** — `'you'`, `'us'` or `'settled'` — and `outstandingCounts` is the
+single derivation both Overview sentences are built from. An unrecognised
+status answers `'you'`: telling someone nothing is required of them when
+something is, is the harmful direction.
+
+The two sentences stay distinct (`scoreLine` totals the open work,
+`obligationSummary` splits it) because they sit inches apart in the v2
+two-column Overview, and the column previously repeated the panel's verdict
+verbatim.
+
+### The envelope timeline is real — and it ships less than it reads
+
+The canvas's third score-panel-adjacent element is a per-agreement accordion
+drawing `Sent → Viewed → Signed` with a dot per step. Unlike the delta, this
+one needed no new store: `routes/esign.ts` has appended `envelope_created`,
+`envelope_viewed` and `envelope_signed` to `esign_audit_events` since the
+append-only trail replaced the `audit_log` JSON blob. All three steps the
+canvas draws are events the signing flow really writes.
+
+`GET /trust/agreements/:envelope_uuid/history` serves it, fetched on expand
+rather than folded into `/agreements` — that endpoint already returns up to
+200 pairwise rows, 100 pending envelopes and 100 documents, and almost none
+of them are ever opened.
+
+Four decisions inside it:
+
+- **`ip`, `ua`, `signer_email` and `meta` never leave the worker.** They are
+  on every audit row. A counterparty's IP address is not part of what the
+  canvas draws and not something a status page has any reason to disclose;
+  the full trail stays with admins at `GET /api/legal/esign/:id`. The SELECT
+  asks for `action, ts` and nothing else, and the test reads the SQL rather
+  than the intent.
+- **404, not 403, for a non-recipient** — `/my_signing_url` already refuses
+  to confirm an envelope exists and this must not become the oracle that one
+  does. The service returns `null` (not a recipient) distinctly from `[]`
+  (yours, nothing recorded), and the route maps them to different answers.
+- **Consecutive repeats collapse with a count.** A three-party envelope logs
+  `envelope_viewed` once per party, and since `signer_email` is withheld the
+  rows cannot be told apart on the page. `Viewed ×3` hides nothing and reads;
+  three identical rows read as a rendering bug. Only CONSECUTIVE repeats
+  collapse — a view after a signature is its own event.
+- **Legacy envelopes fall back to the `audit_log` column.** It was the source
+  of truth before `esign_audit_events` and `routes/esign.ts` describes it as
+  "kept for backward compatibility but no longer written to". Without the
+  fallback every older envelope would expand to an empty timeline and look as
+  though nothing had ever happened to it.
+
+And the one thing the panel must never do: **a failed read is stated as a
+failed read.** "Nothing recorded for this envelope" and "we could not find
+out" are different claims about an audit trail, and collapsing the second
+into the first is the same defect as the canvas's "Unchanged from last
+month".
