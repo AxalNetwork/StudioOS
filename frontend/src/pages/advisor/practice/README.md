@@ -14,7 +14,16 @@ its `ZONE` map.
 | `EngagementsZone.jsx` | PR2 · Engagements | `/practice/engagements` | WORK BOARD | `advisor_engagements` (migration 238) |
 | `DeliveryZone.jsx` | PR3 · Delivery | `/practice/delivery` | COLLECTION | `advisor_deliverables` + `advisor_deliverable_versions` (migration 239) |
 | `SessionsZone.jsx` | PR4 · Sessions | `/practice/sessions` | FEED | availability rules, session types, booking links (migration 240) + `advisor_bookings` amounts (205) |
-| `EarningsZone.jsx` | PR5 · Earnings | `/practice/earnings` | LEDGER | `advisor_bookings` amounts |
+| `EarningsZone.jsx` | **D4** · Earnings | `/practice/earnings` | LEDGER | the take rate, payout account, payouts and per-line cut (241) + the period note (242) + `advisor_bookings` amounts (205) + `advisor_engagements` retainers (238) |
+
+**PR5 IS A POINTER, AND ITS ARTBOARD IS ELSEWHERE.** `Advisor Detail ·
+Practice.dc.html` draws Earnings as `/practice/earnings · drawn in full as D4`,
+and D4 lives in `design/canvases/backlog/Detail Layer Canvas II.dc.html`. That
+file stays in `backlog/` by decision — reading it for intent is not promoting
+it — so `profile_zone_actions.test.mjs` and `profile_zone_filters.test.mjs`
+each read **one artboard out of it by route** (`alsoZones`) rather than
+sweeping the directory, which would hand this profile artboards belonging to
+cohorts and to two partner buckets.
 
 **The Architecture column is the canvas's, and three of these five used to be
 wrong.** `Advisor Detail · Practice.dc.html` tags each artboard in its own
@@ -59,6 +68,9 @@ A zone with real derivations keeps them in a sibling module that imports nothing
 - `sessionGrid.js` — PR4's slot precedence, the four tile counts, day grouping
   and the blackout label. The first module here to hold **both** kinds of time,
   so its header says which is which.
+- `earningsLedger.js` — D4's four windows, its cut note and its payout labels.
+  It holds the third pairing: a period is a **calendar label** (`2026-Q3`, a
+  key and a chip) whose **bounds are UTC instants**, because `created_at` is.
 
 Two reasons, and the second is the one that matters. A guard test can import a
 module and not a page — importing a page pulls React and a stylesheet through its

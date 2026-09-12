@@ -255,6 +255,10 @@ const PROFILES = {
     // row and a sentence explaining why they did not need one.
     canvasDirs: ['design/incoming', 'design/canvases/integrated'],
     canvas: /^(Pages · Advisor |Advisor Detail · Practice)/,
+    // PR5 is a POINTER in the Practice canvas — "drawn in full as D4" — so its
+    // ops come from the backlog file, by route rather than by directory. See
+    // the `alsoZones` block in `canvasOps` for why the whole file is not swept.
+    alsoZones: [['practice/earnings', 'design/canvases/backlog/Detail Layer Canvas II.dc.html']],
     buckets: /^(expertise|network|research|practice)\//,
     // 15 zones and 14 exports as of canvas PR4, and THIS IS THE FIRST TIME THE
     // TWO HAVE MOVED APART. PR1, PR2 and PR3 each drew exactly two ops, one of
@@ -264,7 +268,13 @@ const PROFILES = {
     // other zone wants, through `exportView`. Labelling it `export` would have
     // handed the advisor a spreadsheet under a calendar's name, so it is a
     // page-supplied handler and the export count stays where it was.
-    zones: 15,
+    // 16 zones and 14 exports as of canvas D4. PR5's Earnings adds the
+    // sixteenth and NEITHER of its two ops is an export, for the same reason
+    // PR4's were not: `Export CSV` writes a per-client ledger with a total
+    // row, and `Download 1099 summary` is a different SPAN entirely — a tax
+    // year, fetched from its own endpoint — so neither is the rows-on-screen
+    // dump `exportView` produces. Was 15/14 at PR4.
+    zones: 16,
     links: 1,
     exports: 14,
     // FIVE PAGE-SUPPLIED OPS, AND THE FIFTH IS THE FIRST ONE THIS PROFILE DID
@@ -280,7 +290,11 @@ const PROFILES = {
     // booked ones it refused to touch, and `Export to calendar`, which builds
     // an .ics in the browser from rows already on screen. Was 0, then 4,
     // then 5.
-    handlers: 7,
+    // NINE NOW, because D4's Earnings brings two more — `Export CSV`, built
+    // in the browser from the table already on screen, and `Download 1099
+    // summary`, which fetches its own year rather than deriving one from the
+    // reader's chosen window. Was 0, then 4, then 5, then 7.
+    handlers: 9,
     embeddedGuards: 0,
     // Both remaining exclusions are cards whose whole page IS the gap
     // statement, so there is nothing for a row to sit over. `expertise/
@@ -468,6 +482,57 @@ function literal(out) {
 }
 
 /** Every matching artboard's `route` and its `ops` array, from the canvases. */
+/**
+ * One artboard's HEADER OPS, read from the row that holds its view chips.
+ *
+ * A FOURTH MARKER, AND DELIBERATELY NOT ADDED TO SHAPE B. The shape-B reader
+ * above knows `class="vm"` and `class="bulk"`, and its own docblock records
+ * what each cost when it did not. `Detail Layer Canvas II` marks its ops with
+ * neither: they are inline-styled spans carrying `cursor:pointer`.
+ *
+ * That marker is NOT safe to add to shape B. `cursor:pointer` appears on
+ * ROW-level actions too — "Accept", "Pass", "Open thread" in that same file,
+ * and across a dozen integrated canvases — so a global widening would read a
+ * per-row button as a header op on zones that are currently correct. It would
+ * be the same mistake as the three before it, made in the other direction.
+ *
+ * So the marker is scoped twice over: to a named zone (`alsoZones`), and
+ * within that artboard to the one row that also holds the view chips, which
+ * is where every canvas in this repo puts its header ops. A `sc-for` over a
+ * `…Views` list is what identifies that row, and the ops are the clickable
+ * spans beside it.
+ */
+function headerOps(src, zone) {
+  const slug = (s) => s.trim().toLowerCase().replace(/\s+/g, '-');
+  const crumbs = [...src.matchAll(
+    /<div class="crumb">\s*<span[^>]*>([^<]+)<\/span>\s*<span[^>]*>[^<]*<\/span>\s*<span[^>]*>([^<]+)<\/span>/g,
+  )];
+  // EVERY MATCHING CRUMB, NOT THE FIRST. This file names `practice/earnings`
+  // TWICE — once in the compressed-versus-full comparison strip at the top of
+  // the artboard, and once in the artboard's own frame. Taking the first hit
+  // read the comparison strip, which has no ops row, and reported the zone as
+  // drawing none. Scanning them all and keeping the first that actually
+  // yields ops is what makes the reader indifferent to that ordering.
+  for (let i = 0; i < crumbs.length; i += 1) {
+    if (`${slug(crumbs[i][1])}/${slug(crumbs[i][2])}` !== zone) continue;
+    const from = crumbs[i].index;
+    const to = i + 1 < crumbs.length ? crumbs[i + 1].index : src.length;
+    const segment = src.slice(from, to);
+    // The ops row is the one the view chips are in. Bounded to that single
+    // `<div>` so a clickable span further down the artboard — a row action, a
+    // link in a card — cannot be read as a header op.
+    const chips = segment.search(/<sc-for list="\{\{ \w+ \}\}" as="v"/);
+    if (chips < 0) continue;
+    const rowEnd = segment.indexOf('</div>', chips);
+    const row = segment.slice(chips, rowEnd < 0 ? segment.length : rowEnd);
+    const ops = [...row.matchAll(/cursor:pointer[^>]*>([^<]+)</g)]
+      .map((m) => m[1].trim())
+      .filter((t) => t && !t.includes('{{'));
+    if (ops.length) return ops;
+  }
+  return [];
+}
+
 function canvasOps(profile) {
   const out = {};
   let routes = 0;
@@ -508,6 +573,29 @@ function canvasOps(profile) {
       routes += Object.keys(found).length;
     }
   }
+
+  // ONE ARTBOARD FROM A FILE THIS SCAN DOES NOT OPEN, NAMED ROUTE BY ROUTE.
+  //
+  // `/practice/earnings` is the case, and it is not an oversight in the
+  // Practice canvas: that canvas draws PR5 as a POINTER — "drawn in full as
+  // D4" — and D4 lives in `design/canvases/backlog/Detail Layer Canvas II`.
+  // So the zone has an artboard, it is simply in a file the directory scan
+  // above is right not to sweep: that file also holds D5–D8 for cohorts,
+  // partner delivery and partner pipeline, and pulling the whole thing in
+  // would hand this profile artboards it does not own and give
+  // `expertise/proof` two competing sources.
+  //
+  // Hence route-by-route rather than by directory. The backlog canvas stays
+  // in `backlog/` — reading it for intent is not promoting it — and an entry
+  // here is a claim that THIS zone's ops come from THAT artboard, checkable
+  // because a route the file does not contain fails immediately.
+  for (const [zone, file] of profile.alsoZones || []) {
+    const ops = headerOps(read(file), zone);
+    assert.ok(ops.length, `${file}'s ${zone} artboard parsed with no ops`);
+    out[zone] = ops;
+    routes += 1;
+  }
+
   assert.ok(routes, `no canvases matched ${profile.canvas}`);
   return out;
 }

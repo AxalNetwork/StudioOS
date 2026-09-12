@@ -1762,6 +1762,17 @@ async function handleStripeEvent(
         await confirmBookingFromPaymentIntent(env, obj);
         return;
       }
+      // 241/242 — the ADVISORY session leg, which is the wellbeing one over
+      // different tables. Its own `kind`, because the two products have
+      // separate bookings, separate payout accounts and separate ledgers;
+      // routing both through one handler would let a fulfilment land on the
+      // wrong row. Unreachable while `ADVISOR_CHARGING_ENABLED` is unset,
+      // because nothing creates an intent carrying this kind. D75.
+      if (meta.kind === 'advisor_session') {
+        const { markSessionCharged } = await import('../services/advisorConnect');
+        await markSessionCharged(env, obj);
+        return;
+      }
       if (meta.kind === 'event_ticket') {
         const { fulfillEventTicket } = await import('../services/eventTickets');
         await fulfillEventTicket(env, obj);

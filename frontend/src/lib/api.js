@@ -2796,6 +2796,12 @@ export const api = {
   // platform view over `integrations` + `cron_run_history`.
   hqContent: () => request('/admin/content/summary'),
   hqPlatform: () => request('/admin/platform/summary'),
+  // 241 — the advisory take rate, in BASIS POINTS. 1500 is 15%. The write
+  // refuses a percentage rather than guessing: `15` is ambiguous between
+  // 0.15% and 15%, and a form that guessed wrong would be out by a hundred.
+  hqTakeRate: () => request('/admin/platform/take-rate'),
+  setHqTakeRate: (bps) =>
+    request('/admin/platform/take-rate', { method: 'PUT', body: JSON.stringify({ bps }) }),
   // HQ · Security. The overview is read-only; force re-auth signs every
   // active account out everywhere (the caller included) and needs a TOTP
   // session with a recent step-up, which lib/api.js prompts for on the 403.
@@ -3266,6 +3272,53 @@ export const api = {
   updateMyAdvisorBookingBilling: (id, data) =>
     request(`/advisors/me/bookings/${id}/billing`, { method: 'PATCH', body: JSON.stringify(data) }),
   getMyAdvisorEarnings: () => request('/advisors/me/earnings'),
+
+  // Migration 241 — the money model. Every figure below is what a charge WOULD
+  // take: `settlement` on each response says which of none/test/live is
+  // running, and it says 'none' until the advisory charging flag ships.
+  //
+  // NO CLIENT-SIDE ARITHMETIC. The cut, the net and every total are computed
+  // in the worker from a rate an operator sets, in integer cents, because a
+  // rounding choice made in a component is one nobody can audit — and because
+  // a line keeps the rate it was stamped with, which the browser cannot know.
+  getMyAdvisorLedger: ({ from, until } = {}) => {
+    const q = new URLSearchParams();
+    if (from) q.set('from', from);
+    if (until) q.set('until', until);
+    const s = q.toString();
+    return request(`/advisors/me/ledger${s ? `?${s}` : ''}`);
+  },
+  getMyAdvisorPayoutAccount: () => request('/advisors/me/payout-account'),
+  // PR5b — Stripe Connect onboarding. NEITHER of these moves money: the first
+  // returns a URL the advisor visits, the second reads a status back. Both
+  // work while advisory charging is off, which is how an account gets
+  // verified before the flag flips; the responses carry `settlement` so the
+  // page says which.
+  connectMyAdvisorPayoutAccount: () =>
+    request('/advisors/me/payout-account/connect', { method: 'POST' }),
+  refreshMyAdvisorPayoutAccount: () =>
+    request('/advisors/me/payout-account/refresh', { method: 'POST' }),
+  listMyAdvisorPayouts: () => request('/advisors/me/payouts'),
+  getMyAdvisorTaxSummary: (year) =>
+    request(`/advisors/me/tax-summary${year ? `?year=${encodeURIComponent(year)}` : ''}`),
+
+  // Migration 242 — the advisor's own note about one period, which is what
+  // D4's AI band needs for Accept to file anything. The key is a CALENDAR
+  // LABEL ('2026-Q3', '2026', 'all'), never a date range: two notes that
+  // overlapped on the same quarter could not both be the note for it.
+  //
+  // GET answers 200 with `note: null` when none exists — not writing one is
+  // the ordinary case, and a 404 would make the card treat it as a failure.
+  // DELETE is idempotent for the same reason: Discard must not fail on a
+  // second click.
+  getMyAdvisorPeriodNote: (key) =>
+    request(`/advisors/me/period-notes/${encodeURIComponent(key)}`),
+  saveMyAdvisorPeriodNote: (key, data) =>
+    request(`/advisors/me/period-notes/${encodeURIComponent(key)}`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  deleteMyAdvisorPeriodNote: (key) =>
+    request(`/advisors/me/period-notes/${encodeURIComponent(key)}`, { method: 'DELETE' }),
 
   // Migration 238 — the contract behind the sessions, and whether it renewed.
   //
