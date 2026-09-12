@@ -229,8 +229,11 @@ export const REGISTRY: ProviderDescriptor[] = [
     display_name: 'Carta',
     integration_type: 'cap_table',
     description: 'Mirror your Carta cap table (issuer, stakeholders, securities) into the Capital module on a 6-hour sync.',
-    // 2026-05-14 — parked as coming_soon by product (see Salesforce).
-    status: 'coming_soon',
+    // 2026-09-10 — unparked to 'beta'. OAuth + 6-hour cap-table sync +
+    // Data Imports one-shot already shipped; coming_soon only hid Connect.
+    // Needs CARTA_CLIENT_ID/SECRET (env or Admin → Integration Keys).
+    // Salesforce / Affinity stay coming_soon.
+    status: 'beta',
     tier: 'studio',
     auth_type: 'oauth2',
     capabilities: ['Cap-table sync', 'Stakeholder import', 'Securities import'],
@@ -259,8 +262,13 @@ export const REGISTRY: ProviderDescriptor[] = [
     display_name: 'DocuSign',
     integration_type: 'e_sign',
     description: 'Send incorporation, NDA, and co-founder agreements through DocuSign with audit trail.',
-    // 2026-05-14 — parked as coming_soon by product (see Salesforce).
-    status: 'coming_soon',
+    // 2026-09-10 — unparked to 'beta'. Envelope send, Connect webhook,
+    // hourly reconcile, and Admin e-sign picker already shipped;
+    // coming_soon only hid Connect. Needs DOCUSIGN_CLIENT_ID/SECRET
+    // (env or Admin → Integration Keys). Demo vs production is chosen
+    // in the connect modal (?demo=1|0). Salesforce / Affinity stay
+    // coming_soon.
+    status: 'beta',
     tier: 'studio',
     auth_type: 'oauth2',
     capabilities: ['Send envelopes', 'Webhook on signed', 'Template library'],
@@ -273,8 +281,11 @@ export const REGISTRY: ProviderDescriptor[] = [
     display_name: 'Crunchbase',
     integration_type: 'data_feed',
     description: 'Auto-enrich projects with Crunchbase company data — funding, headcount, sector tags. BETA: Crunchbase Basic API only (read-only org search + lookup); deeper investor / round / people endpoints require Crunchbase Enterprise and ship later.',
-    // 2026-05-14 — parked as coming_soon by product (see Salesforce).
-    status: 'coming_soon',
+    // 2026-09-10 — unparked to 'beta'. The provider, /api/crunchbase/*
+    // routes, ProjectDetail lookup/apply, and Market Intel competitor
+    // fetch were already live; coming_soon only blocked Connect so
+    // enrichment always 412'd. Per-user Basic user_key (no OAuth app).
+    status: 'beta',
     tier: 'growth',
     auth_type: 'api_key',
     capabilities: ['Company enrichment', 'Funding history', 'Competitor lookup'],
