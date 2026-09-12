@@ -21,6 +21,9 @@ import {
   computeWatchOuts,
 } from '../services/matchingVectors';
 import { ensureAdvisorStoresSchema } from '../services/advisorStoresSchema';
+import {
+  PAYOUT_GATE, cutCents, derivePayoutState, settlementMode, takeRate, totalLines,
+} from '../services/advisorMoney';
 import { ensureCohortGuidanceSchema } from '../services/cohortGuidanceSchema';
 import {
   guidanceCounts, oldestOpenHours, collisions, withinDays,
@@ -199,10 +202,23 @@ function bookingDto(b: BookingRow, extras: any = {}): any {
  * read through a path that did not select it. `amount_cents` is genuinely
  * nullable and stays null — zero is a price an advisor may actually mean.
  */
-function advisorMoney(b: Partial<BookingRow>): { amount_cents: number | null; billing_state: string } {
+function advisorMoney(b: Partial<BookingRow>): {
+  amount_cents: number | null; billing_state: string;
+  platform_cut_cents: number | null; take_rate_bps: number | null; net_cents: number | null;
+} {
+  const gross = b.amount_cents ?? null;
+  // 241 — THE STORED CUT, NOT A RECOMPUTED ONE. `platform_cut_cents` is what
+  // this line was actually divided by, stamped when the price was set. A null
+  // cut on a priced line means "recorded before 241", which is a different
+  // fact from a cut of nothing, and `net_cents` stays null with it rather than
+  // reporting gross as if the advisor kept all of it (D56/D68).
+  const cut = (b as any).platform_cut_cents ?? null;
   return {
-    amount_cents: b.amount_cents ?? null,
+    amount_cents: gross,
     billing_state: b.billing_state ?? 'unpriced',
+    platform_cut_cents: cut,
+    take_rate_bps: (b as any).take_rate_bps ?? null,
+    net_cents: gross != null && cut != null ? gross - cut : null,
   };
 }
 
@@ -1353,9 +1369,29 @@ advisors.patch('/me/bookings/:id/billing', async (c) => {
       billing_state = 'billed';
     }
 
+    // 241 — THE CUT IS STAMPED HERE, SERVER-SIDE, AND THE RATE WITH IT.
+    //
+    // Two reasons it is a stored column rather than something the page
+    // multiplies. The client never computes money: a rounding choice made in a
+    // component is a rounding choice nobody can audit. And the RATE is stored
+    // beside the amount because an operator may change it — a line divided at
+    // 15% must still read 15% after the setting moves to 12%, or a quarter an
+    // advisor already reconciled restates itself.
+    //
+    // Clearing the price clears both. A line with no amount has no cut, and
+    // leaving a stale cut behind would be a figure with nothing under it.
+    const rate = await takeRate(c.env);
+    const cut = cutCents(amount_cents, rate.bps);
     await c.env.DB.prepare(
-      'UPDATE advisor_bookings SET amount_cents = ?, billing_state = ?, updated_at = ? WHERE id = ?'
-    ).bind(amount_cents, billing_state, nowIso(), row.id).run();
+      `UPDATE advisor_bookings
+          SET amount_cents = ?, billing_state = ?,
+              platform_cut_cents = ?, take_rate_bps = ?, updated_at = ?
+        WHERE id = ?`
+    ).bind(
+      amount_cents, billing_state,
+      cut, amount_cents == null ? null : rate.bps,
+      nowIso(), row.id,
+    ).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?')
       .bind(row.id).first<BookingRow & { amount_cents: number | null; billing_state: string }>();
     return c.json(bookingDto(fresh!, advisorMoney(fresh!)));
@@ -1385,8 +1421,15 @@ advisors.get('/me/earnings', async (c) => {
     const by = new Map((rows.results || []).map((r) => [r.billing_state, r]));
     const cents = (k: string) => Number(by.get(k)?.total_cents || 0);
     const count = (k: string) => Number(by.get(k)?.bookings || 0);
+    // 241 — CARRIED HERE TOO, not only on the ledger, because this is the
+    // payload the shipped Earnings page reads and that page said in so many
+    // words that Axal "does not take a cut". A rate now exists; the page has
+    // to be able to state it rather than deny it, and it needs the number and
+    // the settlement mode in the same response to say both halves at once.
+    const rate = await takeRate(c.env);
     return c.json({
       currency: 'USD',
+      take_rate: { bps: rate.bps, source: rate.source, updated_at: rate.updated_at },
       billed_cents: cents('billed'),
       collected_cents: cents('collected'),
       written_off_cents: cents('written_off'),
@@ -1395,9 +1438,272 @@ advisors.get('/me/earnings', async (c) => {
       by_state: BILLING_STATES.map((state) => ({
         state, bookings: count(state), total_cents: cents(state),
       })),
-      // Said out loud because a page showing money must not imply a rail
-      // behind it: Axal records these figures and settles nothing.
-      settlement: 'none',
+      // 241 — COMPUTED, NOT WRITTEN AS A LITERAL. This answered a hard-coded
+      // 'none' before there was a take rate to be wrong about. It still
+      // answers 'none' today, and it will keep answering it until PR5b's flag
+      // flips — the difference is that turning settlement on is now one change
+      // in `services/advisorMoney.ts` rather than a search for every surface
+      // that promised it was off.
+      settlement: settlementMode(c.env),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// 241 — the money model: a configurable take rate, the payout account that
+// gates charging, the payout ledger, and the tax-year totals.
+//
+// NOTHING BELOW MOVES MONEY. Every figure is what a charge WOULD take,
+// computed from a rate an operator sets and stamped per line when a price is
+// recorded. `settlement` says which of the three modes is live, and while it
+// says 'none' no surface may render any of this as a receipt. D75.
+// ---------------------------------------------------------------------------
+
+/** One row of D4's "By client · Q3" table, reconciling by construction. */
+function clientLineDto(r: {
+  client_name: string | null; client_user_id: number | null;
+  sessions: number; gross_cents: number; cut_cents: number; unpriced: number;
+}): any {
+  return {
+    client_user_id: r.client_user_id,
+    // NAMED OR NOT RECORDED, never "Unknown". A booking whose user row is
+    // gone still carries its money, and inventing a name for it would be a
+    // claim about who paid.
+    client_name: r.client_name,
+    sessions: r.sessions,
+    gross_cents: r.gross_cents,
+    cut_cents: r.cut_cents,
+    net_cents: r.gross_cents - r.cut_cents,
+    // Carried per row rather than only in the total, because a client whose
+    // sessions are mostly unpriced has a row that understates them and the
+    // reader needs to see which one that is.
+    unpriced_sessions: r.unpriced,
+  };
+}
+
+/**
+ * The Earnings ledger: by client, with the cut as its own column.
+ *
+ * THE TOTAL IS THE SUM OF THE LINE CUTS, not the rate applied to the gross
+ * total — D4's own note says *"The cut is charged per line, not netted at the
+ * bottom"*, and the two arithmetics differ by up to a cent per line. A table
+ * whose rows do not add up to its total is the most corrosive thing a ledger
+ * can do, so `totalLines` is the only thing that adds here.
+ *
+ * PERIOD IS A HALF-OPEN INTERVAL on `created_at`. Absent means everything,
+ * which is what "All time" asks for; the three other views pass explicit
+ * bounds so the server never has to guess what quarter the reader meant.
+ */
+advisors.get('/me/ledger', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const from = trimOrNull(c.req.query('from'), 32);
+    const until = trimOrNull(c.req.query('until'), 32);
+
+    // ONE QUERY TEXT, EVERY BOUND ALWAYS BOUND. The obvious shape here is to
+    // push clauses into an array and `join(' AND ')` them into the template —
+    // and `scripts/check-sql-prepare.mjs` refuses it, correctly: a `${…}`
+    // inside `DB.prepare` lands in the query TEXT, and a guard that has to
+    // decide case by case whether the fragments were literals is a guard that
+    // will eventually decide wrong. `? IS NULL OR` makes an absent bound a
+    // no-op with no interpolation at all.
+    const rows = await c.env.DB.prepare(
+      `SELECT b.founder_user_id AS client_user_id, u.name AS client_name,
+              b.amount_cents AS amount_cents, b.platform_cut_cents AS platform_cut_cents,
+              b.take_rate_bps AS take_rate_bps
+         FROM advisor_bookings b
+         LEFT JOIN users u ON u.id = b.founder_user_id
+        WHERE b.advisor_id = ?
+          AND (? IS NULL OR b.created_at >= ?)
+          AND (? IS NULL OR b.created_at < ?)
+        ORDER BY b.created_at DESC
+        LIMIT 2000`
+    ).bind(m.id, from, from, until, until).all<{
+      client_user_id: number | null; client_name: string | null;
+      amount_cents: number | null; platform_cut_cents: number | null; take_rate_bps: number | null;
+    }>();
+
+    const rate = await takeRate(c.env);
+    const lines = rows.results || [];
+
+    // Grouped in the worker rather than by SQL, because the cut of a line
+    // recorded before 241 has to be DERIVED from its stored rate (or the
+    // current one) rather than summed from a NULL column — and a SQL SUM over
+    // NULLs would silently report those lines as free.
+    const byClient = new Map<string, {
+      client_name: string | null; client_user_id: number | null;
+      sessions: number; gross_cents: number; cut_cents: number; unpriced: number;
+    }>();
+    for (const line of lines) {
+      const key = line.client_user_id == null ? 'none' : String(line.client_user_id);
+      if (!byClient.has(key)) {
+        byClient.set(key, {
+          client_name: line.client_name ?? null, client_user_id: line.client_user_id ?? null,
+          sessions: 0, gross_cents: 0, cut_cents: 0, unpriced: 0,
+        });
+      }
+      const g = byClient.get(key)!;
+      g.sessions += 1;
+      if (line.amount_cents == null) { g.unpriced += 1; continue; }
+      const bps = line.take_rate_bps != null ? Number(line.take_rate_bps) : rate.bps;
+      const cut = line.platform_cut_cents != null
+        ? Number(line.platform_cut_cents)
+        : (cutCents(line.amount_cents, bps) ?? 0);
+      g.gross_cents += Number(line.amount_cents);
+      g.cut_cents += cut;
+    }
+
+    const totals = totalLines(
+      lines.map((l) => ({ amount_cents: l.amount_cents, take_rate_bps: l.take_rate_bps })),
+      rate.bps,
+    );
+    const clients = [...byClient.values()]
+      .sort((a, b) => b.gross_cents - a.gross_cents)
+      .map(clientLineDto);
+    const top = clients[0];
+
+    return c.json({
+      currency: 'USD',
+      from: from ?? null,
+      until: until ?? null,
+      clients,
+      totals: {
+        gross_cents: totals.gross_cents,
+        cut_cents: totals.cut_cents,
+        net_cents: totals.net_cents,
+        sessions: lines.length,
+        priced_sessions: totals.priced,
+        // Surfaced, never subtracted from view: a total that quietly skipped
+        // the sessions nobody priced would be a smaller number presented as a
+        // complete one.
+        unpriced_sessions: totals.unpriced,
+      },
+      // NULL WHEN THERE IS NOTHING TO CONCENTRATE. A share of zero gross is
+      // not 0% — it is a question with no answer, and 0% reads as "well
+      // spread", which is the opposite of what an empty quarter means.
+      concentration: top && totals.gross_cents > 0
+        ? { client_name: top.client_name, pct: Math.round((top.gross_cents / totals.gross_cents) * 100) }
+        : null,
+      take_rate: { bps: rate.bps, source: rate.source, updated_at: rate.updated_at },
+      settlement: settlementMode(c.env),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * The payout account and the gate it implies.
+ *
+ * ALWAYS ANSWERS, even for an advisor who has never started one — `pending`
+ * with its gate sentence is a true statement about an account nobody has set
+ * up, and a 404 here would make the card unrenderable rather than informative.
+ * `started` is what distinguishes the two.
+ */
+advisors.get('/me/payout-account', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM advisor_payout_accounts WHERE advisor_id = ?'
+    ).bind(m.id).first<any>();
+    const state = derivePayoutState(row);
+    return c.json({
+      started: !!row,
+      state,
+      gate: PAYOUT_GATE[state],
+      provider: row?.provider ?? 'stripe',
+      // The account id is NOT returned. It identifies a Stripe account and
+      // nothing on the page needs it; the onboarding route in PR5b hands back
+      // a link instead.
+      charges_enabled: !!row?.charges_enabled,
+      payouts_enabled: !!row?.payouts_enabled,
+      blocked_reason: row?.blocked_reason ?? null,
+      // Null means never asked, which is different from asked and refused.
+      last_checked_at: row?.last_checked_at ?? null,
+      settlement: settlementMode(c.env),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** D4's payout history — date, amount, state. Newest first. */
+advisors.get('/me/payouts', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const rows = await c.env.DB.prepare(
+      `SELECT uid, amount_cents, currency, state, scheduled_for, paid_at,
+              failure_reason, created_at
+         FROM advisor_payouts WHERE advisor_id = ?
+        ORDER BY COALESCE(paid_at, scheduled_for, created_at) DESC LIMIT 200`
+    ).bind(m.id).all<any>();
+    return c.json({
+      items: (rows.results || []).map((r) => ({
+        uid: r.uid,
+        amount_cents: r.amount_cents,
+        currency: r.currency,
+        state: r.state,
+        // Two different kinds of time, kept apart: `scheduled_for` is a
+        // banking DAY and `paid_at` is the INSTANT it settled. A page that
+        // formatted the first as a timestamp would move "Sep 1" for every
+        // reader west of Greenwich.
+        scheduled_for: r.scheduled_for,
+        paid_at: r.paid_at,
+        failure_reason: r.failure_reason,
+      })),
+      settlement: settlementMode(c.env),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Tax-year totals.
+ *
+ * WHAT THIS IS, said in the payload rather than left to a component: a summary
+ * of what THIS PLATFORM RECORDED in a calendar year. It is not an IRS Form
+ * 1099, it is not issued by anyone, and it is not tax advice — `document`
+ * carries that so no surface can render the number without the sentence, and
+ * so a future CSV export inherits it.
+ *
+ * The year is the caller's calendar year over `created_at`, which is UTC.
+ * Stated in `basis` rather than assumed, because an advisor near a year
+ * boundary will otherwise wonder which side a late-December session fell.
+ */
+advisors.get('/me/tax-summary', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const raw = Number(c.req.query('year'));
+    const year = Number.isInteger(raw) && raw >= 2000 && raw <= 2999
+      ? raw
+      : Number(nowIso().slice(0, 4));
+    const rows = await c.env.DB.prepare(
+      `SELECT amount_cents, platform_cut_cents, take_rate_bps, founder_user_id
+         FROM advisor_bookings
+        WHERE advisor_id = ? AND created_at >= ? AND created_at < ?`
+    ).bind(m.id, `${year}-01-01T00:00:00.000Z`, `${year + 1}-01-01T00:00:00.000Z`)
+      .all<{ amount_cents: number | null; platform_cut_cents: number | null; take_rate_bps: number | null; founder_user_id: number | null }>();
+    const lines = rows.results || [];
+    const rate = await takeRate(c.env);
+    const totals = totalLines(lines, rate.bps);
+    const clients = new Set(lines.filter((l) => l.amount_cents != null).map((l) => l.founder_user_id));
+    return c.json({
+      year,
+      currency: 'USD',
+      gross_cents: totals.gross_cents,
+      platform_cut_cents: totals.cut_cents,
+      net_cents: totals.net_cents,
+      sessions: lines.length,
+      priced_sessions: totals.priced,
+      unpriced_sessions: totals.unpriced,
+      clients: clients.size,
+      basis: 'Calendar year in UTC, by the date each session was booked.',
+      document: {
+        is_tax_form: false,
+        note: 'A summary of what this platform recorded. It is not an IRS Form 1099, '
+          + 'no tax document is issued by Axal, and this is not tax advice. '
+          + 'Sessions with no price recorded are counted separately and are not in these totals.',
+      },
+      settlement: settlementMode(c.env),
     });
   } catch (e) { return mapError(c, e); }
 });

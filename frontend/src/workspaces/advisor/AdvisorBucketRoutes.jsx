@@ -88,7 +88,10 @@ function Loading() {
  * you have told the batch, and who has acted on it" over a page that reads
  * "Cohort guidance has no store"; Visibility as "what it converts" over
  * "Nothing counts profile views"; Earnings as "what the platform took" beside
- * a rail on the same screen saying Axal takes no cut; and Services as "how
+ * a rail on the same screen denying any cut at all (both wrong then, and both
+ * still wrong now for opposite reasons — 241 records a rate, and nothing has
+ * been charged under it, so neither the claim nor the denial is available);
+ * and Services as "how
  * often it is booked", which `units_sold` returns null for by design. Four
  * cards advertising a feature and one contradicting a recorded decision, on
  * the one surface an advisor reads before choosing where to click.
@@ -111,7 +114,12 @@ const ZONE_BLURB = {
   // "are not tracked yet". Migration 239 is what made the sentence true.
   delivery: 'Every work product, every version, and whether anyone opened it.',
   sessions: 'Each booked session, the amount you recorded against it, and whether you have marked it billed.',
-  earnings: 'Billed, collected, written off and outstanding, totalled from the amounts you typed. Axal settles nothing and takes no cut.',
+  // The second clause used to read "Axal settles nothing and takes no cut",
+  // which migration 241 made false in one half and unknowable in the other: a
+  // rate IS recorded per priced line, and whether anything settles is
+  // `settlement` on the response, which a static blurb cannot read. It states
+  // the rate and leaves the settlement question to the page. D75.
+  earnings: 'Billed, collected, written off and outstanding, totalled from the amounts you typed, with the platform rate recorded against each priced session.',
   // Expertise — four zones read a store now. Only visibility does not, and it
   // is written from COPY.
   profile: 'What a founder sees before they book you.',
@@ -342,7 +350,11 @@ export default function AdvisorBucketRoutes({ preview = false }) {
       stance: 'Manual practice record',
       note: 'Opportunities, engagements, delivery, sessions and earnings read and write the stored advisory record. Nothing here writes a proposal, sends a message, or decides what a session was worth.',
       unavailable: [
-        ['Money movement', 'A session amount is your own bookkeeping note. Axal issues no invoice, runs no checkout, holds nothing on your behalf and takes no cut. Nothing on this bucket settles anything.'],
+        // "takes no cut" and "nothing on this bucket settles anything" were
+        // both here, and 241 made the first false outright. The rail is
+        // static and cannot read `settlement`, so it names what is recorded
+        // and sends the settlement question to Earnings, which reads it. D75.
+        ['Money movement', 'A session amount is your own bookkeeping note, and a platform rate is recorded against each priced session. Axal issues no invoice, runs no checkout and holds nothing on your behalf. Whether anything has been charged is stated on Earnings, which reads that live.'],
         ['Pricing suggestions', 'No rate is proposed, benchmarked or inferred from your other sessions. Every amount here is one you typed.'],
       ],
     },

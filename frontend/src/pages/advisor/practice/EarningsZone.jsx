@@ -17,11 +17,27 @@ import { NothingYet, Pill, Unrecorded, ZoneBody, ZoneHeading, money } from '../e
  * lies. The worker returns the count for exactly this reason and the page
  * leads with it whenever it is non-zero.
  *
- * AXAL SETTLES NOTHING. The endpoint returns `settlement: 'none'` and this page
- * says so out loud rather than leaving a reader to assume a money page implies
- * a money rail. There is no payment provider, no invoice, no payout, and no
- * obligation on Axal — migration 175 deliberately retired the payout ledger and
- * this does not reopen it.
+ * AXAL SETTLES NOTHING, AND THAT IS NOW A THING TO CHECK RATHER THAN ASSERT.
+ * The endpoint returns `settlement`, and this page renders what it says
+ * instead of a sentence written once. While it reads `'none'` there is no
+ * charge, no invoice, no payout and no obligation on Axal; when PR5b's flag
+ * flips it will read `'test'` or `'live'` and this page will say that instead
+ * — which is the whole reason the claim is computed and not typed.
+ *
+ * THE PAGE USED TO SAY AXAL "DOES NOT TAKE A CUT", AND THAT HAD TO GO.
+ * Migration 241 records a take rate — 1500 bps, admin-configurable — and
+ * stamps the cut on every line as it is priced. Nothing is charged yet, so the
+ * honest statement is the compound one: a rate is recorded, and no money has
+ * moved under it. Denying the rate would be the easier sentence and the false
+ * one, and the mirror-image error — rendering a cut as though it had been
+ * taken — is what the `settlement` check below exists to prevent. D75.
+ *
+ * (The older clause "migration 175 retired the payout ledger and this does not
+ * reopen it" was true when it was written and is no longer the whole story:
+ * 241 adds `advisor_payouts`. That is not 175's table returning — 175's paid
+ * platform credit under a rewards scheme, this one records money settling from
+ * a client's card to an advisor's connected account — and 241's header draws
+ * the distinction at length.)
  */
 
 const ROW = {
@@ -30,6 +46,25 @@ const ROW = {
   written_off: ['Written off', 'danger', 'You decided not to pursue it.'],
   unpriced: ['Unpriced', 'neutral', 'Sessions with no amount recorded. Not counted in any total above.'],
 };
+
+/**
+ * The take rate as a reader sees it, from the basis points the worker sends.
+ *
+ * DIVIDED HERE AND NOWHERE ELSE, and it is the one piece of money arithmetic
+ * this page does — because it is a display conversion, not a calculation: 1500
+ * bps IS 15%, exactly, at every value. Every cent figure on the page is
+ * computed in the worker for the opposite reason.
+ *
+ * An absent rate renders as an absence rather than as 0% — "the platform
+ * charges nothing" is a claim, and a missing response field is not evidence
+ * for it (D56/D68).
+ */
+function takeRatePct(rate) {
+  const bps = rate?.bps;
+  if (bps == null || !Number.isFinite(Number(bps))) return 'a rate that could not be read';
+  const pct = Number(bps) / 100;
+  return `${Number.isInteger(pct) ? pct : pct.toFixed(2)}%`;
+}
 
 function Figure({ label, cents, hint, strong = false }) {
   return (
@@ -77,7 +112,7 @@ export default function EarningsZone() {
     <div className="space-y-4">
       <ZoneHeading
         title="What the practice has earned"
-        blurb="Summed from the sessions you priced. Axal records these figures and settles nothing — there is no invoice, no payout and no payment provider behind this page."
+        blurb="Summed from the sessions you priced, with the platform rate recorded against each one. Axal issues no invoice for them, and whether anything has been charged is stated below rather than assumed here."
         action={d?.unpriced_count > 0 ? <Pill tone="warn">{d.unpriced_count} unpriced</Pill> : null}
       />
 
@@ -139,9 +174,36 @@ export default function EarningsZone() {
               </table>
             </Card>
 
+            {/* RENDERED FROM THE RESPONSE, NOT WRITTEN ONCE. The clause this
+                replaces denied the platform cut outright, which migration 241
+                made false: a take rate is recorded and stamped on every line
+                as it is priced. What is still true is that no money has moved
+                under it, and `settlement` is what says so — so the page states
+                the rate AND the absence of any charge, and stops claiming
+                either one on its own.
+
+                The denial is not quoted here on purpose: the guard in
+                `advisor_bucket_overview.test.mjs` bans that exact phrase, and
+                `codeOnly` spares an INDENTED block comment by design — a `/*`
+                inside a className must not be allowed to open one. A comment
+                explaining a ban must therefore not reproduce the banned
+                string. D75. */}
             <p className="mt-3 text-[11px] leading-relaxed text-axal-ink-3">
               Amounts are in {d.currency || 'USD'} and are your own record. Axal does not invoice
-              your clients, does not take a cut, and holds no money on your behalf.
+              your clients and holds no money on your behalf.{' '}
+              {d.settlement === 'none' ? (
+                <>
+                  A platform rate of {takeRatePct(d.take_rate)} is recorded against each priced
+                  session, and <strong>nothing has been charged under it</strong> — no payment is
+                  taken through Axal today, so the figures above are what you recorded, not what
+                  was collected.
+                </>
+              ) : (
+                <>
+                  Payments are running in <strong>{d.settlement}</strong> mode and a platform rate
+                  of {takeRatePct(d.take_rate)} applies to each priced session.
+                </>
+              )}
             </p>
           </>
         )}

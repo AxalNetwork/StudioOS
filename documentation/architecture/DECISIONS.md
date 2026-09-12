@@ -4228,3 +4228,96 @@ alongside its scan for a bare `fetch` or an unbounded KV await anywhere on the
 path, and live tests that run the middleware against a namespace whose promises
 never settle and require an answer inside the deadline, with the bucket's declared
 policy.
+
+## D75 — Money already moves through Axal; the advisory practice gets the model the wellbeing directory has had all along, recorded before it is charged
+
+**2026-09-12.** Practice PR5 asks for a page (D4, Earnings) that draws a
+platform cut, three payout-account states that gate charging, a payout history
+and a 1099 summary. The codebase appeared to forbid all four. Migration 205's
+header reads, in capitals, **"RECORD ONLY. NO MONEY MOVES THROUGH AXAL"**;
+`EarningsZone.jsx` shipped the sentence *"Axal … does not take a cut, and holds
+no money on your behalf"*; and `templates/legal/advisor_program_terms_v1.md` is
+marked **DORMANT** — *"the take-rate and payout sections below describe
+functionality the platform does not yet execute. Do not publish or send while
+payments remain off-platform."*
+
+**Reading the code rather than the comments changed the decision.** Money has
+moved through Axal since task #4. `services/wellbeing/bookings.ts` creates a
+Stripe **destination charge** with `application_fee_amount` and
+`transfer_data[destination]`, settling to an expert's connected account;
+`routes/wellbeing.ts` runs the full Connect **Express onboarding**
+(`/accounts`, `/account_links`) and an account-status refresh that writes
+`charges_enabled` / `payouts_enabled` back to `experts`; `expert_bookings`
+already stores `application_fee_cents` per line; and the platform's shipped
+default application fee is **15%** (`DEFAULT_APPLICATION_FEE_PCT`), overridable
+per expert and by `EXPERT_APPLICATION_FEE_PCT`.
+
+So 205's sentence was **true about its own column and false as a statement
+about the platform**, and it had been read as the latter. It stays true of
+`advisor_bookings.billing_state`, which nothing here turns into a transaction.
+
+### The decision
+
+1. **Build the money model as drawn**, over the advisory practice's own tables.
+   Migration 241 adds `platform_settings` (one typed platform number, seeded
+   `advisor_take_rate_bps = 1500`), `advisor_payout_accounts` (D4's three
+   states with the gate each implies), `advisor_payouts` (the audit trail), and
+   two columns on `advisor_bookings`: `platform_cut_cents` and `take_rate_bps`.
+2. **Beside `experts`, never inside it.** `experts` (052) is the WELLBEING
+   directory, matched by `services/wellbeing/match.ts`; writing an advisor
+   there would put an advisory practice in the wellbeing match pool. 240 built
+   beside it for the same reason. The *column design* is copied deliberately —
+   `provider_account_id`, `charges_enabled`, `payouts_enabled` do the same job
+   under near-identical names — because a second vocabulary for the same three
+   facts is how two halves of a product come to disagree.
+3. **15% is the platform's existing default, not a canvas fixture.** D4's
+   `CUT = 0.15` is a mock; that it matches `DEFAULT_APPLICATION_FEE_PCT` is
+   what makes it the right seed. It is **admin-configurable** —
+   `PUT /api/admin/platform/take-rate`, super-admin only, audited with the
+   previous value in the row, clamped to 0–50% for the same reason the
+   wellbeing fee is.
+4. **Basis points, integer cents, floor.** `cut = floor(gross × bps / 10000)`,
+   so `gross − cut = net` closes exactly per line and in every total. Floor
+   rather than round because a rounded cut can exceed the stated percentage by
+   a cent, and a fee the terms do not describe is a fee somebody can dispute;
+   rounding down can only favour the advisor.
+5. **The rate is stamped on the line, not only in the setting.** This is what
+   makes the setting safe to change: an operator moving 15% to 12% must not
+   restate a quarter an advisor has already reconciled. `totalLines` prefers
+   the line's own rate and falls back to the current one only for rows recorded
+   before 241.
+6. **The total is the sum of the line cuts**, never the rate applied to the
+   gross total — D4 says so itself (*"The cut is charged per line, not netted
+   at the bottom"*), and the two differ by up to a cent per line. A table whose
+   rows do not add to its total is the most corrosive thing a ledger can do.
+
+### What is recorded and what is charged are different, and the difference is rendered
+
+**Advisory charging is off.** `services/advisorMoney.ts::settlementMode()`
+answers `'none'` unless `ADVISOR_CHARGING_ENABLED` is set *and* a Stripe key is
+present, and it reads production through `util/paymentMode.ts` rather than a
+second, looser test. Every money response carries `settlement`, and no surface
+may render a cut as a charge while it says `'none'`. PR5b wires the advisory
+service leg to **test keys** with production charging behind that flag;
+`advisor_program_terms_v1.md` stays **DORMANT** until counsel clears it, and
+its `{{advisor_program.take_rate}}` placeholder now has exactly one source —
+the setting the ledger charges from — so the document and the ledger cannot
+disagree about the number.
+
+**The two contradictions are retired here rather than left standing.** 241's
+header supersedes the platform-wide reading of 205's (205's own text cannot be
+edited by a later migration, and rewriting history in place would hide that the
+position changed). `EarningsZone.jsx` no longer denies a cut it now records:
+it states the rate, states that nothing has been charged under it, and derives
+both from `settlement` so that flipping the flag changes the sentence rather
+than leaving a stale one behind.
+
+### What this does not decide
+
+Whether advisory charging *should* go live. That waits on counsel clearing the
+dormant terms, and the flag ships off. Nor does it reopen migration 175's
+payout ledger: 175's table paid platform credit under a rewards scheme, and
+`advisor_payouts` records money settling from a client's card to an advisor's
+connected account — same noun, different transaction, which is why every row
+here carries a `provider_payout_id` that can be reconciled against the
+processor.

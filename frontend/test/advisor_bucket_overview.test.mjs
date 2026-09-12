@@ -320,9 +320,8 @@ test('the Network overview shares one INTRO map and marks Organizations where it
 
 test('no overview blurb claims a platform cut or a booking count', () => {
   // Two recorded decisions, both contradicted by the first draft of this grid:
-  // Axal records amounts and settles nothing (no fee, no cut, no payout), and
-  // `units_sold` is null by design because a booking records a topic, not a
-  // service.
+  // nothing has been charged, and `units_sold` is null by design because a
+  // booking records a topic, not a service.
   const blurbBody = block(advisorCode, 'ZONE_BLURB');
   for (const claim of [
     /platform took/i,
@@ -334,4 +333,47 @@ test('no overview blurb claims a platform cut or a booking count', () => {
   ]) {
     assert.doesNotMatch(blurbBody, claim, `an overview blurb re-asserts ${claim}`);
   }
+});
+
+test('no static surface DENIES the cut either, now that one is recorded', () => {
+  // THE OTHER DIRECTION, and it is new. The test above bans claiming money was
+  // taken, which is still right — nothing has been charged. What it never
+  // banned was the opposite sentence, and three static surfaces shipped it:
+  // the Earnings blurb, the Practice board footnote and the AI rail's "Money
+  // movement" card all said Axal "takes no cut". Migration 241 records a rate
+  // per priced line and adds `advisor_payouts`, so the denial is false while
+  // the claim is premature — and a static string can assert NEITHER, because
+  // whether anything settles is `settlement` on the response and none of these
+  // surfaces reads it. Each one names the rate and defers. D75.
+  const surfaces = [
+    ['frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx', advisorCode],
+    ['frontend/src/workspaces/boards/advisorPractice.js', read('frontend/src/workspaces/boards/advisorPractice.js')],
+    ['frontend/src/pages/advisor/practice/EarningsZone.jsx', read('frontend/src/pages/advisor/practice/EarningsZone.jsx')],
+  ];
+  for (const [name, raw] of surfaces) {
+    // `codeOnly`, because the comment in each file explaining what it stopped
+    // saying necessarily says it — the self-matching trap.
+    const src = codeOnly(raw);
+    for (const denial of [
+      /takes? no cut/i,
+      /no payout rail/i,
+      /does not take a cut/i,
+      /no platform line to show/i,
+    ]) {
+      assert.doesNotMatch(src, denial, `${name} denies a cut that migration 241 records`);
+    }
+  }
+
+  // And the positive half, or the ban could be satisfied by deleting the
+  // subject entirely: each surface still tells the reader a rate exists.
+  for (const [name, raw] of surfaces) {
+    assert.match(codeOnly(raw), /platform rate/i,
+      `${name} no longer mentions the platform rate at all`);
+  }
+
+  // The migration the sentence now rests on must still define it, so removing
+  // the rate cannot quietly make the denial true again without failing here.
+  const m241 = read('cloudflare-worker/sql/migrations/241_advisor_money_model.sql');
+  assert.match(m241, /'advisor_take_rate_bps'/);
+  assert.match(m241, /platform_cut_cents/);
 });
