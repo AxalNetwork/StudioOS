@@ -4321,3 +4321,68 @@ payout ledger: 175's table paid platform credit under a rewards scheme, and
 connected account — same noun, different transaction, which is why every row
 here carries a `provider_payout_id` that can be reconciled against the
 processor.
+
+## D76 — Trust Center v2's month-over-month delta gets a real history, and its "needs action" split cannot be copied from the canvas
+
+**2026-09-12.** Task #148 asks for `/trust` to match
+`design/canvases/integrated/Trust Center v2.dc.html` (T2: v2 supersedes v1).
+Two of its score-panel elements cannot be built as drawn, for opposite
+reasons — one has no data behind it, the other has data that means something
+different here.
+
+### The delta had nothing behind it
+
+The canvas prints a month-over-month move under the ring, backed by
+`PREV_SCORE = { founder: 47, investor: 58, … }` — a literal keyed by role —
+and, when a role is missing from it, falls back to `prevScore = score` and
+renders **"Unchanged from last month."** No score history existed anywhere in
+the repo, so shipping that fallback would tell a brand-new account its score
+held steady across a month it did not exist for. D56/D68: an absence is
+stated, never rendered as a plausible zero.
+
+**Decision: migration 243 adds `trust_score_snapshots`, written by the worker
+on read.** `GET /trust/me` calls `recordAndCompareScore`, which does an
+`INSERT OR IGNORE` keyed on `(user_id, captured_month)` and then reads the
+most recent **earlier** month. No cron: the row is stamped by the first visit
+in a calendar month, which is also what makes the comparison meaningful — the
+snapshot is what the score WAS when the month was first observed, and a later
+visit that month must not move it.
+
+Three consequences worth stating:
+
+- **The worker computes the score, not the client.** A history a caller can
+  set is not a history. The rule therefore exists twice — `trustScoreOf` in
+  `services/trust.ts` and `computeTrustScore` in `lib/trustCenter.js` — because
+  production code never imports across the `frontend/src` ↔
+  `cloudflare-worker/src` line in this repo. `test/trust_score_parity.test.ts`
+  imports and RUNS both over shared fixtures; asserting the two files merely
+  look alike would pass the day someone edited one into agreement with itself.
+- **No history returns `null`, and the page says so** rather than drawing a
+  zero delta (`NO_HISTORY_NOTE`).
+- **The month is named** ("since May 2026"), because "last month" is false for
+  a reader who last opened the page five months ago. `captured_month` is a
+  calendar LABEL and is formatted by splitting on the hyphen — `new Date('2026-09')`
+  is midnight UTC and renders as August for every reader west of Greenwich.
+
+### "Needs action" is a different question from the pill's colour
+
+The canvas splits its obligation counts with its own `toneOf`: neutral + bad
+is "needs action", `prog` is "in progress". That works **in its vocabulary**,
+where the fixtures carry `'Pending'` and `'Not started'` as separate statuses.
+
+`legal_obligations` has no `not_started`. Its untouched state **is** `pending`,
+and `POST /obligation/:key/start` transitions `pending → in_review`. Copying
+the canvas's split — `STATUS_TONE.pending` is the amber `prog` tone, correctly,
+because amber means "wants attention" — made the page tell a reader with three
+untouched obligations *"3 in progress — nothing needs action from you."*
+
+**Decision: `waitingOn(status)` in `lib/trustCenter.js` answers the separate
+question** — `'you'`, `'us'` or `'settled'` — and `outstandingCounts` is the
+single derivation both Overview sentences are built from. An unrecognised
+status answers `'you'`: telling someone nothing is required of them when
+something is, is the harmful direction.
+
+The two sentences stay distinct (`scoreLine` totals the open work,
+`obligationSummary` splits it) because they sit inches apart in the v2
+two-column Overview, and the column previously repeated the panel's verdict
+verbatim.

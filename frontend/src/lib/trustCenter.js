@@ -61,13 +61,62 @@ export function verdictFor(score) {
 }
 
 /**
+ * WHO IS THIS OBLIGATION WAITING ON? — `'you'`, `'us'`, or `'settled'`.
+ *
+ * NOT the same question as the status pill's colour, and conflating the two
+ * produces a sentence that is actively false. `STATUS_TONE` gives `pending`
+ * the amber `prog` tone, which is right for a pill (amber = wants attention);
+ * reading that tone as "in progress" makes `scoreLine` say "3 in progress —
+ * nothing needs action from you" to someone whose three obligations are
+ * untouched and waiting on them alone.
+ *
+ * The canvas cannot be followed here either, and for a findable reason: it
+ * splits on its own `toneOf` because its fixtures carry BOTH `'Pending'` and
+ * `'Not started'` as separate statuses, so neutral-means-not-started holds in
+ * its vocabulary. `legal_obligations` has no `not_started`. Its untouched
+ * state IS `pending` — `POST /obligation/:key/start` transitions
+ * `pending → in_review` (routes/trust.ts) — so the canvas's 'Not started' is
+ * our `pending`, and its 'Pending' is our `in_review`.
+ *
+ * Unknown statuses answer `'you'`. Telling someone nothing is required of
+ * them when something is, is the harmful direction; the reverse merely asks
+ * them to look.
+ */
+export function waitingOn(status) {
+  const s = String(status || '').toLowerCase();
+  // Settled — nothing outstanding on either side.
+  if (['satisfied', 'waived', 'signed', 'active', 'verified'].includes(s)) return 'settled';
+  // Moving without the reader: under review, or awaiting a counterparty.
+  if (['in_review', 'self_attested', 'partially_signed'].includes(s)) return 'us';
+  // Everything else is on the reader: pending, expired, rejected, revoked,
+  // cancelled, unverified, not_started — and anything unrecognised.
+  return 'you';
+}
+
+/**
+ * The two counts every sentence on the Overview is built from, derived once.
+ *
+ * The canvas's own instruction, kept: ONE definition of "needs action" and
+ * ONE of "in progress", shared by the score panel and the obligations header.
+ * Counting them separately in two places is how a page ends up saying
+ * "2 open" above a list of three.
+ */
+export function outstandingCounts(obligations = []) {
+  let needs = 0;
+  let inProgress = 0;
+  for (const o of obligations) {
+    const w = waitingOn(o?.status);
+    if (w === 'you') needs += 1;
+    else if (w === 'us') inProgress += 1;
+  }
+  return { needs, inProgress };
+}
+
+/**
  * The sentence under the verdict.
  *
- * ONE definition of "needs action" and ONE of "open", as the canvas insists:
- * `needs` is blocked + not-started (things waiting on the reader), `open` is
- * that plus in-progress (things not yet done, including ones waiting on
- * someone else). Counting them differently in two places is how a page ends
- * up saying "2 open" above a list of three.
+ * `needs` is what waits on the reader, `open` is that plus what is moving
+ * without them — both from `outstandingCounts`, never re-derived here.
  */
 export function scoreLine({ needs, inProgress }) {
   const n = Math.max(0, Number(needs) || 0);
@@ -76,6 +125,34 @@ export function scoreLine({ needs, inProgress }) {
   if (open === 0) return 'Every required obligation is satisfied.';
   if (n === 0) return `${p} in progress — nothing needs action from you.`;
   return `${n} ${n === 1 ? 'item needs' : 'items need'} action, ${open} open in total.`;
+}
+
+/**
+ * The canvas's SECOND sentence — the one above the obligations list.
+ *
+ * Deliberately different content from `scoreLine`, and from the same two
+ * counts: the panel says how much is open in total, this says how the open
+ * work splits. Before this existed the right-hand column repeated
+ * "every required obligation is satisfied" verbatim beside the panel saying
+ * it, and pointed at a badge ("Hover the score for details") that the v2
+ * layout had already moved out of that column.
+ *
+ * The canvas's clear-state sentence closes "Statuses refresh automatically
+ * from Settings and signed envelopes", and that claim is kept because it is
+ * backed: `resyncKycKyb` reconciles `legal_obligations` against
+ * `users.kyc_status` and `corporate_profiles.kyb_status`, and envelope
+ * completion flips the NDA row. Its "Resolve identity items in Settings"
+ * is dropped — true only when the open items are identity items, which this
+ * function cannot know.
+ */
+export function obligationSummary({ needs, inProgress }) {
+  const n = Math.max(0, Number(needs) || 0);
+  const p = Math.max(0, Number(inProgress) || 0);
+  if (n + p === 0) {
+    return 'Nothing outstanding. Statuses refresh automatically from your account settings and signed envelopes.';
+  }
+  if (n === 0) return `${p} in progress — no action needed from you right now.`;
+  return `${n} ${n === 1 ? 'item needs' : 'items need'} action, ${p} in progress.`;
 }
 
 /**

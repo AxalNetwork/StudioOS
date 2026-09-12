@@ -397,3 +397,140 @@ test('both frames get the provenance line, exactly once', () => {
   assert.doesNotMatch(head, /this page reports status only/,
     'the provenance line is back inside the chromeless guard — an investor would never see it');
 });
+
+// ===========================================================================
+// Trust Center v2 — the score panel, the provenance line, and the two exits.
+//
+// The derivations behind these are unit-tested in
+// `frontend/test/trust_center_panel.test.mjs`, where every branch is reachable
+// without React. What is left to guard is that the PAGE actually renders them,
+// and renders them from the shared rule rather than a local re-derivation —
+// which is the specific way this panel went wrong once already.
+
+/** The ScorePanel body, sliced to its own function. */
+const scorePanel = () => {
+  const s = CODE.indexOf('function ScorePanel(');
+  const e = CODE.indexOf('function ObligationList(', s);
+  assert.ok(s > 0 && e > s, 'could not read ScorePanel');
+  return CODE.slice(s, e);
+};
+
+test('the Overview draws the v2 score panel, not just the badge', () => {
+  const panel = scorePanel();
+  // The ring, and the number inside it.
+  assert.match(panel, /<svg viewBox="0 0 160 160"/, 'the ring is gone');
+  assert.match(panel, /strokeDasharray=\{`\$\{dash\.toFixed\(1\)\} \$\{CIRC\.toFixed\(1\)\}`\}/,
+    'the arc no longer tracks the score');
+  assert.match(panel, /of 100/, 'the denominator is gone — a bare 72 has no scale');
+  // Verdict, line, bands — each from the shared module, none re-derived here.
+  assert.match(panel, /\{verdict\}/);
+  assert.match(panel, /\{scoreLine\(\{ needs, inProgress \}\)\}/);
+  assert.match(panel, /SCORE_BANDS\.map/);
+  // And it is mounted in the Overview with the server's history.
+  assert.match(CODE, /<ScorePanel\b/, 'the panel is defined but never rendered');
+  assert.match(CODE, /previousScore=\{matrix\?\.previous_score \?\? null\}/);
+  assert.match(CODE, /previousMonth=\{matrix\?\.previous_month \?\? null\}/);
+});
+
+test('the panel counts by who the row waits on, never by the pill colour', () => {
+  // THE REGRESSION THIS EXISTS FOR. Splitting on `toneOf` puts `pending` —
+  // the untouched state — under "in progress", and the page then tells a
+  // reader with three untouched obligations "nothing needs action from you".
+  const panel = scorePanel();
+  assert.match(panel, /const \{ needs, inProgress \} = outstandingCounts\(obligations\)/,
+    'the panel is deriving its counts itself instead of using the shared rule');
+  assert.doesNotMatch(panel, /toneOf\(/,
+    'the panel is splitting on the pill tone again — `pending` is amber but it waits on the reader');
+});
+
+test('the two Overview columns say different things, from one pair of counts', () => {
+  const s = CODE.indexOf('const overview = (');
+  const e = CODE.indexOf('</Section>', s);
+  assert.ok(s > 0 && e > s, 'could not read the Overview');
+  const ov = CODE.slice(s, e);
+  assert.match(ov, /obligationSummary\(outstandingCounts\(obligations\)\)/,
+    'the obligations column no longer carries the canvas\'s own summary sentence');
+  // The sentence it used to carry duplicated the panel's verdict word for
+  // word, and pointed at a badge this layout moved out of that column.
+  assert.doesNotMatch(ov, /Fully compliant — every required obligation is satisfied/,
+    'the right column repeats the panel\'s verdict verbatim again');
+  assert.doesNotMatch(ov, /Hover the score for details/,
+    'the column points at a badge that is no longer in it');
+  // Two columns on a desktop, one on a phone — the ring is 158px wide.
+  assert.match(ov, /grid grid-cols-1 gap-4 md:grid-cols-\[300px_1fr\]/);
+});
+
+test('the band tone classes are literal, not built by string surgery', () => {
+  // A class name assembled at the call site (`bar.replace('border-l-','border-')`)
+  // is invisible to Tailwind's scanner and ships with no rule behind it, which
+  // is how the first draft of this panel drew a colourless ring.
+  const s = CODE.indexOf('const TONE = {');
+  const e = CODE.indexOf('function toneOf', s);
+  assert.ok(s > 0 && e > s, 'could not read TONE');
+  const tone = CODE.slice(s, e);
+  for (const [band, ring, edge] of [
+    ['ok', 'stroke-emerald-500', 'border-emerald-200'],
+    ['prog', 'stroke-amber-500', 'border-amber-200'],
+    ['bad', 'stroke-red-500', 'border-red-200'],
+  ]) {
+    assert.match(tone, new RegExp(`ring: '${ring}'`), `TONE.${band}.ring is not a literal class`);
+    assert.match(tone, new RegExp(`edge: '${edge}`), `TONE.${band}.edge is not a literal class`);
+  }
+  assert.doesNotMatch(scorePanel(), /\.replace\(/,
+    'the panel is assembling a class name — Tailwind cannot see one that is built at runtime');
+});
+
+test('an obligation row shows where its status came from, and invents nothing', () => {
+  const s = CODE.indexOf('function ObligationList(');
+  const e = CODE.indexOf('function ', CODE.indexOf('return (', s));
+  const list = CODE.slice(s, e > s ? e : s + 4000);
+  assert.match(list, /\{o\.source && \(/,
+    'the provenance line renders unconditionally — a row nothing satisfied would claim an origin');
+  assert.match(list, /\{o\.source\}/);
+  // The premise: the worker derives it and /me returns it.
+  assert.match(WORKER, /source: obligationSource\(o\)/,
+    'GET /trust/me no longer returns `source` — the line would render for nobody');
+  assert.match(WORKER_SVC, /export function obligationSource/);
+  // And it is null, not a filler string, when there is no evidence.
+  assert.match(WORKER_SVC, /if \(!raw\) return null;/,
+    'obligationSource invents a provenance for a row with no evidence');
+});
+
+test('the entity list marks which company the rest of the app is acting on', () => {
+  const s = CODE.indexOf('function CompanyKybCard(');
+  const e = CODE.indexOf('const accreditation =', s);
+  assert.ok(s > 0 && e > s, 'could not read CompanyKybCard');
+  const card = CODE.slice(s, e);
+  assert.match(card, /const activeCompanyId = getActiveCompanyId\(\)/,
+    'the badge has no idea which workspace is active');
+  // Compared as strings on purpose: the id arrives from localStorage as text
+  // and from the API as a number, and `1 === '1'` is false.
+  assert.match(card, /String\(row\.company_id\) === String\(activeCompanyId\)/,
+    'the comparison is type-sensitive again — the badge would never light up');
+  assert.match(card, /Active workspace/);
+  assert.match(read('frontend/src/lib/api.js'), /export function getActiveCompanyId/,
+    'the page imports a helper api.js no longer exports');
+});
+
+test('both "managed elsewhere" exits lead somewhere that exists', () => {
+  // The page reports and does not edit, so every statement of that fact owes
+  // the reader a route to where the editing happens. A dead link here is
+  // worse than no link: it confirms the page cannot help and then fails.
+  //
+  // ANCHORED ON THE RENDER, not on the words. `codeOnly` strips block comments
+  // that start at column 0 and whole-line `//` comments — not an indented JSX
+  // `{/* … */}`, and the page has one that quotes BOTH labels to explain why
+  // they use different verbs. A bare /Edit in Account Settings/ matched that
+  // comment, so replacing the real link text with "Contact support" left the
+  // test green. Third time this suite has been bitten by an assertion its own
+  // explanation satisfies (see #144's LEGAL_LINKS import line).
+  assert.match(CODE, /Edit in Account Settings &rarr;\s*<\/a>/,
+    'the Entity list offers no way out');
+  assert.match(CODE, /<ManagedElsewhere cta="Manage in Account Settings →"/,
+    'the Accreditation card offers no way out');
+  const app = read('frontend/src/App.jsx');
+  assert.match(app, /path="\/account"/, '/account is not routed — both exits are dead ends');
+  // And the role that sees the accreditation card can reach it.
+  const route = app.slice(app.indexOf('path="/account"'), app.indexOf('path="/account"') + 220);
+  assert.match(route, /'investor'/, 'an investor cannot open /account, so its exit 403s');
+});

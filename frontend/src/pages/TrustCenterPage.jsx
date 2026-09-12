@@ -12,10 +12,15 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ShieldCheck, Lock, FileText, CheckCircle2, AlertCircle, Loader2,
   Globe, IdCard, Building2, BadgeCheck, FileSignature, Search,
+  Link2 as LinkIcon,
 } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, getActiveCompanyId } from '../lib/api';
 import { safeReadJSON } from '../lib/storage';
 import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
+import {
+  SCORE_BANDS, bandOf, verdictFor, scoreLine, obligationSummary,
+  outstandingCounts, deltaNote, NO_HISTORY_NOTE,
+} from '../lib/trustCenter';
 
 // Task #25 — these personas are KYC-eligible, so the Identity tab is always
 // shown for them rather than only when the obligation matrix happens to surface
@@ -96,14 +101,23 @@ const TONE = {
   ok: {
     pill: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-200 dark:border-emerald-800',
     bar: 'border-l-emerald-500',
+    // v2's score panel: the ring stroke and the card edge. Separate keys
+    // rather than rewriting `bar` at the call site — a class name built by
+    // string surgery is invisible to Tailwind's scanner and ships unstyled.
+    ring: 'stroke-emerald-500',
+    edge: 'border-emerald-200 dark:border-emerald-900',
   },
   prog: {
     pill: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-200 dark:border-amber-800',
     bar: 'border-l-amber-500',
+    ring: 'stroke-amber-500',
+    edge: 'border-amber-200 dark:border-amber-900',
   },
   bad: {
     pill: 'bg-red-100 text-red-800 border-red-300 dark:bg-red-950 dark:text-red-200 dark:border-red-800',
     bar: 'border-l-red-500',
+    ring: 'stroke-red-500',
+    edge: 'border-red-200 dark:border-red-900',
   },
   neutral: {
     pill: 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600',
@@ -396,6 +410,89 @@ function ToneCounts({ obligations }) {
   );
 }
 
+/**
+ * Trust Center v2's score panel — the left column of the Overview.
+ *
+ * The page already drew a `TrustScoreBadge`; what the canvas draws is a
+ * card: a large ring, "of 100", the verdict, a line explaining what is
+ * outstanding, the month-over-month move, and the three bands with the
+ * current one lit. Every value comes from `lib/trustCenter.js`, which is
+ * pure and unit-tested in both directions.
+ *
+ * THE DELTA IS THE PART THAT CAN LIE, so it is the part with a rule. The
+ * canvas fakes it from a per-role literal and falls back to "Unchanged from
+ * last month" when it has none — which would tell a brand-new account its
+ * score held steady across a month it did not exist for. `deltaNote` returns
+ * null when the server reports no earlier month, and the panel says so.
+ */
+function ScorePanel({ score, previousScore, previousMonth, obligations }) {
+  const band = bandOf(score);
+  const verdict = verdictFor(score);
+  // Counted by WHO THE ROW WAITS ON, not by the pill's colour. `toneOf` gives
+  // `pending` the amber `prog` tone, and splitting on that told a reader with
+  // three untouched obligations "3 in progress — nothing needs action from
+  // you". `waitingOn` is the separate question, and `lib/trustCenter.js`
+  // explains why the canvas's own split cannot be copied.
+  const { needs, inProgress } = outstandingCounts(obligations);
+  const delta = deltaNote(score, previousScore, previousMonth);
+
+  const RING = 158;
+  const R = 66;
+  const CIRC = 2 * Math.PI * R;
+  const dash = (Math.max(0, Math.min(100, score)) / 100) * CIRC;
+
+  return (
+    <div className={`rounded-2xl border p-6 text-center bg-white dark:bg-slate-900 ${TONE[band].edge}`}>
+      <div className="relative mx-auto" style={{ width: RING, height: RING }}>
+        <svg viewBox="0 0 160 160" width={RING} height={RING} className="block -rotate-90">
+          <circle cx="80" cy="80" r={R} fill="none" strokeWidth="15" className="stroke-slate-200 dark:stroke-slate-700" />
+          <circle
+            cx="80" cy="80" r={R} fill="none" strokeWidth="15" strokeLinecap="round"
+            strokeDasharray={`${dash.toFixed(1)} ${CIRC.toFixed(1)}`}
+            className={TONE[band].ring}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <div className="text-[46px] font-extrabold leading-none tracking-tight tabular-nums text-slate-900 dark:text-slate-100">
+            {score}
+          </div>
+          <div className="mt-1 text-[10px] font-medium uppercase tracking-widest text-slate-500 dark:text-slate-400">
+            of 100
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 text-[17px] font-extrabold tracking-tight text-slate-900 dark:text-slate-100">{verdict}</div>
+      <div className="mt-1.5 text-[12.5px] leading-relaxed text-slate-600 dark:text-slate-400">
+        {scoreLine({ needs, inProgress })}
+      </div>
+
+      {delta ? (
+        <div className={`mt-1.5 text-[11.5px] font-semibold tabular-nums ${
+          delta.tone === 'ok' ? 'text-emerald-700 dark:text-emerald-400'
+            : delta.tone === 'bad' ? 'text-red-700 dark:text-red-400'
+              : 'text-slate-500 dark:text-slate-400'}`}>
+          {delta.text}
+        </div>
+      ) : (
+        <div className="mt-1.5 text-[11.5px] text-slate-500 dark:text-slate-400">{NO_HISTORY_NOTE}</div>
+      )}
+
+      <div className="mt-4 flex justify-center gap-1.5 border-t border-slate-100 dark:border-slate-800 pt-4">
+        {SCORE_BANDS.map(b => (
+          <span
+            key={b.key}
+            className={`rounded-full px-2.5 py-1 text-[11px] font-bold border ${
+              b.key === band ? TONE[b.key].pill : 'border-transparent bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}
+          >
+            {b.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ObligationList({ obligations, emptyText, onStart }) {
   if (!obligations.length) {
     return <p className="text-sm text-slate-600">{emptyText || 'Nothing required for this section.'}</p>;
@@ -426,6 +523,17 @@ function ObligationList({ obligations, emptyText, onStart }) {
                     </span>
                   )}
                 </div>
+                {/* PROVENANCE — Trust Center v2 draws "where this status came
+                    from" under every row. `source` is derived server-side from
+                    `evidence_meta` / `evidence_envelope_uuid`; it is null for a
+                    row nothing has satisfied, and a row with no evidence shows
+                    no line rather than a filler claim about its origin. */}
+                {o.source && (
+                  <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                    <LinkIcon size={11} className="shrink-0" aria-hidden="true" />
+                    <span className="truncate">{o.source}</span>
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -900,16 +1008,35 @@ export default function TrustCenterPage({ chromeless = false }) {
 
   const overview = (
     <Section icon={Globe} title="Overview" subtitle="Everything required for your role at a glance.">
-      <div className="flex items-start gap-6 mb-4">
-        <TrustScoreBadge size="lg" score={score} missing={missing} label="Trust score" />
-        <div className="text-sm text-slate-600 dark:text-slate-400">
-          {missing.length === 0
-            ? <span className="text-emerald-700 dark:text-emerald-400 font-medium">Fully compliant — every required obligation is satisfied.</span>
-            : <span>You have <strong>{missing.length}</strong> open requirement{missing.length === 1 ? '' : 's'}. Hover the score for details.</span>}
-          <ToneCounts obligations={obligations} />
+      {/* v2's two-column Overview: the score panel, then the obligations.
+          One column on a phone — the ring is 158px and will not sit beside
+          anything at 400px. */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-[300px_1fr] md:items-start">
+        <ScorePanel
+          score={score}
+          previousScore={matrix?.previous_score ?? null}
+          previousMonth={matrix?.previous_month ?? null}
+          obligations={obligations}
+        />
+        <div>
+          {/* The canvas's obligations-header sentence. It used to repeat the
+              panel's verdict word for word, and then tell the reader to hover
+              a badge that the two-column layout had already moved out of this
+              column. Same two counts as the panel, different thing said about
+              them. */}
+          <div className="text-sm text-slate-600 dark:text-slate-400">
+            {obligationSummary(outstandingCounts(obligations))}
+            <ToneCounts obligations={obligations} />
+          </div>
+          <div className="mt-4">
+            <ObligationList
+              obligations={obligations}
+              emptyText="No obligations outstanding for this role. Nothing is required of you right now."
+              onStart={startObligation}
+            />
+          </div>
         </div>
       </div>
-      <ObligationList obligations={obligations} emptyText="No obligations required for your role." onStart={startObligation} />
     </Section>
   );
 
@@ -1060,6 +1187,11 @@ export default function TrustCenterPage({ chromeless = false }) {
     // they cannot take.
     if (!items.length) return null;
 
+    // Read at render rather than held in state: the company switcher writes it
+    // synchronously and this list is re-rendered by the switch, so state would
+    // only add a way for the badge to lag the workspace it names.
+    const activeCompanyId = getActiveCompanyId();
+
     return (
       <div className="mt-4">
         <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">Your companies</h4>
@@ -1078,18 +1210,42 @@ export default function TrustCenterPage({ chromeless = false }) {
                   : 'Not started'}
               </div>
             </div>
-            {row.is_primary_admin
-              ? <span className="text-[11px] text-slate-500 dark:text-slate-400">You administer this company</span>
-              : <span className="text-[11px] text-slate-400">{row.role_in_company}</span>}
+            <div className="flex flex-none items-center gap-2">
+              {/* v2 marks which of these rows is the workspace you are
+                  currently in. Without it a reader with three companies
+                  cannot tell which record the rest of the app is acting on.
+                  Compared as strings: the id arrives from localStorage as
+                  text and from the API as a number. */}
+              {String(row.company_id) === String(activeCompanyId) && (
+                <span className="rounded border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-widest text-violet-700 dark:border-violet-900 dark:bg-violet-950 dark:text-violet-300">
+                  Active workspace
+                </span>
+              )}
+              {row.is_primary_admin
+                ? <span className="text-[11px] text-slate-500 dark:text-slate-400">You administer this company</span>
+                : <span className="text-[11px] text-slate-400">{row.role_in_company}</span>}
+            </div>
           </div>
         ))}
+        {/* This page reports; Account Settings is where an entity record is
+            changed. The canvas puts the way out at the foot of the list. */}
+        <a
+          href="/account"
+          className="mt-3 inline-block text-xs font-semibold text-violet-700 hover:underline dark:text-violet-400"
+        >
+          Edit in Account Settings &rarr;
+        </a>
       </div>
     );
   }
 
   const accreditation = role === 'investor' && (
     <Section icon={BadgeCheck} title="Accredited investor verification" subtitle="Your accreditation obligation and its current status.">
-      <ManagedElsewhere cta="Open account settings →" href="/account">
+      {/* Wording is the canvas's: v2 says "Manage in Account Settings" here
+          and "Edit in Account Settings" on Entity. They are different verbs
+          on purpose — accreditation is an ongoing status you maintain, an
+          entity record is a document you amend. */}
+      <ManagedElsewhere cta="Manage in Account Settings →" href="/account">
         Basis and supporting evidence are submitted from your account profile.
       </ManagedElsewhere>
       <ObligationList
