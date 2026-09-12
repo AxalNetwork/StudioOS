@@ -231,6 +231,9 @@ const PROFILES = {
     // `profile_zone_actions.test.mjs`, one file later.
     canvasDirs: ['design/incoming', 'design/canvases/integrated'],
     canvas: /^(Pages · Advisor (Network|Research)\.dc\.html$|Advisor Detail · Practice)/,
+    // PR5 is a pointer to D4 in the backlog canvas — see `alsoZones` in
+    // `canvasFilters` for why the file is read by route and not by directory.
+    alsoZones: [['practice/earnings', 'design/canvases/backlog/Detail Layer Canvas II.dc.html']],
     pages: ['frontend/src/pages/advisor', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/advisorZoneActions.js',
     // 7 → 8 → 9 → 10 → 11: `practice/opportunities` brought the bucket's first
@@ -238,8 +241,8 @@ const PROFILES = {
     // `practice/delivery` its third on PR3, `practice/sessions` its fourth on
     // PR4. Every number moved because an artboard landed, not because anyone
     // edited a count.
-    zones: 11,
-    mounted: 11,
+    zones: 12,
+    mounted: 12,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.advisor },
     // THE ONE EXCLUSION THAT IS NOT A DEFERRAL. Founder and investor left this
     // list; advisor and partner do not follow, and the reason is not that their
@@ -262,13 +265,25 @@ const PROFILES = {
       // them, and the only advisor exclusion left is the one above, which is
       // a refusal rather than a deferral.
       //
-      // `practice/earnings` is absent for the same reason it is absent from
-      // the actions ledger: the canvas draws no chips for it, so nothing
-      // specifies a filter row there to defer.
+      // `practice/earnings` WAS ABSENT HERE, on the reading that the canvas
+      // drew no chips for it. That was true of the PRACTICE canvas and false
+      // of the product: PR5 is a pointer ("drawn in full as D4"), and D4 draws
+      // four. `alsoZones` above reads that one artboard by route, so the zone
+      // is now specified and covered rather than deferred by an absence in the
+      // wrong file.
     ],
-    // No `samples`: not one advisor label carries a figure, and the assertion
-    // below proves that rather than taking it on trust — a canvas that gains an
-    // `All 14` forces this profile to declare a pattern.
+    // THE ADVISOR SET CARRIES SAMPLES NOW, AND ONLY IN ONE PLACE — which is
+    // exactly what the "prove the absence" branch below exists to catch, and
+    // it did the moment D4 came into scope, naming both labels.
+    //
+    // `Q3 2026` and `Q2 2026` are the quarter the artboard happened to be
+    // drawn in. A chip reading `Q3 2026` is wrong for every reader after it,
+    // so the two are a `dynamic` group instead: the page supplies today's two
+    // quarters and the label a reader sees is their own. Partner reached the
+    // same pattern from the same canvas problem and relabelled positionally
+    // ("This quarter"); this profile names the actual quarter, which is more
+    // useful and only possible because the label is computed.
+    samples: /\b(?:Q[1-4] )?20\d\d\b/,
     live: (route) => route.replace(/^\//, ''),
   },
 
@@ -419,7 +434,53 @@ function canvasFilters(profile) {
       for (const [route, labels] of Object.entries(found)) out[profile.live(route)] = labels;
     }
   }
+
+  // ONE ARTBOARD FROM A FILE THIS SCAN DOES NOT OPEN, NAMED ROUTE BY ROUTE —
+  // the same hook `profile_zone_actions.test.mjs` grew, for the same zone and
+  // the same reason. The Practice canvas draws PR5 as a POINTER ("drawn in
+  // full as D4") and D4 lives in `design/canvases/backlog/Detail Layer Canvas
+  // II`, a file that also holds artboards for cohorts and for two partner
+  // buckets. Sweeping the directory would hand this profile artboards it does
+  // not own; naming the route cannot.
+  //
+  // The backlog canvas stays in `backlog/` — reading it for intent is not
+  // promoting it.
+  for (const [zone, file] of profile.alsoZones || []) {
+    const chips = viewChipsFor(read(file), zone);
+    assert.ok(chips.length, `${file} draws no view chips for ${zone}`);
+    out[zone] = chips;
+  }
   return out;
+}
+
+/**
+ * One artboard's VIEW CHIPS, from the row that holds them.
+ *
+ * A THIRD SHAPE, scoped to a named zone rather than added to the two above.
+ * `Detail Layer Canvas II` builds its chips with `views([…])` inside the
+ * canvas's own data block — shape C's mechanism — but reaches them through a
+ * per-artboard key (`d4Views`) rather than through a `boards` array, so
+ * neither existing reader finds them.
+ *
+ * Read from the data block by key, because that is where the strings are: the
+ * markup only loops over them. The key is derived from the artboard's id in
+ * the crumb's own file (`d4` → `d4Views`), so a renamed artboard fails here
+ * rather than silently contributing nothing.
+ */
+function viewChipsFor(src, zone) {
+  const slug = (x) => x.trim().toLowerCase().replace(/\s+/g, '-');
+  // Find the artboard id whose sub-label names this zone: `<a class="ab-id"
+  // href="#d4">D4</a>` … `<span class="ab-sub">emerald · /practice/earnings`.
+  const re = /href="#(\w+)">[^<]*<\/a>[\s\S]{0,400}?class="ab-sub">[^<]*?\/([a-z0-9-]+\/[a-z0-9-]+)/g;
+  for (const m of src.matchAll(re)) {
+    if (slug(m[2]) !== zone) continue;
+    const key = `${m[1]}Views`;
+    const at = src.indexOf(`${key}: views([`);
+    if (at < 0) continue;
+    const block = src.slice(at, src.indexOf(']', at));
+    return [...block.matchAll(/'([^']+)'/g)].map((x) => x[1]);
+  }
+  return [];
 }
 
 /**

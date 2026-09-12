@@ -153,6 +153,16 @@ export const ADVISOR_ZONE_ACTIONS = {
     { label: 'Block a date range', kind: 'handler', handler: 'blockRange' },
     { label: 'Export to calendar', kind: 'handler', handler: 'exportCalendar' },
   ],
+  // D4's two ops. NEITHER is `kind: 'export'`: the builder's export kind emits
+  // the rows a table is showing through `exportView`, and both of these are
+  // shaped differently — the first writes a per-client ledger with a total
+  // row, and the second is a different span entirely (a tax YEAR, not the
+  // reader's chosen window) fetched from its own endpoint so it cannot be
+  // derived from what happens to be on screen.
+  'practice/earnings': [
+    { label: 'Export CSV', kind: 'handler', handler: 'exportCsv' },
+    { label: 'Download 1099 summary', kind: 'handler', handler: 'taxSummary' },
+  ],
 
   // ── Network ──────────────────────────────────────────────────────────────
   'network/relationships': [

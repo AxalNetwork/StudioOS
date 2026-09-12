@@ -3293,6 +3293,24 @@ export const api = {
   getMyAdvisorTaxSummary: (year) =>
     request(`/advisors/me/tax-summary${year ? `?year=${encodeURIComponent(year)}` : ''}`),
 
+  // Migration 242 — the advisor's own note about one period, which is what
+  // D4's AI band needs for Accept to file anything. The key is a CALENDAR
+  // LABEL ('2026-Q3', '2026', 'all'), never a date range: two notes that
+  // overlapped on the same quarter could not both be the note for it.
+  //
+  // GET answers 200 with `note: null` when none exists — not writing one is
+  // the ordinary case, and a 404 would make the card treat it as a failure.
+  // DELETE is idempotent for the same reason: Discard must not fail on a
+  // second click.
+  getMyAdvisorPeriodNote: (key) =>
+    request(`/advisors/me/period-notes/${encodeURIComponent(key)}`),
+  saveMyAdvisorPeriodNote: (key, data) =>
+    request(`/advisors/me/period-notes/${encodeURIComponent(key)}`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  deleteMyAdvisorPeriodNote: (key) =>
+    request(`/advisors/me/period-notes/${encodeURIComponent(key)}`, { method: 'DELETE' }),
+
   // Migration 238 — the contract behind the sessions, and whether it renewed.
   //
   // FOUR VERBS AND NOT ONE PATCH, and the split is the worker's, not a

@@ -122,6 +122,15 @@ function freshDb() {
   db.exec(`ALTER TABLE advisor_bookings ADD COLUMN amount_cents INTEGER;`);
   db.exec(`ALTER TABLE advisor_bookings ADD COLUMN billing_state TEXT NOT NULL DEFAULT 'unpriced';`);
   db.exec(migration('241_advisor_money_model'));
+  // 242 — the period note D4's AI band files on Accept. Same fixture,
+  // because the note is keyed to the same windows the ledger answers for
+  // and a test that could not read one could not check the other.
+  db.exec(migration('242_advisor_quarter_notes'));
+  db.exec(`CREATE TABLE IF NOT EXISTS advisor_engagements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
+    advisor_id INTEGER NOT NULL, founder_user_id INTEGER, client_name TEXT NOT NULL,
+    lane TEXT NOT NULL DEFAULT 'signed', shape TEXT NOT NULL DEFAULT 'retainer',
+    amount_cents INTEGER);`);
 
   const u = db.prepare('INSERT INTO users (id, role, advisor_id, name, email) VALUES (?,?,?,?,?)');
   u.run(ADVISOR_USER, 'advisor', 1, 'Ada', 'ada@example.com');
@@ -639,4 +648,156 @@ test('migration 241 keeps the state vocabulary the payout ledger needs', () => {
   for (const s of ['pending', 'verified', 'blocked', 'scheduled', 'paid', 'failed', 'reversed']) {
     assert.ok(all.includes(`'${s}'`), `241 no longer admits the state '${s}'`);
   }
+});
+
+// ── 242 · the period note ──────────────────────────────────────────────────
+
+test('a period nobody has written about answers 200 with no note', async () => {
+  const e = env(freshDb());
+  const r = await call(e, 'GET', '/me/period-notes/2026-Q3', ada);
+  // NOT A 404. Not having written one is the ordinary case and the card
+  // renders it; a 404 would make the page treat a normal state as a failure.
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body, { period_key: '2026-Q3', note: null });
+});
+
+test('only the four shapes of period key are storable', async () => {
+  const e = env(freshDb());
+  for (const bad of ['2026-Q5', 'Q3-2026', '26-Q3', 'everything', '2026-q3', '../etc', '']) {
+    const g = await call(e, 'GET', `/me/period-notes/${encodeURIComponent(bad)}`, ada);
+    assert.ok(g.status === 400 || g.status === 404, `GET ${JSON.stringify(bad)} → ${g.status}`);
+    const w = await call(e, 'PUT', `/me/period-notes/${encodeURIComponent(bad)}`, ada, { body: 'x' });
+    assert.ok(w.status === 400 || w.status === 404, `PUT ${JSON.stringify(bad)} → ${w.status}`);
+  }
+  // And the four that ARE keys, so the validator is not simply strict.
+  for (const good of ['2026-Q1', '2026-Q4', '2026', 'all']) {
+    const w = await call(e, 'PUT', `/me/period-notes/${good}`, ada, { body: 'a real note' });
+    assert.equal(w.status, 200, `PUT ${good} → ${w.status}`);
+  }
+});
+
+test('a note is one per period and the second write replaces the first', async () => {
+  const db = freshDb();
+  const e = env(db);
+  await call(e, 'PUT', '/me/period-notes/2026-Q3', ada, { body: 'first', source: 'ai' });
+  const second = await call(e, 'PUT', '/me/period-notes/2026-Q3', ada, { body: 'second', source: 'edited' });
+  assert.equal(second.body.note.body, 'second');
+  assert.equal(second.body.note.source, 'edited');
+  const rows = db.prepare('SELECT COUNT(*) n FROM advisor_period_notes').get() as any;
+  assert.equal(rows.n, 1, 'the unique index is what makes this one note, not a pile');
+});
+
+test('the figures a note was written against are stored with it', async () => {
+  // A narrative reads "gross is $18,450"; if a session is priced afterwards
+  // the table moves and the sentence does not. Without the stamp the page can
+  // only show two numbers and no reason.
+  const e = env(freshDb());
+  const w = await call(e, 'PUT', '/me/period-notes/2026-Q3', ada, {
+    body: 'Gross is up on Q2.', source: 'ai',
+    figures: { gross_cents: 18_450_00, cut_cents: 2_767_50, net_cents: 15_682_50 },
+  });
+  assert.equal(w.status, 200, JSON.stringify(w.body));
+  assert.equal(w.body.note.figures.gross_cents, 18_450_00);
+  const g = await call(e, 'GET', '/me/period-notes/2026-Q3', ada);
+  assert.equal(g.body.note.figures.net_cents, 15_682_50, 'and it survives the round trip');
+});
+
+test('an empty note is refused BY THE ROUTE, not by the column', async () => {
+  // THE STATUS ALONE CANNOT TELL THE TWO APART, and a mutation proved it:
+  // deleting the route's own check left this green, because `body TEXT NOT
+  // NULL` then rejects the insert and `mapError` maps a constraint failure to
+  // the same 400. The test was reading the DATABASE's refusal and crediting
+  // the route. PR4a's audience check had the identical fault, where SQLite's
+  // CHECK error text contained the word the assertion matched.
+  //
+  // So: the route's own phrasing, which the database never produces, and no
+  // row written either way.
+  const db = freshDb();
+  const e = env(db);
+  for (const body of ['', '   ', null, undefined]) {
+    const w = await call(e, 'PUT', '/me/period-notes/2026-Q3', ada, { body });
+    assert.equal(w.status, 400, `body ${JSON.stringify(body)} was accepted`);
+    assert.match(String(w.body?.detail || ''), /A note needs some text/,
+      `body ${JSON.stringify(body)} was refused by the column, not by the route`);
+  }
+  const n = db.prepare('SELECT COUNT(*) n FROM advisor_period_notes').get() as any;
+  assert.equal(n.n, 0, 'nothing was written');
+});
+
+test('discarding is idempotent, so a second click is not an error', async () => {
+  const e = env(freshDb());
+  await call(e, 'PUT', '/me/period-notes/2026-Q3', ada, { body: 'a note' });
+  const first = await call(e, 'DELETE', '/me/period-notes/2026-Q3', ada);
+  assert.equal(first.status, 200);
+  assert.equal(first.body.note, null);
+  const second = await call(e, 'DELETE', '/me/period-notes/2026-Q3', ada);
+  assert.equal(second.status, 200, 'Discard must not fail on a note that is already gone');
+});
+
+test('a note is the advisor’s own and another advisor cannot read it', async () => {
+  const e = env(freshDb());
+  await call(e, 'PUT', '/me/period-notes/2026-Q3', ada, { body: 'my private read of the quarter' });
+  const theirs = await call(e, 'GET', '/me/period-notes/2026-Q3', grace);
+  assert.equal(theirs.status, 200);
+  assert.equal(theirs.body.note, null, "another advisor's note is not visible, and not an error either");
+});
+
+test('an unknown source falls back to advisor rather than crediting the model', async () => {
+  const e = env(freshDb());
+  const w = await call(e, 'PUT', '/me/period-notes/2026-Q3', ada, { body: 'x', source: 'magic' });
+  assert.equal(w.body.note.source, 'advisor',
+    'over-crediting a model is the failure that matters here, so the fallback is the human');
+});
+
+// ── The retainer column, from the engagement rather than the booking ───────
+
+test('a retainer comes from the engagement, and only from a retainer-shaped one', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const ins = db.prepare(
+    `INSERT INTO advisor_engagements (uid, advisor_id, founder_user_id, client_name, lane, shape, amount_cents)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`);
+  ins.run('e1', 1, CLIENT_A, 'Meridian Labs', 'signed', 'retainer', 13_500_00);
+  ins.run('e2', 1, CLIENT_B, 'Halverton', 'signed', 'sprint', 9_000_00);
+  ins.run('e3', 1, null, 'Verwood', 'signed', 'equity', null);
+
+  const r = await call(e, 'GET', '/me/ledger', ada);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const by = Object.fromEntries(r.body.clients.map((c: any) => [c.client_name, c]));
+  assert.equal(by['Meridian Labs'].retainer_cents, 13_500_00);
+  // A SPRINT'S AMOUNT IS NOT A RETAINER. Putting it in a column headed
+  // "Retainer" would mislabel it, so the column is absent rather than wrong.
+  assert.equal(by.Halverton.retainer_cents, null);
+  assert.equal(by.Halverton.engagement_shape, 'sprint');
+  // An equity engagement has no cents at all, which 238 calls the ordinary
+  // case — and it still gets a ROW, because a client who bills no cash is
+  // exactly the one a cash table would otherwise hide.
+  assert.equal(by.Verwood.retainer_cents, null);
+  assert.equal(by.Verwood.engagement_shape, 'equity');
+  assert.equal(r.body.equity_clients, 1);
+});
+
+test('a client with a contract and no priced session still appears', async () => {
+  const db = freshDb();
+  const e = env(db);
+  db.prepare(
+    `INSERT INTO advisor_engagements (uid, advisor_id, founder_user_id, client_name, lane, shape, amount_cents)
+     VALUES ('e1', 1, ?, 'Meridian Labs', 'signed', 'retainer', 900000)`).run(CLIENT_A);
+  const r = await call(e, 'GET', '/me/ledger', ada);
+  assert.equal(r.body.clients.length, 1, 'an INNER-shaped join would have dropped this row');
+  assert.equal(r.body.clients[0].sessions, 0);
+  assert.equal(r.body.clients[0].retainer_cents, 900000);
+  // And it does not invent session money for them.
+  assert.equal(r.body.totals.gross_cents, 0);
+});
+
+test('a drafting engagement is not a client yet', async () => {
+  const db = freshDb();
+  const e = env(db);
+  db.prepare(
+    `INSERT INTO advisor_engagements (uid, advisor_id, founder_user_id, client_name, lane, shape, amount_cents)
+     VALUES ('e1', 1, ?, 'Nobody', 'drafting', 'retainer', 900000)`).run(CLIENT_A);
+  const r = await call(e, 'GET', '/me/ledger', ada);
+  assert.equal(r.body.clients.length, 0,
+    'a contract nobody has sent is not revenue and not a row');
 });

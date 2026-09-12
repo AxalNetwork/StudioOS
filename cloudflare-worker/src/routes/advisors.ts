@@ -1463,6 +1463,7 @@ advisors.get('/me/earnings', async (c) => {
 function clientLineDto(r: {
   client_name: string | null; client_user_id: number | null;
   sessions: number; gross_cents: number; cut_cents: number; unpriced: number;
+  retainer_cents?: number | null; engagement_shape?: string | null;
 }): any {
   return {
     client_user_id: r.client_user_id,
@@ -1478,6 +1479,17 @@ function clientLineDto(r: {
     // sessions are mostly unpriced has a row that understates them and the
     // reader needs to see which one that is.
     unpriced_sessions: r.unpriced,
+    // D4's Retainer column. NOT from `advisor_bookings` — migration 238's
+    // header says so in as many words: "The reader is PR5/Earnings, whose
+    // per-client table carries a `retainer` figure … That figure cannot come
+    // from `advisor_bookings.amount_cents` … the cycle amount has to live
+    // here or nowhere." So it is the engagement's own `amount_cents`, and
+    // NULL means "no retainer recorded", never zero — an equity engagement is
+    // the ordinary case of a row with no cents.
+    retainer_cents: r.retainer_cents ?? null,
+    // Which of 238's four shapes this client bills under, so the table can
+    // say why a column is empty rather than leaving a gap.
+    engagement_shape: r.engagement_shape ?? null,
   };
 }
 
@@ -1531,17 +1543,42 @@ advisors.get('/me/ledger', async (c) => {
     // recorded before 241 has to be DERIVED from its stored rate (or the
     // current one) rather than summed from a NULL column — and a SQL SUM over
     // NULLs would silently report those lines as free.
+    // THE RETAINER COLUMN COMES FROM THE ENGAGEMENT, NOT THE BOOKING — 238's
+    // header is explicit that it "cannot come from `advisor_bookings.
+    // amount_cents` … the cycle amount has to live here or nowhere". Read as
+    // its own query rather than joined onto the booking rows, because a
+    // client with a retainer and no sessions in this window still belongs in
+    // the table, and an INNER-shaped join would drop exactly that row.
+    //
+    // Tolerated, not required: an advisor whose engagement table cannot be
+    // read still gets their session ledger, with the retainer column reading
+    // as absent rather than the page failing.
+    let engagements: Array<{
+      founder_user_id: number | null; client_name: string | null;
+      shape: string; amount_cents: number | null;
+    }> = [];
+    try {
+      const er = await c.env.DB.prepare(
+        `SELECT founder_user_id, client_name, shape, amount_cents
+           FROM advisor_engagements WHERE advisor_id = ? AND lane != 'drafting' LIMIT 500`
+      ).bind(m.id).all<any>();
+      engagements = er.results || [];
+    } catch { engagements = []; }
+
     const byClient = new Map<string, {
       client_name: string | null; client_user_id: number | null;
       sessions: number; gross_cents: number; cut_cents: number; unpriced: number;
+      retainer_cents: number | null; engagement_shape: string | null;
     }>();
+    const blank = (name: string | null, id: number | null) => ({
+      client_name: name, client_user_id: id,
+      sessions: 0, gross_cents: 0, cut_cents: 0, unpriced: 0,
+      retainer_cents: null as number | null, engagement_shape: null as string | null,
+    });
     for (const line of lines) {
       const key = line.client_user_id == null ? 'none' : String(line.client_user_id);
       if (!byClient.has(key)) {
-        byClient.set(key, {
-          client_name: line.client_name ?? null, client_user_id: line.client_user_id ?? null,
-          sessions: 0, gross_cents: 0, cut_cents: 0, unpriced: 0,
-        });
+        byClient.set(key, blank(line.client_name ?? null, line.client_user_id ?? null));
       }
       const g = byClient.get(key)!;
       g.sessions += 1;
@@ -1552,6 +1589,32 @@ advisors.get('/me/ledger', async (c) => {
         : (cutCents(line.amount_cents, bps) ?? 0);
       g.gross_cents += Number(line.amount_cents);
       g.cut_cents += cut;
+    }
+
+    // Fold the engagements in, creating a row for a client who has a contract
+    // and no priced session in this window — otherwise a retainer-only client
+    // is invisible on the page that is supposed to show what the practice
+    // earns. An engagement with no user id is keyed by name, which is 238's
+    // own rule for a client who is not on the platform.
+    let equityClients = 0;
+    for (const e of engagements) {
+      if (e.shape === 'equity') equityClients += 1;
+      const key = e.founder_user_id == null
+        ? `name:${String(e.client_name || '').toLowerCase()}`
+        : String(e.founder_user_id);
+      if (!byClient.has(key)) {
+        byClient.set(key, blank(e.client_name ?? null, e.founder_user_id ?? null));
+      }
+      const g = byClient.get(key)!;
+      if (!g.client_name) g.client_name = e.client_name ?? null;
+      g.engagement_shape = g.engagement_shape || e.shape;
+      // ONLY A RETAINER HAS A RETAINER FIGURE. A sprint's or a per-call
+      // engagement's `amount_cents` is a different thing, and putting it in a
+      // column headed "Retainer" would mislabel it; an equity engagement has
+      // no cents at all, which is the ordinary case 238 names.
+      if (e.shape === 'retainer' && e.amount_cents != null) {
+        g.retainer_cents = (g.retainer_cents ?? 0) + Number(e.amount_cents);
+      }
     }
 
     const totals = totalLines(
@@ -1586,8 +1649,103 @@ advisors.get('/me/ledger', async (c) => {
         ? { client_name: top.client_name, pct: Math.round((top.gross_cents / totals.gross_cents) * 100) }
         : null,
       take_rate: { bps: rate.bps, source: rate.source, updated_at: rate.updated_at },
+      // D4's cut note says a client billing in equity is absent from a cash
+      // table. Counted rather than asserted: "someone is missing from this
+      // table" is a claim about the reader's own book, and the page says it
+      // only when there is one.
+      equity_clients: equityClients,
       settlement: settlementMode(c.env),
     });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * 242 — the advisor's own note about one period.
+ *
+ * THE FOUR KEYS ARE THE FOUR CHIPS, and nothing else is storable. A key the
+ * page cannot ask for is a row nobody will ever read back, and validating
+ * here rather than trusting the client is what keeps the table's one-note-
+ * per-period index meaningful.
+ *
+ * `all` and a year are deliberately in the set even though D4 draws quarters:
+ * the chip row offers "Year to date" and "All time", and a note written under
+ * one of those is as real as one written under a quarter.
+ */
+const PERIOD_KEY = /^(\d{4}-Q[1-4]|\d{4}|all)$/;
+
+advisors.get('/me/period-notes/:key', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const key = String(c.req.param('key') || '');
+    if (!PERIOD_KEY.test(key)) return c.json({ detail: 'period must be YYYY-Qn, YYYY or all' }, 400);
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM advisor_period_notes WHERE advisor_id = ? AND period_key = ?'
+    ).bind(m.id, key).first<any>();
+    // ABSENT IS A 200 WITH `note: null`, not a 404. "You have not written one"
+    // is the ordinary case and the card renders it; a 404 would make the page
+    // treat a normal state as a failure.
+    return c.json({
+      period_key: key,
+      note: row ? {
+        uid: row.uid, body: row.body, source: row.source,
+        figures: jload<any>(row.figures_json, null),
+        updated_at: row.updated_at,
+      } : null,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.put('/me/period-notes/:key', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const key = String(c.req.param('key') || '');
+    if (!PERIOD_KEY.test(key)) return c.json({ detail: 'period must be YYYY-Qn, YYYY or all' }, 400);
+    const body = await c.req.json().catch(() => ({} as any));
+    const text = trimOrNull(body.body, 8000);
+    if (!text) return c.json({ detail: 'A note needs some text. Use DELETE to remove one.' }, 400);
+    const source = ['advisor', 'ai', 'edited'].includes(String(body.source))
+      ? String(body.source) : 'advisor';
+    // THE FIGURES ARE STAMPED WITH THE NOTE, not re-read later. A narrative
+    // says "gross is $18,450"; if a session is priced tomorrow the table moves
+    // and the sentence does not. Storing what was true when it was written is
+    // what lets the page say so instead of showing two numbers and no reason.
+    const figures = body.figures && typeof body.figures === 'object'
+      ? JSON.stringify(body.figures).slice(0, 4000) : null;
+    const now = nowIso();
+    await c.env.DB.prepare(
+      `INSERT INTO advisor_period_notes (uid, advisor_id, period_key, body, source, figures_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(advisor_id, period_key) DO UPDATE SET
+         body = excluded.body, source = excluded.source,
+         figures_json = excluded.figures_json, updated_at = excluded.updated_at`
+    ).bind(newUid(), m.id, key, text, source, figures, now, now).run();
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM advisor_period_notes WHERE advisor_id = ? AND period_key = ?'
+    ).bind(m.id, key).first<any>();
+    return c.json({
+      period_key: key,
+      note: {
+        uid: row.uid, body: row.body, source: row.source,
+        figures: jload<any>(row.figures_json, null), updated_at: row.updated_at,
+      },
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.delete('/me/period-notes/:key', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const key = String(c.req.param('key') || '');
+    if (!PERIOD_KEY.test(key)) return c.json({ detail: 'period must be YYYY-Qn, YYYY or all' }, 400);
+    await c.env.DB.prepare(
+      'DELETE FROM advisor_period_notes WHERE advisor_id = ? AND period_key = ?'
+    ).bind(m.id, key).run();
+    // Idempotent: discarding a note that was never written is not an error,
+    // and answering 404 would make Discard fail on the ordinary second click.
+    return c.json({ period_key: key, note: null });
   } catch (e) { return mapError(c, e); }
 });
 
