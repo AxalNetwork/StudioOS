@@ -4510,3 +4510,118 @@ The claim is written before the notice goes out, so a failed send costs that
 person that one warning rather than repeating it nightly. The next threshold
 still fires. Rolling the claim back on failure is the tempting alternative
 and it is worse: it turns a flaky notifier into a nightly spammer.
+
+---
+
+## D78 — The magic-link fix is verified by a round trip or it is not verified; and a probe that never ran is red, not green
+
+**2026-09-12. D74 shipped a fix for a sign-in outage and nothing had confirmed
+it against production.** That is not a gap in the fix; it is a gap in what this
+repo can observe. `/login`'s magic link timed out at 30s, D74 moved the email
+send off the response path with `waitUntil`, and for the whole time the task sat
+open the only live evidence anyone had was `post-deploy-smoke.yml` — which
+probes `/api/health` and **stayed green straight through the original outage**,
+because `/api/health` is `RATE_LIMIT_EXEMPT` and touches none of the auth path.
+A green board is not evidence. It was not evidence then and it would not have
+become evidence by waiting.
+
+### Why timing alone was rejected
+
+The obvious probe is the cheap one: POST `/api/auth/magic/start`, assert it
+answers in under a second, done — it measures the reported symptom directly.
+It was rejected because **the fix changed what a fast answer means.**
+
+```ts
+const deliver = sendEmail(c.env, 'auth_magic_link', email, { name, magic_url: magicUrl })
+  .catch((e) => { console.error('[AUTH:magic-start] email send failed', e); });
+const ctx = (() => { try { return c.executionCtx; } catch { return null; } })();
+if (ctx?.waitUntil) ctx.waitUntil(deliver);
+else await deliver;
+```
+
+The token row is committed first and the mail becomes a separate errand with a
+`.catch` that logs and swallows. That removes the latency — and it creates a
+failure mode the *old* code could not have: **the endpoint can answer `202` in
+200ms while the mail silently never arrives.** Gmail credentials expire, the
+OAuth refresh token gets revoked, `waitUntil` gets dropped on an eviction, and
+`/magic/start` keeps answering in 200ms through all of it. A latency probe would
+go green on every one of those. It would not merely miss the regression; it
+would actively certify it.
+
+So the probe reads a real inbox, follows the real link, and asserts a real
+sign-in. `/magic/start` answering `202` is **necessary and nowhere near
+sufficient**, and the three findings are reported separately — `start_latency`,
+`mail_delivered`, `sign_in_completed` — because they fail for different reasons
+and a single pass/fail hides which. A fast endpoint must not be allowed to cover
+for mail that never came; that is the specific lie this design refuses to tell.
+
+A mailbox is unavoidable, not a convenience: `magic_link_tokens` stores
+`token_hash`, so the raw token exists **only in the email**. There is no back
+door for a probe to take.
+
+### Only exit 0 is green — "we never ran" is red too
+
+The probe exits **0** verified, **1** ran and failed, **2** not configured. The
+workflow distinguishes 1 from 2 in its annotation and its step summary, and
+**fails the job on both**.
+
+That last part is the decision, and the tempting alternative is to let exit 2
+pass with a warning: the four secrets do not exist yet, so a scheduled job goes
+red every four hours until somebody acts, and a permanently-red check is how
+people learn to ignore red. It is still wrong. A green tick for *"we did not
+run"* is the same lie as `/api/health` in a different costume — and this
+workflow exists for exactly one reason, so a green tick on it reads, to anyone
+glancing at the Actions tab, as "the magic link works". Crying wolf is a check
+going red for reasons unrelated to the thing it guards. This goes red for
+precisely the thing it guards: the login flow is unverified. The red is
+actionable, its summary names the four secrets, and it clears the moment they
+land.
+
+### The cadence is set by a rate limiter, not by taste
+
+`magic-start-email` allows **3 per 900s per address** (`routes/auth.ts`). A
+probe that trips its own limiter reports a broken sign-in when sign-in is fine
+— a false alarm on the one check whose whole value is being believed. The cron
+is `30 */4 * * *`: four-hourly, and on the half hour so it does not collide with
+the 6-hourly SPA smoke at `:00`.
+
+`frontend/test/magic_link_probe.test.mjs` does not take that on trust. It reads
+the limit off `auth.ts`, expands the cron itself, and asserts that
+`floor(window / gap) + 1 <= limit` — so changing either the schedule or the
+limiter fails the build rather than the probe. The same test reads
+`MAGIC_LINK_TTL_MIN` off `auth.ts` and the default mail budget off the probe,
+and asserts the budget sits inside the token's lifetime; comparing two literals
+there (`120_000 < 15 * 60_000`) would have been an assertion that can never
+fail, which is a thing this repo has now written twice and caught twice.
+
+### Why not in `post-deploy-smoke.yml`, and why not in `test:drift`
+
+Not the smoke: that job's own header says *"No secrets required"*, and folding
+this in hands every scheduled SPA check a mailbox credential it has no use for.
+Its cadence is deploy-shaped; this one's is limiter-shaped.
+
+Not `test:drift`: it reaches production and signs in. A check that cannot run
+inside the suite must never sit in the suite reporting success. Its pure helpers
+— token extraction, Gmail part flattening, staleness, the three verdicts, the
+redirect reading — are unit-tested and those tests *are* in the suite.
+
+### The stale-message trap
+
+A matching email from a previous run satisfies a naive inbox search forever, so
+the probe would keep passing for months after delivery broke — the same shape of
+failure as the `/api/health` smoke, arrived at by a different route. Every
+candidate message must carry an `internalDate` strictly **after** the instant
+this run called `/magic/start`. A message at the exact request instant predates
+the send and does not count.
+
+### What this decision does NOT claim
+
+**Task #168 is not closed by this commit.** The probe is not the deliverable; a
+green run of it is. Until `MAGIC_PROBE_EMAIL`, `GMAIL_CLIENT_ID`,
+`GMAIL_CLIENT_SECRET` and `GMAIL_REFRESH_TOKEN` exist as repository secrets, the
+job fails with NOT CONFIGURED and **the `/login` magic link remains unverified
+against production.** Those secrets require a dedicated test account on
+production — never a real person's address, because the probe signs in as it —
+and read access to its mailbox; a `+alias` of the sending Gmail account delivers
+to that same inbox, which is the cheapest way to satisfy it. Neither can be
+created from inside this repo.

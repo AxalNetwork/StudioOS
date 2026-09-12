@@ -28,6 +28,19 @@ represents a bug that reached production once:
 | `npm-audit-gate.mjs` | A critical advisory in a production dependency — and, separately, a registry that did not answer. `npm audit` exits 1 for both, so a 503 from the advisory endpoint went red exactly like a real CVE. The gate retries a transport failure, names the advisories on a real finding, and still fails when the database is unreachable rather than passing on a question it could not ask. |
 | `check-dark-mode.mjs` | A surface with no dark variant. |
 
+## The live probes
+
+These two reach **production over the network**, so neither is in
+`test:guards` or `test:drift`: a check that cannot run inside the suite must
+never sit in the suite reporting success. Each has its own scheduled
+workflow, and each has unit tests over its pure helpers that *are* in the
+suite.
+
+| File | What it proves |
+| --- | --- |
+| `check-spa-live.mjs` | Every SPA shell route on both hosts returns the rendered shell (200 + `<div id="root">` + a hashed `/assets/*.js`) with the static security headers `docs/_headers` sets. Run as `npm run deploy`'s `postdeploy` hook and 6-hourly by `.github/workflows/post-deploy-smoke.yml`. It probes `/api/health` and nothing more of the API — which is why it stayed green straight through the magic-link outage below. |
+| `check-magic-link-live.mjs` | A **real magic-link sign-in**, end to end: POST `/api/auth/magic/start`, read the link out of a real inbox, follow it, assert a session. Three verdicts reported separately, because D74 moved the email send to `waitUntil` and so `/magic/start` can answer `202` in 200ms while the mail never arrives — a fast endpoint is necessary and nowhere near sufficient. Needs a dedicated production test account and read access to its mailbox (`MAGIC_PROBE_EMAIL`, `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`); **exits 2 and verifies nothing without them, never 0**. Cannot run from an agent sandbox — that proxy answers `403 CONNECT` for `axal.vc` — so its home is `.github/workflows/magic-link-probe.yml`. Guarded by `frontend/test/magic_link_probe.test.mjs`; see `documentation/architecture/DECISIONS.md` D78. |
+
 ## The pull-request preview
 
 | File | What it does |

@@ -1,0 +1,135 @@
+name: magic-link round-trip probe
+
+# Task #168 — the /login magic link timed out at 30s. The fix (D74) moved the
+# email send off the response path with `waitUntil`, and nothing has ever
+# confirmed it against production: the agent sandbox's proxy answers
+# `403 CONNECT` for axal.vc, and a runner is not behind that proxy.
+#
+# WHY THIS IS NOT PART OF post-deploy-smoke.yml, which would have been the
+# obvious home:
+#
+#   1. That workflow says, in its own header, "No secrets required". This one
+#      needs three. Folding them in would hand every scheduled SPA check a
+#      mailbox credential it has no use for.
+#   2. Its cadence is deploy-shaped (every 6h). This one's cadence is set by a
+#      rate limiter: `magic-start-email` allows 3 per 900s per address
+#      (routes/auth.ts). A probe that trips its own limiter fails for a reason
+#      that has nothing to do with the fix.
+#
+# AND WHY IT IS NOT IN test:drift: it reaches production and signs in. A check
+# that cannot run inside the suite must never sit in the suite reporting
+# success. Its pure helpers are unit-tested in
+# frontend/test/magic_link_probe.test.mjs, which IS in the suite.
+#
+# What it proves, and the trap it avoids: /magic/start answering 202 quickly
+# proves nothing about delivery — that is precisely what `waitUntil` changed.
+# The probe reads a real inbox, requires the message to be NEWER than its own
+# request (a leftover from a previous run would otherwise let it pass for
+# months after delivery broke), follows the link, and asserts a real sign-in.
+#
+# Secrets it needs, none of which this repo can create for itself:
+#   MAGIC_PROBE_EMAIL     a DEDICATED test account on production — never a
+#                         real person's address; the probe signs in as it
+#   GMAIL_CLIENT_ID       OAuth client for the mailbox that RECEIVES the link
+#   GMAIL_CLIENT_SECRET
+#   GMAIL_REFRESH_TOKEN   gmail.readonly is enough. A `+alias` of the sending
+#                         account delivers to that same mailbox, which is the
+#                         cheapest way to satisfy this without a new inbox.
+#
+# Until they exist the job FAILS with NOT CONFIGURED and task #168 stays
+# unverified. It does not report success — reporting a pass it never earned is
+# the exact failure this task exists to correct, and is how the /api/health
+# smoke stayed green straight through the original outage. Only exit 0 is
+# green; see the report step for why "we never ran" is red too.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Every 4 hours, on the half hour so it does not collide with the
+    # 6-hourly SPA smoke at :00. Far inside the 3-per-900s per-address limit.
+    - cron: '30 */4 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: magic-link round trip
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: '22'
+
+      # `continue-on-error` lets the report step below run and re-decide, and
+      # nothing more — the step still shows its own colour, and the exit CODE
+      # is captured because 1 and 2 mean different things.
+      - name: Magic-link round trip against production
+        id: probe
+        continue-on-error: true
+        env:
+          MAGIC_PROBE_EMAIL: ${{ secrets.MAGIC_PROBE_EMAIL }}
+          GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
+          GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+          GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
+        run: |
+          set +e
+          node scripts/check-magic-link-live.mjs
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit $code
+
+      # ONLY exit 0 IS GREEN. The two failures are told apart in the
+      # annotation and the summary, but both fail the job, and that is the
+      # whole point of the task: `/api/health` stayed green straight through
+      # the original outage, and a green tick for "we never ran" is the same
+      # lie in a different costume. NOT CONFIGURED is an actionable red with a
+      # four-secret fix, and it goes away the moment the secrets land —
+      # whereas a warning on a passing check is invisible and #168 would sit
+      # unanswered behind it forever.
+      - name: Report the outcome
+        env:
+          PROBE_CODE: ${{ steps.probe.outputs.code }}
+        run: |
+          case "$PROBE_CODE" in
+            0)
+              echo "::notice title=Magic link verified::A real sign-in completed end to end against production."
+              echo '✅ A real magic-link sign-in completed end to end against production. Task #168 is verified by this run.' >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            2)
+              echo "::error title=Magic-link probe NOT CONFIGURED::The probe never ran, so nothing is verified. Set MAGIC_PROBE_EMAIL, GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET and GMAIL_REFRESH_TOKEN as repository secrets."
+              {
+                echo '### Magic-link probe: NOT CONFIGURED'
+                echo
+                echo 'It did not run, so the `/login` magic link is **unverified** — this is not a failure of the sign-in flow.'
+                echo
+                echo 'Add these four repository secrets (Settings → Secrets and variables → Actions):'
+                echo
+                echo '| Secret | What it is |'
+                echo '|---|---|'
+                echo '| `MAGIC_PROBE_EMAIL` | a **dedicated** test account on production — the probe signs in as it, so never a real person |'
+                echo '| `GMAIL_CLIENT_ID` | OAuth client for the mailbox that receives the link |'
+                echo '| `GMAIL_CLIENT_SECRET` | its secret |'
+                echo '| `GMAIL_REFRESH_TOKEN` | `gmail.readonly` is enough. A `+alias` of the sending account delivers to that same mailbox |'
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+              ;;
+            *)
+              echo "::error title=Magic-link sign-in BROKEN::The round trip failed against production. The step log names which of the three verdicts failed."
+              {
+                echo '### Magic-link probe: FAILED'
+                echo
+                echo 'The round trip ran and did not complete. The step log lists the three verdicts separately —'
+                echo '`start_latency`, `mail_delivered`, `sign_in_completed` — and which one failed says what broke:'
+                echo
+                echo '- `start_latency` alone — the endpoint is slow again; the original #168 symptom.'
+                echo '- `mail_delivered` with `start_latency` passing — **the `waitUntil` failure mode**: the endpoint'
+                echo '  answers fast and the mail never arrives. Check the Gmail credentials on the worker.'
+                echo '- `sign_in_completed` alone — the link arrived but `/magic/verify` refused it; the log names the'
+                echo '  `magic_error` code.'
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+              ;;
+          esac
