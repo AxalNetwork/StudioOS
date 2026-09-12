@@ -206,3 +206,98 @@ export function monthName(label) {
  * held steady or was never recorded before.
  */
 export const NO_HISTORY_NOTE = 'First month on record — no comparison yet.';
+
+// ---------------------------------------------------------------------------
+// Envelope history — the timeline the canvas draws under an expanded agreement.
+// ---------------------------------------------------------------------------
+
+/**
+ * The worker's action names, as words a reader recognises.
+ *
+ * MIRRORS `ENVELOPE_EVENT_LABELS` in `cloudflare-worker/src/services/trust.ts`
+ * — the same no-shared-module situation as the score, and
+ * `cloudflare-worker/test/trust_envelope_history.test.ts` imports both and
+ * compares them rather than trusting that two lists were edited together.
+ *
+ * An unrecognised action is humanised, not dropped: the audit trail is
+ * append-only and a future writer should surface here the first time it fires,
+ * rather than leaving a gap in a timeline that claims to be complete.
+ */
+export const ENVELOPE_EVENT_LABELS = {
+  envelope_created: 'Sent',
+  envelope_viewed: 'Viewed',
+  envelope_signed: 'Signed',
+  envelope_rejected: 'Declined',
+  envelope_completed: 'Completed',
+  document_downloaded: 'Downloaded',
+  document_downloaded_by_recipient: 'Downloaded',
+  document_forwarded: 'Forwarded',
+};
+
+export function envelopeEventLabel(action) {
+  const key = String(action || '').trim();
+  if (!key) return 'Event';
+  if (ENVELOPE_EVENT_LABELS[key]) return ENVELOPE_EVENT_LABELS[key];
+  const words = key.replace(/_/g, ' ').trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/**
+ * The tone of a timeline dot. Only two events change it: a decline is the one
+ * outcome a reader must not skim past, and a completion is the one that ends
+ * the story. Everything else is a step.
+ */
+export function envelopeEventTone(action) {
+  const key = String(action || '').trim();
+  if (key === 'envelope_rejected') return 'bad';
+  if (key === 'envelope_completed' || key === 'envelope_signed') return 'ok';
+  return 'step';
+}
+
+/**
+ * Collapse consecutive repeats of the same action into one row.
+ *
+ * A three-party envelope logs `envelope_viewed` once per party, and three
+ * identical "Viewed" rows with no name beside them tell a reader nothing —
+ * the worker deliberately does not send `signer_email`, so the rows cannot be
+ * distinguished on the page. Collapsed rows keep the FIRST timestamp (when
+ * the thing first happened) and carry a count, so nothing is hidden: three
+ * views read "Viewed ×3", not "Viewed".
+ *
+ * Only CONSECUTIVE repeats collapse. Sent → Viewed → Signed → Viewed keeps
+ * both views, because the second one happened after a signature and that
+ * ordering is the point of a timeline.
+ */
+export function collapseEnvelopeHistory(events = []) {
+  const out = [];
+  for (const e of events) {
+    const action = String(e?.action || '').trim();
+    const at = e?.at ? String(e.at) : '';
+    if (!action || !at) continue;
+    const last = out[out.length - 1];
+    if (last && last.action === action) { last.count += 1; continue; }
+    out.push({ action, at, count: 1 });
+  }
+  return out;
+}
+
+/**
+ * '2026-03-14T15:05:00Z' → '14 Mar 2026, 15:05'.
+ *
+ * A real instant this time, not a calendar label — an audit event happened at
+ * a moment, so rendering it in the reader's own zone is correct here in a way
+ * it is not for `monthName`. An unparseable value returns null and the row
+ * renders without a time rather than showing "Invalid Date".
+ */
+export function envelopeEventWhen(iso) {
+  const t = Date.parse(String(iso || ''));
+  if (!Number.isFinite(t)) return null;
+  return new Date(t).toLocaleString(undefined, {
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
+/** What the expanded panel says when the envelope has no recorded events. */
+export const NO_ENVELOPE_HISTORY_NOTE =
+  'No events recorded for this envelope.';

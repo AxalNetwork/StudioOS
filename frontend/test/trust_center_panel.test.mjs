@@ -28,6 +28,8 @@ import {
   bandOf, verdictFor, waitingOn, outstandingCounts,
   scoreLine, obligationSummary, deltaNote, monthName,
   NO_HISTORY_NOTE, SCORE_BANDS,
+  collapseEnvelopeHistory, envelopeEventLabel, envelopeEventTone,
+  envelopeEventWhen, NO_ENVELOPE_HISTORY_NOTE,
 } from '../src/lib/trustCenter.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -290,4 +292,103 @@ test('a label monthName cannot read comes back unchanged, not as a wrong month',
   assert.equal(monthName(''), '');
   assert.equal(monthName(null), '');
   assert.equal(monthName('2026-09-04'), '2026-09-04');
+});
+
+// ---------------------------------------------------------------------------
+// Envelope history — the timeline under an expanded agreement
+
+test('the three steps the canvas draws are the three the signing flow writes', () => {
+  assert.equal(envelopeEventLabel('envelope_created'), 'Sent');
+  assert.equal(envelopeEventLabel('envelope_viewed'), 'Viewed');
+  assert.equal(envelopeEventLabel('envelope_signed'), 'Signed');
+  assert.equal(envelopeEventLabel('envelope_rejected'), 'Declined');
+  assert.equal(envelopeEventLabel('envelope_completed'), 'Completed');
+});
+
+test('an action nobody has a word for is humanised, not dropped', () => {
+  // The audit trail is append-only and a future writer must surface here the
+  // first time it fires. A blank row, or a missing one, would leave a gap in
+  // a timeline that presents itself as complete.
+  assert.equal(envelopeEventLabel('envelope_supervised_by_notary'), 'Envelope supervised by notary');
+  assert.equal(envelopeEventLabel('weird'), 'Weird');
+  assert.equal(envelopeEventLabel(''), 'Event');
+  assert.equal(envelopeEventLabel(null), 'Event');
+});
+
+test('only a decline and an ending change the dot', () => {
+  assert.equal(envelopeEventTone('envelope_rejected'), 'bad');
+  assert.equal(envelopeEventTone('envelope_completed'), 'ok');
+  assert.equal(envelopeEventTone('envelope_signed'), 'ok');
+  assert.equal(envelopeEventTone('envelope_created'), 'step');
+  assert.equal(envelopeEventTone('envelope_viewed'), 'step');
+  assert.equal(envelopeEventTone('anything_else'), 'step');
+});
+
+test('consecutive repeats collapse WITH a count, so nothing is hidden', () => {
+  // A three-party envelope logs envelope_viewed once per party, and the
+  // worker deliberately does not send signer_email — so three identical
+  // "Viewed" rows cannot be told apart on the page. Collapsed, they say ×3.
+  const rows = collapseEnvelopeHistory([
+    { action: 'envelope_created', at: '2026-03-10T09:00:00Z' },
+    { action: 'envelope_viewed', at: '2026-03-11T08:22:00Z' },
+    { action: 'envelope_viewed', at: '2026-03-11T09:40:00Z' },
+    { action: 'envelope_viewed', at: '2026-03-11T11:02:00Z' },
+    { action: 'envelope_signed', at: '2026-03-14T15:05:00Z' },
+  ]);
+  assert.deepEqual(rows.map(r => [r.action, r.count]), [
+    ['envelope_created', 1], ['envelope_viewed', 3], ['envelope_signed', 1],
+  ]);
+  // The FIRST timestamp is kept — when the thing first happened.
+  assert.equal(rows[1].at, '2026-03-11T08:22:00Z');
+});
+
+test('only CONSECUTIVE repeats collapse — a later recurrence is its own row', () => {
+  // Viewed → Signed → Viewed is three events, not two: the second view came
+  // after a signature, and that ordering is the whole point of a timeline.
+  const rows = collapseEnvelopeHistory([
+    { action: 'envelope_viewed', at: '2026-03-11T08:00:00Z' },
+    { action: 'envelope_signed', at: '2026-03-12T08:00:00Z' },
+    { action: 'envelope_viewed', at: '2026-03-13T08:00:00Z' },
+  ]);
+  assert.deepEqual(rows.map(r => r.action),
+    ['envelope_viewed', 'envelope_signed', 'envelope_viewed']);
+  assert.deepEqual(rows.map(r => r.count), [1, 1, 1]);
+});
+
+test('an event missing its action or its instant is not rendered as a blank step', () => {
+  const rows = collapseEnvelopeHistory([
+    { action: 'envelope_created', at: '2026-03-10T09:00:00Z' },
+    { action: '', at: '2026-03-11T09:00:00Z' },
+    { action: 'envelope_signed', at: '' },
+    null,
+    undefined,
+    {},
+  ]);
+  assert.deepEqual(rows.map(r => r.action), ['envelope_created']);
+  assert.deepEqual(collapseEnvelopeHistory(), []);
+  assert.deepEqual(collapseEnvelopeHistory([]), []);
+});
+
+test('an audit instant renders in the reader\'s own zone — unlike a calendar label', () => {
+  // The opposite call from `monthName`, and deliberately so: an audit event
+  // happened at a MOMENT, so showing it in local time is correct. This file
+  // runs in America/Los_Angeles, so 15:05Z is 08:05 local.
+  const when = envelopeEventWhen('2026-03-14T15:05:00Z');
+  assert.match(when, /Mar/);
+  assert.match(when, /2026/);
+  assert.match(when, /08:05/,
+    'the timestamp is not being rendered in the reader\'s zone');
+});
+
+test('an unreadable instant yields no time rather than "Invalid Date"', () => {
+  for (const junk of ['', null, undefined, 'nope', '0000-00-00']) {
+    assert.equal(envelopeEventWhen(junk), null, `${String(junk)} produced a rendered date`);
+  }
+});
+
+test('an envelope with no events says so', () => {
+  assert.ok(NO_ENVELOPE_HISTORY_NOTE.length > 10);
+  // It must not read as an assertion that the envelope was never touched —
+  // a legacy row simply has nothing recorded.
+  assert.match(NO_ENVELOPE_HISTORY_NOTE, /recorded/i);
 });

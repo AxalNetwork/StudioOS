@@ -643,3 +643,110 @@ export async function recordAndCompareScore(
     return { previousScore: null, previousMonth: null };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Envelope history — Trust Center v2's per-agreement timeline.
+// ---------------------------------------------------------------------------
+
+/**
+ * One row of the timeline the canvas draws when an agreement is expanded.
+ * Deliberately narrow: a label and an instant, nothing else.
+ */
+export interface EnvelopeEvent { action: string; at: string }
+
+/**
+ * The audit actions `routes/esign.ts` actually appends, and nothing else.
+ *
+ * The canvas draws Sent / Viewed / Signed, and all three are real here —
+ * `envelope_created`, `envelope_viewed` and `envelope_signed` are written by
+ * `appendAudit` on the live signing flow. Nothing had to be invented, which
+ * is why this is a timeline and not a derivation from two timestamps.
+ *
+ * An action NOT on this list is still returned, humanised, for the same
+ * reason `obligationSource` shows an unknown provenance: a new writer should
+ * surface on the page rather than be silently dropped by a stale list.
+ */
+export const ENVELOPE_EVENT_LABELS: Record<string, string> = {
+  envelope_created: 'Sent',
+  envelope_viewed: 'Viewed',
+  envelope_signed: 'Signed',
+  envelope_rejected: 'Declined',
+  // Not an audit action — synthesised below from `esign_envelopes.completed_at`,
+  // which the last signature sets and nothing appends an event for.
+  envelope_completed: 'Completed',
+  document_downloaded: 'Downloaded',
+  document_downloaded_by_recipient: 'Downloaded',
+  document_forwarded: 'Forwarded',
+};
+
+/**
+ * The caller's own timeline for one envelope.
+ *
+ * AUTHORISATION, and the shape of what is NOT returned:
+ *
+ *   - The caller must be a recipient of the envelope. Matched on
+ *     `r.user_id` OR the lowercased email, because `recipient_user_id` is not
+ *     set on legacy rows — the same join `/agreements` uses to build the
+ *     pending list, so a row that appears there can always be expanded.
+ *   - A non-recipient gets `null`, which the route turns into a 404 rather
+ *     than a 403: the existing `/my_signing_url` handler already refuses to
+ *     confirm that an envelope exists, and this must not become the oracle
+ *     that one isn't.
+ *   - `esign_audit_events` carries `ip`, `ua`, `signer_email` and `meta`.
+ *     NONE of them leave the worker. A counterparty's IP address is not part
+ *     of what the canvas draws and not something this page has any reason to
+ *     disclose; the full trail stays available to admins through
+ *     `GET /api/legal/esign/:id`.
+ *
+ * Legacy rows fall back to the `audit_log` JSON column, which was the source
+ * of truth before `esign_audit_events` existed and is described in
+ * `routes/esign.ts` as "kept for backward compatibility but no longer written
+ * to". Without the fallback every envelope created before that switch would
+ * expand to an empty timeline and look as though nothing had happened to it.
+ */
+export async function envelopeHistory(
+  env: Env,
+  envelopeUuid: string,
+  caller: { id: number; email?: string | null },
+): Promise<EnvelopeEvent[] | null> {
+  const row: any = await env.DB.prepare(
+    `SELECT e.id, e.completed_at, e.audit_log
+       FROM esign_envelopes e
+       JOIN esign_recipients r ON r.envelope_id = e.id
+      WHERE e.envelope_uuid = ?
+        AND (r.user_id = ? OR LOWER(IFNULL(r.recipient_email,'')) = LOWER(?))
+      LIMIT 1`,
+  ).bind(envelopeUuid, caller.id, caller.email || '').first().catch(() => null);
+  if (!row) return null;
+
+  const events: EnvelopeEvent[] = [];
+  try {
+    const res: any = await env.DB.prepare(
+      `SELECT action, ts FROM esign_audit_events
+        WHERE envelope_id = ? ORDER BY ts ASC, id ASC LIMIT 200`,
+    ).bind(row.id).all();
+    for (const e of (res?.results || []) as any[]) {
+      if (e?.action && e?.ts) events.push({ action: String(e.action), at: String(e.ts) });
+    }
+  } catch { /* table absent on a stale D1 — fall through to the JSON column */ }
+
+  if (events.length === 0 && row.audit_log) {
+    try {
+      const legacy = JSON.parse(String(row.audit_log));
+      if (Array.isArray(legacy)) {
+        for (const e of legacy) {
+          if (e?.action && e?.ts) events.push({ action: String(e.action), at: String(e.ts) });
+        }
+      }
+    } catch { /* a malformed blob is no history, not a 500 */ }
+  }
+
+  // `completed_at` is set by the LAST signature and has no audit action of
+  // its own, so the timeline would otherwise end on "Signed" for an envelope
+  // that is finished. Appended rather than synthesised from the signatures:
+  // it is a stored column, not a guess about what the events imply.
+  if (row.completed_at) events.push({ action: 'envelope_completed', at: String(row.completed_at) });
+
+  events.sort((a, b) => (Date.parse(a.at) || 0) - (Date.parse(b.at) || 0));
+  return events;
+}

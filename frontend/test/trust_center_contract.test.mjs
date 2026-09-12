@@ -256,8 +256,17 @@ test('expiry is rendered as a state, not a bare date', () => {
 });
 
 test('the counts describe the list, they do not re-score it', () => {
-  const fn = PAGE.slice(PAGE.indexOf('function ToneCounts'), PAGE.indexOf('function ObligationList'));
+  // Sliced to ToneCounts' OWN closing brace, not to the next named function.
+  // It used to run to `function ObligationList`, and two components have since
+  // been declared in that gap — the second of which fetches, so the `api.`
+  // ban below started failing against a function it was never about.
+  const start = PAGE.indexOf('function ToneCounts');
+  assert.ok(start > 0, 'could not find ToneCounts');
+  const end = PAGE.indexOf('\n}\n', start);
+  const fn = PAGE.slice(start, end > start ? end : PAGE.indexOf('function ObligationList'));
   assert.ok(fn.length > 200, 'could not read ToneCounts');
+  assert.doesNotMatch(fn, /^function (?!ToneCounts)/m,
+    'the ToneCounts slice has swallowed another function');
   // Counted from the same array the rows render — no second fetch, no second source.
   assert.match(fn, /for \(const o of obligations\) n\[toneOf\(o\.status\)\] \+= 1;/);
   assert.doesNotMatch(fn, /api\./, 'ToneCounts must not fetch');
@@ -510,6 +519,67 @@ test('the entity list marks which company the rest of the app is acting on', () 
   assert.match(card, /Active workspace/);
   assert.match(read('frontend/src/lib/api.js'), /export function getActiveCompanyId/,
     'the page imports a helper api.js no longer exports');
+});
+
+test('an agreement expands into the timeline the canvas draws', () => {
+  const s = CODE.indexOf('function EnvelopeHistory(');
+  const e = CODE.indexOf('function ObligationList(', s);
+  assert.ok(s > 0 && e > s, 'the envelope-history panel is gone');
+  const panel = CODE.slice(s, e);
+
+  assert.match(panel, /Envelope history/, 'the canvas\'s own heading for the panel');
+  assert.match(panel, /api\.trustAgreementHistory\(envelopeUuid\)/,
+    'the panel no longer fetches the trail');
+  assert.match(panel, /collapseEnvelopeHistory\(res\?\.history \|\| \[\]\)/);
+  assert.match(panel, /envelopeEventLabel\(e\.action\)/);
+  // The three states an async panel owes its reader, each distinct.
+  assert.match(panel, /state\.phase === 'loading'/);
+  assert.match(panel, /state\.phase === 'error'/);
+  assert.match(panel, /NO_ENVELOPE_HISTORY_NOTE/);
+  // A FAILED READ MUST NOT RENDER AS AN EMPTY TIMELINE. "Nothing recorded"
+  // and "we could not find out" are different claims about an audit trail.
+  assert.match(panel, /phase: 'error'/);
+  assert.doesNotMatch(panel, /catch[\s\S]{0,120}phase: 'ready'/,
+    'a failed fetch resolves to a ready, empty timeline — it must say it failed');
+  // Fetched per envelope and re-fetched when the uuid changes.
+  assert.match(panel, /\}, \[envelopeUuid\]\);/,
+    'the effect does not key on the envelope — expanding a second row would show the first one\'s history');
+});
+
+test('the expander exists only where there is an envelope to expand', () => {
+  const s = CODE.indexOf('function AgreementsTab(');
+  const e = CODE.indexOf('function SanctionsTab(', s);
+  assert.ok(s > 0 && e > s, 'could not read AgreementsTab');
+  const tab = CODE.slice(s, e);
+  assert.match(tab, /\{a\.nda_envelope_uuid && \(/,
+    'the expander is offered on rows with no envelope, where it can only ever say "nothing recorded"');
+  assert.match(tab, /setExpandedEnvelope\(open \? null : a\.nda_envelope_uuid\)/,
+    'the toggle does not close the row it opened');
+  assert.match(tab, /\{open && <EnvelopeHistory envelopeUuid=\{a\.nda_envelope_uuid\} \/>\}/);
+  // One row at a time, keyed by uuid rather than by pair id.
+  assert.match(tab, /const \[expandedEnvelope, setExpandedEnvelope\] = useState\(null\)/);
+  assert.match(tab, /const open = expandedEnvelope === a\.nda_envelope_uuid/);
+  // The control announces itself to a screen reader as well as to a mouse.
+  assert.match(tab, /aria-expanded=\{open\}/);
+  assert.match(tab, /className="sr-only">\{open \? 'Hide' : 'Show'\} envelope history/);
+});
+
+test('the client method the panel calls has the worker route behind it', () => {
+  // The rule in CLAUDE.md, checked here as well as by `npm run test:drift`,
+  // because this pair was added in one commit and is easy to half-revert.
+  assert.match(read('frontend/src/lib/api.js'),
+    /trustAgreementHistory: \(envelope_uuid\) =>\s*\n\s*request\(`\/trust\/agreements\/\$\{encodeURIComponent\(envelope_uuid\)\}\/history`\)/);
+  assert.match(WORKER, /trust\.get\('\/agreements\/:envelope_uuid\/history'/);
+  // 404, not 403 — /my_signing_url already refuses to confirm an envelope
+  // exists and this must not become the oracle that one does.
+  const route = WORKER.slice(
+    WORKER.indexOf("trust.get('/agreements/:envelope_uuid/history'"),
+    WORKER.indexOf("trust.post('/intro/request'"),
+  );
+  assert.ok(route.length > 200, 'could not read the history route');
+  assert.match(route, /if \(history === null\) return c\.json\(\{ error: 'not_a_recipient' \}, 404\)/);
+  // An empty trail is a 200 with an empty array — a real answer, not a 404.
+  assert.match(route, /return c\.json\(\{ history \}\)/);
 });
 
 test('both "managed elsewhere" exits lead somewhere that exists', () => {

@@ -20,6 +20,8 @@ import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadg
 import {
   SCORE_BANDS, bandOf, verdictFor, scoreLine, obligationSummary,
   outstandingCounts, deltaNote, NO_HISTORY_NOTE,
+  collapseEnvelopeHistory, envelopeEventLabel, envelopeEventTone,
+  envelopeEventWhen, NO_ENVELOPE_HISTORY_NOTE,
 } from '../lib/trustCenter';
 
 // Task #25 — these personas are KYC-eligible, so the Identity tab is always
@@ -493,6 +495,90 @@ function ScorePanel({ score, previousScore, previousMonth, obligations }) {
   );
 }
 
+/**
+ * Trust Center v2's envelope history — the timeline under an expanded
+ * agreement row.
+ *
+ * Fetched on expand, not with the list: `/trust/agreements` already returns
+ * up to 400 rows and almost none of them are ever opened. Fetched ONCE per
+ * envelope and kept, because a timeline of past events does not change while
+ * the reader looks at it.
+ *
+ * The canvas draws Sent → Viewed → Signed with a dot per step and the last
+ * one accented. All three are real audit actions (`routes/esign.ts` appends
+ * `envelope_created`, `envelope_viewed`, `envelope_signed`), so nothing here
+ * is derived from a guess about what two timestamps imply.
+ */
+function EnvelopeHistory({ envelopeUuid }) {
+  const [state, setState] = useState({ phase: 'loading', events: [], error: null });
+
+  useEffect(() => {
+    let live = true;
+    setState({ phase: 'loading', events: [], error: null });
+    api.trustAgreementHistory(envelopeUuid)
+      .then(res => {
+        if (!live) return;
+        setState({ phase: 'ready', events: collapseEnvelopeHistory(res?.history || []), error: null });
+      })
+      .catch(e => {
+        if (!live) return;
+        // A failed read is stated as a failed read. An empty timeline here
+        // would say "nothing ever happened to this envelope", which is a
+        // different and much worse claim.
+        setState({ phase: 'error', events: [], error: e?.message || 'Could not load this envelope’s history' });
+      });
+    return () => { live = false; };
+  }, [envelopeUuid]);
+
+  return (
+    <div className="mt-2 border-t border-slate-200 dark:border-slate-700 pt-3 pl-7">
+      <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2.5">
+        Envelope history
+      </div>
+      {state.phase === 'loading' && (
+        <div className="flex items-center gap-2 text-xs text-slate-500">
+          <Loader2 size={12} className="animate-spin" /> Loading…
+        </div>
+      )}
+      {state.phase === 'error' && (
+        <div className="text-xs text-red-700 dark:text-red-300">{state.error}</div>
+      )}
+      {state.phase === 'ready' && state.events.length === 0 && (
+        <div className="text-xs text-slate-500 dark:text-slate-400">{NO_ENVELOPE_HISTORY_NOTE}</div>
+      )}
+      {state.phase === 'ready' && state.events.map((e, i) => {
+        const tone = envelopeEventTone(e.action);
+        const last = i === state.events.length - 1;
+        const when = envelopeEventWhen(e.at);
+        return (
+          <div key={`${e.action}-${e.at}-${i}`} className="flex items-start gap-2.5">
+            <div className="flex flex-none flex-col items-center">
+              <span className={`mt-1.5 h-2 w-2 rounded-full ${
+                tone === 'bad' ? 'bg-red-500'
+                  : last ? 'bg-violet-600 dark:bg-violet-400'
+                    : 'bg-slate-300 dark:bg-slate-600'}`} />
+              {/* The connector stops at the last dot — a line trailing past
+                  the final event would imply something is still to come. */}
+              {!last && <span className="w-px flex-1 bg-slate-200 dark:bg-slate-700" />}
+            </div>
+            <div className="min-w-0 pb-3">
+              <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                {envelopeEventLabel(e.action)}
+                {e.count > 1 && (
+                  <span className="ml-1 font-semibold text-slate-500 dark:text-slate-400">×{e.count}</span>
+                )}
+              </div>
+              {/* No time rather than "Invalid Date" — the row still records
+                  that the event happened. */}
+              {when && <div className="mt-0.5 text-[11px] tabular-nums text-slate-500 dark:text-slate-400">{when}</div>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ObligationList({ obligations, emptyText, onStart }) {
   if (!obligations.length) {
     return <p className="text-sm text-slate-600">{emptyText || 'Nothing required for this section.'}</p>;
@@ -601,6 +687,10 @@ function AgreementsTab({ obligations, onStart, role }) {
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState({});  // { [pairId]: 'resend'|'void' }
   const [info, setInfo] = useState(null);
+  // One row open at a time, as the canvas draws it. Keyed by envelope uuid
+  // rather than by pair id so the open row survives a `reload()` that
+  // renumbers nothing but re-fetches everything.
+  const [expandedEnvelope, setExpandedEnvelope] = useState(null);
   const isAdmin = role === 'admin';
 
   async function reload() {
@@ -689,11 +779,13 @@ function AgreementsTab({ obligations, onStart, role }) {
                 try { return Array.isArray(a.signers_json) ? a.signers_json : JSON.parse(a.signers_json || '[]'); }
                 catch { return []; }
               })();
+              const open = expandedEnvelope === a.nda_envelope_uuid;
               return (
                 <li
                   key={a.id}
-                  className={`flex items-center justify-between bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 border-l-4 ${TONE[toneOf(display)].bar} rounded px-3 py-2 gap-2 flex-wrap`}
+                  className={`bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 border-l-4 ${TONE[toneOf(display)].bar} rounded px-3 py-2`}
                 >
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-3 min-w-0">
                     <Lock size={16} className="text-slate-500 dark:text-slate-400 shrink-0" />
                     <div className="min-w-0">
@@ -716,6 +808,22 @@ function AgreementsTab({ obligations, onStart, role }) {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    {/* v2's expander. Only offered where there is an envelope
+                        to have a history — a pairwise row with no
+                        `nda_envelope_uuid` predates the e-sign flow, and a
+                        control that always answers "nothing recorded" is
+                        worse than no control. */}
+                    {a.nda_envelope_uuid && (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedEnvelope(open ? null : a.nda_envelope_uuid)}
+                        aria-expanded={open}
+                        className="flex h-6 w-6 items-center justify-center rounded border border-slate-300 text-sm font-bold leading-none text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                      >
+                        <span aria-hidden="true">{open ? '−' : '+'}</span>
+                        <span className="sr-only">{open ? 'Hide' : 'Show'} envelope history</span>
+                      </button>
+                    )}
                     <StatusPill status={display} />
                     {canSign && <PairwiseSignButton envelopeUuid={a.nda_envelope_uuid} />}
                     {canAdminAct && (
@@ -735,6 +843,8 @@ function AgreementsTab({ obligations, onStart, role }) {
                       </>
                     )}
                   </div>
+                  </div>
+                  {open && <EnvelopeHistory envelopeUuid={a.nda_envelope_uuid} />}
                 </li>
               );
             })}

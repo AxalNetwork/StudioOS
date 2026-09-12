@@ -3088,6 +3088,11 @@ export const api = {
   trustSanctions: () => request('/trust/sanctions'),
   trustMySigningUrl: (envelope_uuid) =>
     request(`/trust/agreements/${encodeURIComponent(envelope_uuid)}/my_signing_url`),
+  // Trust Center v2's per-agreement timeline, fetched when a row is expanded.
+  // Recipients only; the worker returns 404 for anyone else and never ships
+  // the audit trail's ip / ua / signer_email.
+  trustAgreementHistory: (envelope_uuid) =>
+    request(`/trust/agreements/${encodeURIComponent(envelope_uuid)}/history`),
   trustScore: (userId) => request(`/trust/score/${encodeURIComponent(userId)}`),
   // Task #40 — batch the per-row trust-score lookups on AdminPage / DealsPage
   // into a single request. Returns { scores: [{ user_id, score, missing[],

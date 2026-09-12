@@ -4386,3 +4386,46 @@ The two sentences stay distinct (`scoreLine` totals the open work,
 `obligationSummary` splits it) because they sit inches apart in the v2
 two-column Overview, and the column previously repeated the panel's verdict
 verbatim.
+
+### The envelope timeline is real — and it ships less than it reads
+
+The canvas's third score-panel-adjacent element is a per-agreement accordion
+drawing `Sent → Viewed → Signed` with a dot per step. Unlike the delta, this
+one needed no new store: `routes/esign.ts` has appended `envelope_created`,
+`envelope_viewed` and `envelope_signed` to `esign_audit_events` since the
+append-only trail replaced the `audit_log` JSON blob. All three steps the
+canvas draws are events the signing flow really writes.
+
+`GET /trust/agreements/:envelope_uuid/history` serves it, fetched on expand
+rather than folded into `/agreements` — that endpoint already returns up to
+200 pairwise rows, 100 pending envelopes and 100 documents, and almost none
+of them are ever opened.
+
+Four decisions inside it:
+
+- **`ip`, `ua`, `signer_email` and `meta` never leave the worker.** They are
+  on every audit row. A counterparty's IP address is not part of what the
+  canvas draws and not something a status page has any reason to disclose;
+  the full trail stays with admins at `GET /api/legal/esign/:id`. The SELECT
+  asks for `action, ts` and nothing else, and the test reads the SQL rather
+  than the intent.
+- **404, not 403, for a non-recipient** — `/my_signing_url` already refuses
+  to confirm an envelope exists and this must not become the oracle that one
+  does. The service returns `null` (not a recipient) distinctly from `[]`
+  (yours, nothing recorded), and the route maps them to different answers.
+- **Consecutive repeats collapse with a count.** A three-party envelope logs
+  `envelope_viewed` once per party, and since `signer_email` is withheld the
+  rows cannot be told apart on the page. `Viewed ×3` hides nothing and reads;
+  three identical rows read as a rendering bug. Only CONSECUTIVE repeats
+  collapse — a view after a signature is its own event.
+- **Legacy envelopes fall back to the `audit_log` column.** It was the source
+  of truth before `esign_audit_events` and `routes/esign.ts` describes it as
+  "kept for backward compatibility but no longer written to". Without the
+  fallback every older envelope would expand to an empty timeline and look as
+  though nothing had ever happened to it.
+
+And the one thing the panel must never do: **a failed read is stated as a
+failed read.** "Nothing recorded for this envelope" and "we could not find
+out" are different claims about an audit trail, and collapsing the second
+into the first is the same defect as the canvas's "Unchanged from last
+month".
