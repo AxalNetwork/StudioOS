@@ -10,11 +10,20 @@ its `ZONE` map.
 
 | File | Artboard | Route | Architecture | Store |
 | --- | --- | --- | --- | --- |
-| `OpportunitiesZone.jsx` | PR1 · Opportunities | `/practice/opportunities` | MATCH ENGINE | `advisor_bookings` |
+| `OpportunitiesZone.jsx` | PR1 · Opportunities | `/practice/opportunities` | FEED | `advisor_bookings` |
 | `EngagementsZone.jsx` | PR2 · Engagements | `/practice/engagements` | WORK BOARD | `advisor_engagements` (migration 238) |
 | `DeliveryZone.jsx` | PR3 · Delivery | `/practice/delivery` | COLLECTION | `advisor_deliverables` + `advisor_deliverable_versions` (migration 239) |
-| `SessionsZone.jsx` | PR4 · Sessions | `/practice/sessions` | WORK BOARD | `advisor_bookings` (migration 205 for the money) |
+| `SessionsZone.jsx` | PR4 · Sessions | `/practice/sessions` | FEED | availability rules, session types, booking links (migration 240) + `advisor_bookings` amounts (205) |
 | `EarningsZone.jsx` | PR5 · Earnings | `/practice/earnings` | LEDGER | `advisor_bookings` amounts |
+
+**The Architecture column is the canvas's, and three of these five used to be
+wrong.** `Advisor Detail · Practice.dc.html` tags each artboard in its own
+header and repeats the set in `setIndex`; the two agree. `shellConfig.js` said
+MATCH ENGINE for Opportunities and WORK BOARD for both Delivery and Sessions,
+and nothing objected, because the archetype only feeds `ZoneNav` and the badge —
+a wrong one makes the nav advertise the wrong kind of page and breaks nothing.
+`frontend/test/advisor_shell_canvas.test.mjs` now reads the canvas and pins all
+five, the way `investor_shell_canvas.test.mjs` always has for that profile.
 
 **Three of the five replaced a tab on the legacy Advisory workspace, and each
 replacement is a redirect.** `/advisor/advisory/{opportunities,engagements,delivery}`
@@ -47,6 +56,9 @@ A zone with real derivations keeps them in a sibling module that imports nothing
 - `engagementBoard.js` — PR2's lanes, renewal rules and stored **calendar days**.
 - `deliveryTrail.js` — PR3's version tags, open-state tones, seam line, median
   label and nudge targets, over **instants**.
+- `sessionGrid.js` — PR4's slot precedence, the four tile counts, day grouping
+  and the blackout label. The first module here to hold **both** kinds of time,
+  so its header says which is which.
 
 Two reasons, and the second is the one that matters. A guard test can import a
 module and not a page — importing a page pulls React and a stylesheet through its
@@ -58,8 +70,10 @@ unit-tested in both directions is one a mutation cannot quietly break.
 `new Date('2026-11-04')` is midnight UTC and would render "Nov 3" for every reader
 west of Greenwich. `deliveryTrail.js` sends `sent_at` and `opened_at` through the
 browser's own formatter, because those are written by `nowIso()` at the moment
-something happened and the reader's local day is the right one. Each module's
-header says which it holds.
+something happened and the reader's local day is the right one. `sessionGrid.js`
+holds one of each: a slot's `starts_at` is an instant, and a blackout window is a
+weekday plus a clock reading that is never parsed into a `Date` at all. Each
+module's header says which it holds.
 
 **Chip narrowing stays in the page, not the module.** A chip declared live in
 `frontend/src/workspaces/advisorZoneFilters.js` must be served by the page that mounts the chip
@@ -88,3 +102,14 @@ or the build fails:
 **An absence is stated, never rendered as a plausible zero** (D56/D68): "Not
 recorded" with a reason, never `0` and never an em-dash. `DeliveryZone.jsx` fixed
 one it inherited on the way in.
+
+**And the rule reaches the controls, not just the numbers.** `SessionsZone.jsx`
+withholds "Change the rules" when the availability read failed, because
+`PUT /me/availability` REPLACES the rule set rather than merging: saving that
+form over a set the page never received would write four empty fields and an
+empty blackout list over whatever the advisor configured. A control that would
+destroy the thing it claims to edit is worse than no control, so the card says
+why it is gone. The same read failure is why `rules` is seeded with its own
+empty shape rather than `null` — `<ZoneBody>` builds its children before it
+reads `loading`, so a null held there throws on the first render whatever
+`loading` says (`frontend/test/_zoneGuards.mjs`, rule 2).

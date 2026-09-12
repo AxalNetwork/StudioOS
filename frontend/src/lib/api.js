@@ -3307,6 +3307,21 @@ export const api = {
   // A price here is what the advisor ASKS FOR; nothing in this group charges
   // anyone. The take-rate, the payout account and the Stripe Connect service
   // leg land in 241 and after, in test mode behind a production flag. D75.
+  // The OWNER's view of the calendar, not the public `/:uid/slots` one. It
+  // carries `recording_state`, `payment_state` and `blocked_reason`, which a
+  // founder browsing an advisor's slots must never see: one would tell them
+  // the payout account is unverified, another is a private note about why an
+  // hour is not for sale.
+  listMyAdvisorSlots: ({ days = 14, from } = {}) => {
+    const qs = new URLSearchParams({ days: String(days) });
+    if (from) qs.set('from', from);
+    return request(`/advisors/me/slots?${qs}`);
+  },
+  // Withdraws hours nobody has taken. A booked hour is REFUSED rather than
+  // blocked, and the response reports how many were left alone — blocking one
+  // someone holds would take their session away without telling either side.
+  blockMyAdvisorSlotRange: (data) =>
+    request('/advisors/me/slots/block', { method: 'POST', body: JSON.stringify(data) }),
   getMyAdvisorAvailability: () => request('/advisors/me/availability'),
   // PUT, not PATCH: one row per advisor, and the rule set is the unit edited.
   // A partial update would let a cap and a blackout disagree about which

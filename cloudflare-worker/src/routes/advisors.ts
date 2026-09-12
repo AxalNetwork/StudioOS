@@ -3202,6 +3202,88 @@ advisors.patch('/me/session-types/:id', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+/**
+ * THE OWNER'S VIEW OF A SLOT, and it exists because `GET /:uid/slots` must not
+ * grow these three columns. That route is readable by ANY authenticated user —
+ * it is how a founder browses an advisor's calendar — and `recording_state`,
+ * `payment_state` and `blocked_reason` are the advisor's own operational
+ * facts. A client who could see `held_unpaid` would learn that this advisor's
+ * payout account is unverified, and one who could read `blocked_reason` would
+ * read a private note about why an hour is not for sale. So `slotDto` stays
+ * lean and this one carries the operational half.
+ */
+function ownSlotDto(s: SlotRow & {
+  recording_state?: string; payment_state?: string; blocked_reason?: string | null;
+}, taken = 0): any {
+  return {
+    ...slotDto(s, taken),
+    recording_state: s.recording_state ?? 'none',
+    payment_state: s.payment_state ?? 'not_applicable',
+    blocked_reason: s.blocked_reason ?? null,
+  };
+}
+
+advisors.get('/me/slots', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    // The grid is two weeks forward by default, and the artboard's other three
+    // views (Month, Past sessions, Unpaid held) are narrowings of a window
+    // rather than different queries — so the window is the only parameter.
+    const days = Math.min(370, Math.max(1, Number(c.req.query('days') || 14)));
+    const from = c.req.query('from') || nowIso();
+    const until = new Date(new Date(from).getTime() + days * 86_400_000).toISOString();
+    const rows = await c.env.DB.prepare(
+      `SELECT * FROM advisor_office_hour_slots
+        WHERE advisor_id = ? AND starts_at >= ? AND starts_at < ?
+        ORDER BY starts_at ASC LIMIT 500`
+    ).bind(m.id, from, until).all<SlotRow>();
+    const items: any[] = [];
+    for (const s of (rows.results || []) as SlotRow[]) {
+      items.push(ownSlotDto(s as any, await takenForSlot(c.env, s.id)));
+    }
+    return c.json({ items, window: { from, until, days } });
+  } catch (e) { return mapError(c, e); }
+});
+
+// The artboard's "Block a date range" op. A blocked slot is NOT a cancelled
+// one: cancelling undoes a booking and tells whoever held it, while blocking
+// withdraws an hour that was never taken. Conflating them would send a
+// cancellation notice for an hour nobody had.
+advisors.post('/me/slots/block', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const body = await c.req.json().catch(() => ({} as any));
+    const from = trimOrNull(body.from, 40);
+    const until = trimOrNull(body.until, 40);
+    if (!from || !until) return c.json({ detail: 'A block needs a start and an end' }, 400);
+    if (!(from < until)) return c.json({ detail: 'A block must end after it starts' }, 400);
+    const reason = trimOrNull(body.reason, 200);
+
+    // A BOOKED SLOT IS NOT BLOCKABLE, and this is the whole care in the
+    // handler. Blocking an hour someone already holds would take their session
+    // away silently — they would keep the confirmation and lose the slot. Those
+    // are reported back by count so the advisor learns the range was not
+    // wholly applied, rather than assuming it was.
+    const inRange = await c.env.DB.prepare(
+      `SELECT id FROM advisor_office_hour_slots
+        WHERE advisor_id = ? AND starts_at >= ? AND starts_at < ? AND is_cancelled = 0`
+    ).bind(m.id, from, until).all<{ id: number }>();
+    const ids = (inRange.results || []).map((r) => r.id);
+    let blocked = 0;
+    let skippedBooked = 0;
+    for (const id of ids) {
+      if ((await takenForSlot(c.env, id)) > 0) { skippedBooked++; continue; }
+      await c.env.DB.prepare(
+        'UPDATE advisor_office_hour_slots SET blocked_reason = ? WHERE id = ? AND advisor_id = ?'
+      ).bind(reason || 'Blocked', id, m.id).run();
+      blocked++;
+    }
+    return c.json({ blocked, skipped_booked: skippedBooked, examined: ids.length });
+  } catch (e) { return mapError(c, e); }
+});
+
 advisors.get('/me/booking-links', async (c) => {
   try {
     const user = await requireAuth(c);

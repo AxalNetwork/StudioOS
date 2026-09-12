@@ -269,6 +269,23 @@ export const ADVISOR_ZONE_FILTERS = {
     { canvas: 'By client', key: 'by_client' },
   ],
 
+  // TWO OF THESE CHANGE THE WINDOW AND TWO NARROW IT, which is unusual enough
+  // to say out loud. `Two weeks` and `Month` ask the server for a different
+  // span — the grid is what came back, and filtering a fortnight down to "a
+  // month" would show FEWER slots under the wider name. `Past sessions` and
+  // `Unpaid held` narrow what is already loaded.
+  //
+  // `Unpaid held` earns its place rather than duplicating a tile: the tile
+  // counts them, this shows them. Otherwise every held slot is one amber card
+  // somewhere in a fortnight, and the artboard's own gate note is about
+  // exactly the case where a reader needs to find them all at once.
+  'practice/sessions': [
+    { canvas: 'Two weeks', key: 'two_weeks' },
+    { canvas: 'Month', key: 'month' },
+    { canvas: 'Past sessions', key: 'past' },
+    { canvas: 'Unpaid held', key: 'unpaid_held' },
+  ],
+
   'research/library': [
     { canvas: 'All', key: 'all' },
     { canvas: 'Session docs', key: 'client', label: 'About a client' },
