@@ -3923,3 +3923,108 @@ same series, same shape, no bootstrap.
 contract state · drag to advance". A per-card control is keyboard-reachable
 without a drag-and-drop implementation to make accessible, and the state change
 it writes is identical. Recorded here rather than passing silently.
+
+## D72 — A receipt the sender can set is not a receipt: the deliverables store is split across two licences on purpose
+
+Migration 239 adds `advisor_deliverables` and `advisor_deliverable_versions` for
+Practice · Delivery, whose blurb is the whole requirement — *"Every work
+product, every version, and whether anyone opened it."* Three of its four tiles
+are open receipts (Unopened, Median to open, Never opened), and that is what
+makes this store unusual: **the thing it most needs to record is not the
+advisor's to say.**
+
+**All four "no store exists" claims held**, unlike the six-zone investor audit
+where five were false (D70). Every candidate was read:
+
+| Table | Why it cannot answer |
+| --- | --- |
+| `advisor_client_document_shares` (218) | the right two nouns, the wrong direction. `shared_by_user_id` is the FOUNDER, and the row's document must satisfy `owner_user_id IN (…founder…)` — it can only record a founder offering their own file to a named advisor. |
+| `advisor_client_access_log` (218) | not merely pointed the wrong way — structurally incapable. `advisor_user_id` is its **only** actor column, and its own header calls it "the founder's own record of an advisor's reading". There is no slot in which a client open could be written. |
+| `research_documents` (213) | fourteen columns, never once ALTERed. Its `kind` labels subject matter rather than naming a client, and `indexed_at` is the Vectorize stamp. 213's header pre-declares the boundary. |
+| `engagement_deliverables` (208) | **exactly** the right columns and the wrong licence — single FK to `engagements(id)`, which D71 already documents as unreachable from an advisor. Its column design is copied; its ownership is not. |
+| `deliverable_snapshots` / `company_week_status` | the name is the trap. Keyed `(user_id, cohort_cycle_id, week_number, deliverable_key)` — the founder's cohort week homework, no advisor column. |
+
+All twenty `advisor_*` tables were then swept three ways — a column grep, an
+ALTER grep, and a whole-tree column inventory. **Not one** carries a version, a
+sent stamp, an opened stamp, or a work product the advisor owns.
+
+**THE SPLIT. Migration 208's header states the rule this store inherits:**
+*"`opened_at` and `signed_off_at` are the CLIENT's to set. Only the founder side
+can truthfully say a thing was read, so a partner-side write to either would be
+the firm reporting a metric about itself."* So no route in `routes/advisors.ts`
+writes either column; the founder side does, through
+`routes/advisor_grants.ts`. The test asserts this **against the SQL** — every
+`UPDATE advisor_deliverable_versions SET …` clause and every `INSERT INTO
+advisor_deliverable_versions (…)` column list — rather than against behaviour,
+because the failure mode is someone adding a convenient `SET opened_at = ?`
+years from now, and because the module's own comments and DTO name the column
+constantly, so a blanket ban on the string would fail against correct code.
+
+**SENDING REQUIRES A CLIENT WITH AN ACCOUNT, and this is the rule that makes the
+receipts trustworthy rather than merely sincere.** It falls straight out of D71
+keeping `advisor_engagements.founder_user_id` nullable so a contract can name a
+company that has not joined. A version sent to a client who cannot sign in can
+never be opened by anyone, so it would sit in `unopened` forever, inflate
+`never_opened`, and quietly bias `median_to_open_hours` toward whichever clients
+happen to be linked. Creating and versioning stay open to any client — a draft
+needs no counterparty — and only the send demands one, with a 409 that names the
+consequence and not just the rule. `addressable` is reported beside `unopened`
+for the one case the send rule cannot prevent: an engagement unlinked *after* a
+send, which leaves a row that went out and can never be nudged.
+
+**Two tables, because a work product has many versions**, which the artboard
+proves twice: each list row carries a latest version *and* a count ("v4", "4
+versions"), and the trail card lists four versions of one deliverable with a
+different note against each. One table grouped by title would break on a rename.
+
+**`version` is an INTEGER here and `TEXT` in 208** — the one place this
+deliberately diverges from the shape it copies. A trail has to be ordered and
+`'v10'` sorts before `'v2'` as text. The artboard's own "v2 draft" is a label
+rather than an ordinal, so it gets its own column and the number keeps the order.
+`UNIQUE (deliverable_id, version)` turns a lost race into an error instead of two
+rows both calling themselves v3; the route reads `MAX(version) + 1`, so that
+constraint is the only place the protection actually lives, and the test asserts
+it directly against the migration-built schema rather than trying to stage a race.
+
+**Every stamp lives on the version, not the work product.** The artboard's trail
+marks only v4 "Aug 19 · sent", and its Verwood row reports "Not opened in 4 days"
+against one version. Sending and reading happen to a version; a work product is
+the thing they happen to.
+
+**There is no `state` column, and that absence is load-bearing.** Not started /
+Sent / Opened is entirely determined by which stamps exist, so storing it would
+be a second source of truth that drifts the first time a write half-fails —
+precisely the defect that disqualified `investor_introductions` from being read
+as a ledger (D70): a status column written once by its only INSERT and updated
+by nothing.
+
+**`Median to open` is a real measurement here**, unlike Opportunities' median
+(D68's case), where no `decided_at` existed and the tile correctly reported
+nothing. Both stamps are real, so the figure is computed — **on the FIRST open of
+each work product**, because a second version read a month later says nothing
+about how fast the work reached its reader and would drift the tile upward every
+time a client revisits something old. A reversed pair (`opened_at < sent_at`,
+which clock skew and a bad backfill both produce) contributes no duration at all:
+a tile reading "−3 h to open" is worse than one reading nothing. And null before
+the first open is never 0 — nothing opened yet is not "opened instantly".
+
+**`Never opened` takes no arbitrary threshold.** It counts sent versions whose
+work product has never been opened at all, and the note names the oldest — which
+is what the canvas's own note does ("Verwood board brief, Aug 22"). A day count
+would have been a rule nobody agreed to.
+
+**The AI band is not built, and its premise is false at the first clause.** The
+artboard draws a consent-gated batch summariser whose foot note says the gate
+working *is* the feature. Nothing in this product records that an advisory
+session was recorded, captures consent to record one, or holds a transcript of
+one: `advisor_bookings` has thirteen columns and one ALTER ever (205, money).
+The two stores with the full recording→transcript shape belong to other people —
+`reference_checks` is investor deal-diligence and has been hardcoded 501 since
+T13, and `discovery_interviews` is the founder's own customer-discovery work,
+walled off by `canWrite` (owner-or-admin), by the absence of any booking→project
+join, and by an R2 prefix check. `advisor_proof_consents` is attestation consent
+over a claim about past work, with no audio, no transcript and no booking link;
+reading it as recording consent would be inventing the recording. Building the
+band needs five pieces — columns, consent capture, an audio MIME allowlist and
+R2 prefix, a transcribe route, a summarise route — and the schema supplies zero.
+The zone says that rather than drawing a dead control.

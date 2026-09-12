@@ -2470,4 +2470,338 @@ advisors.post('/me/engagements/:id/renewal', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// ---------------------------------------------------------------------------
+// 239 — Deliverables. What you sent a client, and whether they opened it.
+//
+// TWO INVARIANTS HOLD THIS WHOLE ZONE UP, and both are here rather than on the
+// page, because a page can only report what the routes let it be told.
+//
+// ONE: NO ROUTE IN THIS FILE WRITES `opened_at`. Migration 208's header states
+// the rule this store inherits — "Only the founder side can truthfully say a
+// thing was read, so a partner-side write to either would be the firm reporting
+// a metric about itself." The founder side writes it, through
+// `routes/advisor_grants.ts`. A receipt the advisor can set is not a receipt,
+// and three of the four tiles on this zone are receipts.
+//
+// TWO: SENDING REQUIRES A CLIENT WITH AN ACCOUNT. A version sent to a client
+// who cannot sign in can never be opened by anyone, so it would sit in
+// `Unopened` forever, inflate `Never opened`, and quietly bias `median to open`
+// toward whichever clients happen to be linked. Creating and versioning stay
+// open to any client — a draft needs no counterparty — and only the send
+// demands one, with a 409 that names what is missing. Same shape as the
+// engagement block above refusing signed → ended and naming the renewal route.
+//
+// STATE IS DERIVED AND THERE IS NO COLUMN FOR IT: `not_started` (nothing sent),
+// `sent` (sent, unopened), `opened`. See 239's header for why storing it would
+// reproduce D70's `investor_introductions` defect.
+// ---------------------------------------------------------------------------
+type DeliverableRow = {
+  id: number; uid: string; advisor_id: number;
+  engagement_id: number | null; client_name: string; title: string;
+  created_at: string; updated_at: string;
+};
+type VersionRow = {
+  id: number; uid: string; deliverable_id: number; version: number;
+  label: string | null; summary: string | null; link_url: string | null;
+  sent_at: string | null; opened_at: string | null; signed_off_at: string | null;
+  created_at: string; updated_at: string;
+};
+
+/** `not_started` | `sent` | `opened`, from the stamps alone. */
+export function deliverableState(versions: Pick<VersionRow, 'sent_at' | 'opened_at'>[]): string {
+  if (versions.some((v) => v.opened_at)) return 'opened';
+  if (versions.some((v) => v.sent_at)) return 'sent';
+  return 'not_started';
+}
+
+function versionDto(r: VersionRow): any {
+  return {
+    uid: r.uid, version: Number(r.version), label: r.label, summary: r.summary,
+    link_url: r.link_url,
+    // All three are null until they happen. Never coalesced to a date.
+    sent_at: r.sent_at, opened_at: r.opened_at, signed_off_at: r.signed_off_at,
+    created_at: r.created_at, updated_at: r.updated_at,
+  };
+}
+
+/**
+ * One deliverable of the caller's own, or a thrown 404 — `requireOwnEngagement`
+ * one table over, and 404 for the same reason: loading by id and comparing the
+ * advisor afterwards makes someone else's row indistinguishable from one that
+ * does not exist.
+ */
+async function requireOwnDeliverable(
+  c: Context<{ Bindings: Env }>, advisorId: number, id: number,
+): Promise<DeliverableRow> {
+  const row = await c.env.DB.prepare('SELECT * FROM advisor_deliverables WHERE id = ?')
+    .bind(id).first<DeliverableRow>();
+  if (!row || row.advisor_id !== advisorId) {
+    throw c.json({ detail: 'Deliverable not found' }, 404);
+  }
+  return row;
+}
+
+/** Hours between two stamps, or null if either is missing or unparseable. */
+function hoursBetween(from: string | null, to: string | null): number | null {
+  if (!from || !to) return null;
+  const a = Date.parse(from);
+  const b = Date.parse(to);
+  if (!Number.isFinite(a) || !Number.isFinite(b) || b < a) return null;
+  return (b - a) / 3600000;
+}
+
+/** The middle value, or null for an empty set — never 0. */
+function median(values: number[]): number | null {
+  if (!values.length) return null;
+  const s = [...values].sort((x, y) => x - y);
+  const mid = s.length >> 1;
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+advisors.get('/me/deliverables', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const [rows, versions] = await Promise.all([
+      // The client's ACCOUNT AND ADDRESS come through the engagement, and only
+      // for a linked one. This is what lets the zone offer a nudge over exactly
+      // the rows it can reach, rather than a bulk action that silently skips
+      // some of them.
+      c.env.DB.prepare(
+        `SELECT d.*, e.founder_user_id AS client_user_id,
+                u.name AS client_user_name, u.email AS client_user_email
+           FROM advisor_deliverables d
+           LEFT JOIN advisor_engagements e ON e.id = d.engagement_id
+           LEFT JOIN users u ON u.id = e.founder_user_id
+          WHERE d.advisor_id = ?
+          ORDER BY d.updated_at DESC
+          LIMIT 400`
+      ).bind(m.id).all<DeliverableRow & {
+        client_user_id: number | null; client_user_name: string | null; client_user_email: string | null;
+      }>(),
+      c.env.DB.prepare(
+        `SELECT v.* FROM advisor_deliverable_versions v
+           JOIN advisor_deliverables d ON d.id = v.deliverable_id
+          WHERE d.advisor_id = ?
+          ORDER BY v.deliverable_id, v.version DESC`
+      ).bind(m.id).all<VersionRow>(),
+    ]);
+
+    const byDeliverable = new Map<number, VersionRow[]>();
+    for (const v of versions.results || []) {
+      const list = byDeliverable.get(Number(v.deliverable_id)) || [];
+      list.push(v);
+      byDeliverable.set(Number(v.deliverable_id), list);
+    }
+
+    const items = (rows.results || []).map((d) => {
+      const vs = byDeliverable.get(Number(d.id)) || [];
+      const latest = vs[0] || null;   // the SELECT orders version DESC
+      return {
+        id: d.id, uid: d.uid, advisor_id: d.advisor_id,
+        engagement_id: d.engagement_id ?? null,
+        client_name: d.client_name, title: d.title,
+        // NULL means this client has no account, so nothing they are sent can
+        // ever be opened. The zone says so rather than showing a stuck row.
+        client_user_id: d.client_user_id ?? null,
+        client_user_name: d.client_user_name ?? null,
+        client_user_email: d.client_user_email ?? null,
+        state: deliverableState(vs),
+        version_count: vs.length,
+        latest_version: latest ? versionDto(latest) : null,
+        versions: vs.map(versionDto),
+        created_at: d.created_at, updated_at: d.updated_at,
+      };
+    });
+
+    const sent = items.filter((i) => i.state === 'sent' || i.state === 'opened');
+    const unopened = items.filter((i) => i.state === 'sent');
+    // THE MEASUREMENT, and unlike Opportunities' median this one is real: both
+    // stamps exist, so there is no need to substitute a last-touched column.
+    // Measured on the FIRST open of each deliverable, because a second version
+    // read later says nothing about how fast the work reached its reader.
+    const openHours = items
+      .map((i) => {
+        const opened = [...i.versions].reverse().find((v) => v.opened_at);
+        return opened ? hoursBetween(opened.sent_at, opened.opened_at) : null;
+      })
+      .filter((h): h is number => h != null);
+    const medianHours = median(openHours);
+    // The oldest thing that went out and was never read by anyone — no
+    // threshold, which is what keeps this from being an arbitrary rule.
+    const neverOpened = unopened
+      .map((i) => ({ title: i.title, client_name: i.client_name, sent_at: i.latest_version?.sent_at || null }))
+      .sort((a, b) => String(a.sent_at || '').localeCompare(String(b.sent_at || '')));
+
+    return c.json({
+      items,
+      totals: {
+        work_products: items.length,
+        clients: new Set(items.map((i) => i.client_name)).size,
+        sent: sent.length,
+        unopened: unopened.length,
+        opened: items.filter((i) => i.state === 'opened').length,
+        drafts: items.filter((i) => i.state === 'not_started').length,
+        // Null, never 0. Nothing opened yet is not "opened instantly" (D56/D68).
+        median_to_open_hours: medianHours == null ? null : Math.round(medianHours * 10) / 10,
+        never_opened: neverOpened.length,
+        oldest_never_opened: neverOpened[0] || null,
+        // How many rows a nudge could actually reach. The zone reports the gap
+        // rather than skipping rows quietly.
+        addressable: unopened.filter((i) => i.client_user_email).length,
+      },
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.post('/me/deliverables', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const body = await c.req.json().catch(() => ({} as any));
+    const title = String(body.title || '').trim().slice(0, 200);
+    if (!title) return c.json({ detail: 'A work product needs a title' }, 400);
+
+    // The client comes from the engagement when one is named, so the two cannot
+    // disagree about who this is for; otherwise it is typed.
+    let clientName = String(body.client_name || '').trim().slice(0, 200);
+    let engagementId: number | null = null;
+    if (body.engagement_id != null && body.engagement_id !== '') {
+      const eng = await requireOwnEngagement(c, m.id, Number(body.engagement_id));
+      engagementId = eng.id;
+      clientName = eng.client_name;
+    }
+    if (!clientName) return c.json({ detail: 'A work product needs a client' }, 400);
+
+    const now = nowIso();
+    const uid = newUid();
+    const r = await c.env.DB.prepare(
+      `INSERT INTO advisor_deliverables
+         (uid, advisor_id, engagement_id, client_name, title, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).bind(uid, m.id, engagementId, clientName, title, now, now).run();
+    const id = Number((r as any).meta?.last_row_id);
+    // VERSION 1 COMES WITH IT. A work product with no version is a title, and
+    // every read here assumes at least one row to be the latest.
+    await c.env.DB.prepare(
+      `INSERT INTO advisor_deliverable_versions
+         (uid, deliverable_id, version, label, summary, link_url, created_at, updated_at)
+       VALUES (?, ?, 1, ?, ?, ?, ?, ?)`
+    ).bind(newUid(), id, trimOrNull(body.label, 60), trimOrNull(body.summary, 2000),
+           trimOrNull(body.link_url, 2000), now, now).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverables WHERE id = ?')
+      .bind(id).first<DeliverableRow>();
+    return c.json({ ...fresh, state: 'not_started', version_count: 1 }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.patch('/me/deliverables/:id', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const row = await requireOwnDeliverable(c, m.id, Number(c.req.param('id')));
+    const body = await c.req.json().catch(() => ({} as any));
+    let engagementId = row.engagement_id;
+    let clientName = row.client_name;
+    if ('engagement_id' in body) {
+      if (body.engagement_id == null || body.engagement_id === '') engagementId = null;
+      else {
+        const eng = await requireOwnEngagement(c, m.id, Number(body.engagement_id));
+        engagementId = eng.id;
+        clientName = eng.client_name;
+      }
+    }
+    if ('client_name' in body && engagementId == null) {
+      clientName = String(body.client_name ?? '').trim().slice(0, 200) || row.client_name;
+    }
+    await c.env.DB.prepare(
+      `UPDATE advisor_deliverables
+          SET title = ?, engagement_id = ?, client_name = ?, updated_at = ?
+        WHERE id = ?`
+    ).bind(
+      String(body.title ?? '').trim().slice(0, 200) || row.title,
+      engagementId, clientName, nowIso(), row.id,
+    ).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverables WHERE id = ?')
+      .bind(row.id).first<DeliverableRow>();
+    return c.json(fresh);
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * POST /me/deliverables/:id/versions — the next version of a work product.
+ *
+ * The ordinal is `MAX(version) + 1` read inside the same request, and the
+ * table's `UNIQUE (deliverable_id, version)` is what turns a lost race into an
+ * error rather than two rows both calling themselves v3.
+ */
+advisors.post('/me/deliverables/:id/versions', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const row = await requireOwnDeliverable(c, m.id, Number(c.req.param('id')));
+    const body = await c.req.json().catch(() => ({} as any));
+    const top = await c.env.DB.prepare(
+      'SELECT MAX(version) AS v FROM advisor_deliverable_versions WHERE deliverable_id = ?'
+    ).bind(row.id).first<{ v: number | null }>();
+    const next = Number(top?.v || 0) + 1;
+    const now = nowIso();
+    const uid = newUid();
+    await c.env.DB.prepare(
+      `INSERT INTO advisor_deliverable_versions
+         (uid, deliverable_id, version, label, summary, link_url, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(uid, row.id, next, trimOrNull(body.label, 60), trimOrNull(body.summary, 2000),
+           trimOrNull(body.link_url, 2000), now, now).run();
+    await c.env.DB.prepare('UPDATE advisor_deliverables SET updated_at = ? WHERE id = ?')
+      .bind(now, row.id).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverable_versions WHERE uid = ?')
+      .bind(uid).first<VersionRow>();
+    return c.json(versionDto(fresh!), 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * POST /me/deliverables/:id/versions/:version/send — it went to the client.
+ *
+ * REFUSES A CLIENT WITH NO ACCOUNT, with a 409 that names the link. See the
+ * block comment at the top of this section: a version nobody can open would
+ * poison three of this zone's four tiles, and the alternative — letting the
+ * advisor claim it was opened — is the one thing this store exists to prevent.
+ */
+advisors.post('/me/deliverables/:id/versions/:version/send', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const row = await requireOwnDeliverable(c, m.id, Number(c.req.param('id')));
+    const version = Number(c.req.param('version'));
+    const v = await c.env.DB.prepare(
+      'SELECT * FROM advisor_deliverable_versions WHERE deliverable_id = ? AND version = ?'
+    ).bind(row.id, version).first<VersionRow>();
+    if (!v) return c.json({ detail: 'Version not found' }, 404);
+    if (v.sent_at) return c.json({ detail: 'That version has already been sent' }, 409);
+
+    const client = row.engagement_id == null ? null : await c.env.DB.prepare(
+      `SELECT u.id FROM advisor_engagements e
+         JOIN users u ON u.id = e.founder_user_id
+        WHERE e.id = ? AND e.advisor_id = ?`
+    ).bind(row.engagement_id, m.id).first<{ id: number }>();
+    if (!client) {
+      return c.json({
+        detail: 'Link this work product to an engagement whose client has an Axal account before sending — nothing an unlinked client is sent can ever be recorded as opened',
+      }, 409);
+    }
+
+    const now = nowIso();
+    await c.env.DB.prepare(
+      'UPDATE advisor_deliverable_versions SET sent_at = ?, updated_at = ? WHERE id = ?'
+    ).bind(now, now, v.id).run();
+    await c.env.DB.prepare('UPDATE advisor_deliverables SET updated_at = ? WHERE id = ?')
+      .bind(now, row.id).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverable_versions WHERE id = ?')
+      .bind(v.id).first<VersionRow>();
+    return c.json(versionDto(fresh!));
+  } catch (e) { return mapError(c, e); }
+});
+
 export default advisors;
