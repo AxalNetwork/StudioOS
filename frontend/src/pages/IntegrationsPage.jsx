@@ -1145,6 +1145,9 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
   const [displayName, setDisplayName] = useState(existing?.display_name || provider.display_name);
   const [configText, setConfigText] = useState(existing?.config ? JSON.stringify(existing.config, null, 2) : '');
   const [sfSandbox, setSfSandbox] = useState(false);
+  // DocuSign demo vs prod. Backend defaults missing ?demo= to demo, so we
+  // always send demo=1|0 explicitly. Default demo matches the worker.
+  const [dsDemo, setDsDemo] = useState(true);
   const [err, setErr] = useState('');
   // HubSpot OAuth is gated behind an "Advanced" disclosure because the
   // public app is pending HubSpot Marketplace review — the PAT (Private
@@ -1182,7 +1185,12 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
   const startOauth = async () => {
     setErr('');
     try {
-      const params = provider.key === 'salesforce' ? { sandbox: sfSandbox ? '1' : '' } : {};
+      const params = {};
+      if (provider.key === 'salesforce') params.sandbox = sfSandbox ? '1' : '';
+      // Always send demo=0|1. Omitting the query makes the worker default
+      // to demo, which would silently send production-account users to
+      // account-d.docusign.com.
+      if (provider.key === 'docusign') params.demo = dsDemo ? '1' : '0';
       const res = await api.integrationsOauthStart(provider.key, params);
       if (res.authorize_url) window.location.href = res.authorize_url;
     } catch (e) {
@@ -1252,9 +1260,23 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
                     </label>
                   </div>
                 )}
+                {provider.key === 'docusign' && (
+                  <div className="mb-3 flex items-center gap-3 text-xs" data-testid="docusign-env-picker">
+                    <span className="text-gray-700 dark:text-gray-300">Account:</span>
+                    <label className="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="radio" name="ds_env" checked={!dsDemo} onChange={() => setDsDemo(false)} />
+                      Production
+                    </label>
+                    <label className="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="radio" name="ds_env" checked={dsDemo} onChange={() => setDsDemo(true)} />
+                      Demo
+                    </label>
+                  </div>
+                )}
                 <button type="button" onClick={startOauth} className="bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium px-3 py-1.5 rounded inline-flex items-center gap-1.5">
                   <ExternalLink size={12} /> Continue with {provider.display_name}
                   {provider.key === 'salesforce' && sfSandbox && <span className="ml-1 opacity-80">(Sandbox)</span>}
+                  {provider.key === 'docusign' && dsDemo && <span className="ml-1 opacity-80">(Demo)</span>}
                 </button>
                 {provider.supports_pat && (
                   <p className="mt-2 text-[11px] text-gray-500">
@@ -1265,9 +1287,31 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
                 )}
               </div>
             )}
+            {provider.auth_type === 'api_key' && provider.key === 'crunchbase' && !existing && (
+              <div className="bg-violet-50 border border-violet-200 rounded-lg p-3 text-xs text-violet-900 dark:bg-violet-950/40 dark:border-violet-800 dark:text-violet-100">
+                <p className="font-medium mb-1">Crunchbase Basic user key</p>
+                <p>
+                  Create one at <strong>data.crunchbase.com</strong> → API. Paste the <code className="bg-white px-1 rounded dark:bg-gray-900">user_key</code> below.
+                  Connect runs a live org search to validate it before saving. Daily Basic quota is 200 calls.
+                </p>
+              </div>
+            )}
             {provider.auth_type === 'api_key' && (
-              <Field label={existing ? 'New API key (leave blank to keep current)' : 'API key'}>
-                <input type="password" className={inputCls} value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={existing?.api_key_preview || ''} required={!existing} />
+              <Field label={
+                provider.key === 'crunchbase'
+                  ? (existing ? 'New user_key (leave blank to keep current)' : 'Crunchbase user_key')
+                  : (existing ? 'New API key (leave blank to keep current)' : 'API key')
+              }>
+                <input
+                  type="password"
+                  className={inputCls}
+                  value={apiKey}
+                  onChange={e => setApiKey(e.target.value)}
+                  placeholder={provider.key === 'crunchbase' ? (existing?.api_key_preview || 'user_key') : (existing?.api_key_preview || '')}
+                  required={!existing}
+                  autoComplete="off"
+                  data-testid={provider.key === 'crunchbase' ? 'crunchbase-user-key' : undefined}
+                />
               </Field>
             )}
             {provider.auth_type === 'oauth2' && provider.supports_pat && !existing && (
