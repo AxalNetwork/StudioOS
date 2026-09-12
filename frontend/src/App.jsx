@@ -326,6 +326,7 @@ const StepUpModal = lazy(() => import('./components/StepUpModal'));
 const InstallPrompt = lazy(() => import('./components/InstallPrompt'));
 const KeyboardShortcutsOverlay = lazy(() => import('./components/KeyboardShortcutsOverlay'));
 import useInactivityTimeout from './hooks/useInactivityTimeout';
+import { ONBOARDING_COMPLETE_EVENT } from './lib/onboarding';
 import { shellRoleFor, isSuperAdminUser, readHqView, writeHqView, clearHqView } from './lib/shellRole';
 
 // Phase B · Prompt 5 — sidebar groups now live in `frontend/src/sidebarConfig.js`.
@@ -1070,6 +1071,20 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     })();
     return () => { cancelled = true; };
   }, [user?.id]);
+
+  // The effect above is keyed on `[user?.id]`, so it reads onboarding
+  // progress once per session and never re-reads. That is fine until a
+  // wizard FINISHES mid-session: the shell still holds completed=false, and
+  // the wizard-resume gate below then bounces the user off wherever they
+  // just landed and back into a wizard chosen from their role — an investor
+  // who had just finished was being sent to the founder wizard. The wizard
+  // announces its own completion; listening is cheaper and more reliable
+  // than re-fetching a fact we have already been told.
+  useEffect(() => {
+    const done = () => { setOnboardingComplete(true); setOnboardingLoaded(true); };
+    window.addEventListener(ONBOARDING_COMPLETE_EVENT, done);
+    return () => window.removeEventListener(ONBOARDING_COMPLETE_EVENT, done);
+  }, []);
 
   // Post-OAuth bootstrap in flight. The Google callback set the session
   // cookie entirely server-side and 302'd us to a protected route;
