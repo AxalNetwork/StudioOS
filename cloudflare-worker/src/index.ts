@@ -97,7 +97,7 @@ import search, { ensureAcademySchema } from './routes/search';
 import kyc from './routes/kyc';
 import esign from './routes/esign';
 import trust from './routes/trust';
-import { expireDueArtifacts as expireTrustArtifacts, resyncKycKyb } from './services/trust';
+import { expireDueArtifacts as expireTrustArtifacts, resyncKycKyb, renewalSweep } from './services/trust';
 import integrations from './routes/integrations';
 // Task #2 — HubSpot provider. Side-effect import: the module's top-level
 // `registerProvider({ key: 'hubspot', ... })` runs at boot so the route
@@ -1422,6 +1422,18 @@ export default {
         // NDAs past their `valid_until`, then runs the KYC/KYB resync stub
         // (no-op until Persona/Sumsub are wired). All side-effects are
         // idempotent so re-runs after a missed minute are safe.
+        // Task #163 — renewal warnings at 04:15 UTC, TWENTY MINUTES BEFORE
+        // the expiry sweep below. Ordering matters on the day an item is due:
+        // running after 04:35 would mean the row had already been flipped to
+        // 'expired' and the last warning would be the one nobody got.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 15) {
+          try {
+            const r = await renewalSweep(env, now);
+            if (r.claimed || r.notified) {
+              console.info(`[cron] renewal notices scanned=${r.scanned} claimed=${r.claimed} notified=${r.notified}`);
+            }
+          } catch (e) { console.error('[cron] renewal sweep failed', e); }
+        }
         if (now.getUTCHours() === 4 && now.getUTCMinutes() === 35) {
           try {
             const r = await expireTrustArtifacts(env);

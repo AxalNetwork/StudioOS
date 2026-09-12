@@ -150,6 +150,21 @@ export async function ensureTrustSchema(env: Env): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_pairwise_ndas_a       ON pairwise_ndas(party_a_user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_pairwise_ndas_b       ON pairwise_ndas(party_b_user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_pairwise_ndas_status  ON pairwise_ndas(status)`,
+    // Task #163 (migration 244) — which renewal warnings have already gone
+    // out. `user_id` is in the unique key because a pairwise NDA has two
+    // parties and both must be warned; `expires_at` is in it so a renewed
+    // deadline re-arms all three thresholds.
+    `CREATE TABLE IF NOT EXISTS renewal_notices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      subject_kind TEXT NOT NULL,
+      subject_id INTEGER NOT NULL,
+      threshold_days INTEGER NOT NULL,
+      expires_at TEXT NOT NULL,
+      notified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_renewal_notices_once ON renewal_notices(user_id, subject_kind, subject_id, threshold_days, expires_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_renewal_notices_user ON renewal_notices(user_id, notified_at DESC)`,
   ];
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
   trustSchemaReady = true;
@@ -749,4 +764,269 @@ export async function envelopeHistory(
 
   events.sort((a, b) => (Date.parse(a.at) || 0) - (Date.parse(b.at) || 0));
   return events;
+}
+
+// ---------------------------------------------------------------------------
+// Task #163 — warn people BEFORE something lapses.
+// ---------------------------------------------------------------------------
+
+/**
+ * How far ahead a warning goes out, largest first.
+ *
+ * Three, each sent once, then silence until `expireDueArtifacts` flips the
+ * row. Chosen with the user over a single 30-day notice (one miss and you
+ * hear nothing again) and over a weekly drumbeat (four or five per item is
+ * how a compliance notice teaches people to ignore compliance notices).
+ */
+export const RENEWAL_THRESHOLDS = [30, 14, 7] as const;
+
+/** What a warning is about. Widened only by adding a table above. */
+export type RenewalSubjectKind = 'obligation' | 'pairwise_nda';
+
+export interface RenewalItem {
+  userId: number;
+  kind: RenewalSubjectKind;
+  subjectId: number;
+  /** The stored deadline, verbatim — the claim key depends on it. */
+  expiresAt: string;
+  /** Whole days from `now` to the deadline, rounded down. */
+  daysLeft: number;
+  /** Which of RENEWAL_THRESHOLDS this crossing belongs to. */
+  threshold: number;
+  /** What to call it in the notice. */
+  label: string;
+}
+
+/**
+ * Which threshold a deadline this far out belongs to, or null if none.
+ *
+ * THE SMALLEST CROSSED ONE, not the nearest. A sweep that misses a night —
+ * a failed cron, a deploy, a D1 blip — would otherwise skip that threshold
+ * forever, because the next run finds the item already past it. Taking the
+ * smallest crossed threshold means a missed 14-day run still warns at 13,
+ * once, under the 14-day claim.
+ */
+export function renewalThresholdFor(daysLeft: number): number | null {
+  if (!Number.isFinite(daysLeft) || daysLeft < 0) return null;
+  let hit: number | null = null;
+  for (const t of RENEWAL_THRESHOLDS) if (daysLeft <= t) hit = t;
+  return hit;
+}
+
+/** Whole days between two instants, floored. Negative once past. */
+export function daysUntil(expiresAt: string, now: Date): number | null {
+  const t = Date.parse(String(expiresAt || ''));
+  if (!Number.isFinite(t)) return null;
+  return Math.floor((t - now.getTime()) / 86_400_000);
+}
+
+/**
+ * The obligation keys as a person would say them.
+ *
+ * Deliberately duplicated from `OBLIGATION_META` in `TrustCenterPage.jsx`
+ * rather than imported: production code never crosses the
+ * `frontend/src` <-> `cloudflare-worker/src` line in this repo. The guard
+ * test imports both and compares them, the same treatment the trust score
+ * and the envelope-event labels get.
+ */
+export const OBLIGATION_LABELS: Record<string, string> = {
+  tos_v1: 'Terms of Service',
+  privacy_v1: 'Privacy Policy',
+  founder_nda_v1: 'Founder NDA',
+  investor_nda_v1: 'Investor NDA',
+  mentor_nda_v1: 'Advisor NDA',
+  mentor_disclaimer_v1: 'Advisor disclaimer',
+  partner_msa_v1: 'Partner MSA',
+  kyc_v1: 'Identity verification (KYC)',
+  kyb_v1: 'Entity verification (KYB)',
+  accreditation_v1: 'Accreditation evidence',
+};
+
+export function obligationLabel(key: string): string {
+  return OBLIGATION_LABELS[String(key || '')] || String(key || 'Obligation');
+}
+
+/**
+ * One line per expiring item: what it is and how long is left.
+ *
+ * A STATE, NOT A DATE. `expires 3/14/2027` reads the same whether it is two
+ * years out or next Tuesday, which is exactly the defect `expiryNote` was
+ * written to fix on `/trust`. The notice repeats that lesson rather than
+ * re-learning it.
+ */
+export function renewalItemLine(item: { label: string; daysLeft: number }): string {
+  const d = item.daysLeft;
+  if (d <= 0) return `${item.label} — expires today`;
+  return `${item.label} — expires in ${d} ${d === 1 ? 'day' : 'days'}`;
+}
+
+/**
+ * The digest one person receives.
+ *
+ * ONE DERIVATION OF "how many", used by the title and the body both. The
+ * Trust Center shipped a frame where a tally and a sentence beside it
+ * disagreed about the same rows; a notice that says "2 items" over a list of
+ * three would be the same defect delivered by email.
+ *
+ * The soonest deadline drives the title, because that is the one that
+ * decides how urgently this needs reading.
+ */
+export function renewalDigest(items: RenewalItem[]): { title: string; body: string } {
+  const sorted = [...items].sort((a, b) => a.daysLeft - b.daysLeft);
+  const n = sorted.length;
+  const soonest = sorted[0];
+  const title = n === 1
+    ? `${soonest.label} expires in ${Math.max(0, soonest.daysLeft)} ${soonest.daysLeft === 1 ? 'day' : 'days'}`
+    : `${n} items expire soon — the first in ${Math.max(0, soonest.daysLeft)} ${soonest.daysLeft === 1 ? 'day' : 'days'}`;
+  const lines = sorted.map(i => `• ${renewalItemLine(i)}`);
+  return {
+    title,
+    // No instruction the platform cannot honour: the Trust Center is where
+    // these are resolved, and the link goes there.
+    body: `${lines.join('\n')}\n\nRenew them from your Trust Center before they lapse.`,
+  };
+}
+
+/**
+ * Nightly: find what is about to lapse, claim each warning exactly once, and
+ * send one digest per person.
+ *
+ * COVERS EXACTLY THE ROWS `expireDueArtifacts` FLIPS — `legal_obligations`
+ * that are `satisfied` with a deadline, and `pairwise_ndas` that are
+ * `active` with one. That predicate is copied on purpose rather than
+ * reinvented: if the warning and the expiry disagreed about what expires,
+ * someone would be warned about an item that never lapses, or lapse without
+ * a warning. It also gives the "never warn about an already-settled row"
+ * rule for free — a `waived`, `revoked` or already-`expired` row is not
+ * `satisfied`/`active` and never matches.
+ *
+ * Every D1 call is wrapped: one unreadable row must not cost everyone else
+ * their warning, the same posture `expireDueArtifacts` and `resyncKycKyb`
+ * already take.
+ */
+export async function renewalSweep(
+  env: Env,
+  now: Date = new Date(),
+  deps: { notify?: (env: Env, args: any) => Promise<unknown> } = {},
+): Promise<{ scanned: number; claimed: number; notified: number }> {
+  await ensureTrustSchema(env);
+  const horizon = new Date(now.getTime() + RENEWAL_THRESHOLDS[0] * 86_400_000).toISOString();
+  const nowIso = now.toISOString();
+  const candidates: RenewalItem[] = [];
+  let scanned = 0;
+
+  // -- obligations ----------------------------------------------------------
+  try {
+    const res: any = await env.DB.prepare(
+      `SELECT id, user_id, obligation_key, expires_at
+         FROM legal_obligations
+        WHERE status = 'satisfied'
+          AND expires_at IS NOT NULL
+          AND expires_at > ?
+          AND expires_at <= ?`,
+    ).bind(nowIso, horizon).all();
+    for (const r of ((res?.results || []) as any[])) {
+      scanned += 1;
+      const daysLeft = daysUntil(r.expires_at, now);
+      if (daysLeft === null) continue;
+      const threshold = renewalThresholdFor(daysLeft);
+      if (threshold === null) continue;
+      candidates.push({
+        userId: Number(r.user_id), kind: 'obligation', subjectId: Number(r.id),
+        expiresAt: String(r.expires_at), daysLeft, threshold,
+        label: obligationLabel(r.obligation_key),
+      });
+    }
+  } catch (e) { console.error('[trust] renewal scan (obligations) failed', e); }
+
+  // -- pairwise NDAs --------------------------------------------------------
+  // BOTH PARTIES. One row, two people who lose cover when it lapses — and
+  // the claim key carries user_id precisely so the first party's warning
+  // does not swallow the second's.
+  try {
+    const res: any = await env.DB.prepare(
+      `SELECT id, party_a_user_id, party_b_user_id, valid_until
+         FROM pairwise_ndas
+        WHERE status = 'active'
+          AND valid_until IS NOT NULL
+          AND valid_until > ?
+          AND valid_until <= ?`,
+    ).bind(nowIso, horizon).all();
+    for (const r of ((res?.results || []) as any[])) {
+      scanned += 1;
+      const daysLeft = daysUntil(r.valid_until, now);
+      if (daysLeft === null) continue;
+      const threshold = renewalThresholdFor(daysLeft);
+      if (threshold === null) continue;
+      for (const uid of [r.party_a_user_id, r.party_b_user_id]) {
+        if (!Number.isFinite(Number(uid)) || Number(uid) <= 0) continue;
+        candidates.push({
+          userId: Number(uid), kind: 'pairwise_nda', subjectId: Number(r.id),
+          expiresAt: String(r.valid_until), daysLeft, threshold,
+          label: 'Mutual NDA',
+        });
+      }
+    }
+  } catch (e) { console.error('[trust] renewal scan (NDAs) failed', e); }
+
+  // -- claim, then group ----------------------------------------------------
+  // THE INSERT IS THE DECISION. `INSERT OR IGNORE` succeeds exactly once per
+  // (person, item, threshold, deadline); a second run the same night claims
+  // nothing and therefore sends nothing. Two overlapping runs cannot
+  // double-send for the same reason.
+  const byUser = new Map<number, RenewalItem[]>();
+  let claimed = 0;
+  for (const c of candidates) {
+    let won = false;
+    try {
+      const ins: any = await env.DB.prepare(
+        `INSERT OR IGNORE INTO renewal_notices
+           (user_id, subject_kind, subject_id, threshold_days, expires_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      ).bind(c.userId, c.kind, c.subjectId, c.threshold, c.expiresAt).run();
+      won = Number((ins?.meta as any)?.changes ?? 0) === 1;
+    } catch (e) { console.error('[trust] renewal claim failed', e); }
+    if (!won) continue;
+    claimed += 1;
+    const list = byUser.get(c.userId) || [];
+    list.push(c);
+    byUser.set(c.userId, list);
+  }
+
+  // -- one notice per person ------------------------------------------------
+  const send = deps.notify
+    || (async (e: Env, a: any) => (await import('./notify')).notify(e, a));
+  let notified = 0;
+  for (const [userId, items] of byUser) {
+    const { title, body } = renewalDigest(items);
+    try {
+      await send(env, {
+        userId,
+        type: 'renewal_due',
+        // NOT critical, deliberately. An omitted or critical category
+        // bypasses quiet hours AND the digest buffer (notify.ts), which is
+        // the opposite of what a batched renewal notice is for.
+        category: 'compliance',
+        title,
+        body,
+        link: '/trust',
+        channels: ['in_app', 'email'],
+        payload: {
+          items: items.map(i => ({
+            kind: i.kind, subject_id: i.subjectId, label: i.label,
+            expires_at: i.expiresAt, days_left: i.daysLeft, threshold: i.threshold,
+          })),
+        },
+      });
+      notified += 1;
+    } catch (e) {
+      // The claim already succeeded, so a failed send costs this person this
+      // warning rather than repeating it nightly. That is the safe direction:
+      // the next threshold still fires, and the alternative — rolling the
+      // claim back — turns a flaky notifier into a nightly spammer.
+      console.error('[trust] renewal notify failed', userId, e);
+    }
+  }
+
+  return { scanned, claimed, notified };
 }

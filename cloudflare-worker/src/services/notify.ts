@@ -36,6 +36,12 @@ export type NotifyCategory =
   | 'calendar'
   | 'scoring'
   | 'proactive_nudges'
+  // Task #163 — obligations and NDAs approaching expiry. Named here rather
+  // than passed as a bare string so the omission below is deliberate:
+  // `compliance` is NOT in CRITICAL_CATEGORIES, because a renewal notice is
+  // exactly the kind of thing quiet hours and the digest exist for. A
+  // critical one would wake someone at 3am about a deadline 30 days out.
+  | 'compliance'
   | string;
 
 /** Categories that bypass quiet hours AND digest — spec'd by Task #14. */
