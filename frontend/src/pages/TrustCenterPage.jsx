@@ -19,7 +19,7 @@ import { safeReadJSON } from '../lib/storage';
 import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
 import {
   SCORE_BANDS, bandOf, verdictFor, scoreLine, obligationSummary,
-  outstandingCounts, deltaNote, NO_HISTORY_NOTE,
+  outstandingCounts, waitingOn, deltaNote, NO_HISTORY_NOTE,
   collapseEnvelopeHistory, envelopeEventLabel, envelopeEventTone,
   envelopeEventWhen, NO_ENVELOPE_HISTORY_NOTE,
 } from '../lib/trustCenter';
@@ -391,14 +391,28 @@ function NdaCard({ items, onChanged }) {
  * "0 blocked" and "no blocked row exists" are the same fact stated two ways and
  * the second one reads as an achievement.
  */
+/**
+ * The tally beside the obligations list.
+ *
+ * COUNTED BY `waitingOn`, NOT BY THE PILL TONE — and the render is what
+ * caught it. Splitting on `toneOf` puts `pending` under "in progress", so
+ * with three untouched obligations and one under review the pills read
+ * "4 in progress" inches from a sentence reading "1 in progress", in the
+ * same frame, about the same five rows. Both were defensible on their own
+ * terms and together they were a contradiction.
+ *
+ * So there is now ONE split on this page — `outstandingCounts` — and these
+ * pills are the same two numbers the two sentences are built from, plus the
+ * settled remainder. The severity tones stay: bad for what waits on the
+ * reader, amber for what is moving, green for what is done.
+ */
 function ToneCounts({ obligations }) {
-  const n = { bad: 0, prog: 0, ok: 0, neutral: 0 };
-  for (const o of obligations) n[toneOf(o.status)] += 1;
+  const { needs, inProgress } = outstandingCounts(obligations);
+  const settled = obligations.filter(o => waitingOn(o.status) === 'settled').length;
   const shown = [
-    ['bad', n.bad, 'blocked'],
-    ['prog', n.prog, 'in progress'],
-    ['ok', n.ok, 'satisfied'],
-    ['neutral', n.neutral, 'not started'],
+    ['bad', needs, 'need action'],
+    ['prog', inProgress, 'in progress'],
+    ['ok', settled, 'satisfied'],
   ].filter(([, c]) => c > 0);
   if (!shown.length) return null;
   return (
@@ -551,7 +565,12 @@ function EnvelopeHistory({ envelopeUuid }) {
         const last = i === state.events.length - 1;
         const when = envelopeEventWhen(e.at);
         return (
-          <div key={`${e.action}-${e.at}-${i}`} className="flex items-start gap-2.5">
+          // NOT `items-start`. The dot column is a flex column whose connector
+          // is `flex-1`, and under `items-start` the column shrinks to the
+          // dot and the line resolves to zero height — the timeline rendered
+          // as four loose dots. Stretching is the default; saying nothing is
+          // the fix.
+          <div key={`${e.action}-${e.at}-${i}`} className="flex gap-2.5">
             <div className="flex flex-none flex-col items-center">
               <span className={`mt-1.5 h-2 w-2 rounded-full ${
                 tone === 'bad' ? 'bg-red-500'

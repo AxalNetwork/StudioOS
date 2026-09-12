@@ -268,8 +268,21 @@ test('the counts describe the list, they do not re-score it', () => {
   assert.doesNotMatch(fn, /^function (?!ToneCounts)/m,
     'the ToneCounts slice has swallowed another function');
   // Counted from the same array the rows render — no second fetch, no second source.
-  assert.match(fn, /for \(const o of obligations\) n\[toneOf\(o\.status\)\] \+= 1;/);
+  assert.match(fn, /outstandingCounts\(obligations\)/);
   assert.doesNotMatch(fn, /api\./, 'ToneCounts must not fetch');
+
+  // AND FROM THE SAME SPLIT THE TWO SENTENCES USE. It counted by `toneOf`
+  // until the page was rendered: `pending` is the amber `prog` tone, so three
+  // untouched obligations plus one in review drew "4 in progress" inches from
+  // a sentence reading "1 in progress", in one frame, about the same rows.
+  // Neither number was wrong on its own terms; together they were nonsense.
+  assert.doesNotMatch(fn, /toneOf\(o\.status\)/,
+    'the tally is back on the pill tone — it will contradict the sentences above it');
+  assert.match(fn, /waitingOn\(o\.status\) === 'settled'/,
+    'the settled count is derived some other way than the two beside it');
+  // The label must not be the sentence's word for the OTHER bucket.
+  assert.match(fn, /\['bad', needs, 'need action'\]/);
+  assert.match(fn, /\['prog', inProgress, 'in progress'\]/);
   // A zero is omitted, not drawn: "0 blocked" reads as an achievement.
   assert.match(fn, /\.filter\(\(\[, c\]\) => c > 0\)/);
 });
