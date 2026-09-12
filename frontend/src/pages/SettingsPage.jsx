@@ -10,6 +10,7 @@ import {
   Sun, Moon, ChevronDown, Check, Ban, Scale, Loader2, Activity,
 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
+import { useAuth } from '../hooks/useAuthSync';
 import { startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
 // Task #6 (IF) — Onboarding tab (checklist + tour re-run + reset).
@@ -1888,6 +1889,8 @@ function PasskeyPanel({ flash }) {
 // SMS as a backup 2FA factor (Google Cloud Identity Platform). Phone numbers
 // at rest server-side; the UI only ever sees the last 4 digits.
 function SmsPanel({ data, flash }) {
+  const { role: liveRole } = useAuth();
+  const isAdmin = String(liveRole || '').toLowerCase() === 'admin';
   const [status, setStatus] = useState(null);
   const [step, setStep] = useState('idle');           // idle | enroll | verify
   const [country, setCountry] = useState('US');
@@ -1952,10 +1955,22 @@ function SmsPanel({ data, flash }) {
   if (!status.sms_available) {
     return (
       <Card title="SMS as a backup factor" description="SMS verification is not enabled on this server yet.">
-        <div className="text-xs text-gray-500 dark:text-gray-400">
-          An administrator needs to provision Google Cloud Identity Platform credentials
-          (<span className="font-mono">GCIP_API_KEY</span>) to turn this on. Once enabled, you'll
-          be able to add a phone number here as a backup factor for account recovery.
+        <div className="text-xs text-gray-500 dark:text-gray-400 space-y-2">
+          <p>
+            An administrator needs to add Google Cloud Identity Platform credentials
+            under Admin → Integration Keys → Google Identity (SMS). That stores the
+            Web API key (<span className="font-mono">GCIP_API_KEY</span>) so you can
+            add a phone number here as a backup factor for account recovery.
+          </p>
+          {isAdmin && (
+            <a
+              href="/admin?tab=integration-keys"
+              data-testid="sms-admin-keys-link"
+              className="inline-flex text-violet-700 hover:underline font-medium"
+            >
+              Open Integration Keys
+            </a>
+          )}
         </div>
       </Card>
     );
