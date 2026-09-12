@@ -256,17 +256,22 @@ const PROFILES = {
     canvasDirs: ['design/incoming', 'design/canvases/integrated'],
     canvas: /^(Pages · Advisor |Advisor Detail · Practice)/,
     buckets: /^(expertise|network|research|practice)\//,
-    // 13 and 13 as of canvas PR2: `practice/engagements` is the second Practice
+    // 14 and 14 as of canvas PR3: `practice/delivery` is the third Practice
     // artboard to land, leaving `excluded` below and taking its place here with
-    // one export ("Export contract pack"). PR1 did the same before it with
-    // "Export decision log". Both counts move together because each Practice
-    // artboard so far draws exactly two ops, one of them an export.
-    zones: 13,
+    // one export ("Export as client pack"). PR1 and PR2 did the same before it.
+    // Both counts move together because each Practice artboard so far draws
+    // exactly two ops, one of them an export.
+    zones: 14,
     links: 1,
-    exports: 13,
-    // Four page-supplied ops — the same set partner has, because `AskZone` and
-    // `LibraryZone` are each one file serving both. Was 0.
-    handlers: 4,
+    exports: 14,
+    // FIVE PAGE-SUPPLIED OPS, AND THE FIFTH IS THE FIRST ONE THIS PROFILE DID
+    // NOT SHARE WITH PARTNER. Four of them are `AskZone` and `LibraryZone`,
+    // which are each one file serving both licences. The fifth is Delivery's
+    // `Bulk: nudge unopened` — an advisor→client send, which exists here and
+    // nowhere else because migration 239 refuses to send a work product to a
+    // client with no account, so every row that could be unopened is
+    // addressable. Was 0, then 4.
+    handlers: 5,
     embeddedGuards: 0,
     // Both remaining exclusions are cards whose whole page IS the gap
     // statement, so there is nothing for a row to sit over. `expertise/
@@ -291,7 +296,8 @@ const PROFILES = {
     // `practice/opportunities` LEFT ON PR1, the first to do so, which is the
     // list working as intended: four became three because an artboard landed,
     // not because anyone edited the count. `practice/engagements` LEFT ON PR2
-    // the same way, and three became two.
+    // the same way, and three became two. `practice/delivery` LEFT ON PR3, and
+    // two became one — the last Practice deferral is Sessions.
     //
     // `practice/earnings` IS NOT AMONG THEM, and the canvas says why in its own
     // words: PR5 "is drawn at full fidelity on the system canvas as D4 … listed
@@ -302,7 +308,7 @@ const PROFILES = {
     // that and this guard caught it.
     excluded: [
       'expertise/visibility', 'network/organizations',
-      'practice/delivery', 'practice/sessions',
+      'practice/sessions',
     ],
     live: (route) => route.replace(/^\//, ''),
   },

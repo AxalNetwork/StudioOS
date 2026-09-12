@@ -90,23 +90,33 @@ test('every Practice zone is served — none is left claiming a store that exist
     .map((r) => r.slice('/practice/'.length));
   assert.deepEqual(zones, ['opportunities', 'engagements', 'delivery', 'sessions', 'earnings']);
 
-  // Two come from the legacy Advisory workspace, three from their own pages.
-  // Together that must be all five: Practice has no unbacked zone left.
+  // ALL FIVE COME FROM THEIR OWN PAGE NOW, AND NONE FROM THE LEGACY WORKSPACE.
+  // That is what `fromWorkspace` being empty asserts, and the assertion is the
+  // point: the legacy five-tab workspace no longer serves a single Practice
+  // zone, so no advisor can reach two pages that answer the same question with
+  // different instruments.
   //
-  // `opportunities` MOVED on canvas PR1 and `engagements` on PR2. Both rendered
-  // the legacy five-tab Advisory workspace `embedded`: one a pending-request
-  // queue, the other a flat list of BOOKINGS keyed on `advisor_bookings.status`.
-  // Both were honest and neither was its artboard — PR1 asks for a decision LOG
-  // over every request that ever arrived, PR2 for a CONTRACT board with renewal
-  // cycles that nothing could store until migration 238. Delivery is still the
-  // legacy workspace and moves the same way when PR3 lands.
+  // `opportunities` MOVED on canvas PR1, `engagements` on PR2 and `delivery` on
+  // PR3. All three rendered the legacy workspace `embedded`: a pending-request
+  // queue, a flat list of BOOKINGS keyed on `advisor_bookings.status`, and a
+  // post-session review loop. All three were honest and none was its artboard —
+  // PR1 asks for a decision LOG over every request that ever arrived, PR2 for a
+  // CONTRACT board with renewal cycles that nothing could store until migration
+  // 238, PR3 for a collection of WORK PRODUCTS with a version trail and an open
+  // receipt that nothing could store until 239.
+  //
+  // THE `LIVE` BLOCK IS STILL READ RATHER THAN ASSUMED GONE. It keeps its
+  // `/practice` key with an empty Set — the mechanism is the generic escape
+  // hatch for a bucket served by a workspace of its own — so this slice still
+  // has something to find, and finding nothing in it is the assertion.
   const live = bucketRoutes.slice(bucketRoutes.indexOf('const LIVE = {'),
     bucketRoutes.indexOf('const ZONE = {'));
+  assert.ok(live.length > 0 && live.length < 3000, 'the LIVE slice must not run away');
   const fromWorkspace = zones.filter((z) => live.includes(`'${z}'`));
   const fromOwnPage = dispatchMap()['/practice'] || [];
-  assert.deepEqual(fromWorkspace, ['delivery']);
+  assert.deepEqual(fromWorkspace, []);
   assert.deepEqual(fromOwnPage.slice().sort(),
-    ['earnings', 'engagements', 'opportunities', 'sessions']);
+    ['delivery', 'earnings', 'engagements', 'opportunities', 'sessions']);
   assert.deepEqual([...fromWorkspace, ...fromOwnPage].sort(), [...zones].sort());
 
   // And the copy that said they had "no store at all" is gone. It was true

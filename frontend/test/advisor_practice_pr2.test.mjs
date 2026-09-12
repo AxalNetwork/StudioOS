@@ -301,18 +301,29 @@ test('engagements is mounted as its own page, and left the legacy workspace', ()
   assert.match(ROUTES, /const PracticeEngagementsZone = lazy\(/, 'and it is actually imported');
 });
 
-test('both replaced legacy routes redirect rather than serving a second answer', () => {
+test('every replaced legacy route redirects rather than serving a second answer', () => {
   // Decision 1 of this series: each legacy tab becomes a redirect in the PR that
   // replaces it. PR1 shipped its zone and left `/advisor/advisory/opportunities`
   // serving the old inbox, so two pages answered the same question with
-  // different instruments. Both are redirects now.
-  for (const slug of ['opportunities', 'engagements']) {
+  // different instruments. All three replaced tabs are redirects now.
+  //
+  // DELIVERY JOINED THE LIST ON PR3 AND THIS TEST USED TO ASSERT THE OPPOSITE —
+  // `path="/advisor/advisory/delivery" element={guard(` with the note "its
+  // artboard has not landed". It had not, then; the assertion was true and is
+  // the one this series is built to move. Updating it is the point of writing it
+  // that way, and what must NOT happen is the assertion being dropped: the same
+  // check now says delivery redirects.
+  for (const slug of ['opportunities', 'engagements', 'delivery']) {
     assert.match(APP, new RegExp(
       `path="/advisor/advisory/${slug}" element=\\{<Navigate to="/practice/${slug}" replace />\\}`,
     ), slug);
   }
-  // Delivery still serves the workspace — its artboard has not landed.
-  assert.match(APP, /path="\/advisor\/advisory\/delivery" element=\{guard\(/);
+  // CLIENTS AND CONTRACTS STILL SERVE THE WORKSPACE, and they are the whole of
+  // what is left: neither has an artboard, which is a gap in the canvas rather
+  // than permission to delete a working tab.
+  for (const slug of ['clients', 'contracts']) {
+    assert.match(APP, new RegExp(`path="/advisor/advisory/${slug}" element=\\{guard\\(`), slug);
+  }
   // And the workspace's own default tab is not a redirect, which would bounce
   // twice.
   assert.match(APP, /path="\/advisor\/advisory" element=\{<Navigate to="\/advisor\/advisory\/clients" replace \/>\}/);

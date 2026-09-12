@@ -102,6 +102,31 @@ export const ADVISOR_ZONE_ACTIONS = {
     { label: 'Export contract pack', kind: 'export' },
   ],
 
+  // NEITHER OF THESE NEEDS THE `canvas:`/`label:` SPLIT, which is worth saying
+  // because the two artboards before it both did. `Bulk: nudge unopened` is 20
+  // characters and `Export as client pack` is 21, against a cap of 24
+  // (`zone_label_contract.test.mjs`), so both render the canvas's own string.
+  //
+  // `Bulk: nudge unopened` IS THE FIRST ADVISOR→CLIENT SEND IN THIS PRODUCT,
+  // and it is built rather than deferred because migration 239's send rule
+  // removes the blocker that stopped its sibling on Engagements. That one is
+  // `unbuilt` because a renewal notice may target a client with no account and
+  // a bulk send would silently skip them. Here it cannot: a deliverable version
+  // can only BE sent to a client who has an account, so every row that could
+  // possibly be unopened is addressable by construction. The channel already
+  // existed — `routes/messages.ts` (migration 185) opens a thread with any
+  // account and its `SUBJECT_TYPES` already carries `'engagement'`.
+  //
+  // `kind: 'handler'` RATHER THAN A DESTINATION, per D67: it acts on rows this
+  // page has already loaded, and the page confirms the recipients on screen
+  // before anything is sent. The one case the send rule cannot prevent — an
+  // engagement unlinked after a send — is reported as a count of rows the nudge
+  // will NOT reach, never skipped quietly.
+  'practice/delivery': [
+    { label: 'Bulk: nudge unopened', kind: 'handler', handler: 'nudgeUnopened' },
+    { label: 'Export as client pack', kind: 'export' },
+  ],
+
   // ── Network ──────────────────────────────────────────────────────────────
   'network/relationships': [
     { label: 'Log interaction', unbuilt: 'no interaction log is stored' },

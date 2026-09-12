@@ -2319,14 +2319,21 @@ function AppInner() {
           /advisor/advisory a two-hop bounce. Clients is the first tab the canvas
           has no zone for, which is what this route now exists to serve. */}
       <Route path="/advisor/advisory" element={<Navigate to="/advisor/advisory/clients" replace />} />
-      {/* TWO REDIRECTS, ONE PER ARTBOARD THAT HAS LANDED. The opportunities one
-          was owed by PR1 and missed — the zone shipped, the legacy inbox stayed
-          reachable at its old URL, and two pages answered the same question with
-          different instruments. Delivery keeps the workspace until PR3. */}
+      {/* THREE REDIRECTS, ONE PER ARTBOARD THAT HAS LANDED, and that is now every
+          tab the canvas has a zone for. The opportunities one was owed by PR1 and
+          missed — the zone shipped, the legacy inbox stayed reachable at its old
+          URL, and two pages answered the same question with different
+          instruments. The delivery one is owed by PR3 for the same reason and is
+          not a deletion: the review loop that tab uniquely carried is a section
+          of the new page, so the redirect loses no capability.
+
+          CLIENTS AND CONTRACTS ARE THE WHOLE REMAINING WORKSPACE. Neither has an
+          artboard, which is a gap in the canvas rather than permission to drop a
+          working tab, so both keep their URL and stay linked from Opportunities. */}
       <Route path="/advisor/advisory/opportunities" element={<Navigate to="/practice/opportunities" replace />} />
       <Route path="/advisor/advisory/engagements" element={<Navigate to="/practice/engagements" replace />} />
+      <Route path="/advisor/advisory/delivery" element={<Navigate to="/practice/delivery" replace />} />
       <Route path="/advisor/advisory/clients" element={guard(['admin', 'advisor'], advisorPrivateWorkspace(<AdvisorAdvisoryWorkspace />))} />
-      <Route path="/advisor/advisory/delivery" element={guard(['admin', 'advisor'], advisorPrivateWorkspace(<AdvisorAdvisoryWorkspace />))} />
       <Route path="/advisor/advisory/contracts" element={guard(['admin', 'advisor'], advisorPrivateWorkspace(<AdvisorAdvisoryWorkspace />))} />
       {/* documentation/architecture/DECISIONS.md D12 — the Research row is /market-intel and nothing else.
           D8 redirected the market tab; D9 withdrew the funds tab; D12 withdrew

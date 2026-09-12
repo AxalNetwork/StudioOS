@@ -245,6 +245,30 @@ export const ADVISOR_ZONE_FILTERS = {
     { canvas: 'By client', key: 'by_client' },
   ],
 
+  // ALL FIVE RUN, AND ONE OF THEM ONLY RUNS BECAUSE THE STORE RESOLVED THE
+  // CANVAS'S OWN INCONSISTENCY. `Draft` is drawn as a chip and defined as a
+  // pill, but no row in the artboard's fixture carries that state — its draft
+  // row is `state:'Not started'` with `version:'v2 draft'`, two names for one
+  // thing. Clicking the chip as drawn would have returned nothing, which is the
+  // exact failure this file's docblock is about: an empty set reading as an
+  // answer. Migration 239 makes it a real state — a work product whose latest
+  // version has never been sent — so `Draft` is `not_started` and the chip
+  // narrows honestly.
+  //
+  // `Unopened` and `Opened` read the derived state, which comes from whether
+  // `opened_at` exists — and that column is written by the FOUNDER side, never
+  // by an advisor route (D72). These two chips are the only place in four
+  // profiles where a filter reads a fact the signed-in user cannot author.
+  //
+  // `By client` reorders rather than narrows, as on Engagements.
+  'practice/delivery': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Unopened', key: 'unopened' },
+    { canvas: 'Opened', key: 'opened' },
+    { canvas: 'Draft', key: 'draft' },
+    { canvas: 'By client', key: 'by_client' },
+  ],
+
   'research/library': [
     { canvas: 'All', key: 'all' },
     { canvas: 'Session docs', key: 'client', label: 'About a client' },
