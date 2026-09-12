@@ -3834,3 +3834,92 @@ instead: "no support at all" is an anti-join between the ledger and
 `portfolio_positions` — two stored sets compared — never the ledger's silence
 read as an answer, and never inferred from an update, an introduction row, or
 book membership.
+
+## D71 — The renewal rate decides the engagement store's shape: two verbs own the three columns it reads
+
+Migration 238 adds `advisor_engagements` for Practice · Engagements. Unlike the
+five-of-six false `unbuilt` reasons the investor series turned up (D70), **all
+four claims on this zone were true**, and the schema check is why:
+
+| Table read | Why it cannot answer |
+| --- | --- |
+| `engagements` | the **partner** licence, and unusable rather than merely wrong: `need_id` and `quote_id` are NOT NULL and `quote_id` is **UNIQUE**, so an advisory relationship needs a fabricated need *and* a fabricated quote that cannot even be reused twice; `price REAL NOT NULL` contradicts the artboard's own equity client; `partner_id`/`founder_id`/`project_id` are all NOT NULL and there is no advisor column. It is also defined twice, which drags in `check-migration-column-shapes.mjs`. |
+| `partner_retainers` (208) | the right **shape**, the wrong owner — keyed `engagement_id REFERENCES engagements(id)`, unreachable from an advisor. Its `shape`/`renews_at`/`ended_at` are copied rather than reinvented. |
+| `partner_engagement_health` (232) | `scope_state`/`scope_note`, also keyed on `engagements(id)`, and carrying no renewal decision or cycle count even for partners. |
+| `advisor_client_grants` (218) | has `status` and `expires_at` and looks reusable. It is **data-room access**. Reading `expires_at` as a contract term is exactly the mislabel D70's table warns about. |
+| `advisor_state` (048) | the name is a trap: `(user_id, question_id, last_asked_at, answer_count)`, the AI advisor's question cadence. |
+
+**A renewal decision and a cycle count exist nowhere in the product** — not even
+on the partner side. Those two are genuinely new rather than ported, and
+everything the artboard calls "Only here · the number that judges a practice"
+is computed from them.
+
+**That is why the write surface is four verbs and not one PATCH.** `lane`,
+`cycles` and `outcome` are the rate's whole input. A merge-PATCH over all three
+would let a caller assert `outcome = 'renewed'` with no cycle behind it, or
+clear a cycle with no decision, and the instrument would report whatever the
+last writer typed. So the descriptive columns merge freely through
+`PATCH /me/engagements/:id`, and those three move only through
+`POST …/advance` (a lane) and `POST …/renewal` (a decision).
+
+**Signed → ended is refused on `/advance`, with a 409 naming `/renewal`.**
+Ending a signed contract *is* the renewal decision that did not go the advisor's
+way; routing it through the lane verb would drop it out of the denominator —
+the failure the canvas names outright: *"a rate that excludes its failures is
+not a rate."* Ending an **unsigned** row is allowed there and records no
+outcome at all, because an abandoned draft never had a renewal to lose. That
+asymmetry is the store's central rule, and
+`cloudflare-worker/test/advisor_engagements_scope.test.ts` drives both halves
+against real SQLite.
+
+**Three consequences of reading the canvas fixture rather than the artboard
+markup**, each of which changed the schema after the first draft:
+
+- **`cycles` counts terms RUN, including the one in progress.** The fixture is
+  explicit — "Fifth cycle" at `cycles:5`, "First cycle ending" at `cycles:1` —
+  so signing sets 1 and each renewal adds one. The renewal history lists every
+  row with `cycles > 0`, which is every engagement ever signed; an unsent draft
+  is the only thing 0 leaves out. An earlier draft of the migration had this
+  backwards, counting renewals *behind* a row.
+- **`proposed_at` exists because a proposal card reads "Sent Aug 21".** Folding
+  that into `started_at` would file the day terms went out as the day the work
+  began. Three stamps, one per transition, plus `term_ends_at` — which serves
+  both "Renews" and "Ends", because which one it means is `lane`'s job.
+- **There is no `end_reason`.** The first draft had one, reasoning that "they
+  hired in-house" and "wrong fit" are different kinds of ending. The fixture
+  settles it the other way: both arrive as one sentence, the artboard draws
+  exactly one Note column, and a second field would have had no reader.
+
+**`outcome` is NULL until a row is signed, which diverges from the fixture on
+purpose.** That fixture stamps `outcome:'Active'` on an unsent draft and its own
+comment calls the field "the placeholder outcome field", routing the Active tile
+around it. A stored value the artboard has to work around is the wrong default;
+here an unsent draft cannot reach the rate's denominator at all. The Active
+tile therefore counts **lanes**, not outcomes — a renewed contract is the most
+active thing on the board and its outcome is `'renewed'`, so an outcome filter
+would report 2 of the canvas's 5.
+
+**`amount_cents` is nullable and has its reader on another artboard.** PR5 ·
+Earnings carries a per-client `retainer` figure beside a session count
+(Meridian: 13500 over 6 sessions), and that cannot come from
+`advisor_bookings.amount_cents`, which is the per-session column already
+occupying the other half of the same row. `shape` is load-bearing across the
+same seam: Earnings excludes the equity client **by design**, because a cash
+gross cannot span a client who bills no cash, and without a stored shape it
+would have to guess which to leave out. NULL means nobody recorded an amount,
+never zero (D56/D68) — and `renewal_rate` is NULL before the first decision,
+because a practice that has not reached a renewal has not failed to renew.
+
+**No lazy bootstrap, and that is the rule rather than an omission.**
+`GOTCHAS.md` ties `services/advisorStoresSchema.ts` to **ALTER** migrations:
+they are flagged non-idempotent and *recorded-without-running* by a `--baseline`
+adoption. 238 is pure `CREATE TABLE IF NOT EXISTS` + `CREATE INDEX IF NOT
+EXISTS`, so the runner applies it for real; mirroring it into the bootstrap
+would also break `advisor_stores_bootstrap.test.ts`, which holds the healed
+schema equal to migrations 201–206 exactly. Migration 237 is the precedent —
+same series, same shape, no bootstrap.
+
+**The board advances by control, not by drag.** The canvas labels it "By
+contract state · drag to advance". A per-card control is keyboard-reachable
+without a drag-and-drop implementation to make accessible, and the state change
+it writes is identical. Recorded here rather than passing silently.
