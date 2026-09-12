@@ -67,6 +67,16 @@ import { isGcipConfigured, sendVerificationCode, signInWithPhoneNumber } from '.
 import { send as sendEmail } from '../services/email/send';
 import { stripTrailingSlashes } from '../util/url';
 import { notify } from '../services/notify';
+import { withDeadline } from '../util/deadline';
+
+// A stall is an outage, and this limiter fails closed on an outage. Both KV
+// calls carry a deadline because KV takes no AbortSignal: without one the catch
+// below — correct, deliberate, and the whole point of the audit-M1 posture —
+// simply never runs, and the request hangs instead of being denied. Denying in
+// two seconds is the declared policy arriving on time; hanging for thirty is the
+// policy not arriving at all.
+const RATE_KV_DEADLINE_MS = 2_000;
+
 
 const recover = new Hono<{ Bindings: Env }>();
 
@@ -92,9 +102,12 @@ async function rate(env: Env, key: string, max: number, windowSec: number): Prom
     const now = Math.floor(Date.now() / 1000);
     const slot = Math.floor(now / windowSec);
     const k = `rl:${key}:${slot}`;
-    const cur = parseInt((await env.RATE_LIMITS.get(k)) || '0', 10);
+    const cur = parseInt((await withDeadline(env.RATE_LIMITS.get(k), RATE_KV_DEADLINE_MS, 'rate-get')) || '0', 10);
     if (cur >= max) return false;
-    await env.RATE_LIMITS.put(k, String(cur + 1), { expirationTtl: windowSec + 5 });
+    await withDeadline(
+      env.RATE_LIMITS.put(k, String(cur + 1), { expirationTtl: windowSec + 5 }),
+      RATE_KV_DEADLINE_MS, 'rate-put',
+    );
     return true;
   } catch (e) {
     // Fail-CLOSED on KV outage (audit M1): account-recovery throttles must deny
@@ -468,11 +481,11 @@ recover.post('/sms/start', async (c) => {
   const { id: ticketId, lookup_token } = await createTicket(c.env, user.id, 'sms', { sms_last4: sms_.last4 }, c);
   // Bind the GCIP session to the ticket so /sms/verify can atomically
   // resolve THIS ticket (no orphaned `open` rows in activity).
-  await c.env.RATE_LIMITS.put(
+  await withDeadline(c.env.RATE_LIMITS.put(
     `recover-sms-session:${r.sessionInfo}`,
     JSON.stringify({ user_id: user.id, email, ts: Date.now(), ticket_id: ticketId }),
     { expirationTtl: 600 },
-  );
+  ), RATE_KV_DEADLINE_MS, 'stash-put');
   await notifyAllChannels(c.env, user, 'auth_recovery_started', { ticket_id: String(ticketId) });
   return c.json({ session_info: r.sessionInfo, last4: sms_.last4, ticket_id: ticketId, lookup_token });
 });
@@ -487,7 +500,7 @@ recover.post('/sms/verify', async (c) => {
   if (!(await rate(c.env, `recover-sms-verify:${email}`, 5, 300))) {
     return c.json({ error: 'Too many attempts' }, 429);
   }
-  const stashed = await c.env.RATE_LIMITS.get(`recover-sms-session:${sessionInfo}`);
+  const stashed = await withDeadline(c.env.RATE_LIMITS.get(`recover-sms-session:${sessionInfo}`), RATE_KV_DEADLINE_MS, 'stash-get');
   if (!stashed) return c.json({ error: 'session_expired' }, 410);
   let bound: { user_id: number; email: string; ticket_id?: number };
   try { bound = JSON.parse(stashed); } catch { return c.json({ error: 'session_corrupted' }, 500); }
@@ -504,7 +517,7 @@ recover.post('/sms/verify', async (c) => {
 
   const stored = await loadSms(c.env, user.id);
   if (!stored || stored.phone !== v.phoneNumber) return c.json({ error: 'phone_mismatch' }, 401);
-  await c.env.RATE_LIMITS.delete(`recover-sms-session:${sessionInfo}`);
+  await withDeadline(c.env.RATE_LIMITS.delete(`recover-sms-session:${sessionInfo}`), RATE_KV_DEADLINE_MS, 'stash-delete');
 
   // SMS-based recovery is full-assurance (the factor was bound at
   // enrolment) but applies the 24h cool-off since the user clearly

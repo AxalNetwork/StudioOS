@@ -16,8 +16,10 @@
  */
 import type { MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
+import { withDeadline } from '../util/deadline';
 
 const SKIP_PREFIXES = ['/api/health', '/api/monitoring/'];
+const STAMP_DEADLINE_MS = 2_000;
 const TTL_SECONDS = 300; // 5 min — matches the cookie/session refresh cadence
 
 // Lazy bootstrap — guarantees `users.last_active_at` exists before the
@@ -47,7 +49,12 @@ export const lastActiveMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => 
       const work = (async () => {
         const key = `last_active:${userId}`;
         try {
-          const seen = env.RATE_LIMITS ? await env.RATE_LIMITS.get(key) : null;
+          // Bounded even though this runs after the response: a `waitUntil`
+          // promise that never settles keeps the invocation alive on the
+          // runtime's clock, and a throttle stamp is not worth that.
+          const seen = env.RATE_LIMITS
+            ? await withDeadline(env.RATE_LIMITS.get(key), STAMP_DEADLINE_MS, 'lastActive-get')
+            : null;
           if (seen) return; // throttled — already stamped within last 5 min
         } catch {}
         try {
@@ -61,13 +68,20 @@ export const lastActiveMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => 
         }
         try {
           if (env.RATE_LIMITS) {
-            await env.RATE_LIMITS.put(key, '1', { expirationTtl: TTL_SECONDS });
+            await withDeadline(
+              env.RATE_LIMITS.put(key, '1', { expirationTtl: TTL_SECONDS }),
+              STAMP_DEADLINE_MS, 'lastActive-put',
+            );
           }
         } catch {}
       })();
 
+      // In production there is always an executionCtx, so the stamp runs after
+      // the response. The fallback exists for tests and `wrangler dev`, where
+      // awaiting it would put two unbounded remote calls (a KV read, a D1
+      // UPDATE) in front of every response — so it is bounded too.
       if (ctx?.waitUntil) ctx.waitUntil(work);
-      else await work;
+      else await withDeadline(work, STAMP_DEADLINE_MS, 'lastActive');
     } catch (e) {
       console.error('[lastActive] middleware crashed', (e as Error).message);
     }

@@ -92,6 +92,16 @@ import { hashEmail } from '../util/hashEmail';
 // Task #9 follow-up — fresh Google signups land in 'exploring' too, same
 // as /register and magic-link. See exploringSchema.ts.
 import { ensureExploringSchema } from '../services/exploringSchema';
+import { withDeadline } from '../util/deadline';
+
+// A KV round trip that has not answered in this long is treated as a miss: the
+// cookie fallback covers the put, and a missing bind nonce is already a
+// 'bad_state', which is the honest answer when we cannot verify the binding.
+const STATE_KV_DEADLINE_MS = 2_000;
+// Google's token endpoint gets ten seconds. The catch below already returns
+// null on a network failure; without a signal a hung connection never reaches
+// it, and the user waits on a redirect that will not come.
+const TOKEN_FETCH_TIMEOUT_MS = 10_000;
 
 const authGoogle = new Hono<{ Bindings: Env }>();
 
@@ -313,8 +323,17 @@ authGoogle.get('/start', async (c) => {
   // LinkedIn, etc.) commonly drop the third-party-cookie context across
   // the Google round-trip, which used to surface as 'bad_state'.
   const stateSig = state.slice(state.indexOf('.') + 1);
+  // Bounded, and the catch below is why that matters: a KV that never answers
+  // would hold up the redirect to Google for the life of the request, which is
+  // what made /login stop offering the button at all — LoginPage probes this
+  // very endpoint on mount and hides the control when the probe does not
+  // resolve. The cookie written just below is the documented fallback, so a
+  // skipped put degrades desktop-only rather than failing the handshake.
   try {
-    await c.env.TOKENS.put(`gstate:${stateSig}`, nonce, { expirationTtl: 600 });
+    await withDeadline(
+      c.env.TOKENS.put(`gstate:${stateSig}`, nonce, { expirationTtl: 600 }),
+      STATE_KV_DEADLINE_MS, 'gstate-put',
+    );
   } catch (e) { console.error('[auth_google] state KV put failed', e); }
   c.header(
     'Set-Cookie',
@@ -391,6 +410,7 @@ async function exchangeCode(env: Env, code: string): Promise<IdTokenPayload | nu
   let resp: Response;
   try {
     resp = await fetch('https://oauth2.googleapis.com/token', {
+      signal: AbortSignal.timeout(TOKEN_FETCH_TIMEOUT_MS),
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
@@ -460,7 +480,9 @@ authGoogle.get('/callback', async (c) => {
   const stateSig = stateRaw.slice(stateRaw.indexOf('.') + 1);
   let bindNonce = '';
   try {
-    bindNonce = (await c.env.TOKENS.get(`gstate:${stateSig}`)) || '';
+    bindNonce = (await withDeadline(
+      c.env.TOKENS.get(`gstate:${stateSig}`), STATE_KV_DEADLINE_MS, 'gstate-get',
+    )) || '';
   } catch (e) { console.error('[auth_google] state KV get failed', e); }
   if (!bindNonce) {
     // Cookie fallback for desktop browsers (KV write may have failed at /start).
@@ -474,7 +496,9 @@ authGoogle.get('/callback', async (c) => {
   // One-shot: delete the KV record and clear the binding cookie so the
   // same {code,state} pair cannot be replayed even if it leaks (Google's
   // code is already single-use, but defence-in-depth).
-  try { await c.env.TOKENS.delete(`gstate:${stateSig}`); } catch {}
+  try {
+    await withDeadline(c.env.TOKENS.delete(`gstate:${stateSig}`), STATE_KV_DEADLINE_MS, 'gstate-delete');
+  } catch {}
   c.header(
     'Set-Cookie',
     'studioos_google_state=; HttpOnly; Secure; SameSite=Lax; Path=/api/auth/google; Max-Age=0',

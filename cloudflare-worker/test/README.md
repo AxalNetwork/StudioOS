@@ -14,6 +14,11 @@ which is the whole point: D1 rejects the entire statement, so one bad column
 name silently empties a screen in production.
 
 `_ts-loader.mjs` strips types at import; `fixtures/` holds shared rows.
+`_codeOnly.mjs` gives a source-scanning test the code without the prose, plus
+`callArgs` for reading one call's arguments past the braces a regex chokes on —
+an assertion that bans a shape fails on the comment explaining why that shape is
+gone, and the argument list of `fetch(url, { headers: { … } })` does not end at
+the first `)`.
 
 ## Conventions
 
@@ -27,3 +32,8 @@ name silently empties a screen in production.
 - `schema_guards.test.mjs` is the cross-cutting one: it walks the whole worker
   source and asserts repo-wide rules, and it is usually the file to extend when
   a new invariant needs holding.
+- **A remote call that never answers is not an error, so no `catch` sees it.**
+  `auth_path_bounded.test.mjs` holds the auth path to a deadline on every awaited
+  remote call, and runs the rate-limit middleware and the schema bootstrap
+  against stubs whose promises never settle. Test a stall, not just a failure:
+  the 30s sign-in outage of 2026-09-12 passed every existing test (D74).

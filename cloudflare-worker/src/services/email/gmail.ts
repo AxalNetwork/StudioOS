@@ -11,8 +11,17 @@
  */
 import type { Env } from '../../types';
 
+// A DEADLINE ON EVERY OUTBOUND CALL IN THE MAIL PATH. `/magic/start` awaits the
+// send inline, so a Google endpoint that never answers holds a person's sign-in
+// open until the browser gives up — which is what "The server did not respond
+// within 30s" was on 2026-09-12. Ten seconds is well above a healthy send and
+// well below the client's patience, and every caller here already handles a
+// thrown failure by logging and reporting the send as failed.
+const MAIL_FETCH_TIMEOUT_MS = 10_000;
+
 async function getGmailAccessToken(env: Env): Promise<string> {
   const res = await fetch('https://oauth2.googleapis.com/token', {
+    signal: AbortSignal.timeout(MAIL_FETCH_TIMEOUT_MS),
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -230,6 +239,7 @@ export async function sendRawEmail(env: Env, opts: RawEmailOpts): Promise<boolea
     const raw = btoa(unescape(encodeURIComponent(rawEmail)))
       .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      signal: AbortSignal.timeout(MAIL_FETCH_TIMEOUT_MS),
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ raw }),

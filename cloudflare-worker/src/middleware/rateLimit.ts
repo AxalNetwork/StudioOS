@@ -7,6 +7,14 @@
 import type { MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
 import { getCurrentUser } from '../auth';
+import { withDeadline, DeadlineExceeded } from '../util/deadline';
+
+// A KV round trip that has not answered in this long is treated exactly like a
+// KV error. Two seconds is far above a healthy bump (single-digit ms) and far
+// below anything a person would sit through — and the alternative is not "a
+// slower answer", it is no answer at all, because nothing below can run until
+// this one returns.
+const KV_DEADLINE_MS = 2_000;
 
 // Rate limit buckets — sliding-ish window via KV with per-window counter keys
 type Bucket = {
@@ -323,10 +331,19 @@ export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
       (c.req.header('x-forwarded-for') || '').split(',')[0].trim() ||
       'unknown';
 
-    for (const b of BUCKETS) {
-      if (!b.test(path, method, role)) continue;
-      // userId required for per-user buckets — skip if anonymous
-      if (b.scope === 'user' && !userId) continue;
+    // Resolved up front because a stalled namespace has to be answered ONCE for
+    // the whole request, not once per bucket. Several buckets match a typical
+    // path (a specific one plus the global 1000/min burst), and with a deadline
+    // per KV call a namespace that answers nothing would cost the deadline
+    // again for every one of them — three matching buckets turning a 2s stall
+    // into 6s, on the exact route where the budget is 30s and already shared
+    // with two more limiters and a schema bootstrap.
+    const matching = BUCKETS.filter(
+      (b) => b.test(path, method, role) && !(b.scope === 'user' && !userId),
+    );
+
+    for (let i = 0; i < matching.length; i++) {
+      const b = matching[i];
 
       const windowKey = b.windowSec >= 3600 ? windowHour : windowMinute;
       let key: string;
@@ -340,25 +357,51 @@ export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
 
       let count = 0;
       try {
-        count = await bumpCounter(env.RATE_LIMITS, key, b.windowSec);
+        // THE DEADLINE IS WHAT MAKES THE POLICY BELOW REACHABLE. `bumpCounter`
+        // is a KV read followed by a KV write, and KV takes no AbortSignal, so
+        // a namespace that answers neither leaves this `await` pending for as
+        // long as the request lives. Every line under the catch — the
+        // fail-open, the 503 for an abuse-prone bucket — was already correct
+        // and simply never ran: a stall is not an error, so nothing threw. On
+        // 2026-09-12 sign-in returned "The server did not respond within 30s"
+        // with nothing in the log, which is what that looks like from outside.
+        count = await withDeadline(
+          bumpCounter(env.RATE_LIMITS, key, b.windowSec), KV_DEADLINE_MS, `ratelimit:${b.name}`,
+        );
       } catch (e) {
-        // KV outage. Default = fail-open (continue); buckets marked
-        // `failClosed` instead reject with 503 so a KV failure can't be used
-        // to bypass an abuse-prone limiter. Either way it is observable.
+        // KV outage OR a KV that never answered — deliberately the same branch,
+        // because the right response to both is the bucket's declared policy
+        // and a second branch would be one more thing to keep in step.
+        // Default = fail-open (continue); buckets marked `failClosed` instead
+        // reject with 503 so a KV failure can't be used to bypass an
+        // abuse-prone limiter. Either way it is observable.
         console.error(`[ratelimit] KV bumpCounter failed bucket=${b.name} failClosed=${!!b.failClosed}`, e);
-        if (b.failClosed) {
+        // A STALL CONDEMNS THE WHOLE NAMESPACE, NOT JUST THIS BUCKET. Once a
+        // deadline has expired there is no reason to believe the next bucket's
+        // read will answer, so we decide the request here from what the
+        // REMAINING matching buckets declare rather than paying the deadline
+        // again for each. Reading them all keeps the security posture exact: a
+        // fail-open bucket earlier in the list cannot smuggle a request past a
+        // fail-closed one later in it.
+        const stalled = e instanceof DeadlineExceeded;
+        const closesDoor = stalled
+          ? matching.slice(i).some((r) => r.failClosed)
+          : !!b.failClosed;
+        if (closesDoor) {
+          const named = (stalled ? matching.slice(i).find((r) => r.failClosed) : b)!;
           await logBlock(env, ctx, {
-            user_id: userId, endpoint: path, bucket: b.name, count: -1, blocked: true,
+            user_id: userId, endpoint: path, bucket: named.name, count: -1, blocked: true,
           });
           c.header('Retry-After', '30');
-          c.header('X-RateLimit-Bucket', b.name);
+          c.header('X-RateLimit-Bucket', named.name);
           return c.json({
             detail: 'Rate limiting is temporarily unavailable; this request was rejected for safety. Try again shortly.',
-            bucket: b.name,
+            bucket: named.name,
             code: 'rate_limit_unavailable',
             retry_after: 30,
           }, 503);
         }
+        if (stalled) break;
         continue;
       }
 
