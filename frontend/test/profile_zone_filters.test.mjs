@@ -299,7 +299,7 @@ const PROFILES = {
     // directory made `delivery/board`'s chip row look like labels from nowhere.
     canvasDirs: ['design/incoming', 'design/canvases/integrated'],
     // `Offers` JOINS THE REGEX, and `canvasDirs` needs no change for it:
-    // `design/incoming/Pages · Partner Offers.dc.html` is already in the
+    // `design/canvases/integrated/Pages · Partner Offers.dc.html` is already in the
     // directory this profile opens, and it is byte-identical on the nineteen
     // labels to the copy in `design/canvases/integrated/` — checked rather than
     // assumed, both name the same five routes in the same order.

@@ -32,7 +32,7 @@ import { codeOnly } from './_codeOnly.mjs';
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const read = (p) => codeOnly(raw(p));
 
-const CANVAS = raw('design/incoming/Pages · Partner Offers.dc.html');
+const CANVAS = raw('design/canvases/integrated/Pages · Partner Offers.dc.html');
 const pageRaw = raw('frontend/src/pages/PerksPage.jsx');
 const page = read('frontend/src/pages/PerksPage.jsx');
 const worker = raw('cloudflare-worker/src/routes/perks.ts');
