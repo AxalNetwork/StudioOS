@@ -2146,4 +2146,328 @@ advisors.delete('/admin/cohort-assignments/:id', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// ---------------------------------------------------------------------------
+// 238 — Engagements. The contract behind the sessions, and whether it renewed.
+//
+// WHY THESE ARE FOUR VERBS AND NOT ONE PATCH. `advisor_engagements` carries
+// three fields nothing else in the product has — `lane`, `cycles` and
+// `outcome` — and the renewal rate is computed from the last two. A single
+// merge-PATCH over all three would let a caller set `outcome = 'renewed'`
+// without a cycle behind it, or clear a cycle without a decision, and the
+// instrument the artboard calls "the number that judges a practice" would be
+// whatever the last writer typed. So the descriptive columns merge freely
+// through PATCH, and the two columns the rate reads move ONLY through
+// `/advance` (a lane) and `/renewal` (a decision), each with its own rules.
+//
+// THE ONE TRANSITION THAT IS REFUSED is signed → ended through `/advance`.
+// Ending a signed contract IS the renewal decision that did not go the
+// advisor's way, and routing it through the lane verb would drop it out of
+// the denominator — the exact failure the canvas names: "a rate that excludes
+// its failures is not a rate." Ending an UNSIGNED row is allowed there and
+// records no outcome, because an abandoned draft never had a renewal to lose.
+// ---------------------------------------------------------------------------
+export const ENGAGEMENT_LANES = ['drafting', 'proposed', 'signed', 'renewal_due', 'ended'];
+export const ENGAGEMENT_SHAPES = ['retainer', 'sprint', 'equity', 'per_call'];
+/** The two lanes that mean "under contract" — what the Active tile counts. */
+const SIGNED_LANES = new Set(['signed', 'renewal_due']);
+
+type EngagementRow = {
+  id: number; uid: string; advisor_id: number;
+  founder_user_id: number | null; client_name: string;
+  lane: string; shape: string;
+  scope_label: string | null; scope_includes: string | null; scope_excludes: string | null;
+  amount_cents: number | null;
+  proposed_at: string | null; started_at: string | null;
+  term_ends_at: string | null; ended_at: string | null;
+  cycles: number; outcome: string | null; renewal_note: string | null;
+  created_at: string; updated_at: string;
+};
+
+function engagementDto(r: EngagementRow): any {
+  return {
+    id: r.id, uid: r.uid, advisor_id: r.advisor_id,
+    // NULL means the client is not (or not yet) a platform user. The name is
+    // what the board renders either way — see migration 238's header.
+    founder_user_id: r.founder_user_id ?? null,
+    client_name: r.client_name,
+    lane: r.lane, shape: r.shape,
+    scope_label: r.scope_label, scope_includes: r.scope_includes, scope_excludes: r.scope_excludes,
+    // Not zero. An advisory relationship with no amount recorded has not been
+    // declared free, and an equity engagement has no cents by its nature.
+    amount_cents: r.amount_cents ?? null,
+    proposed_at: r.proposed_at, started_at: r.started_at,
+    term_ends_at: r.term_ends_at, ended_at: r.ended_at,
+    cycles: Number(r.cycles || 0),
+    // NULL until the row is signed. The fixture's placeholder 'Active' on an
+    // unsent draft is the thing this deliberately does not reproduce.
+    outcome: r.outcome ?? null,
+    renewal_note: r.renewal_note,
+    created_at: r.created_at, updated_at: r.updated_at,
+  };
+}
+
+/** YYYY-MM-DD, or null. A malformed date is dropped rather than stored. */
+function engagementDate(v: unknown): string | null {
+  if (v == null || v === '') return null;
+  const s = String(v).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(Date.parse(s)) ? s : null;
+}
+
+/**
+ * One engagement of the caller's own, or a thrown 404.
+ *
+ * NOT 403, and not "check the id then load it": the row is loaded by id and
+ * the advisor is compared afterwards, so an engagement belonging to another
+ * advisor is indistinguishable from one that does not exist. `mapError` passes
+ * a thrown Response through untouched, which is why this can answer 404 from
+ * inside a helper at all.
+ */
+async function requireOwnEngagement(
+  c: Context<{ Bindings: Env }>, advisorId: number, id: number,
+): Promise<EngagementRow> {
+  const row = await c.env.DB.prepare('SELECT * FROM advisor_engagements WHERE id = ?')
+    .bind(id).first<EngagementRow>();
+  if (!row || row.advisor_id !== advisorId) {
+    throw c.json({ detail: 'Engagement not found' }, 404);
+  }
+  return row;
+}
+
+/** A client link, validated against `users`, or null. */
+async function engagementClientUser(env: Env, v: unknown): Promise<number | null> {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n <= 0) return null;
+  const u = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(n).first<{ id: number }>();
+  return u ? Number(u.id) : null;
+}
+
+advisors.get('/me/engagements', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const rows = await c.env.DB.prepare(
+      `SELECT * FROM advisor_engagements WHERE advisor_id = ?
+        ORDER BY updated_at DESC LIMIT 400`
+    ).bind(m.id).all<EngagementRow>();
+    const items = (rows.results || []).map(engagementDto);
+
+    // THE RATE IS COMPUTED HERE RATHER THAN ON THE PAGE, because its
+    // denominator is the whole argument. `decided` counts renewals that went
+    // either way and nothing else: a signed contract still running has made no
+    // decision, and an unsent draft never had one to make.
+    const renewed = items.filter((e) => e.outcome === 'renewed').length;
+    const ended = items.filter((e) => e.outcome === 'ended').length;
+    const decided = renewed + ended;
+    return c.json({
+      items,
+      totals: {
+        // Lanes, not outcomes — the canvas is explicit that a draft never sent
+        // and a proposal awaiting an answer are not engagements.
+        active: items.filter((e) => SIGNED_LANES.has(e.lane)).length,
+        renewal_due: items.filter((e) => e.lane === 'renewal_due').length,
+        ended_lane: items.filter((e) => e.lane === 'ended').length,
+        renewed, ended, decided,
+        // Null, never 0%. A practice that has not yet reached a renewal has
+        // not failed to renew, and 0% would say it had.
+        renewal_rate: decided > 0 ? Math.round((renewed / decided) * 100) : null,
+        // What the Active tile's breakdown note ("2 retainers, 1 sprint…")
+        // reads from.
+        by_shape: ENGAGEMENT_SHAPES.reduce((acc, s) => {
+          acc[s] = items.filter((e) => SIGNED_LANES.has(e.lane) && e.shape === s).length;
+          return acc;
+        }, {} as Record<string, number>),
+      },
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.post('/me/engagements', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const body = await c.req.json().catch(() => ({} as any));
+    const clientName = String(body.client_name || '').trim().slice(0, 200);
+    // The one required field. A contract board row with no client is a card
+    // nobody can act on, and the column is NOT NULL for the same reason.
+    if (!clientName) return c.json({ detail: 'An engagement needs a client name' }, 400);
+    const shape = String(body.shape || 'retainer').trim();
+    if (!ENGAGEMENT_SHAPES.includes(shape)) {
+      return c.json({ detail: `shape must be one of: ${ENGAGEMENT_SHAPES.join(', ')}` }, 400);
+    }
+    // A row is BORN DRAFTING. Signing is a transition with its own stamps and
+    // its own cycle, so letting a caller open one straight into 'signed' would
+    // mean two code paths for the same event and one of them would drift.
+    const now = nowIso();
+    const uid = newUid();
+    const r = await c.env.DB.prepare(
+      `INSERT INTO advisor_engagements
+         (uid, advisor_id, founder_user_id, client_name, lane, shape,
+          scope_label, scope_includes, scope_excludes, amount_cents,
+          term_ends_at, cycles, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'drafting', ?, ?, ?, ?, ?, ?, 0, ?, ?)`
+    ).bind(
+      uid, m.id, await engagementClientUser(c.env, body.founder_user_id), clientName, shape,
+      trimOrNull(body.scope_label, 200), trimOrNull(body.scope_includes, 2000),
+      trimOrNull(body.scope_excludes, 2000), parsePriceCents(body.amount_cents),
+      engagementDate(body.term_ends_at), now, now,
+    ).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_engagements WHERE id = ?')
+      .bind((r as any).meta?.last_row_id).first<EngagementRow>();
+    return c.json(engagementDto(fresh!), 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+// PATCH — the descriptive columns only. `lane`, `cycles` and `outcome` are
+// absent by design; see the block comment above.
+advisors.patch('/me/engagements/:id', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const row = await requireOwnEngagement(c, m.id, Number(c.req.param('id')));
+    const body = await c.req.json().catch(() => ({} as any));
+    const shape = body.shape == null ? row.shape : String(body.shape).trim();
+    if (!ENGAGEMENT_SHAPES.includes(shape)) {
+      return c.json({ detail: `shape must be one of: ${ENGAGEMENT_SHAPES.join(', ')}` }, 400);
+    }
+    await c.env.DB.prepare(
+      `UPDATE advisor_engagements
+          SET client_name = ?, founder_user_id = ?, shape = ?, scope_label = ?,
+              scope_includes = ?, scope_excludes = ?, amount_cents = ?,
+              term_ends_at = ?, updated_at = ?
+        WHERE id = ?`
+    ).bind(
+      // Merge, not replace: the board edits one field at a time, and an empty
+      // client name would blank a card rather than rename it.
+      String(body.client_name ?? '').trim().slice(0, 200) || row.client_name,
+      'founder_user_id' in body
+        ? await engagementClientUser(c.env, body.founder_user_id) : row.founder_user_id,
+      shape,
+      'scope_label' in body ? trimOrNull(body.scope_label, 200) : row.scope_label,
+      'scope_includes' in body ? trimOrNull(body.scope_includes, 2000) : row.scope_includes,
+      'scope_excludes' in body ? trimOrNull(body.scope_excludes, 2000) : row.scope_excludes,
+      'amount_cents' in body ? parsePriceCents(body.amount_cents) : row.amount_cents,
+      'term_ends_at' in body ? engagementDate(body.term_ends_at) : row.term_ends_at,
+      nowIso(), row.id,
+    ).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_engagements WHERE id = ?')
+      .bind(row.id).first<EngagementRow>();
+    return c.json(engagementDto(fresh!));
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * POST /me/engagements/:id/advance — move a card between lanes.
+ *
+ * A CONTROL RATHER THAN A DRAG, and the divergence is deliberate. The canvas
+ * labels the board "By contract state · drag to advance"; a per-card control
+ * is keyboard-reachable without a drag-and-drop implementation to make
+ * accessible, and the state change it writes is identical.
+ */
+advisors.post('/me/engagements/:id/advance', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const row = await requireOwnEngagement(c, m.id, Number(c.req.param('id')));
+    const body = await c.req.json().catch(() => ({} as any));
+    const lane = String(body.lane || '').trim();
+    if (!ENGAGEMENT_LANES.includes(lane)) {
+      return c.json({ detail: `lane must be one of: ${ENGAGEMENT_LANES.join(', ')}` }, 400);
+    }
+    // Ended is terminal, the same rule `portfolio_support.ts` applies to a
+    // delivered promise: re-opening one would let a recorded outcome be
+    // quietly un-recorded, and the renewal rate is exactly what that would
+    // falsify.
+    if (row.lane === 'ended') {
+      return c.json({ detail: 'an engagement that has ended cannot change lane' }, 409);
+    }
+    if (lane === 'ended' && SIGNED_LANES.has(row.lane)) {
+      return c.json({
+        detail: 'a signed engagement ends through a renewal decision — POST /me/engagements/:id/renewal with decision "ended"',
+      }, 409);
+    }
+
+    const now = nowIso();
+    const day = now.slice(0, 10);
+    const signing = SIGNED_LANES.has(lane) && !SIGNED_LANES.has(row.lane);
+    await c.env.DB.prepare(
+      `UPDATE advisor_engagements
+          SET lane = ?, proposed_at = ?, started_at = ?, ended_at = ?,
+              cycles = ?, outcome = ?, updated_at = ?
+        WHERE id = ?`
+    ).bind(
+      lane,
+      lane === 'proposed' ? (engagementDate(body.proposed_at) || day) : row.proposed_at,
+      signing ? (row.started_at || engagementDate(body.started_at) || day) : row.started_at,
+      // Only an UNSIGNED row can reach 'ended' here — the signed case was
+      // refused above — so this stamps an abandoned draft and nothing else.
+      lane === 'ended' ? (row.ended_at || day) : row.ended_at,
+      // The first term begins at signing. `max` rather than `+ 1` so a lane
+      // correction (renewal_due → signed and back) cannot inflate the count.
+      signing ? Math.max(Number(row.cycles || 0), 1) : row.cycles,
+      // Signing is what gives a row an outcome to have. Ending an unsigned one
+      // leaves it NULL, which is what keeps an abandoned draft out of the
+      // renewal rate's denominator.
+      signing ? (row.outcome || 'active') : row.outcome,
+      now, row.id,
+    ).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_engagements WHERE id = ?')
+      .bind(row.id).first<EngagementRow>();
+    return c.json(engagementDto(fresh!));
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * POST /me/engagements/:id/renewal — record the decision the practice is
+ * judged on.
+ *
+ * This is the only writer of `outcome` after signing and the only thing that
+ * moves `cycles` past 1, which is what makes the renewal rate mean something.
+ * It refuses an unsigned row rather than inventing a decision for it.
+ */
+advisors.post('/me/engagements/:id/renewal', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const row = await requireOwnEngagement(c, m.id, Number(c.req.param('id')));
+    const body = await c.req.json().catch(() => ({} as any));
+    const decision = String(body.decision || '').trim();
+    if (decision !== 'renewed' && decision !== 'ended') {
+      return c.json({ detail: 'decision must be "renewed" or "ended"' }, 400);
+    }
+    if (!SIGNED_LANES.has(row.lane)) {
+      return c.json({
+        detail: row.lane === 'ended'
+          ? 'this engagement has already ended'
+          : 'only a signed engagement has a renewal to decide',
+      }, 409);
+    }
+
+    const now = nowIso();
+    const day = now.slice(0, 10);
+    const renewed = decision === 'renewed';
+    await c.env.DB.prepare(
+      `UPDATE advisor_engagements
+          SET lane = ?, cycles = ?, outcome = ?, renewal_note = ?,
+              term_ends_at = ?, ended_at = ?, updated_at = ?
+        WHERE id = ?`
+    ).bind(
+      renewed ? 'signed' : 'ended',
+      // A renewal starts a term, so it adds one. Ending does not: the term
+      // that just ran was already counted when it began.
+      renewed ? Number(row.cycles || 0) + 1 : row.cycles,
+      decision,
+      // One note column, because the artboard draws one — migration 238's
+      // header records why there is no separate end_reason beside it.
+      'note' in body ? trimOrNull(body.note, 2000) : row.renewal_note,
+      renewed ? engagementDate(body.term_ends_at) : row.term_ends_at,
+      renewed ? row.ended_at : (row.ended_at || day),
+      now, row.id,
+    ).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_engagements WHERE id = ?')
+      .bind(row.id).first<EngagementRow>();
+    return c.json(engagementDto(fresh!));
+  } catch (e) { return mapError(c, e); }
+});
+
 export default advisors;
