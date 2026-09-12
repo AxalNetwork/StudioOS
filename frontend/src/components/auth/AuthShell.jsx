@@ -16,6 +16,17 @@ export default function AuthShell({
   compact = false,
   /** Full-page background image (e.g. /auth/login-background.webp on /login). */
   backgroundSrc = null,
+  /**
+   * Sign-in and register are single-column forms, and 404px is the right
+   * measure for those — a wider column would just stretch one input. A page
+   * that lays choices out side by side is a different shape: at 404px the
+   * licence picker's four cards stack into one long strip and a desktop
+   * viewport shows a ribbon of white either side of it, which is what "it
+   * looks mobile-only" means. `wide` opts a page into a measure that can
+   * hold two columns; the default is unchanged, so /login and /register
+   * keep the column they were designed for.
+   */
+  wide = false,
 }) {
   const shellStyle = backgroundSrc
     ? {
@@ -50,7 +61,7 @@ export default function AuthShell({
       </header>
 
       <div className={`flex flex-1 justify-center px-4 pb-12 ${compact ? 'pt-4' : 'pt-6 sm:pt-10'}`}>
-        <div className="w-full max-w-[404px]">
+        <div className={`w-full ${wide ? 'max-w-[840px]' : 'max-w-[404px]'}`}>
           {children}
           {showApplyCard && (
             <div

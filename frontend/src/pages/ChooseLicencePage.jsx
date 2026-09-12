@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Building2, Briefcase, TrendingUp, Users } from 'lucide-react';
 import AuthShell, { AuthCard, authV2 } from '../components/auth/AuthShell';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
 import { track } from '../lib/funnel';
+import { OWNERSHIP_NOTICE, LEGAL_LINKS } from '../lib/legalNotice';
 
 const LICENCES = [
   {
@@ -80,13 +81,18 @@ export default function ChooseLicencePage() {
   const selectedMeta = LICENCES.find((l) => l.key === selected);
 
   return (
-    <AuthShell email={user?.email} platformNote="First sign-in">
+    <AuthShell
+      email={user?.email}
+      platformNote="First sign-in"
+      backgroundSrc="/auth/login-background.webp"
+      wide
+    >
       <AuthCard>
-        <h1 className="m-0 text-[25px] font-extrabold tracking-tight leading-tight text-[#241f38]">
-          Choose your licence
+        <h1 className="m-0 text-[25px] font-extrabold tracking-tight leading-tight text-[#241f38] sm:text-[29px]">
+          Choose your adventure
         </h1>
-        <p className="mt-2 text-[13.5px] leading-relaxed text-[#6b6577]">
-          This decides which workspace opens and which agreement we send. You can start working while membership is reviewed.
+        <p className="mt-2 text-[13.5px] leading-relaxed text-[#6b6577] sm:text-[14.5px]">
+          Pick your path and we&rsquo;ll open the right workspace and send the matching agreement. You can start working while your membership is reviewed.
         </p>
 
         {error && (
@@ -134,10 +140,6 @@ export default function ChooseLicencePage() {
           })}
         </div>
 
-        <p className="mt-5 font-mono text-[10.5px] leading-relaxed text-[#6b6577]">
-          Admin access is invite-only. Territory operators receive their licence by email from HQ — it is never self-selected here.
-        </p>
-
         <button
           type="button"
           disabled={busy || !selected}
@@ -148,6 +150,28 @@ export default function ChooseLicencePage() {
           {busy ? 'Saving…' : `Continue as ${selectedMeta?.name || 'member'}`}
         </button>
       </AuthCard>
+
+      {/* The agreements a member accepts by continuing, and who they are
+          contracting with. This sits OUTSIDE the card and on the background
+          image, so its colours are the on-dark set rather than the card's
+          ink-on-white — the same treatment AuthShell's own header uses for
+          the logo and the email. */}
+      <footer className="mt-6 flex flex-col items-center gap-2 text-center">
+        <nav className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+          {LEGAL_LINKS.map((l) => (
+            <Link
+              key={l.to}
+              to={l.to}
+              className="text-[12px] font-medium text-white/85 underline-offset-2 hover:text-white hover:underline"
+            >
+              {l.label}
+            </Link>
+          ))}
+        </nav>
+        <p className="m-0 max-w-[56ch] font-mono text-[10.5px] leading-relaxed text-white/70">
+          {OWNERSHIP_NOTICE}
+        </p>
+      </footer>
     </AuthShell>
   );
 }

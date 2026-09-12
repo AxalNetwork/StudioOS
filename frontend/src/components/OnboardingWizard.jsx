@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { ArrowLeft, ArrowRight, Loader2, Check } from 'lucide-react';
 import { api } from '../lib/api';
+import { ONBOARDING_COMPLETE_EVENT } from '../lib/onboarding';
 
 // Phase 0.2 / Task #23 — Shared multi-step wizard shell.
 // Persists `{flow, step, total_steps, data}` to /api/onboarding/progress
@@ -8,6 +9,7 @@ import { api } from '../lib/api';
 // off. Calls onFinish() after the final step + POST /complete.
 //
 // `steps` is: [{ key, title, description?, render: ({values, set, error}) => JSX, validate?: (values) => string|null }]
+
 export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 'Finish' }) {
   const [stepIdx, setStepIdx] = useState(0);
   const [values, setValues] = useState({});
@@ -78,6 +80,17 @@ export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 
       try {
         await api.onboardingComplete(flow);
         setCompleted(true);
+        // TELL THE APP SHELL, or its wizard-resume gate undoes this.
+        //
+        // App.jsx reads onboarding progress in an effect keyed on
+        // `[user?.id]`, so it fetches once per session and never again. It
+        // therefore still believes this user is mid-wizard, and the moment
+        // onFinish() navigates anywhere outside /onboarding the gate fires
+        // and sends them back to WIZARD_FOR_LICENCE[their role] — which is
+        // how an investor who just finished ended up staring at the FOUNDER
+        // wizard. Re-fetching would be a second round trip for a fact we
+        // already hold, so we hand it over directly.
+        window.dispatchEvent(new CustomEvent(ONBOARDING_COMPLETE_EVENT, { detail: { flow } }));
       } catch (e) {
         setError(e?.message || 'Could not finalize onboarding');
         setBusy(false);
@@ -108,7 +121,11 @@ export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 
           <Check size={22} />
         </div>
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">You're all set</h2>
-        <p className="text-sm text-gray-600 mt-2">Onboarding complete — redirecting you to Studio.</p>
+        {/* Destination-neutral on purpose: this shell serves the founder,
+            investor and partner flows, and each `onFinish` now sends its
+            own role somewhere different. Naming Studio here was already
+            wrong for two of the three. */}
+        <p className="text-sm text-gray-600 mt-2">Onboarding complete — taking you to your workspace.</p>
       </div>
     );
   }
@@ -264,11 +281,19 @@ export function MultiChoiceField({ label, options, value, onChange }) {
 
 export function SliderField({ label, value, onChange }) {
   const v = typeof value === 'number' ? value : 0.5;
+  // The fill has to be drawn, not accented. `appearance-none` removes the
+  // native widget, and `accent-color` only styles a native one — the two
+  // together are why these read as five blank pills with nothing to show
+  // where the value sat. `--range-pct` drives the gradient stop in the
+  // `.axal-range` rule in index.css; the thumb is drawn there too, because
+  // a thumb needs per-engine pseudo-elements no utility class can reach.
   return (
     <label className="block">
       <div className="flex items-center justify-between mb-1">
         <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{label}</span>
-        <span className="text-xs text-gray-500">{Math.round(v * 100)}%</span>
+        <span className="text-xs font-semibold text-violet-700 tabular-nums dark:text-violet-300">
+          {Math.round(v * 100)}%
+        </span>
       </div>
       <input
         type="range"
@@ -277,8 +302,39 @@ export function SliderField({ label, value, onChange }) {
         step="0.05"
         value={v}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-violet-600"
+        style={{ '--range-pct': `${v * 100}%` }}
+        className="axal-range"
+        aria-label={label}
       />
+    </label>
+  );
+}
+
+export function SelectField({ label, options, value, onChange, placeholder = 'Select…', required = false, hint }) {
+  return (
+    <label className="block">
+      <span className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">
+        {label}
+        {required && <span className="ml-1 text-violet-600" aria-hidden="true">*</span>}
+      </span>
+      <select
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        required={required}
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
+      >
+        {/* An empty first option is what makes "nothing chosen" a real state
+            rather than a silent default. Without it the browser preselects
+            the first country and a required field is satisfied by a value
+            the member never looked at. */}
+        <option value="">{placeholder}</option>
+        {options.map((opt) => {
+          const v = typeof opt === 'string' ? opt : opt.value;
+          const lab = typeof opt === 'string' ? opt : opt.label;
+          return <option key={v} value={v}>{lab}</option>;
+        })}
+      </select>
+      {hint && <span className="block text-[11px] text-gray-500 mt-1">{hint}</span>}
     </label>
   );
 }

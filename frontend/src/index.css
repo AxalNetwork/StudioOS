@@ -565,3 +565,71 @@ details > summary .details-chevron {
   }
   [data-table-cards] [data-table-card-row] > *:last-child { border-bottom: 0; }
 }
+
+/* Range inputs — Task #145.
+   `appearance-none` STRIPS the native widget, and with it everything
+   `accent-color` was doing. The onboarding sliders carried both: an
+   `accent-violet-600` that could no longer reach a thumb, over a track with
+   no filled portion, which is why the investor wizard's "What matters most
+   to you" step read as five empty pills and gave no clue what was selected.
+
+   Once the native widget is gone the fill and the thumb have to be drawn,
+   so: the fill is a hard-stop gradient at `--range-pct`, which React sets
+   from the value, and the thumb is styled per-engine because WebKit and
+   Gecko expose different pseudo-elements and a selector either engine
+   cannot parse invalidates the whole rule for BOTH. They stay in separate
+   blocks for that reason — do not merge them into one selector list.
+
+   #7c3aed is authV2.purple, written literally rather than as
+   var(--color-axal-violet): Tailwind v4 tree-shakes an @theme token that no
+   utility references, and a dropped token here would silently paint
+   nothing — which is the exact failure this rule exists to fix. */
+.axal-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    #7c3aed 0%,
+    #7c3aed var(--range-pct, 50%),
+    #e4e4e7 var(--range-pct, 50%),
+    #e4e4e7 100%
+  );
+  cursor: pointer;
+  outline-offset: 3px;
+}
+
+.axal-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #7c3aed;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(36, 31, 56, 0.35);
+  cursor: pointer;
+}
+
+.axal-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #7c3aed;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(36, 31, 56, 0.35);
+  cursor: pointer;
+}
+
+/* Firefox paints its own track under the gradient; keep it transparent so
+   the one fill above is the only thing the reader sees. */
+.axal-range::-moz-range-track {
+  background: transparent;
+  height: 8px;
+}
+
+.axal-range:focus-visible {
+  outline: 2px solid #6d28d9;
+}

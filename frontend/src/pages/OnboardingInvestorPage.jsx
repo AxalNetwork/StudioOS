@@ -1,8 +1,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import OnboardingWizard, { TextField, TextArea, ChoiceField, MultiChoiceField, SliderField } from '../components/OnboardingWizard';
+import OnboardingWizard, { TextField, TextArea, ChoiceField, MultiChoiceField, SelectField, SliderField } from '../components/OnboardingWizard';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
+import { COUNTRIES } from '../lib/countries';
+import { NFX_SECTORS } from '../lib/nfxSectors';
+import { investorLanding } from '../lib/onboarding';
 
 // Phase 0.2 / Task #23 — Investor onboarding wizard.
 // Task #4 (2026-05-10) — extended into a 6-step profiling chatbot whose
@@ -12,7 +15,10 @@ export default function OnboardingInvestorPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const SECTORS = ['AI/ML','Climate','Fintech','Healthtech','Consumer','Enterprise SaaS','Crypto','Bio','Defense','Robotics','Energy'];
+  // The thesis and the anti-thesis are drawn from ONE list — see
+  // lib/nfxSectors.js for why it is the NFX taxonomy here and not the Axal
+  // one that classifies companies.
+  const SECTORS = NFX_SECTORS;
   const STAGES = ['Pre-seed','Seed','Series A','Series B+','Growth'];
   const GEOS = ['North America','Europe','LATAM','APAC','MENA','Africa'];
   const TICKETS = ['<$10k', '$10k-$50k', '$50k-$250k', '$250k-$1M', '$1M+'];
@@ -44,7 +50,14 @@ export default function OnboardingInvestorPage() {
       key: 'accreditation',
       title: 'Accreditation',
       description: 'Required so we can show you private placement opportunities.',
-      validate: (v) => (!v.accreditation_status ? 'Confirm your accreditation status' : null),
+      validate: (v) => {
+        if (!v.accreditation_status) return 'Confirm your accreditation status';
+        // Required, because accreditation is a jurisdiction question: "Non-US
+        // investor" and "Accredited (US)" mean different things in different
+        // countries, and a blank country leaves the answer unreadable.
+        if (!v.country) return 'Select your country of residence';
+        return null;
+      },
       render: ({ values, set }) => (
         <div className="space-y-4">
           <ChoiceField
@@ -58,7 +71,14 @@ export default function OnboardingInvestorPage() {
             value={values.accreditation_status}
             onChange={(x) => set('accreditation_status', x)}
           />
-          <TextField label="Country of residence" value={values.country} onChange={(x) => set('country', x)} placeholder="United States" />
+          <SelectField
+            label="Country of residence"
+            options={COUNTRIES}
+            value={values.country}
+            onChange={(x) => set('country', x)}
+            placeholder="Select a country…"
+            required
+          />
         </div>
       ),
     },
@@ -238,7 +258,7 @@ export default function OnboardingInvestorPage() {
       // Surfacing this in the wizard would be confusing; the user can
       // re-save anytime from Settings → Privacy.
     }
-    navigate(user?.role === 'exploring' ? '/exploring' : '/studio');
+    navigate(investorLanding(user?.role), { replace: true });
   };
 
   return (

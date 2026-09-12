@@ -412,8 +412,11 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
   const regEmailHash = await hashEmail(email);
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_registered', ${`registered (lane=${role || 'partner'}) — holding in exploring pending admin review — pending email verification (email_hash=${regEmailHash})`}, ${regEmailHash}, ${user.id})`;
   // Auth v2 — seed the licence-picker gate row. RequireAuth pins new users to
-  // /onboarding/licence until POST /onboarding/licence advances them into the
-  // role wizard. Legacy accounts may still have flow='chat'.
+  // the SPA page `/onboarding` until the API call `POST /api/onboarding/licence`
+  // advances them into the role wizard. Those two paths are NOT the same thing
+  // and only the page moved: the picker used to live at `/onboarding/licence`,
+  // which read as the same string as its own endpoint. The endpoint keeps its
+  // name. Legacy accounts may still have flow='chat'.
   if ((role || 'partner') !== 'admin') {
     try {
       await c.env.DB.prepare(
