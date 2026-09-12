@@ -583,7 +583,7 @@ export default function SpinoutLabMarketPage() {
   const youDot = { x: POS_W * 0.72, y: POS_H * 0.28 };
 
   const page = (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6" data-testid="page-spinout-market">
+    <div className="w-full px-2 sm:px-4 py-3" data-testid="page-spinout-market">
       {/* Header — brand rule, back control inline with the title, and the tool
           icon in its violet tile (design handoff). */}
       <LabPageHeader

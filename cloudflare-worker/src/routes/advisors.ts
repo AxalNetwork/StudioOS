@@ -99,6 +99,10 @@ type BookingRow = {
   id: number; uid: string; slot_id: number; advisor_id: number;
   founder_user_id: number; topic: string | null; notes: string | null;
   status: string; cancel_reason: string | null;
+  // Migration 205. Declared here because `bookingDto` returns them: the two
+  // were on the row and off the type, so nothing complained when the DTO
+  // dropped them for a year.
+  amount_cents: number | null; billing_state: string;
   created_at: string; updated_at: string;
 };
 
@@ -146,6 +150,10 @@ function slotDto(s: SlotRow, taken = 0): any {
     created_at: s.created_at,
   };
 }
+/**
+ * The booking as BOTH parties may see it. Deliberately no money — see
+ * `advisorMoney` below for the two columns that are the advisor's alone.
+ */
 function bookingDto(b: BookingRow, extras: any = {}): any {
   return {
     id: b.id, uid: b.uid, slot_id: b.slot_id, advisor_id: b.advisor_id,
@@ -154,6 +162,47 @@ function bookingDto(b: BookingRow, extras: any = {}): any {
     cancel_reason: b.cancel_reason,
     created_at: b.created_at, updated_at: b.updated_at,
     ...extras,
+  };
+}
+
+/**
+ * Migration 205's two columns, for the advisor's own reads only.
+ *
+ * THE BUG THIS EXISTS TO FIX. Migration 205 added `amount_cents` and
+ * `billing_state` to `advisor_bookings`, and `PATCH /me/bookings/:id/billing`
+ * named them in its own response — but `bookingDto`, which every LIST goes
+ * through, is a whitelist and never did. `GET /me/bookings` selects `b.*`, so
+ * both columns arrived at the DTO and were dropped on the way out.
+ *
+ * `pages/advisor/practice/SessionsZone.jsx` is the page built specifically to
+ * show that money. With both fields undefined it rendered "Not recorded" on
+ * every row including priced ones, an empty state pill, "Set a price" where it
+ * should have said "Change", and an unpriced count that disagreed with
+ * Earnings — and, worst, its editor opened blank over a stored price and
+ * overwrote it on save. A whitelist that silently drops a column is
+ * indistinguishable from a column nobody ever wrote.
+ *
+ * WHY THIS IS A SEPARATE FUNCTION RATHER THAN TWO MORE LINES IN `bookingDto`.
+ * Three of the five DTO call sites answer the FOUNDER or either party:
+ * `POST /slots/:id/book` replies to the founder who just booked,
+ * `GET /bookings/me` is the founder's own list, and `transition()` answers
+ * whichever side moved the booking. Migration 205's header is explicit that
+ * `billing_state` is "the advisor's own bookkeeping note about their own
+ * arrangement" — no invoice is issued and Axal takes no position on
+ * collection — so `written_off` reaching the client would disclose that their
+ * advisor gave up collecting from them. Restoring the field to the shared DTO
+ * would have fixed a display bug by opening a leak, which is why the fix is
+ * scoped to the audience instead. Call this from advisor-authenticated reads;
+ * never from a founder-facing one.
+ *
+ * `billing_state` has a NOT NULL DEFAULT, so `?? 'unpriced'` only covers a row
+ * read through a path that did not select it. `amount_cents` is genuinely
+ * nullable and stays null — zero is a price an advisor may actually mean.
+ */
+function advisorMoney(b: Partial<BookingRow>): { amount_cents: number | null; billing_state: string } {
+  return {
+    amount_cents: b.amount_cents ?? null,
+    billing_state: b.billing_state ?? 'unpriced',
   };
 }
 
@@ -674,6 +723,7 @@ advisors.get('/me/bookings', async (c) => {
       : await c.env.DB.prepare(sql).bind(m.id).all<BookingRow>();
     return c.json({
       items: (rows.results || []).map((r: any) => bookingDto(r, {
+        ...advisorMoney(r),
         founder_name: r.founder_name ?? null,
         founder_email: r.founder_email ?? null,
         client_user_id: r.founder_user_id,
@@ -819,10 +869,30 @@ advisors.post('/bookings/:id/review', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+/**
+ * The two people on the booking, and nobody else.
+ *
+ * THIS READ HAD `requireAuth` AND NOTHING ELSE — any signed-in account could
+ * name any booking id and read both sides' reviews of a session they had no
+ * part in. A review carries a rating and free-text comment about a named
+ * advisor by a named founder; the id is a small integer, so the whole table
+ * was walkable.
+ *
+ * The predicate lives in the WHERE clause rather than in a branch, so "no such
+ * booking" and "not yours" are the same 404 and a stranger cannot confirm a
+ * booking exists. `requireOwnEngagement` answers the same way.
+ */
 advisors.get('/bookings/:id/reviews', async (c) => {
   try {
-    await requireAuth(c);
+    const user = await requireAuth(c);
     const id = Number(c.req.param('id'));
+    if (!Number.isFinite(id)) return c.json({ detail: 'Not found' }, 404);
+    const mine = await c.env.DB.prepare(
+      `SELECT b.id FROM advisor_bookings b
+         LEFT JOIN advisors a ON a.id = b.advisor_id
+        WHERE b.id = ? AND (b.founder_user_id = ? OR a.user_id = ?)`,
+    ).bind(id, user.id, user.id).first<{ id: number }>();
+    if (!mine && !isAdmin(user)) return c.json({ detail: 'Not found' }, 404);
     const rows = await c.env.DB.prepare(
       'SELECT * FROM advisor_reviews WHERE booking_id = ? ORDER BY created_at ASC'
     ).bind(id).all<any>();
@@ -1288,10 +1358,7 @@ advisors.patch('/me/bookings/:id/billing', async (c) => {
     ).bind(amount_cents, billing_state, nowIso(), row.id).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?')
       .bind(row.id).first<BookingRow & { amount_cents: number | null; billing_state: string }>();
-    return c.json(bookingDto(fresh!, {
-      amount_cents: fresh!.amount_cents ?? null,
-      billing_state: fresh!.billing_state,
-    }));
+    return c.json(bookingDto(fresh!, advisorMoney(fresh!)));
   } catch (e) { return mapError(c, e); }
 });
 

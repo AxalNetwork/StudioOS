@@ -37,6 +37,11 @@ const ADVISOR_USER = 70;
 const OTHER_ADVISOR_USER = 71;
 const FOUNDER_USER = 72;
 const ADMIN_USER = 73;
+// A founder with no part in any booking — the reader the reviews endpoint
+// used to answer, and the reason `grace` alone is not enough of a test: an
+// advisor missing the advisor half of the predicate and a founder missing the
+// founder half are two different ways for the WHERE clause to be wrong.
+const OUTSIDER_USER = 74;
 const CYCLE = 9;
 const OTHER_CYCLE = 10;
 
@@ -115,6 +120,16 @@ function freshDb() {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE (slot_id, founder_user_id)
     );
+    -- Verbatim from sql/historical/t13_t14_t15.sql:69. Present because
+    -- GET /bookings/:id/reviews is read here, and a read whose ownership
+    -- check is the thing under test has to be able to return a row.
+    CREATE TABLE advisor_reviews (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
+      booking_id INTEGER NOT NULL, reviewer_user_id INTEGER NOT NULL,
+      reviewer_role TEXT NOT NULL, rating INTEGER NOT NULL, comment TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (booking_id, reviewer_role)
+    );
   `);
   // The new schema comes from the migration files verbatim. If one of them
   // stops parsing, these tests stop running — which is the point.
@@ -130,6 +145,7 @@ function freshDb() {
   u.run(OTHER_ADVISOR_USER, 'advisor', 2, 'Grace', 'grace@example.com');
   u.run(FOUNDER_USER, 'founder', null, 'Fran', 'fran@example.com');
   u.run(ADMIN_USER, 'admin', null, 'Root', 'root@example.com');
+  u.run(OUTSIDER_USER, 'founder', null, 'Otto', 'otto@example.com');
 
   const a = db.prepare(
     'INSERT INTO advisors (id, uid, user_id, display_name, email) VALUES (?,?,?,?,?)');
@@ -181,7 +197,15 @@ async function call(
     headers['Content-Type'] = 'application/json';
     (init as any).body = JSON.stringify(body);
   }
-  const res = await advisors.request(path, init, e);
+  // The fourth argument is the ExecutionContext. Without it Hono's
+  // `c.executionCtx` getter THROWS rather than returning undefined, so
+  // `c.executionCtx?.waitUntil` — the guard the cancel and booking paths use
+  // to defer their calendar-sync hooks — turns into a 500 in tests and only
+  // in tests. Production always has one; passing a no-op here means these
+  // tests exercise the same branch production does.
+  const res = await advisors.request(path, init, e, {
+    waitUntil() {}, passThroughOnException() {},
+  } as any);
   return { status: res.status, body: await res.json().catch(() => null) };
 }
 
@@ -189,6 +213,7 @@ const ada = { user: ADVISOR_USER, role: 'advisor' };
 const grace = { user: OTHER_ADVISOR_USER, role: 'advisor' };
 const fran = { user: FOUNDER_USER, role: 'founder' };
 const root = { user: ADMIN_USER, role: 'admin' };
+const otto = { user: OUTSIDER_USER, role: 'founder' };
 
 // ---------------------------------------------------------------------------
 // 202 — profile fields
@@ -359,11 +384,13 @@ test('a proof item an advisor does not own is not theirs to delete', async () =>
 // ---------------------------------------------------------------------------
 // 205 — session amounts and earnings
 // ---------------------------------------------------------------------------
-function seedBooking(db: InstanceType<typeof DatabaseSync>, id: number, advisorId = 1) {
+function seedBooking(
+  db: InstanceType<typeof DatabaseSync>, id: number, advisorId = 1, status = 'completed',
+) {
   db.prepare('INSERT INTO advisor_office_hour_slots (id, uid, advisor_id, starts_at, ends_at) VALUES (?,?,?,?,?)')
     .run(id, `slot-${id}`, advisorId, '2026-09-10T15:00:00Z', '2026-09-10T16:00:00Z');
   db.prepare('INSERT INTO advisor_bookings (id, uid, slot_id, advisor_id, founder_user_id, status) VALUES (?,?,?,?,?,?)')
-    .run(id, `bk-${id}`, id, advisorId, FOUNDER_USER, 'completed');
+    .run(id, `bk-${id}`, id, advisorId, FOUNDER_USER, status);
 }
 
 test('an existing booking starts unpriced, and unpriced is not zero', async () => {
@@ -417,6 +444,148 @@ test('earnings separate collected from written off', async () => {
   assert.equal(g.body.collected_cents, 40000);
   assert.equal(g.body.written_off_cents, 15000);
   assert.equal(g.body.outstanding_cents, 0, 'a written-off session is not outstanding');
+});
+
+// ---------------------------------------------------------------------------
+// 205, second half — the money has to survive the LIST, and stop at the
+// advisor.
+//
+// EVERY TEST ABOVE ASSERTS THE PATCH RESPONSE, AND THAT IS WHY THE BUG LIVED.
+// `PATCH /me/bookings/:id/billing` named both columns in its own reply, so a
+// suite built around it went green while `bookingDto` — the whitelist every
+// list goes through — dropped them. `SessionsZone.jsx` reads the LIST, so it
+// showed "Not recorded" over stored prices, an empty state pill, and an
+// editor that opened blank and overwrote the price on save.
+//
+// The second half of the pair is the audience. Three DTO call sites answer
+// the founder or either party, and migration 205 calls `billing_state` the
+// advisor's own bookkeeping note; `written_off` reaching the client would
+// tell them their advisor gave up collecting. So these tests pin BOTH
+// directions: present on the advisor's read, absent on everyone else's.
+// ---------------------------------------------------------------------------
+test("a session's price survives the trip to the advisor's own list", async () => {
+  const db = freshDb(); seedBooking(db, 1);
+  const e = env(db);
+  await call(e, 'PATCH', '/me/bookings/1/billing', ada,
+    { amount_cents: 30000, billing_state: 'collected' });
+  const list = await call(e, 'GET', '/me/bookings', ada);
+  assert.equal(list.body.items.length, 1);
+  assert.equal(list.body.items[0].amount_cents, 30000, 'the stored price, not undefined');
+  assert.equal(list.body.items[0].billing_state, 'collected');
+});
+
+test('an unpriced session says unpriced in the list rather than saying nothing', async () => {
+  const db = freshDb(); seedBooking(db, 1);
+  const e = env(db);
+  const item = (await call(e, 'GET', '/me/bookings', ada)).body.items[0];
+  // `in` rather than a value check: an absent key and a null one both read as
+  // `undefined` on the page, and only one of them is the contract.
+  assert.ok('amount_cents' in item, 'the key is there even when the price is not');
+  assert.ok('billing_state' in item);
+  assert.equal(item.amount_cents, null, 'absent, never 0 — zero is a price');
+  assert.equal(item.billing_state, 'unpriced');
+});
+
+test("the client's own list does not carry the advisor's bookkeeping", async () => {
+  const db = freshDb(); seedBooking(db, 1);
+  const e = env(db);
+  await call(e, 'PATCH', '/me/bookings/1/billing', ada,
+    { amount_cents: 22000, billing_state: 'written_off' });
+  const item = (await call(e, 'GET', '/bookings/me', fran)).body.items[0];
+  assert.ok(item, 'the founder still sees their booking');
+  assert.equal('billing_state' in item, false,
+    'a client must not learn their advisor wrote the session off');
+  assert.equal('amount_cents' in item, false);
+});
+
+test('moving a booking through its lifecycle does not answer with the money', async () => {
+  // `confirmed`, because cancel only accepts `pending|confirmed` — a
+  // `completed` booking 409s and the assertions below would then be passing
+  // against an error body that has no billing keys for the trivial reason.
+  const db = freshDb(); seedBooking(db, 1, 1, 'confirmed');
+  const e = env(db);
+  await call(e, 'PATCH', '/me/bookings/1/billing', ada, { amount_cents: 9900 });
+  // `cancel` is `whoCan: 'either'`, so this same response shape goes to the
+  // client when the client cancels.
+  const moved = await call(e, 'POST', '/bookings/1/cancel', fran, { reason: 'Conflict' });
+  assert.equal(moved.status, 200, 'the move landed — not a 409 with no keys on it');
+  assert.equal(moved.body.status, 'cancelled');
+  assert.equal('amount_cents' in moved.body, false);
+  assert.equal('billing_state' in moved.body, false);
+});
+
+// ---------------------------------------------------------------------------
+// The reviews on a booking belong to the two people on it
+//
+// `GET /bookings/:id/reviews` had `requireAuth` and no ownership check at all,
+// so any signed-in account could name any booking id and read both sides'
+// ratings and free-text comments about a session they had no part in. Booking
+// ids are small integers, so the whole table was walkable.
+// ---------------------------------------------------------------------------
+function seedReview(db: InstanceType<typeof DatabaseSync>, bookingId: number) {
+  db.prepare(
+    'INSERT INTO advisor_reviews (uid, booking_id, reviewer_user_id, reviewer_role, rating, comment) VALUES (?,?,?,?,?,?)',
+  ).run(`rv-${bookingId}`, bookingId, FOUNDER_USER, 'founder', 2, 'Turned up late and rambled.');
+}
+
+test('both people on a booking can read its reviews', async () => {
+  const db = freshDb(); seedBooking(db, 1); seedReview(db, 1);
+  const e = env(db);
+  for (const who of [ada, fran]) {
+    const r = await call(e, 'GET', '/bookings/1/reviews', who);
+    assert.equal(r.status, 200);
+    assert.equal(r.body.items.length, 1);
+  }
+});
+
+test('nobody else can, whichever half of the booking they are missing', async () => {
+  const db = freshDb(); seedBooking(db, 1); seedReview(db, 1);
+  const e = env(db);
+  // grace is an advisor, but not THIS booking's advisor; otto is a founder,
+  // but not THIS booking's founder.
+  for (const who of [grace, otto]) {
+    const r = await call(e, 'GET', '/bookings/1/reviews', who);
+    assert.equal(r.status, 404, 'and 404, not 403 — a stranger learns nothing');
+    assert.equal(r.body?.items, undefined, 'no rows leak alongside the refusal');
+  }
+});
+
+test('an admin can read them, and an id nobody owns answers the same 404', async () => {
+  const db = freshDb(); seedBooking(db, 1); seedReview(db, 1);
+  const e = env(db);
+  assert.equal((await call(e, 'GET', '/bookings/1/reviews', root)).status, 200);
+  // A booking that does not exist and a booking that is not yours are
+  // indistinguishable on purpose: otherwise the 404/200 split is an oracle
+  // for which ids are real.
+  assert.equal((await call(e, 'GET', '/bookings/999/reviews', fran)).status, 404);
+});
+
+test('a non-numeric booking id is refused before the lookup runs', async () => {
+  const db = freshDb(); seedBooking(db, 1); seedReview(db, 1);
+  // THE DATABASE IS THE WITNESS HERE, not the status code. Asserting only
+  // that `/bookings/abc/reviews` returns 404 passes with the `Number.isFinite`
+  // guard DELETED: `Number('abc')` is NaN, node:sqlite binds it happily,
+  // no row comes back and the ownership check 404s for the wrong reason.
+  // That mutant escaped. Real D1 rejects a NaN bind, so deleting the guard
+  // trades a 404 for a 500 in production and nowhere else — which is exactly
+  // the kind of divergence a test that only reads the status cannot see.
+  const real = makeD1(db);
+  const e = {
+    JWT_SECRET, ENVIRONMENT: 'development',
+    DB: {
+      ...real,
+      prepare(sql: string) {
+        if (sql.includes('FROM advisor_bookings b')) throw new Error('the booking lookup ran');
+        return real.prepare(sql);
+      },
+    },
+  };
+  assert.equal((await call(e, 'GET', '/bookings/abc/reviews', fran)).status, 404);
+  // ...and the poison is live: the same env on a numeric id DOES reach the
+  // lookup and blows up. 400 rather than 500 because `mapError` only ever
+  // answers 400/401/403 for a thrown Error — the point is that it is not the
+  // 404 above.
+  assert.equal((await call(e, 'GET', '/bookings/1/reviews', fran)).status, 400);
 });
 
 // ---------------------------------------------------------------------------

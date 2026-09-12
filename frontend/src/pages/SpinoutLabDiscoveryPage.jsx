@@ -381,7 +381,7 @@ export default function SpinoutLabDiscoveryPage() {
   const icpLabel = (v) => ICP_FIT_OPTIONS.find((o) => o.value === v)?.label || null;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6" data-testid="page-spinout-discovery">
+    <div className="w-full px-2 sm:px-4 py-3" data-testid="page-spinout-discovery">
       {/* Header */}
       <LabPageHeader
         className="mb-5"

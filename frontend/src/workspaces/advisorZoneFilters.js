@@ -203,6 +203,28 @@ export const ADVISOR_ZONE_FILTERS = {
   // indexed once and later failed a re-index keeps its old count: the failure
   // path updates the state and leaves the number alone. Filtering on the number
   // would silently drop exactly the documents this chip is for.
+  // ── Practice ─────────────────────────────────────────────────────────────
+  //
+  // ALL FIVE RUN, AND TWO OF THEM ARE DERIVED RATHER THAN STORED. `status` on
+  // `advisor_bookings` is pending|confirmed|completed|cancelled|no_show, so
+  // Accepted and Declined read a column — but `Expired` does not exist as a
+  // status anywhere. A request still `pending` after its SLOT HAS STARTED is
+  // one the advisor never answered, and that is the artboard's sharpest point:
+  // "a decline preserves the referral, silence spends it". Two stored facts,
+  // one honest state.
+  //
+  // `Declined` EXCLUDES TWO CANCELLATIONS THE WORKER WRITES ITSELF —
+  // 'slot_cancelled' and 'capacity_race' (`routes/advisors.ts`). Neither is an
+  // answer to a request, and counting them would make the accept rate beside
+  // the chips wrong.
+  'practice/opportunities': [
+    { canvas: 'Awaiting decision', key: 'awaiting' },
+    { canvas: 'Accepted', key: 'accepted' },
+    { canvas: 'Declined', key: 'declined' },
+    { canvas: 'Expired', key: 'expired' },
+    { canvas: 'All time', key: 'all' },
+  ],
+
   'research/library': [
     { canvas: 'All', key: 'all' },
     { canvas: 'Session docs', key: 'client', label: 'About a client' },
