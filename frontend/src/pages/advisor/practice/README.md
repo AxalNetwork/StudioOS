@@ -23,6 +23,15 @@ question with different instruments is worse than one. Clients and Contracts hav
 no artboard, so they keep their `/advisor/advisory/*` URL and the legacy
 workspace with it.
 
+**The open receipt is written on the founder's side, not here.** `DeliveryZone.jsx`
+reports whether a client read something and has no control that can say so:
+`GET /advisors/received/deliverables` and `POST …/:uid/open` are the client's, and
+they live beside the founder-facing half of `cloudflare-worker/src/routes/advisors.ts`
+because the relationship carrying a deliverable is the engagement and no grant is
+involved. A work product can only be SENT to an engagement whose client has an
+Axal account, and `EngagementsZone.jsx` is where that account is linked — from the
+people who have booked this advisor, never by typing an id. D73.
+
 **What a replaced tab could do that its artboard does not draw moves with it.**
 Delivery's post-session review loop — sessions held, which have a review, your
 average rating, and the form that files one — is a section at the bottom of

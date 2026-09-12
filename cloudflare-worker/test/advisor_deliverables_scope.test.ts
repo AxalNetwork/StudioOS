@@ -187,25 +187,62 @@ function clientOpens(db: InstanceType<typeof DatabaseSync>, uid: string, at: str
 // ---------------------------------------------------------------------------
 // The two invariants
 // ---------------------------------------------------------------------------
-test('no route in advisors.ts writes opened_at — the receipt is the client\'s', () => {
+test('the only writer of opened_at is the client\'s own route', () => {
   // CHECKED AGAINST THE SQL, not against behaviour, because the failure mode is
   // someone adding a convenient `SET opened_at = ?` long after this zone ships.
   // Reading the statements rather than the whole file also sidesteps the
   // self-matching trap: this module's own comments and its DTO name the column
   // constantly, and a blanket ban on the string would fail against correct code.
+  //
+  // THIS TEST SAID "NO ROUTE IN advisors.ts WRITES opened_at" UNTIL PR3C, and
+  // the change is a tightening rather than a concession. The rule was never
+  // "nothing in this file writes it" — it is "the ADVISOR cannot write it" — and
+  // PR3c put the client's own route in the same router, because the relationship
+  // carrying a deliverable is the engagement and no grant is involved. So the
+  // file is split at that handler: everything before it is the advisor's side
+  // and may not touch either stamp, and the one writer after it must be the
+  // founder's route and must be guarded so a reload cannot move the stamp.
   const src = readFileSync(resolve(HERE, '../src/routes/advisors.ts'), 'utf8');
-  const updates = [...src.matchAll(/UPDATE\s+advisor_deliverable_versions\s+SET\s+([^`]*?)WHERE/gs)];
-  assert.ok(updates.length > 0, 'the send route must still be an UPDATE, or this test is vacuous');
-  for (const [, setClause] of updates) {
+  const CLIENT_ROUTE = "advisors.post('/received/deliverables/:uid/open'";
+  const at = src.indexOf(CLIENT_ROUTE);
+  assert.ok(at > 0, 'the client\'s open route must exist, or this file has no writer at all');
+  const advisorSide = src.slice(0, at);
+  const clientSide = src.slice(at);
+
+  const updatesIn = (region: string) =>
+    [...region.matchAll(/UPDATE\s+advisor_deliverable_versions\s+SET\s+([^`]*?)WHERE/gs)];
+
+  // The advisor's half: an UPDATE exists (the send), and no stamp that belongs
+  // to the client appears in any SET clause.
+  const advisorUpdates = updatesIn(advisorSide);
+  assert.ok(advisorUpdates.length > 0, 'the send route must still be an UPDATE, or this test is vacuous');
+  for (const [, setClause] of advisorUpdates) {
     assert.ok(!/opened_at/.test(setClause),
       `an advisor route sets opened_at: ${setClause.trim().slice(0, 120)}`);
     assert.ok(!/signed_off_at/.test(setClause),
       'signed_off_at is the client\'s too — 208\'s header names both');
   }
+
+  // The client's half: exactly one UPDATE, it sets `opened_at`, and it carries
+  // the `opened_at IS NULL` guard that makes first-open-wins a property of the
+  // statement rather than of the handler's control flow.
+  const clientUpdates = updatesIn(clientSide);
+  assert.equal(clientUpdates.length, 1, 'the client side has exactly one write');
+  assert.match(clientUpdates[0][1], /opened_at/);
+  assert.match(clientSide, /WHERE id = \? AND opened_at IS NULL/,
+    'first open wins must be enforced in SQL, not by reading first');
+  // AND SIGN-OFF STILL HAS NO WRITER ANYWHERE. 239 carries the column; no
+  // artboard draws it and no page renders it, so writing it would be a fact
+  // nothing reads.
+  for (const [, setClause] of clientUpdates) {
+    assert.ok(!/signed_off_at/.test(setClause),
+      'nothing sets signed_off_at yet — no surface asks for it');
+  }
+
   const inserts = [...src.matchAll(/INSERT INTO\s+advisor_deliverable_versions\s*\(([^)]*)\)/g)];
   assert.ok(inserts.length > 0);
   for (const [, cols] of inserts) {
-    assert.ok(!/opened_at/.test(cols), `an advisor route inserts opened_at: ${cols.trim()}`);
+    assert.ok(!/opened_at/.test(cols), `a route inserts opened_at: ${cols.trim()}`);
   }
 });
 

@@ -60,6 +60,7 @@ export default function EngagementsZone() {
   const [deciding, setDeciding] = useState(null);
   const [decision, setDecision] = useState({ decision: 'renewed', note: '', term_ends_at: '' });
   const [adding, setAdding] = useState(false);
+  const [candidates, setCandidates] = useState([]);
   const [draft, setDraft] = useState({
     client_name: '', shape: 'retainer', scope_label: '', scope_includes: '',
     scope_excludes: '', amount: '', term_ends_at: '',
@@ -69,6 +70,21 @@ export default function EngagementsZone() {
     setState((current) => ({ ...current, loading: true, error: '' }));
     try {
       const data = await api.listMyAdvisorEngagements();
+      // WHO THIS ADVISOR MAY LINK, as a TOLERATED SECOND SOURCE. The candidates
+      // are the people who have booked them — the relationship the worker checks
+      // — and an advisor whose bookings will not load still has a contract
+      // board, so this never takes the page down with it.
+      const held = await api.listMyAdvisorBookings().catch(() => null);
+      const seen = new Map();
+      for (const b of held?.items || []) {
+        if (b.client_user_id && !seen.has(b.client_user_id)) {
+          seen.set(b.client_user_id, {
+            id: b.client_user_id,
+            name: b.client_name || b.founder_name || b.client_email || `Member #${b.client_user_id}`,
+          });
+        }
+      }
+      setCandidates([...seen.values()].sort((a, b) => a.name.localeCompare(b.name)));
       setState({ loading: false, error: '', items: data?.items || [], totals: data?.totals || null });
     } catch (error) {
       setState({
@@ -120,6 +136,26 @@ export default function EngagementsZone() {
 
   const advance = (e, lane) => act(e.id, () => api.advanceMyAdvisorEngagement(e.id, lane),
     'That lane could not be recorded.');
+
+  /**
+   * Linking the client's Axal account to the contract — PR3c, and the piece that
+   * made the rest of this store reachable.
+   *
+   * WHAT THE LINK BUYS, in one sentence on the card: a work product can only be
+   * SENT to a linked client, and only a linked client can record that they opened
+   * it. Migration 238 keeps the client as a NAME on purpose — a retainer may
+   * predate the company joining — so this stays optional and a card without it
+   * still works as a contract.
+   *
+   * THE OPTIONS ARE THE PEOPLE WHO HAVE BOOKED THIS ADVISOR, because that is the
+   * relationship the worker checks. Offering a free-text id or address would be
+   * a control that teaches the wrong model: most values would be refused, and
+   * the ones accepted would let an advisor attach a stranger. `DocumentShares`
+   * on the founder side settled this shape first.
+   */
+  const linkClient = (e, value) => act(e.id,
+    () => api.updateMyAdvisorEngagement(e.id, { founder_user_id: value === '' ? null : Number(value) }),
+    'That client account could not be linked.');
 
   const recordRenewal = (e) => act(e.id, async () => {
     await api.recordMyAdvisorEngagementRenewal(e.id, {
@@ -277,7 +313,8 @@ export default function EngagementsZone() {
                        one, because its own data fills all four. A lane with no
                        cards and no sentence reads as a rendering failure. */
                     ? <p className="py-2 text-[10.5px] leading-relaxed text-axal-ink-3">Nothing here.</p>
-                    : cards.map((e) => <BoardCard key={e.id} e={e} busy={busy === e.id} onAdvance={advance} />)}
+                    : cards.map((e) => <BoardCard key={e.id} e={e} busy={busy === e.id}
+                      onAdvance={advance} candidates={candidates} onLink={linkClient} />)}
                 </div>
               </div>
             );
@@ -453,9 +490,15 @@ export default function EngagementsZone() {
  * rather than a disabled one: there is no move to make, and a greyed button
  * implies there is.
  */
-function BoardCard({ e, busy, onAdvance }) {
+function BoardCard({ e, busy, onAdvance, candidates, onLink }) {
   const due = e.lane === 'renewal_due';
   const moves = laneMoves(e.lane);
+  // The linked account may not be among the candidates any more — a booking can
+  // be removed after the link was made — so its own option is added rather than
+  // letting the select fall back to "not linked" and read as though it were.
+  const options = e.founder_user_id && !(candidates || []).some((p) => p.id === e.founder_user_id)
+    ? [...(candidates || []), { id: e.founder_user_id, name: `Member #${e.founder_user_id}` }]
+    : (candidates || []);
   return (
     <div data-testid={`card-pr2-${e.id}`}
       className={`rounded-[9px] border p-2.5 ${due
@@ -480,6 +523,23 @@ function BoardCard({ e, busy, onAdvance }) {
           ))}
         </div>
       )}
+      <div className="mt-2 border-t border-axal-hairline pt-2 dark:border-gray-700">
+        <label className="block text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-ink-3"
+          htmlFor={`link-pr2-${e.id}`}>Client account</label>
+        <select id={`link-pr2-${e.id}`} data-testid={`link-pr2-${e.id}`} disabled={busy}
+          value={e.founder_user_id || ''} onChange={(ev) => onLink(e, ev.target.value)}
+          className="mt-1 w-full rounded-md border border-axal-hairline bg-white px-1.5 py-1 text-[10.5px] disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900">
+          <option value="">Not linked — a name only</option>
+          {options.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <p className="mt-1 text-[9.5px] leading-relaxed text-axal-ink-3">
+          {e.founder_user_id
+            ? 'Linked. Work products can be sent to them, and they can record having opened one.'
+            : options.length === 0
+              ? 'Nobody has booked you yet, so there is no account to link. The contract works either way.'
+              : 'Only a linked client can be sent a work product, or record that they opened one.'}
+        </p>
+      </div>
     </div>
   );
 }

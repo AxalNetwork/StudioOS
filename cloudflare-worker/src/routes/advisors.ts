@@ -2233,12 +2233,49 @@ async function requireOwnEngagement(
   return row;
 }
 
-/** A client link, validated against `users`, or null. */
-async function engagementClientUser(env: Env, v: unknown): Promise<number | null> {
+/**
+ * A client link — an account this advisor ALREADY HAS A RELATIONSHIP WITH, or
+ * null.
+ *
+ * THIS USED TO ACCEPT ANY EXISTING `users.id`, and that was wrong in both
+ * directions at once. An advisor has no way to learn another account's numeric
+ * id, so the column was unusable by a human; and an advisor who guessed one
+ * could attach a stranger's account to their own contract, then open a message
+ * thread with them through Delivery's nudge. A write that is simultaneously
+ * unreachable and over-trusting is not a link, it is a hole.
+ *
+ * THE RELATIONSHIP IS THE PERMISSION, and it is one of two facts the product
+ * already records: the account has BOOKED this advisor, or it has OPENED A
+ * RECORD to them (an active grant from migration 218). Either means the two
+ * people have met in this product; neither can be manufactured by the advisor
+ * alone. `DocumentShares` on the founder side settled this shape first —
+ * "offering an address the API would refuse is how a control teaches the wrong
+ * model" — so the picker on Engagements offers exactly this set.
+ *
+ * AN UNRELATED ACCOUNT RESOLVES TO NULL rather than erroring, which is the
+ * behaviour a dangling id already had: the engagement keeps its client NAME and
+ * simply stays unsendable. One rule, one outcome, and no new error path on the
+ * two routes that call this.
+ *
+ * `m.user_id` IS NULLABLE, so the grant half is skipped rather than compared
+ * against null — an advisor record with no account behind it has no grants by
+ * definition, and `advisor_user_id = NULL` would match nothing while reading as
+ * though it might.
+ */
+async function engagementClientUser(env: Env, m: AdvisorRow, v: unknown): Promise<number | null> {
   if (v == null || v === '') return null;
   const n = Number(v);
   if (!Number.isInteger(n) || n <= 0) return null;
-  const u = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(n).first<{ id: number }>();
+  const u = await env.DB.prepare(
+    `SELECT u.id FROM users u
+      WHERE u.id = ?
+        AND (EXISTS (SELECT 1 FROM advisor_bookings b
+                      WHERE b.advisor_id = ? AND b.founder_user_id = u.id)
+          OR EXISTS (SELECT 1 FROM advisor_client_grants g
+                      WHERE g.advisor_user_id = ? AND g.granted_by_user_id = u.id
+                        AND g.status = 'active'
+                        AND (g.expires_at IS NULL OR g.expires_at > datetime('now'))))`
+  ).bind(n, m.id, m.user_id ?? -1).first<{ id: number }>();
   return u ? Number(u.id) : null;
 }
 
@@ -2307,7 +2344,7 @@ advisors.post('/me/engagements', async (c) => {
           term_ends_at, cycles, created_at, updated_at)
        VALUES (?, ?, ?, ?, 'drafting', ?, ?, ?, ?, ?, ?, 0, ?, ?)`
     ).bind(
-      uid, m.id, await engagementClientUser(c.env, body.founder_user_id), clientName, shape,
+      uid, m.id, await engagementClientUser(c.env, m, body.founder_user_id), clientName, shape,
       trimOrNull(body.scope_label, 200), trimOrNull(body.scope_includes, 2000),
       trimOrNull(body.scope_excludes, 2000), parsePriceCents(body.amount_cents),
       engagementDate(body.term_ends_at), now, now,
@@ -2341,7 +2378,7 @@ advisors.patch('/me/engagements/:id', async (c) => {
       // client name would blank a card rather than rename it.
       String(body.client_name ?? '').trim().slice(0, 200) || row.client_name,
       'founder_user_id' in body
-        ? await engagementClientUser(c.env, body.founder_user_id) : row.founder_user_id,
+        ? await engagementClientUser(c.env, m, body.founder_user_id) : row.founder_user_id,
       shape,
       'scope_label' in body ? trimOrNull(body.scope_label, 200) : row.scope_label,
       'scope_includes' in body ? trimOrNull(body.scope_includes, 2000) : row.scope_includes,
@@ -2798,6 +2835,124 @@ advisors.post('/me/deliverables/:id/versions/:version/send', async (c) => {
     ).bind(now, now, v.id).run();
     await c.env.DB.prepare('UPDATE advisor_deliverables SET updated_at = ? WHERE id = ?')
       .bind(now, row.id).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverable_versions WHERE id = ?')
+      .bind(v.id).first<VersionRow>();
+    return c.json(versionDto(fresh!));
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// 239, the client's half — the receipt an advisor cannot write
+// ---------------------------------------------------------------------------
+/**
+ * THE WHOLE POINT OF THESE TWO ROUTES is that `opened_at` has no advisor-side
+ * writer and never will. Migration 208's header, inherited by 239, states the
+ * rule: `opened_at` and `signed_off_at` are the CLIENT's to set, because only
+ * the founder side can truthfully say a thing was read — an advisor-side write
+ * would be the practice reporting a metric about itself. `/me/deliverables`
+ * reports three tiles that stay null until a founder acts here.
+ *
+ * THEY SIT IN THIS FILE RATHER THAN `advisor_grants.ts`, AND THE SCHEMA IS WHY:
+ * no grant is involved. The relationship that carries a deliverable is the
+ * ENGAGEMENT, so a grant-scoped route would hide every work product from a
+ * founder who never opened a record — which is most of them. This router already
+ * holds the founder-facing half of the advisor surface (`/`, `/match`, `/:uid`,
+ * `/:uid/slots`, `/slots/:id/book`, `/bookings/:id/*`), all `requireAuth` with
+ * no advisor profile, and these join it.
+ */
+
+/**
+ * GET /received/deliverables — what my advisors have sent me.
+ *
+ * SENT VERSIONS ONLY, and that is a privacy rule rather than a filter. A version
+ * with no `sent_at` is the advisor's draft: they created it, they have not handed
+ * it over, and a client who could see it would be reading work in progress. A
+ * deliverable whose every version is unsent does not appear at all.
+ */
+advisors.get('/received/deliverables', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    await ensureAdvisorStoresSchema(c.env);
+    const rows = await c.env.DB.prepare(
+      `SELECT d.id, d.uid, d.title, d.client_name, d.created_at, d.updated_at,
+              a.display_name AS advisor_name, a.uid AS advisor_uid
+         FROM advisor_deliverables d
+         JOIN advisor_engagements e ON e.id = d.engagement_id
+         JOIN advisors a ON a.id = d.advisor_id
+        WHERE e.founder_user_id = ?
+          AND EXISTS (SELECT 1 FROM advisor_deliverable_versions v
+                       WHERE v.deliverable_id = d.id AND v.sent_at IS NOT NULL)
+        ORDER BY d.updated_at DESC LIMIT 200`
+    ).bind(user.id).all<any>();
+
+    const items = [] as any[];
+    for (const d of rows.results || []) {
+      const vs = await c.env.DB.prepare(
+        `SELECT * FROM advisor_deliverable_versions
+          WHERE deliverable_id = ? AND sent_at IS NOT NULL
+          ORDER BY version DESC`
+      ).bind(d.id).all<VersionRow>();
+      const versions = (vs.results || []).map(versionDto);
+      items.push({
+        uid: d.uid, title: d.title,
+        advisor_name: d.advisor_name, advisor_uid: d.advisor_uid,
+        // DERIVED BY THE SAME FUNCTION THE ADVISOR'S PAGE READS, so the two
+        // sides can never disagree about what "opened" means. `not_started` is
+        // unreachable here by construction — every row has a sent version — and
+        // that is worth leaving to the shared helper rather than re-deriving a
+        // two-state version of it that would drift.
+        state: deliverableState(versions),
+        version_count: versions.length,
+        versions,
+        updated_at: d.updated_at,
+      });
+    }
+    return c.json({
+      items,
+      totals: {
+        work_products: items.length,
+        unread: items.filter((i) => i.state === 'sent').length,
+        advisors: new Set(items.map((i) => i.advisor_uid)).size,
+      },
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * POST /received/deliverables/:uid/open — the receipt, stamped once.
+ *
+ * FIRST OPEN WINS, AND THE SQL IS WHAT ENFORCES IT: `WHERE opened_at IS NULL`
+ * on the UPDATE, not a read-then-write in the handler. A founder reloading the
+ * page cannot move the stamp, and two concurrent opens cannot race one past the
+ * other. The second call is not an error — reading something twice never is — so
+ * it returns the row with the original stamp intact.
+ *
+ * A DRAFT CANNOT BE OPENED. `sent_at IS NOT NULL` is in the scope query, so a
+ * version the advisor never sent answers 404 like anyone else's: without it a
+ * founder could stamp a deliverable nobody handed them, and `median_to_open` on
+ * the advisor's page would be measuring an interval that never happened.
+ *
+ * 404, NEVER 403, for a version belonging to someone else's engagement — the
+ * `requireOwnDeliverable` reasoning from PR3a, one table further out. Comparing
+ * after the load is what makes another client's row indistinguishable from one
+ * that does not exist.
+ */
+advisors.post('/received/deliverables/:uid/open', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    await ensureAdvisorStoresSchema(c.env);
+    const v = await c.env.DB.prepare(
+      `SELECT v.* FROM advisor_deliverable_versions v
+         JOIN advisor_deliverables d ON d.id = v.deliverable_id
+         JOIN advisor_engagements e ON e.id = d.engagement_id
+        WHERE v.uid = ? AND e.founder_user_id = ? AND v.sent_at IS NOT NULL`
+    ).bind(c.req.param('uid'), user.id).first<VersionRow>();
+    if (!v) return c.json({ detail: 'Work product not found' }, 404);
+
+    const now = nowIso();
+    await c.env.DB.prepare(
+      'UPDATE advisor_deliverable_versions SET opened_at = ?, updated_at = ? WHERE id = ? AND opened_at IS NULL'
+    ).bind(now, now, v.id).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverable_versions WHERE id = ?')
       .bind(v.id).first<VersionRow>();
     return c.json(versionDto(fresh!));
