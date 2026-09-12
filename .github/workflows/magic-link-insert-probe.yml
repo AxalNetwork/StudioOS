@@ -1,20 +1,32 @@
 name: magic-link insert probe
 
-# Task #168, the cheap half. `magic-link-probe.yml` is the real answer — it reads
-# a mailbox, follows the link and asserts a sign-in — and it cannot run until a
-# Gmail OAuth app exists. This one needs no mailbox: it asks for a link and then
-# looks in production D1 for the token row.
+# Task #168, the half that needs no mailbox. `magic-link-probe.yml` is still the
+# only probe that reads an inbox, follows the link and asserts a sign-in, and it
+# cannot run until a Gmail OAuth app exists. This one asks for a link and then
+# looks in production D1 — and D1 turns out to hold more than the token row.
 #
-# That is precisely where the outage died. D74's diagnosis found
-# `magic_link_tokens` holding four rows, newest 2026-08-03, and the failing
-# attempt wrote none — the request never reached the INSERT that `/magic/start`
-# performs before anything else. A row appearing is direct evidence the
-# thirty-second hang is gone.
+# THREE VERDICTS:
+#   start_latency       /magic/start answered under budget. The reported symptom.
+#   token_row_written   a `magic_link_tokens` row appeared. Exactly where the
+#                       outage died: D74's diagnosis found four rows, newest
+#                       2026-08-03, and the failing attempt wrote none, so the
+#                       request never reached the INSERT that is the endpoint's
+#                       first act.
+#   mail_send_recorded  the mail was handed to Gmail and ACCEPTED. `routes/auth.ts`
+#                       sends through `services/email/send.ts`, which writes an
+#                       `email_send_log` row (`status='queued'`) before enqueueing;
+#                       the queue consumer marks it `sent` only when the Gmail API
+#                       took it, and `failed` with a `last_error` otherwise.
 #
-# IT DOES NOT PROVE THE MAGIC LINK WORKS. D74 moved the send to `waitUntil`, so
-# the row is committed and the mail is a separate errand that can fail in
-# silence. Green here means "answers and commits". `magic-link-probe.yml` stays
-# the only thing that can close #168.
+# WHY THE THIRD ONE EXISTS. Without it this probe would pass on a login that sends
+# no email at all: D74 moved the send to `waitUntil`, so the token row commits and
+# the mail is a separate errand that can die in silence. That silence is legible in
+# `email_send_log` — a row stuck at `queued`, or `failed` with a named cause.
+#
+# IT STILL DOES NOT PROVE THE MAIL ARRIVED. Gmail accepting a message is not an
+# inbox (a bounce, a spam file or a wrong address all follow acceptance), and
+# nothing here follows the link or asserts a session. `magic-link-probe.yml` does
+# both and stays the only check that can close #168.
 #
 # SECRETS: two of the three already exist.
 #   MAGIC_PROBE_EMAIL      the one to add. A real email is sent to it on every
@@ -38,9 +50,11 @@ on:
     # valid link, and pass without ever proving its own mail arrived — a false
     # pass on the one check whose entire value is being believed.
     #
-    # Thirty minutes against its 120s mail budget makes the overlap impossible.
-    # `frontend/test/magic_link_insert_probe.test.mjs` asserts the gap by parsing
-    # both crons and the budget out of source, so neither can drift alone.
+    # Thirty minutes beats the sum of this probe's own budgets (15s for the token
+    # row, 180s for the send) with minutes to spare, so the overlap is
+    # impossible. `frontend/test/magic_link_insert_probe.test.mjs` asserts the gap
+    # by parsing both crons and every budget out of source, so none can drift
+    # alone.
     #
     # The union of both schedules is also two requests per 4h for one address,
     # far inside `magic-start-email`'s 3 per 900s.
@@ -62,7 +76,7 @@ jobs:
 
       # `continue-on-error` lets the report step below run and re-decide, and
       # nothing more; the exit CODE is captured because 1 and 2 differ.
-      - name: Ask for a link, then look for its row
+      - name: Ask for a link, then look for its row and its send
         id: probe
         continue-on-error: true
         env:
@@ -86,15 +100,18 @@ jobs:
         run: |
           case "$PROBE_CODE" in
             0)
-              echo "::notice title=Magic-link INSERT reached::/magic/start answered under budget and committed its token row. This says nothing about delivery."
+              echo "::notice title=Magic-link INSERT and send both reached::/magic/start answered under budget, committed its token row, and Gmail accepted the mail. This does not prove it arrived."
               {
                 echo '### Magic-link insert probe: PASS'
                 echo
-                echo '`/magic/start` answered under budget and a new `magic_link_tokens` row appeared.'
-                echo 'That is the original #168 symptom — a request that never reached its INSERT — confirmed gone.'
+                echo '`/magic/start` answered under budget, a new `magic_link_tokens` row appeared, and the'
+                echo '`email_send_log` row for it reached `status=sent` — so Gmail accepted the message.'
+                echo 'That is the original #168 symptom confirmed gone, and the `waitUntil` send confirmed'
+                echo 'to have actually run.'
                 echo
-                echo '**Delivery is NOT covered here.** `waitUntil` commits the row and sends the mail separately,'
-                echo 'so it can fail in silence. `magic-link-probe.yml` remains the only check that can close #168.'
+                echo '**Arrival is NOT covered here.** Acceptance by Gmail is not an inbox — a bounce, a spam'
+                echo 'file or a wrong address all follow it — and nothing here follows the link or asserts a'
+                echo 'session. `magic-link-probe.yml` remains the only check that can close #168.'
               } >> "$GITHUB_STEP_SUMMARY"
               ;;
             2)
@@ -112,7 +129,7 @@ jobs:
               exit 1
               ;;
             *)
-              echo "::error title=Magic-link INSERT not reached::The endpoint did not answer under budget, or committed no token row — the shape of the original outage."
+              echo "::error title=Magic-link flow broken::The endpoint was slow, committed no token row, or the mail was never sent — the step log names which."
               {
                 echo '### Magic-link insert probe: FAILED'
                 echo
@@ -122,6 +139,11 @@ jobs:
                 echo '- `token_row_written` — **the request did not reach its INSERT.** This is exactly how the'
                 echo '  outage presented: `magic_link_tokens` stopped gaining rows while the browser waited 30s.'
                 echo '  Read the gates ahead of the INSERT in `cloudflare-worker/src/routes/auth.ts`.'
+                echo '- `mail_send_recorded` — **the token row exists but no mail was sent.** A login that looks'
+                echo '  healthy and delivers nothing. The detail says which of the three shapes it is:'
+                echo '  no `email_send_log` row at all (the `waitUntil` errand never reached its own INSERT),'
+                echo '  a row stuck at `queued` (enqueued, never delivered — check the `studioos-job-queue`'
+                echo '  consumer and its DLQ), or `failed`/`dlq`, where `last_error` names the cause.'
               } >> "$GITHUB_STEP_SUMMARY"
               exit 1
               ;;
