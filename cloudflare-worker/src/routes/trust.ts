@@ -26,6 +26,9 @@ import {
   getPairwiseNda,
   hasActivePairwiseNda,
   upsertPairwiseNda,
+  obligationSource,
+  trustScoreOf,
+  recordAndCompareScore,
   type ObligationKey,
 } from '../services/trust';
 import { getSQL } from '../db';
@@ -45,16 +48,44 @@ trust.get('/me', async (c) => {
   await seedObligations(c.env, user.id, user.role);
   const rows: any = await c.env.DB.prepare(
     `SELECT obligation_key, required, status, expires_at, evidence_envelope_uuid,
-            updated_at, created_at
+            evidence_meta, updated_at, created_at
        FROM legal_obligations WHERE user_id = ? ORDER BY required DESC, obligation_key`,
   ).bind(user.id).all();
-  const obligations = (rows?.results || []) as any[];
+  const obligations = ((rows?.results || []) as any[]).map(o => ({
+    ...o,
+    // PROVENANCE, which Trust Center v2 draws under every obligation row as
+    // "Synced from …" / "From envelope …". The fact was already in the table —
+    // `evidence_meta` has carried `{"source":"kyc_provider",…}` since the KYC
+    // sync landed — it simply never left the worker, so the page had nothing to
+    // render and drew the row bare. Derived here rather than in the client
+    // because `evidence_meta` is an opaque JSON blob whose shape is this
+    // module's business, and shipping the raw blob would make every consumer
+    // re-learn it.
+    source: obligationSource(o),
+  }));
   const requiredOpen = obligations.filter(o => o.required && o.status !== 'satisfied' && o.status !== 'waived');
+
+  // The score, and what it was the last month we have on record.
+  //
+  // Computed HERE and not read back from the client: this value is written to
+  // `trust_score_snapshots`, and a history a caller can set is not a history.
+  // `trustScoreOf` is the worker's copy of the frontend's `computeTrustScore`;
+  // `cloudflare-worker/test/trust_score_parity.test.ts` runs both over the
+  // same fixtures and fails if they ever disagree.
+  const score = trustScoreOf(obligations);
+  const history = await recordAndCompareScore(c.env, user.id, score);
+
   return c.json({
     role: user.role,
     obligations,
     required_open_count: requiredOpen.length,
     fully_compliant: requiredOpen.length === 0,
+    score,
+    // null when this is the first month on record. The page states that
+    // absence instead of rendering a zero delta — an account with no prior
+    // month has not "held steady", it has no comparison (D56/D68).
+    previous_score: history.previousScore,
+    previous_month: history.previousMonth,
   });
 });
 

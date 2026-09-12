@@ -38,6 +38,7 @@ const PAGE = read('frontend/src/pages/TrustCenterPage.jsx');
 const CODE = codeOnly(PAGE);
 const API = read('frontend/src/lib/api.js');
 const WORKER = read('cloudflare-worker/src/routes/trust.ts');
+const WORKER_SVC = read('cloudflare-worker/src/services/trust.ts');
 const BASELINE = JSON.parse(read('scripts/api-drift-baseline.json'));
 
 /** Every path routes/trust.ts actually declares. */
@@ -207,8 +208,11 @@ test('the three statuses that used to render grey now read correctly', () => {
 test('waived reads the same way the score counts it', () => {
   // computeTrustScore counts waived alongside satisfied. A neutral pill beside
   // a green score said two things about one row.
-  const badge = read('frontend/src/components/TrustScoreBadge.jsx');
-  assert.match(badge, /o\.status === 'satisfied' \|\| o\.status === 'waived'/,
+  // The rule moved out of TrustScoreBadge.jsx into the pure lib module so the
+  // worker's copy could be run against it (migration 243's snapshot needs the
+  // score server-side). The badge re-exports it; the rule itself reads here.
+  const rule = read('frontend/src/lib/trustCenter.js');
+  assert.match(rule, /o\.status === 'satisfied' \|\| o\.status === 'waived'/,
     'the score no longer counts waived — recheck its tone');
   const block = PAGE.slice(
     PAGE.indexOf('const STATUS_TONE = {'),
@@ -221,9 +225,18 @@ test('the client score formula still mirrors the WORKER, and the PAGE does not i
   // The canvas proposed partial credit for in-review plus a per-gate penalty.
   // Shipping it would have put /trust at odds with GET /trust/score/:userId
   // AND with the same badge on /account.
-  assert.match(WORKER, /Math\.round\(\(satisfied \/ required\.length\) \* 100\)/);
-  const badge = read('frontend/src/components/TrustScoreBadge.jsx');
-  assert.match(badge, /Math\.round\(\(satisfied \/ required\.length\) \* 100\)/);
+  assert.match(WORKER_SVC, /Math\.round\(\(satisfied \/ required\.length\) \* 100\)/);
+  const rule = read('frontend/src/lib/trustCenter.js');
+  assert.match(rule, /Math\.round\(\(satisfied \/ required\.length\) \* 100\)/);
+  // Looking alike is not enough and never was: the two are now imported and
+  // RUN side by side over shared fixtures in
+  // `cloudflare-worker/test/trust_score_parity.test.ts`. This stays as the
+  // cheap structural tripwire for someone editing one of them in place.
+  assert.match(
+    read('frontend/src/components/TrustScoreBadge.jsx'),
+    /export \{ computeTrustScore \} from '\.\.\/lib\/trustCenter'/,
+    'the badge must re-export the shared rule, not grow a private copy',
+  );
   // The PAGE consumes the shared helper and defines no rival.
   assert.match(PAGE, /computeTrustScore\(obligations\)/);
   assert.doesNotMatch(CODE, /reqGates|weightOf|PREV_SCORE|scoreDelta/,
