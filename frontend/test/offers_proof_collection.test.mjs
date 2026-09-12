@@ -39,7 +39,7 @@ import { codeOnly } from './_codeOnly.mjs';
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const read = (p) => codeOnly(raw(p));
 
-const CANVAS = raw('design/incoming/Pages · Partner Offers.dc.html');
+const CANVAS = raw('design/canvases/integrated/Pages · Partner Offers.dc.html');
 const zoneRaw = raw('frontend/src/pages/partner/offers/ProofZone.jsx');
 const zone = read('frontend/src/pages/partner/offers/ProofZone.jsx');
 const actions = read('frontend/src/workspaces/partnerZoneActions.js');

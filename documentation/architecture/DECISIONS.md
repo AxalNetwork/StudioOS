@@ -4659,11 +4659,17 @@ fact about the configuration, and the reader cannot tell which from the tick. Th
 "partially verified green" D78 exists to forbid, reintroduced through the back door. Two
 probes, each green only when everything it names passed, keep the tick meaning one thing.
 
-So `check-magic-link-insert.mjs` reports `start_latency` and `token_row_written` and
-**disclaims delivery in the script, in the annotation and in the step summary** — because the
-`waitUntil` failure mode leaves the row committed and the mail unsent, and this probe is blind
-to precisely that. It closes one of three verdicts. `magic-link-probe.yml` stays the only
-thing that can close #168.
+So `check-magic-link-insert.mjs` reports `start_latency` and `token_row_written`, and
+`magic-link-probe.yml` stays the only thing that can close #168.
+
+> **Amended the same day by D80.** The two paragraphs above originally went further and said
+> this probe "disclaims delivery in the script, in the annotation and in the step summary —
+> because the `waitUntil` failure mode leaves the row committed and the mail unsent, and this
+> probe is blind to precisely that." **That was wrong on the last point.** The `waitUntil` send
+> writes an `email_send_log` row, so the failure is legible in D1 and the probe now carries a
+> third verdict, `mail_send_recorded`. What stays true is the shape of the argument below — two
+> probes rather than two modes — and that only the mailbox probe can prove the mail *arrived*.
+> Read D80 before relying on any sentence here about what this probe cannot see.
 
 ### The schedule offset is a correctness requirement
 
@@ -4697,3 +4703,69 @@ Each run writes one row to production `magic_link_tokens` (15-minute expiry, nev
 sends one real email, so it was put to the user before being built. **It does not close #168.**
 Until a run passes, nothing is verified; once one does, #168 reads *original 30s symptom
 verified, delivery still unverified* — and only the mailbox probe can change the second half.
+
+## D80 — The `waitUntil` send does leave a trace, so the probe asserts the Gmail handoff
+
+**2026-09-12, hours after D79.** That decision shipped `check-magic-link-insert.mjs` with two
+verdicts and a disclaimer: *"NOT CHECKED HERE: delivery. Only check-magic-link-live.mjs can see
+that."* The disclaimer rested on an assumption nobody had checked — that D74's `waitUntil` send
+leaves nothing in D1. **It leaves a full record.**
+
+`routes/auth.ts:8` imports `send as sendEmail` from `services/email/send.ts`. That function
+inserts an `email_send_log` row (`status='queued'`, `to_addr`, `template_key='auth_magic_link'`)
+**before** it enqueues onto `JOB_QUEUE`; the queue consumer (`services/queueWorker.ts`, case
+`email_send`) calls `deliverNow`, which marks the row `sent` **only when the Gmail API accepted
+the message** and `failed` with a `last_error` otherwise.
+
+So the precise failure D74 introduced — token row committed, `/magic/start` answering 202 in
+200ms, mail never sent — is visible as a row stuck at `queued`, or a `failed`/`dlq` row naming
+its cause. **The probe as merged would have passed on exactly that**, reporting a healthy login
+that delivers nothing. That is the defect this decision closes, and it needed no new secret:
+`email_send_log` sits in the same D1 the probe already reads.
+
+### Why this is a verdict and not the mode D79 rejected
+
+It looks like the thing D79 forbade, and it is the opposite. D79's objection to `--no-mailbox`
+was that a script with modes **goes green on a subset**, so its tick reports the configuration
+rather than the system. `mail_send_recorded` adds no mode and no subset: it runs on every run,
+on the same single secret, and there is no configuration under which the probe passes without
+it. The tick still means one thing — it just means more of the right thing.
+
+### What is proved, and what is still not
+
+**Proved: acceptance.** Gmail took the message. **Not proved: arrival.** A bounce, a spam file
+or a wrong address all come after acceptance, and nothing here follows the link or asserts a
+session. So the mailbox probe keeps exclusive territory — inbox arrival plus a completed
+sign-in — and remains the check that closes #168. With this verdict, #168 reads *original 30s
+symptom verified, send handoff verified, arrival and sign-in still unverified.*
+
+### The budget is measured, not guessed
+
+Production `email_send_log` holds four real `auth_magic_link` rows. Their `enqueued_at` →
+`sent_at` gaps are **10s, 29s, 82s and 26s**, every one on the first attempt. `MAGIC_SEND_BUDGET_MS`
+therefore defaults to **180000** — the 60s first written here would have failed the 82s send,
+which succeeded. `frontend/test/magic_link_insert_probe.test.mjs` parses the budget out of
+source and asserts it clears 82s, asserts the schedule gap clears the sum of this probe's
+budgets, and asserts the budgets fit inside the job's `timeout-minutes` so raising one cannot
+silently trade a report for a killed job.
+
+Two further traps the tests pin. The poll is scoped `AND id > ?` against a baseline taken
+**before** the request: every existing row is `sent`, so without that scope the August rows
+would satisfy the verdict forever — the same trap the token baseline exists to avoid, one table
+over. And `last_error` is **redacted before printing**: `deliverNow` stores the thrown message,
+the payload it was thrown from carries the rendered `magic_url`, and a CI log is readable by
+anyone who can read the repo, so a URL or any 24-character token-shaped run is stripped while
+`gmail_creds_missing`, `gmail_send_failed` and `deliver_now_threw` survive intact.
+
+### One narrow correction to D74's rationale
+
+Reading the same table settled something else. `[[env.production.queues.producers]]` landed in
+`92bef59e4` (2026-05-05), before all four sends, so `JOB_QUEUE` was bound throughout: pre-D74,
+`await sendEmail(…)` awaited `ensureSendLog`, the log INSERT and `Jobs.enqueue`'s `queue_jobs`
+INSERT — **three D1 round trips, never the Gmail call**, which ran in the consumer. So the
+`waitUntil` move did not remove "two bounded fetches (token + send) that can legitimately take
+10s each", as its own comment in `auth.ts` claims. **#535 is not misdiagnosed** — its
+load-bearing half is the other one, `util/deadline.ts`'s `withDeadline` wrapped around every
+await on the auth path, which bounds a stall wherever it sits. Only that one sentence of the
+comment is wrong. Whether the hang is gone still needs a live measurement, which is
+`start_latency`, which needs a run.

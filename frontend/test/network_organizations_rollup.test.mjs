@@ -48,7 +48,7 @@ function tilesIn(code) {
   }));
 }
 
-const CANVAS = raw('design/incoming/Pages · Partner Network.dc.html');
+const CANVAS = raw('design/canvases/integrated/Pages · Partner Network.dc.html');
 const pageRaw = raw('frontend/src/pages/partner/OrganizationsZone.jsx');
 const page = read('frontend/src/pages/partner/OrganizationsZone.jsx');
 const workspace = read('frontend/src/workspaces/NetworkWorkspace.jsx');
