@@ -3303,6 +3303,44 @@ export const api = {
   sendMyAdvisorDeliverableVersion: (id, version) =>
     request(`/advisors/me/deliverables/${id}/versions/${version}/send`, { method: 'POST' }),
 
+  // Migration 240 — the three things that decide what the calendar contains.
+  // A price here is what the advisor ASKS FOR; nothing in this group charges
+  // anyone. The take-rate, the payout account and the Stripe Connect service
+  // leg land in 241 and after, in test mode behind a production flag. D75.
+  // The OWNER's view of the calendar, not the public `/:uid/slots` one. It
+  // carries `recording_state`, `payment_state` and `blocked_reason`, which a
+  // founder browsing an advisor's slots must never see: one would tell them
+  // the payout account is unverified, another is a private note about why an
+  // hour is not for sale.
+  listMyAdvisorSlots: ({ days = 14, from } = {}) => {
+    const qs = new URLSearchParams({ days: String(days) });
+    if (from) qs.set('from', from);
+    return request(`/advisors/me/slots?${qs}`);
+  },
+  // Withdraws hours nobody has taken. A booked hour is REFUSED rather than
+  // blocked, and the response reports how many were left alone — blocking one
+  // someone holds would take their session away without telling either side.
+  blockMyAdvisorSlotRange: (data) =>
+    request('/advisors/me/slots/block', { method: 'POST', body: JSON.stringify(data) }),
+  getMyAdvisorAvailability: () => request('/advisors/me/availability'),
+  // PUT, not PATCH: one row per advisor, and the rule set is the unit edited.
+  // A partial update would let a cap and a blackout disagree about which
+  // edit won.
+  saveMyAdvisorAvailability: (data) =>
+    request('/advisors/me/availability', { method: 'PUT', body: JSON.stringify(data) }),
+  listMyAdvisorSessionTypes: () => request('/advisors/me/session-types'),
+  // Refuses a free intro that carries a price (400): free and unpriced are
+  // different facts, and a type asserting both says nothing a reader can use.
+  createMyAdvisorSessionType: (data) =>
+    request('/advisors/me/session-types', { method: 'POST', body: JSON.stringify(data) }),
+  updateMyAdvisorSessionType: (id, data) =>
+    request(`/advisors/me/session-types/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  listMyAdvisorBookingLinks: () => request('/advisors/me/booking-links'),
+  // 409 on a slug another advisor already holds — the slug resolves from the
+  // URL alone, so it is unique across the table rather than per advisor.
+  createMyAdvisorBookingLink: (data) =>
+    request('/advisors/me/booking-links', { method: 'POST', body: JSON.stringify(data) }),
+
   // The CLIENT's half of 239 — the only writer of `opened_at` in the product.
   // These two are read and called by the FOUNDER, not the advisor: the receipt
   // is theirs to give, and the pair above deliberately has no equivalent. D73.

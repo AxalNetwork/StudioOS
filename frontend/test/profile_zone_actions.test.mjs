@@ -256,12 +256,15 @@ const PROFILES = {
     canvasDirs: ['design/incoming', 'design/canvases/integrated'],
     canvas: /^(Pages · Advisor |Advisor Detail · Practice)/,
     buckets: /^(expertise|network|research|practice)\//,
-    // 14 and 14 as of canvas PR3: `practice/delivery` is the third Practice
-    // artboard to land, leaving `excluded` below and taking its place here with
-    // one export ("Export as client pack"). PR1 and PR2 did the same before it.
-    // Both counts move together because each Practice artboard so far draws
-    // exactly two ops, one of them an export.
-    zones: 14,
+    // 15 zones and 14 exports as of canvas PR4, and THIS IS THE FIRST TIME THE
+    // TWO HAVE MOVED APART. PR1, PR2 and PR3 each drew exactly two ops, one of
+    // them an export, so the counts rose together. PR4 draws two ops and
+    // NEITHER is an export: `Export to calendar` is an .ics file, which the
+    // builder's export kind cannot produce — that kind emits the CSV every
+    // other zone wants, through `exportView`. Labelling it `export` would have
+    // handed the advisor a spreadsheet under a calendar's name, so it is a
+    // page-supplied handler and the export count stays where it was.
+    zones: 15,
     links: 1,
     exports: 14,
     // FIVE PAGE-SUPPLIED OPS, AND THE FIFTH IS THE FIRST ONE THIS PROFILE DID
@@ -271,7 +274,13 @@ const PROFILES = {
     // nowhere else because migration 239 refuses to send a work product to a
     // client with no account, so every row that could be unopened is
     // addressable. Was 0, then 4.
-    handlers: 5,
+    //
+    // SEVEN NOW, because PR4's Sessions brings two at once — `Block a date
+    // range`, which withdraws hours nobody has taken and reports back the
+    // booked ones it refused to touch, and `Export to calendar`, which builds
+    // an .ics in the browser from rows already on screen. Was 0, then 4,
+    // then 5.
+    handlers: 7,
     embeddedGuards: 0,
     // Both remaining exclusions are cards whose whole page IS the gap
     // statement, so there is nothing for a row to sit over. `expertise/
@@ -306,9 +315,11 @@ const PROFILES = {
     // specify it, and listing it here would claim a deferral against an
     // artboard that is not there. The first draft of this list did exactly
     // that and this guard caught it.
+    // `practice/sessions` LEFT ON PR4, and one became none: every Practice
+    // zone the canvas specifies ops for now has them. What remains excluded is
+    // the two whose whole page IS the gap statement.
     excluded: [
       'expertise/visibility', 'network/organizations',
-      'practice/sessions',
     ],
     live: (route) => route.replace(/^\//, ''),
   },

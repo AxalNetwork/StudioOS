@@ -233,11 +233,13 @@ const PROFILES = {
     canvas: /^(Pages · Advisor (Network|Research)\.dc\.html$|Advisor Detail · Practice)/,
     pages: ['frontend/src/pages/advisor', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/advisorZoneActions.js',
-    // 7 → 8 → 9 → 10: `practice/opportunities` brought the bucket's first live
-    // filter row on canvas PR1, `practice/engagements` its second on PR2,
-    // `practice/delivery` its third on PR3.
-    zones: 10,
-    mounted: 10,
+    // 7 → 8 → 9 → 10 → 11: `practice/opportunities` brought the bucket's first
+    // live filter row on canvas PR1, `practice/engagements` its second on PR2,
+    // `practice/delivery` its third on PR3, `practice/sessions` its fourth on
+    // PR4. Every number moved because an artboard landed, not because anyone
+    // edited a count.
+    zones: 11,
+    mounted: 11,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.advisor },
     // THE ONE EXCLUSION THAT IS NOT A DEFERRAL. Founder and investor left this
     // list; advisor and partner do not follow, and the reason is not that their
@@ -255,12 +257,14 @@ const PROFILES = {
       // `specified` is not bucket-filtered — so the ones whose pages have not
       // been built yet have to be named or the exact-set check below fails.
       // Each leaves this list as its artboard lands: `practice/engagements`
-      // left on PR2, `practice/delivery` on PR3, and PR4 sessions remains.
+      // left on PR2, `practice/delivery` on PR3 and `practice/sessions` on
+      // PR4. NONE REMAIN — every Practice artboard that draws chips now has
+      // them, and the only advisor exclusion left is the one above, which is
+      // a refusal rather than a deferral.
       //
       // `practice/earnings` is absent for the same reason it is absent from
       // the actions ledger: the canvas draws no chips for it, so nothing
       // specifies a filter row there to defer.
-      'practice/sessions',
     ],
     // No `samples`: not one advisor label carries a figure, and the assertion
     // below proves that rather than taking it on trust — a canvas that gains an

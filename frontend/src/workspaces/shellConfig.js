@@ -279,10 +279,23 @@ export const SHELLS = {
       { kind: 'link', label: 'Home', to: '/studio' },
       { kind: 'bucket', label: 'Practice', prefix: '/practice', tagline: 'Run my advisory business',
         zones: [
-          { slug: 'opportunities', label: 'Opportunities', archetype: A.MATCH_ENGINE, legacy: '/advisor/advisory/opportunities' },
+          // THREE OF THESE FIVE ADVERTISED THE WRONG PAGE TYPE, and the canvas
+          // has said so since it was drawn. `Advisor Detail · Practice.dc.html`
+          // tags each artboard in its own header and repeats the set in
+          // `setIndex`, and the two agree: Opportunities FEED, Engagements WORK
+          // BOARD, Delivery COLLECTION, Sessions FEED, Earnings LEDGER. This
+          // list said MATCH ENGINE, WORK BOARD, WORK BOARD, WORK BOARD, LEDGER.
+          //
+          // It went unnoticed because the archetype is only read by ZoneNav and
+          // the badge — nothing breaks, the nav just names the wrong kind of
+          // page — and because `investor_shell_canvas.test.mjs` pins the
+          // investor shell to its canvases while the advisor shell had no
+          // equivalent. `advisor_shell_canvas.test.mjs` is that equivalent, and
+          // it reads the canvas rather than remembering it.
+          { slug: 'opportunities', label: 'Opportunities', archetype: A.FEED, legacy: '/advisor/advisory/opportunities' },
           { slug: 'engagements', label: 'Engagements', archetype: A.WORK_BOARD, legacy: '/advisor/advisory/engagements' },
-          { slug: 'delivery', label: 'Delivery', archetype: A.WORK_BOARD, legacy: '/advisor/advisory/delivery' },
-          { slug: 'sessions', label: 'Sessions', archetype: A.WORK_BOARD },
+          { slug: 'delivery', label: 'Delivery', archetype: A.COLLECTION, legacy: '/advisor/advisory/delivery' },
+          { slug: 'sessions', label: 'Sessions', archetype: A.FEED },
           { slug: 'earnings', label: 'Earnings', archetype: A.LEDGER },
         ] },
       // Cohorts reads Spin-Out Lab data. Read-only: it owns no Lab route and

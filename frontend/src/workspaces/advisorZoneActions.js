@@ -5,14 +5,19 @@ import { makeZoneActions } from './zoneActionBuilder';
  * actions actually does. `zoneActionBuilder.js` states the three outcomes and
  * the rules they follow; this file is the advisor's answers.
  *
- * FOUR ZONES IS THE WHOLE ADVISOR SCOPE, AND THAT IS A FACT ABOUT THE CANVASES
- * RATHER THAN A SHORTFALL IN THIS PASS. Only one advisor artboard set carries
- * an `ops:` array at all — `design/incoming/Pages · Advisor Expertise.dc.html`.
- * `Advisor Detail · Practice`, `Advisor Canvas` and the backlog
- * `Pages · Advisor Cohorts` are rendered exports with no header actions on any
- * artboard, so Practice's five zones and Cohorts' five have nothing to copy;
- * inventing actions for them is the exact failure this pass exists to avoid.
- * `/network` and `/research` are the shared surfaces every profile defers.
+ * FOUR ZONES WAS THE WHOLE ADVISOR SCOPE WHEN THIS WAS WRITTEN, and the
+ * paragraph that stood here said Practice could never grow any — that
+ * `Advisor Detail · Practice` was "a rendered export with no header actions on
+ * any artboard". That was true of the `ops:` ARRAY the Expertise canvas
+ * carries and false of the artboards themselves: PR1 through PR4 each draw
+ * their operations as `<span class="bulk">` in the frame, which is the same
+ * instruction in different markup. Four of the five Practice zones have
+ * entries below because their artboards ask for them.
+ *
+ * `Advisor Canvas` and the backlog `Pages · Advisor Cohorts` still carry
+ * nothing to copy, and inventing actions for them is the failure this pass
+ * exists to avoid. `/network` and `/research` are the shared surfaces every
+ * profile defers.
  *
  * `expertise/visibility` IS THE FIFTH ARTBOARD AND IS DELIBERATELY ABSENT. That
  * zone is not a body at all — it is the one card left in
@@ -125,6 +130,28 @@ export const ADVISOR_ZONE_ACTIONS = {
   'practice/delivery': [
     { label: 'Bulk: nudge unopened', kind: 'handler', handler: 'nudgeUnopened' },
     { label: 'Export as client pack', kind: 'export' },
+  ],
+
+  // BOTH BUILT, AND THE FIRST ONE IS THE CAREFUL ONE. `Block a date range`
+  // withdraws hours that were never taken, which is NOT what cancelling does:
+  // cancelling undoes a booking and tells whoever held it. Conflating them
+  // would send a cancellation notice for an hour nobody had, so migration 240
+  // gives a blocked slot its own column rather than reusing `is_cancelled`.
+  // The route refuses to block a slot someone already holds and reports those
+  // back by count, so the advisor learns the range was not wholly applied
+  // instead of assuming it was — the same shape as Delivery's nudge, which
+  // names the rows it will not reach.
+  //
+  // `Export to calendar` is a HANDLER and not `kind: 'export'`, which is the
+  // one thing worth pausing on. The builder's export kind emits the CSV every
+  // other zone wants, through `exportView` — and a calendar is an .ics file, a
+  // different format for a different consumer. Labelling it `export` would
+  // have produced "Export to calendar · this view" and handed the advisor a
+  // spreadsheet. It stays client-side either way: the file is built from rows
+  // already on screen, so there is no endpoint and nothing leaves the browser.
+  'practice/sessions': [
+    { label: 'Block a date range', kind: 'handler', handler: 'blockRange' },
+    { label: 'Export to calendar', kind: 'handler', handler: 'exportCalendar' },
   ],
 
   // ── Network ──────────────────────────────────────────────────────────────
