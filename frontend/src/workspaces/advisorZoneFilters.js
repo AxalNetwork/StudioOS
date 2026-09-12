@@ -225,6 +225,26 @@ export const ADVISOR_ZONE_FILTERS = {
     { canvas: 'All time', key: 'all' },
   ],
 
+  // ALL FIVE RUN, AND ONE OF THEM REORDERS RATHER THAN NARROWS. Migration 238
+  // stores `lane` with five values, so Signed, Renewal due and Ended each read
+  // a column directly — `Signed` covers both signed lanes, because
+  // `renewal_due` is a state inside Signed on the canvas's own board and a chip
+  // that excluded it would hide the contracts most in need of attention.
+  //
+  // `By client` IS A SORT, and saying so matters. Every other chip in these four
+  // tables narrows a set; this one orders the board, the renewal history and the
+  // scope cards by client name and drops nothing. A chip called "By client" that
+  // filtered rows out would be lying about what it did — and this file's own
+  // docblock is about exactly that failure mode, a chip whose empty result reads
+  // as an answer.
+  'practice/engagements': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Signed', key: 'signed' },
+    { canvas: 'Renewal due', key: 'renewal_due' },
+    { canvas: 'Ended', key: 'ended' },
+    { canvas: 'By client', key: 'by_client' },
+  ],
+
   'research/library': [
     { canvas: 'All', key: 'all' },
     { canvas: 'Session docs', key: 'client', label: 'About a client' },

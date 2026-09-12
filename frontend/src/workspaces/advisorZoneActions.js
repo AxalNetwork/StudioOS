@@ -71,6 +71,37 @@ export const ADVISOR_ZONE_ACTIONS = {
     { label: 'Export decision log', kind: 'export' },
   ],
 
+  // `Bulk: send renewal notice` IS THE SPLIT'S THIRD USE, for the same reason
+  // as PR1's above and the one `founderZoneActions.js:56` established: the
+  // canvas string is 25 characters against a cap of 24
+  // (`zone_label_contract.test.mjs`), and shortening it in place is not
+  // available because the canvas-order guard deep-equals the canvas ops
+  // verbatim. The rendered label keeps both ideas the canvas carries — bulk,
+  // and a renewal notice.
+  //
+  // THE REASON IS THE ADDRESS, NOT THE CHANNEL — and the first draft of this
+  // entry said the opposite, which is exactly the failure this pass keeps
+  // catching. It claimed "nothing sends a message from you to a client".
+  // Something does: `routes/messages.ts` (migration 185) is a person-to-person
+  // inbox, `POST /api/messages` opens a thread with any existing account, and
+  // its `SUBJECT_TYPES` already includes `'engagement'`. Writing a gap that is
+  // not there is the same defect as hiding one that is.
+  //
+  // What actually blocks it is WHO to send to. That POST keys the recipient on
+  // `to_email` against an existing account, and migration 238 keeps the client
+  // as a NAME with `founder_user_id` nullable on purpose — the artboard's
+  // clients are companies, and a retainer may predate the client joining. So
+  // the engagement payload carries no address at all today, and for an unlinked
+  // client there is none to carry. A bulk send over a mixed set would deliver
+  // to some rows and silently skip the rest, which is worse than no button.
+  //
+  // Two small pieces close it and neither belongs in a page PR: the client's
+  // address on the read, and a rule for the rows that have none.
+  'practice/engagements': [
+    { canvas: 'Bulk: send renewal notice', label: 'Bulk: renewal notice', unbuilt: 'a notice needs an addressable client, and an engagement keeps its client as a name — only a linked account has an address, so a bulk send would reach some clients and silently skip the rest' },
+    { label: 'Export contract pack', kind: 'export' },
+  ],
+
   // ── Network ──────────────────────────────────────────────────────────────
   'network/relationships': [
     { label: 'Log interaction', unbuilt: 'no interaction log is stored' },

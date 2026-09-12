@@ -16,6 +16,7 @@ const CohortsFoundersZone = lazy(() => import('../../pages/advisor/cohorts/Found
 const CohortsThisWeekZone = lazy(() => import('../../pages/advisor/cohorts/ThisWeekZone'));
 const CohortsOutcomesZone = lazy(() => import('../../pages/advisor/cohorts/OutcomesZone'));
 const PracticeOpportunitiesZone = lazy(() => import('../../pages/advisor/practice/OpportunitiesZone'));
+const PracticeEngagementsZone = lazy(() => import('../../pages/advisor/practice/EngagementsZone'));
 const PracticeSessionsZone = lazy(() => import('../../pages/advisor/practice/SessionsZone'));
 const PracticeEarningsZone = lazy(() => import('../../pages/advisor/practice/EarningsZone'));
 const ExpertiseProfileZone = lazy(() => import('../../pages/advisor/expertise/ProfileZone'));
@@ -90,7 +91,11 @@ function Loading() {
 const ZONE_BLURB = {
   // Practice — all five zones read a real store.
   opportunities: 'Inbound requests and proposals — what is asking for your time.',
-  engagements: 'The engagements you have accepted, and where each one stands.',
+  // THE ARTBOARD'S OWN BLURB, with one word changed. It reads "including the two
+  // that ended"; two is this canvas's fixture count and would be a claim about
+  // the reader's own book, so it becomes "the ones that ended". The clause after
+  // it is why the zone exists and stays verbatim.
+  engagements: 'Every client with their scope, contract state and renewal date — including the ones that ended, because a practice is judged on renewals.',
   delivery: 'What you have sent a client, and what is still outstanding.',
   sessions: 'Each booked session, the amount you recorded against it, and whether you have marked it billed.',
   earnings: 'Billed, collected, written off and outstanding, totalled from the amounts you typed. Axal settles nothing and takes no cut.',
@@ -121,7 +126,13 @@ const LIVE = {
   // at was an inbox — pending requests plus a slot editor — and the artboard
   // asks for a decision LOG over every request that ever arrived. Both read
   // `advisor_bookings`; only one of them answers the canvas.
-  '/practice': new Set(['engagements', 'delivery']),
+  //
+  // `engagements` LEFT ON PR2, and the gap was wider than PR1's. That tab was a
+  // flat list of BOOKINGS with Upcoming/Past/All chips and three lifecycle
+  // buttons — a session list keyed on `advisor_bookings.status`. The artboard is
+  // a CONTRACT board with renewal cycles and written scope, which nothing in the
+  // schema could hold until migration 238.
+  '/practice': new Set(['delivery']),
 };
 
 // One page per zone, each over the store its migration created. These render a
@@ -137,6 +148,7 @@ const ZONE = {
   },
   '/practice': {
     opportunities: PracticeOpportunitiesZone,
+    engagements: PracticeEngagementsZone,
     sessions: PracticeSessionsZone,
     earnings: PracticeEarningsZone,
   },

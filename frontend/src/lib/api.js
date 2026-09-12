@@ -3257,6 +3257,25 @@ export const api = {
     request(`/advisors/me/bookings/${id}/billing`, { method: 'PATCH', body: JSON.stringify(data) }),
   getMyAdvisorEarnings: () => request('/advisors/me/earnings'),
 
+  // Migration 238 — the contract behind the sessions, and whether it renewed.
+  //
+  // FOUR VERBS AND NOT ONE PATCH, and the split is the worker's, not a
+  // convenience here: `lane`, `cycles` and `outcome` are the whole input to the
+  // renewal rate, so a merge-PATCH over them would let a caller assert a
+  // renewal with no cycle behind it. `updateMyAdvisorEngagement` carries the
+  // descriptive columns; the two POSTs carry a lane move and a decision. D71.
+  listMyAdvisorEngagements: () => request('/advisors/me/engagements'),
+  createMyAdvisorEngagement: (data) =>
+    request('/advisors/me/engagements', { method: 'POST', body: JSON.stringify(data) }),
+  updateMyAdvisorEngagement: (id, data) =>
+    request(`/advisors/me/engagements/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  advanceMyAdvisorEngagement: (id, lane) =>
+    request(`/advisors/me/engagements/${id}/advance`, { method: 'POST', body: JSON.stringify({ lane }) }),
+  // `decision` is 'renewed' or 'ended'. Ending a SIGNED engagement goes through
+  // here rather than through `advance`, so the loss lands in the denominator.
+  recordMyAdvisorEngagementRenewal: (id, data) =>
+    request(`/advisors/me/engagements/${id}/renewal`, { method: 'POST', body: JSON.stringify(data) }),
+
   // The attester's own answer. Unauthenticated on purpose — the token is the
   // credential, and an attester is usually not a user of this product.
   respondToAdvisorProofConsent: (token, data) =>
