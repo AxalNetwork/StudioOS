@@ -1,0 +1,128 @@
+name: magic-link insert probe
+
+# Task #168, the cheap half. `magic-link-probe.yml` is the real answer — it reads
+# a mailbox, follows the link and asserts a sign-in — and it cannot run until a
+# Gmail OAuth app exists. This one needs no mailbox: it asks for a link and then
+# looks in production D1 for the token row.
+#
+# That is precisely where the outage died. D74's diagnosis found
+# `magic_link_tokens` holding four rows, newest 2026-08-03, and the failing
+# attempt wrote none — the request never reached the INSERT that `/magic/start`
+# performs before anything else. A row appearing is direct evidence the
+# thirty-second hang is gone.
+#
+# IT DOES NOT PROVE THE MAGIC LINK WORKS. D74 moved the send to `waitUntil`, so
+# the row is committed and the mail is a separate errand that can fail in
+# silence. Green here means "answers and commits". `magic-link-probe.yml` stays
+# the only thing that can close #168.
+#
+# SECRETS: two of the three already exist.
+#   MAGIC_PROBE_EMAIL      the one to add. A real email is sent to it on every
+#                          run, so it must be an inbox you own; a `+alias` of
+#                          the sending account is the cheapest. It is the same
+#                          secret the mailbox probe will want.
+#   CLOUDFLARE_API_TOKEN   already a repository secret, documented with D1 scope
+#   CLOUDFLARE_ACCOUNT_ID  already a repository secret
+#
+# SIDE EFFECTS PER RUN, both real: one row in production `magic_link_tokens`
+# (expires in 15 minutes, never used) and one real email.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # THE OFFSET FROM magic-link-probe.yml (`30 */4 * * *`) IS A CORRECTNESS
+    # REQUIREMENT, NOT TIDINESS. Both probes request a link for the same address,
+    # and the mailbox probe accepts any message whose `internalDate` post-dates
+    # its own request. If this probe fired inside that polling window, the
+    # mailbox probe would take THIS probe's email as its own, follow a perfectly
+    # valid link, and pass without ever proving its own mail arrived — a false
+    # pass on the one check whose entire value is being believed.
+    #
+    # Thirty minutes against its 120s mail budget makes the overlap impossible.
+    # `frontend/test/magic_link_insert_probe.test.mjs` asserts the gap by parsing
+    # both crons and the budget out of source, so neither can drift alone.
+    #
+    # The union of both schedules is also two requests per 4h for one address,
+    # far inside `magic-start-email`'s 3 per 900s.
+    - cron: '0 */4 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: magic-link insert
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: '22'
+
+      # `continue-on-error` lets the report step below run and re-decide, and
+      # nothing more; the exit CODE is captured because 1 and 2 differ.
+      - name: Ask for a link, then look for its row
+        id: probe
+        continue-on-error: true
+        env:
+          MAGIC_PROBE_EMAIL: ${{ secrets.MAGIC_PROBE_EMAIL }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set +e
+          node scripts/check-magic-link-insert.mjs
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit $code
+
+      # ONLY exit 0 IS GREEN, per D78. Exit 2 here has a second meaning worth
+      # keeping distinct: the API token may lack D1 read, and reporting that as
+      # "no row was written" would send someone hunting a production auth bug
+      # that is really a permission.
+      - name: Report the outcome
+        env:
+          PROBE_CODE: ${{ steps.probe.outputs.code }}
+        run: |
+          case "$PROBE_CODE" in
+            0)
+              echo "::notice title=Magic-link INSERT reached::/magic/start answered under budget and committed its token row. This says nothing about delivery."
+              {
+                echo '### Magic-link insert probe: PASS'
+                echo
+                echo '`/magic/start` answered under budget and a new `magic_link_tokens` row appeared.'
+                echo 'That is the original #168 symptom — a request that never reached its INSERT — confirmed gone.'
+                echo
+                echo '**Delivery is NOT covered here.** `waitUntil` commits the row and sends the mail separately,'
+                echo 'so it can fail in silence. `magic-link-probe.yml` remains the only check that can close #168.'
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            2)
+              echo "::error title=Insert probe COULD NOT RUN::Either MAGIC_PROBE_EMAIL is unset or the Cloudflare token cannot read D1. Nothing was verified."
+              {
+                echo '### Magic-link insert probe: COULD NOT RUN'
+                echo
+                echo 'Nothing was verified — this is **not** a finding about the sign-in flow. Either:'
+                echo
+                echo '- `MAGIC_PROBE_EMAIL` is unset. It is the only secret this probe needs that does not'
+                echo '  already exist; a `+alias` of the sending account works, and a real email is sent to it'
+                echo '  on every run.'
+                echo '- or `CLOUDFLARE_API_TOKEN` cannot read D1 on this account. The step log says which.'
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+              ;;
+            *)
+              echo "::error title=Magic-link INSERT not reached::The endpoint did not answer under budget, or committed no token row — the shape of the original outage."
+              {
+                echo '### Magic-link insert probe: FAILED'
+                echo
+                echo 'The step log names which verdict failed:'
+                echo
+                echo '- `start_latency` — the endpoint is slow again; the reported #168 symptom.'
+                echo '- `token_row_written` — **the request did not reach its INSERT.** This is exactly how the'
+                echo '  outage presented: `magic_link_tokens` stopped gaining rows while the browser waited 30s.'
+                echo '  Read the gates ahead of the INSERT in `cloudflare-worker/src/routes/auth.ts`.'
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+              ;;
+          esac

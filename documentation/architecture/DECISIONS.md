@@ -4625,3 +4625,75 @@ production — never a real person's address, because the probe signs in as it �
 and read access to its mailbox; a `+alias` of the sending Gmail account delivers
 to that same inbox, which is the cheapest way to satisfy it. Neither can be
 created from inside this repo.
+
+---
+
+## D79 — A second probe rather than a subset of the first, because a green tick must keep meaning one thing
+
+**2026-09-12, hours after D78.** That decision built a magic-link probe that reads a
+mailbox, follows the link and asserts a sign-in — and established the rule that **only exit 0
+is green**, with "we never ran" failing the job precisely because a green tick for an unrun
+check is how `/api/health` stayed green through the original outage.
+
+The probe cannot run. It needs a Gmail OAuth app to read an inbox, and none exists. So #168
+sat unverified while a cheaper question went unasked: **did the request reach its INSERT?**
+
+That question needs no mailbox. `/magic/start` commits a `magic_link_tokens` row before it
+does anything else, and D74's diagnosis turned on exactly that — four rows, newest
+2026-08-03, and the failing attempt wrote none. A row appearing is direct evidence the
+thirty-second hang is gone.
+
+**And the cost had been overestimated.** `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`
+are already repository secrets with D1 scope, and `scripts/migrate-d1.mjs --remote` is the
+standing precedent for CI reading production D1. So the check needs **one** new secret rather
+than four, and no OAuth app at all.
+
+### Why not a flag on the existing probe
+
+The obvious shape is `--no-mailbox` on `check-magic-link-live.mjs`: one script, shared
+helpers, less code. It is the wrong shape, and D78 is the reason.
+
+A single script with two modes has to **go green on a subset**. Its green then means
+"everything I was configured to check passed", which is not a fact about the system — it is a
+fact about the configuration, and the reader cannot tell which from the tick. That is the
+"partially verified green" D78 exists to forbid, reintroduced through the back door. Two
+probes, each green only when everything it names passed, keep the tick meaning one thing.
+
+So `check-magic-link-insert.mjs` reports `start_latency` and `token_row_written` and
+**disclaims delivery in the script, in the annotation and in the step summary** — because the
+`waitUntil` failure mode leaves the row committed and the mail unsent, and this probe is blind
+to precisely that. It closes one of three verdicts. `magic-link-probe.yml` stays the only
+thing that can close #168.
+
+### The schedule offset is a correctness requirement
+
+Both probes request a link for the **same address**. The mailbox probe accepts any message
+whose `internalDate` post-dates its own request — so if the insert probe fires inside that
+polling window, the mailbox probe picks up the **insert probe's** email, follows a perfectly
+valid link, and passes **without ever proving its own mail arrived.** A false pass on the one
+check whose entire value is being believed, and nothing in either script would notice.
+
+Hence `0 */4 * * *` against the mailbox probe's `30 */4 * * *`: thirty minutes against a 120s
+mail budget. `frontend/test/magic_link_insert_probe.test.mjs` parses both crons and that
+budget out of source and asserts the gap exceeds it, so neither can drift alone. The same test
+checks the union of both schedules against `magic-start-email`'s 3-per-900s limit, because the
+limiter is per address and two workflows now share one.
+
+### A third exit code with a second meaning
+
+Exit 2 already meant "could not run". Here it also covers **the API token lacking D1 read** —
+which must never surface as `token_row_written: false`, because that reads as a broken sign-in
+when the truth is a missing permission, and sends someone hunting a production auth bug. The
+verdict rests on `MAX(id)` for the probe address before and after, never on a parsed
+`created_at`: that column is a SQLite `CURRENT_TIMESTAMP` in UTC, and
+`new Date('2026-08-03 12:20:43')` parses as local time in Node, so comparing it to a runner
+clock is a timezone bug and a skew bug at once. `AUTOINCREMENT` ids are monotonic and carry no
+clock. Scoping to the address also means a real person signing in mid-run cannot be mistaken
+for the probe's own row. No token material is read; the row id is all it needs.
+
+### What this does not claim
+
+Each run writes one row to production `magic_link_tokens` (15-minute expiry, never used) and
+sends one real email, so it was put to the user before being built. **It does not close #168.**
+Until a run passes, nothing is verified; once one does, #168 reads *original 30s symptom
+verified, delivery still unverified* — and only the mailbox probe can change the second half.
