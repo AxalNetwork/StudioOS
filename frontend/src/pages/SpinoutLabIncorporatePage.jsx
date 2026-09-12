@@ -31,6 +31,7 @@ import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import AxalCheckout from '../components/AxalCheckout';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -429,7 +430,7 @@ export default function SpinoutLabIncorporatePage() {
   const dim = paid ? '' : 'opacity-60';
 
   return (
-    <div className="w-full px-2 sm:px-4 py-3 space-y-5" data-testid="page-spinout-incorporate">
+    <LabPageShell width="full" testId="page-spinout-incorporate">
       {/* Header */}
       <LabPageHeader
         icon={Landmark}
@@ -777,6 +778,6 @@ export default function SpinoutLabIncorporatePage() {
           </div>
         </div>
       )}
-    </div>
+    </LabPageShell>
   );
 }

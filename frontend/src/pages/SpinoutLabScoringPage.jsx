@@ -64,6 +64,7 @@ import BenchmarkBars from '../components/scoring/BenchmarkBars';
 import DimensionDrawer from '../components/scoring/DimensionDrawer';
 import ExportReportModal from '../components/scoring/ExportReportModal';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 
 // Worker-only endpoints: ONLY a 404 means "not in this environment" (the dev
 // FastAPI lacks /api/radar and /api/assessment). Same convention as
@@ -340,7 +341,7 @@ export default function SpinoutLabScoringPage() {
   }
 
   return (
-    <div className="w-full px-2 sm:px-4 py-3 space-y-4" data-testid="page-spinout-scoring">
+    <LabPageShell width="full" spaceY="space-y-4" testId="page-spinout-scoring">
       {/* Canonical Lab header. The teal diligence-phase stripe (design L34) is
           kept via ruleClassName; its -mx-4 -mt-6 bleed is dropped because the
           rule now sits inside the header block.
@@ -694,6 +695,6 @@ export default function SpinoutLabScoringPage() {
         onCancel={() => setExportOpen(false)}
         onGenerate={generatePdf}
       />
-    </div>
+    </LabPageShell>
   );
 }

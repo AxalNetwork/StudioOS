@@ -39,6 +39,7 @@ import {
   AlertTriangle, ExternalLink, X, ChevronDown, ChevronUp, RefreshCw,
 } from 'lucide-react';
 import LabPageHeader from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 import IncomingLeadsStrip from '../components/IncomingLeadsStrip';
 import { api, spinoutLab, assessment } from '../lib/api';
 import { archetypeMeta, SKILL_AXES } from '../lib/assessmentMeta';
@@ -496,7 +497,7 @@ export default function SpinoutLabAdvisorsPage() {
   const week = num(user?.spinout_lab_week) || state?.week || 3;
 
   const page = (
-    <div className="w-full px-2 sm:px-4 py-3 space-y-5" data-testid="page-spinout-advisors">
+    <LabPageShell width="full" testId="page-spinout-advisors">
       {/* Header — canonical Lab header (LabPageHeader owns the back link, the
           icon tile, the title/status row and the week pill). */}
       <LabPageHeader
@@ -1027,7 +1028,7 @@ export default function SpinoutLabAdvisorsPage() {
           </div>
         </div>
       )}
-    </div>
+    </LabPageShell>
   );
 
   return <AssistLayout surface="advisory">{page}</AssistLayout>;

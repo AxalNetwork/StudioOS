@@ -49,6 +49,7 @@ import { useToast } from '../components/useToast';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import { initialsOf, buildGaps } from './SpinoutLabAdvisorsPage';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
 const LBL = 'text-[10.5px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -573,7 +574,7 @@ export default function SpinoutLabOfficeHoursPage() {
     : { text: 'Questions missing', cls: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' });
 
   return (
-    <div className="w-full px-2 sm:px-4 py-3" data-testid="spinout-office-hours-page">
+    <LabPageShell width="full" spaceY="" testId="spinout-office-hours-page">
       {/* Header. The design's 3px teal accent rule (Office Hours.dc.html L30)
           survives as the shared header's top rule, recoloured teal. */}
       <LabPageHeader
@@ -1168,6 +1169,6 @@ export default function SpinoutLabOfficeHoursPage() {
           {toast.msg}
         </div>
       )}
-    </div>
+    </LabPageShell>
   );
 }
