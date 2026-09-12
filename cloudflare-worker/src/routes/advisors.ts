@@ -24,6 +24,9 @@ import { ensureAdvisorStoresSchema } from '../services/advisorStoresSchema';
 import {
   PAYOUT_GATE, cutCents, derivePayoutState, settlementMode, takeRate, totalLines,
 } from '../services/advisorMoney';
+import {
+  connectLink, ensurePayoutAccount, loadPayoutAccount, refreshAccount,
+} from '../services/advisorConnect';
 import { ensureCohortGuidanceSchema } from '../services/cohortGuidanceSchema';
 import {
   guidanceCounts, oldestOpenHours, collisions, withinDays,
@@ -1778,6 +1781,64 @@ advisors.get('/me/payout-account', async (c) => {
       blocked_reason: row?.blocked_reason ?? null,
       // Null means never asked, which is different from asked and refused.
       last_checked_at: row?.last_checked_at ?? null,
+      settlement: settlementMode(c.env),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Start or resume Connect onboarding, and hand back the URL to visit.
+ *
+ * NOT GATED ON THE CHARGING FLAG, deliberately. Connecting an account moves
+ * no money, and an advisor verifying while advisory charging is off is
+ * exactly how the platform gets ready to switch it on. What it does need is a
+ * Stripe key, and the absence of one is an explicit 503 rather than a
+ * simulated link — `util/paymentMode.ts`'s rule, which this route inherits
+ * through the service.
+ */
+advisors.post('/me/payout-account/connect', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    if (!c.env.STRIPE_SECRET_KEY) {
+      return c.json({ detail: 'Payouts are not configured on this environment.' }, 503);
+    }
+    const account = await ensurePayoutAccount(c.env, m.id, newUid());
+    const link = await connectLink(c.env, account, (user as any).email || '', '/practice/earnings');
+    return c.json({
+      url: link.url,
+      // SAID ON THE WAY IN, because an advisor who has just been asked to
+      // verify a payout account will reasonably assume it is about to be
+      // used. While settlement is 'none' it is not.
+      settlement: settlementMode(c.env),
+      note: settlementMode(c.env) === 'none'
+        ? 'Connecting an account does not start any charging. Nothing is taken through Axal today.'
+        : null,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Ask the provider what the account can do now, and write the answer back.
+ *
+ * A FAILED REFRESH IS A 200 THAT SAYS SO. The card must render either way,
+ * and "we could not ask" is not "blocked": the previous state and its
+ * `last_checked_at` stay put so a reader can tell a fresh answer from a stale
+ * one.
+ */
+advisors.post('/me/payout-account/refresh', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const account = await loadPayoutAccount(c.env, m.id);
+    if (!account) {
+      return c.json({ refreshed: false, state: 'pending', reason: 'not_started', started: false });
+    }
+    const res = await refreshAccount(c.env, account);
+    return c.json({
+      ...res,
+      started: true,
+      gate: PAYOUT_GATE[res.state] || null,
       settlement: settlementMode(c.env),
     });
   } catch (e) { return mapError(c, e); }

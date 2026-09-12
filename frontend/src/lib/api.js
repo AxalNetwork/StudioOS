@@ -3289,6 +3289,15 @@ export const api = {
     return request(`/advisors/me/ledger${s ? `?${s}` : ''}`);
   },
   getMyAdvisorPayoutAccount: () => request('/advisors/me/payout-account'),
+  // PR5b — Stripe Connect onboarding. NEITHER of these moves money: the first
+  // returns a URL the advisor visits, the second reads a status back. Both
+  // work while advisory charging is off, which is how an account gets
+  // verified before the flag flips; the responses carry `settlement` so the
+  // page says which.
+  connectMyAdvisorPayoutAccount: () =>
+    request('/advisors/me/payout-account/connect', { method: 'POST' }),
+  refreshMyAdvisorPayoutAccount: () =>
+    request('/advisors/me/payout-account/refresh', { method: 'POST' }),
   listMyAdvisorPayouts: () => request('/advisors/me/payouts'),
   getMyAdvisorTaxSummary: (year) =>
     request(`/advisors/me/tax-summary${year ? `?year=${encodeURIComponent(year)}` : ''}`),

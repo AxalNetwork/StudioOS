@@ -138,6 +138,8 @@ export default function EarningsZone() {
   const [busy, setBusy] = useState(false);
   const [saveNote, setSaveNote] = useState(null);
   const [exportNote, setExportNote] = useState(null);
+  const [connecting, setConnecting] = useState(false);
+  const [connectNote, setConnectNote] = useState(null);
 
   // The window is derived ONCE per view change and reused by the ledger read,
   // the note key and the chip label, so the three cannot name different
@@ -363,6 +365,41 @@ export default function EarningsZone() {
     } finally { setBusy(false); }
   }, [window_]);
 
+  // ── Connect (PR5b) ───────────────────────────────────────────────────────
+  // NEITHER CONTROL MOVES MONEY. Connecting returns a URL the advisor visits
+  // and refreshing reads a status back, so both work while advisory charging
+  // is off — which is how an account gets verified before the flag flips. The
+  // card says that in as many words rather than letting a verify button imply
+  // a charge is imminent.
+  const connect = useCallback(async () => {
+    setConnecting(true); setConnectNote(null);
+    try {
+      const res = await api.connectMyAdvisorPayoutAccount();
+      if (!res?.url) throw new Error('No onboarding link came back.');
+      window.location.assign(res.url);
+    } catch (e) {
+      setConnectNote({ ok: false, text: e?.message || 'That could not be started.' });
+      setConnecting(false);
+    }
+  }, []);
+
+  const refreshAccount = useCallback(async () => {
+    setConnecting(true); setConnectNote(null);
+    try {
+      const res = await api.refreshMyAdvisorPayoutAccount();
+      const fresh = await api.getMyAdvisorPayoutAccount().catch(() => null);
+      if (fresh) setPayout(fresh);
+      // A FAILED REFRESH IS REPORTED AS A FAILED REFRESH, not as a state. The
+      // card keeps the last state it had and this line says the reading is
+      // old — "we could not ask" is not "blocked".
+      setConnectNote(res?.refreshed
+        ? { ok: true, text: `Checked with the provider — ${res.state}.` }
+        : { ok: false, text: 'The provider could not be reached, so the state above is the last one recorded.' });
+    } catch (e) {
+      setConnectNote({ ok: false, text: e?.message || 'Nothing was checked.' });
+    } finally { setConnecting(false); }
+  }, []);
+
   const empty = (
     <NothingYet
       title="Nothing recorded yet"
@@ -531,6 +568,20 @@ export default function EarningsZone() {
               {payout?.blocked_reason}
             </p>
           )}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button type="button" className={payout?.started ? ghostButtonClass : buttonClass}
+              onClick={connect} disabled={connecting} data-testid="button-connect-payout">
+              {connecting ? 'Working…' : payout?.started ? 'Continue setup' : 'Connect a payout account'}
+            </button>
+            {payout?.started && (
+              <button type="button" className={ghostButtonClass}
+                onClick={refreshAccount} disabled={connecting}>
+                Check with the provider
+              </button>
+            )}
+          </div>
+          <SaveNote note={connectNote} />
+
           {/* NOT YET ASKED IS NOT REFUSED, and the two look identical in the
               card above. `last_checked_at` is what separates them. */}
           <p className="mt-3 text-[11px] leading-relaxed text-axal-ink-3">
@@ -540,7 +591,16 @@ export default function EarningsZone() {
                 ? (payout?.last_checked_at
                   ? `Last checked against ${payout?.provider}.`
                   : 'Never checked against the provider, so this is the last state recorded rather than the current one.')
-                : 'No payout account has been started. Nothing is charged through Axal today either way.'}
+                : 'No payout account has been started.'}
+            {' '}
+            {/* SAID BESIDE THE BUTTON THAT ASKS FOR IT. An advisor pressed to
+                verify a payout account will reasonably assume it is about to
+                be used; while `settlement` is 'none' it is not, and a verify
+                flow that let that assumption stand would be the page
+                implying a charge the platform cannot make. */}
+            {payout?.settlement === 'none'
+              ? 'Connecting an account does not start any charging — nothing is taken through Axal today.'
+              : `Payments are running in ${payout?.settlement} mode.`}
           </p>
         </Card>
 
