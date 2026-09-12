@@ -4429,3 +4429,84 @@ failed read.** "Nothing recorded for this envelope" and "we could not find
 out" are different claims about an audit trail, and collapsing the second
 into the first is the same defect as the canvas's "Unchanged from last
 month".
+
+## D77 — A renewal warning needs a memory of its own, and the inbox cannot be it
+
+**2026-09-12.** Task #163. `/trust` reports a lapsed obligation accurately —
+Trust Center v2 draws `Expired 74 days ago` — and **the first time anybody
+finds out is when they open the page.** `expireDueArtifacts` flips a past-due
+row at 04:35 UTC without telling anyone. The fix is a nightly sweep that
+warns beforehand, and the interesting part is not finding the rows.
+
+### The inbox is not a memory
+
+`notify()` (`services/notify.ts`) is the platform's one notification writer
+and it already does the hard parts: per-user channel preferences, quiet
+hours, and a digest buffer flushed on its own schedule. This task feeds it
+rather than building anything beside it.
+
+But **`notify()` has no idempotency of any kind.** A nightly caller that
+simply asked "what expires soon?" would write the same warning into the same
+inbox every night for thirty nights. So something has to remember what has
+already been said, and `notifications_inbox` cannot be that thing: a reader
+can mark rows read, the UI can clear them, and `payload` is opaque JSON with
+no index to match on. Memory that a reader can delete is not memory.
+
+**Migration 244 adds `renewal_notices`**, and the `INSERT OR IGNORE` *is* the
+decision to send — a row is claimed exactly once, so a second run the same
+night claims nothing and therefore sends nothing, and two overlapping runs
+cannot double-send. Same pattern as migration 243's score snapshot.
+
+Two columns in the unique key are easy to leave out and both were nearly
+missed:
+
+- **`user_id`**, because a pairwise NDA has TWO parties and both lose cover
+  when it lapses. Keyed on the subject alone, party A's claim silently
+  swallows party B's warning. Found by reading `expireDueArtifacts` rather
+  than by testing — one row, two people.
+- **`expires_at`**, because a renewed obligation has a new deadline and the
+  three warnings must arm again for the new term. Without it an item warned
+  once could never be warned again for the rest of its life, which is the
+  opposite of what a renewal notice is for.
+
+### The predicate is copied, not reinvented
+
+The sweep selects exactly the rows `expireDueArtifacts` flips — obligations
+that are `satisfied` with a deadline, NDAs that are `active` with one. If the
+warning and the expiry disagreed about what expires, somebody would be warned
+about an item that never lapses, or lapse with no warning. It also gives the
+"never warn about a settled row" rule for free: `waived`, `revoked` and
+already-`expired` rows are not `satisfied`/`active` and never match.
+
+### Three warnings, and the smallest crossed threshold
+
+30 / 14 / 7 days, each sent once, then silence — chosen with the user over a
+single 30-day notice (one miss and you hear nothing again) and over a weekly
+drumbeat (four or five per item is how a compliance notice teaches people to
+ignore compliance notices).
+
+The threshold for a given deadline is the **smallest one it has crossed**,
+not the nearest. A sweep that misses a night — a failed cron, a deploy, a D1
+blip — would otherwise skip that threshold forever, because the next run
+finds the item already past it. Taking the smallest crossed threshold means
+a missed 14-day run still warns at 13, once, under the 14-day claim.
+
+### One notice per person, and it must not be critical
+
+The digest is per recipient: someone with four lapsing agreements gets one
+message listing all four. Four separate messages is what makes people turn
+compliance mail off.
+
+The notice passes `category: 'compliance'`, and that category is deliberately
+**not** in `CRITICAL_CATEGORIES`. An omitted or critical category bypasses
+quiet hours *and* the digest buffer (`notify.ts`: `const isCritical =
+!args.category || CRITICAL_CATEGORIES.has(args.category)`) — so getting this
+wrong would wake someone at 3am about a deadline thirty days out, which is
+the exact opposite of what a batched renewal notice is for.
+
+### When a send fails, the claim stands
+
+The claim is written before the notice goes out, so a failed send costs that
+person that one warning rather than repeating it nightly. The next threshold
+still fires. Rolling the claim back on failure is the tempting alternative
+and it is worse: it turns a flaky notifier into a nightly spammer.
