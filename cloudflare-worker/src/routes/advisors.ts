@@ -2959,4 +2959,316 @@ advisors.post('/received/deliverables/:uid/open', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// ───────────────────────────── PR4 · Sessions — the rules, prices and links ──
+//
+// Migration 240's three stores plus the two new slot columns. The artboard
+// (`Advisor Detail · Practice.dc.html` PR4, tagged FEED) draws a calendar and,
+// beside it, the three things that decide what the calendar contains: the
+// availability rules that generate slots, the session types that price them,
+// and the booking links that fill them.
+//
+// NOTHING HERE CHARGES ANYONE. A `price_cents` is what the advisor asks for.
+// Migration 241 adds the take-rate and the payout account; the Stripe Connect
+// service leg lands after it in test mode behind a production flag. Until that
+// flag flips, `payment_state` records why a booking could NOT be charged and
+// never asserts that one was — which is why 'charged' is only ever written by
+// the settlement path, never by a route in this block. D75.
+
+type AvailabilityRow = {
+  id: number; advisor_id: number;
+  weekly_paid_cap: number | null; buffer_minutes: number | null;
+  min_notice_hours: number | null; blackouts_json: string;
+  timezone: string | null; created_at: string; updated_at: string;
+};
+type SessionTypeRow = {
+  id: number; uid: string; advisor_id: number; name: string;
+  duration_minutes: number | null; cadence_note: string | null;
+  price_cents: number | null; is_free_intro: number; once_per_client: number;
+  sort_order: number; is_active: number; created_at: string; updated_at: string;
+};
+type BookingLinkRow = {
+  id: number; uid: string; advisor_id: number; slug: string;
+  session_type_id: number | null; audience: string; cohort_ref: string | null;
+  requires_payout_account: number; note: string | null; is_active: number;
+  created_at: string; updated_at: string;
+};
+
+const LINK_AUDIENCES = ['public', 'cohort', 'private'];
+
+function availabilityDto(r: AvailabilityRow | null): any {
+  // NULL is "not set", and it stays null all the way to the page. A cap the
+  // advisor never chose must not render as a number they can be held to —
+  // D56/D68, the same rule `renewal_rate` follows above.
+  return {
+    weekly_paid_cap: r?.weekly_paid_cap ?? null,
+    buffer_minutes: r?.buffer_minutes ?? null,
+    min_notice_hours: r?.min_notice_hours ?? null,
+    blackouts: jload<any[]>(r?.blackouts_json, []),
+    timezone: r?.timezone ?? null,
+    // Lets the page tell "no rules configured" from "rules configured to
+    // nothing", which read identically in the four fields above.
+    configured: Boolean(r),
+  };
+}
+
+function sessionTypeDto(r: SessionTypeRow): any {
+  return {
+    id: r.id, uid: r.uid, name: r.name,
+    duration_minutes: r.duration_minutes, cadence_note: r.cadence_note,
+    price_cents: r.price_cents,
+    is_free_intro: !!r.is_free_intro,
+    once_per_client: !!r.once_per_client,
+    sort_order: r.sort_order, is_active: !!r.is_active,
+  };
+}
+
+function bookingLinkDto(r: BookingLinkRow): any {
+  return {
+    id: r.id, uid: r.uid, slug: r.slug,
+    session_type_id: r.session_type_id, audience: r.audience,
+    cohort_ref: r.cohort_ref,
+    requires_payout_account: !!r.requires_payout_account,
+    note: r.note, is_active: !!r.is_active,
+  };
+}
+
+/**
+ * A blackout window is a CALENDAR DAY AND CLOCK TIME, never an instant.
+ * `new Date('2026-11-04')` is midnight UTC, so a window stored as a timestamp
+ * moves an hour twice a year and lands on the wrong side of a Friday for every
+ * reader west of Greenwich. The shape is validated here so a malformed rule is
+ * refused at the door rather than silently generating the wrong calendar.
+ */
+function parseBlackouts(v: unknown): string {
+  if (v == null) return '[]';
+  if (!Array.isArray(v)) throw new Error('blackouts must be an array');
+  if (v.length > 50) throw new Error('blackouts is limited to 50 windows');
+  const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  const CLOCK = /^([01]\d|2[0-3]):[0-5]\d$/;
+  const out = v.map((w: any) => {
+    const day = String(w?.day || '').trim().toLowerCase();
+    if (!DAYS.includes(day)) throw new Error(`blackout day must be one of: ${DAYS.join(', ')}`);
+    const from = String(w?.from || '').trim();
+    const to = String(w?.to || '').trim();
+    if (!CLOCK.test(from) || !CLOCK.test(to)) throw new Error('blackout from/to must be HH:MM');
+    if (from >= to) throw new Error('a blackout window must end after it starts');
+    return { day, from, to };
+  });
+  return JSON.stringify(out);
+}
+
+function parseOptionalCount(v: unknown, label: string, max: number): number | null {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 0) throw new Error(`${label} must be a whole number, zero or more`);
+  if (n > max) throw new Error(`${label} is implausibly large`);
+  return n;
+}
+
+advisors.get('/me/availability', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM advisor_availability_rules WHERE advisor_id = ?'
+    ).bind(m.id).first<AvailabilityRow>();
+    return c.json(availabilityDto(row));
+  } catch (e) { return mapError(c, e); }
+});
+
+// PUT, not PATCH: one row per advisor, and the whole rule set is the unit an
+// advisor edits. A partial update would let a cap and a blackout disagree
+// about which edit won.
+advisors.put('/me/availability', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const body = await c.req.json().catch(() => ({} as any));
+    const cap = parseOptionalCount(body.weekly_paid_cap, 'weekly_paid_cap', 200);
+    const buffer = parseOptionalCount(body.buffer_minutes, 'buffer_minutes', 24 * 60);
+    const notice = parseOptionalCount(body.min_notice_hours, 'min_notice_hours', 24 * 365);
+    const blackouts = parseBlackouts(body.blackouts);
+    const now = nowIso();
+    await c.env.DB.prepare(
+      `INSERT INTO advisor_availability_rules
+         (advisor_id, weekly_paid_cap, buffer_minutes, min_notice_hours,
+          blackouts_json, timezone, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(advisor_id) DO UPDATE SET
+         weekly_paid_cap = excluded.weekly_paid_cap,
+         buffer_minutes = excluded.buffer_minutes,
+         min_notice_hours = excluded.min_notice_hours,
+         blackouts_json = excluded.blackouts_json,
+         timezone = excluded.timezone,
+         updated_at = excluded.updated_at`
+    ).bind(
+      m.id, cap, buffer, notice, blackouts,
+      trimOrNull(body.timezone, 64), now, now,
+    ).run();
+    const fresh = await c.env.DB.prepare(
+      'SELECT * FROM advisor_availability_rules WHERE advisor_id = ?'
+    ).bind(m.id).first<AvailabilityRow>();
+    return c.json(availabilityDto(fresh));
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.get('/me/session-types', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const rows = await c.env.DB.prepare(
+      `SELECT * FROM advisor_session_types WHERE advisor_id = ?
+        ORDER BY sort_order ASC, id ASC LIMIT 100`
+    ).bind(m.id).all<SessionTypeRow>();
+    return c.json({ items: (rows.results || []).map(sessionTypeDto) });
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.post('/me/session-types', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const body = await c.req.json().catch(() => ({} as any));
+    const name = String(body.name || '').trim().slice(0, 200);
+    if (!name) return c.json({ detail: 'A session type needs a name' }, 400);
+    const isFreeIntro = body.is_free_intro ? 1 : 0;
+    const price = parsePriceCents(body.price_cents);
+    // FREE AND UNPRICED ARE DIFFERENT FACTS and the pair must not contradict.
+    // A free intro carrying a price says two things at once, and the canvas
+    // prices its intro at "Free" precisely so a reader can trust the word.
+    if (isFreeIntro && price != null && price > 0) {
+      return c.json({ detail: 'A free intro cannot carry a price' }, 400);
+    }
+    const now = nowIso();
+    const uid = newUid();
+    const r = await c.env.DB.prepare(
+      `INSERT INTO advisor_session_types
+         (uid, advisor_id, name, duration_minutes, cadence_note, price_cents,
+          is_free_intro, once_per_client, sort_order, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
+    ).bind(
+      uid, m.id, name,
+      parseOptionalCount(body.duration_minutes, 'duration_minutes', 24 * 60),
+      trimOrNull(body.cadence_note, 200), price,
+      isFreeIntro, body.once_per_client ? 1 : 0,
+      parseOptionalCount(body.sort_order, 'sort_order', 999) ?? 0,
+      now, now,
+    ).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_session_types WHERE id = ?')
+      .bind((r as any).meta?.last_row_id).first<SessionTypeRow>();
+    return c.json(sessionTypeDto(fresh!), 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.patch('/me/session-types/:id', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM advisor_session_types WHERE id = ? AND advisor_id = ?'
+    ).bind(Number(c.req.param('id')), m.id).first<SessionTypeRow>();
+    // 404, never 403: the scope is in the WHERE clause, so another advisor's
+    // row is indistinguishable from one that does not exist.
+    if (!row) return c.json({ detail: 'Session type not found' }, 404);
+    const body = await c.req.json().catch(() => ({} as any));
+    const name = body.name == null ? row.name : String(body.name).trim().slice(0, 200);
+    if (!name) return c.json({ detail: 'A session type needs a name' }, 400);
+    const isFreeIntro = body.is_free_intro == null ? row.is_free_intro : (body.is_free_intro ? 1 : 0);
+    const price = body.price_cents === undefined ? row.price_cents : parsePriceCents(body.price_cents);
+    if (isFreeIntro && price != null && price > 0) {
+      return c.json({ detail: 'A free intro cannot carry a price' }, 400);
+    }
+    await c.env.DB.prepare(
+      `UPDATE advisor_session_types
+          SET name = ?, duration_minutes = ?, cadence_note = ?, price_cents = ?,
+              is_free_intro = ?, once_per_client = ?, sort_order = ?, is_active = ?,
+              updated_at = ?
+        WHERE id = ? AND advisor_id = ?`
+    ).bind(
+      name,
+      body.duration_minutes === undefined ? row.duration_minutes
+        : parseOptionalCount(body.duration_minutes, 'duration_minutes', 24 * 60),
+      body.cadence_note === undefined ? row.cadence_note : trimOrNull(body.cadence_note, 200),
+      price, isFreeIntro,
+      body.once_per_client == null ? row.once_per_client : (body.once_per_client ? 1 : 0),
+      body.sort_order === undefined ? row.sort_order
+        : (parseOptionalCount(body.sort_order, 'sort_order', 999) ?? 0),
+      body.is_active == null ? row.is_active : (body.is_active ? 1 : 0),
+      nowIso(), row.id, m.id,
+    ).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_session_types WHERE id = ?')
+      .bind(row.id).first<SessionTypeRow>();
+    return c.json(sessionTypeDto(fresh!));
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.get('/me/booking-links', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const rows = await c.env.DB.prepare(
+      `SELECT * FROM advisor_booking_links WHERE advisor_id = ?
+        ORDER BY is_active DESC, id ASC LIMIT 100`
+    ).bind(m.id).all<BookingLinkRow>();
+    return c.json({ items: (rows.results || []).map(bookingLinkDto) });
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.post('/me/booking-links', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const body = await c.req.json().catch(() => ({} as any));
+    // The slug is resolved from the URL alone, so it has to be URL-safe and it
+    // has to be unique across every advisor — hence the refusal below rather
+    // than a silent rewrite: a link the advisor did not type is a link they
+    // cannot give out from memory.
+    // Validated BEFORE any normalising, so 'Ada/Intro' is a 400 and not a
+    // quiet rewrite to 'ada/intro'. A lowercasing step here would hand back a
+    // link the advisor did not type, which is the one thing a link they read
+    // aloud or retype from memory cannot survive. The test for this caught the
+    // route doing exactly that.
+    const slug = String(body.slug || '').trim();
+    if (!/^[a-z0-9][a-z0-9/-]{1,98}[a-z0-9]$/.test(slug)) {
+      return c.json({ detail: 'A slug may use lowercase letters, digits, hyphens and slashes' }, 400);
+    }
+    const audience = String(body.audience || 'public').trim();
+    if (!LINK_AUDIENCES.includes(audience)) {
+      return c.json({ detail: `audience must be one of: ${LINK_AUDIENCES.join(', ')}` }, 400);
+    }
+    // A cohort link with no cohort admits everyone, which is the opposite of
+    // what it claims. Refuse rather than quietly widening the audience.
+    const cohortRef = trimOrNull(body.cohort_ref, 100);
+    if (audience === 'cohort' && !cohortRef) {
+      return c.json({ detail: 'A cohort link needs the cohort it admits' }, 400);
+    }
+    let sessionTypeId: number | null = null;
+    if (body.session_type_id != null && body.session_type_id !== '') {
+      const t = await c.env.DB.prepare(
+        'SELECT id FROM advisor_session_types WHERE id = ? AND advisor_id = ?'
+      ).bind(Number(body.session_type_id), m.id).first<{ id: number }>();
+      // Someone else's session type is not an option this advisor may sell.
+      if (!t) return c.json({ detail: 'Session type not found' }, 404);
+      sessionTypeId = t.id;
+    }
+    const now = nowIso();
+    const uid = newUid();
+    const existing = await c.env.DB.prepare('SELECT id FROM advisor_booking_links WHERE slug = ?')
+      .bind(slug).first<{ id: number }>();
+    if (existing) return c.json({ detail: 'That link is already taken' }, 409);
+    const r = await c.env.DB.prepare(
+      `INSERT INTO advisor_booking_links
+         (uid, advisor_id, slug, session_type_id, audience, cohort_ref,
+          requires_payout_account, note, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
+    ).bind(
+      uid, m.id, slug, sessionTypeId, audience, cohortRef,
+      body.requires_payout_account ? 1 : 0, trimOrNull(body.note, 300), now, now,
+    ).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_booking_links WHERE id = ?')
+      .bind((r as any).meta?.last_row_id).first<BookingLinkRow>();
+    return c.json(bookingLinkDto(fresh!), 201);
+  } catch (e) { return mapError(c, e); }
+});
+
 export default advisors;
