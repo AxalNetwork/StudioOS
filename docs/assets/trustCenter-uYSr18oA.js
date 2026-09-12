@@ -1,0 +1,1 @@
+function e(e=[]){let t=e.filter(e=>e.required);if(t.length===0)return 100;let n=t.filter(e=>e.status===`satisfied`||e.status===`waived`).length;return Math.round(n/t.length*100)}export{e as t};
