@@ -363,7 +363,37 @@ export function prepareBody(src, bindings = []) {
   return blankMatches(withoutSafeComments(chars.join('')), /^import\s[\s\S]*?from\s*['"][^'"]+['"];?$/gm);
 }
 
-const used = (body, name) => new RegExp(`\\b${name.replace(/\$/g, '\\$')}\\b`).test(body);
+/** The characters that can continue a JavaScript identifier. A literal regex. */
+const IDENT_CHAR = /[A-Za-z0-9_$]/;
+
+/**
+ * Does `name` appear in `body` as a whole identifier?
+ *
+ * NO CONSTRUCTED REGEX. Building one from the name — even escaped — is the
+ * `detect-non-literal-regexp` shape Semgrep flags (alert 6079 on this very
+ * line), and while `name` is always `/^[A-Za-z_$][\w$]*$/` here, a plain scan
+ * removes the question rather than arguing it. It is also faster: no compile
+ * per name.
+ *
+ * IT IS ALSO MORE CORRECT, which is why this is a fix and not a workaround.
+ * `\b` uses JavaScript's own word definition, in which `$` is NOT a word
+ * character — so `\b\$foo\b` never matches ` $foo;`, and a `$`-prefixed
+ * binding would have been reported dead however much it was used. No such
+ * binding exists in the repository today, so the bug was latent; it is gone
+ * now because `IDENT_CHAR` includes `$`.
+ */
+export function used(body, name) {
+  for (let from = 0; ; from += 1) {
+    const at = body.indexOf(name, from);
+    if (at < 0) return false;
+    const before = at > 0 ? body[at - 1] : '';
+    const after = body[at + name.length] || '';
+    // An empty string at either edge is a boundary, and `IDENT_CHAR` says no
+    // to it, so start-of-file and end-of-file both count.
+    if (!IDENT_CHAR.test(before) && !IDENT_CHAR.test(after)) return true;
+    from = at;
+  }
+}
 
 /** Every dead binding in one file's source, both shapes, as message strings. */
 export function deadBindings(src) {

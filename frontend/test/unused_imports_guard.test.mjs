@@ -37,7 +37,7 @@ import { resolve } from 'node:path';
 import {
   deadBindings, destructureBindings, destructurePatterns, destructuredNames,
   matchBracket, namedImports, prepareBody, topIndexOf, topParts,
-  withoutSafeComments, withoutStrings, withoutTemplates, TREES,
+  used, withoutSafeComments, withoutStrings, withoutTemplates, TREES,
 } from '../../scripts/check-unused-imports.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -395,6 +395,62 @@ test('topIndexOf ignores everything that is not top level', () => {
   assert.equal(topIndexOf('fn(x = 1)', '='), -1, 'an = inside a call was top level');
   assert.equal(topIndexOf('key: value', ':'), 3);
   assert.equal(topIndexOf('a: { b: c }', ':'), 1, 'the nested colon won');
+});
+
+// ---------------------------------------------------------------------------
+// The whole-identifier test, which used to be a constructed regex
+
+test('a name matches only as a whole identifier', () => {
+  assert.equal(used('use(name);', 'name'), true);
+  assert.equal(used('const xnamey = 1;', 'name'), false, 'a substring counted as a use');
+  assert.equal(used('const name_2 = 1;', 'name'), false);
+  assert.equal(used('const _name = 1;', 'name'), false);
+  assert.equal(used('const name2 = 1;', 'name2'), true);
+  // Both file edges count as boundaries.
+  assert.equal(used('name', 'name'), true);
+  assert.equal(used('name;', 'name'), true);
+  assert.equal(used('(name', 'name'), true);
+  assert.equal(used('', 'name'), false);
+  // A property access is a use, same as the `\b` version treated it.
+  assert.equal(used('obj.name', 'name'), true);
+  // And the scan must not stop at the first near-miss.
+  assert.equal(used('xnamey; then name;', 'name'), true,
+    'the search gave up after a rejected candidate');
+});
+
+test('a `$`-prefixed identifier is matched — the bug `\\b` hid', () => {
+  // `\b` uses JavaScript's word definition, in which `$` is NOT a word
+  // character, so `\b\$foo\b` never matched ` $foo;` and a `$`-prefixed
+  // binding read as dead however much it was used. No such binding exists in
+  // the repo today, which is why this went unnoticed rather than unbroken.
+  assert.equal(used('const x = $dollar;', '$dollar'), true);
+  assert.deepEqual(dead('const { $ref } = x;\nuse($ref);\n'), []);
+  assert.deepEqual(dead('const { $ref } = x;\n'), ['destructured:$ref']);
+  assert.equal(used('const x = $dollarish;', '$dollar'), false,
+    'a $-prefixed name matched a longer identifier');
+
+  // AND THE OTHER DIRECTION, which is what actually requires `$` to be in
+  // IDENT_CHAR: a `$` ADJACENT to the match means this is a different
+  // identifier. `$` inside the name never tests the character class at all,
+  // because only the two boundary characters are inspected.
+  assert.equal(used('const $name = 1;', 'name'), false,
+    '`$name` was read as a use of `name` — `$` is missing from IDENT_CHAR');
+  assert.equal(used('const name$ = 1;', 'name'), false,
+    '`name$` was read as a use of `name`');
+  assert.deepEqual(dead('const { name } = x;\nuse($name);\n'), ['destructured:name'],
+    '`$name` counted as a use of the binding `name`');
+});
+
+test('the guard builds no regex from a name', () => {
+  // Semgrep alert 6079 (`detect-non-literal-regexp`) fired on the constructed
+  // pattern. A plain scan removes the shape instead of suppressing it, and
+  // this keeps it removed — a `nosemgrep` comment here would be the tell that
+  // someone put the regex back.
+  const src = read('scripts/check-unused-imports.mjs');
+  assert.doesNotMatch(src, /new RegExp/,
+    'a constructed regex is back in the guard — Semgrep will flag it again');
+  assert.doesNotMatch(src, /nosemgrep/,
+    'the finding was suppressed rather than fixed');
 });
 
 // ---------------------------------------------------------------------------
