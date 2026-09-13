@@ -189,8 +189,12 @@ test('the two kinds route to two task classes, both real', async () => {
     assert.ok(task, `${kind} has no task class`);
     // Registered in ROUTE, or every figure the rail reports for it is wrong —
     // and `run()` refuses an unknown task outright.
-    assert.match(router, new RegExp(`^  ${task}: \\{`, 'm'), `${task} is not a ROUTE entry`);
-    assert.match(router, new RegExp(`\\| '${task}'`), `${task} is not in the TaskClass union`);
+    // Literal probes, not a regex built from `task`: Semgrep's
+    // `detect-non-literal-regexp` is right that a pattern compiled from a
+    // variable is worth avoiding, and `\n  x: {` says the same thing as the
+    // multiline anchor did.
+    assert.ok(router.includes(`\n  ${task}: {`), `${task} is not a ROUTE entry`);
+    assert.ok(router.includes(`| '${task}'`), `${task} is not in the TaskClass union`);
   }
   // Distinct classes, because /api/ai/me/spend groups by task and the rail
   // quotes the caller's observed average per task.
@@ -334,9 +338,76 @@ test('a run reads only this project, and nothing a caller names', async () => {
   const body = handler(await routeSrc(), "founderValidate.post('/propose/:projectId'");
   assert.match(body, /const s = await scope\(c, Number\(c\.req\.param\('projectId'\)\), canWrite\)/,
     'propose is not behind the write gate');
-  // Every id that reaches the prompt comes from the project's own view.
-  assert.match(body, /getPainGroupsView\(c\.env, s\.project\.id\)/);
+
+  // EVERY ID THAT REACHES THE PROMPT STILL COMES FROM THE PROJECT'S OWN VIEW —
+  // the read moved into `services/fills/registry.ts`'s `gather`, so the assertion
+  // moved with it rather than being dropped. The route's only contribution is the
+  // context, and `projectId` there is the SCOPED project: `s.project.id`, resolved
+  // by `scope` from the path and gated, never a number off the request body.
+  assert.match(body, /const ctx = \{ env: c\.env, user: s\.user, projectId: s\.project\.id \};/,
+    'the fill context carries a project id the caller could have chosen');
+  assert.doesNotMatch(body, /b\.project|b\.projectId|body\?\.project/,
+    'the route reads a project id out of the request body');
+
+  // And no gather reaches past its own context for one.
+  const registry = await readFile(resolve(__dirname, '../src/services/fills/registry.ts'), 'utf8');
+  const gathers = [...registry.matchAll(/async gather\(ctx\)[\s\S]*?\n  \},/g)].map((m) => m[0]);
+  assert.ok(gathers.length >= 3, `only ${gathers.length} gathers found — has the registry shrunk?`);
+  for (const g of gathers) {
+    assert.doesNotMatch(g, /project_id = \?\s*'?\s*\)?\s*\.bind\((?!ctx\.projectId)/,
+      'a gather binds a project id that is not its context’s');
+    assert.doesNotMatch(g, /WHERE project_id = \d/, 'a gather hardcodes a project id');
+  }
+
   // And the route validates no model of its own — run() owns that list.
   assert.doesNotMatch(body, /alternates|@cf\//,
     'the route re-derives the model allow-list instead of letting run() decide');
+});
+
+test('a proposal is refused before it is stored, and the count is reported', async () => {
+  // THE GUARANTEE THE SOURCED CLASS RESTS ON, at the last point it can be
+  // enforced. `parse` refuses what it can see; `refuseReason` refuses what the
+  // CLASS requires regardless of what a parser was written to do — a `sourced`
+  // proposal with no citation, a citation with no quote, a restatement carrying
+  // one. Two checks and not a redundant one: the store must not be able to hold
+  // any of those, whatever the parser does.
+  const body = handler(await routeSrc(), "founderValidate.post('/propose/:projectId'");
+  assert.match(body, /const why = refuseReason\(spec, p\);/);
+  assert.ok(body.indexOf('const why = refuseReason(spec, p);') < body.indexOf('INSERT INTO validate_proposals'),
+    'a proposal is stored before the class check runs');
+  assert.match(body, /if \(why\) \{ refused\.push\(why\); continue; \}/);
+
+  // REPORTED, NOT SWALLOWED. A run that silently returns two of five reads as a
+  // model with little to say, when what happened is that three were refused.
+  assert.match(body, /refused: refused\.length,/);
+  assert.match(body, /refused_reasons: \[\.\.\.new Set\(refused\)\]/);
+
+  // And the columns migration 246 added are written, or a stored proposal cannot
+  // say which surface it belongs to or what it was drawn from.
+  // WORD TOKENS, PARSED ONCE. `includes` would be wrong here for the reason the
+  // old `\b…\b` existed: `surface` is a substring of `surface_ref`, so a bare
+  // substring check would pass on a column that is not the one asked for. One
+  // literal pattern over the body gives the same precision without compiling a
+  // regex per column — which is what `detect-non-literal-regexp` objects to.
+  const words = new Set([...body.matchAll(/[A-Za-z_][\w]*/g)].map((m) => m[0]));
+  for (const column of ['surface', 'fill_class', 'citation_json', 'target_ref']) {
+    assert.ok(words.has(column), `a stored proposal carries no ${column}`);
+  }
+  assert.match(body, /p\.citation \? JSON\.stringify\(p\.citation\) : null,/);
+});
+
+test('nothing is spent to be told there is nothing to work from', async () => {
+  // The empty cases are the ones a founder meets most and they are not errors:
+  // no themes to sort into, every phrase already grouped, every sizing input
+  // already filled. `gather` says so in the words the page shows, and the run
+  // never happens — spending a call to be told either by a model is a call wasted.
+  const body = handler(await routeSrc(), "founderValidate.post('/propose/:projectId'");
+  const gatherAt = body.indexOf('await spec.gather(ctx)');
+  const runAt = body.indexOf('await aiRun(c.env, {');
+  assert.ok(gatherAt > 0 && runAt > gatherAt, 'the model runs before the facts are gathered');
+  assert.match(body, /if \(gathered\.empty\) \{/);
+  assert.ok(body.indexOf('if (gathered.empty) {') < runAt,
+    'an empty project still spends a run');
+  assert.match(body, /message: gathered\.emptyReason \|\|/,
+    'the empty reason is dropped, so the page has to invent one');
 });

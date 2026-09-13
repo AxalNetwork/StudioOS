@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, BarChart3, ChevronRight, FileText, Link2, RefreshCw, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
+import { deckShareState } from '../../lib/deckShares';
 import { WorkerRail } from '../../ui';
 import './founderRaisePitch.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
@@ -144,7 +145,7 @@ function PitchContent({ view, project, versions, current, analytics, engagementE
     <div className="fr-pitch-context"><div><span className="fr-pitch-label">Selected startup</span><strong data-testid="text-pitch-project">{text(project.name)}</strong><span>{text(project.sector, 'Sector not recorded')}</span></div><div className="fr-pitch-context-right"><span className="fr-pitch-label">Current deck</span><strong>{current ? `${displayVersion(current)} · ${text(current.title, 'Untitled deck')}` : 'No current deck recorded'}</strong><span>{current ? `Created ${formatDate(current.created_at)}` : 'Version source returned no decks'}</span></div></div>
     <div className="fr-pitch-stat-strip">
       <Stat label="Versions" value={versions.length || 'Unavailable'} note={versions.length ? `${displayVersion(current)} current when flagged` : 'No deck versions recorded'} muted={!versions.length} />
-      <Stat label="Share links" value={analytics.linkCount === null ? 'Unavailable' : analytics.linkCount} note={analytics.linkCount === null ? (engagementError ? 'Share source unavailable' : 'No share-link count returned') : `${analytics.expiringCount} expiring`} muted={analytics.linkCount === null} />
+      <Stat label="Share links" value={analytics.linkCount === null ? 'Unavailable' : analytics.linkCount} note={analytics.linkCount === null ? (engagementError ? 'Share source unavailable' : 'No share-link count returned') : `${analytics.deadCount} no longer open`} muted={analytics.linkCount === null} />
       <Stat label="Total views" value={analytics.totalViews === null ? 'Unavailable' : analytics.totalViews} note={analytics.totalViews === null ? 'Engagement source unavailable' : `across ${analytics.rows.length} returned rows`} muted={analytics.totalViews === null} />
       <Stat label="Drop-off slide" value={analytics.dropOff === null ? 'Unavailable' : `Slide ${analytics.dropOff}`} note={analytics.dropOff === null ? 'No slide analytics returned' : 'From engagement source'} muted={analytics.dropOff === null} />
     </div>
@@ -165,20 +166,32 @@ function PitchContent({ view, project, versions, current, analytics, engagementE
 function normalizeAnalytics(value) {
   const source = value?.engagement || value?.analytics || value || {};
   const rawRows = asList(source, 'rows', 'investors', 'shares', 'links', 'share_links');
+  // Task #196 — the state is computed ONCE per row, then read twice: as the cell
+  // under the investor name, and as the count in the stat strip. `row.status` DOES
+  // NOT EXIST on a deck share row — the engagement route returns `revoked_at`,
+  // `exhausted`, `expires_at`, `view_count` and `view_limit`, and never a
+  // `status` — so that cell read "Share record" for every row and the stat below
+  // counted 0 expiring forever. It matters now because a withdrawn link would
+  // otherwise be indistinguishable here from a live one, on a page whose own note
+  // says it shows share state and only declines to CHANGE it. `deckShareState` is
+  // the same rule the deck builder's panel uses, so the two cannot disagree.
+  const states = rawRows.map((row) => deckShareState(row));
   const rows = rawRows.map((row, index) => ({
     id: row.id || row.share_id || row.investor_id || index,
     investor: text(row.investor_name || row.investor || row.name || row.email, 'Anonymous share'),
     version: row.version == null ? 'Version not recorded' : `v${row.version}`,
     views: row.views ?? row.view_count ?? 'Not recorded',
     avgTime: row.avg_time || row.average_time || row.read_time || 'Not recorded',
-    lastActivity: row.last_activity || row.last_opened_at || row.updated_at ? formatDateTime(row.last_activity || row.last_opened_at || row.updated_at) : 'Activity not recorded',
-    source: text(row.status, 'Share record'),
+    lastActivity: row.last_activity || row.last_opened_at || row.updated_at || row.last_viewed_at ? formatDateTime(row.last_activity || row.last_opened_at || row.updated_at || row.last_viewed_at) : 'Activity not recorded',
+    source: text(row.status, states[index].label),
   }));
   const sumViews = rows.reduce((sum, row) => Number.isFinite(Number(row.views)) ? sum + Number(row.views) : sum, 0);
   const hasViewValue = rows.some((row) => Number.isFinite(Number(row.views)));
   const totalViews = source.total_views ?? source.views ?? (hasViewValue ? sumViews : null);
   const linkCount = source.share_link_count ?? source.share_links_count ?? source.link_count ?? (Array.isArray(source.share_links) ? source.share_links.length : (Array.isArray(source.links) ? source.links.length : (rawRows.length ? rawRows.length : null)));
-  return { rows, totalViews: totalViews == null || totalViews === '' ? null : totalViews, linkCount: linkCount == null || linkCount === '' ? null : linkCount, expiringCount: rawRows.filter((row) => String(row.status || '').toLowerCase().includes('expir')).length, dropOff: source.drop_off_slide ?? source.dropoff_slide ?? source.drop_off ?? null };
+  // What a founder can act on is whether a link still opens, so that is counted.
+  const deadCount = states.filter((s) => !s.live).length;
+  return { rows, totalViews: totalViews == null || totalViews === '' ? null : totalViews, linkCount: linkCount == null || linkCount === '' ? null : linkCount, deadCount, dropOff: source.drop_off_slide ?? source.dropoff_slide ?? source.drop_off ?? null };
 }
 
 function Stat({ label, value, note, muted }) { return <div className={`fr-pitch-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }

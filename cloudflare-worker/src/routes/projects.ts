@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { schedulePush } from '../integrations/autopush';
 import { getSQL } from '../db';
@@ -27,6 +28,11 @@ import {
 import { ensureMethodAllowed } from '../services/decks/branding';
 import { PREMIUM_METHOD_IDS } from '../services/decks/methods';
 import { normalizeUseOfFunds, formatUseOfFundsText } from '../util/useOfFunds';
+import {
+  ASSUMPTION_COLUMNS, ASSUMPTION_KEYS,
+  loadAssumptions, sanitizeAssumptions, saveAssumptions,
+} from '../services/marketAssumptions';
+import { fillsForRow, filledColumns } from '../services/fills/provenance';
 
 const projects = new Hono<{ Bindings: Env }>();
 
@@ -1034,6 +1040,126 @@ projects.put('/:projectId/spinout-deck/overrides', async (c) => {
 
   const overrides = await saveSpinoutDeckOverrides(c.env, projectId, Number(user.id), raw, remove);
   return c.json({ overrides, overridable_keys: SPINOUT_OVERRIDABLE_KEYS });
+});
+
+// ===========================================================================
+// Task #188 / #198 — the market-sizing assumptions behind TAM/SAM/SOM.
+//
+// `PUT /:id` saves the three RESULTS. These two routes save the reasoning, which
+// `SpinoutLabMarketPage` has been holding in session state since it was written —
+// its own comment asked for "a project_market_assumptions table that doesn't
+// exist yet", and migration 247 is it. A page whose claim is that its figures are
+// derived rather than invented was keeping the conclusion and dropping the
+// derivation the moment the tab closed.
+//
+// The access rule is `PUT /:id`'s, deliberately: an assumption is project data,
+// so whoever may edit the project's TAM may edit what produced it. Admins and
+// partners anywhere, the owning founder, an accepted co-founder. Advisors read
+// only and investors are never editors — the same write-IDOR audit M2 closed on
+// `PUT /:id`, which would otherwise reopen here one route later.
+// ===========================================================================
+
+/**
+ * May this caller write project data? The rule `PUT /:id` applies, in one place.
+ *
+ * Kept as a local helper rather than folded into `projectAccess`: `canAccessProject`
+ * there answers a different and looser question (may they SEE it), and an
+ * investor passes that one.
+ */
+async function canEditProjectData(
+  env: Env, project: { id: number; founder_id: number | null }, user: User,
+): Promise<boolean> {
+  if (user.role === 'admin' || user.role === 'partner') return true;
+  if (user.role === 'investor') return false;
+  if (user.founder_id && project.founder_id === user.founder_id) return true;
+  const memberRole = await getProjectMembershipRole(env, project.id, user.id);
+  return memberRole === 'cofounder' || memberRole === 'owner';
+}
+
+/** The project row both routes below need, or the response to send instead. */
+async function loadProjectForAssumptions(
+  c: Context<{ Bindings: Env }>, user: User,
+): Promise<{ project: { id: number; founder_id: number | null } } | { error: Response }> {
+  const id = parseInt(String(c.req.param('projectId') ?? ''), 10);
+  if (!Number.isFinite(id)) return { error: c.json({ error: 'Invalid project id' }, 400) };
+  const row = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?')
+    .bind(id).first<{ id: number; founder_id: number | null }>();
+  if (!row) return { error: c.json({ error: 'Project not found' }, 404) };
+  if (!(await canEditProjectData(c.env, row, user))) {
+    return { error: c.json({ detail: 'Forbidden: you do not own this project' }, 403) };
+  }
+  return { project: row };
+}
+
+projects.get('/:projectId/market-assumptions', async (c) => {
+  const user = await requireAuth(c);
+  const found = await loadProjectForAssumptions(c, user);
+  if ('error' in found) return found.error;
+  const assumptions = await loadAssumptions(c.env, found.project.id);
+
+  // WHICH FIGURES EADWYN SUPPLIED, and only the ones that are still its figures.
+  //
+  // This is the read that keeps the market page's three provenance statements
+  // true rather than merely uncontradicted. `filledColumns` compares each
+  // provenance row against what the row HOLDS NOW, so a founder who typed over a
+  // researched figure by hand owns it and the drawer stops marking it — a card
+  // still reading "Eadwyn" over their number is the same lie pointed the other
+  // way. Keyed back to the drawer's own field names, because the client should
+  // not have to know the column map to read its own labels.
+  const columnToKey = Object.fromEntries(
+    Object.entries(ASSUMPTION_COLUMNS).map(([key, column]) => [column, key]),
+  );
+  const row = await c.env.DB.prepare(
+    'SELECT * FROM project_market_assumptions WHERE project_id = ?',
+  ).bind(found.project.id).first<Record<string, unknown>>().catch(() => null);
+  const filled: Record<string, unknown> = {};
+  if (row) {
+    const fills = await fillsForRow(c.env, 'project_market_assumptions', Number(row.id));
+    for (const [column, fill] of filledColumns(fills, row)) {
+      const key = columnToKey[column];
+      if (!key) continue;
+      filled[key] = {
+        fill_class: fill.fill_class,
+        edited: fill.edited,
+        model: fill.model,
+        citation: fill.citation,
+        proposed_value: fill.proposed_value,
+      };
+    }
+  }
+
+  return c.json({
+    assumptions,
+    // The keys this store accepts, so the drawer cannot send a field the server
+    // will reject and find out only from a 400.
+    keys: ASSUMPTION_KEYS,
+    filled,
+  });
+});
+
+// A PATCH, not a replace: fields that are not sent are left alone. That is what
+// lets a single cited fill write one population without blanking the eleven
+// values the founder typed. An unknown key is rejected by name rather than
+// dropped, because a save that silently ignored a field looks like one that
+// worked.
+projects.put('/:projectId/market-assumptions', async (c) => {
+  const user = await requireAuth(c);
+  const found = await loadProjectForAssumptions(c, user);
+  if ('error' in found) return found.error;
+
+  let body: any = {};
+  try { body = await c.req.json(); } catch { body = {}; }
+  const raw = body?.assumptions ?? body ?? {};
+
+  // CHECKED BEFORE ANYTHING IS WRITTEN. Returning a 400 after the good fields
+  // landed would be a response that contradicts what the request did — the caller
+  // reads a rejection and the row has changed.
+  const { rejected } = sanitizeAssumptions(raw);
+  if (rejected.length) {
+    return c.json({ error: 'Unknown market assumption fields', rejected, keys: ASSUMPTION_KEYS }, 400);
+  }
+  const { assumptions } = await saveAssumptions(c.env, found.project.id, raw, Number(user.id));
+  return c.json({ assumptions, keys: ASSUMPTION_KEYS });
 });
 
 // ===========================================================================

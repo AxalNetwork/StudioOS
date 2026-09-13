@@ -6,7 +6,7 @@ import WorkspaceShell, { NotRecorded } from '../WorkspaceShell';
 import ZoneToolbar from '../ZoneToolbar';
 import { founderZoneFilters } from '../founderZoneFilters';
 import { founderZoneActions } from '../founderZoneActions';
-import ValidateProposals from './ValidateProposals';
+import FillProposals from '../FillProposals';
 import InterviewRecording from './InterviewRecording';
 import useAssistMode from '../../hooks/useAssistMode';
 import LogInterviewModal from '../../components/discovery/LogInterviewModal';
@@ -1142,7 +1142,7 @@ export default function FounderValidateWorkspace() {
         new heading is worse than a moment's blank.
       */}
       {zone?.slug === 'pain-map' && (
-        <ValidateProposals
+        <FillProposals
           key="pain-map"
           projectId={projectId}
           kind="pain_tag"
@@ -1151,7 +1151,7 @@ export default function FounderValidateWorkspace() {
         />
       )}
       {zone?.slug === 'hypotheses' && (
-        <ValidateProposals
+        <FillProposals
           key="hypotheses"
           projectId={projectId}
           kind="hypothesis"

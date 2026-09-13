@@ -27,6 +27,7 @@ import { fileURLToPath } from 'node:url';
 
 import { FILL_KINDS, FILL_SURFACES, fillKind, kindsForSurface } from '../src/services/fills/registry.ts';
 import { FILL_CLASSES, isFillClass, refuseReason } from '../src/services/fills/types.ts';
+import { ASSUMPTION_COLUMNS } from '../src/services/marketAssumptions.ts';
 import { insertHypothesis, upsertPainAlias } from '../src/routes/_founder_validate_writes.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -82,10 +83,25 @@ function tableFromMigration(name: string, table: string): string {
   return `${src.slice(at, end)}\n);`;
 }
 
-/** The same, for an index — the upsert's ON CONFLICT target is part of the shape. */
+/**
+ * The same, for an index — the upsert's ON CONFLICT target is part of the shape.
+ *
+ * THE MIGRATION'S INDEX NAMES ARE READ ONCE WITH A LITERAL PATTERN and then
+ * looked up. Semgrep's `detect-non-literal-regexp` flagged the `new RegExp` this
+ * built from `index` (alert 6087) and the rule is right — a regex compiled from a
+ * variable is worth avoiding even where the variable is a literal in this file.
+ * Parsing the whole file's `CREATE INDEX` names into a map also handles the
+ * `UNIQUE` variant and any whitespace without an alternation to get wrong, and it
+ * keeps the word-boundary the old pattern needed: `idx_foo` can no longer be
+ * found by asking for `idx_foobar`, because the capture is the whole name.
+ */
 function indexFromMigration(name: string, index: string): string {
   const src = readFileSync(`${SQL}/migrations/${name}.sql`, 'utf8');
-  const at = src.search(new RegExp(`CREATE (UNIQUE )?INDEX IF NOT EXISTS ${index}\\b`));
+  const starts = new Map<string, number>();
+  for (const m of src.matchAll(/CREATE\s+(?:UNIQUE\s+)?INDEX\s+IF\s+NOT\s+EXISTS\s+([A-Za-z_][\w]*)/g)) {
+    if (!starts.has(m[1])) starts.set(m[1], m.index ?? -1);
+  }
+  const at = starts.get(index) ?? -1;
   assert.ok(at >= 0, `${index} is no longer created by migration ${name}`);
   return src.slice(at, src.indexOf(';', at) + 1);
 }
@@ -155,13 +171,71 @@ const env = (db: InstanceType<typeof DatabaseSync>) => ({ DB: makeD1(db) }) as a
 const ctx = (db: InstanceType<typeof DatabaseSync>, projectId = P) =>
   ({ env: env(db), user: { id: 3, role: 'founder' } as any, projectId });
 
-test('both Validate kinds are registered, and nothing else slipped in', () => {
-  assert.deepEqual(Object.keys(FILL_KINDS).sort(), ['hypothesis', 'pain_tag']);
-  assert.deepEqual([...FILL_SURFACES].sort(), ['validate/hypotheses', 'validate/pain-map']);
+test('every kind is registered under its own surface, and nothing else slipped in', () => {
+  assert.deepEqual(Object.keys(FILL_KINDS).sort(),
+    ['competitor', 'hypothesis', 'market_input', 'pain_tag']);
+  assert.deepEqual([...FILL_SURFACES].sort(),
+    ['market/competitors', 'market/sizing', 'validate/hypotheses', 'validate/pain-map']);
   assert.equal(fillKind('pain_tag')?.surface, 'validate/pain-map');
+  assert.equal(fillKind('market_input')?.surface, 'market/sizing');
   assert.equal(fillKind('nope'), null, 'an unknown kind must resolve to null, not undefined-shaped');
   assert.equal(kindsForSurface('validate/pain-map').length, 1);
-  assert.equal(kindsForSurface('grow/market').length, 0, 'a surface with no entry must offer nothing');
+  assert.equal(kindsForSurface('brand/positioning').length, 0,
+    'a surface with no entry must offer nothing');
+  // Two namespaces, and the ids in them must not be confused: a surface is an
+  // address for a blank, and a kind is what fills it.
+  for (const k of Object.values(FILL_KINDS)) {
+    assert.notEqual(k.kind, k.surface, `${k.kind} uses one id for both its kind and its surface`);
+  }
+});
+
+test('every kind names a rail that exists and declares a mode — D17', () => {
+  // D17 refused a mode toggle "until a page branches on the mode", because a
+  // switch that changes nothing is a control that cannot affect the product. The
+  // mirror image is what this checks: a fill whose rail has no `mode` entry is a
+  // CAPABILITY WITH NO SWITCH — it would run with no way to turn it off, and
+  // `manualNote`'s promise that nothing runs and nothing is spent would be false
+  // on that page.
+  const config = readFileSync(resolve(HERE, '../../frontend/src/ui/eadwynConfig.js'), 'utf8');
+  for (const k of Object.values(FILL_KINDS)) {
+    const at = config.indexOf(`\n  ${k.assistSurface}: {`);
+    assert.ok(at > 0, `eadwynConfig has no ASSIST_SURFACES entry called ${k.assistSurface}`);
+    const entry = config.slice(at, config.indexOf('\n  },', at));
+    assert.match(entry, /mode: \{/,
+      `${k.assistSurface} offers ${k.kind} with no mode entry, so it cannot be turned off`);
+    assert.match(entry, /kind: 'choice'/, `${k.assistSurface}'s mode is not a real choice`);
+    assert.match(entry, /manualNote:/,
+      `${k.assistSurface} says what ON does and not what OFF means`);
+  }
+});
+
+test('every kind has a host that mounts its band — the other half of D17', () => {
+  // THE GAP THE TEST ABOVE DOES NOT CLOSE, and it was open for one commit. A
+  // `mode` entry makes the switch RENDERABLE; it does not make anything happen
+  // when it is flipped. Declaring the market mode without mounting the band left
+  // a switch a founder could turn on to no effect — the dead control D17 refused,
+  // reached from the opposite direction: config that arrived before its mount.
+  //
+  // So this asserts the mount, not the config: some page reads the same mode key
+  // the rail writes, and passes the kind to the band.
+  const hosts = [
+    'frontend/src/workspaces/founder/FounderValidateWorkspace.jsx',
+    'frontend/src/pages/founder/FounderValidatePage.jsx',
+    'frontend/src/pages/SpinoutLabMarketPage.jsx',
+  ].map((p) => readFileSync(resolve(HERE, '../..', p), 'utf8')).join('\n');
+
+  for (const k of Object.values(FILL_KINDS)) {
+    assert.ok(hosts.includes(`kind="${k.kind}"`),
+      `${k.kind} is registered and no page offers it, so the switch does nothing`);
+  }
+  // And both sides read ONE mode store, so flipping the switch cannot leave the
+  // page as it was — the reason `useAssistMode` is a module store at all.
+  assert.match(hosts, /useAssistMode\('market'\)/);
+  const layout = readFileSync(resolve(HERE, '../../frontend/src/ui/AssistLayout.jsx'), 'utf8');
+  assert.match(layout, /const \[mode, setMode\] = useAssistMode\(surface\);/,
+    'AssistLayout draws a rail whose switch has nothing behind it');
+  assert.match(layout, /mode=\{mode\}\s*\n\s*onModeChange=\{setMode\}/,
+    'the rail is given no way to change the mode it renders');
 });
 
 test('every entry declares a class the store admits and a task the router knows', () => {
@@ -297,19 +371,113 @@ test('a hypothesis accept addresses the row it actually inserted', async () => {
   );
 });
 
-test('the two Validate kinds are restatements, and neither may carry a citation', () => {
+test('each kind keeps the promise its class makes, and only that one', () => {
+  // The classes are not interchangeable, and the write-path check is what makes
+  // the difference real rather than documentary. A citation on a restatement
+  // would put a source beside a value the source did not supply; a `sourced` fill
+  // with none is an assertion with nothing behind it.
+  const citation = { kind: 'library' as const, document_id: 1, title: 't', chunk: 0, quote: 'a real sentence' };
+  const bare = { payload: {}, targetRef: 'x', readable: 'something' };
+  const expected: Record<string, string> = {
+    pain_tag: 'restatement', hypothesis: 'restatement',
+    market_input: 'sourced', competitor: 'sourced',
+  };
   for (const k of Object.values(FILL_KINDS)) {
-    assert.equal(k.fillClass, 'restatement', `${k.kind} is no longer a restatement — re-check its guarantee`);
-    // A citation on a restatement would put a source beside a value the source
-    // did not supply. `refuseReason` is the write-path check; this is that it
-    // applies to these kinds.
-    const withCitation = {
-      payload: {}, targetRef: 'x', readable: 'something',
-      citation: { kind: 'library' as const, document_id: 1, title: 't', chunk: 0, quote: 'q' },
-    };
-    assert.match(String(refuseReason(k, withCitation)), /carrying a citation/);
-    assert.equal(refuseReason(k, { payload: {}, targetRef: 'x', readable: 'something' }), null);
+    assert.equal(k.fillClass, expected[k.kind],
+      `${k.kind} changed class — re-check the guarantee it now has to keep`);
+    if (k.fillClass === 'restatement') {
+      assert.match(String(refuseReason(k, { ...bare, citation })), /carrying a citation/);
+      assert.equal(refuseReason(k, bare), null);
+    } else {
+      assert.match(String(refuseReason(k, bare)), /no citation/,
+        `${k.kind} is sourced and would be written with nothing behind it`);
+      assert.equal(refuseReason(k, { ...bare, citation }), null);
+    }
   }
+});
+
+test('the market fill proposes the inputs and never the market size', async () => {
+  // THE WHOLE POINT OF THE SOURCED CLASS, and the thing #198 turns on. The page
+  // derives TAM from population × ACV with the founder's own assumptions and
+  // stamps each card "Founder research" or "Founder model". A fill that proposed
+  // a TAM would write over that arithmetic into `projects.tam` — a bare REAL with
+  // nothing beside it to say who produced the number — and make all three of the
+  // page's provenance statements false at once.
+  const market = fillKind('market_input')!;
+  const src = read('src/services/fills/registry.ts');
+  const entry = src.slice(src.indexOf('const marketSizing: FillKind = {'));
+  assert.doesNotMatch(entry.slice(0, entry.indexOf('\n};')), /projects\.tam|UPDATE projects/,
+    'the market fill can write projects.tam');
+  assert.match(market.prompt, /never propose the market size itself/i);
+  // The fields it may propose are exactly the store's own sizing inputs.
+  for (const field of ['population', 'acv', 'cagr']) {
+    assert.ok(ASSUMPTION_COLUMNS[field], `${field} is not a column this store has`);
+  }
+  assert.equal(market.target({ field: 'acv' }, '', ctx(freshDb())).table, 'project_market_assumptions');
+  assert.equal(market.target({ field: 'acv' }, '', ctx(freshDb())).column, 'acv');
+});
+
+test('the competitor fill adds to a list and cannot start one', async () => {
+  // D46's rule for the tagger, applied to a second surface: *"the tagger sorts
+  // phrases into themes the founder wrote and cannot create one"*. Starting a
+  // competitor analysis runs discovery and a public-web crawl, so a fill that
+  // bootstrapped one would spend a founder's budget on a job they did not ask for
+  // inside a run they asked to be cheap.
+  const competitor = fillKind('competitor')!;
+  const src = read('src/services/fills/registry.ts');
+  const entry = src.slice(src.indexOf('const competitorScan: FillKind = {'));
+  const body = entry.slice(0, entry.indexOf('\n};'));
+  assert.doesNotMatch(body, /runCompetitorAnalysis|INSERT INTO competitor_analyses/,
+    'the competitor fill can start an analysis');
+  assert.match(body, /Eadwyn adds to your list — it does not start one/);
+  assert.match(competitor.prompt, /Never invent a company, a product name or a URL\./);
+
+  // IT WRITES THROUGH THE FORM'S OWN WRITER, which is why that writer was
+  // extracted from the route body at all. A second copy would have got `position`
+  // wrong (the board is ordered by it) and would have forgotten `edited = 1`,
+  // which is what stops the next discovery run deleting an accepted row.
+  assert.match(body, /await insertManualCandidate\(/);
+  const route = read('src/routes/competitors.ts');
+  assert.match(route, /await insertManualCandidate\(c\.env, user\.id, id, inputs, \{/,
+    'the manual route no longer goes through the shared writer');
+  // SCOPED TO THE ADD-ONE HANDLER, not the whole file. Two other inserts into
+  // `competitor_candidates` are legitimately different operations and must stay:
+  // `persistResult` replaces the whole set after a discovery run, and the bulk
+  // `PUT /:id` rewrites the board from a client-supplied array. A file-wide ban
+  // would have forbidden both, which is how a guard starts being worked around.
+  const addHandler = (() => {
+    const at = route.indexOf("competitors.post('/:id/candidates'");
+    assert.ok(at > 0, 'the add-a-competitor route is gone');
+    return route.slice(at, route.indexOf('\n});', at));
+  })();
+  assert.doesNotMatch(addHandler, /INSERT INTO competitor_candidates/,
+    'the add-one handler kept its own copy of the insert');
+  assert.doesNotMatch(addHandler, /MAX\(position\)/,
+    'the add-one handler still allocates its own position');
+  const writes = read('src/routes/_competitor_writes.ts');
+  assert.match(writes, /UPDATE competitor_analyses SET edited = 1/,
+    'the shared writer no longer protects manual rows from a re-run');
+  assert.match(writes, /COALESCE\(MAX\(position\), -1\) AS maxpos/,
+    'the shared writer no longer allocates a position');
+
+  // AND IT NEVER CRAWLS ON ACCEPT. An accept is a click a founder expects to be
+  // instant; a crawl turns it into a wait and an outbound request they did not ask
+  // for. `buildManualCandidate` will do it when asked, so this has to say no.
+  assert.match(body, /crawl: false,/, 'accepting a competitor triggers a web crawl');
+
+  // The name is not the editable field: a renamed company is a different company,
+  // and the citation was found for the one the model named.
+  assert.equal(competitor.editableField, 'note');
+
+  // THE ADDRESS LIMIT IS STATED RATHER THAN FUDGED. `competitor_candidates.id` is
+  // a TEXT uid and `fill_provenance.target_row_id` is an INTEGER, so this row
+  // cannot be addressed the way the others are. Row 0 says "on this project"
+  // without pretending to point at a row; coercing the uid would put every
+  // competitor on NaN.
+  const t = competitor.target({ name: 'x' }, '', ctx(freshDb()));
+  assert.equal(t.table, 'competitor_candidates');
+  assert.equal(t.rowId, 0);
+  assert.match(body, /is an INTEGER/, 'the address limitation is no longer written down');
 });
 
 test('a sourced fill with no citation is refused, and one with a hollow citation too', () => {
@@ -378,7 +546,7 @@ test('a proposal row can carry a surface, a class, a citation and a target', () 
   // The four columns migration 246 added, and the read that has to select them.
   const migration = readFileSync(`${SQL}/migrations/246_fills_the_blanks_everywhere.sql`, 'utf8');
   for (const col of ['surface', 'fill_class', 'citation_json', 'target_ref']) {
-    assert.match(migration, new RegExp(`ADD COLUMN ${col} TEXT`), `246 no longer adds ${col}`);
+    assert.ok(migration.includes(`ADD COLUMN ${col} TEXT`), `246 no longer adds ${col}`);
   }
   // The backfill is what makes `surface` meaningful on landing rather than after
   // the next run, and it has to cover both existing kinds.

@@ -681,6 +681,14 @@ export const api = {
   getProject: (id) => request(`/projects/${id}`),
   createProject: (data) => request('/projects', { method: 'POST', body: JSON.stringify(data) }),
   updateProject: (id, data) => request(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  // Task #188/#198 — the sizing assumptions BEHIND tam/sam/som, which
+  // `SpinoutLabMarketPage` used to hold in session state and drop when the tab
+  // closed. A PATCH: fields left out are kept, which is what lets one cited fill
+  // write one figure without blanking the eleven the founder typed.
+  getMarketAssumptions: (id) => request(`/projects/${id}/market-assumptions`),
+  saveMarketAssumptions: (id, assumptions) => request(`/projects/${id}/market-assumptions`, {
+    method: 'PUT', body: JSON.stringify({ assumptions }),
+  }),
   deleteProject: (id) => request(`/projects/${id}`, { method: 'DELETE' }),
   // Task #7 (AM) — Admin > Trash management for soft-deleted projects.
   adminListProjectTrash: () => request('/admin/projects/trash'),
@@ -1352,7 +1360,13 @@ export const api = {
   proposeValidate: (projectId, data) => request(`/founder/validate/propose/${projectId}`, {
     method: 'POST', timeoutMs: 60_000, body: JSON.stringify(data),
   }),
-  acceptValidateProposal: (id) => request(`/founder/validate/proposals/${id}/accept`, { method: 'POST' }),
+  // `body` carries `{ value }` for an accept-with-edit and is omitted otherwise.
+  // Omitted rather than sent as the unchanged original, because `fill_provenance`
+  // derives `edited` from comparing the two and a table where every row is marked
+  // corrected says nothing about any of them.
+  acceptValidateProposal: (id, body) => request(`/founder/validate/proposals/${id}/accept`, {
+    method: 'POST', ...(body ? { body: JSON.stringify(body) } : {}),
+  }),
   discardValidateProposal: (id) => request(`/founder/validate/proposals/${id}/discard`, { method: 'POST' }),
 
   // ---------- Validate · interview recordings (migration 215) ----------
@@ -2192,6 +2206,11 @@ export const api = {
     { method: 'POST', body: JSON.stringify({ view_id: viewId, seconds }) },
   ),
   deckEngagement: (id) => request(`/decks/${id}/engagement`),
+  // Task #196 — withdraw a share link. Revoking EXPIRES the row rather than
+  // deleting it, so the impression history stays attributable to a link the
+  // founder can still see they created; idempotent, so a double-click or a
+  // second tab cannot report that a withdrawn link might still be live.
+  deckRevokeShare: (id, shareId) => request(`/decks/${id}/shares/${shareId}`, { method: 'DELETE' }),
   // Task #6 — share-link viewer onboarding + conversion endpoints.
   deckShareContext: (token) => request(`/decks/share/${encodeURIComponent(token)}/context`),
   deckShareSignup: (token, payload) => request(

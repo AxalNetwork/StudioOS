@@ -148,8 +148,27 @@ export interface FillContext {
 export interface FillKind {
   /** Stable id. Stored in `validate_proposals.kind` and never re-used. */
   kind: string;
-  /** Zone key — `validate/pain-map`, `grow/market`. Drives the mode gate. */
+  /**
+   * The blank's own address — `validate/pain-map`, `market/sizing`. Stored in
+   * `validate_proposals.surface`, and what a band names when it lists what it can
+   * offer. Fine-grained on purpose: two kinds on one page are two bands.
+   */
   surface: string;
+  /**
+   * The `ASSIST_SURFACES` key in `frontend/src/ui/eadwynConfig.js` whose `mode`
+   * entry gates this kind — a COARSER namespace, and not the same one.
+   *
+   * `eadwynConfig` is keyed per RAIL, and one rail sits behind many zones:
+   * `workspace` is the single entry for every workspace zone, and that file says
+   * why — "twenty surfaces over one task class would report the same average
+   * twenty times and call it per-page data". This registry addresses individual
+   * blanks instead. Naming both makes the link one field rather than a
+   * convention, and lets `fills_registry.test.ts` check D17's rule against it: a
+   * kind whose rail declares no `mode` entry is a capability with no switch,
+   * which is the mirror image of the dead config
+   * `ui_assist_rail_and_sidebar` already refuses — a switch with no capability.
+   */
+  assistSurface: string;
   fillClass: FillClass;
   /**
    * The router task class. It MUST declare `alternates` in `aiRouter`'s ROUTE
@@ -184,7 +203,19 @@ export interface FillKind {
   readable(payload: Record<string, unknown>): string;
 
   gather(ctx: FillContext): Promise<Gathered>;
-  parse(text: string, gathered: Gathered): Proposed[];
+  /**
+   * The model's reply, turned into proposals — and this is where a proposal earns
+   * the right to be offered at all.
+   *
+   * ASYNC AND GIVEN THE CONTEXT, because a `sourced` kind has to go and find its
+   * citation: the model returns a figure, and `services/fills/citations.ts` looks
+   * for a passage that supports it in the founder's own library and then, failing
+   * that, in a research call. A synchronous `parse` would force the citation step
+   * to happen somewhere else, and "somewhere else" is how a `sourced` proposal
+   * ends up stored with a null citation. A `restatement` ignores `ctx` and returns
+   * an array; the caller awaits either.
+   */
+  parse(text: string, gathered: Gathered, ctx: FillContext): Proposed[] | Promise<Proposed[]>;
   apply(ctx: FillContext, payload: Record<string, unknown>, targetRef: string): Promise<Applied>;
   target(payload: Record<string, unknown>, targetRef: string, ctx: FillContext): FillTarget;
 }
