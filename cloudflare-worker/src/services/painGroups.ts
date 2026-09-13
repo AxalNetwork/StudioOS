@@ -56,7 +56,25 @@ type PainAliasRow = {
   display_phrase: string;
 };
 
-type InterviewPains = { pains_json: string | null };
+type InterviewPains = { pains_json: string | null; id?: number };
+
+/**
+ * A severity a founder recorded against ONE phrase in ONE interview.
+ *
+ * Severity is per pain and not per interview, because one conversation names a
+ * must-have and a nice-to-have in the same breath — which is why migration 211
+ * put it in its own table keyed on `(interview_id, phrase_norm)` rather than as
+ * a column on `discovery_interviews`. That table shipped with the shape right
+ * and NO READER AND NO WRITER ANYWHERE, which migration 215's header calls out
+ * by name as "a column that exists that nothing reads". This is the reader.
+ */
+export type PainSeverityRow = { interview_id: number; phrase_norm: string; severity: string };
+
+/** The two values a severity may take. Anything else is not recorded. */
+export const PAIN_SEVERITIES = ['need', 'nice'] as const;
+export type PainSeverity = (typeof PAIN_SEVERITIES)[number];
+export const isPainSeverity = (v: unknown): v is PainSeverity =>
+  typeof v === 'string' && (PAIN_SEVERITIES as readonly string[]).includes(v);
 
 export type PainTheme = { theme: string; mentions: number };
 
@@ -69,8 +87,23 @@ export type PainGroupsView = {
     sort_order: number;
     count: number;
     phrases: Array<{ phrase_norm: string; display_phrase: string }>;
+    // How many DISTINCT interviews called this theme a need, and how many
+    // called it a nice-to-have. Two counts rather than one verdict: the same
+    // pain is a must-have for one segment and an optional for another, and
+    // collapsing that to a single label is the judgement the founder is
+    // supposed to be making from this page.
+    need_count: number;
+    nice_count: number;
   }>;
-  ungrouped: Array<{ phrase_norm: string; display_phrase: string; count: number }>;
+  ungrouped: Array<{
+    phrase_norm: string; display_phrase: string; count: number;
+    need_count: number; nice_count: number;
+  }>;
+  // Absent, not zero, when nothing has been recorded — so a page can tell "no
+  // severity is on file" from "every mention is a nice-to-have". A chip
+  // narrowing on severity over the first of those would answer a question the
+  // store cannot answer.
+  severity_recorded: boolean;
 };
 
 export type PainGroupModel = {
@@ -166,6 +199,12 @@ type ThemeAccum = {
   groupId: number | null;
   count: number; // distinct interviews
   phrases: Map<string, string>; // phrase_norm → display
+  // Distinct interviews that recorded a severity against ANY phrase of this
+  // theme. Counted per theme rather than per phrase because that is the
+  // question the chip row asks — "which of these are need-to-have" is about the
+  // theme a reader is looking at, not about one wording of it.
+  needInterviews: Set<number>;
+  niceInterviews: Set<number>;
 };
 
 function resolvePhrase(
@@ -192,13 +231,14 @@ function analyzePains(
   interviews: InterviewPains[],
   model: PainGroupModel,
   projectId: number,
+  severities: PainSeverityRow[] = [],
 ): PainAnalysis {
   const interviewTotal = interviews.length;
   const acc = new Map<string, ThemeAccum>();
   const ensureAcc = (key: string, title: string, groupId: number | null): ThemeAccum => {
     let a = acc.get(key);
     if (!a) {
-      a = { key, title, groupId, count: 0, phrases: new Map() };
+      a = { key, title, groupId, count: 0, phrases: new Map(), needInterviews: new Set(), niceInterviews: new Set() };
       acc.set(key, a);
     }
     return a;
@@ -214,6 +254,11 @@ function analyzePains(
     if (!a.phrases.has(norm)) a.phrases.set(norm, model.aliasDisplay.get(norm) || norm);
   }
 
+  // `(interview_id, phrase_norm)` → severity, which is the table's own unique
+  // index, so at most one row can reach this map per pair.
+  const sevBy = new Map<string, string>();
+  for (const r of severities) sevBy.set(`${r.interview_id}\u0000${r.phrase_norm}`, r.severity);
+
   for (const it of interviews) {
     const seenKeys = new Set<string>();
     for (const phrase of safeParseStrings(it.pains_json)) {
@@ -227,6 +272,16 @@ function analyzePains(
       if (!seenKeys.has(r.key)) {
         a.count += 1;
         seenKeys.add(r.key);
+      }
+      // A SEVERITY IS AGAINST THE PHRASE THE FOUNDER TYPED, and it lands on the
+      // THEME that phrase resolves to — so re-grouping two wordings under one
+      // theme carries their severities with them, exactly as it already carries
+      // their counts. The set is of interview ids, so one interview naming the
+      // same theme three ways counts once.
+      if (it.id != null) {
+        const sev = sevBy.get(`${it.id}\u0000${norm}`);
+        if (sev === 'need') a.needInterviews.add(it.id);
+        else if (sev === 'nice') a.niceInterviews.add(it.id);
       }
     }
   }
@@ -244,7 +299,11 @@ function analyzePains(
           display_phrase,
         }))
       : [];
-    return { id: g.id, title: g.title, sort_order: g.sort_order, count: a ? a.count : 0, phrases };
+    return {
+      id: g.id, title: g.title, sort_order: g.sort_order, count: a ? a.count : 0, phrases,
+      need_count: a ? a.needInterviews.size : 0,
+      nice_count: a ? a.niceInterviews.size : 0,
+    };
   });
 
   const ungrouped = Array.from(acc.values())
@@ -254,12 +313,26 @@ function analyzePains(
       phrase_norm: a.key.slice('impl:'.length),
       display_phrase: a.title,
       count: a.count,
+      need_count: a.needInterviews.size,
+      nice_count: a.niceInterviews.size,
     }));
 
   return {
     interviewTotal,
     themes,
-    view: { project_id: projectId, interview_total: interviewTotal, groups, ungrouped },
+    view: {
+      project_id: projectId,
+      interview_total: interviewTotal,
+      groups,
+      ungrouped,
+      // FROM THE ROWS, NOT FROM THE COUNTS. A severity recorded against a
+      // phrase nobody has logged since — or against an interview whose pain was
+      // re-worded — leaves every theme at zero while the store is not empty.
+      // Deriving this from `need_count + nice_count` would then tell the page
+      // "nothing is recorded", and a chip that narrows on severity would answer
+      // a question the store cannot answer.
+      severity_recorded: severities.length > 0,
+    },
   };
 }
 
@@ -333,11 +406,29 @@ export async function materializeTitleNormAliases(
 /** Structured view for the curation UI: curated groups + ungrouped phrases. */
 export async function getPainGroupsView(env: Env, projectId: number): Promise<PainGroupsView> {
   const model = await loadPainGroupModel(env, projectId);
+  // `id` JOINED THE SELECT so severity can be attributed. It was `pains_json`
+  // alone, which is the whole reason three of this zone's four chips could not
+  // be built: with no interview behind a mention there is nothing to narrow by.
   const res = await env.DB.prepare(
-    `SELECT pains_json FROM discovery_interviews WHERE project_id = ?`,
+    `SELECT id, pains_json FROM discovery_interviews WHERE project_id = ?`,
   )
     .bind(projectId)
-    .all<{ pains_json: string | null }>()
-    .catch(() => ({ results: [] as { pains_json: string | null }[] }));
-  return analyzePains(res.results || [], model, projectId).view;
+    .all<InterviewPains>()
+    .catch(() => ({ results: [] as InterviewPains[] }));
+
+  // SCOPED THROUGH THE INTERVIEW, because `interview_pain_severities` carries
+  // no project of its own — the same join `discovery_interviews` is the owner
+  // of everywhere else in this file. A severity from another founder's project
+  // cannot reach this view.
+  const sev = await env.DB.prepare(
+    `SELECT s.interview_id, s.phrase_norm, s.severity
+       FROM interview_pain_severities s
+       JOIN discovery_interviews i ON i.id = s.interview_id
+      WHERE i.project_id = ?`,
+  )
+    .bind(projectId)
+    .all<PainSeverityRow>()
+    .catch(() => ({ results: [] as PainSeverityRow[] }));
+
+  return analyzePains(res.results || [], model, projectId, sev.results || []).view;
 }

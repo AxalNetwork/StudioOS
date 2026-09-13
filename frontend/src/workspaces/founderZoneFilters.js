@@ -165,10 +165,24 @@ export const FOUNDER_ZONE_FILTERS = {
   // is explicit that both zones read one endpoint so they "cannot disagree";
   // a chip that quietly forks the number is a worse answer than no chip.
   'validate/pain-map': [
-    { canvas: 'ICP only', unbuilt: 'a theme carries its phrases and not the interviews they came from, so no mention can be traced to a conversation whose ICP fit is recorded' },
-    { canvas: 'All interviews', unbuilt: 'the same missing attribution seen from the other side — with no per-mention interview there is no subset for this to be the whole of, and it would match every theme on the page' },
-    { canvas: 'Need-to-have', unbuilt: 'no mention carries a severity: `interview_pain_severities` exists with no reader and no writer anywhere in the worker, so nothing separates a need from a nice-to-have' },
-    { canvas: 'By recency', unbuilt: 'a pain theme carries no date — the grouped view has no interview behind a phrase, and `loadEvidenceBase` does not select `interview_date` either' },
+    { canvas: 'ICP only', unbuilt: 'a theme carries its phrases and not the interviews they came from, so no mention can be traced to a conversation whose ICP fit is recorded', hover: 'A theme keeps its phrases, not the interviews behind them, so no mention can be traced to one.' },
+    { canvas: 'All interviews', unbuilt: 'the same missing attribution seen from the other side — with no per-mention interview there is no subset for this to be the whole of, and it would match every theme on the page', hover: 'The same missing link from the other side: with no interview behind a mention, this matches everything.' },
+    // LIVE. The reason this carried was "no mention carries a severity:
+    // `interview_pain_severities` exists with no reader and no writer anywhere
+    // in the worker" — a table migration 211 shipped with the right shape and
+    // nothing on either end of it, which migration 215's own header names as
+    // the example of a column that comes to exist and is never read. It has
+    // both now: `PUT /founder/validate/interviews/:id/pain-severity` writes it
+    // and `getPainGroupsView` reads it back as `need_count` per theme.
+    //
+    // The page narrows on `need_count > 0`, which is a claim about INTERVIEWS
+    // and not about the founder's opinion: a theme is need-to-have here because
+    // somebody they interviewed was recorded saying so. `nice_count` is kept
+    // separate rather than inverted, because the same pain is a must-have for
+    // one segment and optional for another, and that split is the judgement
+    // this page exists to support.
+    { canvas: 'Need-to-have', key: 'need' },
+    { canvas: 'By recency', unbuilt: 'a pain theme carries no date — the grouped view has no interview behind a phrase, and `loadEvidenceBase` does not select `interview_date` either', hover: 'A pain theme carries no date — there is no interview behind a phrase to take one from.' },
   ],
   // `Blocking the verdict` is the one label here the board already answers in
   // prose: `buildBoard` computes `_note` for every claim whose verdict is null
@@ -177,7 +191,7 @@ export const FOUNDER_ZONE_FILTERS = {
   'validate/hypotheses': [
     { canvas: 'All', key: 'all' },
     { canvas: 'Blocking the verdict', key: 'blocking' },
-    { canvas: 'Recently moved', unbuilt: 'the board selects id, code, claim, sort_order and retired_at — no `updated_at` reaches the page, and nothing records a claim moving between lanes' },
+    { canvas: 'Recently moved', unbuilt: 'the board selects id, code, claim, sort_order and retired_at — no `updated_at` reaches the page, and nothing records a claim moving between lanes', hover: 'Nothing records a claim moving between lanes, and no update time reaches this board.' },
     { canvas: 'Retired', key: 'retired' },
   ],
   'validate/verdict': [
@@ -479,7 +493,7 @@ export const FOUNDER_ZONE_FILTERS = {
     { canvas: 'Adjacent', unbuilt: CATEGORY_IS_PER_COMPETITOR },
     {
       canvas: 'Comparables',
-      unbuilt: 'no competitor can be filed as a comparable: the form offers direct or adjacent, and every writer coerces anything else to direct',
+      unbuilt: 'no competitor can be filed as a comparable: the form offers direct or adjacent, and every writer coerces anything else to direct', hover: 'A competitor is filed as direct or adjacent; nothing can be filed as a comparable.',
     },
   ],
   // `All` is the only one of the five this licence can run. Two fail on the

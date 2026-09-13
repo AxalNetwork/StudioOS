@@ -242,6 +242,20 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
                     fillsOn={fillsOn}
                     onChanged={() => setLocalKey((n) => n + 1)}
                   />
+                  {/* THE WRITER FOR `interview_pain_severities`, and it lives
+                      HERE rather than on the pain map for a reason the table's
+                      own key states: severity is per `(interview_id,
+                      phrase_norm)`. The map shows THEMES, which are many
+                      phrases from many interviews — there is no single
+                      interview on that page to write against. Judging a pain
+                      belongs beside the conversation it came out of. */}
+                  {pains.length > 0 && (
+                    <PainSeverity
+                      interviewId={r.id}
+                      pains={pains}
+                      onChanged={() => setLocalKey((n) => n + 1)}
+                    />
+                  )}
                 </li>
               );
             })}
@@ -273,9 +287,116 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
 // all four of this zone's canvas labels are `unbuilt`, so `zoneFilters` returns
 // an empty array and the toolbar draws its action side only. See
 // `founderZoneFilters.js` for why a grouped view cannot narrow by ICP.
+/**
+ * The pain map's chip row, as predicates.
+ *
+ * ONE ENTRY, AND NO `all`, WHICH IS THE DIFFERENCE FROM ITS THREE SIBLINGS.
+ * `HYPOTHESIS_VIEWS` and the other two open with `all:` because their canvas
+ * rows open with an `All` chip; PO — sorry, V2's row is `ICP only · All
+ * interviews · Need-to-have · By recency`, and the only one of the four with a
+ * store behind it is the third. So the map holds exactly the live keys the
+ * table declares, which is what `zone_actions.test.mjs` asserts, and the page
+ * reads it as `PAIN_VIEWS[narrow] ? filter : everything`.
+ *
+ * That last shape is deliberate rather than the `VIEWS[view] || VIEWS.all` the
+ * siblings use. The guard's own docblock records why: a key with no predicate
+ * falls through to the default and SILENTLY ANSWERS A DIFFERENT QUESTION —
+ * clicking "Retired" once showed the live claims. With no `all` to fall back
+ * to, an unrecognised key here means "nothing is narrowing", which is the same
+ * answer as the row's own cleared state and is true whatever it was handed.
+ */
+const PAIN_VIEWS = {
+  // A claim about INTERVIEWS, not about the founder's ranking: the theme is
+  // here because somebody they spoke to was recorded calling it a must.
+  need: (g) => (g.need_count || 0) > 0,
+};
+
+/**
+ * How severe was this pain, in this conversation?
+ *
+ * WRITES `interview_pain_severities`, which migration 211 created with the
+ * right shape, a unique index on `(interview_id, phrase_norm)`, and no reader
+ * and no writer anywhere in the worker — migration 215's header names it as its
+ * example of a column that comes to exist and is never read. The consequence on
+ * screen was `/validate/pain-map`'s `Need-to-have` chip, which carried exactly
+ * that reason.
+ *
+ * THREE STATES, NOT TWO. A pain is a need, a nice-to-have, or unjudged — and
+ * unjudged is the one that must stay reachable, because "nobody has decided"
+ * and "everybody said optional" are different findings and the map reports them
+ * differently. Clicking the current answer clears it.
+ *
+ * OPTIMISTIC, WITH THE SERVER'S ANSWER WINNING. The PUT returns the severity it
+ * stored; a failed write rolls the row back to what it was rather than leaving
+ * a judgement on screen that is not on file.
+ */
+function PainSeverity({ interviewId, pains, onChanged }) {
+  const [byPhrase, setByPhrase] = useState({});
+  const [busy, setBusy] = useState(null);
+  const [error, setError] = useState('');
+
+  const set = async (phrase, severity) => {
+    const current = byPhrase[phrase] ?? null;
+    const next = current === severity ? null : severity;
+    setBusy(phrase); setError('');
+    setByPhrase((m) => ({ ...m, [phrase]: next }));
+    try {
+      const r = await api.setInterviewPainSeverity(interviewId, phrase, next);
+      setByPhrase((m) => ({ ...m, [phrase]: r?.severity ?? next }));
+      onChanged?.();
+    } catch (e) {
+      setByPhrase((m) => ({ ...m, [phrase]: current }));
+      setError(e?.message || 'That judgement was not saved.');
+    } finally { setBusy(null); }
+  };
+
+  return (
+    <div className="mt-2">
+      <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">
+        How badly did they need it?
+      </div>
+      <ul className="mt-1 space-y-1">
+        {pains.map((p) => {
+          const phrase = typeof p === 'string' ? p : String(p?.pain ?? '');
+          if (!phrase) return null;
+          const chosen = byPhrase[phrase] ?? null;
+          return (
+            <li key={phrase} className="flex flex-wrap items-center gap-2">
+              <span className="min-w-0 flex-1 truncate text-[11px] text-axal-muted">{phrase}</span>
+              {[['need', 'Need-to-have'], ['nice', 'Nice-to-have']].map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  disabled={busy === phrase}
+                  aria-pressed={chosen === key}
+                  onClick={() => set(phrase, key)}
+                  data-testid={`button-pain-severity-${key}`}
+                  className={`rounded-[6px] border px-2 py-0.5 text-[10.5px] font-semibold disabled:opacity-60 ${
+                    chosen === key
+                      ? 'border-axal-violet bg-axal-violet/10 text-axal-violet'
+                      : 'border-axal-hairline text-axal-muted hover:border-axal-faint'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </li>
+          );
+        })}
+      </ul>
+      {error && <p className="mt-1 text-[11px] text-rose-600">{error}</p>}
+    </div>
+  );
+}
+
 function PainMap({ projectId, ready, zoneFilters, zoneActions }) {
   const [view, setView] = useState(null);
   const [error, setError] = useState(null);
+  // `all` or `need`, and the chip row is the only thing that sets it. Named
+  // rather than boolean because the canvas's row has four entries and the other
+  // three are still unbuilt — a second one going live adds a value here rather
+  // than a second flag.
+  const [narrow, setNarrow] = useState('all');
 
   useEffect(() => {
     if (!ready || !projectId) return undefined;
@@ -296,12 +417,26 @@ function PainMap({ projectId, ready, zoneFilters, zoneActions }) {
   const total = view.interview_total || 0;
   const ranked = [...groups].sort((a, b) => (b.phrases?.length || 0) - (a.phrases?.length || 0));
   const top = ranked[0];
+  // NARROWED ON THE ROWS THE SERVER COUNTED, not on a predicate invented here.
+  // `need_count` is DISTINCT INTERVIEWS in which somebody was recorded calling
+  // this theme a need — so the chip answers "which of these did the people we
+  // spoke to say they must have", which is a claim about them and not about the
+  // founder's own ranking.
+  const shown = PAIN_VIEWS[narrow] ? ranked.filter(PAIN_VIEWS[narrow]) : ranked;
+  const needTotal = groups.filter((g) => (g.need_count || 0) > 0).length;
 
   return (
     <div className="space-y-4">
       <ZoneToolbar
         role="founder"
-        filters={zoneFilters ? zoneFilters({}) : []}
+        filters={zoneFilters ? zoneFilters({
+          value: narrow,
+          // Clicking the current chip clears it, the same toggle the other
+          // zones use — otherwise a reader who narrows has no way back without
+          // reloading, because the row has no `All` of its own here.
+          onChange: (key) => setNarrow((cur) => (cur === key ? 'all' : key)),
+          counts: { need: needTotal },
+        }) : []}
         actions={zoneActions ? zoneActions() : []}
       />
       <StatRow items={[
@@ -314,10 +449,28 @@ function PainMap({ projectId, ready, zoneFilters, zoneActions }) {
         { label: 'Themes', value: groups.length, note: 'you name them; nothing else does' },
         { label: 'Interviews behind them', value: total, note: 'the denominator for every frequency below' },
         { label: 'Ungrouped phrases', value: ungrouped.length, note: 'logged, not yet themed' },
-        { label: 'Severity tiering', value: null, note: 'need / good / nice is not a field a pain carries yet' },
+        // WAS `value: null` with "need / good / nice is not a field a pain
+        // carries yet". It is one now — `interview_pain_severities` has a
+        // reader and a writer — so the tile reports the count, and reports it
+        // as themes rather than as mentions because that is what the chip
+        // beside it narrows.
+        {
+          label: 'Need-to-have themes',
+          value: view.severity_recorded ? needTotal : null,
+          note: view.severity_recorded
+            ? 'someone interviewed was recorded calling these a must'
+            : 'no severity recorded against any pain yet',
+        },
       ]} />
 
-      {groups.length === 0 && ungrouped.length === 0 ? (
+      {narrow === 'need' && shown.length === 0 && groups.length > 0 ? (
+        <EmptyState
+          title="No theme is recorded as a need yet"
+          description={view.severity_recorded
+            ? 'Severity is on file for this venture, and none of it marks a theme as a must-have. The map has themes; this narrowing has none.'
+            : 'Nothing has been marked need-to-have on any interview. This chip narrows on what interviewees were recorded saying, so with nothing recorded it has nothing to show — which is not the same as every pain being optional.'}
+        />
+      ) : groups.length === 0 && ungrouped.length === 0 ? (
         <EmptyState
           title="No pains logged yet"
           description="Pain themes are grouped from the pains recorded against interviews. Until one is logged this map has nothing to draw, and drawing it anyway would be inventing the finding."
@@ -330,7 +483,7 @@ function PainMap({ projectId, ready, zoneFilters, zoneActions }) {
             <span className="text-[11px] text-axal-faint">Frequency across {total} interview{total === 1 ? '' : 's'}</span>
           </div>
           <ul className="space-y-2.5">
-            {ranked.map((g) => {
+            {shown.map((g) => {
               const n = g.phrases?.length || 0;
               const pct = total ? Math.round((n / total) * 100) : 0;
               return (
@@ -339,6 +492,18 @@ function PainMap({ projectId, ready, zoneFilters, zoneActions }) {
                     <span className="truncate text-xs font-semibold">{g.title}</span>
                     <span className="shrink-0 text-[11px] tabular-nums text-axal-faint">
                       {n} phrase{n === 1 ? '' : 's'}{total ? ` · ${pct}%` : ''}
+                      {/* BOTH COUNTS, NEVER ONE VERDICT. The same pain is a
+                          must-have for one segment and optional for another,
+                          and collapsing that to a single label is the judgement
+                          this page exists to support rather than to make. */}
+                      {(g.need_count || 0) > 0 && (
+                        <span className="ml-1.5 rounded-[4px] bg-axal-ground px-1 py-px font-semibold text-axal-ink">
+                          {g.need_count} need
+                        </span>
+                      )}
+                      {(g.nice_count || 0) > 0 && (
+                        <span className="ml-1 rounded-[4px] px-1 py-px">{g.nice_count} nice</span>
+                      )}
                     </span>
                   </div>
                   <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-axal-ground">
@@ -357,8 +522,13 @@ function PainMap({ projectId, ready, zoneFilters, zoneActions }) {
           <p className="mt-3 border-t border-axal-hairline pt-3 text-[11px] leading-relaxed text-axal-faint">
             Percentages are phrases over interviews, so a theme two people named twice each does not read as four
             people. {top ? `“${top.title}” leads at ${total ? Math.round(((top.phrases?.length || 0) / total) * 100) : 0}%.` : ''}{' '}
-            Severity tiering — need-to-have, good-to-have, nice-to-have — is what the canvas adds here, and it needs a
-            field on the pain record that does not exist yet, so the column reads “Not recorded” instead of guessing.
+            {view.severity_recorded
+              ? 'Severity is recorded per pain and per interview, so one conversation can name a must-have and a '
+                + 'nice-to-have in the same breath. A theme counts once per interview however many ways that '
+                + 'interview worded it.'
+              : 'Severity — need-to-have against nice-to-have — is recorded on an interview, against the pain it '
+                + 'named. None is on file for this venture yet, so the map ranks by frequency alone and says so '
+                + 'rather than ranking by a severity it would have to invent.'}
           </p>
         </Card>
       )}

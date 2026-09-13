@@ -131,8 +131,21 @@ test('the builder drops a handler the page did not supply, and keeps one it did'
     },
   });
 
-  assert.deepEqual(rows.map((r) => r.label), ['Open', 'Running'],
-    'an unsupplied handler must be dropped, and an unbuilt entry with it');
+  // WAS `['Open', 'Running']` under "an unsupplied handler must be dropped, and
+  // an unbuilt entry with it". The two halves have come apart and the reason is
+  // the point of the split: an UNSUPPLIED HANDLER is a wiring mistake — the
+  // table declares an op and the page forgot to pass its callback — and the
+  // only safe answer is to drop it, because nothing is known about why. An
+  // UNBUILT entry is a stated fact with a reason attached, and it is drawn
+  // disabled so the reader sees the artboard's row and can hover for the
+  // reason. `scripts/check-zone-handlers.mjs` fails the build on the first
+  // case, so the silent drop is the second line rather than the only one.
+  assert.deepEqual(rows.map((r) => r.label), ['Open', 'Running', 'Gap'],
+    'an unsupplied handler must be dropped, and an unbuilt entry drawn disabled');
+  const gap = rows.find((r) => r.label === 'Gap');
+  assert.equal(gap.disabled, true, 'an unbuilt op is drawn live');
+  assert.equal(gap.onClick, undefined, 'an unbuilt op is clickable with nothing to perform');
+  assert.equal(gap.title, 'nothing performs it', 'an unbuilt op says nothing on hover');
   assert.equal(rows[0].onClick(), 'clicked', 'a bare function is taken as the click itself');
   assert.equal(rows[0].disabled, false, 'a bare function is neither disabled nor busy');
   assert.equal(rows[1].disabled, true, 'the object form must carry disabled through');
@@ -226,6 +239,11 @@ test('each zone\'s view map holds exactly the live chips its table declares', ()
     'validate/interviews': 'const INTERVIEW_VIEWS = {',
     'validate/hypotheses': 'const HYPOTHESIS_VIEWS = {',
     'validate/verdict': 'const SUMMARY_VIEWS = {',
+    // JOINED WHEN ITS FIRST CHIP WENT LIVE. `Need-to-have` was prose because
+    // `interview_pain_severities` had no reader and no writer; it has both now,
+    // so the zone has a live key and needs its predicate under this guard like
+    // the other three. The other three labels on that row are still prose.
+    'validate/pain-map': 'const PAIN_VIEWS = {',
   };
   for (const [zone, decl] of Object.entries(MAPS)) {
     const live = (FOUNDER_ZONE_FILTERS[zone] || []).filter((f) => f.key).map((f) => f.key).sort();
@@ -236,12 +254,20 @@ test('each zone\'s view map holds exactly the live chips its table declares', ()
       + `${JSON.stringify(keys)} — a chip with no predicate falls back to the default view `
       + 'and answers a different question');
   }
-  // And the zone whose four labels are ALL prose has no map at all: an empty one
-  // would be a place for a chip to reappear without its table entry changing.
-  const painMap = FOUNDER_ZONE_FILTERS['validate/pain-map'] || [];
-  assert.equal(painMap.filter((f) => f.key).length, 0,
-    'validate/pain-map gained a live chip; it needs a view map and an entry above');
-  assert.ok(!/const PAIN_MAP_VIEWS/.test(src), 'a pain-map view map appeared with no live chip to serve');
+  // WAS "the zone whose four labels are ALL prose has no map at all", asserting
+  // `validate/pain-map` had zero live chips and no map — "an empty one would be
+  // a place for a chip to reappear without its table entry changing". That was
+  // a true statement about a schedule, and the loop above is the invariant: a
+  // zone's map holds exactly its live keys, whether that is none or four. The
+  // zone is now in `MAPS` and checked by the same rule as its siblings.
+  //
+  // What the sentence was protecting is kept, generalised: a map with no zone
+  // in `MAPS` is a map nothing checks.
+  const declared = [...src.matchAll(/^const ([A-Z_]+_VIEWS) = \{/gm)].map((m) => m[1]).sort();
+  const guarded = Object.values(MAPS).map((d) => d.slice('const '.length, d.indexOf(' = {'))).sort();
+  assert.deepEqual(declared, guarded,
+    `this file declares ${JSON.stringify(declared)} and the guard covers ${JSON.stringify(guarded)} — `
+    + 'a view map nobody checks is a chip row that can drift from its table');
 });
 
 test('every api method the handlers name is one that exists', () => {

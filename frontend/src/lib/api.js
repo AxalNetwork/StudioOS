@@ -1331,6 +1331,14 @@ export const api = {
     api._downloadCsv(`/founder/validate/summary/${projectId}/export.csv`, 'validation-summary.csv'),
   recordValidationDecision: (projectId, data) => request(`/founder/validate/decision/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
   updateInterviewEvidence: (id, data) => request(`/founder/validate/interviews/${id}/evidence`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // Severity is per PAIN and not per interview — one conversation names a
+  // must-have and a nice-to-have in the same breath — so it is its own call
+  // rather than a field on the evidence PATCH above. `severity: null` clears
+  // the record, which is a third state and not the same as 'nice'.
+  setInterviewPainSeverity: (id, phrase, severity) =>
+    request(`/founder/validate/interviews/${id}/pain-severity`, {
+      method: 'PUT', body: JSON.stringify({ phrase, severity }),
+    }),
 
   // ---------- Validate · "AI fills the blanks" (migration 214) ----------
   // A proposal is written by the worker and decided by a person. Nothing here

@@ -130,52 +130,119 @@ test('every filter label is a label, not a sentence', () => {
   assert.ok(seen >= 200, `only ${seen} filters read — the tables are not being walked`);
 });
 
-test('nothing unbuilt survives either builder into something a reader can see', () => {
+test('nothing unbuilt survives either builder into something a reader can act on', () => {
   // The end-to-end half. The two builders are asserted directly elsewhere; this
   // walks EVERY zone of all eight tables and checks the built output, so a table
   // that grew a new entry shape — or a builder that grew a new escape — fails
   // here rather than on the screen.
+  //
+  // THE TITLE USED TO END "into something a reader can SEE", and the change of
+  // one word is the change of rule. An unbuilt control is drawn now, disabled,
+  // with its reason on hover: 166 of them across the eight tables were
+  // invisible, and every one was read as a missing feature — five reports in a
+  // week about zones that had dropped nothing the artboard drew.
+  //
+  // What must not survive is anything a reader can ACT on. A dead control that
+  // clicks is worse than an absent one, and a dead FILTER that selects is worse
+  // than either: it returns an empty set, and an empty set reads as an answer.
+  // So each item is either live or inert, and inert means no handler at all.
   let ops = 0;
+  let unbuiltOpsDrawn = 0;
   for (const [name, table, build] of ACTION_TABLES) {
     for (const zone of Object.keys(table)) {
-      for (const item of build(zone, { query: '', view: null })) {
+      const built = build(zone, { query: '', view: null });
+      // NAMED, NOT COUNTED. The first draft asserted `deadOps > 0` over every
+      // disabled item, and a mutation that made unbuilt ops invisible again
+      // passed it — because `view: null` leaves every EXPORT disabled too, so
+      // the counter was satisfied without a single unbuilt op on screen. The
+      // labels come from the table now, so each one has to be found.
+      for (const row of table[zone].filter((r) => r.unbuilt)) {
+        const drawn = built.find((i) => i.label === row.label);
+        assert.ok(drawn, `${name} · ${zone} · ${row.label} is unbuilt and is not drawn at all`);
+        assert.equal(drawn.disabled, true, `${name} · ${zone} · ${row.label} is unbuilt and drawn live`);
+        unbuiltOpsDrawn += 1;
+      }
+      for (const item of built) {
         assert.equal(item.note, undefined, `${name} · ${zone} · ${item.label} still carries prose`);
-        assert.ok(item.to || item.onClick || item.disabled,
-          `${name} · ${zone} · ${item.label} renders but does nothing`);
+        if (item.disabled) {
+          assert.equal(item.onClick, undefined,
+            `${name} · ${zone} · ${item.label} is disabled and still clickable`);
+          assert.ok(item.title, `${name} · ${zone} · ${item.label} is drawn dead and says nothing on hover`);
+        } else {
+          assert.ok(item.to || item.onClick,
+            `${name} · ${zone} · ${item.label} renders live but does nothing`);
+        }
         ops += 1;
       }
     }
   }
   assert.ok(ops > 0, 'no actions were built at all — the walk is not walking');
+  assert.ok(unbuiltOpsDrawn >= 50,
+    `only ${unbuiltOpsDrawn} unbuilt ops are drawn — the tables carry far more than that`);
 
   let chips = 0;
+  let unbuiltChipsDrawn = 0;
   for (const [name, table, build] of FILTER_TABLES) {
     for (const zone of Object.keys(table)) {
-      for (const item of build(zone, { value: '__none__' })) {
+      const built = build(zone, { value: '__none__' });
+      // Same correction as the ops half. A `dynamic` entry is excluded because
+      // it is REPLACED by the page's supplied names rather than drawn beside
+      // them — with nothing supplied it contributes no chip at all, which is
+      // right: a placeholder bearing the canvas's sample name would state a
+      // segment this account has not got.
+      for (const row of table[zone].filter((r) => r.unbuilt && !r.dynamic)) {
+        const label = row.label || (Array.isArray(row.canvas) ? row.canvas[0] : row.canvas);
+        const drawn = built.find((i) => i.label === label);
+        assert.ok(drawn, `${name} · ${zone} · ${label} is unbuilt and is not drawn at all`);
+        assert.equal(drawn.disabled, true, `${name} · ${zone} · ${label} is unbuilt and drawn live`);
+        unbuiltChipsDrawn += 1;
+      }
+      for (const item of built) {
         assert.equal(item.note, undefined, `${name} · ${zone} · ${item.label} still carries prose`);
-        assert.ok(item.onSelect, `${name} · ${zone} · ${item.label} is a chip that cannot be selected`);
+        if (item.disabled) {
+          assert.equal(item.onSelect, undefined,
+            `${name} · ${zone} · ${item.label} is a disabled chip that can still be selected`);
+          assert.notEqual(item.active, true,
+            `${name} · ${zone} · ${item.label} is a dead chip drawn as the current view`);
+          assert.ok(item.title, `${name} · ${zone} · ${item.label} is drawn dead and says nothing on hover`);
+        } else {
+          assert.ok(item.onSelect, `${name} · ${zone} · ${item.label} is a live chip that cannot be selected`);
+        }
         chips += 1;
       }
     }
   }
   assert.ok(chips > 0, 'no filters were built at all — the walk is not walking');
+  assert.ok(unbuiltChipsDrawn >= 50,
+    `only ${unbuiltChipsDrawn} unbuilt chips are drawn — the tables carry far more than that`);
 });
 
-test('an unbuilt entry is dropped, not merely emptied', () => {
-  // The difference matters to the toolbar: an entry that survived as `{label:
-  // 'Comparables'}` with no handler would render as a chip that does nothing —
-  // the "absent is not empty" failure `zoneFilterBuilder` exists to prevent,
-  // arrived at from the other side. So the count is what is asserted.
+test('an unbuilt entry is drawn inert, and the count is exact', () => {
+  // WAS "dropped, not merely emptied", and asserted `built.length === rows.length
+  // - dead.length`. The worry behind it was right and is now the wrong half of a
+  // pair: "an entry that survived as `{label: 'Comparables'}` with no handler
+  // would render as a chip that does nothing — the 'absent is not empty' failure
+  // `zoneFilterBuilder` exists to prevent, arrived at from the other side."
+  //
+  // A chip that does nothing AND SAYS NOTHING is the failure. A chip that is
+  // visibly disabled, cannot be selected, and explains itself on hover is not:
+  // there is no click, so there is no empty set to misread. The count is still
+  // exact — every row produces exactly one chip — and the dead ones are pinned
+  // as dead rather than as absent.
   const zone = 'research/companies';
   const rows = FOUNDER_ZONE_FILTERS[zone];
   const dead = rows.filter((r) => r.unbuilt && !r.dynamic);
   assert.ok(dead.length >= 3, `${zone} no longer carries the unbuilt entries this pins`);
   const built = founderZoneFilters(zone, { value: 'all' });
-  assert.equal(built.length, rows.length - dead.length,
-    `${zone} builds ${built.length} chips from ${rows.length} rows with ${dead.length} unbuilt`);
+  assert.equal(built.length, rows.length,
+    `${zone} builds ${built.length} chips from ${rows.length} rows — every row draws exactly one`);
   for (const row of dead) {
     for (const label of filterLabels(row)) {
-      assert.ok(!built.some((i) => i.label === label), `${zone} still draws "${label}"`);
+      const chip = built.find((i) => i.label === label);
+      assert.ok(chip, `${zone} stopped drawing "${label}" — it is invisible again`);
+      assert.equal(chip.disabled, true, `${zone} · ${label} is drawn as a live chip`);
+      assert.equal(chip.onSelect, undefined, `${zone} · ${label} can be selected`);
+      assert.ok(chip.title, `${zone} · ${label} says nothing on hover`);
     }
   }
 });
@@ -233,34 +300,55 @@ test('the Offers ops are the canvas\'s own, in the canvas\'s order', () => {
   }
 });
 
-test('every Offers zone still offers its export, and only its export', () => {
-  // The visible consequence of the sweep on the five zones that were reported.
-  // Two of the three ops per zone are unbuilt and now render nothing; `Export`
-  // is real on all five — migrations 208 and 209 gave these zones their stores
-  // — so each header keeps exactly one control, with the canvas's own label.
+test('every Offers zone draws its whole artboard row, and its export says which state it is in', () => {
+  // WAS "still offers its export, AND ONLY ITS EXPORT", with
+  // `deepEqual(labels, ['Export · nothing yet'])`. That was exact and correct
+  // while the two unbuilt ops per zone rendered nothing. They are drawn now,
+  // disabled with their reason on hover, so the header is the artboard's whole
+  // three-op row — which is what these five zones were reported as missing.
+  //
+  // The export's own contract is unchanged and is still the point of this test:
+  // it is the one control here that is BUILT, and the difference between "no
+  // store" and "no rows yet" has to survive both being grey.
   for (const zone of Object.keys(OFFERS_OPS)) {
     const built = partnerZoneActions(zone, { query: '', view: null });
+    const exportItem = built.find((i) => String(i.label).startsWith('Export'));
+    assert.ok(exportItem, `${zone} no longer offers its export`);
+
     // THE LABEL CARRIES THE STATE, and the plain `Export` it used to show is
     // what made eight working exports get reported as missing features: with no
     // rows the button greys out, and its only explanation was a hover `title`.
     // An account with no rows is the steady state for a new firm, not a
     // transient one, so "disabled with no visible reason" is what most partners
-    // actually saw.
-    assert.deepEqual(built.map((i) => i.label), ['Export · nothing yet'],
-      `${zone} renders something other than its export, or its export no longer `
-      + 'says on screen why it is disabled');
-    // Disabled rather than absent: the store and the writer both exist, so this
-    // is a state of a real control, not an unbuilt one.
-    assert.equal(built[0].disabled, true, `${zone}'s export claims rows it has not loaded`);
+    // actually saw. The unbuilt ops beside it keep the canvas label and put
+    // their reason in the hover — a deliberate asymmetry: one is waiting on
+    // data and changes while you watch, the other is waiting on a store.
+    assert.equal(exportItem.label, 'Export · nothing yet',
+      `${zone}'s export no longer says on screen why it is disabled`);
+    assert.equal(exportItem.disabled, true, `${zone}'s export claims rows it has not loaded`);
+    for (const other of built.filter((i) => i !== exportItem)) {
+      assert.equal(other.disabled, true, `${zone} · ${other.label} is drawn live with no store behind it`);
+      assert.equal(other.onClick, undefined, `${zone} · ${other.label} is clickable with nothing to perform`);
+      assert.ok(other.title, `${zone} · ${other.label} is drawn dead and says nothing on hover`);
+      assert.doesNotMatch(other.label, /·/,
+        `${zone} · ${other.label} borrowed the export's suffix — an unbuilt op is not waiting on rows`);
+    }
 
     const loaded = partnerZoneActions(zone, {
       query: '', view: { scope: 's', header: ['A'], rows: [{ a: 1 }], cells: (r) => [r.a] },
     });
     // The same control in its other state — one `·` suffix swapped for another,
     // which is the whole point: two states of one thing, not two controls.
-    assert.deepEqual(loaded.map((i) => i.label), ['Export · this view'],
+    const loadedExport = loaded.find((i) => String(i.label).startsWith('Export'));
+    assert.equal(loadedExport.label, 'Export · this view',
       `${zone}'s export does not say which rows it covers once they arrive`);
-    assert.equal(loaded[0].disabled, undefined, `${zone}'s export stays dead once rows arrive`);
-    assert.ok(loaded[0].onClick, `${zone}'s export does not write a file`);
+    assert.equal(loadedExport.disabled, undefined, `${zone}'s export stays dead once rows arrive`);
+    assert.ok(loadedExport.onClick, `${zone}'s export does not write a file`);
+    // And the unbuilt ops do NOT come alive with the rows: rows were never what
+    // they were waiting for.
+    for (const other of loaded.filter((i) => i !== loadedExport)) {
+      assert.equal(other.disabled, true,
+        `${zone} · ${other.label} came alive when rows arrived, but it has no store`);
+    }
   }
 });

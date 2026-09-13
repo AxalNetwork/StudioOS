@@ -25,7 +25,10 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { loadPainGroupModel, normPhrase, getPainGroupsView } from '../services/painGroups';
+import {
+  loadPainGroupModel, normPhrase, getPainGroupsView,
+  isPainSeverity, PAIN_SEVERITIES,
+} from '../services/painGroups';
 import { csvResponse, stamp } from '../services/csv';
 import {
   serializeInterviewsCsv, serializePainMapCsv, serializeSummaryCsv,
@@ -457,6 +460,71 @@ founderValidate.patch('/interviews/:id/evidence', async (c) => {
     ).bind(trimOrNull(b.interviewee_company), id).run();
   }
   return json({ ok: true });
+});
+
+/**
+ * Record — or clear — how severe ONE pain was in ONE interview.
+ *
+ * `interview_pain_severities` (migration 211) shipped with the right shape, a
+ * unique index, and no reader and no writer anywhere in the worker. Migration
+ * 215's own header names it as the example of "a column that comes to exist
+ * that nothing reads". This is the writer; `getPainGroupsView` is the reader.
+ *
+ * The consequence on screen is the `Need-to-have` chip on `/validate/pain-map`,
+ * which was `unbuilt` with exactly this reason recorded against it: "no mention
+ * carries a severity, so nothing separates a need from a nice-to-have".
+ *
+ * KEYED ON THE PHRASE AS TYPED, NORMALISED HERE. The table's key is
+ * `(interview_id, phrase_norm)` and `normPhrase` is the same function the pain
+ * map groups by, so a severity follows its phrase through re-grouping and
+ * re-wording exactly as its mention does. A caller sending a display phrase and
+ * a caller sending a normalised one reach the same row.
+ *
+ * NO CHECK THAT THE PHRASE IS ONE THE INTERVIEW LOGGED, and that is deliberate
+ * rather than missed. `pains_json` is a free-text blob a founder edits; a
+ * severity written against a phrase they then reword would have to be deleted
+ * or orphaned, and orphaned is the honest state — the view joins on the phrase,
+ * so an orphan simply stops counting and comes back if the wording does.
+ * Rejecting the write instead would make the order of two edits matter.
+ */
+founderValidate.put('/interviews/:id/pain-severity', async (c) => {
+  const id = Number(c.req.param('id'));
+  const owner = await c.env.DB.prepare(
+    'SELECT project_id FROM discovery_interviews WHERE id = ?',
+  ).bind(id).first<{ project_id: number }>();
+  if (!owner) return notFound('Interview');
+  const s = await scope(c, Number(owner.project_id), canWrite);
+  if (s instanceof Response) return s;
+
+  const b = await c.req.json().catch(() => ({} as any));
+  const norm = normPhrase(String(b?.phrase ?? ''));
+  if (!norm) return json({ detail: 'phrase is required' }, 400);
+
+  // An explicit null CLEARS the record, which is a third state and not the same
+  // as `nice`: "this founder has not judged it" is what the pain map reports as
+  // no severity on file, and a page that could only ever add would have no way
+  // back to it.
+  if (b?.severity == null) {
+    await c.env.DB.prepare(
+      'DELETE FROM interview_pain_severities WHERE interview_id = ? AND phrase_norm = ?',
+    ).bind(id, norm).run();
+    return json({ ok: true, severity: null });
+  }
+
+  if (!isPainSeverity(b.severity)) {
+    return json({ detail: `severity must be ${PAIN_SEVERITIES.join(' or ')}, or null to clear` }, 400);
+  }
+
+  // UPSERT ON THE TABLE'S OWN UNIQUE INDEX. Two tabs judging the same pain must
+  // not leave two rows — the view would then count one interview twice, and the
+  // `need_count` it reports is a count of interviews.
+  await c.env.DB.prepare(
+    `INSERT INTO interview_pain_severities (interview_id, phrase_norm, severity)
+     VALUES (?, ?, ?)
+     ON CONFLICT(interview_id, phrase_norm)
+     DO UPDATE SET severity = excluded.severity, updated_at = datetime('now')`,
+  ).bind(id, norm, b.severity).run();
+  return json({ ok: true, severity: b.severity });
 });
 
 // ---------------------------------------------------------------------------
