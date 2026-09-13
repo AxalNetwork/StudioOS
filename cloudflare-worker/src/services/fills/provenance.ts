@@ -125,6 +125,85 @@ export async function recordFill(env: Env, input: RecordFillInput): Promise<numb
   return Number(r.meta?.last_row_id) || 0;
 }
 
+/**
+ * Record a whole form's worth of `composition` fills, in one call.
+ *
+ * WHY THIS EXISTS SEPARATELY FROM `recordFill`. Validate's fills are decided one
+ * at a time: a proposal appears, a founder accepts it, one row is written. Brand
+ * copy is not shaped like that and should not be forced into that shape — the
+ * editor's autofill already works correctly, drafting into LOCAL state that the
+ * founder edits freely and commits with Save. Its only defect was that
+ * `ai_generated: true` came back from the route and was thrown away at the point
+ * of use, so a published headline Eadwyn wrote was indistinguishable from one the
+ * founder typed. There is nothing to rebuild here; there is a fact to keep.
+ *
+ * SO THE PROPOSALS ARRIVE AT SAVE TIME, and both values are kept per the
+ * product's decision: what Eadwyn proposed, what the founder actually saved, and
+ * `edited` derived from comparing them. A founder who took a drafted line and
+ * rewrote half of it has produced something that is neither the model's work nor
+ * unaided, and being able to say which is the whole point of the table.
+ *
+ * COLUMNS ARE CHECKED AGAINST WHAT THE CALLER ACTUALLY WROTE, not taken on the
+ * client's word. A proposal naming a column absent from `written` is dropped: the
+ * client sends the columns it believes it filled, and a stale or wrong name would
+ * otherwise file provenance against a value nobody set.
+ */
+export async function recordCompositionFills(env: Env, input: {
+  table: string;
+  rowId: number;
+  /** Column → what Eadwyn proposed for it. */
+  proposals: Record<string, unknown>;
+  /** Column → what was actually written. The authority on which columns exist. */
+  written: Record<string, unknown>;
+  model?: string | null;
+  task?: string | null;
+  decidedBy?: number | null;
+}): Promise<number> {
+  const { proposals, written } = input;
+  if (!proposals || typeof proposals !== 'object') return 0;
+  let count = 0;
+  for (const [column, proposed] of Object.entries(proposals)) {
+    const proposedText = String(proposed ?? '').trim();
+    const writtenText = String(written[column] ?? '').trim();
+    // ONE GATE, THREE CASES, and they collapse into each other by construction:
+    // a proposal with nothing in it, a field the founder cleared before saving,
+    // and a column the page does not have at all — the last because an absent key
+    // reads as `undefined` and then as the empty string. An earlier version also
+    // tested `hasOwnProperty(written, column)` above this line, which sounds like
+    // a different check and cannot be: a column absent from `written` can never
+    // have a non-empty value, so no input distinguishes the two and removing the
+    // guard changed nothing a test could see. Dead code that reads as a safeguard
+    // is worse than no safeguard, because the next reader trusts it.
+    //
+    // All three must skip for the same reason: a row saying "Eadwyn proposed X"
+    // beside a field holding nothing would put provenance behind an empty value,
+    // which `filledColumns` would then have to special-case.
+    if (!proposedText || !writtenText) continue;
+    try {
+      await recordFill(env, {
+        target: { table: input.table, rowId: input.rowId, column },
+        proposalId: null,
+        fillClass: 'composition',
+        proposedValue: proposedText,
+        writtenValue: writtenText,
+        citation: null,
+        model: input.model ?? null,
+        task: input.task ?? null,
+        decidedBy: input.decidedBy ?? null,
+      });
+      count += 1;
+    } catch (e) {
+      // ONE FAILED ROW DOES NOT FAIL THE SAVE, and this is the one place in this
+      // module where that is right. The accept path reverts because a value with
+      // no provenance is the state it exists to prevent; here the value is the
+      // founder's own copy on their own page, saved by an explicit click, and
+      // refusing the save over a missing audit row would be the worse outcome.
+      console.error('[fills] recordCompositionFills:', (e as Error).message);
+    }
+  }
+  return count;
+}
+
 export interface FilledValue {
   target_column: string;
   fill_class: FillClass;
