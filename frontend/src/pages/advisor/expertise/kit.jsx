@@ -68,15 +68,27 @@ export function ZoneHeading({ title, blurb, action }) {
  * which asserts that nothing exists. Reading the error first means the page
  * can only ever claim a store is empty when it actually read the store.
  */
-export function ZoneBody({ loading, error, isEmpty, empty, onRetry, actions, children }) {
+export function ZoneBody({ loading, error, isEmpty, empty, onRetry, actions, notice, children }) {
   // `actions` renders ABOVE all four states, on purpose. A zone's header row is
   // as true while the store is loading, or failed, or empty, as it is when rows
   // are on screen — "no cadence is stored, so there is no set of reports to
   // draft" does not become false because the fetch is in flight. An export with
   // nothing loaded says so itself (see `zoneActionBuilder.js`), so the row can
   // sit here without ever offering a file that does not exist.
+  //
+  // `notice` IS THE SAME ARGUMENT ONE STEP FURTHER, and it exists because a
+  // whole class of state was being rendered as a REPLACEMENT for the zone
+  // rather than as a fact about it. The partner zones each answered "this
+  // account is not attached to a firm" by returning a card and nothing else, on
+  // twelve zones, which is how an admin walked a workspace and saw twelve
+  // copies of one card instead of twelve pages. A condition that explains why a
+  // store is unreadable is a line ABOUT the zone; it is not the zone.
+  //
+  // Deliberately generic: this component serves four licences and knows nothing
+  // about firms or advisors. The caller decides what the line says and when.
   const row = actions?.length ? <ZoneActions className="mb-3" items={actions} /> : null;
-  const wrap = (body) => (row ? <>{row}{body}</> : body);
+  const head = (row || notice) ? <>{row}{notice}</> : null;
+  const wrap = (body) => (head ? <>{head}{body}</> : body);
   if (loading) {
     return wrap(<div className="space-y-3" aria-busy="true"><Skeleton className="h-9" /><Skeleton className="h-28" /></div>);
   }

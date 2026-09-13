@@ -244,12 +244,6 @@ export default function AdvisorBucketRoutes({ preview = false }) {
   const slug = zone?.slug;
 
   const body = useMemo(() => {
-    // An admin previewing the Advisor ROLE has selected no person, so Practice
-    // and Expertise have no practice to render. The notice replaces the BODY
-    // and keeps the shell — the crumb, zone row and rail still say where you
-    // are, which a redirect to /studio did not.
-    if (preview) return <AdvisorPreviewNotice />;
-
     // Bucket root: render the canvas overview — the zone grid that says what
     // this bucket holds and opens each zone from there. The sidebar row must
     // land here, not on the first zone.
@@ -396,6 +390,24 @@ export default function AdvisorBucketRoutes({ preview = false }) {
         />
       )}
     >
+      {/* THE BOUNDARY IS A LINE ABOVE THE ZONE, NOT THE ZONE. This used to be
+          `if (preview) return <AdvisorPreviewNotice />` inside `body`, so an
+          admin previewing the Advisor role got one card instead of a page on
+          all eighteen of these routes — reported as unnecessary, and it was:
+          the boundary was stated eighteen times and the product never once.
+
+          What the card was defending is still defended. When Cohorts joined
+          this gate the argument was that an admin would otherwise see "no
+          batch assigned" and read a BOUNDARY as an ABSENCE. That argument is
+          about whether the boundary is STATED, not about whether it takes over
+          the page — and the strip states it, in words, directly above the zone
+          it applies to.
+
+          Access is unchanged: every `/api/advisors/me/*` read goes through
+          `requireMyAdvisor`, which throws for a caller with no advisor row. The
+          zone renders its own frame over no rows; no endpoint hands back a
+          practice that is not the caller's. */}
+      {preview && <AdvisorPreviewNotice />}
       {body}
       {!preview && prefix === '/practice' && slug === 'opportunities' && !isRoot && (
         <Card className="mt-4 p-4">

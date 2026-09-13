@@ -247,3 +247,34 @@ test('five icons went with the card grid, and the docblock says which', () => {
   assert.ok(pageRaw.includes('FIVE ICONS WENT WITH THE CARD GRID'),
     'the removal is no longer recorded, so the next reader re-adds them');
 });
+
+test('the /offers board reads the catalog with the payload’s own field names', () => {
+  // THE BUCKET BOARD AT `/offers` SHARES THIS ZONE'S PAYLOAD AND HAD ITS OWN
+  // NAMES FOR IT. `rows: (d) => top(d?.items).map((o) => [o.name, title(o.category),
+  // usd(o.price)])` — `name` and `price` are not keys `serialize()` emits, so
+  // the Offering and Price columns rendered blank on every row while Category,
+  // the one real name of the three, filled. Same shape as the `.offerings` /
+  // `.items` envelope bug this file's header opens with, and as the five blank
+  // export columns on Negotiations: a plausible key resolving to undefined and
+  // nothing anywhere to say so.
+  const board = read('frontend/src/workspaces/boards/partnerOffers.js');
+  const section = board.slice(board.indexOf("slug: 'catalog'"), board.indexOf("slug: 'perk-deals'"));
+  const rowFields = [...section.matchAll(/\bo\.([a-z_]+)/g)].map((m) => m[1]);
+  assert.ok(rowFields.length >= 3, 'the catalog section no longer maps over the offering rows');
+
+  // Every one of them has to be a key the worker actually sends.
+  const serialize = worker.slice(worker.indexOf('function serialize('), worker.indexOf('services.get('));
+  const emitted = new Set([...serialize.matchAll(/^\s{4}([a-z_]+):/gm)].map((m) => m[1]));
+  // `sold` is added by the list query beside the serialized row, not inside it.
+  emitted.add('sold');
+  for (const f of rowFields) {
+    assert.ok(emitted.has(f),
+      `the board reads \`o.${f}\`, which GET /services/offerings does not send — that column renders blank`);
+  }
+
+  // And cents through the cents formatter: the artboard's instMeta is "Prices
+  // stored as integers, formatted once", so `usd` over `price_cents` would
+  // print $480,000 where the zone page prints $4,800.
+  assert.match(section, /usdCents\(o\.price_cents\)/,
+    'the board must format the integer price with the cents formatter');
+});

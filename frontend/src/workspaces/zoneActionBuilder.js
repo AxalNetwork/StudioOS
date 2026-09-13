@@ -113,7 +113,25 @@ export function makeZoneActions(TABLE) {
       if (item.kind === 'export') {
         const rows = view?.rows || [];
         if (!rows.length) {
-          return { label: item.label, testid, disabled: true, title: 'nothing loaded to export yet' };
+          // THE STATE GOES IN THE LABEL, because a grey button whose only
+          // explanation is a `title` is indistinguishable from a missing
+          // feature — and was reported as one on eight zones across four
+          // buckets in a single afternoon. Every one of those exports was
+          // built, wired and correct; the account simply had no rows.
+          //
+          // `· nothing yet` rather than a sentence beside the control: this
+          // file's own history is that a `note` field drawing `{label} — {note}`
+          // turned a five-op header into five paragraphs, and `ZoneActions`
+          // keeps that lesson in its docblock. The suffix is the convention the
+          // live branch below already uses, so the control reads as one thing
+          // in two states rather than two different controls — and a hover
+          // still explains which rows it means.
+          return {
+            label: `${item.label} · nothing yet`,
+            testid,
+            disabled: true,
+            title: 'This export writes the rows this view is showing, and it has none yet.',
+          };
         }
         return {
           label: `${item.label} · this view`,

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import {
-  ZoneBody, NothingYet, StatedLimit, ZoneHeading, UnlinkedZone,
+  ZoneBody, NothingYet, StatedLimit, ZoneHeading, NoPartnerProfile,
   isNoPartnerProfile, moneyDollars,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
@@ -102,23 +102,39 @@ export default function PartnerDeliveryBoardZone() {
   // With nothing loaded the export renders disabled and says so itself.
   const rowActions = partnerZoneActions('delivery/board', { view: { header: ['Client', 'Mode', 'Scope', 'Granted', 'Progress', 'Health', 'Value'], rows: visible, cells: (r) => [r.client, r.mode, r.scope, r.grant, r.mode === 'project' ? `${r.milestones_done}/${r.milestone_count}` : r.hours_this_period, r.health, r.price] } });
 
-  if (isNoPartnerProfile(state.error)) {
-    return <UnlinkedZone title="Board" actions={rowActions} />;
-  }
+  // NOT AN EARLY RETURN ANY MORE. This was
+  //   `if (isNoPartnerProfile(state.error)) return <UnlinkedZone … />;`
+  // which drew a card INSTEAD of the zone — on twelve zones, so an admin
+  // reading this workspace saw twelve copies of one card and never a page.
+  // `ZoneBody` takes the line as a `notice` above its states, and the zone
+  // renders underneath in its own empty state, which is also the state that
+  // says what this zone holds. The gate itself is untouched: the read still
+  // 400s, so `isEmpty` is forced rather than inferred from rows that never
+  // arrived, and `error` is cleared so the shared "This did not load" card —
+  // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
+  const unlinked = isNoPartnerProfile(state.error);
 
   return (
     <>
+      {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
+          An action states what the zone DOES and an export over nothing
+          loaded renders disabled and says so; a filter chip is a claim about
+          ROWS, and a selectable `Published` over a store this account cannot
+          read is the "an empty set reads as an answer" failure
+          `zoneFilterBuilder.js` exists to prevent, reached from a new
+          direction. `profile_zone_actions.test.mjs` asserts both halves. */}
       <ZoneToolbar
         className="mb-3"
         role="partner"
-        filters={partnerZoneFilters('delivery/board', { value: view, onChange: setView })}
+        filters={unlinked ? [] : partnerZoneFilters('delivery/board', { value: view, onChange: setView })}
         actions={rowActions}
       />
       <ZoneBody
         loading={state.loading}
-        error={state.error}
+        error={unlinked ? null : state.error}
         onRetry={load}
-        isEmpty={items.length === 0}
+        notice={unlinked ? <NoPartnerProfile /> : null}
+        isEmpty={unlinked || (items.length === 0)}
         empty={(
           <NothingYet
             title="No engagement is on the board yet"

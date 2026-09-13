@@ -906,15 +906,28 @@ for (const [name, profile] of Object.entries(PROFILES)) {
      * account cannot read is the "an empty set reads as an answer" failure
      * `zoneFilterBuilder.js` exists to prevent, reached from a new direction.
      */
+    // THE SECOND HALF OF THE SAME ARGUMENT, and the reason `UnlinkedZone` is
+    // gone. Keeping the header row over the gate card was right and was one
+    // step out of two: the card still stood INSTEAD of the zone, on twelve of
+    // them, so the reader this test is about — the admin checking whether a
+    // design was built — got twelve copies of one card and never a page. Three
+    // of those zones were then reported as not matching their artboards, which
+    // was correctly observed and wrongly diagnosed.
+    //
+    // `ZoneBody` takes the line as a `notice` above its states now, and each
+    // zone forces `isEmpty` rather than inferring it from rows that never
+    // arrived, so the zone renders in its own empty state — which is also the
+    // state that explains what the zone HOLDS. `error` is cleared in the same
+    // breath, because the shared "This did not load" card is the exact
+    // confusion `isNoPartnerProfile` exists to prevent.
+    //
+    // Nothing about access changed: `requirePartnerProfile` is untouched and
+    // every read still 400s for an unattached account.
     const kit = codeOnly(read('frontend/src/pages/partner/kit.jsx'));
-    if (!kit.includes('export function UnlinkedZone')) {
-      assert.fail('partner/kit.jsx no longer exports UnlinkedZone');
-    }
-    const helper = kit.slice(kit.indexOf('export function UnlinkedZone'));
-    assert.match(helper, /<ZoneActions[^>]*items=\{actions\}/,
-      'UnlinkedZone stopped drawing the zone\'s actions above the gap card');
-    assert.doesNotMatch(helper, /ZoneToolbar|filters=/,
-      'UnlinkedZone draws a filter over rows this account cannot read');
+    assert.doesNotMatch(kit, /export function UnlinkedZone/,
+      'the card that stood instead of the zone is back');
+    assert.match(kit, /export function NoPartnerProfile/,
+      'the line that states the boundary is gone, so the gate is silent');
 
     let checked = 0;
     for (const f of pageFiles(profile)) {
@@ -923,10 +936,20 @@ for (const [name, profile] of Object.entries(PROFILES)) {
       // that take this branch.
       if (!src.includes('isNoPartnerProfile(state.error)')) continue;
       checked += 1;
-      assert.match(src, /<UnlinkedZone[\s\S]{0,120}?actions=\{/,
+      assert.match(src, /const unlinked = isNoPartnerProfile\(state\.error\);/,
+        `${f} no longer derives the no-firm state as a flag`);
+      assert.match(src, /notice=\{unlinked \? <NoPartnerProfile \/> : null\}/,
+        `${f} takes the no-firm branch without saying why the zone is empty`);
+      assert.match(src, /isEmpty=\{unlinked \|\|/,
+        `${f} would infer emptiness from rows that never arrived`);
+      assert.match(src, /error=\{unlinked \? null : state\.error\}/,
+        `${f} lets the gate render as "This did not load", which is a fault it is not`);
+      // ACTIONS YES, FILTERS NO — the half of this test that predates the
+      // change and is unchanged by it. The row must survive; a chip must not.
+      assert.match(src, /actions=\{rowActions\}/,
         `${f} takes the no-firm branch without handing over its header row`);
-      assert.doesNotMatch(src, /<NoPartnerProfile\s*\/>/,
-        `${f} renders the gap card directly again, which drops the row above it`);
+      assert.match(src, /filters=\{unlinked \? \[\] :/,
+        `${f} draws a filter chip over rows this account cannot read`);
     }
     // A floor rather than an exact count: the per-file assertion above is the
     // real one and runs on a tenth zone the day it appears. This only stops a
@@ -1209,10 +1232,23 @@ test('the label says the export is of this view, because it is', () => {
   assert.match(read('frontend/src/lib/csvExport.js'), /\$\{list\.length\}-rows/,
     'the filename no longer carries the row count');
   // An export over rows that have not LOADED is the one control that stays and
-  // goes quiet: the store and the writer both exist, so it keeps the canvas's
-  // label and renders disabled rather than vanishing like an unbuilt op.
-  assert.match(builder, /disabled: true, title: 'nothing loaded to export yet'/,
-    'an export with no rows is offered as a live button');
+  // goes quiet: the store and the writer both exist, so it renders disabled
+  // rather than vanishing like an unbuilt op.
+  //
+  // BUT IT NO LONGER GOES SILENT. It kept the plain canvas label and explained
+  // itself only through a `title`, so on an account with no rows — the steady
+  // state for a new firm, not a transient one — a working export was a grey
+  // button with no reason on screen. Eight of them were reported as missing
+  // features across four buckets in one afternoon. The state now rides the
+  // label, in the same `·` suffix the live branch uses, so the control reads as
+  // one thing in two states instead of two different controls.
+  assert.match(builder, /label: `\$\{item\.label\} · nothing yet`/,
+    'a disabled export no longer says on screen why it is disabled — it is back '
+    + 'to a grey button explained only by a hover title, which is how eight '
+    + 'working exports were reported as missing');
+  assert.match(builder, /disabled: true/, 'an export with no rows is no longer disabled');
+  assert.doesNotMatch(builder, /label: item\.label, testid, disabled: true/,
+    'the disabled export is back to the bare canvas label with no state on it');
 });
 
 /*

@@ -32,10 +32,6 @@
  * Everything else is a straight re-export, so a zone has one import line and
  * the shared four-state handling stays shared.
  */
-// Imported as VALUES, not just re-exported, because `UnlinkedZone` at the foot
-// of this file composes them. A re-export does not bring a name into scope.
-import ZoneActions from '../../workspaces/ZoneActions';
-import { ZoneHeading } from '../advisor/expertise/kit';
 
 export {
   // The four states, in one place, with error beating empty. See its own
@@ -143,7 +139,7 @@ export function SeamRead({ children }) {
 }
 
 /**
- * The boundary a partner account with no partner row hits.
+ * The boundary a partner account with no partner row hits, said ABOVE the zone.
  *
  * NOT AN ERROR AND NOT AN EMPTY STORE. `requirePartnerProfile` throws when a
  * signed-in partner has no `users.partner_id` and no `partners` row matching
@@ -152,37 +148,49 @@ export function SeamRead({ children }) {
  * account simply is not linked to a firm, and in production that is currently
  * the majority of partner accounts. A reader deserves to be told which of the
  * two they are looking at.
+ *
+ * WHY IT IS A LINE AND NOT A CARD ANY MORE. It was a block that stood INSTEAD
+ * of the zone, on twelve zones across Offers, Pipeline and Delivery. Three of
+ * them were then reported as not matching their artboards — correctly observed
+ * and wrongly diagnosed: every one of those artboard bodies is built, and a
+ * card was drawn over it. `ensureRoleProfile` backfills `users.partner_id` for
+ * `role = 'partner'` alone, so an admin reading this workspace — including
+ * anyone checking whether a design shipped — hits this branch on every zone and
+ * never once reaches a page.
+ *
+ * The zone renders underneath now, in its own empty state, which is also the
+ * state that explains what the zone HOLDS. So the reader gets the boundary and
+ * the orientation instead of the boundary twelve times. Same change, same
+ * reasoning and the same week as `AdvisorPreviewNotice` on the other half of
+ * the product.
+ *
+ * ACCESS IS UNTOUCHED. `requirePartnerProfile` is unchanged and every read
+ * still 400s for an unattached account; this decides only what is drawn when it
+ * does.
  */
 export function NoPartnerProfile() {
   return (
-    <div className="rounded-xl border border-dashed border-axal-hairline p-5">
-      <h3 className="text-sm font-extrabold tracking-tight">
-        This account is not linked to a firm yet
-      </h3>
-      <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-muted">
-        Everything in the partner workspace hangs off a firm record, and this
-        sign-in is not attached to one. That is an account link rather than
-        anything you have or have not done here — nothing is missing from your
-        data, because there is no firm for it to be missing from yet.
-      </p>
-      <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-muted">
-        An admin can attach it, under Partners → Firm links. Until then every
-        zone in this workspace will say the same thing.
-      </p>
-      {/* THE SENTENCE FOR THE OTHER READER OF THIS CARD, and for a long time
-          the more common one. An admin previewing the Partner role resolves to
-          no firm and never will: `ensureRoleProfile` backfills
-          `users.partner_id` for `role = 'partner'` alone, so every zone shows
-          this card. Telling them "an admin can attach it" is useless — they
-          ARE the admin, and attaching their own sign-in to somebody's firm is
-          the one act with no subject and no audit trail. Impersonation is the
-          way in, which is the same answer `AdvisorPreviewNotice` gives on the
-          other half of the product. */}
-      <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-faint">
-        Reading this as an admin? Previewing the Partner role attaches you to
-        nobody. Impersonate one of a firm’s accounts to open its workspace —
-        that names whose book is being read and records it.
-      </p>
+    <div
+      className="mb-3.5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-[8px] border border-dashed border-axal-hairline bg-axal-ground px-3 py-2 text-[11.5px] leading-relaxed text-axal-muted"
+      data-testid="no-partner-profile"
+    >
+      <span className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">
+        Not linked to a firm
+      </span>
+      <span>
+        Everything in this workspace hangs off a firm record and this sign-in is not attached to
+        one, so the zone below is showing you nobody’s. An admin can attach it under Partners →
+        Firm links.
+      </span>
+      {/* THE SENTENCE FOR THE OTHER READER, and for a long time the more common
+          one. An admin previewing the Partner role resolves to no firm and never
+          will, so "an admin can attach it" is useless to them — they ARE the
+          admin, and attaching their own sign-in to somebody's firm is the one
+          act with no subject and no audit trail. Impersonation is the way in. */}
+      <span className="text-axal-faint">
+        Reading this as an admin? Impersonate one of a firm’s accounts — that names whose book is
+        being read, and records it.
+      </span>
     </div>
   );
 }
@@ -199,39 +207,3 @@ export function isNoPartnerProfile(error) {
   return /no partner profile/i.test(String(error || ''));
 }
 
-/**
- * The whole zone when the account is not linked to a firm — heading, header
- * row, gate card.
- *
- * WHY THE ROW SURVIVES THE GATE, AND WHY THIS IS A FIX RATHER THAN A FLOURISH.
- * All nine partner zones used to `return` the heading and the card and nothing
- * else, which took the header row out of the one state where the MOST people
- * see it. `requirePartnerProfile` resolves an admin only when `users.partner_id`
- * is set, and `ensureRoleProfile` backfills that column only for
- * `role = 'partner'` — so every admin reading this workspace, including anyone
- * checking whether a design was built, hits this branch on every zone. The
- * canvas's actions were shipped and then rendered nowhere the reviewer looked.
- *
- * `ZoneBody` has argued the general form of this since it was written: "a
- * zone's header row is as true while the store is loading, or failed, or empty,
- * as it is when rows are on screen". A store that could not be read because the
- * account is not attached to a firm is the same case, and it was the one state
- * that had been carved out of the rule.
- *
- * ACTIONS, NOT FILTERS, AND THE ASYMMETRY IS THE POINT. An action states what
- * the zone does; an export with nothing loaded already says so itself and
- * renders disabled (`zoneActionBuilder.js`). A filter chip is a claim about
- * ROWS, and there are none — drawing a selectable `Published` over a store this
- * account cannot read would be the "empty set reads as an answer" failure that
- * `zoneFilterBuilder.js` exists to prevent, reached from a new direction. So
- * callers pass `actions` here and never `filters`.
- */
-export function UnlinkedZone({ title, actions = [] }) {
-  return (
-    <>
-      <ZoneHeading title={title} />
-      {actions.length > 0 && <ZoneActions className="mb-3" items={actions} />}
-      <NoPartnerProfile />
-    </>
-  );
-}

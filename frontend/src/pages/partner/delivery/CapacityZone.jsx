@@ -7,7 +7,7 @@ import {
   // own composition now, and `CapTile` can draw an absence as the shared
   // `NotRecorded` chip rather than as an em dash a reader reads as zero.
   Section, Field, SaveNote,
-  UnlinkedZone, isNoPartnerProfile,
+  NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
@@ -178,23 +178,39 @@ export default function PartnerCapacityZone() {
 
   const rowActions = partnerZoneActions('delivery/capacity', { view: { header: ['Person', 'Seats held', 'Project h', 'Seat h', 'Internal h', 'Total'], rows: visible, cells: (p) => [p.name, p.live_seats, p.project_hours, p.seat_hours, p.internal_hours, p.total_hours] } });
 
-  if (isNoPartnerProfile(state.error)) {
-    return <UnlinkedZone title="Capacity" actions={rowActions} />;
-  }
+  // NOT AN EARLY RETURN ANY MORE. This was
+  //   `if (isNoPartnerProfile(state.error)) return <UnlinkedZone … />;`
+  // which drew a card INSTEAD of the zone — on twelve zones, so an admin
+  // reading this workspace saw twelve copies of one card and never a page.
+  // `ZoneBody` takes the line as a `notice` above its states, and the zone
+  // renders underneath in its own empty state, which is also the state that
+  // says what this zone holds. The gate itself is untouched: the read still
+  // 400s, so `isEmpty` is forced rather than inferred from rows that never
+  // arrived, and `error` is cleared so the shared "This did not load" card —
+  // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
+  const unlinked = isNoPartnerProfile(state.error);
 
   return (
     <>
+      {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
+          An action states what the zone DOES and an export over nothing
+          loaded renders disabled and says so; a filter chip is a claim about
+          ROWS, and a selectable `Published` over a store this account cannot
+          read is the "an empty set reads as an answer" failure
+          `zoneFilterBuilder.js` exists to prevent, reached from a new
+          direction. `profile_zone_actions.test.mjs` asserts both halves. */}
       <ZoneToolbar
         className="mb-3"
         role="partner"
-        filters={partnerZoneFilters('delivery/capacity', { value: view, onChange: setView })}
+        filters={unlinked ? [] : partnerZoneFilters('delivery/capacity', { value: view, onChange: setView })}
         actions={rowActions}
       />
       <ZoneBody
         loading={state.loading}
-        error={state.error}
+        error={unlinked ? null : state.error}
         onRetry={load}
-        isEmpty={people.length === 0 && seats.length === 0}
+        notice={unlinked ? <NoPartnerProfile /> : null}
+        isEmpty={unlinked || (people.length === 0 && seats.length === 0)}
         empty={(
           <NothingYet
             title="No seat granted and no hours logged"

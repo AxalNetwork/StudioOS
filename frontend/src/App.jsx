@@ -1657,8 +1657,16 @@ function AppInner() {
   // and landing on Studio with no explanation reads as a broken link, and was
   // reported as one. The notice says which boundary was hit and how to cross it.
   const advisorRolePreview = user?.role === 'admin' && !isImpersonating && effectiveRole === 'advisor';
+  // The notice sits ABOVE the workspace rather than instead of it — the same
+  // change `AdvisorBucketRoutes` makes for its eighteen zone routes, and for
+  // the same reason: a card that replaces the body states the boundary once per
+  // route and shows the product on none of them. `AdvisorAdvisoryWorkspace`
+  // scopes on the signed-in advisor, so a preview reader sees its frame over no
+  // rows, with the line above saying why.
   const advisorPrivateWorkspace = (component) => (
-    advisorRolePreview ? <AdvisorPreviewNotice /> : component
+    advisorRolePreview
+      ? <><AdvisorPreviewNotice />{component}</>
+      : component
   );
   // The HQ-only surfaces, same shape as the advisor notice: a stated boundary
   // inside the shell, not a bounce. Keyed on the browsed identity's elevation
@@ -2168,7 +2176,19 @@ function AppInner() {
       {/* One-time cart checkout + post-checkout confirmation (auth-protected). */}
       <Route path="/checkout" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutPage />)} />
       <Route path="/checkout/confirmation" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutConfirmationPage />)} />
-      <Route path="/deals" element={guard(['admin', 'partner', 'investor'], investorWorkspace('deals', <DealsPage />))} />
+      {/* THE BUCKET ROOT GOES TO THE BUCKET ROUTER, which is what its four zone
+          routes below already do. It used to go to `InvestorWorkspacePage`,
+          whose `ownsDealsRoute` branch renders `InvestorDealsWorkspace` — the
+          page ID1–ID4 emptied, one panel at a time, until its own comment read
+          "All four decision panels are gone". So `/deals` drew a heading, a
+          pill row and nothing. `InvestorDealsRoutes` answers the root with the
+          bucket board, the same overview every partner and advisor root has.
+
+          The non-investor arm is untouched: `investorWorkspace` returned the
+          bare component for any other effective role, and a partner reading
+          /deals still gets `DealsPage` exactly as before. */}
+      <Route path="/deals" element={guard(['admin', 'partner', 'investor'],
+        effectiveRole === 'investor' ? <InvestorDealsRoutes /> : <DealsPage />)} />
 
       {/* ── Deals · the four stages, as four routes ──────────────────────────
           The zone slugs are InvestorDealsWorkspace's own anchor ids with the

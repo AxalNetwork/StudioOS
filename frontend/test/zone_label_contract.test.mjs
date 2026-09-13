@@ -240,15 +240,26 @@ test('every Offers zone still offers its export, and only its export', () => {
   // — so each header keeps exactly one control, with the canvas's own label.
   for (const zone of Object.keys(OFFERS_OPS)) {
     const built = partnerZoneActions(zone, { query: '', view: null });
-    assert.deepEqual(built.map((i) => i.label), ['Export'],
-      `${zone} renders something other than its export`);
-    // With no rows loaded it is disabled rather than absent: the store and the
-    // writer both exist, so this is a transient state, not an unbuilt control.
+    // THE LABEL CARRIES THE STATE, and the plain `Export` it used to show is
+    // what made eight working exports get reported as missing features: with no
+    // rows the button greys out, and its only explanation was a hover `title`.
+    // An account with no rows is the steady state for a new firm, not a
+    // transient one, so "disabled with no visible reason" is what most partners
+    // actually saw.
+    assert.deepEqual(built.map((i) => i.label), ['Export · nothing yet'],
+      `${zone} renders something other than its export, or its export no longer `
+      + 'says on screen why it is disabled');
+    // Disabled rather than absent: the store and the writer both exist, so this
+    // is a state of a real control, not an unbuilt one.
     assert.equal(built[0].disabled, true, `${zone}'s export claims rows it has not loaded`);
 
     const loaded = partnerZoneActions(zone, {
       query: '', view: { scope: 's', header: ['A'], rows: [{ a: 1 }], cells: (r) => [r.a] },
     });
+    // The same control in its other state — one `·` suffix swapped for another,
+    // which is the whole point: two states of one thing, not two controls.
+    assert.deepEqual(loaded.map((i) => i.label), ['Export · this view'],
+      `${zone}'s export does not say which rows it covers once they arrive`);
     assert.equal(loaded[0].disabled, undefined, `${zone}'s export stays dead once rows arrive`);
     assert.ok(loaded[0].onClick, `${zone}'s export does not write a file`);
   }
