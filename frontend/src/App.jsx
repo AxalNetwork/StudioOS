@@ -1657,8 +1657,16 @@ function AppInner() {
   // and landing on Studio with no explanation reads as a broken link, and was
   // reported as one. The notice says which boundary was hit and how to cross it.
   const advisorRolePreview = user?.role === 'admin' && !isImpersonating && effectiveRole === 'advisor';
+  // The notice sits ABOVE the workspace rather than instead of it — the same
+  // change `AdvisorBucketRoutes` makes for its eighteen zone routes, and for
+  // the same reason: a card that replaces the body states the boundary once per
+  // route and shows the product on none of them. `AdvisorAdvisoryWorkspace`
+  // scopes on the signed-in advisor, so a preview reader sees its frame over no
+  // rows, with the line above saying why.
   const advisorPrivateWorkspace = (component) => (
-    advisorRolePreview ? <AdvisorPreviewNotice /> : component
+    advisorRolePreview
+      ? <><AdvisorPreviewNotice />{component}</>
+      : component
   );
   // The HQ-only surfaces, same shape as the advisor notice: a stated boundary
   // inside the shell, not a bounce. Keyed on the browsed identity's elevation
