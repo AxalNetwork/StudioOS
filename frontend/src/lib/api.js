@@ -1834,7 +1834,15 @@ export const api = {
     request('/admin/github', { method: 'PUT', body: JSON.stringify(body || {}) }),
   adminTestGithub: () => request('/admin/github/test', { method: 'POST' }),
   adminDeleteGithubConfig: () => request('/admin/github', { method: 'DELETE' }),
-  adminUpdateRole: (userId, role) => request(`/admin/users/${userId}/role?role=${role}`, { method: 'PATCH' }),
+  // `overrideReason`, when given, asks the server to assign a role that the
+  // binding-agreement gate would otherwise refuse. It is NOT a formality: the
+  // route requires a super admin and a reason of real length, and writes the
+  // reason into the role_changed audit line. Passing a constant here would put
+  // a meaningless sentence into that audit, so callers send what was typed.
+  adminUpdateRole: (userId, role, overrideReason) => request(`/admin/users/${userId}/role?role=${role}`, {
+    method: 'PATCH',
+    ...(overrideReason ? { body: JSON.stringify({ override_reason: overrideReason }) } : {}),
+  }),
   adminToggleActive: (userId) => request(`/admin/users/${userId}/toggle-active`, { method: 'PATCH' }),
   // Set per-user access level. `level` is 'limited' (browse-only, no signing
   // until KYC) or null (revoke). Full access is granted via kycAdminApprove.
