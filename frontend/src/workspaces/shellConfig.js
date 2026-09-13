@@ -407,11 +407,33 @@ export function bucketForPath(role, pathname) {
  */
 export const bucketTitle = (bucket) => bucket?.tagline || bucket?.label;
 
-/** The zone within a bucket that a pathname resolves to. Defaults to the first. */
+/**
+ * The zone within a bucket that a pathname resolves to.
+ *
+ * A BUCKET ROOT ANSWERS WITH THE FIRST ZONE; AN UNKNOWN SLUG ANSWERS NULL, AND
+ * THE DIFFERENCE IS THE WHOLE POINT. This used to end `|| bucket.zones[0]` for
+ * both cases, which is right for the root (`/research`, where there is no slug
+ * to match) and quietly wrong for a slug this role's shell does not list.
+ * `ResearchWorkspace` dispatches its BODY on the resolved slug, so an advisor
+ * at `/research/funds` — a zone only the founder shell has — rendered Ask's
+ * body under Ask's heading. Not an error, not an empty state: a different page
+ * wearing the URL of the one that was asked for, across nineteen role/route
+ * combinations.
+ *
+ * `route_role_zone_contract.test.mjs` stops the routes admitting those roles in
+ * the first place. This is the second half of that fix rather than a duplicate
+ * of it: a guard list is hand-maintained, and when the next one drifts the
+ * caller should get `null` and redirect, not silently serve a neighbour.
+ *
+ * Callers already treat null as "no zone" — five of the eight resolve the root
+ * themselves (`isRoot ? null : zoneForPath(...)`), so for them the old fallback
+ * was already unreachable.
+ */
 export function zoneForPath(bucket, pathname) {
   if (!bucket) return null;
   const rest = String(pathname || '').slice(bucket.prefix.length).replace(/^\//, '');
-  return bucket.zones.find((z) => z.slug === rest) || bucket.zones[0];
+  if (!rest) return bucket.zones[0];
+  return bucket.zones.find((z) => z.slug === rest) || null;
 }
 
 /** `/prefix/slug` for a zone. The one place a workspace URL is composed. */

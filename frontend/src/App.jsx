@@ -1897,15 +1897,15 @@ function AppInner() {
             : <Navigate to="/research/ask" replace />} />
       <Route path="/research/ask" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/markets" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/funds" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/funds" element={guard(labRoles(['admin', 'founder']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/library" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/diligence" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/benchmarking" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/client-prep" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/diligence" element={guard(labRoles(['admin', 'investor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/benchmarking" element={guard(labRoles(['admin', 'investor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/client-prep" element={guard(labRoles(['admin', 'advisor', 'partner']), <ResearchWorkspace role={researchRole} user={user} />)} />
       {/* Legacy Customer Discovery folds into the unified Discovery workspace. */}
       <Route path="/customer-discovery" element={<Navigate to="/build/discovery" replace />} />
-      <Route path="/build/roadmap" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <FounderBuildRoadmap />)} />
+      <Route path="/build/roadmap" element={guard(labRoles(['admin', 'founder']), <FounderBuildRoadmap />)} />
       <Route path="/build/cadence" element={guard(labRoles(['admin', 'founder']), <FounderBuildCadence />)} />
       <Route path="/build/kpi" element={guard(labRoles(['admin', 'founder']), <FounderBuildKpi />)} />
       <Route path="/build/metrics" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('build', <FounderWorkspaceTabs set="build" user={user}><MetricsPage /></FounderWorkspaceTabs>))} />
@@ -2177,7 +2177,7 @@ function AppInner() {
           workspace still renders all four sections and the route scrolls to
           one. Splitting it into four pages is a content decision, not a
           routing one. */}
-      <Route path="/deals/pipeline" element={guard(['admin', 'partner', 'investor'], <InvestorDealsRoutes />)} />
+      <Route path="/deals/pipeline" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/screening" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/commit" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/closing" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
@@ -2274,7 +2274,7 @@ function AppInner() {
       <Route path="/ic" element={guard(['admin', 'partner', 'investor'], <ICDecisionsPage />)} />
       <Route path="/ic/:uid" element={guard(['admin', 'partner', 'investor'], <ICDecisionPage />)} />
       <Route path="/lp-reports" element={guard(['admin', 'investor'], investorFundWorkspace(<FundOpsWorkspace />))} />
-      <Route path="/portfolio/updates" element={guard(['admin', 'partner', 'investor', 'founder'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
+      <Route path="/portfolio/updates" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/portfolio/positions" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       {/* Advisor sections shell — three tabbed workspaces (Network, Advisory,
           Research) scoped to the advisor (and admin) roles. Each tab deep-links
