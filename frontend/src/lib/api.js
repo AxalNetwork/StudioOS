@@ -1439,6 +1439,19 @@ export const api = {
   // ("get churn to zero") so it cannot double as "no target".
   listMetricTargets: (projectId) => request(`/progress/metrics/${projectId}/targets`),
   setMetricTarget: (projectId, data) => request(`/progress/metrics/${projectId}/targets`, { method: 'PUT', body: JSON.stringify(data) }),
+  // #176 FB5 — metric DEFINITIONS, which are not targets. The canvas's own note
+  // says why the op exists: "definitions live on this page precisely so 'net
+  // burn' means the same thing in month 14 as in month 1". They could not ride on
+  // `metric_targets` because its `target_value` is NOT NULL, so defining a metric
+  // would have forced a plan number for it. Migration 251. `definition: null`
+  // clears, for the same reason `target_value: null` does above.
+  listMetricDefinitions: (projectId) => request(`/progress/metrics/${projectId}/definitions`),
+  setMetricDefinition: (projectId, data) => request(`/progress/metrics/${projectId}/definitions`, { method: 'PUT', body: JSON.stringify(data) }),
+  // #176 FB5 — the CSV importer. `{ csv, dry_run }` in; a verdict PER LINE out,
+  // because an importer that reports OK while eleven of fourteen months went
+  // missing is worse than one that fails. `dry_run: true` runs the same parse and
+  // writes nothing, so a founder sees what a file would do first.
+  importMetricsCsv: (projectId, data) => request(`/progress/metrics/${projectId}/import-csv`, { method: 'POST', body: JSON.stringify(data) }),
   // Build queue #121 — derived KPIs (growth, LTV:CAC, payback, retention)
   // computed server-side from the snapshot series, with `unavailable[]`
   // explaining any metric that could not be computed.

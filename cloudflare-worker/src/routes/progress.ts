@@ -58,6 +58,9 @@ import {
 } from '../services/painGroups';
 import { upsertPainAlias } from './_founder_validate_writes';
 import { syncStripeForUser } from '../integrations/providers/stripe';
+// `/build/kpi`'s CSV importer (#176 FB5). The parser is a service so it can be
+// exercised without a database — every rejection reason is a unit test.
+import { planImport } from '../services/metricsCsv';
 import { summarise as summariseSaasMetrics, sparkline as saasSparkline, type Snapshot as SaasSnapshot } from '../services/saasMetrics';
 
 const progress = new Hono<{ Bindings: Env }>();
@@ -1991,9 +1994,17 @@ interface MetricTargetRow {
  * ever disagree, `metric_targets_store.test.ts` builds its fixture from the
  * MIGRATION and fails.
  */
-let _metricTargetsReady = false;
+// KEYED ON `env.DB`, NOT A MODULE BOOLEAN. This was `let _metricTargetsReady =
+// false`, which is the bug #203 found and fixed in `ensureProjectMetricsSchema`
+// twenty lines up: a module-level flag is shared by every request an isolate
+// serves, so the FIRST database to be bootstrapped marks the job done for all of
+// them. Production has one D1 and it never showed there; a test, a preview Worker
+// and production sharing one build is where it bites. Fixed here rather than left
+// beside its own fix — the pattern is `services/painGroups.ts`'s.
+const METRIC_TARGETS_READY = new WeakMap<object, boolean>();
 async function ensureMetricTargetsSchema(env: Env): Promise<void> {
-  if (_metricTargetsReady) return;
+  const readyKey = env.DB as unknown as object;
+  if (METRIC_TARGETS_READY.get(readyKey)) return;
   try {
     await env.DB.exec(
       'CREATE TABLE IF NOT EXISTS metric_targets ('
@@ -2011,7 +2022,7 @@ async function ensureMetricTargetsSchema(env: Env): Promise<void> {
     await env.DB.exec(
       'CREATE INDEX IF NOT EXISTS idx_metric_targets_project ON metric_targets(project_id)',
     );
-    _metricTargetsReady = true;
+    METRIC_TARGETS_READY.set(readyKey, true);
   } catch (e) {
     console.error('[progress] ensureMetricTargetsSchema:', (e as Error).message);
   }
@@ -2115,6 +2126,264 @@ progress.put('/metrics/:projectId/targets', async (c) => {
        FROM metric_targets WHERE project_id = ? AND metric_key = ?`,
   ).bind(projectId, metricKey).first<MetricTargetRow>();
   return c.json({ ok: true, target: fresh ? serializeTarget(fresh) : null });
+});
+
+/**
+ * `/build/kpi`'s `Definitions` and `Import CSV` — migration 251 and
+ * `services/metricsCsv.ts`. Task #176, FB5.
+ *
+ * Both ops were registered `unbuilt`, which renders NOTHING, so two of the
+ * artboard's four ops were invisible on the page.
+ *
+ * THEY LIVE HERE AND NOT IN A NEW ROUTER because `/metrics/*` is this file's
+ * surface: `ensureProjectMetricsSchema`, the snapshot CRUD, the targets pair and
+ * the Stripe import are all above. A sibling router would split one zone's API
+ * across two files, and the next reader would find half of it.
+ */
+
+/** A definition may only name a metric the series actually has a column for. */
+type MetricDefinitionRow = {
+  id: number;
+  metric_key: string;
+  definition: string;
+  source_kind: string;
+  updated_at: string | null;
+  created_at: string | null;
+};
+
+/**
+ * 'manual' | 'stripe' | 'derived' — where the founder INTENDS this metric to come
+ * from, which is not the same question as `project_metrics.source` (where one row
+ * did come from). See migration 251: the two disagreeing is a finding.
+ */
+const DEFINITION_SOURCES = new Set(['manual', 'stripe', 'derived']);
+
+// Keyed on `env.DB`, for the reason the comment above `METRIC_TARGETS_READY` gives.
+const METRIC_DEFINITIONS_READY = new WeakMap<object, boolean>();
+async function ensureMetricDefinitionsSchema(env: Env): Promise<void> {
+  const readyKey = env.DB as unknown as object;
+  if (METRIC_DEFINITIONS_READY.get(readyKey)) return;
+  try {
+    await env.DB.exec(
+      'CREATE TABLE IF NOT EXISTS metric_definitions ('
+      + 'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+      + 'project_id INTEGER NOT NULL, '
+      + 'metric_key TEXT NOT NULL, '
+      + 'definition TEXT NOT NULL, '
+      + "source_kind TEXT NOT NULL DEFAULT 'manual', "
+      + 'created_by INTEGER, '
+      + "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
+      + 'updated_at TEXT, '
+      + 'UNIQUE (project_id, metric_key))',
+    );
+    await env.DB.exec(
+      'CREATE INDEX IF NOT EXISTS idx_metric_definitions_project ON metric_definitions(project_id)',
+    );
+    METRIC_DEFINITIONS_READY.set(readyKey, true);
+  } catch (e) {
+    console.error('[progress] ensureMetricDefinitionsSchema:', (e as Error).message);
+  }
+}
+
+/**
+ * GET /progress/metrics/:projectId/definitions — what each metric means here.
+ *
+ * `keys` travels with the rows, exactly as the targets route does it, so the
+ * editor's picker is the route's own list rather than a second copy in the SPA
+ * that can drift from what a write accepts.
+ */
+progress.get('/metrics/:projectId/definitions', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+  const project = await loadProject(c, projectId, user);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanView(project, user);
+  await ensureMetricDefinitionsSchema(c.env);
+  let items: MetricDefinitionRow[] = [];
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT id, metric_key, definition, source_kind, created_at, updated_at
+         FROM metric_definitions WHERE project_id = ? ORDER BY metric_key`,
+    ).bind(projectId).all<MetricDefinitionRow>();
+    items = rows.results || [];
+  } catch (e) {
+    console.error('[progress] definitions GET:', (e as Error).message);
+  }
+  return c.json({
+    items,
+    keys: Object.keys(METRIC_TARGET_KEYS),
+    sources: [...DEFINITION_SOURCES],
+  });
+});
+
+/**
+ * PUT /progress/metrics/:projectId/definitions — write one, or clear it.
+ *
+ * UPSERT, because `UNIQUE (project_id, metric_key)` says there is exactly one
+ * definition per metric: a founder rewording what "net burn" excludes is editing
+ * the same row, and a create/update split would make them find its id first.
+ *
+ * `definition: null` DELETES. An empty string cannot mean "no definition" —
+ * `trim()` would make a founder who typed only spaces indistinguishable from one
+ * clearing the row — so the null is explicit and a blank string is a 400.
+ */
+progress.put('/metrics/:projectId/definitions', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+  const project = await loadProject(c, projectId, user);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanEdit(project, user);
+  await ensureMetricDefinitionsSchema(c.env);
+
+  const body: Record<string, unknown> = await c.req.json().catch(() => ({}));
+  const metricKey = String(body.metric_key ?? '').trim();
+  if (!Object.prototype.hasOwnProperty.call(METRIC_TARGET_KEYS, metricKey)) {
+    return c.json({
+      detail: `Unknown metric_key: ${metricKey || '(missing)'}`,
+      keys: Object.keys(METRIC_TARGET_KEYS),
+    }, 400);
+  }
+
+  if (body.definition === null) {
+    await c.env.DB.prepare('DELETE FROM metric_definitions WHERE project_id = ? AND metric_key = ?')
+      .bind(projectId, metricKey).run();
+    return c.json({ ok: true, cleared: metricKey });
+  }
+
+  const text = String(body.definition ?? '').trim();
+  if (!text) return c.json({ detail: 'definition must be text, or null to clear it' }, 400);
+  const asked = String(body.source_kind ?? '').trim();
+  const sourceKind = DEFINITION_SOURCES.has(asked) ? asked : 'manual';
+
+  await c.env.DB.prepare(
+    `INSERT INTO metric_definitions (project_id, metric_key, definition, source_kind, created_by)
+          VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(project_id, metric_key) DO UPDATE
+        SET definition  = excluded.definition,
+            source_kind = excluded.source_kind,
+            updated_at  = datetime('now')`,
+  ).bind(projectId, metricKey, text.slice(0, 4000), sourceKind, user.id).run();
+
+  const fresh = await c.env.DB.prepare(
+    `SELECT id, metric_key, definition, source_kind, created_at, updated_at
+       FROM metric_definitions WHERE project_id = ? AND metric_key = ?`,
+  ).bind(projectId, metricKey).first<MetricDefinitionRow>();
+  return c.json({ ok: true, definition: fresh ?? null });
+});
+
+/**
+ * POST /progress/metrics/:projectId/import-csv — fourteen months in one paste.
+ *
+ * `{ csv: '…', dry_run?: true }` in; `{ written, rejected, ignored, rows }` out.
+ *
+ * THE VERDICT IS PER LINE, AND THAT IS THE POINT. An importer that reports "OK"
+ * while eleven of fourteen months went missing is worse than one that fails: the
+ * founder finds out six weeks later when a board pack is short. Every rejected
+ * line comes back with its file line number and the reason, and the page prints
+ * them.
+ *
+ * `dry_run` WRITES NOTHING and returns the same verdict, so a founder can see what
+ * a file would do before it does it. It is the same code path — a second
+ * "validate" endpoint would be a second answer to the same question.
+ *
+ * `source = 'csv'` RATHER THAN 'manual'. `project_metrics` is unique on
+ * `(project_id, snapshot_date, source)`, so an import cannot overwrite a figure
+ * the founder typed by hand, and re-importing a corrected file updates the
+ * import's own rows instead of adding a second set. A NULL source would not
+ * collide at all (SQLite treats NULLs as distinct), which is exactly the
+ * duplicate this avoids.
+ */
+progress.post('/metrics/:projectId/import-csv', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+  const project = await loadProject(c, projectId, user);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanEdit(project, user);
+  await ensureProjectMetricsSchema(c.env);
+
+  const body: Record<string, unknown> = await c.req.json().catch(() => ({}));
+  const csv = String(body.csv ?? '');
+  // The cap is on BYTES as well as rows: `planImport` walks the string once, and
+  // a megabyte of paste is a request that should be refused rather than parsed.
+  if (csv.length > 512_000) {
+    return c.json({ detail: 'The file is too large for one import — split it.' }, 413);
+  }
+  const plan = planImport(csv);
+  const dryRun = body.dry_run === true;
+
+  if (dryRun || !plan.rows.length) {
+    return c.json({
+      written: 0,
+      dry_run: dryRun,
+      would_write: plan.rows.length,
+      rejected: plan.rejected,
+      ignored: plan.ignored,
+      columns: plan.columns,
+      rows: plan.rows,
+    });
+  }
+
+  // ONE STATEMENT PER ROW, NOT ONE BUILT FROM THE COLUMNS PRESENT. Every metric
+  // column is named, with `NULL` for the ones this file did not carry — except
+  // that `DO UPDATE` sets only what arrived, via `COALESCE`, so a second file
+  // carrying just `headcount` does not blank the MRR the first one imported.
+  const statements = plan.rows.map((row) => c.env.DB.prepare(
+    `INSERT INTO project_metrics
+       (project_id, snapshot_date, mrr, arr, cac, ltv, monthly_churn_pct,
+        active_users, new_users, net_burn, cash_balance, headcount,
+        nrr_pct, paying_accounts, notes, source, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'csv', ?)
+     ON CONFLICT(project_id, snapshot_date, source) DO UPDATE SET
+       mrr = COALESCE(excluded.mrr, mrr),
+       arr = COALESCE(excluded.arr, arr),
+       cac = COALESCE(excluded.cac, cac),
+       ltv = COALESCE(excluded.ltv, ltv),
+       monthly_churn_pct = COALESCE(excluded.monthly_churn_pct, monthly_churn_pct),
+       active_users = COALESCE(excluded.active_users, active_users),
+       new_users = COALESCE(excluded.new_users, new_users),
+       net_burn = COALESCE(excluded.net_burn, net_burn),
+       cash_balance = COALESCE(excluded.cash_balance, cash_balance),
+       headcount = COALESCE(excluded.headcount, headcount),
+       nrr_pct = COALESCE(excluded.nrr_pct, nrr_pct),
+       paying_accounts = COALESCE(excluded.paying_accounts, paying_accounts),
+       notes = COALESCE(excluded.notes, notes)`,
+  ).bind(
+    projectId, row.snapshot_date,
+    row.values.mrr ?? null, row.values.arr ?? null, row.values.cac ?? null,
+    row.values.ltv ?? null, row.values.monthly_churn_pct ?? null,
+    row.values.active_users ?? null, row.values.new_users ?? null,
+    row.values.net_burn ?? null, row.values.cash_balance ?? null,
+    row.values.headcount ?? null, row.values.nrr_pct ?? null,
+    row.values.paying_accounts ?? null, row.notes ?? null, user.id,
+  ));
+
+  try {
+    await c.env.DB.batch(statements);
+  } catch (e) {
+    const msg = (e as Error).message || '';
+    console.error('[progress] import-csv:', msg);
+    // NOTHING PARTIAL IS CLAIMED. `batch` is atomic on real D1, so a failure
+    // wrote nothing; reporting a count here would be a guess.
+    return c.json({
+      detail: /no such (table|column)/i.test(msg)
+        ? 'Metrics store not ready, please retry.'
+        : 'The import could not be written. Nothing was saved.',
+      written: 0,
+      rejected: plan.rejected,
+    }, /no such (table|column)/i.test(msg) ? 503 : 500);
+  }
+
+  return c.json({
+    written: plan.rows.length,
+    dry_run: false,
+    rejected: plan.rejected,
+    ignored: plan.ignored,
+    columns: plan.columns,
+    months: plan.rows.map((r) => r.snapshot_date),
+  });
 });
 
 // Task #3 (DF) — time-series aggregator. Returns

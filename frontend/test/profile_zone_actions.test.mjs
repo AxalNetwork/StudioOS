@@ -84,12 +84,17 @@ const PROFILES = {
     // rather than as a silent spread", and that is exactly how this landed —
     // three counts went red in one run and each was read before it was moved.
     //
-    // 8 → 10 with `build/cadence`'s `New ritual` and `Edit templates`. Both open
-    // a form `FounderBuildCadence` owns, which is the shape D67 named this kind
-    // for; and both were `unbuilt` until migration 250 stored rituals and
-    // templates, so the gap count below falls by three as these two and the
-    // export above go live — the whole point of pinning all four.
-    handlers: 10,
+    // 8 → 12 across two changes in one pass, and the arithmetic is the point:
+    //
+    //   · `build/cadence`'s `New ritual` and `Edit templates` (migration 250);
+    //   · `build/kpi`'s `Import CSV` (`services/metricsCsv.ts`) and `Definitions`
+    //     (migration 251).
+    //
+    // All four open a form the page owns, which is the shape D67 named this kind
+    // for. All four were `unbuilt`, so the gap count below falls by FIVE — those
+    // four plus cadence's `Export archive`, which became an export. Every count in
+    // this block moved in one run and each was read before it was changed.
+    handlers: 12,
     // NOTHING IS EXCLUDED ANY MORE. `research/funds` sat here as "a card in
     // `ResearchWorkspace`'s ZONE_COPY, not a body" — true when it was written
     // and untrue since `ZONE_COPY` became `{}` and `LIVE_ZONES` gained `funds`.

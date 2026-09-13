@@ -5815,3 +5815,120 @@ were nowhere in the page and that guard failed — correctly. The worker exports
 own `CADENCE_VIEWS` with the same four keys and
 `frontend/test/cadence_vocabulary.test.mjs` compares the two, values and meanings
 both, because `frontend/` and `cloudflare-worker/` cannot import each other.
+
+---
+
+## D89 — `/build/kpi` gets definitions and an importer, and stops denying the targets it already had
+
+**Date:** 2026-09-13 · **Task:** #176 (FB5) · **Migration:** 251
+
+Two of `/build/kpi`'s four ops were `unbuilt`, which renders nothing — so the
+artboard's row shipped with half its controls invisible. And the page carried
+**three claims that were already false**, which is the more interesting half.
+
+### What the page was denying
+
+- `Against target · Unavailable`, noted "Targets are not stored in this source."
+  `metric_targets` has been stored since migration 173 and given a reader and a
+  writer by #194. This page simply never read it.
+- `Definitions unavailable`, drawn as a disabled chip.
+- A closing note: "Targets, target variance, cash/burn fields, and metric
+  definitions are not returned by the current source." Wrong on all four —
+  variance is computed from the first two, and `net_burn` / `cash_balance` are
+  columns `project_metrics` has and `progress.ts`'s POST has always accepted.
+- The rail's `['Target comparison', 'No target source is connected.']`.
+
+Every one is deleted rather than softened. A refusal kept beside a working store
+is the failure #193 was filed for, and this is the second zone in one pass where
+the refusal outlived its fix.
+
+### The ledger was showing seven of twelve metrics
+
+`net_burn`, `cash_balance`, `headcount`, `nrr_pct` and `paying_accounts` were
+absent from the page's `FIELDS` — three of them rows the canvas's own table draws.
+A founder who had entered a burn figure could not see it, and "Missing cells"
+counted out of seven. All twelve are listed now, and their LABELS come from
+`lib/metricTargets`'s `METRIC_LABELS` rather than a second copy of the same twelve
+strings: two label tables that agree today is exactly when to merge them.
+
+### A definition is not a target, and `metric_targets` proves it
+
+`metric_targets.target_value` is `NOT NULL`. Hanging a `definition` column there
+would mean defining "net burn" required inventing a plan number for it — and then
+"4 of 6 against target" would count a metric nobody set a target for. So migration
+251 is its own table, `UNIQUE (project_id, metric_key)` on the same key shape so
+the two are joinable per metric. Same call as 249 and 250: ask what the row is
+FOR, not what it is near.
+
+`source_kind` there is **not** `project_metrics.source`. One records where the
+founder intends a metric to come from; the other where one row actually came from.
+The two disagreeing is a finding — a metric declared Stripe-synced whose rows all
+say `manual` means the integration is not running — so both are kept.
+
+"1 customised" is `edited_at`, a timestamp: a fact, not a stored derivation. And
+the three built-in starting points are **not** seeded rows — a GET that writes
+cannot be retried safely, and a seeded definition is indistinguishable from the
+founder's own, which would make the count a statement about the platform.
+
+### The importer's real feature is the rejection list
+
+`services/metricsCsv.ts` parses; the route writes. An importer that reports "OK"
+while eleven of fourteen months went missing is worse than one that fails, because
+the founder finds out six weeks later when a board pack is short. So:
+
+- a verdict **per line**, with the line number in the FILE (header included) so it
+  matches what their editor shows;
+- `dry_run: true` runs the same parse and writes nothing, so the committing press
+  is never the first thing that reads the file — one endpoint, one parser;
+- the row cap is reported line by line, never applied quietly;
+- a duplicated month is **refused, not last-wins**: both lines look deliberate and
+  a silent pick drops a figure the founder can see in their own file;
+- a row whose every metric is blank is refused rather than written as a month of
+  nulls, or "months on record" counts rows the import invented.
+
+It reads what a spreadsheet actually holds — `$104,800`, `1.2%`, `(61,200)` for
+negative, `—` and `n/a` for absent, `2026-08` / `08/2026` / `Aug 2026` for the
+month — and refuses `08/02/2026`, which is February in one country and August in
+another. A date the platform picked is a row filed against a month that may not
+have happened.
+
+**`source = 'csv'`, and that is load-bearing.** `project_metrics` is unique on
+`(project_id, snapshot_date, source)`, so an import can never overwrite a figure
+entered by hand, and re-importing a corrected file updates the import's own rows.
+`DO UPDATE` uses `COALESCE`, so a second file covering only MRR does not blank the
+burn the first one carried — the difference between a correction and a truncation.
+
+### Two more equivalent mutants, and one real find
+
+22 mutations applied, 22 caught. One proved equivalent: removing
+`month < 1 || month > 12` from the date validator changes nothing, because
+`lengths[12]` and `lengths[-1]` are both `undefined` and `1 <= undefined` is false.
+The check stays — a date validator should state its rule rather than rely on an
+out-of-bounds comparison happening to be falsy.
+
+The real find: the parser held a **literal, invisible U+FEFF** in a regex to strip
+Excel's byte-order mark — and `trim()` already strips it, since U+FEFF is
+`<ZWNBSP>` in the spec's WhiteSpace production (verified against node). So the
+replace was redundant AND was the kind of byte an editor or a reformat eats,
+leaving a regex that matches everything. It is gone; every BOM in the tests is now
+written as an escape. And the trim turns out to be load-bearing for exactly one
+header — `notes`, matched by an exact comparison with no alias entry — which is
+now the assertion that holds it.
+
+### The test had to mount the router the way production does
+
+`progress.ts` refuses by `throw new Error('Forbidden')` and nothing in that file
+maps it; `index.ts`'s app-level `onError` does, via a table whose own comment says
+"Without this, RBAC failures surface as 500s and the frontend can't distinguish
+'log in again' from 'the server crashed'." Driving the sub-router alone returns
+500 for what is a 403 in production. Rather than accept `403 || 500` — which would
+make a genuine crash read as a refusal — the test attaches the same three-line
+mapping and asserts 403 exactly.
+
+### One latent bug fixed on the way
+
+`ensureMetricTargetsSchema`'s readiness flag was a module-level `let`, the same bug
+#203 found in `ensureProjectMetricsSchema` twenty lines above it: the first
+`env.DB` to bootstrap marks the helper done for every database in the isolate.
+Production has one D1 and it never showed. Fixed to a `WeakMap` keyed on the
+binding rather than left sitting beside its own fix.

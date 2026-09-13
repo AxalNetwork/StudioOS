@@ -121,11 +121,17 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Edit templates', kind: 'handler', handler: 'editTemplates' },
     { label: 'Export archive', kind: 'export' },
   ],
+  // TWO OF THESE FOUR WERE GAPS AND ARE NOT ANY MORE. `Import CSV` is
+  // `services/metricsCsv.ts` behind `POST /progress/metrics/:id/import-csv`;
+  // `Definitions` is migration 251. Both open a form the page owns (D67 — a table
+  // cannot hold a modal's state), which is why they are handlers rather than
+  // links: the import needs a dry run and a rejection list, and the definition
+  // editor needs the metric picker the route's own `keys` supplies.
   'build/kpi': [
     { label: 'Bulk entry', to: '/build/metrics' },
-    { label: 'Import CSV', unbuilt: 'no importer is built; snapshots are entered one at a time' },
+    { label: 'Import CSV', kind: 'handler', handler: 'importCsv' },
     { label: 'Stripe sync', to: '/build/metrics' },
-    { label: 'Definitions', unbuilt: 'metric definitions are not stored' },
+    { label: 'Definitions', kind: 'handler', handler: 'definitions' },
   ],
 
   // ── Grow ─────────────────────────────────────────────────────────────────
