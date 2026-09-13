@@ -46,6 +46,8 @@ import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import { AssistLayout } from '../ui';
+import useAssistMode from '../hooks/useAssistMode';
+import FillProposals from '../workspaces/FillProposals';
 
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
 const CARD = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm';
@@ -285,6 +287,33 @@ export default function SpinoutLabMarketPage() {
   // "Eadwyn" over their own number is the same lie this page's copy exists to
   // avoid, pointed the other way.
   const [filled, setFilled] = useState({});
+  // The rail's switch, read from the same module store the rail reads it from.
+  // Off until the founder turns it on, per D17 and the money rule behind it.
+  const [fillsOn] = useAssistMode('market');
+
+  /**
+   * Re-read the drawer's fields and their provenance after an accept.
+   *
+   * WITHOUT THIS THE ACCEPT WORKS AND LOOKS LIKE IT DID NOT. The figure lands in
+   * `project_market_assumptions` and the drawer keeps showing the empty field it
+   * showed a second ago, so a founder presses the button again — and the band has
+   * already removed the proposal, so the second press does nothing either. A
+   * mechanism that succeeds invisibly is indistinguishable from one that failed.
+   *
+   * Both halves, because they are two facts: what the field now holds, and that
+   * Eadwyn is what put it there. Reading only the first would leave the stamp
+   * missing until a reload.
+   */
+  const reloadAssumptions = async () => {
+    if (!project) return;
+    try {
+      const saved = await api.getMarketAssumptions(project.id);
+      setAssume(seedAssumptions(project, saved?.assumptions));
+      setFilled(saved?.filled || {});
+    } catch (e) {
+      reportError('SpinoutLabMarketPage:reloadAssumptions', e);
+    }
+  };
   const [anim, setAnim] = useState(null); // {tam,sam,som} in dollars while the recalc tween runs
   const animRef = useRef(null);
   const finishRef = useRef({ tween: false, saved: false });
@@ -748,6 +777,24 @@ export default function SpinoutLabMarketPage() {
           </>
         ) : null}
       />
+
+      {/* THE FILL'S OWN BAND, and the page it fills. Task #188's market kind
+          proposes an addressable population, an ACV benchmark and a growth rate —
+          each with a citation or dropped — into the drawer's own fields. It
+          renders only when the rail's switch is on, reads existing proposals and
+          runs nothing until the founder presses the button, and `onApplied`
+          reloads so an accepted figure appears in the drawer rather than after a
+          refresh. `useAssistMode('market')` is the same module store the rail
+          reads, so the switch and this band cannot disagree. */}
+      {project && (
+        <FillProposals
+          key="market-sizing"
+          projectId={project.id}
+          kind="market_input"
+          enabled={fillsOn}
+          onApplied={reloadAssumptions}
+        />
+      )}
 
       {/* Design's Week-2 notice (611-614) — informational only: StudioOS
           deliberately keeps this page editable in Week 2 (founders iterate

@@ -29,7 +29,7 @@ import { codeOnly } from './_codeOnly.mjs';
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const RAIL = 'frontend/src/ui/WorkerRail.jsx';
 const HOOK = 'frontend/src/hooks/useAssistMode.js';
-const BAND = 'frontend/src/workspaces/founder/ValidateProposals.jsx';
+const BAND = 'frontend/src/workspaces/FillProposals.jsx';
 const PAGE = 'frontend/src/workspaces/founder/FounderValidateWorkspace.jsx';
 const CFG = 'frontend/src/ui/eadwynConfig.js';
 

@@ -193,6 +193,35 @@ test('every kind names a rail that exists and declares a mode — D17', () => {
   }
 });
 
+test('every kind has a host that mounts its band — the other half of D17', () => {
+  // THE GAP THE TEST ABOVE DOES NOT CLOSE, and it was open for one commit. A
+  // `mode` entry makes the switch RENDERABLE; it does not make anything happen
+  // when it is flipped. Declaring the market mode without mounting the band left
+  // a switch a founder could turn on to no effect — the dead control D17 refused,
+  // reached from the opposite direction: config that arrived before its mount.
+  //
+  // So this asserts the mount, not the config: some page reads the same mode key
+  // the rail writes, and passes the kind to the band.
+  const hosts = [
+    'frontend/src/workspaces/founder/FounderValidateWorkspace.jsx',
+    'frontend/src/pages/founder/FounderValidatePage.jsx',
+    'frontend/src/pages/SpinoutLabMarketPage.jsx',
+  ].map((p) => readFileSync(resolve(HERE, '../..', p), 'utf8')).join('\n');
+
+  for (const k of Object.values(FILL_KINDS)) {
+    assert.match(hosts, new RegExp(`kind="${k.kind}"`),
+      `${k.kind} is registered and no page offers it, so the switch does nothing`);
+  }
+  // And both sides read ONE mode store, so flipping the switch cannot leave the
+  // page as it was — the reason `useAssistMode` is a module store at all.
+  assert.match(hosts, /useAssistMode\('market'\)/);
+  const layout = readFileSync(resolve(HERE, '../../frontend/src/ui/AssistLayout.jsx'), 'utf8');
+  assert.match(layout, /const \[mode, setMode\] = useAssistMode\(surface\);/,
+    'AssistLayout draws a rail whose switch has nothing behind it');
+  assert.match(layout, /mode=\{mode\}\s*\n\s*onModeChange=\{setMode\}/,
+    'the rail is given no way to change the mode it renders');
+});
+
 test('every entry declares a class the store admits and a task the router knows', () => {
   const router = read('src/services/aiRouter.ts');
   for (const k of Object.values(FILL_KINDS)) {
