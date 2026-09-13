@@ -103,7 +103,7 @@ export const ADVISOR_ZONE_ACTIONS = {
   // Two small pieces close it and neither belongs in a page PR: the client's
   // address on the read, and a rule for the rows that have none.
   'practice/engagements': [
-    { canvas: 'Bulk: send renewal notice', label: 'Bulk: renewal notice', unbuilt: 'a notice needs an addressable client, and an engagement keeps its client as a name — only a linked account has an address, so a bulk send would reach some clients and silently skip the rest' },
+    { canvas: 'Bulk: send renewal notice', label: 'Bulk: renewal notice', unbuilt: 'a notice needs an addressable client, and an engagement keeps its client as a name — only a linked account has an address, so a bulk send would reach some clients and silently skip the rest', hover: 'An engagement keeps its client as a name, and only a linked account has an address to send to.' },
     { label: 'Export contract pack', kind: 'export' },
   ],
 
@@ -207,7 +207,7 @@ export const ADVISOR_ZONE_ACTIONS = {
     // already exists — the form on the page takes one — and that is a different
     // act from asking a founder to open their record. A control called `New
     // brief` that added a row would name the wrong thing.
-    { label: 'New brief', unbuilt: 'a brief exists because a founder opened their record to you, and nothing here can ask for one — what you can add is a row inside a brief you already hold, which the form below takes' },
+    { label: 'New brief', unbuilt: 'a brief exists because a founder opened their record to you, and nothing here can ask for one — what you can add is a row inside a brief you already hold, which the form below takes', hover: 'A brief exists because a founder opened their record to you; nothing here can ask for one.' },
     // NOT THE PARTNER'S `Attach to proposal`, and not the same edge. Partner's
     // is brief→`quotes`, which migration 222 built; an advisor holds no quotes,
     // and this artboard asks for brief→session, which nothing records.

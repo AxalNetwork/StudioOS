@@ -788,21 +788,35 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     }
   });
 
-  test(`${name}: a filter with no source is never rendered at all`, () => {
-    // STRONGER THAN THE ASSERTION IT REPLACES, which allowed the item through
-    // as long as it carried no click handler — it then rendered as prose in the
-    // chip row. Nothing unbuilt reaches the renderer now, so every item the
-    // builder returns is a chip that runs.
+  test(`${name}: a filter with no source is drawn, and cannot be selected`, () => {
+    // THIS TEST HAS HELD THREE RULES AND THE CONSTRAINT UNDER THEM HAS NEVER
+    // MOVED. First it allowed an unbuilt item through as long as it carried no
+    // click handler — which let it render as PROSE in the chip row. Then
+    // nothing unbuilt reached the renderer at all, and the title read "never
+    // rendered"; that made 166 canvas controls invisible across the eight
+    // tables and produced five "elements are missing" reports in a week.
+    //
+    // Now it is drawn, disabled, with its reason on hover. The constant through
+    // all three: A FILTER THAT CANNOT RUN MUST NOT BE SELECTABLE. That is the
+    // one property that makes it safe — a dead filter does not fail loudly, it
+    // returns an empty set, and an empty set reads as an answer.
     for (const [zone, rows] of Object.entries(profile.table)) {
       const built = profile.build(zone, { value: '__none__' });
       for (const item of built) {
-        assert.ok(item.onSelect, `${zone} · ${item.label} is rendered but cannot be selected`);
         assert.equal(item.note, undefined, `${zone} · ${item.label} still carries prose`);
+        if (item.disabled) {
+          assert.equal(item.onSelect, undefined, `${zone} · ${item.label} is disabled and still selectable`);
+          assert.notEqual(item.active, true, `${zone} · ${item.label} is a dead chip drawn as the current view`);
+          assert.ok(item.title, `${zone} · ${item.label} is drawn dead and says nothing on hover`);
+        } else {
+          assert.ok(item.onSelect, `${zone} · ${item.label} is a live chip that cannot be selected`);
+        }
       }
       const dead = rows.filter((r) => r.unbuilt && !r.dynamic).map((r) => r.label || r.canvas);
       for (const label of dead) {
-        assert.ok(!built.some((i) => i.label === label),
-          `${zone} · ${label} has no source and is still drawn`);
+        const chip = built.find((i) => i.label === label);
+        assert.ok(chip, `${zone} · ${label} has no source and is not drawn at all`);
+        assert.equal(chip.disabled, true, `${zone} · ${label} has no source and is drawn live`);
       }
     }
   });
@@ -1279,9 +1293,29 @@ test('a dynamic group renders its stored names and nothing else', () => {
     value: 'referral',
     dynamic: { sources: [{ key: 'waitlist', label: 'Waitlist' }, { key: 'referral', label: 'Referral' }] },
   });
-  assert.deepEqual(bySource.map((i) => i.label), ['All', 'Waitlist', 'Referral']);
+  // The dynamic group's own entry carries an `unbuilt` reason about SEGMENTS,
+  // and that entry is the group — it is replaced by the supplied names rather
+  // than drawn beside them, so there is no dead chip here to find. A group with
+  // nothing supplied still contributes nothing: a placeholder chip labelled
+  // with the canvas's sample name would state a segment this founder has not
+  // got, which is the one thing a dynamic group may not do.
+  // `Stalled` sits beside the group as its own unbuilt entry — "no activity
+  // timeline is stored, so no account can be called stalled" — and is drawn
+  // dead, which is the whole of this change. It is also the chip this file's
+  // header opens on: it once shipped LIVE with a predicate of `return []`, so
+  // clicking it answered "you have no stalled accounts" over a store that
+  // records no stalling at all. Drawn and unselectable is the third state, and
+  // the assertion below pins that it cannot go back to the first.
+  assert.deepEqual(bySource.map((i) => i.label), ['All', 'Waitlist', 'Referral', 'Stalled']);
   assert.ok(bySource.find((i) => i.label === 'Referral').active, 'the supplied source cannot be selected');
   assert.ok(bySource.every((i) => !i.note), 'a sentence is back in the chip row');
+  const stalled = bySource.find((i) => i.label === 'Stalled');
+  assert.equal(stalled.disabled, true, 'Stalled is live again over a store that records no stalling');
+  assert.equal(stalled.onSelect, undefined, 'Stalled can be clicked, and an empty set reads as an answer');
+  for (const name of ['Waitlist', 'Referral']) {
+    assert.ok(!bySource.find((i) => i.label === name).disabled,
+      `${name} is a stored source name drawn as a dead chip`);
+  }
 
   // The reason survives on the table entry, and still says the same thing.
   const row = FOUNDER_ZONE_FILTERS['grow/customers'].find((r) => r.dynamic === 'sources');
@@ -1296,19 +1330,30 @@ test('a dynamic group renders its stored names and nothing else', () => {
   assert.match(talentRow.unbuilt, /no job post is linked/, 'the fallback reason stopped being recorded');
 });
 
-test('filters sharing one reason are recorded once and rendered never', () => {
-  // /build/cadence has four filters and one reason. That reason used to be
+test('filters sharing one reason are recorded once and drawn each', () => {
+  // /build/cadence has four filters and one reason. That reason was once
   // collected into a sentence naming all four and printed under the chips;
-  // /build/this-week's two distinct reasons became two sentences. Both are now
-  // absent from the row entirely — a zone whose filters cannot run shows the
-  // ones that can, and nothing else.
+  // /build/this-week's two distinct reasons became two sentences. Neither is
+  // drawn as prose any more, and neither zone is empty either — the row is the
+  // artboard's row, with each dead chip carrying its own hover.
+  //
+  // WAS `deepEqual(cadence, [])` under the title "rendered never". That is the
+  // assertion this change is about: a four-chip artboard row rendering as
+  // nothing at all is why /build/cadence was reported as missing its options.
   const cadence = founderZoneFilters('build/cadence', { value: 'x' });
-  assert.deepEqual(cadence, [], 'a zone with no runnable filter still renders something');
+  assert.equal(cadence.length, FOUNDER_ZONE_FILTERS['build/cadence'].length,
+    'a zone whose filters all lack a store no longer draws its row');
+  assert.ok(cadence.every((i) => i.disabled && !i.onSelect && i.title),
+    'cadence draws a chip that can be selected over a store it has not got');
 
   const week = founderZoneFilters('build/this-week', { value: 'now' });
-  assert.ok(week.every((i) => i.onSelect && !i.note), 'this-week renders prose in the chip row');
+  assert.ok(week.every((i) => !i.note), 'this-week renders prose in the chip row');
+  assert.ok(week.every((i) => (i.disabled ? !i.onSelect : Boolean(i.onSelect))),
+    'this-week draws a chip whose handler disagrees with its disabled state');
   for (const label of ['Last 4', 'All weeks', 'Carried only']) {
-    assert.ok(!week.some((i) => i.label === label), `${label} has no source and is still drawn`);
+    const chip = week.find((i) => i.label === label);
+    assert.ok(chip, `${label} has no source and is not drawn at all`);
+    assert.equal(chip.disabled, true, `${label} has no source and is drawn live`);
   }
 
   // The reasons themselves stay in the table, distinct where they were distinct.

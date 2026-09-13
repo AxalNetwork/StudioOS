@@ -131,8 +131,21 @@ test('the builder drops a handler the page did not supply, and keeps one it did'
     },
   });
 
-  assert.deepEqual(rows.map((r) => r.label), ['Open', 'Running'],
-    'an unsupplied handler must be dropped, and an unbuilt entry with it');
+  // WAS `['Open', 'Running']` under "an unsupplied handler must be dropped, and
+  // an unbuilt entry with it". The two halves have come apart and the reason is
+  // the point of the split: an UNSUPPLIED HANDLER is a wiring mistake — the
+  // table declares an op and the page forgot to pass its callback — and the
+  // only safe answer is to drop it, because nothing is known about why. An
+  // UNBUILT entry is a stated fact with a reason attached, and it is drawn
+  // disabled so the reader sees the artboard's row and can hover for the
+  // reason. `scripts/check-zone-handlers.mjs` fails the build on the first
+  // case, so the silent drop is the second line rather than the only one.
+  assert.deepEqual(rows.map((r) => r.label), ['Open', 'Running', 'Gap'],
+    'an unsupplied handler must be dropped, and an unbuilt entry drawn disabled');
+  const gap = rows.find((r) => r.label === 'Gap');
+  assert.equal(gap.disabled, true, 'an unbuilt op is drawn live');
+  assert.equal(gap.onClick, undefined, 'an unbuilt op is clickable with nothing to perform');
+  assert.equal(gap.title, 'nothing performs it', 'an unbuilt op says nothing on hover');
   assert.equal(rows[0].onClick(), 'clicked', 'a bare function is taken as the click itself');
   assert.equal(rows[0].disabled, false, 'a bare function is neither disabled nor busy');
   assert.equal(rows[1].disabled, true, 'the object form must carry disabled through');

@@ -95,7 +95,7 @@ export const ADVISOR_ZONE_FILTERS = {
     { canvas: 'Mine', unbuilt: EVERY_ROW_IS_YOURS },
     {
       canvas: 'From the Lab',
-      unbuilt: 'nothing marks a relationship as sourced from the Lab; a referral records a name and an organisation as free text, with no link back to an account',
+      unbuilt: 'nothing marks a relationship as sourced from the Lab; a referral records a name and an organisation as free text, with no link back to an account', hover: 'Nothing marks a relationship as sourced from the Lab; a referral records free text only.',
     },
   ],
 
@@ -186,7 +186,7 @@ export const ADVISOR_ZONE_FILTERS = {
     { canvas: 'Prospects', unbuilt: NO_COMPANY_ON_AN_ANALYSIS },
     {
       canvas: 'Researching',
-      unbuilt: 'the only state an analysis carries is the state of its own run (draft, running, complete or error), which says nothing about your standing with a company',
+      unbuilt: 'the only state an analysis carries is the state of its own run (draft, running, complete or error), which says nothing about your standing with a company', hover: 'An analysis records the state of its own run, which says nothing about your standing.',
     },
   ],
   // ALL FOUR RUN. `kind` carries the artboard's own axis, and `index_state`

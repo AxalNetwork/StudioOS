@@ -61,7 +61,7 @@ export const FOUNDER_ZONE_ACTIONS = {
   // progress.ts), so a control that "sends" would be theatre over a connection
   // that is already live. What it should become is a link that says so.
   'validate/pain-map': [
-    { label: 'Send to Problem slide', unbuilt: 'the curated pain themes already feed the deck’s Problem slide; there is nothing to send, and a button implying otherwise would claim credit for a pipe that runs on its own' },
+    { label: 'Send to Problem slide', unbuilt: 'the curated pain themes already feed the deck’s Problem slide; there is nothing to send, and a button implying otherwise would claim credit for a pipe that runs on its own', hover: 'These themes already feed the deck’s Problem slide, so there is nothing to send.' },
     { label: 'Export map', kind: 'handler', handler: 'exportPainMap' },
   ],
   'validate/hypotheses': [
@@ -70,7 +70,7 @@ export const FOUNDER_ZONE_ACTIONS = {
   ],
   'validate/verdict': [
     { label: 'Export summary', kind: 'handler', handler: 'exportSummary' },
-    { label: 'Send to Problem slide', unbuilt: 'the curated pain themes already feed the deck’s Problem slide; there is nothing to send, and a button implying otherwise would claim credit for a pipe that runs on its own' },
+    { label: 'Send to Problem slide', unbuilt: 'the curated pain themes already feed the deck’s Problem slide; there is nothing to send, and a button implying otherwise would claim credit for a pipe that runs on its own', hover: 'These themes already feed the deck’s Problem slide, so there is nothing to send.' },
   ],
   // ── Build ────────────────────────────────────────────────────────────────
   'build/this-week': [
@@ -151,7 +151,7 @@ export const FOUNDER_ZONE_ACTIONS = {
   // so the roll-up above is empty on every account and there is nothing to
   // have duplicated. The two halves of this row now say the same thing.
   'network/organizations': [
-    { label: 'Add org', unbuilt: 'a contact records a person, an email and an audience, and no field on it names an organisation, so there is no org for a form to add' },
+    { label: 'Add org', unbuilt: 'a contact records a person, an email and an audience, and no field on it names an organisation, so there is no org for a form to add', hover: 'A contact records a person, an email and an audience — no field on it names an organisation.' },
     { label: 'Merge duplicates', unbuilt: 'nothing groups people into organisations here, so there are no rows to be duplicates of each other' },
     { label: 'Export', kind: 'export' },
   ],
@@ -204,7 +204,7 @@ export const FOUNDER_ZONE_ACTIONS = {
   'research/ask': [
     { label: 'New brief', kind: 'handler', handler: 'newSession' },
     { label: 'Export session', kind: 'export' },
-    { label: 'Clear history', unbuilt: 'the history is stored now and nothing deletes from it — an answer is kept or not kept, and erasing a reader’s own questions is the one irreversible act this page declines to offer' },
+    { label: 'Clear history', unbuilt: 'the history is stored now and nothing deletes from it — an answer is kept or not kept, and erasing a reader’s own questions is the one irreversible act this page declines to offer', hover: 'Nothing deletes from the history; an answer is kept or it is not.' },
   ],
   'research/markets': [
     { label: 'New deep-dive', unbuilt: 'signals are gathered on a schedule, not started here' },

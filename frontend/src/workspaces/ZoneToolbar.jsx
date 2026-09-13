@@ -38,17 +38,20 @@ import { accentChipClass } from './shellConfig';
  * auto-skin now pairs both vocabularies, so neither is the safer one and
  * rewriting these would be churn.
  *
- * A FILTER THAT CANNOT RUN IS NOT DRAWN AT ALL. `zoneFilterBuilder.js` argues
- * why this matters more for a filter than for a button: a dead filter does not
- * fail loudly, it returns an empty set, and an empty set reads as an answer. So
- * an `unbuilt` filter never reaches this component — the builder drops it, and
- * the reason stays in the filter table where it can be acted on.
+ * A FILTER THAT CANNOT RUN IS DRAWN, DISABLED, AND SAYS WHY ON HOVER.
+ * `zoneFilterBuilder.js` carries the full history of that decision — it has now
+ * been three things — and the constraint this component enforces is the one
+ * that survived all three: a dead filter must never be SELECTABLE. A dead
+ * filter does not fail loudly; it returns an empty set, and an empty set reads
+ * as an answer. `disabled` plus a missing `onSelect` means there is no click
+ * and no empty set to misread.
  *
- * IT USED TO RENDER THOSE REASONS HERE, GROUPED INTO SENTENCES, and that was
- * the bug: `/build/cadence`'s four-chip row shipped as a paragraph about the
- * cadence store, and the design's tidy filter strip became an essay on every
- * zone that had a gap. Not drawing the dead chip was right. Explaining its
- * absence to the customer, in the row where the working chips live, was not.
+ * IT ONCE RENDERED THOSE REASONS HERE, GROUPED INTO SENTENCES BESIDE THE CHIPS,
+ * and that was a different bug: `/build/cadence`'s four-chip row shipped as a
+ * paragraph about the cadence store, and the design's tidy filter strip became
+ * an essay on every zone with a gap. A `title` is not that. Nothing is printed
+ * beside the chips; the row reads as the artboard's row, and the explanation
+ * appears only for a reader who hovers to ask for it.
  */
 
 const CHIP =
@@ -60,7 +63,7 @@ const CHIP_OFF =
   'dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-gray-600';
 
 /**
- * @param {Array<{label:string,testid?:string,active?:boolean,onSelect?:()=>void}>} filters
+ * @param {Array<{label:string,testid?:string,active?:boolean,onSelect?:()=>void,disabled?:boolean,title?:string}>} filters
  * @param {Array} actions  passed straight to `ZoneActions`
  * @param {string} role    which licence's accent the selected chip wears
  */
@@ -80,9 +83,28 @@ export default function ZoneToolbar({ filters = [], actions = [], role = 'founde
               key={item.label}
               type="button"
               data-testid={item.testid}
-              aria-pressed={Boolean(item.active)}
-              onClick={item.onSelect}
-              className={`${CHIP} ${item.active ? `${on} font-bold` : CHIP_OFF}`}
+              // `aria-pressed` ONLY WHERE PRESSING IS POSSIBLE. A disabled chip
+              // is not an unpressed toggle; it is a control with no state to be
+              // in, and announcing "not pressed" invites a screen-reader user
+              // to press it.
+              //
+              // `title` ALONE, AND NOT AN `aria-label` THAT CONCATENATES IT.
+              // The first draft here composed `{label} — {title}` into an
+              // aria-label so the reason would not be mouse-only, and
+              // `zone_label_contract.test.mjs` failed it on the em dash — which
+              // is the guard doing precisely its job. That string IS the old
+              // `note` shape, and building it into the accessible name would
+              // have played the paragraph inline to exactly the readers who
+              // cannot skip it. `title` is announced as the description in its
+              // own right; the name stays the label.
+              {...(item.disabled
+                ? { disabled: true, title: item.title }
+                : { 'aria-pressed': Boolean(item.active), onClick: item.onSelect })}
+              className={`${CHIP} ${
+                item.disabled
+                  ? `${CHIP_OFF} cursor-not-allowed opacity-55`
+                  : (item.active ? `${on} font-bold` : CHIP_OFF)
+              }`}
             >
               {item.label}
             </button>

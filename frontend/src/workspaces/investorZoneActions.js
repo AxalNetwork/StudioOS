@@ -79,26 +79,26 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
   ],
   'deals/commit': [
-    { label: 'Export minutes', unbuilt: 'no minutes are stored to export; ic_meetings carries an agenda, written before the room rather than after it' },
+    { label: 'Export minutes', unbuilt: 'no minutes are stored to export; ic_meetings carries an agenda, written before the room rather than after it', hover: 'No minutes are stored — the meeting record is its agenda, written before the room, not after it.' },
     { label: 'Add condition', unbuilt: 'conditions are not a stored record — the memo and terms are free text, and neither can block a later stage' },
     // WAS: 'no vote is opened here, so none can be closed'. False — a vote
     // opens when the first one is cast (POST /api/ic/:uid/vote moves draft →
     // voting) and closes when a decision is set (PUT /api/ic/:uid forces
     // decided and stamps decided_at). What is missing is the screen, which is
     // the same shape as the LP row below: served, not offered.
-    { label: 'Close vote', unbuilt: 'closing a vote is served by the API — recording a decision against it moves it to decided — but no screen offers the form yet' },
+    { label: 'Close vote', unbuilt: 'closing a vote is served by the API — recording a decision against it moves it to decided — but no screen offers the form yet', hover: 'Recording a decision closes a vote, and no screen offers that form yet.' },
   ],
   'deals/closing': [
     // WAS: 'no closing templates are stored'. False — legal_templates ships the
     // SAFE, stock-purchase and subscription agreements with merge fields and
     // versions. The gap is one layer above them: nothing stores a closing
     // CHECKLIST for a template to be applied to.
-    { label: 'Apply template', unbuilt: 'the SAFE, stock-purchase and subscription templates are stored; what is missing is a closing checklist for one to be applied to' },
+    { label: 'Apply template', unbuilt: 'the SAFE, stock-purchase and subscription templates are stored; what is missing is a closing checklist for one to be applied to', hover: 'The templates are stored; what is missing is a closing checklist to apply one to.' },
     { label: 'Export packet', unbuilt: 'the documents and signature envelopes are stored, but nothing assembles them into a packet' },
     // WAS: 'wires are not a stored record'. True, and imprecise enough to cost
     // the next reader a lookup — capital_calls DOES carry an amount and a paid
     // date. It is the other direction.
-    { label: 'Record wire', unbuilt: 'no transfer OUT to a company is recorded; capital_calls is an LP paying into the fund, which is the other direction' },
+    { label: 'Record wire', unbuilt: 'no transfer OUT to a company is recorded; capital_calls is an LP paying into the fund, which is the other direction', hover: 'No transfer out to a company is recorded; what the fund records is capital coming in from an LP.' },
   ],
 
   // ── Fund ─────────────────────────────────────────────────────────────────
@@ -138,7 +138,7 @@ export const INVESTOR_ZONE_ACTIONS = {
     // (`portfolio_positions.round_name`, one per round) and POST /positions
     // creates it. What is true is that the write is admin-only, so an
     // investor's book does not offer it.
-    { label: 'Add follow-on', unbuilt: 'a follow-on is a round on the position itself, and recording one is an admin write — this book is the investor’s read of it' },
+    { label: 'Add follow-on', unbuilt: 'a follow-on is a round on the position itself, and recording one is an admin write — this book is the investor’s read of it', hover: 'A follow-on is recorded as an admin write; this book is the investor’s read of it.' },
   ],
   'portfolio/updates': [
     // CHECKED, AND THE OLD REASON WAS TOO BROAD BY ONE CALL. "Nothing on this
@@ -149,7 +149,7 @@ export const INVESTOR_ZONE_ACTIONS = {
     // startup's followers, and excludes the author. So the chase is genuinely
     // unbuilt, for a narrower reason than the one that was written down, and
     // the narrower reason is the one that stays true if a chase is ever built.
-    { label: 'Chase all overdue', unbuilt: 'nothing here reaches a company that stayed silent — the only outbound on this desk fires when an update arrives, and it notifies the startup’s followers' },
+    { label: 'Chase all overdue', unbuilt: 'nothing here reaches a company that stayed silent — the only outbound on this desk fires when an update arrives, and it notifies the startup’s followers', hover: 'Nothing here reaches a company that stayed silent.' },
     // WAS 'no reminder rules are stored', which is true and describes a
     // different object. The rules this desk actually has are the KPI
     // definitions companies are held to, and they ARE stored — firm-wide,
@@ -195,7 +195,7 @@ export const INVESTOR_ZONE_ACTIONS = {
   // "Derived from the relationship book" was true and incomplete; the book has
   // no organisation to derive one from.
   'network/organizations': [
-    { label: 'Add org', unbuilt: 'a relationship records two accounts, a type and a strength, and nothing on it names a firm, so there is no org for a form to add' },
+    { label: 'Add org', unbuilt: 'a relationship records two accounts, a type and a strength, and nothing on it names a firm, so there is no org for a form to add', hover: 'A relationship records two accounts, a type and a strength — nothing on it names a firm.' },
     { label: 'Merge duplicates', unbuilt: 'no organisation is stored on a relationship, so the list above is empty on every account and has no duplicates to merge' },
     { label: 'Export', kind: 'export' },
   ],
@@ -218,7 +218,7 @@ export const INVESTOR_ZONE_ACTIONS = {
   'research/ask': [
     { label: 'New brief', kind: 'handler', handler: 'newSession' },
     { label: 'Export session', kind: 'export' },
-    { label: 'Clear history', unbuilt: 'the history is stored now and nothing deletes from it — an answer is kept or not kept, and erasing a reader’s own questions is the one irreversible act this page declines to offer' },
+    { label: 'Clear history', unbuilt: 'the history is stored now and nothing deletes from it — an answer is kept or not kept, and erasing a reader’s own questions is the one irreversible act this page declines to offer', hover: 'Nothing deletes from the history; an answer is kept or it is not.' },
   ],
   // Both of these zones have had a real body since the research stores landed,
   // and both were calling `zoneActionsFor` all along — with no key here, so
@@ -229,7 +229,7 @@ export const INVESTOR_ZONE_ACTIONS = {
     // The zone's own StatedLimit argues this one, and the note says the same
     // thing it does: "a request button that wrote nowhere would be worse than
     // the conversation it replaced."
-    { label: 'New request', unbuilt: 'a founder opens a room; nothing here asks one to, and a button that wrote nowhere would replace the conversation that does' },
+    { label: 'New request', unbuilt: 'a founder opens a room; nothing here asks one to, and a button that wrote nowhere would replace the conversation that does', hover: 'A founder opens a data room; nothing here can ask one to.' },
     { label: 'Attach to deal', unbuilt: 'nothing links a room grant to a deal record' },
     { label: 'Export', kind: 'export' },
   ],

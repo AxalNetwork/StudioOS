@@ -1170,18 +1170,35 @@ test('the shared zone body actually renders the row it is handed', () => {
     'a ZoneBody return path stopped carrying the actions row');
 });
 
-test('an action that performs nothing is not rendered at all', () => {
-  // THIS ASSERTION REVERSED, DELIBERATELY. It used to require that an
-  // unperformable action rendered as a `<span>` of prose stating why. That
-  // shipped the reason to the customer inside the control's own label — the
-  // design's `Comparables` chip arrived as a two-line sentence about how
-  // comparables are filed — so the entry now renders NOTHING and the reason
-  // stays in the action table. Refusing to draw a dead button has not changed;
-  // only where the refusal is explained has.
+test('an action that performs nothing is drawn disabled, and never clickable', () => {
+  // THIS ASSERTION HAS NOW REVERSED TWICE, AND THE PATH IS THE POINT.
+  //
+  // It first required an unperformable action to render as a `<span>` of prose
+  // stating why — which shipped the reason to the customer inside the control's
+  // own label, and the design's `Comparables` chip arrived as a two-line
+  // sentence about how comparables are filed.
+  //
+  // It then required the entry to render NOTHING, with the reason kept in the
+  // table. That fixed the prose and hid 166 canvas controls across eight
+  // tables; every one was read as a missing feature, and five separate reports
+  // in one week said "elements are missing" about zones that had dropped
+  // nothing the artboard drew.
+  //
+  // It now requires the entry to be DRAWN, DISABLED, with the reason on hover.
+  // What has never changed, through all three, is the property this test is
+  // really about: THE CONTROL MUST NOT BE CLICKABLE. A dead button that
+  // responds to a click teaches the reader it is dead by wasting the click.
   const builder = read('frontend/src/workspaces/zoneActionBuilder.js');
   const bind = builder.slice(builder.indexOf('export function makeZoneActions'));
-  assert.match(bind, /return null;\n\s*\}\)\.filter\(Boolean\);/,
-    'the builder no longer drops the entries it cannot perform');
+  // Through `codeOnly`, because the branch's own comment explains that it
+  // carries no `onClick` — a raw-source check fails on the explanation.
+  const code = codeOnly(builder);
+  const codeBind = code.slice(code.indexOf('export function makeZoneActions'));
+  const unbuiltBranch = codeBind.slice(codeBind.indexOf('if (item.unbuilt)'),
+    codeBind.indexOf('if (item.unbuilt)') + 300);
+  assert.match(unbuiltBranch, /disabled: true, title: item\.hover \|\| item\.unbuilt/,
+    'the builder no longer draws the entries it cannot perform');
+  assert.doesNotMatch(unbuiltBranch, /onClick/, 'an unbuilt op was given a click handler');
 
   const zone = read('frontend/src/workspaces/ZoneActions.jsx');
   const render = zone.slice(zone.indexOf('export default function ZoneActions'));
@@ -1197,8 +1214,14 @@ test('an action that performs nothing is not rendered at all', () => {
   // Through `codeOnly`: the docblock NAMES `noteAlways` to explain why it was
   // removed, so a raw-source check would fail on the explanation itself.
   const filters = codeOnly(read('frontend/src/workspaces/zoneFilterBuilder.js'));
-  assert.match(filters, /if \(item\.unbuilt\) return \[\];/,
-    'the filter builder no longer drops an unbuilt chip');
+  assert.match(filters, /if \(item\.unbuilt\) \{[\s\S]{0,400}?disabled: true,[\s\S]{0,200}?title: item\.hover \|\| item\.unbuilt/,
+    'the filter builder no longer draws an unbuilt chip');
+  // The filter half needs the stronger version of the same rule: a dead BUTTON
+  // wastes a click, and a dead CHIP returns an empty set that reads as an
+  // answer. So no `onSelect` and no `active` on the unbuilt branch at all.
+  const unbuiltChip = filters.slice(filters.indexOf('if (item.unbuilt)'), filters.indexOf('if (item.unbuilt)') + 400);
+  assert.doesNotMatch(unbuiltChip, /onSelect/, 'an unbuilt chip was made selectable');
+  assert.doesNotMatch(unbuiltChip, /active/, 'an unbuilt chip can be drawn as the current view');
   assert.doesNotMatch(filters, /noteAlways/,
     'the noteAlways mode is back — a standing sentence beside working chips');
 });
@@ -1246,8 +1269,15 @@ test('the label says the export is of this view, because it is', () => {
     'a disabled export no longer says on screen why it is disabled — it is back '
     + 'to a grey button explained only by a hover title, which is how eight '
     + 'working exports were reported as missing');
-  assert.match(builder, /disabled: true/, 'an export with no rows is no longer disabled');
-  assert.doesNotMatch(builder, /label: item\.label, testid, disabled: true/,
+  // SCOPED TO THE EXPORT BRANCH. This used to read the whole file for
+  // `label: item.label, testid, disabled: true` — the old bare-label shape —
+  // and that string is now also the opening of the UNBUILT branch, which is a
+  // different control making a different claim and is correct as written. A
+  // whole-file needle cannot tell them apart, so the slice does.
+  const exportBranch = builder.slice(builder.indexOf("if (item.kind === 'export')"),
+    builder.indexOf('if (item.to)'));
+  assert.match(exportBranch, /disabled: true/, 'an export with no rows is no longer disabled');
+  assert.doesNotMatch(exportBranch, /label: item\.label, testid, disabled: true/,
     'the disabled export is back to the bare canvas label with no state on it');
 });
 

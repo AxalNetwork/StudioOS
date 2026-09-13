@@ -14,11 +14,11 @@ import { exportView } from '../lib/csvExport';
  *   `to: '/path'`     — the flow is built, on a route the reader may open, and
  *                       this is a link to it. Every one is re-checked against
  *                       `App.jsx`'s guard by `frontend/test/profile_zone_actions.test.mjs`.
- *   `unbuilt: '…'`    — nothing performs it yet. The entry stays here so the
- *                       canvas-order guard can still prove this table dropped
- *                       nothing the artboard drew, and so a reader of this file
- *                       learns why. IT RENDERS NOTHING. The builder returns null
- *                       and the caller drops it before `ZoneActions` ever sees it.
+ *   `unbuilt: '…'`    — nothing performs it yet. Rendered DISABLED, with the
+ *                       reason on hover, so the header row is the artboard's
+ *                       row and every control on it is honest about whether it
+ *                       can run. `hover: '…'` overrides the tooltip where the
+ *                       engineering reason is too long to be one.
  *
  * WHY `handler` EXISTS, AND WHY IT IS NOT A WORKAROUND. Until it did, this
  * builder could say three things, and across all four profiles' 218 entries not
@@ -39,16 +39,33 @@ import { exportView } from '../lib/csvExport';
  * file exists to refuse. `profile_zone_actions.test.mjs` fails the build for it
  * too, so the silent runtime fallback is the second line, never the first.
  *
- * WHY `unbuilt` RENDERS NOTHING, WHEN IT USED TO RENDER ITS OWN REASON. The
- * field was called `note` and `ZoneActions` drew it as `{label} — {note}`, so
- * the design's `Comparables` chip shipped to customers as "Comparables — no
- * competitor can be filed as a comparable: the form offers direct or adjacent,
- * and every writer coerces anything else to direct". That is a true sentence in
- * the wrong place. Refusing to draw a button nothing performs is right and has
- * not changed; printing the refusal INSIDE the control's own label turned every
- * unbuilt op into a paragraph of design-review commentary on the customer
- * surface, and turned five zone headers into essays. The reason belongs in this
- * file, where the person who can act on it reads it.
+ * WHY `unbuilt` IS DRAWN AND DISABLED, HAVING BEEN BOTH OTHER THINGS FIRST.
+ *
+ * It began as `note`, drawn INLINE as `{label} — {note}`, so the design's
+ * `Comparables` chip shipped to customers as "Comparables — no competitor can
+ * be filed as a comparable: the form offers direct or adjacent, and every
+ * writer coerces anything else to direct". A true sentence in the wrong place;
+ * five zone headers became essays.
+ *
+ * The correction was to render nothing, and that created the report this
+ * change answers. Measured across the four profiles: 170 canvas controls
+ * invisible, 54 of them in the founder buckets alone, and every one read as a
+ * missing feature. Five separate reports in one week said "elements are
+ * missing" about zones that had dropped nothing the artboard drew.
+ *
+ * So: drawn, disabled, reason on HOVER. What makes this different from `note`
+ * rather than a return to it is that a tooltip is opt-in — nothing is printed
+ * beside the control, the row reads as the artboard's row, and the explanation
+ * appears only for a reader who asks. Recorded as the user's decision of
+ * 2026-09-13, taken after the trade-off was put to them: a disabled control can
+ * read as broken, which is exactly what the greyed exports were reported as.
+ *
+ * THE DISABLED EXPORT KEEPS ITS LABEL SUFFIX AND DOES NOT MOVE TO A TOOLTIP.
+ * The two states are not the same claim. An unbuilt op has no feature behind
+ * it; an export with no rows is built, wired and correct and is waiting on
+ * data, which is a state that CHANGES while the reader watches. `· nothing yet`
+ * says that without a hover, and the eight reports that produced it were about
+ * a control whose only explanation was a `title` nobody hovered.
  *
  * WHY THE BUILDER IS SHARED AND THE TABLES ARE NOT. The rules are identical
  * across profiles — what an empty export says, how a link carries the reader's
@@ -146,6 +163,11 @@ export function makeZoneActions(TABLE) {
       }
       if (item.to) {
         return { label: item.label, testid, to: withQuery(item.to, query), title: item.linkNote };
+      }
+      if (item.unbuilt) {
+        // No `onClick`: a control nothing performs must not be clickable, or a
+        // reader learns it is dead by pressing it and watching nothing happen.
+        return { label: item.label, testid, disabled: true, title: item.hover || item.unbuilt };
       }
       return null;
     }).filter(Boolean);
