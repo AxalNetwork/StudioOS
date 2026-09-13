@@ -4769,3 +4769,134 @@ load-bearing half is the other one, `util/deadline.ts`'s `withDeadline` wrapped 
 await on the auth path, which bounds a stall wherever it sits. Only that one sentence of the
 comment is wrong. Whether the hang is gone still needs a live measurement, which is
 `start_latency`, which needs a run.
+
+---
+
+## D81 — `chargeSession` gets its caller; the flag becomes a switch rather than a claim
+
+**2026-09-13.** PR5b (D75) shipped `services/advisorConnect.ts` with onboarding at one end and
+fulfilment at the other. Reviewing that leg turned up that **the middle had no writer**:
+`chargeSession` was an exported function referenced by nothing but its own test file — no route,
+no webhook, no dynamic import. `POST /api/advisors/bookings/:id/pay` is that caller.
+
+The state machine was already built from both ends. `PATCH /me/bookings/:id/billing` stamps
+`amount_cents`, `platform_cut_cents` and `take_rate_bps` server-side and moves the row to
+`billing_state = 'billed'`; `markSessionCharged` moves it to `'collected'` when Stripe's webhook
+says the money arrived. Only the transition between them — the client actually paying — had
+nothing that could perform it.
+
+### Why this is worth a decision rather than just a route
+
+`settlementMode()` answers `'none'` **only** because `ADVISOR_CHARGING_ENABLED` is unset, and
+that value is reported as `settlement:` by seven handlers in `routes/advisors.ts` and two in
+`admin_platform.ts`. So before this route existed, flipping the flag would have **told advisors
+settlement was live while no path could take a payment** — a surface asserting a capability that
+does not exist, which is the D56/D68 failure. This change does not turn charging on. It makes the
+flag *sufficient*, so that flipping it is a switch and not a claim.
+
+### The dead code this uncovered, which was worse than recorded
+
+Migration 240 created `advisor_office_hour_slots.payment_state` with `'held_unpaid'` meaning "a
+slot taken by a booking that could not be charged", and the working note for this task said that
+column simply had no writer. It was worse than that. `markSessionCharged` clears the hold with
+`SET payment_state = 'charged' WHERE ... AND payment_state IN ('held_unpaid', 'authorized')`, and
+**neither of those two states had a writer anywhere in the worker** — so that `UPDATE` could never
+match a row. The fulfilment leg's slot bookkeeping was unreachable in both directions, not merely
+unexercised. Step 4 of this route is `held_unpaid`'s first writer, which is also what makes that
+`UPDATE` reachable for the first time. (`'authorized'` still has none; it is for a manual-capture
+flow nobody has built, and it stays honestly empty rather than being written by this route to make
+a `CHECK` constraint look used.)
+
+The write is scoped `AND payment_state = 'not_applicable'` so a slot already `charged` or
+`refunded` by another booking on the same capacity is never walked backwards, and it is
+best-effort: the founder's answer does not depend on the bookkeeping succeeding.
+
+### Charging an already-priced booking, rather than a path that prices itself
+
+The obvious alternative was a route that resolves a price itself — `advisor_booking_links.
+session_type_id` → `advisor_session_types.price_cents`, a chain migration 240 created and no
+route reads. That was rejected for this change: it needs a booking path that does not exist (the
+`/b/<slug>` link flow is unbuilt) and it makes a pricing decision nobody has asked for. Charging
+a booking the advisor has already priced needs **no migration and no new booking path**, and it
+closes the actual gap. The price chain remains unresolved and unasked.
+
+### The guard ordering is load-bearing, and the tests treat it as behaviour
+
+`chargeSession` throws `SettlementDisabled` on its own, so the route refuses either way — but it
+throws *after* the handler would have called `ensurePaymentsCustomer`, which creates a Stripe
+customer and writes `users.stripe_customer_id`. Checking settlement first means a charge that
+cannot succeed leaves **no customer, no `held_unpaid`, and no D1 write of any kind**. The `catch`
+still maps `SettlementDisabled` anyway, because a guard that depends on the caller checking first
+is not a guard.
+
+### A rate-limit bucket, because the PR template's checklist was a real question
+
+*"Rate-limit bucket assigned for any new public endpoint"* turned out not to be a tick-box here.
+The route fell through to the generic `user` bucket: **60 PaymentIntent creations per minute per
+user, fail-OPEN**, so knocking out KV removed even that. `promo_validate` (20/min, failClosed) and
+`admin_catalog_writes` (20/min, failClosed) are both tighter for strictly less exposure, and the
+`Bucket` type's own comment reserves `failClosed` for *"abuse-prone / money-adjacent buckets so the
+limiter can't be bypassed by knocking out KV"*. `advisor_session_charge` is 10/min per user,
+failClosed. Ten is far above any real workflow — paying is one call, a declined card is a handful
+of retries — and `chargeSession`'s idempotency key means repeat calls for the same booking return
+the same intent, so what this caps is a script walking many bookings.
+
+**The pattern names both mounts, and that is load-bearing.** `index.ts` routes the advisors router
+at `/api/advisors` **and** `/api/mentors`. A bucket naming only the first would leave
+`/api/mentors/bookings/1/pay` on the generic fail-open bucket — a limiter that is present, green,
+and bypassable by spelling the prefix the other way. That is the `ai` bucket's recorded bug
+verbatim (`/api/advisor` vs `/api/advisory`, where the one route that spends Workers AI per request
+matched no AI bucket at all), except both prefixes here are live today rather than hypothetical.
+
+`rateLimit_advisor_charge.test.ts` executes the pattern rather than substring-matching it, for the
+reason its sibling gives: a regex reads correct and matches the wrong set. 13 mutations, 0 escapes
+— including dropping `mentors`, widening the id to `.+`, losing either anchor, adding a `/g` flag,
+and moving the bucket below the catch-all.
+
+**One of those mutations escaped first, and the cause is worth recording**: the sibling guards
+locate a bucket with `src.slice(at, at + 400)`, and this bucket sits immediately above the generic
+`user` one, so 400 characters run past its closing brace into a neighbour that also carries
+`scope: 'user'`. Flipping *this* bucket to `scope: 'ip'` left the assertion satisfied by the next
+bucket's line. The fix slices to the literal's own `},`. The existing guards are not wrong today,
+but only because their windows happen to land in comment prose — reordering the list would give
+them the same hole.
+
+### No frontend, and therefore no `docs/` rebuild
+
+The route returns 503 in every environment today. A payment UI that can only 503 would be exactly
+the surface-implying-a-capability failure above, so there is none — and no `api.js` method either,
+since nothing calls it (`check-api-drift` has nothing to reconcile). The route is written, tested
+and unreachable, which is the posture `advisorConnect.ts` already takes for the same reason.
+
+### One deliberate omission, stated rather than skipped
+
+Wellbeing persists `stripe_payment_intent_id` on its booking row; `advisor_bookings` has no such
+column and adding one is a migration this change was scoped to avoid. It is not needed:
+`markSessionCharged` finds the booking by `metadata.booking_uid`, and `chargeSession`'s idempotency
+key `pi:advisory:${bookingUid}` is deterministic from that same uid, so the intent is recoverable
+from Stripe without a second copy. A follow-up if a reconciliation report ever wants it locally.
+
+### What the green here means
+
+`cloudflare-worker/test/advisor_charge_route.test.ts` is 20 tests, every assertion
+mutation-checked in both directions (24 mutations, 0 escapes). **It is unit-test green, not a live
+charge** — `settlementMode()` is `'none'` in every environment, including the test harness unless
+a test forces it on, so no money has moved and none can until the flag flips. Three findings from
+that pass are recorded next to the code they apply to, because they generalise:
+
+- An assertion is worthless if its fixture makes the bug invisible. `amountCents: gross` mutated
+  to `amountCents: 30000` **passed**, because the fixture price was `30_000`. Fixed with an odd
+  price (`41_737`) and by asserting against the stored row rather than a constant.
+- A source-text assertion cannot see dead code. `if (false && e instanceof SettlementDisabled)`
+  still contains the text the assertion reads, so it escaped; the honest mutation for a source
+  assertion is deletion, and the residual gap is written down in the test rather than patched with
+  a rule that only fits the mutation that found it.
+- **A guard that scans a file as text reads its comments too.** PR5a's existing guard — *"no
+  advisory surface renders a charge as accomplished fact"* — forbids hard-coding the settlement
+  mode anywhere in `routes/advisors.ts`, and it failed this branch **twice**: first on a real
+  literal in the `SettlementDisabled` catch, then on the comment written to explain why that
+  literal had been removed. Both were the guard working. The first fix was the interesting one:
+  the right value was neither a constant nor a second `settlementMode()` read but `e.mode` off the
+  thrown error, symmetrical with the `e.state` the 409 below it already used — so a refusal now
+  reports what the service decided rather than what the environment says a moment later. The
+  second was a reminder that prose inside a scanned file is part of what gets scanned.

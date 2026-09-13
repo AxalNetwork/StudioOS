@@ -35,6 +35,22 @@ type Bucket = {
 // the word, and `[^/]+` rather than `.+` so it cannot span a segment.
 export const COMPANY_INVITE_SEND = /^\/api\/company\/[^/]+\/invitations(\/[^/]+\/resend)?$/;
 
+/**
+ * The founder's advisory-session charge — `POST /bookings/:id/pay`, D81.
+ *
+ * BOTH MOUNTS, AND THAT IS NOT DEFENSIVE PADDING. `index.ts` routes the same
+ * advisors router at `/api/advisors` AND `/api/mentors`, so a pattern naming
+ * only the first would leave `/api/mentors/bookings/1/pay` on the generic
+ * 60/min fail-open bucket — the limiter present and bypassable by spelling the
+ * prefix the other way. That is the `ai` bucket's recorded bug exactly
+ * (`/api/advisor` vs `/api/advisory`), and both prefixes are live today rather
+ * than hypothetical.
+ *
+ * Anchored at both ends with `[^/]+` for the id, so it cannot widen to a path
+ * that merely contains the word or span a segment.
+ */
+export const ADVISOR_SESSION_CHARGE = /^\/api\/(advisors|mentors)\/bookings\/[^/]+\/pay$/;
+
 const BUCKETS: Bucket[] = [
   // 5 spin-out executions / hour, admin/partner only
   {
@@ -139,6 +155,28 @@ const BUCKETS: Bucket[] = [
     test: (p, m) =>
       (m === 'POST' || m === 'PATCH' || m === 'PUT') &&
       (p.startsWith('/api/admin/catalog/') || p.startsWith('/api/admin/stripe/')),
+    scope: 'user',
+    failClosed: true,
+  },
+  // D81 — the founder's advisory-session charge. Each accepted call asks Stripe
+  // to create a PaymentIntent against a connected account, which is the most
+  // money-adjacent write this worker has; `promo_validate` and
+  // `admin_catalog_writes` above are both tighter than the default for less.
+  // Left on the generic bucket it would be 60 intent creations a minute per
+  // user, fail-OPEN, so a KV outage removed even that.
+  //
+  // 10/min is far above any real workflow — paying for a session is one call,
+  // and a declined card is a handful of retries — and far below anything worth
+  // driving. `chargeSession`'s idempotency key is derived from the booking uid,
+  // so repeat calls for the SAME booking return the same intent; the surface
+  // this caps is a script walking many bookings. failClosed for the reason the
+  // type's own comment gives: a money-adjacent limit that goes away when KV
+  // does is not a limit.
+  {
+    name: 'advisor_session_charge',
+    limit: 10,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && ADVISOR_SESSION_CHARGE.test(p),
     scope: 'user',
     failClosed: true,
   },
