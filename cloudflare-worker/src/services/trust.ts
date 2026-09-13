@@ -503,6 +503,21 @@ export async function resyncKycKyb(env: Env): Promise<{ scanned: number; updated
   }
 
   // -- KYB reconciliation (entity investors) --------------------------------
+  // THIS BRANCH IS INERT AND NOW SAYS SO. The SELECT joins
+  // `corporate_profiles.kyb_status`, which no table in this schema defines, so D1
+  // rejects it on every run. It used to be swallowed by a bare
+  // `.catch(() => ({ results: [] }))`, which is indistinguishable from "no rows to
+  // reconcile": the nightly cron reported `scanned=0, updated=0` and read as
+  // healthy while `kyb_v1` — which has no other satisfier — stayed pending for
+  // every entity investor and every partner handed one at deal signature.
+  //
+  // The statement is KEPT rather than removed. It is the only record of the
+  // intended flow, and `scripts/check-sqlite-columns.mjs` tracks that phantom
+  // column by name as the standing marker for this gap (asserted in
+  // `test/schema_guards.test.mjs`, and depended on by
+  // `test/obligation_satisfiable.test.ts`). Wiring KYB means giving the decision a
+  // real home — migration 220's `company_kyb_records.status` is the obvious
+  // candidate — and pointing this query at it; it is not a switch to flip.
   try {
     const pendingKyb: any = await env.DB.prepare(
       `SELECT lo.id AS oblig_id, lo.user_id, cp.kyb_status
@@ -510,7 +525,15 @@ export async function resyncKycKyb(env: Env): Promise<{ scanned: number; updated
          LEFT JOIN corporate_profiles cp ON cp.user_id = lo.user_id
         WHERE lo.obligation_key = 'kyb_v1'
           AND lo.status IN ('pending','in_review')`,
-    ).all().catch(() => ({ results: [] as any[] }));
+    ).all().catch((e: any) => {
+      console.warn(
+        '[trust] resyncKycKyb KYB inert — no KYB decision can be read: '
+        + 'corporate_profiles.kyb_status does not exist and no provider writes one, '
+        + 'so kyb_v1 cannot be satisfied by this reconciler '
+        + `(${e?.message || e})`,
+      );
+      return { results: [] as any[] };
+    });
     const rows: any[] = pendingKyb?.results || [];
     scanned += rows.length;
     for (const r of rows) {
