@@ -96,6 +96,26 @@ export function mapError(c: Context<{ Bindings: Env }>, e: any) {
   if (e instanceof Response) return e;
 
   const msg = String(e?.message || e || 'Error');
+
+  // A SCHEMA ERROR IS A BUG, NOT A REFUSAL, and the caller must not be handed
+  // the query's internals. Every other message this function maps is a sentence
+  // somebody wrote for a person to read; "no such column" is SQLite talking to
+  // us. It reached a customer: `/pipeline/leads` queried a column
+  // `service_offerings` has never had, and because the frontend promotes
+  // `detail` to the thrown `Error.message` and the zone renders that verbatim,
+  // a partner's screen read `D1_ERROR: no such column: partner_id at offset 62:
+  // SQLITE_ERROR`.
+  //
+  // DELIBERATELY NARROW — only the two shapes that mean "the code and the
+  // schema disagree". A UNIQUE or FOREIGN KEY constraint failure is a real
+  // answer about the caller's data, routes translate those into their own
+  // wording, and swallowing them here would hide a refusal rather than a bug.
+  // 500 rather than 400 because nothing about the request was wrong.
+  if (/no such column|no such table/i.test(msg)) {
+    console.error('[mapError] schema mismatch — the code and D1 disagree:', msg);
+    return c.json({ detail: 'Something went wrong loading this. The failure has been logged.' }, 500);
+  }
+
   const status =
     msg === 'Unauthorized' ? 401 :
     msg === 'Forbidden' || msg === 'Admin required' || msg === 'KYC required' ? 403 :

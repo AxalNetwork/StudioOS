@@ -438,10 +438,20 @@ export default function PartnerNegotiationsZone() {
   // Hoisted so the gate branch below and the live row draw the SAME row.
   // With nothing loaded the export renders disabled and says so itself,
   // which is what makes a header row over an unreadable store honest.
+  // FIVE OF THESE SIX EXPORT COLUMNS READ NOTHING BEFORE THIS. The row is
+  // `{ quote_id, price, need_title, need_category, founder_name,
+  // negotiation: {stage, ball, open_question} | null, terms }` — so `r.shape`,
+  // `r.value_cents`, `r.stage`, `r.ball_in_court` and `r.open_question` were
+  // all undefined and exported as empty cells, leaving a CSV of client names.
+  // The board above reads them correctly, which is why nobody saw it: only the
+  // download was wrong, and the download is disabled until rows load.
+  // `negotiation` is null for a quote nobody has started tracking, so the last
+  // three are optional-chained rather than assumed.
   const rowActions = partnerZoneActions('pipeline/negotiations', { view: {
         header: ['Client', 'Shape', 'Value', 'Stage', 'Ball', 'Open question'],
         rows: items,
-        cells: (r) => [r.founder_name, r.shape, r.value_cents, r.stage, r.ball_in_court, r.open_question],
+        cells: (r) => [r.founder_name, r.need_category, r.price,
+          r.negotiation?.stage, r.negotiation?.ball, r.negotiation?.open_question],
       } });
 
   if (isNoPartnerProfile(state.error)) {
