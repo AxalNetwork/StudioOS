@@ -462,9 +462,28 @@ test('a collision counts only when neither definition can host the other', () =>
   // could host the other, so whichever ran first won and the loser's writer
   // threw on every call. Migration 235 adds the four columns to the real
   // table and the phantom declaration is gone, so there is one shape again.
+  //
+  // `advisor_bookings` AND `service_offerings` LEFT ON 2026-09-13, and they left
+  // a different way: not fixed, never real. `definitions()` walked
+  // `cloudflare-worker/sql` recursively and so harvested `sql/historical/`, whose
+  // own README says "Nothing builds from them." A definition that has never been
+  // a build input cannot be one of two definitions competing to be the table.
+  //
+  // What that produced was not a false pass but a false FINDING, and the shape of
+  // it is worth keeping: the `advisor_bookings` collision was reported between
+  // `historical/schema.sql:1024` and `historical/t13_t14_t15.sql:52` — two
+  // archived files disagreeing with EACH OTHER — while its single live definition
+  // in the baseline conflicts with nothing. `service_offerings` was worse: its
+  // archived shape is the one that took `/pipeline/leads` down in #182, so the
+  // ledger was asking someone to adjudicate between the live table and a file
+  // already established as wrong. Both entries are deleted from the baseline, and
+  // this list shrinks with them.
+  //
+  // The exclusion does not blind the gate: a fresh conflicting definition in a
+  // real build input still fails it, mutation-checked.
   assert.deepEqual([...all.keys()].sort(), [
-    'advisor_bookings', 'capital_calls', 'founder_checkins',
-    'ic_meetings', 'metrics_snapshots', 'service_offerings', 'wellbeing_resources',
+    'capital_calls', 'founder_checkins',
+    'ic_meetings', 'metrics_snapshots', 'wellbeing_resources',
   ]);
 });
 
