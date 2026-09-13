@@ -51,7 +51,8 @@ import {
   Loader2, CheckCircle2, ArrowRight, MessageSquare, SkipForward, BookOpen,
   Mic, MicOff, Ticket,
 } from 'lucide-react';
-import { api, spinoutLab as spinoutLabApi } from '../../lib/api';
+import { api, getActiveCompanyId, spinoutLab as spinoutLabApi } from '../../lib/api';
+import { orientationMessage, shouldOrient } from '../../lib/eadwynOrientation';
 import { safeReadJSON, safeWriteJSON } from '../../lib/storage';
 import { reportError } from '../../lib/log';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -235,6 +236,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
       setProgress(r.progress || { total: 0, answered: 0, skipped: 0, percent: 0, complete: !!r.complete });
       // Hydrate transcript so reloads show prior turns.
       const cid = r.conversation_id || r.conversation_uid;
+      let hydrated = 0;
       if (cid) {
         try {
           const hist = await api.advisor.conversation(cid);
@@ -245,7 +247,38 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
           }));
           setMessages(msgs);
           setAnsweredIds((hist?.answers || []).filter((a) => a.saved_status === 'saved').map((a) => a.question_id));
+          hydrated = msgs.length;
         } catch { /* non-fatal */ }
+      }
+      // ORIENTATION — Eadwyn says what it is before it asks anything.
+      //
+      // A newcomer arriving from onboarding met this panel empty, with the
+      // assessment's first question in it. Out of context that reads as one
+      // more form, on the single surface whose whole purpose is to save them
+      // from forms.
+      //
+      // ONLY WHEN THE TRANSCRIPT IS EMPTY, which is what makes it once-only
+      // without a flag: a reader with history is not a newcomer, and a reader
+      // who answers anything never sees it again. `hydrated` is counted from
+      // the history read rather than from `messages`, because this runs inside
+      // the same tick that set it and the state has not landed yet.
+      //
+      // IT SPENDS NOTHING. The text is assembled from the persona, the progress
+      // and whether a company is linked — all already in hand. A first touch is
+      // the worst place to spend a budget nobody has agreed to, which is the
+      // same call `ui/eadwynConfig.js` makes about the onboarding chat.
+      const orientProgress = r.progress || null;
+      if (shouldOrient({ ready: true, messageCount: hydrated })) {
+        setMessages([{
+          role: 'assistant',
+          orientation: true,
+          content: orientationMessage({
+            role: r.persona || user?.role || null,
+            progress: orientProgress,
+            hasCompany: !!getActiveCompanyId(),
+            name: user?.name || null,
+          }),
+        }]);
       }
       // Explorer completion incentive — the worker attaches `promo_notice`
       // for exploring users: an early "finish this and earn a 30-day
@@ -275,7 +308,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
       availabilityRef.current?.(true);
       setLoadError(e?.message || 'Could not load the assistant');
     }
-  }, []);
+  }, [user?.role, user?.name]);
 
   useEffect(() => { if (user) bootstrap(); }, [user, bootstrap]);
   // Server-driven progress + lab state.
