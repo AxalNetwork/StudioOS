@@ -26,8 +26,10 @@
  * here would still pass.
  *
  * The interesting half is still the NEGATIVE one. `Send to Problem slide` is
- * drawn on two artboards and has no endpoint, so it carries `unbuilt:` and no
- * handler — and this file fails the moment it gains one.
+ * drawn on two artboards and must never become a button that sends: the pain
+ * themes already feed the deck. It is a LINK to the slide now, under a label
+ * that does not say "send" — and this file fails the moment it gains a handler
+ * or gets the canvas's verb back on a control.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -36,6 +38,7 @@ import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 import { apiMethodNames } from './_apiMethods.mjs';
 import { FOUNDER_ZONE_FILTERS } from '../src/workspaces/founderZoneFilters.js';
+import { FOUNDER_ZONE_ACTIONS as ZONE_ACTIONS } from '../src/workspaces/founderZoneActions.js';
 import { makeZoneActions } from '../src/workspaces/zoneActionBuilder.js';
 
 const ROOT = resolve(import.meta.dirname, '..', '..');
@@ -307,23 +310,45 @@ test('the retire control is the caller `retired_at` never had', () => {
     'the control no longer toggles, so a retired claim cannot be restored');
 });
 
-test('"Send to Problem slide" is not drawn, because it would be theatre', () => {
-  // The canvas gives it to Pain map and Verdict. There is no endpoint — and
+test('"Send to Problem slide" is a link to the slide, never a button that sends', () => {
+  // The canvas gives it to Pain map and Verdict, and the verb is the problem:
   // the pain themes ALREADY feed the deck's slide 2, since `pain_groups` is
   // curated for exactly that. A button that "sends" would be a control over a
-  // pipe that already runs, which is a worse lie than a missing button.
-  // It is IN the table — dropping it would tell the canvas-order guard the
-  // artboard never drew it — and it carries `unbuilt:`, which renders nothing.
+  // pipe that already runs — a worse lie than a missing button.
+  //
+  // IT WAS `unbuilt:` UNTIL 2026-09-13 AND THAT IS NO LONGER THE RIGHT ANSWER.
+  // An unbuilt op renders disabled with its reason on hover, which says "this
+  // cannot run" about a connection that runs fine. What a reader pressing it
+  // actually wants is to SEE the slide, and that is a route they may open. So
+  // the op is a link to the deck workspace, the artboard's word stays in
+  // `canvas:` where the canvas-order guard reads it, and the word on screen is
+  // one that does not claim to send.
   const declared = declaredHandlers();
   for (const zone of ['validate/pain-map', 'validate/verdict']) {
     assert.ok(!(declared.get(zone) || []).length || declared.get(zone).length < 2,
       `${zone} declares a handler for every op, so the send button became real`);
   }
   const table = codeOnly(TABLE);
-  assert.match(table, /\{ label: 'Send to Problem slide', unbuilt: '/,
-    'the send op must stay recorded as a gap, so the canvas-order guard still sees it');
+  assert.match(table, /canvas: 'Send to Problem slide', label: '([^']+)', to: '\/raise\/pitch\?mode=workspace'/,
+    'the artboard op must stay recorded, as a link, or the canvas-order guard stops seeing it');
+  assert.doesNotMatch(table, /label: 'Send to Problem slide'/,
+    'the canvas verb is back on a control, and the control does not send');
   assert.ok(!/Send to Problem slide/.test(block),
     'a "send" button over a feed that is already live must not ship');
+
+  // AND RENDERED, not just declared. The table could hold the right entry and
+  // the builder still emit a dead control; this is the half a reader sees.
+  const zoneActions = makeZoneActions(ZONE_ACTIONS);
+  for (const zone of ['validate/pain-map', 'validate/verdict']) {
+    const op = zoneActions(zone, { query: '?project_id=7' })
+      .find((a) => /Problem slide/.test(a.label));
+    assert.ok(op, `${zone} no longer draws the Problem-slide op at all`);
+    assert.doesNotMatch(op.label, /send/i, `${zone} draws a control whose label claims to send`);
+    assert.equal(op.to, '/raise/pitch?mode=workspace&project_id=7',
+      `${zone}'s Problem-slide op does not carry the reader's scope to the deck`);
+    assert.equal(typeof op.onClick, 'undefined', 'a link must not also carry a click');
+    assert.ok(!op.disabled, 'the op is a live route, so it must not render disabled');
+  }
 });
 
 test('ZoneActions renders no limit at all, as text or as a button', () => {

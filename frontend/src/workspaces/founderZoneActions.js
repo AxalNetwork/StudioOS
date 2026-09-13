@@ -55,13 +55,19 @@ export const FOUNDER_ZONE_ACTIONS = {
     // the canvas's word would promise a column the download has not got.
     { canvas: 'Export transcripts', label: 'Export interviews', kind: 'handler', handler: 'exportInterviews' },
   ],
-  // "Send to Problem slide" is drawn on two artboards and performs nothing on
-  // either — not because the pipe is missing, but because it already runs
-  // without a button: `pain_groups` is curated for the deck's slide 2 (see
-  // progress.ts), so a control that "sends" would be theatre over a connection
-  // that is already live. What it should become is a link that says so.
+  // "Send to Problem slide" IS NOW THE LINK THIS COMMENT ASKED FOR, and the
+  // label is not the canvas's because the canvas's would be a lie. It is drawn
+  // on two artboards and performs nothing on either — not because the pipe is
+  // missing, but because it already runs without a button: `pain_groups` is
+  // curated for the deck's slide 2 (`services/spinoutDeckData.ts` reads it,
+  // `axalSpinoutDemoDay.ts` renders it), so a control that "sends" would be
+  // theatre over a connection that is already live. A reader who presses it
+  // wants to SEE the slide, and that is a route they may open — so the op is a
+  // link to the deck and says what is already true on hover. Same reasoning as
+  // `Export transcripts` above: keep the artboard's word in `canvas`, put the
+  // honest one in `label`.
   'validate/pain-map': [
-    { label: 'Send to Problem slide', unbuilt: 'the curated pain themes already feed the deck’s Problem slide; there is nothing to send, and a button implying otherwise would claim credit for a pipe that runs on its own', hover: 'These themes already feed the deck’s Problem slide, so there is nothing to send.' },
+    { canvas: 'Send to Problem slide', label: 'Open the Problem slide', to: '/raise/pitch?mode=workspace', linkNote: 'These themes already feed the deck’s Problem slide — open the deck to read it.' },
     { label: 'Export map', kind: 'handler', handler: 'exportPainMap' },
   ],
   'validate/hypotheses': [
@@ -70,17 +76,29 @@ export const FOUNDER_ZONE_ACTIONS = {
   ],
   'validate/verdict': [
     { label: 'Export summary', kind: 'handler', handler: 'exportSummary' },
-    { label: 'Send to Problem slide', unbuilt: 'the curated pain themes already feed the deck’s Problem slide; there is nothing to send, and a button implying otherwise would claim credit for a pipe that runs on its own', hover: 'These themes already feed the deck’s Problem slide, so there is nothing to send.' },
+    { canvas: 'Send to Problem slide', label: 'Open the Problem slide', to: '/raise/pitch?mode=workspace', linkNote: 'These themes already feed the deck’s Problem slide — open the deck to read it.' },
   ],
   // ── Build ────────────────────────────────────────────────────────────────
   'build/this-week': [
     { label: 'Export CSV', kind: 'export' },
-    { label: 'Configure zone', unbuilt: 'nothing here is configurable — this desk reads the roadmap’s Now column' },
+    // WHAT WOULD CONFIGURE THIS DESK IS THE ROADMAP, so the op is a link to
+    // where the roadmap is edited. `/build/roadmap` is the READ-ONLY view of
+    // the same data — sending a reader there to change something is the
+    // round trip this note is meant to save them. The editor is
+    // `/execution/roadmap` (`RoadmapPage` calls `api.moveOkr`), which is the
+    // destination `New scenario` below already uses for the same reason.
+    { label: 'Configure zone', to: '/execution/roadmap', linkNote: 'This desk reads the roadmap’s Now column; the roadmap is edited in Execution.' },
   ],
   'build/board': [
     { label: 'Bulk move', unbuilt: 'no bulk stage change is stored; a deal moves from its own row' },
     { label: 'Automations', unbuilt: 'no automation rules are stored' },
-    { label: 'Configure lanes', unbuilt: 'the lanes are the pipeline’s stored stages and are not editable here' },
+    // THE REASON HERE CLAIMED MORE THAN THE CODE HAS. It said the lanes were
+    // "the pipeline’s stored stages", which implies a table an editor could
+    // one day write to. There is none: the six stages are a literal, written
+    // twice — `FounderBuildBoard.jsx` and `pages/PipelinePage.jsx` — and a
+    // founder cannot even drag between them (`PipelinePage` gates `canEdit`
+    // on admin or partner). Configuring them needs a stage table first.
+    { label: 'Configure lanes', unbuilt: 'the six lanes are written into the code twice and no per-project stage list is stored, so there is nothing for an editor to change', hover: 'The six lanes are fixed in code — no per-project stage list is stored yet.' },
   ],
   'build/roadmap': [
     { label: 'New scenario', to: '/execution/roadmap', linkNote: 'objectives and key results are edited in Execution' },
@@ -126,7 +144,14 @@ export const FOUNDER_ZONE_ACTIONS = {
   'grow/brand': [
     { label: 'New page', to: '/spinout-lab/brand' },
     { label: 'Export leads', kind: 'export' },
-    { label: 'Edit templates', unbuilt: 'landing templates are chosen in the brand builder, not edited' },
+    // THE REASON WAS FALSE ABOUT THE BUILDER IT NAMED. It said templates are
+    // "chosen in the brand builder, not edited"; `/build/brand` mounts
+    // `BrandBuilderPage`, whose step 2 chooses a template and whose step 3
+    // renders `TemplateContentEditor` over `TEMPLATE_CONTENT_SCHEMA` — which
+    // is editing the template's content, field by field. A reason that names
+    // a surface the reader may open and then denies the capability that
+    // surface has is worse than no reason: it sends them away from the answer.
+    { label: 'Edit templates', to: '/build/brand', linkNote: 'Templates are chosen and their content edited in the brand builder.' },
   ],
   'grow/launch': [
     { label: 'New item', to: '/calendar' },
@@ -164,7 +189,19 @@ export const FOUNDER_ZONE_ACTIONS = {
   'raise/pitch': [
     { label: 'New version', to: '/raise/pitch?mode=workspace' },
     { label: 'Export PDF', to: '/raise/pitch?mode=workspace' },
-    { label: 'Revoke a link', unbuilt: 'share links are revoked where they are issued, in the deck builder' },
+    // THIS REASON WAS SIMPLY UNTRUE, and it is the worst kind of untrue: it
+    // named a surface and sent the reader there to do something no surface
+    // does. `api.deckShare` issues a link (`routes/decks.ts`) and NOTHING
+    // revokes one — not the deck builder, not this desk, nowhere. What
+    // limits a leaked link today is only its own expiry, and
+    // `PitchDeckPage` issues every one with `{ expires_in_hours: 24,
+    // view_limit: 1 }`, so the hover states those two facts rather than
+    // pointing anywhere. The shape a revoke would copy exists one route over
+    // — `DELETE /api/captable/shares/:id` revokes by expiring, keeping the
+    // view history attributable — and building it needs a `revoked_at`
+    // column `pitch_deck_share_tokens` has not got. That is a store change,
+    // so it is a task and not a reword.
+    { label: 'Revoke a link', unbuilt: 'nothing revokes a deck share link anywhere in the product; each one expires on its own, after 24 hours or a single view', hover: 'A deck link cannot be revoked yet — it expires on its own, after 24 hours or one view.' },
   ],
   'raise/capital': [
     { label: 'Model a round', to: '/raise/capital/model' },
@@ -172,7 +209,12 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Add instrument', to: '/raise/capital/cap-table' },
   ],
   'raise/legal': [
-    { label: 'Send for signature', unbuilt: 'no e-signature provider is connected' },
+    // THE REASON WAS STALE, NOT WRONG WHEN WRITTEN. "No e-signature provider
+    // is connected" reads as DocuSign being unconfigured, and DocuSign is the
+    // OPTIONAL second provider: `routes/esign.ts` declares `provider TEXT NOT
+    // NULL DEFAULT 'native'` and the native path signs without any third
+    // party. `/legal/send` is mounted for every licence, a founder included.
+    { label: 'Send for signature', to: '/legal/send' },
     { label: 'Add document', to: '/legal' },
     { label: 'Calendar', to: '/raise/legal-engine/compliance' },
   ],
