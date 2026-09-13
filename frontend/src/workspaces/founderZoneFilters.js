@@ -72,8 +72,12 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
 // reworded copy cannot drift from its twin.
 const NO_WEEK_STAMP =
   'a key result carries no week, so there is no earlier week to open';
-const NO_CADENCE_STORE =
-  'no ritual schedule or review archive is stored for this startup';
+// `NO_CADENCE_STORE` stood here — "no ritual schedule or review archive is
+// stored for this startup" — and covered all four of `build/cadence`'s labels.
+// Migration 250 stored all three of those things, and removing the constant is
+// the point: a reason that survives its own fix is a reason that will be cited
+// again. This is the second one to go the same way (`NO_SESSION_RECORD`, below,
+// went when migration 221 landed), which is the pattern working.
 const NO_LIQUIDITY_LEDGER =
   'no restriction, tender or liquidity-event ledger is connected';
 // `NO_SESSION_RECORD` stood here — "no session history is stored, so no past
@@ -252,13 +256,22 @@ export const FOUNDER_ZONE_FILTERS = {
     { canvas: 'Dependencies', key: 'dependencies' },
     { canvas: 'Scenarios', unbuilt: 'no roadmap scenario is stored' },
   ],
-  // Nothing at all backs this zone: the page loads the project list and no
-  // second source. All four filters share the one reason.
+  // ALL FOUR ARE LIVE AS OF MIGRATION 250. Rituals, the runs that archive them
+  // and their templates are stored per project (`routes/founder_cadence.ts`), so
+  // every chip here is a predicate over rows — `lib/cadence.js`'s `CADENCE_VIEWS`
+  // holds them, and the worker exports the same map so the CSV and the chips
+  // cannot disagree about what `retros` selects.
+  //
+  // THE ROW MIXES TWO AXES AND THAT IS THE CANVAS'S CHOICE. `Plans` and `Retros`
+  // narrow on the ritual's KIND; `Skipped` narrows on the run's STATE. So a
+  // missed retro appears under both, and the counts do not sum to the total.
+  // Said out loud here because the alternative is a reader deciding the numbers
+  // are broken.
   'build/cadence': [
-    { canvas: 'All rituals', unbuilt: NO_CADENCE_STORE },
-    { canvas: 'Plans', unbuilt: NO_CADENCE_STORE },
-    { canvas: 'Retros', unbuilt: NO_CADENCE_STORE },
-    { canvas: 'Skipped', unbuilt: NO_CADENCE_STORE },
+    { canvas: 'All rituals', key: 'all' },
+    { canvas: 'Plans', key: 'plans' },
+    { canvas: 'Retros', key: 'retros' },
+    { canvas: 'Skipped', key: 'skipped' },
   ],
   // Metric snapshots are dated and their fields are individually nullable, so
   // every one of these four is a predicate over stored values.

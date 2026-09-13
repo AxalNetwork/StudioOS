@@ -68,7 +68,10 @@ const PROFILES = {
     // elsewhere in the same change must be turned into a link in the same
     // change, or the product ships a feature while a header still denies it.
     links: 23,
-    exports: 20,
+    // 20 → 21 with `build/cadence`'s `Export archive`. Migration 250 gave the
+    // zone a review archive, so an export over the rows the page is showing is
+    // the same `kind: 'export'` every other zone uses.
+    exports: 21,
     // Seven ops the PAGE performs: six of Validate's — three open a dialog the
     // workspace owns and three are server-side CSV downloads with a busy state —
     // plus `research/ask`'s `New brief` and `research/library`'s `Upload` —
@@ -80,7 +83,13 @@ const PROFILES = {
     // "pinning it at 0 elsewhere is what makes a second one show up as a change
     // rather than as a silent spread", and that is exactly how this landed —
     // three counts went red in one run and each was read before it was moved.
-    handlers: 8,
+    //
+    // 8 → 10 with `build/cadence`'s `New ritual` and `Edit templates`. Both open
+    // a form `FounderBuildCadence` owns, which is the shape D67 named this kind
+    // for; and both were `unbuilt` until migration 250 stored rituals and
+    // templates, so the gap count below falls by three as these two and the
+    // export above go live — the whole point of pinning all four.
+    handlers: 10,
     // NOTHING IS EXCLUDED ANY MORE. `research/funds` sat here as "a card in
     // `ResearchWorkspace`'s ZONE_COPY, not a body" — true when it was written
     // and untrue since `ZONE_COPY` became `{}` and `LIVE_ZONES` gained `funds`.
@@ -892,7 +901,17 @@ for (const [name, profile] of Object.entries(PROFILES)) {
       const src = read(f);
       let at = src.indexOf(`${profile.call}('`);
       while (at >= 0) {
-        const call = callText(src, at);
+        // COMMENTS INSIDE THE CALL ARE PROSE, NOT IDENTIFIERS, and this read
+        // them as names. `FounderBuildCadence` explains its two page-supplied
+        // ops with `// Both ops need a venture.` inside the builder call, and
+        // the scan below reported `Both` as an undeclared global on a page that
+        // is correct. `codeOnly` is the repo's existing answer to exactly this —
+        // two tests above it stops a docblock's `kind: 'handler'` from being
+        // counted as a declaration. Stripping prose narrows the scan to what it
+        // was always about, so it can only remove false alarms; the guard's own
+        // note says a false alarm here is worse than a gap, because it is what
+        // gets a guard weakened instead of fixed.
+        const call = codeOnly(callText(src, at));
         const bare = call
           // A template literal is text plus real expressions: keep the `${…}`
           // bodies, drop the rest, or `?project_id=${id}` contributes a bare `$`.

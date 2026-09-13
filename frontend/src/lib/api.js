@@ -1291,6 +1291,24 @@ export const api = {
   linkHypothesisPain: (id, data) => request(`/founder/validate/hypotheses/${id}/links`, { method: 'POST', body: JSON.stringify(data) }),
   unlinkHypothesisPain: (linkId) => request(`/founder/validate/links/${linkId}`, { method: 'DELETE' }),
   getValidationDecision: (projectId) => request(`/founder/validate/decision/${projectId}`),
+
+  // Build · Cadence (#176 FB4). ONE READ FOR THE WHOLE ZONE, because all four
+  // of its stat cards are counts over rows the same response carries — a
+  // separate `/stats` call would be a second answer to a question the rows
+  // already answer, and the two would disagree the moment a run is edited.
+  // The write surface is per-record because that is what a form submits.
+  getCadence: (projectId) => request(`/founder/cadence/${projectId}`),
+  getCadenceStarters: () => request('/founder/cadence/starters'),
+  createRitual: (projectId, data) => request(`/founder/cadence/${projectId}/rituals`, { method: 'POST', body: JSON.stringify(data) }),
+  updateRitual: (id, data) => request(`/founder/cadence/rituals/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteRitual: (id) => request(`/founder/cadence/rituals/${id}`, { method: 'DELETE' }),
+  logRitualRun: (projectId, data) => request(`/founder/cadence/${projectId}/runs`, { method: 'POST', body: JSON.stringify(data) }),
+  updateRitualRun: (id, data) => request(`/founder/cadence/runs/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteRitualRun: (id) => request(`/founder/cadence/runs/${id}`, { method: 'DELETE' }),
+  createRitualTemplate: (projectId, data) => request(`/founder/cadence/${projectId}/templates`, { method: 'POST', body: JSON.stringify(data) }),
+  updateRitualTemplate: (id, data) => request(`/founder/cadence/templates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteRitualTemplate: (id) => request(`/founder/cadence/templates/${id}`, { method: 'DELETE' }),
+
   // Validate · the three exports.
   //
   // ONE DOWNLOAD HELPER, NOT THREE. The blob → Content-Disposition →

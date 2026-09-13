@@ -5647,3 +5647,171 @@ the isolate. In production there is one D1 and it never showed. It is a `WeakMap
 keyed on `env.DB` now, matching `services/painGroups.ts` and
 `services/discoveryInterviewSchema.ts`, which key readiness that way for exactly
 this reason.
+
+---
+
+## D88 — `/build/cadence` gets a store: rituals, runs, templates — and the archive is what somebody wrote down
+
+**Date:** 2026-09-13 · **Task:** #176 (FB4) · **Migration:** 250
+
+`/build/cadence` was the emptiest zone in the product and the most talkative about
+it. The page loaded the project list and no second source, printed "Cadence store
+unavailable" in four places, showed four `Unavailable` stat cards and a
+three-row "Capability coverage" list — and its four filter chips and three ops
+were all registered `unbuilt`, which renders **nothing**. So the artboard's
+toolbar shipped empty while the body explained at length that it could not work.
+Reported three times; the user's words were "doesn't look at all like the one from
+the artifact".
+
+Migration 250 gives it three tables and `routes/founder_cadence.ts` reads them.
+
+### Three tables, because three different things are being stated
+
+A **ritual** is a standing intention ("we retro on Fridays"). A **run** is what
+happened on one date, including not happening. A **template** is the prompt a
+ritual is conducted from.
+
+Folding runs into rituals would make the archive a property of the schedule, so
+editing the schedule would rewrite history. Folding templates in would stop two
+rituals sharing one prompt, which is the first thing a founder with a Monday plan
+and a Friday retro wants.
+
+### Every figure above the archive is computed, and none is stored
+
+Reviews archived, adherence, the template count and the average retro length are
+counts over `ritual_runs` and `ritual_templates`. `founder_validate.ts` states the
+rule this follows: a stored count is a second answer to a question the rows
+already answer, and the two disagree the first time a row is edited.
+
+Three of the four had a wrong-but-plausible implementation waiting, and each is
+pinned by a test:
+
+- **Adherence over an empty archive is NULL**, not 0% (which says the founder
+  adheres to nothing) and not 100% (which congratulates them for it). The
+  denominator is returned beside the percentage, because adherence over three runs
+  and over three hundred are different claims.
+- **An untimed retro is excluded from the average, not counted as zero minutes.**
+  What protects this is `intOrNull` checking emptiness **before** `Number()` —
+  `Number(null)` and `Number('')` are both 0 and both finite, the trap #203
+  shipped once in the function whose docblock forbade it. Verified against
+  `node:sqlite` that SQL's own `AVG` also skips NULLs.
+- **`reviews archived` is its own aggregate, not `runs.length`.** The archive is
+  capped at 500 rows so a Worker's memory envelope stays predictable; a count
+  taken from the returned page would be right for every account under 500 reviews
+  and silently stuck at 500 for the ones that have most.
+
+### Adherence cannot see a skip nobody recorded, and that is not patched over
+
+`done / (done + missed)` needs the missed rows to exist, so a project that logs
+only its successes reads 100%. Inferring a miss from a scheduled date with no row
+would mean deciding a founder on holiday broke their cadence. The figure reports
+its denominator instead.
+
+### One run per ritual per date, which replaces nothing and prevents a lot
+
+`UNIQUE(ritual_id, run_date)`, and the writer upserts. Friday's retro happened
+once; without the index a double-submit files it twice and **every** count above
+the archive is then wrong in the direction that flatters. Keyed on `(ritual_id,
+run_date)` rather than `(project_id, run_date)` — the latter would make a Monday
+plan and a Monday standup mutually exclusive, which is most founders' Monday.
+Both columns are NOT NULL, so unlike migration 249's `source` there is no
+NULL-distinctness hole.
+
+### Retiring keeps the archive; deleting does not
+
+`active = 0` retires a ritual and its runs stay, because the archive is the zone's
+reason to exist. Deleting takes the runs with it: a run with no ritual has no name
+and no kind, so it would draw as a blank row and match no filter. The page offers
+retire first.
+
+### The filter row mixes two axes, and that is the canvas's choice
+
+`All rituals · Plans · Retros · Skipped` — the first three select the ritual's
+KIND, the fourth the run's STATE. A missed retro is under both, so the counts do
+not sum to the total. Asserted rather than tolerated, in
+`frontend/test/cadence_vocabulary.test.mjs`, because a reader who expects them to
+sum will conclude the numbers are broken.
+
+### `other` is a kind, and it is load-bearing
+
+Without it a founder's weekly investor sync has to claim to be a retro to be
+stored at all — and then it lands in the `Retros` filter and in the average retro
+length. A store that forces a wrong answer gets wrong answers. The worker coerces
+an unrecognised kind to `other`, which is why the form has to offer it: otherwise
+the coercion is invisible to the person filling it in.
+
+### "1 customised" is a timestamp, not a boolean
+
+`ritual_templates.edited_at` records that someone saved a change. A `customised`
+flag would be a stored derivation; a timestamp is a fact, and it answers the next
+question a reader has. The three built-in starting points are **not** seeded rows:
+a GET that writes cannot be retried safely, and a seeded row is indistinguishable
+from one the founder wrote, which would make the count a statement about the
+platform rather than the venture.
+
+### What the page stopped saying, and the one sentence that survives
+
+Every "unavailable" claim is deleted rather than softened — a refusal kept beside
+a working feature is the failure #193 was filed for, and `NO_CADENCE_STORE` is
+gone from `founderZoneFilters.js` for the same reason `NO_SESSION_RECORD` went
+when migration 221 landed. A stat card with nothing in it now reads **"Not yet"**
+rather than "Unavailable": the platform can answer, the account has not got there,
+and #180 is about exactly that distinction.
+
+What survives, because it is still true: **a calendar event is not an operating
+ritual and a roadmap change is not a review outcome.** Nothing here reads
+`calendar_events`. An archive assembled from side effects would report a cadence
+nobody ran.
+
+### Three things a mutation sweep changed, not just confirmed
+
+24 mutations applied, 24 caught, and two more proved **equivalent** rather than
+escaped — worth recording so nobody tries to close them:
+
+- Removing `decided > 0` computes `Math.round((0 / 0) * 100)` = NaN, and
+  `JSON.stringify({ a: NaN })` is `{"a":null}`. The response is byte-identical, so
+  no assertion at the HTTP boundary can distinguish it. The guard stays.
+- `AND r.duration_minutes IS NOT NULL` is redundant with SQL's `AVG`, verified
+  against `node:sqlite`. It stays as a statement of intent; `intOrNull` is what
+  actually protects the figure.
+
+And one real bug the sweep found rather than confirmed: the retro **target** was
+read from the average's row set, so a retro ritual whose runs were all untimed
+contributed no target either — a founder who had set "target 30" and never timed a
+retro read "No target set". It is its own query now. The target is a property of
+the ritual; the average is a property of its timed runs.
+
+### `/starters` had to be registered above `/:projectId`
+
+Hono matches in registration order, so the literal path resolved as
+`projectId = 'starters'`, `Number('starters')` was NaN, and the route answered 400
+"Invalid project id". A test found it. A static segment goes above the parameter
+that would otherwise eat it.
+
+### Three guards were corrected, not loosened
+
+- `profile_zone_actions.test.mjs`'s identifier scan read **comment words** as
+  variable names (`// Both ops need a venture.` → an undeclared global `Both`).
+  `codeOnly()` now runs on the call text — the same helper two tests above already
+  uses on the whole file. Narrowing a scan to code can only remove false alarms,
+  and the guard's own note says a false alarm is what gets a guard weakened.
+- `profile_zone_filters.test.mjs` asserted all four cadence chips were disabled
+  and unselectable. That fact changed, so the assertion is **inverted**, not
+  relaxed: four live chips, no hover text, exactly one active, and the shared
+  reason gone from the module.
+- `_deck-loader-hook.mjs` could not import any page that imports its stylesheet —
+  `ERR_UNKNOWN_FILE_EXTENSION` before the first assertion. A `.css` import is now
+  an empty module, which is what Vite does for the real build. Until this existed,
+  testing a page's exported predicates meant regexing its source, which proves the
+  file contains a string rather than that the module exports a working value.
+
+### `CADENCE_VIEWS` lives in the page, and a guard is why
+
+`zoneFilterBuilder`'s contract is that the table owns the labels and the **page**
+owns the predicate (`FounderValidateWorkspace`'s `PAIN_VIEWS` is the same shape),
+and `profile_zone_filters.test.mjs` proves a live filter key appears in the page
+that would have to serve it. With the four predicates in `lib/cadence.js` the keys
+were nowhere in the page and that guard failed — correctly. The worker exports its
+own `CADENCE_VIEWS` with the same four keys and
+`frontend/test/cadence_vocabulary.test.mjs` compares the two, values and meanings
+both, because `frontend/` and `cloudflare-worker/` cannot import each other.

@@ -204,6 +204,9 @@ import partnerPipeline from './routes/partner_pipeline';
 import partnerOffers from './routes/partner_offers';
 import partnerDelivery from './routes/partner_delivery';
 import founderValidate from './routes/founder_validate';
+// The operating cadence (#176 FB4) — rituals, the runs that archive them, and
+// the templates they are conducted from. Migration 250.
+import founderCadence from './routes/founder_cadence';
 import insightsRoutes from './routes/insights';
 // Signals — founder decision-engine over public company data (not a trading UI).
 import signalsRoutes from './routes/signals';
@@ -1012,6 +1015,10 @@ app.route('/api/partner/offers', partnerOffers);
 // and is never stored.
 app.route('/api/partner/delivery', partnerDelivery);
 app.route('/api/founder/validate', founderValidate);
+// `/build/cadence`'s store. Read by whoever may read the interviews; written by
+// the venture's own and admins — the same two predicates Validate uses, imported
+// rather than re-derived.
+app.route('/api/founder/cadence', founderCadence);
 app.route('/api/insights', insightsRoutes);
 // Signals — founder-actionable opportunity engine over public-market evidence.
 app.route('/api/signals', signalsRoutes);

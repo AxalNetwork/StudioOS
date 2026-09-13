@@ -105,10 +105,21 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
     { label: 'Configure', unbuilt: 'no roadmap settings are stored' },
   ],
+  // ALL THREE ARE LIVE AS OF MIGRATION 250, and all three were `unbuilt` for the
+  // same reason: there was no cadence store. There is one now
+  // (`routes/founder_cadence.ts`), so the reasons are deleted rather than
+  // softened — a refusal kept beside a working feature is the failure #193 was
+  // filed for.
+  //
+  // TWO HANDLERS AND ONE EXPORT, WHICH IS THE SPLIT THE OPS ACTUALLY HAVE.
+  // `New ritual` and `Edit templates` open forms the page owns (D67 — a table
+  // cannot hold a modal's state), and `Export archive` writes the rows the page
+  // has loaded under the chip the reader has selected, which is what
+  // `kind: 'export'` already does everywhere else.
   'build/cadence': [
-    { label: 'New ritual', unbuilt: 'rituals are not a stored record yet' },
-    { label: 'Edit templates', unbuilt: 'no cadence templates are stored' },
-    { label: 'Export archive', unbuilt: 'no cadence history is stored, so there is no archive to export' },
+    { label: 'New ritual', kind: 'handler', handler: 'newRitual' },
+    { label: 'Edit templates', kind: 'handler', handler: 'editTemplates' },
+    { label: 'Export archive', kind: 'export' },
   ],
   'build/kpi': [
     { label: 'Bulk entry', to: '/build/metrics' },
