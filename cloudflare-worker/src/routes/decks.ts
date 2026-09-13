@@ -57,6 +57,7 @@ async function ensureSchema(env: Env): Promise<void> {
        view_limit INTEGER NOT NULL DEFAULT 1,
        view_count INTEGER NOT NULL DEFAULT 0,
        last_viewed_at TEXT,
+       revoked_at TEXT,
        created_by INTEGER,
        created_at TEXT DEFAULT (datetime('now'))
      )`,
@@ -92,6 +93,12 @@ async function ensureSchema(env: Env): Promise<void> {
     }
     if (!have.has('last_viewed_at')) {
       try { await env.DB.prepare(`ALTER TABLE pitch_deck_share_tokens ADD COLUMN last_viewed_at TEXT`).run(); } catch {}
+    }
+    // Migration 248 — task #196. Until this column existed a share link could
+    // not be withdrawn: four ways to run out on its own and no way for its
+    // owner to end it.
+    if (!have.has('revoked_at')) {
+      try { await env.DB.prepare(`ALTER TABLE pitch_deck_share_tokens ADD COLUMN revoked_at TEXT`).run(); } catch {}
     }
   } catch {}
   _migrated = true;
@@ -827,7 +834,13 @@ decks.get('/share/:token', async (c) => {
             used_at = CASE WHEN view_count + 1 >= view_limit THEN datetime('now') ELSE used_at END
       WHERE token_hash = ?
         AND view_count < view_limit
-        AND expires_at > datetime('now')`
+        AND expires_at > datetime('now')
+        -- Task #196. Revoking sets expires_at too, so this predicate is
+        -- belt-and-braces, deliberately: without it the guarantee would depend on
+        -- two writes both landing, and a revoke that set revoked_at and failed to
+        -- set expires_at would leave the link live while the panel reported it
+        -- dead. It costs nothing on a row already fetched by unique index.
+        AND revoked_at IS NULL`
   ).bind(h).run();
   const changes = Number((claim as any)?.meta?.changes || 0);
   if (changes !== 1) {
@@ -929,7 +942,8 @@ decks.get('/:id/engagement', async (c) => {
   try { await projectOwned(c, user, Number(row.project_id)); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   const tokens = await c.env.DB.prepare(
-    `SELECT id, expires_at, used_at, view_limit, view_count, last_viewed_at, created_at
+    `SELECT id, expires_at, used_at, view_limit, view_count, last_viewed_at,
+            revoked_at, created_at
        FROM pitch_deck_share_tokens
       WHERE deck_id = ?
       ORDER BY created_at DESC
@@ -988,6 +1002,13 @@ decks.get('/:id/engagement', async (c) => {
       view_count: Number(t.view_count) || 0,
       last_viewed_at: t.last_viewed_at,
       exhausted: !!t.used_at || (Number(t.view_count) || 0) >= (Number(t.view_limit) || 1),
+      // Task #196 — `revoked_at` is the one thing `exhausted` cannot express, and
+      // withdrawing sets `expires_at` too, so a revoked link looks neither
+      // exhausted nor freshly live. Without this field the panel would report
+      // "active" for a link the founder just ended, which reads as a failed
+      // withdraw. `revoked_at` is also what distinguishes "the owner ended
+      // this" from "it ran out" — the reason the column exists.
+      revoked_at: t.revoked_at || null,
     })),
     views: viewRows.map((v) => ({
       id: v.id, share_token_id: v.share_token_id,
@@ -1173,6 +1194,77 @@ decks.post('/:id/share', async (c) => {
     share_path: `/share/deck/${token}`,
     legacy_share_path: `/deck/share/${token}`,
     one_time: viewLimit === 1,
+  });
+});
+
+/**
+ * DELETE /api/decks/:id/shares/:shareId — withdraw a share link. Task #196.
+ *
+ * THE GAP THIS CLOSES. A founder generates a link, sends it to an investor, and
+ * then the round changes, the deck is wrong, the recipient turns out to be a
+ * competitor, or the email went to the wrong address. Until now there was no
+ * control anywhere that stopped the link working: `pitch_deck_share_tokens` has
+ * `expires_at`, `used_at`, `view_limit` and `view_count` — four ways for a link to
+ * run out on its own, and none for its owner to end it. The Engagement panel lists
+ * the links and their view counts, so a founder could watch a link they could not
+ * stop being used.
+ *
+ * REVOKING IS EXPIRING, NOT DELETING, and `routes/captable.ts` states the reason
+ * this is copied from: *"Revoke by expiring rather than deleting, so the view
+ * history stays attributable to a link the owner can still see they created."* A
+ * DELETE here would also orphan every `deck_share_views` row — `share_token_id`
+ * has no foreign key and would simply dangle — taking with it the impression
+ * history, which is the evidence a founder most wants after discovering a link
+ * went somewhere it should not have.
+ *
+ * IDEMPOTENT, and that is a decision rather than a shortcut. Revoking an
+ * already-revoked link returns 200 with the same body: the caller's intent is
+ * satisfied, and a 409 would mean a founder who double-clicked the button, or hit
+ * it from two tabs after a scare, got an error telling them the link might still
+ * be live. The first `revoked_at` is kept, because the question worth answering
+ * later is when it was withdrawn, not when someone last pressed the button.
+ *
+ * The access check is `POST /:id/share`'s — whoever may create a link for this
+ * deck may end one — minus the tier gate. Revoking is not a paid capability: a
+ * founder whose plan lapsed must still be able to withdraw a link they issued
+ * while it did not.
+ */
+decks.delete('/:id/shares/:shareId', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'));
+  const shareId = parseInt(c.req.param('shareId'));
+  if (!Number.isFinite(id) || !Number.isFinite(shareId)) return c.json({ error: 'bad id' }, 400);
+  await ensureSchema(c.env);
+  let row: any;
+  try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
+  try { await projectOwned(c, user, Number(row.project_id)); }
+  catch { return c.json({ error: 'forbidden' }, 403); }
+
+  // SCOPED TO THIS DECK, not just to the token id. Without `AND deck_id = ?` a
+  // founder who owns deck A could revoke a link on deck B by id — the deck is the
+  // thing they were authorised for, and the token id alone carries no ownership.
+  const tok = await c.env.DB.prepare(
+    'SELECT id, revoked_at FROM pitch_deck_share_tokens WHERE id = ? AND deck_id = ?',
+  ).bind(shareId, id).first<{ id: number; revoked_at: string | null }>();
+  if (!tok) return c.json({ error: 'not found' }, 404);
+
+  // `revoked_at IS NULL` keeps the FIRST revocation's timestamp — see the header.
+  await c.env.DB.prepare(
+    `UPDATE pitch_deck_share_tokens
+        SET revoked_at = datetime('now'), expires_at = datetime('now')
+      WHERE id = ? AND revoked_at IS NULL`,
+  ).bind(shareId).run();
+  const fresh = await c.env.DB.prepare(
+    'SELECT id, revoked_at, expires_at FROM pitch_deck_share_tokens WHERE id = ?',
+  ).bind(shareId).first<any>();
+  return c.json({
+    ok: true,
+    id: shareId,
+    revoked_at: fresh?.revoked_at ?? null,
+    expires_at: fresh?.expires_at ?? null,
+    // True when this request is what withdrew it, false when it already was.
+    // The panel can say "withdrawn" either way and does not need to care.
+    newly_revoked: !tok.revoked_at,
   });
 });
 

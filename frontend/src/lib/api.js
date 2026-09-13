@@ -2206,6 +2206,11 @@ export const api = {
     { method: 'POST', body: JSON.stringify({ view_id: viewId, seconds }) },
   ),
   deckEngagement: (id) => request(`/decks/${id}/engagement`),
+  // Task #196 — withdraw a share link. Revoking EXPIRES the row rather than
+  // deleting it, so the impression history stays attributable to a link the
+  // founder can still see they created; idempotent, so a double-click or a
+  // second tab cannot report that a withdrawn link might still be live.
+  deckRevokeShare: (id, shareId) => request(`/decks/${id}/shares/${shareId}`, { method: 'DELETE' }),
   // Task #6 — share-link viewer onboarding + conversion endpoints.
   deckShareContext: (token) => request(`/decks/share/${encodeURIComponent(token)}/context`),
   deckShareSignup: (token, payload) => request(
