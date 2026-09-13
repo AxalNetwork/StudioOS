@@ -26,9 +26,42 @@ represents a bug that reached production once:
 | `check-frontend-builds.mjs` | A frontend that does not build. Every other check here reads the source as TEXT, so a parse error passes the whole suite and surfaces one push later in CI. Runs the real bundler into a temp directory — never `docs/`. |
 | `check-folder-docs.mjs` | A folder that carries weight without explaining itself, or a README naming a file that does not exist. |
 | `check-unused-imports.mjs` | A name a module binds and never uses — both `import { a } from '…'` and a destructured `const { a } = obj`. CodeQL reports these as alerts, so the choice is here or in a CI round trip; it raised three in one session before this existed. Deliberately narrow in both halves, because a false positive demands a change that breaks working code: named imports only (never default or namespace), and for destructuring `const` only — never a parameter list, and never a pattern with a rest element, since `const { password, ...safe } = user` names the field precisely to exclude it. Its own tests are the evidence it can fail, because **zero** destructured bindings in the repo are currently dead: `frontend/test/unused_imports_guard.test.mjs`. |
-| `check-react-hook-imports.mjs` | The other half of that rule — a name USED but never imported. `useState` shipped undefined to the apex once and took the public site down on first paint; a missing binding is a runtime error, so the bundle was clean and no test rendered the component. |
+| `check-react-hook-imports.mjs` | The other half of that rule — a name USED but never imported. `useState` shipped undefined to the apex once and took the public site down on first paint; a missing binding is a runtime error, so the bundle was clean and no test rendered the component. Since `lint:undef` below, this is coverage-redundant across `frontend/src`'s JS and JSX (verified by mutation) and kept for the TS and TSX files the linter cannot parse, plus a message that names the failure. |
 | `npm-audit-gate.mjs` | A critical advisory in a production dependency — and, separately, a registry that did not answer. `npm audit` exits 1 for both, so a 503 from the advisory endpoint went red exactly like a real CVE. The gate retries a transport failure, names the advisories on a real finding, and still fails when the database is unreachable rather than passing on a question it could not ask. |
 | `check-dark-mode.mjs` | A surface with no dark variant. |
+
+## The one rule that needed a linter
+
+`npm run lint:undef` — ESLint over `frontend/src/**/*.{js,jsx}` with everything
+off except **`no-undef`**. It is not a `check-*.mjs` and so is not in
+`test:guards`; `test:drift` runs it directly.
+
+It exists because `check-react-hook-imports.mjs` says in its own header why it
+cannot be the whole answer: *"A general undefined-identifier check is a linter's
+job and would need real scope analysis to avoid false positives."* The case it
+misses is **a name declared in one component and read in a sibling** —
+`FounderGrowFocus.jsx` had three (`metCount`, `measured`, `readTargets`)
+declared in the host and read in `FocusContent`, which blanked `/grow/focus`
+with a `ReferenceError` at render. An undefined identifier is a runtime error,
+not a build one, so Vite bundled it without complaint: two were found by CodeQL
+and the third by a browser. Writing the scope analysis that separates those
+cases by hand is writing a linter, so this is a linter with one rule.
+
+Its first run found two live bugs — `StartupList.jsx`'s empty-state button
+called a `setShowForm` the refactor had removed (the only branch that ever ran,
+so every new account with no startups got the `ReferenceError`), and
+`SpinoutLabPage.jsx` read an unimported `LAB_APPLY_HREF`. Config and the
+reasoning behind what it deliberately leaves off are in `eslint.config.mjs`.
+
+**It does not cover the whole SPA.** The glob is `{js,jsx}` — espree cannot parse
+TypeScript — and `frontend/src`'s 27 TS and TSX files are type-checked by
+nothing: `test:types` compiles `cloudflare-worker` only, the SPA has no tsconfig,
+and Vite strips those types without checking them. Against this bug class they
+are covered only by the 14 hook names in `check-react-hook-imports.mjs`. The gap
+is currently empty (zero TS2304 across those files) and closing it means a
+frontend `tsc --noEmit` behind 15 pre-existing type errors — see
+`documentation/architecture/DECISIONS.md` D84, which also records why the hook
+script stays despite being coverage-redundant across JS and JSX now.
 
 ## The live probes
 

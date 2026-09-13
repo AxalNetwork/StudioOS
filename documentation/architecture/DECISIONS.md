@@ -5192,3 +5192,123 @@ client method swallows its own failure into `[]`, and three investor screens ren
 a permanently empty capital-call list with no error shown. Deciding which shape
 wins is a product question about whether syndicate capital calls are a real
 feature, so it is its own task rather than folded in here.
+
+## D84 — A linter enters the repo, for exactly one rule
+
+**Task #200.** `FounderGrowFocus.jsx` declared `metCount`, `measured` and
+`readTargets` in the host component and read all three inside `FocusContent`, a
+sibling defined in the same file. `/grow/focus` rendered a blank body with
+`ReferenceError: metCount is not defined`. Vite bundled it without a word,
+because an undefined identifier is a **runtime** error and not a build one. Two
+of the three were caught by CodeQL after the fact and the third by a browser.
+
+The repo already carried two bespoke guards aimed at this neighbourhood, and one
+of them states in its own header why they are not enough:
+`scripts/check-react-hook-imports.mjs` says *"A general undefined-identifier
+check is a linter's job and would need real scope analysis to avoid false
+positives; hooks are worth special-casing because they are the names most often
+added to a component body long after the import line."* That is exactly right,
+and it is why the hook check could not have found these three: they are not
+hooks, and telling "declared in a sibling scope" apart from "declared here"
+requires resolving scopes rather than matching text.
+
+### The decision: ESLint, with everything off except `no-undef`
+
+Writing scope analysis by hand is writing a linter, so the alternative was never
+"linter or script" — it was "a linter, or a third script that reimplements the
+part of a linter that is hard". `eslint.config.mjs` at the repo root configures
+`frontend/src/**/*.{js,jsx}` with `no-undef: 'error'` and **no other rule**;
+`npm run lint:undef` runs it and `test:drift` calls it.
+
+**No style rules, no `react-hooks`, no `import/*`, no formatting.** Each of those
+is a judgement about house style that nobody in this repo has made, and turning
+any of them on here would put hundreds of findings between this rule and the next
+person who runs it. That restraint is the decision, not an omission: the rule
+earns its place by being the one the codebase has already been bitten by twice.
+
+The worker is deliberately out of scope, and for a good reason: `tsc --noEmit`
+over `cloudflare-worker/src` already refuses an undefined name — the same
+guarantee by a better route — and it is already in `test:drift` as `test:types`.
+
+### The gap this leaves open, measured rather than waved at
+
+`frontend/src` holds **27 `.ts`/`.tsx` files** (the deck templates, `DeckBase`,
+`brand/gvpn.ts`), and the glob above is `{js,jsx}` because espree cannot parse
+TypeScript. The worker's justification does not transfer to them: `test:types`
+compiles `cloudflare-worker` **only**, the SPA has no tsconfig at all, and Vite
+strips those types without checking them. So against this bug class those 27
+files are covered by nothing but the 14 hook names in
+`check-react-hook-imports.mjs`.
+
+The gap is real and currently **empty**. A probe tsconfig over exactly those
+files reports 15 errors and **zero TS2304** ("cannot find name"), so nothing in
+them is undefined today. Closing it properly means a frontend `tsc --noEmit`,
+which means first resolving those 15 — and they are not lint noise. Two look
+like live wrong output: `templates/index.ts` gives two templates the category
+`"event"`, which `TemplateCategory` does not admit, and
+`minimal_seed_app.tsx:1160` hands a timeline `{year, event}` objects where it
+expects `{date, label}`. A third reads `.initials` off an object typed `{name}`.
+Each is a judgement about what a deck should render, so they are their own task
+rather than bolted onto this one — recorded here so the next person does not
+read `lint:undef` as covering the whole SPA.
+
+### The two bugs the first run found
+
+Both were live, both were in the class the rule was added for, and neither was
+reachable by any existing check:
+
+- **`components/StartupList.jsx`** — the empty state's "New startup" button fell
+  back to `setShowForm(true)`, a setter that left with the create form when the
+  page became a component. `onNewStartup` defaults to `null` and the sole caller
+  (`ExecutionPage`) passes nothing, so the throwing branch was the **only** branch
+  that ever ran: every new account with no startups clicked that button and got a
+  `ReferenceError`. Fixed by rendering no button when there is no handler — an
+  absent control is honest, a control that throws is not.
+- **`pages/SpinoutLabPage.jsx`** — read `LAB_APPLY_HREF` without importing it
+  from `../lib/spinoutLab`. Fixed by adding it to the existing import.
+
+### The 119 findings that were not findings
+
+The first run reported 122 errors, of which 119 were `eslint-disable` comments
+**already in the source** naming rules from plugins this config does not install:
+`react-hooks/exhaustive-deps` (77), `jsx-a11y/*` (2), and 40 "unused disable
+directive". ESLint errors on a disable comment for a rule it cannot resolve, so
+those directives turned a three-finding run into a wall.
+
+Installing both plugins to make the names resolve would pull in two dependencies
+for spelling alone, and deleting 119 comments from files this task is not about
+would bury two real bugs in an unreviewable diff — those comments are notes from
+whoever wrote the code, and they still say something about a deps array even with
+no linter to enforce them. So the names resolve to **no-op rules** and
+`reportUnusedDisableDirectives` is off, because against a no-op every one of them
+is trivially unused. If a later pass turns these plugins on for real, that block
+in `eslint.config.mjs` is what it deletes.
+
+### The one declared blind spot
+
+`frontend/src/decks/buildDeck.js` ends `abToBase64` with `(typeof btoa ===
+'function') ? btoa(bin) : Buffer.from(bin, 'binary')…` — correct in the browser
+and under `node --test`, and `no-undef` cannot see that the `Buffer` branch is
+unreachable in a bundle. Node globals are therefore declared for
+`frontend/src/decks/**` alone, and **not** repo-wide: a blanket declaration would
+hide a real `process.env` or `require` reaching a browser bundle. Rewriting
+working code to satisfy a linter that cannot read a `typeof` guard would be the
+wrong way round.
+
+### What this does not replace
+
+`check-unused-imports.mjs` guards the opposite direction — a name imported and
+never used — which `no-undef` cannot see at all, and it reaches five trees this
+config does not (`cloudflare-worker/src`, `scripts/`, and both test trees).
+
+`check-react-hook-imports.mjs` is the interesting one, and the honest statement
+is narrower than "it still has its own territory": it is scoped to `frontend/src`
+exactly like this config, so across `.js`/`.jsx` it is now **coverage-redundant**.
+That was verified rather than assumed — deleting `useState` from
+`StartupList.jsx`'s import line makes `lint:undef` exit 1 naming `useState` at all
+four call sites, which is precisely the `PublicNav.jsx` failure the script was
+written for. It is kept for two reasons that are worth stating plainly because
+someone will reasonably want to delete it: it is the only cover for the
+`.ts`/`.tsx` gap above, and its message names the specific failure where ESLint
+says only `'useState' is not defined`. If the frontend `tsc --noEmit` above ever
+lands, the first reason disappears and only the second remains.

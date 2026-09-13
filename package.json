@@ -11,7 +11,7 @@
     "test:guards": "node scripts/check-api-drift.mjs && node scripts/check-sql-unsafe.mjs && node scripts/check-sql-prepare.mjs && node scripts/check-sql-migrations.mjs && node scripts/check-sqlite-dialect.mjs && node scripts/check-sqlite-tables.mjs && node scripts/check-sqlite-columns.mjs && node scripts/check-write-router-columns.mjs && node scripts/check-sqlite-table-collisions.mjs && node scripts/check-migration-column-shapes.mjs && node scripts/check-money-cents.mjs && node scripts/check-regulated-wording.mjs && node scripts/check-row-generics.mjs && node scripts/check-wrangler-binding-parity.mjs && node scripts/check-scanner-ignore-parity.mjs && node scripts/check-folder-docs.mjs && node scripts/check-decision-ids.mjs && node scripts/check-unused-imports.mjs && node scripts/check-react-hook-imports.mjs && node scripts/check-zone-handlers.mjs && node scripts/check-zone-hover-copy.mjs && node scripts/check-tail-consumer.mjs && node scripts/check-advisor-bank-drift.mjs && node scripts/check-statemachine-coverage.mjs && node scripts/check-deck-templates.mjs && node scripts/check-deck-payload-wiring.mjs && node scripts/check-docs-fresh.mjs && node scripts/check-frontend-builds.mjs",
     "test:types": "cd cloudflare-worker && npx --no-install tsc --noEmit",
     "test:retention": "node --test scripts/lib/assetRetention.test.mjs",
-    "test:drift": "npm run test:frontend && npm run test:worker && npm run test:retention && npm run test:guards && npm run test:types && node scripts/check-dark-mode.mjs",
+    "test:drift": "npm run test:frontend && npm run test:worker && npm run test:retention && npm run test:guards && npm run test:types && npm run lint:undef && node scripts/check-dark-mode.mjs",
     "test:e2e": "playwright test",
     "build": "node scripts/build-frontend.mjs",
     "predeploy": "node scripts/migrate-d1.mjs --remote",
@@ -32,7 +32,8 @@
     "claude:check": "bash scripts/check-anthropic-key.sh",
     "lfs:check": "node scripts/lfs-size-gate.mjs",
     "lfs:check-all": "node scripts/lfs-size-gate.mjs --all",
-    "lfs:install-hook": "node scripts/lfs-size-gate.mjs --install"
+    "lfs:install-hook": "node scripts/lfs-size-gate.mjs --install",
+    "lint:undef": "eslint --no-warn-ignored 'frontend/src/**/*.{js,jsx}'"
   },
   "keywords": [],
   "author": "",
@@ -62,6 +63,8 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
+    "eslint": "^9.39.5",
+    "globals": "^17.12.0",
     "wrangler": "^4.131.0"
   },
   "overrides": {
