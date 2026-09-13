@@ -59,7 +59,7 @@ canvas behind it still shows up here.
 | Headerless | Network | `/network` | Partner Operator Canvas |
 | Headerless | Research | `/research` | — (no canvas; shipped ahead of the design corpus) |
 
-## `admin` — 46 destinations in 6 groups
+## `admin` — 51 destinations in 6 groups
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
@@ -78,7 +78,12 @@ canvas behind it still shows up here.
 | Admin | Monitoring | `/monitoring` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Telegram Channels | `/admin/telegram` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Content Queue | `/admin/articles` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Publications | `/admin/publications` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Partner Invitations | `/admin/partners` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Referral Review | `/admin/refer-earn` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Public Team Page | `/admin/team` | Team · Authority |
 | Admin | My Licence | `/admin/my-licence` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Trash | `/admin/trash` | — (no canvas; shipped ahead of the design corpus) |
 | Studio | Pipeline Board | `/pipeline` | — (no canvas; shipped ahead of the design corpus) |
 | Studio | Scoring Engine | `/scoring` | Scoring Engine v2 |
 | Studio | Risk Matrix | `/portfolio/risk-matrix` | — (no canvas; shipped ahead of the design corpus) |
@@ -137,7 +142,7 @@ canvas behind it still shows up here.
 
 ## Destinations with no canvas
 
-60 of the 92 sidebar rows above are not claimed
+64 of the 97 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
@@ -166,7 +171,11 @@ rather than merely absent.
 - admin · Admin · Monitoring (`/monitoring`)
 - admin · Admin · Telegram Channels (`/admin/telegram`)
 - admin · Admin · Content Queue (`/admin/articles`)
+- admin · Admin · Publications (`/admin/publications`)
+- admin · Admin · Partner Invitations (`/admin/partners`)
+- admin · Admin · Referral Review (`/admin/refer-earn`)
 - admin · Admin · My Licence (`/admin/my-licence`)
+- admin · Admin · Trash (`/admin/trash`)
 - admin · Studio · Pipeline Board (`/pipeline`)
 - admin · Studio · Risk Matrix (`/portfolio/risk-matrix`)
 - admin · Studio · Market Intelligence (`/market-intel`)
