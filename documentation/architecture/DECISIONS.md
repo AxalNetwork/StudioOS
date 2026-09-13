@@ -4829,6 +4829,38 @@ cannot succeed leaves **no customer, no `held_unpaid`, and no D1 write of any ki
 still maps `SettlementDisabled` anyway, because a guard that depends on the caller checking first
 is not a guard.
 
+### A rate-limit bucket, because the PR template's checklist was a real question
+
+*"Rate-limit bucket assigned for any new public endpoint"* turned out not to be a tick-box here.
+The route fell through to the generic `user` bucket: **60 PaymentIntent creations per minute per
+user, fail-OPEN**, so knocking out KV removed even that. `promo_validate` (20/min, failClosed) and
+`admin_catalog_writes` (20/min, failClosed) are both tighter for strictly less exposure, and the
+`Bucket` type's own comment reserves `failClosed` for *"abuse-prone / money-adjacent buckets so the
+limiter can't be bypassed by knocking out KV"*. `advisor_session_charge` is 10/min per user,
+failClosed. Ten is far above any real workflow — paying is one call, a declined card is a handful
+of retries — and `chargeSession`'s idempotency key means repeat calls for the same booking return
+the same intent, so what this caps is a script walking many bookings.
+
+**The pattern names both mounts, and that is load-bearing.** `index.ts` routes the advisors router
+at `/api/advisors` **and** `/api/mentors`. A bucket naming only the first would leave
+`/api/mentors/bookings/1/pay` on the generic fail-open bucket — a limiter that is present, green,
+and bypassable by spelling the prefix the other way. That is the `ai` bucket's recorded bug
+verbatim (`/api/advisor` vs `/api/advisory`, where the one route that spends Workers AI per request
+matched no AI bucket at all), except both prefixes here are live today rather than hypothetical.
+
+`rateLimit_advisor_charge.test.ts` executes the pattern rather than substring-matching it, for the
+reason its sibling gives: a regex reads correct and matches the wrong set. 13 mutations, 0 escapes
+— including dropping `mentors`, widening the id to `.+`, losing either anchor, adding a `/g` flag,
+and moving the bucket below the catch-all.
+
+**One of those mutations escaped first, and the cause is worth recording**: the sibling guards
+locate a bucket with `src.slice(at, at + 400)`, and this bucket sits immediately above the generic
+`user` one, so 400 characters run past its closing brace into a neighbour that also carries
+`scope: 'user'`. Flipping *this* bucket to `scope: 'ip'` left the assertion satisfied by the next
+bucket's line. The fix slices to the literal's own `},`. The existing guards are not wrong today,
+but only because their windows happen to land in comment prose — reordering the list would give
+them the same hole.
+
 ### No frontend, and therefore no `docs/` rebuild
 
 The route returns 503 in every environment today. A payment UI that can only 503 would be exactly
