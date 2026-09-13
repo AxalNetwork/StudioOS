@@ -248,14 +248,50 @@ test('each zone\'s view map holds exactly the live chips its table declares', ()
     // the other three. The other three labels on that row are still prose.
     'validate/pain-map': 'const PAIN_VIEWS = {',
   };
+  // A CHIP'S BEHAVIOUR MAY BE ANY OF THREE THINGS, AND MUST BE EXACTLY ONE.
+  // Three of these zones only ever narrow, so a predicate map said everything
+  // about them. `validate/pain-map` does not: its row is `ICP only · All
+  // interviews · Need-to-have · By recency`, where `All interviews` is the
+  // cleared state and `By recency` REORDERS the same set. Requiring those two to
+  // appear as predicates would have forced `() => true` entries that satisfy this
+  // guard while lying about what the chip does — a test shaping the code to fit
+  // itself. So the rule is the invariant rather than the shape: every live chip
+  // in the table is claimed by exactly one declared role, and every declared role
+  // belongs to a live chip.
+  //
+  // `EXTRA_ROLES` lists the non-predicate roles a zone declares. A zone absent
+  // from it must account for all of its chips with predicates, exactly as before.
+  const EXTRA_ROLES = {
+    'validate/pain-map': {
+      sorts: 'const PAIN_SORTS = {',
+      cleared: /^const PAIN_CLEARED = '([a-z-]+)';$/m,
+    },
+  };
   for (const [zone, decl] of Object.entries(MAPS)) {
     const live = (FOUNDER_ZONE_FILTERS[zone] || []).filter((f) => f.key).map((f) => f.key).sort();
     assert.ok(live.length, `${zone} declares no live chip — this map should not exist`);
-    const keys = [...objectBlock(src, decl).matchAll(/^ {2}'?([a-z-]+)'?:/gm)].map((m) => m[1]).sort();
-    assert.deepEqual(keys, live,
-      `${zone} declares live chips ${JSON.stringify(live)} and its view map holds `
-      + `${JSON.stringify(keys)} — a chip with no predicate falls back to the default view `
-      + 'and answers a different question');
+    const keys = [...objectBlock(src, decl).matchAll(/^ {2}'?([a-z-]+)'?:/gm)].map((m) => m[1]);
+    const extra = EXTRA_ROLES[zone] || {};
+    const sorts = extra.sorts
+      ? [...objectBlock(src, extra.sorts).matchAll(/^ {2}'?([a-z-]+)'?:/gm)].map((m) => m[1])
+      : [];
+    let cleared = [];
+    if (extra.cleared) {
+      const m = src.match(extra.cleared);
+      assert.ok(m, `${zone} declares a cleared-state constant this guard cannot find — ${extra.cleared}`);
+      cleared = [m[1]];
+    }
+    const claimed = [...keys, ...sorts, ...cleared];
+    // NO KEY IN TWO ROLES. A chip that is both a predicate and a sort has no
+    // single answer to "what does pressing this do", and the page would pick one
+    // silently — the same class of failure as a chip with no role at all.
+    assert.equal(new Set(claimed).size, claimed.length,
+      `${zone} claims a chip in more than one role (${JSON.stringify(claimed)}) — a chip that both `
+      + 'narrows and reorders has no defined behaviour');
+    assert.deepEqual([...claimed].sort(), live,
+      `${zone} declares live chips ${JSON.stringify(live)} and its view maps claim `
+      + `${JSON.stringify([...claimed].sort())} — a chip with no predicate, sort or cleared-state `
+      + 'declaration falls through and answers a different question');
   }
   // WAS "the zone whose four labels are ALL prose has no map at all", asserting
   // `validate/pain-map` had zero live chips and no map — "an empty one would be
@@ -266,11 +302,19 @@ test('each zone\'s view map holds exactly the live chips its table declares', ()
   //
   // What the sentence was protecting is kept, generalised: a map with no zone
   // in `MAPS` is a map nothing checks.
-  const declared = [...src.matchAll(/^const ([A-Z_]+_VIEWS) = \{/gm)].map((m) => m[1]).sort();
-  const guarded = Object.values(MAPS).map((d) => d.slice('const '.length, d.indexOf(' = {'))).sort();
+  // `_SORTS` IS SWEPT UP TOO, for the reason the original sentence gives. A
+  // chip-behaviour map nobody checks is a chip row that can drift from its
+  // table, and that is as true of an ordering map as of a predicate one — a
+  // `BUILD_SORTS` added next to `PAIN_SORTS` without an `EXTRA_ROLES` entry
+  // would otherwise be invisible here.
+  const declared = [...src.matchAll(/^const ([A-Z_]+_(?:VIEWS|SORTS)) = \{/gm)].map((m) => m[1]).sort();
+  const guarded = [
+    ...Object.values(MAPS),
+    ...Object.values(EXTRA_ROLES).map((r) => r.sorts).filter(Boolean),
+  ].map((d) => d.slice('const '.length, d.indexOf(' = {'))).sort();
   assert.deepEqual(declared, guarded,
     `this file declares ${JSON.stringify(declared)} and the guard covers ${JSON.stringify(guarded)} — `
-    + 'a view map nobody checks is a chip row that can drift from its table');
+    + 'a chip-behaviour map nobody checks is a chip row that can drift from its table');
 });
 
 test('every api method the handlers name is one that exists', () => {
@@ -418,4 +462,86 @@ test('the two hypothesis dialogs send exactly what their routes accept', () => {
   for (const d of ['supports', 'contradicts']) {
     assert.ok(dlg.includes(`'${d}'`), `the link form must offer ${d} — the route accepts both`);
   }
+});
+
+test('the pain map divides interviews by interviews, not wordings by interviews', () => {
+  // THE BUG THIS PINS, MEASURED. `analyzePains` seeds every curated alias as a
+  // phrase whether or not an interview logged it, and this page divided
+  // `g.phrases.length` by `view.interview_total`. Run against the real service:
+  // a theme with three curated wordings that NO interview mentioned, on a
+  // two-interview project, drew "3 phrases · 150%" with the bar pinned at 100%
+  // while the server's own `count` was 0.
+  //
+  // It was not a disagreement nobody had noticed. `serializePainMapCsv`'s
+  // docblock already asserted `count` is "the same number the pain map page
+  // shows" — the export used `count` and the page did not, so one record read two
+  // ways one screen apart, and the comment vouched for the agreement.
+  //
+  // ASSERTED ON THE EXPRESSION, NOT ON A BANNED TOKEN. `phrases.length` is still
+  // in this file and should be: the wording count is what a founder curating the
+  // map needs to see. What must never come back is `phrases.length` as the
+  // NUMERATOR over the interview total, which is what these two read.
+  const pct = src.match(/const pct = total \? Math\.round\(\(([^/]+)\/ total\) \* 100\) : 0;/);
+  assert.ok(pct, 'the pain map no longer computes a percentage the way this guard can read');
+  assert.match(pct[1], /^n\s*$/, `the percentage divides ${pct[1].trim()} by the interview total`);
+  assert.match(src, /const n = g\.count \|\| 0;/,
+    'the numerator must be `count` — distinct interviews — and not a length of anything');
+
+  // The leading-theme sentence in the footnote takes the same number. It read
+  // `top.phrases?.length` and so could name a different theme from the one at
+  // the top of its own list once the ranking was fixed.
+  assert.ok(!/top\.phrases\?\.length/.test(src),
+    'the footnote still computes its headline percentage from the wording count');
+  assert.match(src, /top\.count \|\| 0/, 'the footnote must quote the same frequency the rows show');
+
+  // AND THE RANKING. `analyzePains` sorts its `themes` by `count` desc then
+  // title — the order the deck's Problem slide renders — and this zone's own
+  // `Send to Problem slide` op is a LINK to that slide. Sorting the page by
+  // wording variety let the page and the slide it points at name different
+  // leading pains.
+  assert.match(src, /\(b\.count \|\| 0\) - \(a\.count \|\| 0\)\s*\n?\s*\|\| String\(a\.title\)\.localeCompare\(String\(b\.title\)\)/,
+    'the rows must rank by interviews then title — the same order the deck slide uses');
+});
+
+test('every chip the pain map narrows on reads a field the view carries', () => {
+  // A predicate over a field the server does not send is a chip that matches
+  // nothing forever, and it looks exactly like "you have no such themes". The
+  // fields are asserted against `painGroups.ts` itself rather than a list here,
+  // so removing one from the view breaks this rather than the screen.
+  const service = codeOnly(read('cloudflare-worker/src/services/painGroups.ts'));
+  const views = objectBlock(src, 'const PAIN_VIEWS = {');
+  const fields = [...views.matchAll(/g\.([a-z_]+)\b/g)].map((m) => m[1]);
+  assert.ok(fields.length >= 2, `only ${fields.length} fields read by the predicates — the matcher is not matching`);
+  for (const f of new Set(fields)) {
+    assert.ok(new RegExp(`\\b${f}:`).test(service),
+      `the pain map narrows on g.${f}, which PainGroupsView does not carry`);
+  }
+  // The sort reads one too, and the same argument applies to it.
+  const sorts = objectBlock(src, 'const PAIN_SORTS = {');
+  const sortFields = [...sorts.matchAll(/\b[ab]\.([a-z_]+)\b/g)].map((m) => m[1]);
+  assert.ok(sortFields.length >= 2, 'the sort reads no view field — the matcher is not matching');
+  for (const f of new Set(sortFields)) {
+    assert.ok(new RegExp(`\\b${f}:`).test(service),
+      `the pain map sorts on ${f}, which PainGroupsView does not carry`);
+  }
+});
+
+test('the two absent-is-not-empty flags are read before their counts are stated', () => {
+  // `icp_recorded` and `severity_recorded` exist so an empty chip can be
+  // explained by the right reason: "nobody recorded who these people were" is a
+  // gap in the log, and "none of them was your customer" is a finding about the
+  // customers. A page that states the second when the first is true is the
+  // failure `verdictFor`'s header describes — confident, wrong, and
+  // indistinguishable on screen from a real result.
+  for (const flag of ['icp_recorded', 'severity_recorded']) {
+    assert.ok(src.includes(`view.${flag}`), `the pain map never reads view.${flag}`);
+  }
+  // The stat tile must go to NotRecorded rather than to 0 when the field was
+  // never filled in — `StatRow` renders `null` as `<NotRecorded />`.
+  assert.match(src, /value: view\.icp_recorded \? icpTotal : null/,
+    'the ICP tile reports a number where the honest answer is "not recorded"');
+  // And the empty state must have both branches, or one of the two findings
+  // above is being reported as the other.
+  assert.match(src, /narrow === 'icp' && shown\.length === 0/,
+    'narrowing to ICP with no match falls through to the generic empty state');
 });

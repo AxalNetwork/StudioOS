@@ -150,23 +150,41 @@ export const FOUNDER_ZONE_FILTERS = {
     { canvas: 'Strong fit', key: 'strong' },
     { canvas: 'Not ICP', key: 'not-icp' },
   ],
-  // ALL FOUR ARE PROSE, AND THE FIRST TWO ARE THE INTERESTING ONES. This zone
-  // reads `api.painGroups`, whose `PainGroupsView` gives each theme a list of
-  // `{ phrase_norm, display_phrase }` — the PHRASES, never the interviews behind
-  // them. So no mention can be attributed to a conversation, and with no
-  // conversation there is no `icp_fit` to narrow by and no `interview_date` to
-  // order by. `ICP only` and `All interviews` are two views of an attribution
-  // the payload does not carry, and one of them is the whole page.
+  // ALL FOUR ARE LIVE NOW, AND THREE OF THEM WERE ONE COLUMN LIST APART.
   //
-  // THE PAGE COULD COMPUTE IT AND MUST NOT. `listInterviews` does return
-  // `icp_fit` and `pains` per interview, so a client-side regroup is reachable —
-  // and it would re-implement the server's normalisation and alias mapping to
-  // produce a second frequency for the same theme. This workspace's own header
-  // is explicit that both zones read one endpoint so they "cannot disagree";
-  // a chip that quietly forks the number is a worse answer than no chip.
+  // What this row used to say is worth keeping, because it was true and it was
+  // the right refusal at the time: this zone reads `api.painGroups`, whose
+  // `PainGroupsView` gave each theme a list of `{ phrase_norm, display_phrase }`
+  // — the PHRASES, never the interviews behind them. With no conversation
+  // behind a mention there was no `icp_fit` to narrow by and no
+  // `interview_date` to order by, so `ICP only`, `All interviews` and `By
+  // recency` all failed on one missing link.
+  //
+  // The link was not missing from the DATABASE. `discovery_interviews` has
+  // carried `icp_fit` since migration 161 and `interview_date` since the
+  // baseline; `getPainGroupsView` simply selected neither. It selects both now
+  // and `analyzePains` attributes them on the same first-sight branch that
+  // counts a theme's interviews, so `icp_count`, `fit_unrecorded_count` and
+  // `last_mention_at` cannot disagree with `count` about which conversations are
+  // behind a theme. No migration; the reason was about a query, not a store.
+  //
+  // THE PAGE STILL MUST NOT COMPUTE IT. `listInterviews` returns `icp_fit` and
+  // `pains` per interview, so a client-side regroup remains reachable — and it
+  // would re-implement the server's normalisation and alias mapping to produce a
+  // second frequency for the same theme. This workspace's own header is explicit
+  // that both zones read one endpoint so they "cannot disagree"; the attribution
+  // is therefore computed where the grouping is, and the page only reads it.
   'validate/pain-map': [
-    { canvas: 'ICP only', unbuilt: 'a theme carries its phrases and not the interviews they came from, so no mention can be traced to a conversation whose ICP fit is recorded', hover: 'A theme keeps its phrases, not the interviews behind them, so no mention can be traced to one.' },
-    { canvas: 'All interviews', unbuilt: 'the same missing attribution seen from the other side — with no per-mention interview there is no subset for this to be the whole of, and it would match every theme on the page', hover: 'The same missing link from the other side: with no interview behind a mention, this matches everything.' },
+    // `icp_count > 0`, where ICP is `isIcp` — strong or partial — imported by
+    // the service from the helper that owns the rule, so this chip and the
+    // hypothesis verdict cannot drift apart about who counts as a customer.
+    { canvas: 'ICP only', key: 'icp' },
+    // THE CLEARED STATE, NAMED. The old reason called this "the same missing
+    // attribution from the other side… it would match every theme on the page",
+    // and matching every theme is exactly this chip's job now that `ICP only`
+    // exists to be the other half of the pair — the same role `All` plays in
+    // this zone's three sibling rows. It is not a no-op; it is the way back.
+    { canvas: 'All interviews', key: 'all' },
     // LIVE. The reason this carried was "no mention carries a severity:
     // `interview_pain_severities` exists with no reader and no writer anywhere
     // in the worker" — a table migration 211 shipped with the right shape and
@@ -182,7 +200,14 @@ export const FOUNDER_ZONE_FILTERS = {
     // one segment and optional for another, and that split is the judgement
     // this page exists to support.
     { canvas: 'Need-to-have', key: 'need' },
-    { canvas: 'By recency', unbuilt: 'a pain theme carries no date — the grouped view has no interview behind a phrase, and `loadEvidenceBase` does not select `interview_date` either', hover: 'A pain theme carries no date — there is no interview behind a phrase to take one from.' },
+    // A SORT, NOT A SUBSET, WHICH IS WHY IT IS THE ONE CHIP HERE THAT HIDES
+    // NOTHING. The date is the latest `interview_date` among the interviews
+    // mentioning the theme — "somebody said this to us recently" — and never a
+    // date of the theme's own, which a founder renaming a group months later
+    // would move without anyone saying anything new. Themes whose interviews
+    // carry no date sort last rather than being dropped: a missing date is not
+    // a reason to hide a pain people named.
+    { canvas: 'By recency', key: 'recency' },
   ],
   // `Blocking the verdict` is the one label here the board already answers in
   // prose: `buildBoard` computes `_note` for every claim whose verdict is null

@@ -106,7 +106,17 @@ function freshDb() {
     CREATE TABLE discovery_interviews (
       id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL,
       interviewee_name TEXT, interviewee_role TEXT, interviewee_company TEXT,
-      icp_fit TEXT, quote_consent INTEGER, pains_json TEXT,
+      -- interview_date IS IN THE BASELINE CREATE TABLE and was missing here.
+      -- (No backticks in this comment: it sits inside a template literal, and
+      -- the first one ends the string — which cost a parse error to learn.)
+      -- The gap was invisible until getPainGroupsView started selecting it, and
+      -- then it was not a failed assertion: the interview SELECT is wrapped in a
+      -- catch returning [], so "no such column" returned NO INTERVIEWS and every
+      -- test in this file failed on an empty ungrouped list. A fixture that is a
+      -- subset of production reads as working code until the day the query
+      -- widens — the same rule partner_pipeline_stores.test.ts states from the
+      -- other direction.
+      icp_fit TEXT, quote_consent INTEGER, interview_date TEXT, pains_json TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
   `);

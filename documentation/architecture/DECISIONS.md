@@ -5312,3 +5312,131 @@ someone will reasonably want to delete it: it is the only cover for the
 `.ts`/`.tsx` gap above, and its message names the specific failure where ESLint
 says only `'useState' is not defined`. If the frontend `tsc --noEmit` above ever
 lands, the first reason disappears and only the second remains.
+
+## D85 — Three chips were a column list away, and the frequency beside them was wrong
+
+**Task #175.** `/validate/pain-map` drew V2's chip row — `ICP only · All
+interviews · Need-to-have · By recency` — with three of the four as prose. All
+three carried one reason, and it was a good reason when it was written:
+
+> *"a theme carries its phrases and not the interviews they came from, so no
+> mention can be traced to a conversation whose ICP fit is recorded"*
+
+That was true of the **payload** and never true of the database.
+`discovery_interviews` has carried `icp_fit` since migration 161 and
+`interview_date` since the baseline; `getPainGroupsView` selected neither. The
+whole of the missing link was two names in one column list. **No migration.**
+
+### The fold, and where the attribution had to happen
+
+`analyzePains` already kept per-theme sets of interview ids for `need_count` and
+`nice_count`, so the shape existed. The new counts ride the **same first-sight
+branch** that increments `count` — the one guarded by `seenKeys` — so one
+interviewee naming a theme three ways is one interview in every number on the
+row. A fold that attributed per phrase instead would report more customers than
+were spoken to, the asymmetry `evidenceFor` exists to hold.
+
+`isIcp` is **imported** from `routes/_founder_validate_helpers`, not restated.
+The rule is `strong || partial`, with NULL a fourth state and an explicit `none`
+a recorded non-customer, and the whole value of one definition is that the pain
+map and the hypothesis verdict cannot drift about who counts as a customer. A
+service importing a `routes/_*.ts` shared module follows `_competitor_writes.ts`
+and `_capital_call_writes.ts`; that file imports only `types` and `auth`, so
+there is no cycle.
+
+### `fit_unrecorded_count` is not a footnote
+
+Three buckets, not two: ICP, recorded non-ICP, and **never recorded**. Folding
+NULL into "not ICP" makes `icp_count` read 0 for every project logged before
+migration 161, and an `ICP only` chip then states *"none of your pains come from
+your customers"* with total confidence on no evidence. `verdictFor`'s header
+names this as the failure the absent-is-not-empty rule exists to prevent; it is
+the same rule, one screen over. So the row shows `2 icp · 4 fit ?` and the map
+carries `icp_recorded` — read **from the interview rows, not from the theme
+counts**, because a project whose only ICP interviewee named no pain leaves every
+theme at zero while the field is plainly in use.
+
+### `By recency` is a sort, and the date is the interview's
+
+The date is the latest `interview_date` among the interviews mentioning a theme —
+"somebody said this to us recently". Never a date of the theme's own: a founder
+renaming a group months later would move it without anyone saying anything new.
+`created_at` is deliberately not the fallback, because a batch of old interviews
+typed up this morning would all read as this morning. Themes with no date sort
+**last** rather than being dropped — a pain people named is not hidden because
+nobody recorded when they said it. The comparison is a **string** compare on
+`YYYY-MM-DD`, which sorts in date order; `Date.parse` on a bare date string is
+the local-versus-UTC trap this repo has already been bitten by.
+
+### The chip row needed three kinds, and the guard had to learn them
+
+This zone's three siblings only ever narrow, so one predicate map said everything
+about them. This row does not: `All interviews` is the **cleared state** and `By
+recency` **reorders**. `zone_actions.test.mjs` required every live chip to appear
+in the predicate map — a rule written after a real escape, where a missing
+predicate made "Retired" show the live claims — and satisfying it would have
+meant two `() => true` entries that pass the guard while lying about what the
+chip does.
+
+So the page declares `PAIN_VIEWS`, `PAIN_SORTS` and `PAIN_CLEARED`, and the guard
+now asserts the invariant rather than the shape: **every live chip is claimed by
+exactly one declared role, and every declared role belongs to a live chip** —
+with a second assertion that no chip is claimed twice, since a chip that both
+narrows and reorders has no defined behaviour. That is stricter than what it
+replaced, not looser: the sorts and the cleared state are now checked too.
+
+### THE BUG FOUND ON THE WAY, and it was the worse one
+
+The pain map's frequency was **wordings over interviews**. The page computed
+`g.phrases.length / view.interview_total`, ranked by the same, and quoted it in
+its own footnote — while `g.count`, the distinct-interview count the server
+computes, went unread.
+
+`analyzePains` seeds every curated alias as a phrase **whether or not any
+interview logged it**. So a founder who grouped three wordings under one theme
+saw that theme at *"3 phrases · 150%"*, bar pinned at 100%, on a two-interview
+project **where nobody had mentioned it at all**. Measured against the real
+service, not reasoned about: `count: 0`, `phrases.length: 3`, `interview_total:
+2`.
+
+It was not a disagreement nobody had noticed — it was one a comment had
+*vouched for*. `serializePainMapCsv`'s docblock said `count` is "the same number
+the pain map page shows", and went on to describe computing frequency from
+`phrases.length` as an "earlier reading of that page". That earlier reading was
+the live one. The export wrote `0` and `0%` for the theme the page drew at 150%:
+one record, two answers, one screen apart, with the prose asserting they agreed.
+
+The page reads `count` now and ranks by `count` desc then title — the order
+`analyzePains` gives `themes`, which is what the deck's Problem slide renders.
+That matters beyond tidiness: this zone's own `Send to Problem slide` op is a
+**link** to that slide, so ranking by wording variety let the page and the slide
+it points at name different leading pains. The wording count is still shown, as
+a separate label, because it is what a founder curating the map needs to see.
+
+### The silent-blank-page regression this nearly shipped
+
+Naming `icp_fit` in the SELECT unconditionally is **not safe**. Migration 161
+ALTERs it in, `ensureDiscoveryIcpFitColumn` exists because it may be absent, and
+its header says a caller should "degrade to 'ICP fit unavailable' instead of
+emitting SQL that would fail with `no such column`". The interview read is
+wrapped in `.catch(() => [])` — so on an environment where the column cannot be
+read, the result is not a missing chip. It is **no interviews**, and the entire
+pain map renders empty with no error shown. A feature that only adds a chip would
+have blanked the page it sits on.
+
+The column list follows the bootstrap's answer, and the degraded path is pinned
+by a test that makes the ALTER fail. Getting that test right took two attempts,
+and the first attempt is the lesson: it built the table without the column and let
+the bootstrap add it, so an unconditional SELECT passed just as well and the
+mutation walked straight through. A degradation test that lets the system heal
+itself first is testing the healthy path.
+
+### Still refused, and now for one honest reason
+
+`/validate/verdict`'s `As of last week` and `Changed this month`, and
+`/validate/hypotheses`' `Recently moved`, all want the same thing: a record of a
+claim **changing**. `hypotheses` carries no `updated_at` that reaches the board
+and nothing writes a lane transition, so there is no history to read. That is a
+store this product does not have, not a query it forgot to write — the opposite
+of the three above — and a product question (what is a verdict snapshot *of*?)
+rather than an engineering one.
