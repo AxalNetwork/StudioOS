@@ -2225,6 +2225,13 @@ still has no exceptions to reason about.
 
 ### D46. "AI fills the blanks" ships with the branch D17 required, off by default, and names two things rather than the canvas's three
 
+> **Two rules below are superseded by D82.** "Two capabilities, not three" counted
+> capabilities on one surface, and there are three surfaces now; and match-back is
+> no longer the only honesty mechanism — a `sourced` fill keeps a citation instead,
+> because a market size has nothing in the project to match against. Everything
+> else here still holds, including the invariant that `apply` calls the function
+> the manual form calls, which D82 generalises rather than replaces.
+
 **D17 refused this toggle** because *"no page branches on an assist mode.
 Turning the switch off would change nothing any of the six surfaces does, so
 shipping it puts a control on screen that cannot affect the product"* — and
@@ -4900,3 +4907,144 @@ that pass are recorded next to the code they apply to, because they generalise:
   thrown error, symmetrical with the `e.state` the 409 below it already used — so a refusal now
   reports what the service decided rather than what the environment says a moment later. The
   second was a reminder that prose inside a scanned file is part of what gets scanned.
+
+---
+
+## D82 — A fill that is not a restatement needs a different promise, and TAM needs a table before it needs a model
+
+D46 settled how "AI fills the blanks" works on one surface and made two rules that
+this change alters. Both were right for what existed then, and neither generalises.
+
+### The rule that had to change: match-back is not the only honesty mechanism
+
+D46's mechanism is MATCH-BACK — *"every item is matched back against something
+that exists in the project before it can become a row"*. `parseTagProposals`
+refuses a phrase not in this project's own ungrouped set; `parseDraftProposals`
+refuses a claim that restates one on file. Both of Validate's fills are
+RESTATEMENTS of evidence the founder logged, so the rule fits them exactly.
+
+It cannot fit a market size. The whole point of asking Eadwyn for TAM is that the
+project does not contain it, so there is nothing to match back against — and with
+no replacement guarantee, filling it means writing an unsourced number into a
+column a founder-derived figure occupies. So each kind now declares which promise
+it keeps, and `services/fills/types.ts` holds the three:
+
+| Class | The promise | What happens when it cannot be kept |
+| --- | --- | --- |
+| `restatement` | it restates a row already in the project | the proposal is dropped — D46's rule, unchanged |
+| `sourced` | it carries a citation naming where it came from, with the quote | **the proposal is dropped**, never written with a hedge |
+| `composition` | it makes no factual claim (a tagline, positioning copy) | it may never target a column holding a MEASURED value |
+
+`refuseReason` enforces this on the WRITE path rather than in review, because a
+`sourced` value with no citation is not a lower-quality fill — it is an assertion
+with nothing behind it, and the store must not be able to hold one.
+
+### The other rule that changed: "two capabilities, not three" is now three surfaces
+
+D46 counted capabilities on one surface. The dispatch was `if (row.kind ===
+'pain_tag')` in a file about Validate — fine for two kinds, the wrong place for a
+third. `services/fills/registry.ts` holds one entry per kind now, and its own
+header states the invariant the move had to preserve: **`apply` must be the
+function the manual form already calls.** That is D46's "accepting and typing
+produce the same row", generalised, and the reason is concrete rather than tidy —
+`insertHypothesis` allocates `H1, H2 …` from the highest code EVER used so a
+retired `H2` is never reissued, and a second writer with its own idea of that rule
+is how duplicate codes start being handed out to a founder who finds out when two
+claims share a name in a board pack.
+
+**The test for that invariant first passed with the rule reimplemented.** An empty
+`hypotheses` table cannot tell `MAX(CAST(substr(code,2)))` from `COUNT(*) + 1`,
+because with no history both say 1. The fixture now seeds a project whose codes
+are not a dense sequence — H1 live, H6 retired, H2 live, X9 hand-edited — where
+the next code is H7 and each of the four plausible wrong rules gives a different
+answer. It is the clearest example this repo has of a test that was green and
+worthless, and the lesson is the fixture, not the assertion.
+
+### Provenance is a side table, because a column cannot hold two facts
+
+`projects.tam` is one bare `REAL`. `SpinoutLabMarketPage` derives TAM from an
+addressable population × an ACV with the founder's own assumptions, and says so
+three times: a code comment recording that the design's "AI-assisted estimates"
+was dropped *"rather than lie about provenance"*, on-screen copy reading *"nothing
+on this page is auto-invented — empty means not researched yet"*, and a per-card
+"Founder research" / "Founder model" stamp. The moment a model can write to that
+column all three become false, because nothing beside the number says who produced
+it.
+
+So `fill_provenance` (migration 246) records one row per accepted fill: the
+address as a `(table, row, column)` triple, the class, **both values** — what was
+proposed and what was written — `edited` derived from comparing them, the citation,
+and the model that ran. `filledColumns` compares a provenance row against what the
+row holds NOW, so a founder who typed over a filled figure by hand owns it and the
+card stops claiming otherwise: the same lie pointed the other way is still a lie.
+
+`edited` is derived and never passed in, because a caller that has to remember to
+set it will eventually forget, and the one thing that row must never do is claim a
+value is untouched when it is not.
+
+### The market surface needed a table before it needed a model
+
+The honest fill for market sizing proposes the INPUTS, not the size — a TAM
+proposal would write over the founder's arithmetic. But until migration 247 there
+was nowhere to put an addressable population: the drawer's twelve fields were
+`useState` and went when the tab closed, and the page's own comment had been asking
+for `project_market_assumptions` since it was written. **What it kept was the
+conclusion with none of the reasoning**, which is a stranger thing for a page about
+derived figures to do than anything its copy warns about. 247 is that table; the
+store patches rather than replaces, which is what lets one cited figure land
+without blanking the eleven the founder typed.
+
+The drawer's note — *"only TAM/SAM/SOM are saved to your startup record yet"* —
+was true and is now false, and it was corrected in the same change. A stale honest
+note is worse than none: it teaches a founder to expect their work to be dropped,
+so they stop typing it.
+
+### Brand already worked; its provenance was the only thing missing
+
+`POST /brand/landing/autofill` has returned `ai_generated: true` since it shipped
+and its mechanism is correct — it drafts into local state, the founder edits
+freely, Save is the commit. **Nothing about it was rebuilt.** The flag was read at
+the point of use and discarded, so a published headline Eadwyn wrote was
+indistinguishable from one the founder typed, on the same page whose rail names the
+model. The editor keeps the proposal through the draft as a MAP and not a set,
+which is the whole design: a keystroke does not clear it, because a drafted line
+half-rewritten is exactly the case `edited` exists to describe.
+
+Its save-time write is deliberately NOT the accept path's. Validate reverts when
+provenance cannot be written, because there a value with no provenance is the state
+the table exists to prevent. Brand copy is the founder's own words on their own
+page, saved by an explicit click, so a failed audit row is logged and the save
+stands — refusing it would be the worse outcome.
+
+### Two smaller findings, recorded where they generalise
+
+**A citation that names a document and not the passage is a label.** `SearchHit.chunk`
+has been declared "for a citation" since the research library shipped and
+`upsertEntity` has always written `metadata.chunk` — and `searchSemantic`'s mapping
+dropped it, so `routes/research.ts` recorded `chunk: null` on every Ask citation it
+ever wrote. Found while building the citation path, fixed there, and the band shows
+the quote for the same reason: the only check a reader has is reading the sentence.
+
+**A dead guard that reads as a safeguard is worse than none.** The brand recorder
+tested `hasOwnProperty(written, column)` before its emptiness check, and the
+mutation run showed deleting it changed nothing any test could see. It cannot: a
+column absent from `written` reads as `undefined` and then as the empty string, so
+no input distinguishes the two. It was removed rather than kept, because the next
+reader would have trusted it.
+
+### Also: the second surface to declare a `mode`, and the first outside Validate
+
+D17 named a brand page as the plausible second one. It is the market page, because
+that is where a branch became true — off, no figure is proposed and nothing is
+spent; on, Eadwyn looks for the inputs the page multiplies. `FillKind.assistSurface`
+names the rail whose `mode` gates a kind, so D17's rule is now checked
+mechanically: a fill whose rail declares no mode is a capability with no switch,
+which is the mirror image of the dead config `ui_assist_rail_and_sidebar` already
+refuses.
+
+**And "Edit the claim" was built.** The canvas has drawn accept / edit / discard
+since this band was designed; the middle control lived only in a comment
+describing the artboard. Accepting a value a founder would have corrected teaches
+them to discard and retype — the same work with the proposal's provenance thrown
+away. An unchanged edit is sent as a plain accept, because a table where every row
+is marked corrected says nothing about any of them.
