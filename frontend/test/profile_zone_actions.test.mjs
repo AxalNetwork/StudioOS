@@ -1209,10 +1209,23 @@ test('the label says the export is of this view, because it is', () => {
   assert.match(read('frontend/src/lib/csvExport.js'), /\$\{list\.length\}-rows/,
     'the filename no longer carries the row count');
   // An export over rows that have not LOADED is the one control that stays and
-  // goes quiet: the store and the writer both exist, so it keeps the canvas's
-  // label and renders disabled rather than vanishing like an unbuilt op.
-  assert.match(builder, /disabled: true, title: 'nothing loaded to export yet'/,
-    'an export with no rows is offered as a live button');
+  // goes quiet: the store and the writer both exist, so it renders disabled
+  // rather than vanishing like an unbuilt op.
+  //
+  // BUT IT NO LONGER GOES SILENT. It kept the plain canvas label and explained
+  // itself only through a `title`, so on an account with no rows — the steady
+  // state for a new firm, not a transient one — a working export was a grey
+  // button with no reason on screen. Eight of them were reported as missing
+  // features across four buckets in one afternoon. The state now rides the
+  // label, in the same `·` suffix the live branch uses, so the control reads as
+  // one thing in two states instead of two different controls.
+  assert.match(builder, /label: `\$\{item\.label\} · nothing yet`/,
+    'a disabled export no longer says on screen why it is disabled — it is back '
+    + 'to a grey button explained only by a hover title, which is how eight '
+    + 'working exports were reported as missing');
+  assert.match(builder, /disabled: true/, 'an export with no rows is no longer disabled');
+  assert.doesNotMatch(builder, /label: item\.label, testid, disabled: true/,
+    'the disabled export is back to the bare canvas label with no state on it');
 });
 
 /*
