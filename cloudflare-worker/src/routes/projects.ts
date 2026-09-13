@@ -29,8 +29,10 @@ import { ensureMethodAllowed } from '../services/decks/branding';
 import { PREMIUM_METHOD_IDS } from '../services/decks/methods';
 import { normalizeUseOfFunds, formatUseOfFundsText } from '../util/useOfFunds';
 import {
-  ASSUMPTION_KEYS, loadAssumptions, sanitizeAssumptions, saveAssumptions,
+  ASSUMPTION_COLUMNS, ASSUMPTION_KEYS,
+  loadAssumptions, sanitizeAssumptions, saveAssumptions,
 } from '../services/marketAssumptions';
+import { fillsForRow, filledColumns } from '../services/fills/provenance';
 
 const projects = new Hono<{ Bindings: Env }>();
 
@@ -1093,11 +1095,45 @@ projects.get('/:projectId/market-assumptions', async (c) => {
   const user = await requireAuth(c);
   const found = await loadProjectForAssumptions(c, user);
   if ('error' in found) return found.error;
+  const assumptions = await loadAssumptions(c.env, found.project.id);
+
+  // WHICH FIGURES EADWYN SUPPLIED, and only the ones that are still its figures.
+  //
+  // This is the read that keeps the market page's three provenance statements
+  // true rather than merely uncontradicted. `filledColumns` compares each
+  // provenance row against what the row HOLDS NOW, so a founder who typed over a
+  // researched figure by hand owns it and the drawer stops marking it — a card
+  // still reading "Eadwyn" over their number is the same lie pointed the other
+  // way. Keyed back to the drawer's own field names, because the client should
+  // not have to know the column map to read its own labels.
+  const columnToKey = Object.fromEntries(
+    Object.entries(ASSUMPTION_COLUMNS).map(([key, column]) => [column, key]),
+  );
+  const row = await c.env.DB.prepare(
+    'SELECT * FROM project_market_assumptions WHERE project_id = ?',
+  ).bind(found.project.id).first<Record<string, unknown>>().catch(() => null);
+  const filled: Record<string, unknown> = {};
+  if (row) {
+    const fills = await fillsForRow(c.env, 'project_market_assumptions', Number(row.id));
+    for (const [column, fill] of filledColumns(fills, row)) {
+      const key = columnToKey[column];
+      if (!key) continue;
+      filled[key] = {
+        fill_class: fill.fill_class,
+        edited: fill.edited,
+        model: fill.model,
+        citation: fill.citation,
+        proposed_value: fill.proposed_value,
+      };
+    }
+  }
+
   return c.json({
-    assumptions: await loadAssumptions(c.env, found.project.id),
+    assumptions,
     // The keys this store accepts, so the drawer cannot send a field the server
     // will reject and find out only from a 400.
     keys: ASSUMPTION_KEYS,
+    filled,
   });
 });
 

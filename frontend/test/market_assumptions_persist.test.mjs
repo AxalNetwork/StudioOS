@@ -121,6 +121,46 @@ test('a failed assumptions save is visible, not swallowed', () => {
   assert.match(src, /reportError\('SpinoutLabMarketPage:assumptions', e\)/);
 });
 
+test('a figure Eadwyn supplied is marked, and one the founder replaced is not', () => {
+  // THE READ HALF OF #198, and the reason `fill_provenance` exists rather than a
+  // column pair. The page makes three provenance claims that are true and unusual
+  // for being so; the third — a per-card "Founder research" stamp — goes quietly
+  // wrong the first time Eadwyn fills a field unless the field says so where it
+  // sits. Nothing is marked for a figure the founder typed, which is the common
+  // case and the point: the ABSENCE of a stamp is the claim that they did it.
+  assert.match(PAGE, /function FilledMark\(\{ fill \}\)/);
+  assert.match(PAGE, /if \(!fill\) return null;/,
+    'a founder-typed figure gets a stamp claiming Eadwyn supplied it');
+  assert.match(PAGE, /'Eadwyn · edited' : 'Eadwyn · sourced'/,
+    'a corrected fill and an untouched one read the same');
+  assert.match(PAGE, /setFilled\(saved\?\.filled \|\| \{\}\)/,
+    'the page never reads which figures were filled');
+
+  // Marked on exactly the fields the market fill can supply, and no others.
+  for (const field of ['population', 'acv', 'cagr']) {
+    assert.match(PAGE, new RegExp(`<FilledMark fill=\\{filled\\.${field}\\} />`),
+      `${field} can be filled by Eadwyn and is never marked as such`);
+  }
+  for (const field of ['samPct', 'winRate', 'tamOverride']) {
+    assert.doesNotMatch(PAGE, new RegExp(`<FilledMark fill=\\{filled\\.${field}\\} />`),
+      `${field} is the founder's own judgement and must not carry an Eadwyn stamp`);
+  }
+
+  // AND THE SERVER WITHHOLDS A FIGURE THE FOUNDER HAS SINCE OVERWRITTEN, which is
+  // where the comparison actually happens — `filledColumns` reads the provenance
+  // row against what the row holds now. A card still reading "Eadwyn" over their
+  // own number is the same lie pointed the other way.
+  const route = read('../cloudflare-worker/src/routes/projects.ts');
+  const at = route.indexOf("projects.get('/:projectId/market-assumptions'");
+  assert.ok(at > 0, 'the market-assumptions GET is gone');
+  const body = route.slice(at, route.indexOf('\n});', at));
+  assert.match(body, /for \(const \[column, fill\] of filledColumns\(fills, row\)\)/,
+    'the route returns every provenance row rather than only the ones that still hold');
+  assert.match(body, /proposed_value: fill\.proposed_value,/,
+    'what Eadwyn proposed before the founder changed it is not sent');
+  assert.match(body, /citation: fill\.citation,/, 'the source is not sent');
+});
+
 test('the market rail can be turned off, and says what off means — D17', () => {
   // D17 refused a mode switch until a page branched on it. The market page
   // branches now, so the switch is real — and `manualNote` is what OFF means in

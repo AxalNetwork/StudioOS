@@ -36,6 +36,7 @@ import {
   Lock,
   Pencil,
   ShieldCheck,
+  Sparkles,
   X,
 } from 'lucide-react';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
@@ -56,6 +57,51 @@ const TXA = 'w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-wh
 const SEG_ON = 'bg-violet-600 border-violet-600 text-white';
 const SEG_OFF = 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300';
 const GHOST_SM = 'h-[26px] px-2.5 rounded-[7px] border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-violet-700 dark:text-violet-300 text-[11px] font-semibold';
+
+/**
+ * The stamp beside a figure Eadwyn supplied, with where it came from.
+ *
+ * THIS IS WHY `fill_provenance` EXISTS, and the page has needed it since the copy
+ * above the cards was written. Three statements on this page are true and unusual
+ * for being so: the comment recording that "AI-assisted estimates" was dropped
+ * "rather than lie about provenance", the on-screen "nothing on this page is
+ * auto-invented", and the per-card "Founder research" / "Founder model" stamp.
+ * They stay true only if a researched figure says so where it sits — a page that
+ * marked nothing would make the third one quietly wrong the first time Eadwyn
+ * filled a field.
+ *
+ * It renders NOTHING for a field the founder filled, which is the common case and
+ * the point: the absence of a stamp is the claim that they did it. And nothing for
+ * a figure they have since typed over — the server already withholds it, because a
+ * provenance row is compared against what the row holds now.
+ */
+function FilledMark({ fill }) {
+  if (!fill) return null;
+  const source = fill.citation?.kind === 'library'
+    ? fill.citation.title || 'a document in your library'
+    : fill.citation?.source || null;
+  // The title carries the quote, because the check a reader makes is reading the
+  // sentence — and a hover is where it belongs on a form this dense rather than
+  // three lines of prose per field. `title` is opt-in by hover, the same contract
+  // the workspace zone reasons use for an unbuilt control.
+  const detail = [
+    fill.edited ? 'Eadwyn proposed this and you changed it' : 'Eadwyn supplied this figure',
+    source ? `Source: ${source}` : null,
+    fill.citation?.quote ? `“${fill.citation.quote}”` : null,
+    fill.edited && fill.proposed_value ? `It proposed: ${fill.proposed_value}` : null,
+    fill.model ? `Model: ${fill.model.split('/').pop()}` : null,
+  ].filter(Boolean).join('\n');
+  return (
+    <span
+      className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-violet-100 px-1.5 py-0.5 align-middle text-[9.5px] font-bold text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+      title={detail}
+      data-testid="filled-mark"
+    >
+      <Sparkles size={9} aria-hidden="true" />
+      {fill.edited ? 'Eadwyn · edited' : 'Eadwyn · sourced'}
+    </span>
+  );
+}
 
 export function fmtMoney(v) {
   const n = Number(v);
@@ -233,6 +279,12 @@ export default function SpinoutLabMarketPage() {
   const [shared, setShared] = useState(false);
   // Assumptions drawer (spec A) — persisted since 247, see seedAssumptions().
   const [assume, setAssume] = useState(() => seedAssumptions(null));
+  // WHICH FIGURES EADWYN SUPPLIED — and only the ones that are STILL its figures.
+  // The server compares each provenance row against what the row holds now, so a
+  // figure the founder has since typed over comes back unmarked: a label reading
+  // "Eadwyn" over their own number is the same lie this page's copy exists to
+  // avoid, pointed the other way.
+  const [filled, setFilled] = useState({});
   const [anim, setAnim] = useState(null); // {tam,sam,som} in dollars while the recalc tween runs
   const animRef = useRef(null);
   const finishRef = useRef({ tween: false, saved: false });
@@ -317,6 +369,7 @@ export default function SpinoutLabMarketPage() {
         setFit(ft);
         setCompAnalysis(comp);
         setAssume(seedAssumptions(p, saved?.assumptions));
+        setFilled(saved?.filled || {});
         setStatus('ready');
       })
       .catch((e) => {
@@ -1340,11 +1393,11 @@ export default function SpinoutLabMarketPage() {
                     ))}
                   </div>
                   <label>
-                    <span className={FLD}>Total addressable population (units)</span>
+                    <span className={FLD}>Total addressable population (units)<FilledMark fill={filled.population} /></span>
                     <input type="number" min="0" value={assume.population} onChange={setA('population')} className={INP} data-testid="input-population" />
                   </label>
                   <label>
-                    <span className={FLD}>Average contract value ($)</span>
+                    <span className={FLD}>Average contract value ($)<FilledMark fill={filled.acv} /></span>
                     <input type="number" min="0" value={assume.acv} onChange={setA('acv')} className={INP} data-testid="input-acv" />
                   </label>
                   <label>
@@ -1408,7 +1461,7 @@ export default function SpinoutLabMarketPage() {
                 <div className={`${LBL} mb-2.5`}>Growth</div>
                 <div className="flex flex-col gap-2.5">
                   <label>
-                    <span className={FLD}>CAGR estimate (%)</span>
+                    <span className={FLD}>CAGR estimate (%)<FilledMark fill={filled.cagr} /></span>
                     <input type="number" min="0" value={assume.cagr} onChange={setA('cagr')} className={INP} data-testid="input-cagr" />
                   </label>
                   <label>
