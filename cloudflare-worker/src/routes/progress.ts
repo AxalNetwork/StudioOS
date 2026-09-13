@@ -1564,7 +1564,7 @@ progress.get('/signals/:projectId', async (c) => {
   const interviewRows = interviews.results || [];
 
   const sig = signalsSlider(interviewRows);
-  // Users + revenue sliders require the metrics_snapshots table, which is
+  // Users + revenue sliders require the project_metrics table, which is
   // out of scope for Task #8 — return zero with the same `reason` field
   // FastAPI emits when no snapshots exist.
   const usersScore = 0;
@@ -1643,18 +1643,56 @@ type SerializedSnap = {
   created_at: string;
 };
 
-// Task #3 (DF) — lazy column ensure for metrics_snapshots. Frontend writes
-// cac/ltv/arr/monthly_churn_pct/new_users which the original 2-column
-// schema doesn't have. Idempotent PRAGMA + ALTER ADD COLUMN.
-let _metricsColsReady = false;
-export async function ensureMetricsSnapshotsSchema(env: Env): Promise<void> {
-  if (_metricsColsReady) return;
+/**
+ * Lazy bootstrap for `project_metrics`. Canonical migration is
+ * `249_project_metrics.sql`.
+ *
+ * WHAT THIS HELPER USED TO BE, AND WHY IT COULD NOT WORK. It was
+ * `ensureMetricsSnapshotsSchema`, and `metrics_snapshots` was two tables under one
+ * name: production's is the DEAL shape `routes/pipeline.ts` creates at runtime
+ * (`deal_id NOT NULL`, `key_metrics`, `traction_score`, `ai_review`), while every
+ * statement in this file writes a per-project series keyed on `project_id`.
+ *
+ * So the `have.size === 0` branch never ran in production — the table already
+ * existed — and the ALTER branch below added only the ten columns in `required`.
+ * `project_id`, `mrr`, `active_users`, `notes` and `source` were never in that
+ * list, so they were never added, and every read, write and rollup in this file
+ * threw `no such column: project_id`. Silently: the rollups are wrapped
+ * defensively, so `computeLifecycleSignals` returned `latest_mrr: null` and
+ * friends on every call, and a founder's KPI form failed on submit.
+ *
+ * The comment above `computeLifecycleSignals` even said "pipeline.ts also writes a
+ * *deal-keyed* metrics_snapshots, so we ensure the founder-metrics shape first" —
+ * which is what this helper was believed to do and could not, because an ALTER
+ * cannot turn a `deal_id` table into a `project_id` one.
+ *
+ * Migration 249 gives the series its own table with exactly the shape this file
+ * writes, and the CREATE below mirrors it. The ALTER branch is kept for an
+ * environment that has an older `project_metrics` — migration 034 declared a
+ * six-column version of this shape under the old name, so a database built from
+ * that lineage can exist. It cannot rescue a wrong-keyed table and no longer
+ * pretends to: `project_id` is in the CREATE and nowhere else, because a table
+ * without it is not this table. See D87.
+ */
+/**
+ * READINESS IS PER-DATABASE, NOT PER-MODULE. This was a plain `let … = false`, so
+ * the first `env.DB` to bootstrap marked the helper done for every other one in
+ * the isolate — a second database got skipped entirely and its table was never
+ * created. In production there is one D1 and it never showed, which is exactly
+ * the kind of "fine until it isn't" this repo keys on `env.DB` elsewhere:
+ * `services/painGroups.ts` and `services/discoveryInterviewSchema.ts` both use a
+ * `WeakMap` for this reason. Found by a test that bootstrapped two databases.
+ */
+const PROJECT_METRICS_READY = new WeakMap<object, boolean>();
+export async function ensureProjectMetricsSchema(env: Env): Promise<void> {
+  const key = env.DB as unknown as object;
+  if (PROJECT_METRICS_READY.get(key)) return;
   try {
-    const cols = await env.DB.prepare(`PRAGMA table_info(metrics_snapshots)`).all<{ name: string }>();
+    const cols = await env.DB.prepare(`PRAGMA table_info(project_metrics)`).all<{ name: string }>();
     const have = new Set((cols.results || []).map((r) => r.name));
     if (have.size === 0) {
       await env.DB.exec(
-        `CREATE TABLE IF NOT EXISTS metrics_snapshots (`
+        `CREATE TABLE IF NOT EXISTS project_metrics (`
           + ` id INTEGER PRIMARY KEY AUTOINCREMENT,`
           + ` project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,`
           + ` snapshot_date TEXT NOT NULL,`
@@ -1668,7 +1706,14 @@ export async function ensureMetricsSnapshotsSchema(env: Env): Promise<void> {
           + `)`,
       );
       try { await env.DB.exec(
-        `CREATE INDEX IF NOT EXISTS idx_metrics_snapshots_project ON metrics_snapshots(project_id, snapshot_date DESC)`,
+        `CREATE INDEX IF NOT EXISTS idx_project_metrics_project ON project_metrics(project_id, snapshot_date DESC)`,
+      ); } catch (e) { void e; }
+      // Mirrors migration 249. One row per project per day per source, so a
+      // re-sync upserts instead of deleting and re-inserting. A NULL source does
+      // not collide in SQLite, which is deliberate — see the migration.
+      try { await env.DB.exec(
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_project_metrics_day_source`
+          + ` ON project_metrics(project_id, snapshot_date, source)`,
       ); } catch (e) { void e; }
     } else {
       const required: Array<[string, string]> = [
@@ -1682,14 +1727,14 @@ export async function ensureMetricsSnapshotsSchema(env: Env): Promise<void> {
       ];
       for (const [col, decl] of required) {
         if (!have.has(col)) {
-          try { await env.DB.exec(`ALTER TABLE metrics_snapshots ADD COLUMN ${col} ${decl}`); }
+          try { await env.DB.exec(`ALTER TABLE project_metrics ADD COLUMN ${col} ${decl}`); }
           catch (e) { void e; }
         }
       }
     }
-    _metricsColsReady = true;
+    PROJECT_METRICS_READY.set(key, true);
   } catch (e) {
-    console.error('[progress] ensureMetricsSnapshotsSchema:', (e as Error).message);
+    console.error('[progress] ensureProjectMetricsSchema:', (e as Error).message);
   }
 }
 
@@ -1736,11 +1781,11 @@ progress.get('/metrics/:projectId', async (c) => {
   const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanView(project, user);
-  await ensureMetricsSnapshotsSchema(c.env);
+  await ensureProjectMetricsSchema(c.env);
   let items: SerializedSnap[] = [];
   try {
     const rows = await c.env.DB.prepare(
-      `SELECT * FROM metrics_snapshots WHERE project_id = ? ORDER BY snapshot_date DESC, id DESC LIMIT 200`,
+      `SELECT * FROM project_metrics WHERE project_id = ? ORDER BY snapshot_date DESC, id DESC LIMIT 200`,
     ).bind(projectId).all<MetricsSnapshot>();
     items = (rows.results || []).map(serializeSnap);
   } catch (e) {
@@ -1757,7 +1802,7 @@ progress.post('/metrics/:projectId', async (c) => {
   const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
-  await ensureMetricsSnapshotsSchema(c.env);
+  await ensureProjectMetricsSchema(c.env);
   const body: Record<string, unknown> = await c.req.json().catch(() => ({}));
   const dateRaw = String(body?.snapshot_date || '').trim();
   const snapshotDate = dateRaw || new Date().toISOString().slice(0, 10);
@@ -1781,7 +1826,7 @@ progress.post('/metrics/:projectId', async (c) => {
   const source = body?.source ? String(body.source).slice(0, 80) : 'manual';
   try {
     const r = await c.env.DB.prepare(
-      `INSERT INTO metrics_snapshots
+      `INSERT INTO project_metrics
          (project_id, snapshot_date, mrr, arr, cac, ltv, monthly_churn_pct,
           active_users, new_users, net_burn, cash_balance, headcount,
           nrr_pct, paying_accounts, notes, source, created_by, created_at)
@@ -1790,7 +1835,7 @@ progress.post('/metrics/:projectId', async (c) => {
       projectId, snapshotDate, mrr, arr, cac, ltv, churn, activeUsers, newUsers,
       netBurn, cashBalance, headcount, nrrPct, payingAccounts, notes, source, user.id,
     ).run();
-    const fresh = await c.env.DB.prepare('SELECT * FROM metrics_snapshots WHERE id = ?')
+    const fresh = await c.env.DB.prepare('SELECT * FROM project_metrics WHERE id = ?')
       .bind(r.meta.last_row_id).first<MetricsSnapshot>();
     return c.json(serializeSnap(fresh as MetricsSnapshot));
   } catch (e) {
@@ -1810,8 +1855,8 @@ progress.put('/metrics/snapshot/:id', async (c) => {
   const user = await requireAuth(c);
   const id = Number(c.req.param('id'));
   if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
-  await ensureMetricsSnapshotsSchema(c.env);
-  const existing = await c.env.DB.prepare('SELECT id, project_id FROM metrics_snapshots WHERE id = ?')
+  await ensureProjectMetricsSchema(c.env);
+  const existing = await c.env.DB.prepare('SELECT id, project_id FROM project_metrics WHERE id = ?')
     .bind(id).first<{ id: number; project_id: number }>();
   if (!existing) return c.json({ detail: 'Snapshot not found' }, 404);
   const project = await loadProject(c, existing.project_id, user);
@@ -1842,12 +1887,12 @@ progress.put('/metrics/snapshot/:id', async (c) => {
     binds.push(v);
   }
   if (sets.length === 0) {
-    const cur = await c.env.DB.prepare('SELECT * FROM metrics_snapshots WHERE id = ?').bind(id).first<MetricsSnapshot>();
+    const cur = await c.env.DB.prepare('SELECT * FROM project_metrics WHERE id = ?').bind(id).first<MetricsSnapshot>();
     return c.json(serializeSnap(cur as MetricsSnapshot));
   }
   binds.push(id);
   try {
-    await c.env.DB.prepare(`UPDATE metrics_snapshots SET ${sets.join(', ')} WHERE id = ?`).bind(...binds).run();
+    await c.env.DB.prepare(`UPDATE project_metrics SET ${sets.join(', ')} WHERE id = ?`).bind(...binds).run();
   } catch (e) {
     const msg = (e as Error).message || '';
     const drift = /no such (table|column)/i.test(msg);
@@ -1857,7 +1902,7 @@ progress.put('/metrics/snapshot/:id', async (c) => {
       drift ? 503 : 500,
     );
   }
-  const fresh = await c.env.DB.prepare('SELECT * FROM metrics_snapshots WHERE id = ?').bind(id).first<MetricsSnapshot>();
+  const fresh = await c.env.DB.prepare('SELECT * FROM project_metrics WHERE id = ?').bind(id).first<MetricsSnapshot>();
   return c.json(serializeSnap(fresh as MetricsSnapshot));
 });
 
@@ -1865,14 +1910,14 @@ progress.delete('/metrics/:id', async (c) => {
   const user = await requireAuth(c);
   const id = Number(c.req.param('id'));
   if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
-  await ensureMetricsSnapshotsSchema(c.env);
-  const existing = await c.env.DB.prepare('SELECT id, project_id FROM metrics_snapshots WHERE id = ?')
+  await ensureProjectMetricsSchema(c.env);
+  const existing = await c.env.DB.prepare('SELECT id, project_id FROM project_metrics WHERE id = ?')
     .bind(id).first<{ id: number; project_id: number }>();
   if (!existing) return c.json({ detail: 'Snapshot not found' }, 404);
   const project = await loadProject(c, existing.project_id, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
-  await c.env.DB.prepare('DELETE FROM metrics_snapshots WHERE id = ?').bind(id).run();
+  await c.env.DB.prepare('DELETE FROM project_metrics WHERE id = ?').bind(id).run();
   return c.json({ ok: true });
 });
 
@@ -1939,7 +1984,7 @@ interface MetricTargetRow {
 /**
  * Create `metric_targets` if this database has not run migration 173.
  *
- * The same lazy-ensure `ensureMetricsSnapshotsSchema` above does, and for the
+ * The same lazy-ensure `ensureProjectMetricsSchema` above does, and for the
  * same reason: the dev SQLite file is not kept in sync with D1's migrations, so a
  * route that assumes the table exists is a 500 on a developer's first request.
  * The DDL is a copy of migration 173's, CHECK constraint included — if the two
@@ -2082,7 +2127,7 @@ progress.get('/metrics/:projectId/series', async (c) => {
   const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanView(project, user);
-  await ensureMetricsSnapshotsSchema(c.env);
+  await ensureProjectMetricsSchema(c.env);
 
   const allowed = new Set(['mrr', 'arr', 'cac', 'ltv', 'monthly_churn_pct', 'active_users', 'new_users']);
   const metric = String(c.req.query('metric') || 'mrr');
@@ -2093,14 +2138,14 @@ progress.get('/metrics/:projectId/series', async (c) => {
     if (granularity === 'month') {
       const rows = await c.env.DB.prepare(
         `SELECT substr(snapshot_date, 1, 7) AS bucket, AVG(${safeMetric}) AS v
-           FROM metrics_snapshots WHERE project_id = ?
+           FROM project_metrics WHERE project_id = ?
            GROUP BY bucket ORDER BY bucket ASC`,
       ).bind(projectId).all<{ bucket: string; v: number | null }>();
       series = (rows.results || []).map((r) => ({ date: r.bucket, value: r.v }));
     } else {
       const rows = await c.env.DB.prepare(
         `SELECT snapshot_date AS date, ${safeMetric} AS v
-           FROM metrics_snapshots WHERE project_id = ?
+           FROM project_metrics WHERE project_id = ?
            ORDER BY snapshot_date ASC, id ASC`,
       ).bind(projectId).all<{ date: string; v: number | null }>();
       series = (rows.results || []).map((r) => ({ date: r.date, value: r.v }));
@@ -2126,13 +2171,13 @@ progress.get('/metrics/:projectId/summary', async (c) => {
   const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanView(project, user);
-  await ensureMetricsSnapshotsSchema(c.env);
+  await ensureProjectMetricsSchema(c.env);
 
   let rows: SaasSnapshot[] = [];
   try {
     const res = await c.env.DB.prepare(
       `SELECT snapshot_date, mrr, arr, cac, ltv, monthly_churn_pct, active_users, new_users
-         FROM metrics_snapshots WHERE project_id = ?
+         FROM project_metrics WHERE project_id = ?
          ORDER BY snapshot_date ASC, id ASC LIMIT 500`,
     ).bind(projectId).all<SaasSnapshot>();
     rows = res.results || [];
@@ -2263,7 +2308,7 @@ type LifecycleSignals = {
 };
 
 // Every query is wrapped defensively: source tables may be absent on a cold
-// isolate, and pipeline.ts also writes a *deal-keyed* metrics_snapshots, so we
+// isolate, and pipeline.ts also writes a *deal-keyed* project_metrics, so we
 // ensure the founder-metrics shape first and never let a signal miss 500 the GET.
 async function computeLifecycleSignals(env: Env, projectId: number): Promise<LifecycleSignals> {
   const out: LifecycleSignals = {
@@ -2287,10 +2332,10 @@ async function computeLifecycleSignals(env: Env, projectId: number): Promise<Lif
     out.interview_count = Number(di?.n ?? 0);
   } catch (_e) { /* noop */ }
   try {
-    await ensureMetricsSnapshotsSchema(env);
+    await ensureProjectMetricsSchema(env);
     const ms = await env.DB.prepare(
       `SELECT mrr, active_users, monthly_churn_pct, new_users
-         FROM metrics_snapshots WHERE project_id = ?
+         FROM project_metrics WHERE project_id = ?
         ORDER BY snapshot_date DESC, id DESC LIMIT 1`,
     ).bind(projectId).first<{
       mrr: number | null; active_users: number | null;

@@ -5539,3 +5539,111 @@ shrank with it.
 corrected. The DDL files still disagree: `sql/infrastructure.sql` declares a shape
 nothing builds from and now nothing writes. That is a documentation collision
 rather than a live one, and retiring the file is its own small task.
+
+## D87 — The per-project metric series gets its own table, and two live writers start working
+
+**Task #203**, found by closing #202. Excluding `sql/historical/` from
+`check-sqlite-table-collisions.mjs` left `metrics_snapshots` with five LIVE
+definitions, and two of them were writers nobody had counted.
+
+### The break, measured
+
+Production's `metrics_snapshots` is the DEAL shape `routes/pipeline.ts` creates at
+runtime — `deal_id NOT NULL, snapshot_date, key_metrics, traction_score,
+ai_review, created_by` — plus ten metric columns that `progress.ts`'s own
+`ensureMetricsSnapshotsSchema` ALTERed in. That ALTER trail is visible in the
+baseline as the comma after `created_by`, which is how we know the helper has run.
+
+Its `required` list never included `project_id`, `mrr`, `active_users`, `notes`
+or `source`. And:
+
+- **`routes/progress.ts:1784`** — the founder metrics-snapshot POST — INSERTs all
+  five.
+- **`integrations/providers/stripe.ts:337`** — the Stripe MRR sync — INSERTs four.
+
+So both threw `no such column: project_id`. A founder entering KPIs got a failure;
+a Stripe sync wrote nothing. `computeLifecycleSignals` wraps its read defensively,
+so `latest_mrr`, `active_users`, `monthly_churn_pct` and `new_users` returned NULL
+on every call — a founder's lifecycle signals were permanently blank and nothing
+said why.
+
+### Three things kept it invisible, and each is now asserted against
+
+1. **A helper believed to do what it could not.** The comment above
+   `computeLifecycleSignals` said *"pipeline.ts also writes a deal-keyed
+   metrics_snapshots, so we ensure the founder-metrics shape first."* An ALTER
+   cannot turn a `deal_id` table into a `project_id` one. A test now creates a
+   deal-shaped table, runs the bootstrap, and asserts `project_id` is still absent
+   — so nobody restores the belief.
+2. **A guard that cannot see it, by design.** `check-sqlite-columns` unions every
+   CREATE TABLE, so each writer's own `CREATE TABLE IF NOT EXISTS` contributed
+   `project_id` and `mrr` to the known set and its INSERT validated against them.
+   That guard's docblock states the limitation and names
+   `check-sqlite-table-collisions.mjs` as the complement — which is exactly how
+   this surfaced.
+3. **A docblock asserting the opposite of the truth.** `services/saasMetrics.ts`
+   said the `project_id` shape was *"the LIVE one … what every metrics handler
+   reads."* Every clause was false about production. It is corrected, and the
+   correction says what it used to say, because a doc that confidently states the
+   wrong schema is load-bearing in the wrong direction.
+
+A fourth kept it invisible in CI: **three test fixtures hand-wrote
+`metrics_snapshots` with `project_id`**, and one apologised for it in advance —
+*"in the shape `ensureMetricsSnapshotsSchema` creates (project_id, not the
+baseline dump's historical deal_id)."* Calling production's shape "historical" is
+how a fixture comes to certify a broken feature. All three are repointed.
+
+### The decision: a new table, not four more ALTERs
+
+Migration 249 creates `project_metrics`. The alternative — adding the five columns
+to `metrics_snapshots` — was rejected on two grounds:
+
+- **The reader families are disjoint.** `deal_id`: `pipeline.ts` (three reads) and
+  `services/tractionSnapshots.ts`. `project_id`: `progress.ts`'s whole CRUD
+  surface plus three rollups, `research.ts`, and `stripe.ts`. Merging them would
+  make the deal side's `SELECT *` reads return project rows with every traction
+  field NULL — the pollution D86 refused for the review annotation.
+- **`deal_id` is `NOT NULL`.** A project row would have to put something there.
+  `deal_id` IS a `projects.id` (D86), so it would be the same number in two
+  columns: a thing that works by coincidence and breaks the first time someone
+  changes what `deal_id` means.
+
+**No backfill, and that is provable rather than hopeful.** The old writes named a
+column that does not exist, so they always threw. There has never been a
+project-keyed row to move.
+
+### The uniqueness that replaces a read-modify-write
+
+`UNIQUE(project_id, snapshot_date, source)`, so `stripe.ts` upserts instead of
+`DELETE`-then-`INSERT`. The old pair had a window where the day carried no figure
+at all, and — worse — the DELETE was inside a `try/catch` while the INSERT was
+not: a failed delete left a duplicate, a failed insert took the whole sync down.
+
+`excluded.*` names only the four figures Stripe knows. A blanket replace would
+wipe a founder's headcount for the same day, because Stripe has no opinion about
+their headcount.
+
+**A NULL `source` does not collide** — SQLite treats NULLs as distinct in a UNIQUE
+index — and that is deliberate. A hand-entered figure is a statement someone made,
+not a projection to be silently replaced, so the route decides whether a second
+entry updates or adds. A founder's figure and Stripe's figure for the same day are
+two claims and are two rows.
+
+### Dollars, carried over rather than re-decided
+
+`check-money-cents` correctly flagged four new REAL money columns. They are
+recorded in the baseline with the reason rather than converted: `saasMetrics.ts`
+computes LTV:CAC, CAC payback, burn multiple, CMGR and runway over these as
+dollars, `financial_models.assumptions_json` carries `mrr` and `arr` as dollars
+beside them, and the SPA renders both. Converting the column without converting
+that chain would put two denominations one join apart, which is worse than either.
+Re-denominating the metric series is its own task.
+
+### One latent bug fixed on the way, found by a test
+
+`ensureProjectMetricsSchema`'s readiness flag was a module-level `let … = false`,
+so the first `env.DB` to bootstrap marked the helper done for **every** database in
+the isolate. In production there is one D1 and it never showed. It is a `WeakMap`
+keyed on `env.DB` now, matching `services/painGroups.ts` and
+`services/discoveryInterviewSchema.ts`, which key readiness that way for exactly
+this reason.

@@ -4,7 +4,7 @@
  * The manual "Import from Stripe" button calls `syncStripeForUser`. When the
  * connected account has no active/trialing subscriptions, the route shows the
  * "connected but no synced billing data yet" message — but the shared sync used
- * to write a zero `source='stripe'` row to `metrics_snapshots` *before* the
+ * to write a zero `source='stripe'` row to `project_metrics` *before* the
  * route could classify the result as "no data", so a misleading $0 Stripe row
  * leaked into the snapshot history.
  *
@@ -82,7 +82,7 @@ function freshDb() {
       last_error TEXT,
       updated_at TEXT
     );
-    CREATE TABLE metrics_snapshots (
+    CREATE TABLE project_metrics (
       id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL,
       snapshot_date TEXT NOT NULL, mrr REAL, arr REAL, cac REAL, ltv REAL,
       monthly_churn_pct REAL, active_users INTEGER, new_users INTEGER,
@@ -144,7 +144,7 @@ function activeSub(id: string, customer: string, unitAmountCents: number) {
 }
 
 function snapshotCount(db: InstanceType<typeof DatabaseSync>): number {
-  const r = db.prepare("SELECT COUNT(*) AS c FROM metrics_snapshots WHERE source = 'stripe'").get() as { c: number };
+  const r = db.prepare("SELECT COUNT(*) AS c FROM project_metrics WHERE source = 'stripe'").get() as { c: number };
   return Number(r.c);
 }
 
@@ -195,7 +195,7 @@ test('has billing data → ok and exactly one stripe snapshot row is written', w
     assert.equal(result.imported, 1);
 
     assert.equal(snapshotCount(db), 1, 'the happy path must still persist a snapshot');
-    const row = db.prepare("SELECT mrr, project_id, source FROM metrics_snapshots WHERE source = 'stripe'").get() as any;
+    const row = db.prepare("SELECT mrr, project_id, source FROM project_metrics WHERE source = 'stripe'").get() as any;
     assert.equal(row.mrr, 10);
     assert.equal(row.project_id, PROJECT_ID);
   },
