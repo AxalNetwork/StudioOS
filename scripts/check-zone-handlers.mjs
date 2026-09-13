@@ -162,6 +162,34 @@ function keysOf(obj) {
   return out;
 }
 
+/**
+ * Every `const <name> = {` in one file → the index of its opening brace.
+ *
+ * ONE STATIC REGEX AND A LOOKUP, rather than one regex built per name. Both
+ * call sites below used to do `new RegExp(\`const\\s+${name}\\s*=\\s*\\{\`)`,
+ * and Semgrep's `detect-non-literal-regexp` flagged the first of them on
+ * PR #551. The ReDoS it warns about could not fire here — every one of those
+ * names is captured by `[A-Za-z0-9_$]+`, so none can hold a metacharacter —
+ * but "this particular interpolation happens to be safe" is an argument every
+ * reader has to re-make, and it stops being true the day a capture widens.
+ * Building no regex from input removes the question instead of answering it.
+ *
+ * It is also the better scan: one pass per file, where the old shape re-read
+ * the whole text once per name it wanted.
+ *
+ * FIRST DECLARATION WINS, which is what the `.exec()` calls did — they returned
+ * the first match too. A name declared twice in one module is a shadowed scope
+ * this scanner cannot resolve either way, and preferring the last would be a
+ * silent change of answer rather than a fix.
+ */
+function objectDecls(text) {
+  const out = new Map();
+  for (const d of text.matchAll(/\bconst\s+([A-Za-z0-9_$]+)\s*=\s*\{/g)) {
+    if (!out.has(d[1])) out.set(d[1], d.index + d[0].length - 1);
+  }
+  return out;
+}
+
 /** Every `zoneActions(…)` call in a child file, and the names it supplies. */
 function suppliedBy(file) {
   const text = fs.readFileSync(file, 'utf8');
@@ -175,10 +203,12 @@ function suppliedBy(file) {
     if (obj) for (const k of keysOf(obj)) out.add(k);
   }
   // `zoneActions(rows, handlers)` — a named object declared in the child.
+  // `objectDecls` carries why this is a lookup rather than a built regex.
+  const decls = objectDecls(text);
   for (const c of text.matchAll(/zoneActions\([^)]*?,\s*([A-Za-z0-9_$]+)\s*\)/g)) {
-    const decl = new RegExp(`const\\s+${c[1]}\\s*=\\s*\\{`).exec(text);
-    if (!decl) continue;
-    const obj = block(text, decl.index + decl[0].length - 1);
+    const at = decls.get(c[1]);
+    if (at === undefined) continue;
+    const obj = block(text, at);
     if (obj) for (const k of keysOf(obj)) out.add(k);
   }
   return out;
@@ -232,9 +262,9 @@ export function callSites() {
         continue;
       }
       const varName = named ? named[1] : 'handlers';
-      const decl = new RegExp(`const\\s+${varName}\\s*=\\s*\\{`).exec(text);
-      if (decl) {
-        const obj = block(text, decl.index + decl[0].length - 1);
+      const declAt = objectDecls(text).get(varName);
+      if (declAt !== undefined) {
+        const obj = block(text, declAt);
         record(call.roles, call.zone, { file: rel, supplied: obj ? keysOf(obj) : new Set(), deferred: false });
         continue;
       }
