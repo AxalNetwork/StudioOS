@@ -1399,6 +1399,14 @@ export const api = {
   listMetricsSnapshots: (projectId) => request(`/progress/metrics/${projectId}`),
   createMetricsSnapshot: (projectId, data) => request(`/progress/metrics/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
   deleteMetricsSnapshot: (id) => request(`/progress/metrics/${id}`, { method: 'DELETE' }),
+  // Task #194 — metric targets. `metric_targets` shipped in migration 173 and
+  // had no reader and no writer for 21 migrations; these are both ends. The
+  // plan number is per project and per metric, never per snapshot, which is
+  // why the setter is an upsert on `(project_id, metric_key)` rather than a
+  // create. Pass `target_value: null` to clear one — 0 is a real target
+  // ("get churn to zero") so it cannot double as "no target".
+  listMetricTargets: (projectId) => request(`/progress/metrics/${projectId}/targets`),
+  setMetricTarget: (projectId, data) => request(`/progress/metrics/${projectId}/targets`, { method: 'PUT', body: JSON.stringify(data) }),
   // Build queue #121 — derived KPIs (growth, LTV:CAC, payback, retention)
   // computed server-side from the snapshot series, with `unavailable[]`
   // explaining any metric that could not be computed.

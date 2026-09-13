@@ -298,13 +298,16 @@ export const FOUNDER_ZONE_FILTERS = {
   ],
 
   // ── Grow ─────────────────────────────────────────────────────────────────
-  // Metric snapshots are dated, so the two period views run. Experiments and
-  // targets are the zone's stated gaps and its rail says so already.
+  // Metric snapshots are dated, so the two period views run. `Targets` runs now
+  // too: `metric_targets` shipped in migration 173 and had no reader and no
+  // writer anywhere until task #194 gave it both, so the chip's old reason —
+  // "no metric target is stored" — was true of every account and true forever.
+  // Experiments remains the zone's one stated gap.
   'grow/focus': [
     { canvas: 'August', key: 'latest', label: 'Latest month' },
     { canvas: 'Last 6 mo', key: 'six-months' },
     { canvas: 'Experiments', unbuilt: 'no experiment log is connected, so no effect on the metric is claimed' },
-    { canvas: 'Targets', unbuilt: 'no metric target is stored' },
+    { canvas: 'Targets', key: 'targets', label: 'Targets {n}' },
   ],
   // Roles linked to this startup become their own chips — the canvas's two are
   // sample names. An application's stored status is what "shortlisted" reads.
