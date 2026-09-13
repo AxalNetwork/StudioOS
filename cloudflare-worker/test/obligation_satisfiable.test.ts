@@ -1,22 +1,28 @@
 /**
  * An obligation seeded `required: 1` must have a code path that can satisfy it.
  *
- * EIGHT OF THE TEN CANNOT BE, which is what this file exists to make measurable.
- * `legal_obligations` is written in exactly four files — `services/trust.ts`,
- * `services/partnerDeals.ts`, `routes/trust.ts` and `index.ts` — and across all of
- * them only three statements write `'satisfied'` at all. Every other transition goes
- * to `'waived'` (the role-prune and the legacy-KYC waive) or `'expired'`. So no
- * account can reach a trust score of 100 and `fully_compliant` (`routes/trust.ts`)
- * is permanently false for every user.
+ * THREE OF THE TEN CANNOT BE, down from eight when this file landed. That number
+ * is the measurement, and the point of the file is that it can only fall.
  *
- * THE EIGHT SPLIT INTO TWO KINDS, and keeping them apart is what makes the guard
- * below able to prove itself rather than merely assert:
+ * WHAT CLOSED. The three NDAs and the advisor disclaimer each had a real signable
+ * document, a wired template body and a working send route, and nothing wrote the
+ * result back — so `satisfyObligationFromEnvelope` now records a completed envelope
+ * against them, which is what `evidence_envelope_uuid` was added for in migration
+ * 025. Proven behaviourally in `obligation_signature_satisfier.test.ts`.
  *
- *   SEVEN have no write site anywhere — the six terms/NDA keys, whose acceptance
- *   happens but is never recorded, and `accreditation_v1`, which has a legal
- *   template and an e-sign doc_type and no satisfier.
+ * WHAT REMAINS, and why each is a decision rather than a missing write:
  *
- *   ONE, `kyb_v1`, HAS a write site that has never been able to run. That is the
+ *   `tos_v1`, `privacy_v1` — there is no affirmative acceptance anywhere in the
+ *   product to record. Only passive browsewrap text, and on the one screen every
+ *   signup must pass, not even that. Writing `satisfied` here would assert an act
+ *   the user never performed; the fix is a consent checkbox, not a write.
+ *
+ *   `accreditation_v1` — required of every investor, no satisfier. It has a legal
+ *   template and an e-sign doc_type, so it looks wired; satisfying or waiving it is
+ *   a securities question for counsel, and it is deliberately excluded from
+ *   `SATISFIABLE_BY_SIGNATURE` for that reason.
+ *
+ *   `kyb_v1` — HAS a write site that has never been able to run. That is the
  *   sharper half, because it fails invisibly: `resyncKycKyb`'s KYB branch joins
  *   `corporate_profiles.kyb_status`, a column that exists on no table in this
  *   schema, and the D1 error used to be swallowed by
@@ -32,11 +38,12 @@
  * is captured, which is what distinguishes "nothing to do tonight" from "this has
  * never worked".
  *
- * WHAT THIS FILE DELIBERATELY DOES NOT DO. It changes no seeding and builds no
- * satisfier. Waiving `accreditation_v1` is a securities question and waiving
- * `tos_v1` is a terms question; the precedent here is `ADVISOR_CHARGING_ENABLED`
- * staying unset until counsel cleared the advisor terms. This file measures, and
- * `UNSATISFIABLE_TODAY` is an exact set so the measurement can only shrink.
+ * WHAT IS STILL DELIBERATELY NOT DONE. No seeding changed, and no obligation is
+ * waived. The three remaining keys are each blocked on a decision rather than on
+ * code, and the precedent for leaving them alone is `ADVISOR_CHARGING_ENABLED`
+ * staying unset until counsel cleared the advisor terms. This file measures;
+ * `UNSATISFIABLE_TODAY` is an exact set, so the measurement can only shrink and a
+ * regression cannot be quiet.
  *
  * Real SQLite via `_d1_sqlite.mjs`, for the reason that file gives: a text-matching
  * stub cannot tell a correct predicate from an incorrect one, and the whole point
@@ -166,6 +173,31 @@ function writeSites(): { writes: Map<string, Set<string>>; sites: number } {
 }
 
 /**
+ * Keys the signature satisfier accepts.
+ *
+ * NEEDED BECAUSE A TEXT SCAN CANNOT ANSWER THIS ONE.
+ * `satisfyObligationFromEnvelope` binds `obligation_key = ?` from a set rather
+ * than naming keys in SQL, so `writeSites()` correctly finds its write statement
+ * and correctly attributes no key to it. Rather than loosen that attribution —
+ * which is what stops a key in a neighbouring branch being credited to the wrong
+ * write — this reads the authority directly: the `SATISFIABLE_BY_SIGNATURE` set
+ * in `services/trust.ts` IS the list of keys that satisfier will act on.
+ *
+ * That the keys in it can really be satisfied is proven behaviourally, by
+ * `obligation_signature_satisfier.test.ts` running the satisfier against a real
+ * database for each one. This parser establishes scope; that file establishes it
+ * works.
+ */
+function signatureSatisfiableKeys(): Set<string> {
+  const at = TRUST_SVC.indexOf('const SATISFIABLE_BY_SIGNATURE');
+  assert.ok(at > 0, 'SATISFIABLE_BY_SIGNATURE is gone from trust.ts — did the satisfier move?');
+  const block = TRUST_SVC.slice(at, TRUST_SVC.indexOf(']);', at));
+  const keys = [...block.matchAll(/'([a-z0-9_]+_v1)'/g)].map((m) => m[1]);
+  assert.ok(keys.length > 0, 'SATISFIABLE_BY_SIGNATURE parsed to nothing');
+  return new Set(keys);
+}
+
+/**
  * EXACT SET. Each entry is a key a seeder marks required and that nothing can
  * satisfy. It can only shrink: removing an entry without building its satisfier
  * fails, and closing a gap without removing its entry also fails.
@@ -193,12 +225,21 @@ const UNSATISFIABLE_TODAY: Record<string, Gap> = {
   // Acceptance happens somewhere — a signup checkbox, a signature — but nothing
   // records it into `legal_obligations`. No write site in any of the four files
   // names these keys, so every user carries them pending forever.
-  tos_v1: { satisfier: 'none', why: 'acceptance is never recorded into legal_obligations' },
-  privacy_v1: { satisfier: 'none', why: 'acceptance is never recorded into legal_obligations' },
-  founder_nda_v1: { satisfier: 'none', why: 'signature is never recorded into legal_obligations' },
-  investor_nda_v1: { satisfier: 'none', why: 'signature is never recorded into legal_obligations' },
-  mentor_nda_v1: { satisfier: 'none', why: 'signature is never recorded into legal_obligations' },
-  mentor_disclaimer_v1: { satisfier: 'none', why: 'acceptance is never recorded into legal_obligations' },
+  // The four signature-backed keys USED TO BE HERE. Their entries are gone
+  // because `satisfyObligationFromEnvelope` now records a completed envelope
+  // against them; the `SATISFIABLE_BY_SIGNATURE` parser above is what credits
+  // them, and `obligation_signature_satisfier.test.ts` proves each one works.
+  //
+  // ToS and privacy remain, and for a reason worth stating precisely: there is no
+  // affirmative acceptance anywhere in the product to record. `/register` shows
+  // passive "By continuing you agree" text; the onboarding licence gate renders
+  // only two link labels and no such sentence at all — the claim that continuing
+  // constitutes acceptance lives in code comments (`ChooseLicencePage.jsx`,
+  // `lib/legalNotice.js`), not on screen. Marking these satisfied today would
+  // record an act the user never performed, so the fix is a real consent
+  // checkbox, not a write.
+  tos_v1: { satisfier: 'none', why: 'no affirmative acceptance exists to record — only passive browsewrap text' },
+  privacy_v1: { satisfier: 'none', why: 'no affirmative acceptance exists to record — only passive browsewrap text' },
   // Has a legal template and an e-sign doc_type, so it looks wired; it is not.
   // required:1 for EVERY investor, which makes this the widest of the seven.
   // Waiving it is a securities question, not a code change.
@@ -339,7 +380,12 @@ test('every obligation a seeder marks required can be satisfied, or is a recorde
   const inert = new Set(
     Object.entries(UNSATISFIABLE_TODAY).filter(([, g]) => g.satisfier === 'inert').map(([k]) => k),
   );
-  const satisfiable = new Set([...writes.keys()].filter((k) => !inert.has(k)));
+  // Two sources, because there are two ways a key becomes satisfiable: a write
+  // that names it in SQL, and the signature satisfier that binds it from a set.
+  const satisfiable = new Set([
+    ...[...writes.keys()].filter((k) => !inert.has(k)),
+    ...signatureSatisfiableKeys(),
+  ]);
 
   const unexplained = [...required].filter((k) => !satisfiable.has(k) && !recorded.has(k)).sort();
   assert.deepEqual(unexplained, [],
@@ -361,10 +407,14 @@ test('every obligation a seeder marks required can be satisfied, or is a recorde
     assert.ok(gap.why.length > 25, `${key}'s entry does not say why it cannot be satisfied`);
 
     if (gap.satisfier === 'none') {
-      assert.ok(!writes.has(key),
-        `${key} is recorded as having NO write site, but one now names it in `
-        + `${[...(writes.get(key) ?? [])].join(', ')}. If it can satisfy the obligation, delete `
-        + `this entry; if it cannot, change the entry to satisfier:'inert' and name what blocks it.`);
+      // Checked against the UNION, not just the textual writes: adding a key to
+      // SATISFIABLE_BY_SIGNATURE is exactly as much a satisfier as naming it in
+      // SQL, and an entry that survived that would be a false statement.
+      assert.ok(!satisfiable.has(key),
+        `${key} is recorded as having NO satisfier, but one now covers it `
+        + `(${[...(writes.get(key) ?? ['SATISFIABLE_BY_SIGNATURE'])].join(', ')}). If it can `
+        + `satisfy the obligation, delete this entry; if it cannot, change the entry to `
+        + `satisfier:'inert' and name what blocks it.`);
       continue;
     }
 
@@ -403,15 +453,28 @@ test('the parsers found both sides, so the comparison above is not vacuous', () 
   for (const k of ['tos_v1', 'privacy_v1', 'kyb_v1', 'accreditation_v1', 'partner_msa_v1']) {
     assert.ok(required.has(k), `${k} is required somewhere but the parser missed it`);
   }
-  assert.equal(sites, 3,
-    `expected exactly 3 writes of status='satisfied' across the three files, found ${sites} — `
+  assert.equal(sites, 4,
+    `expected exactly 4 writes of status='satisfied' across the three files, found ${sites} — `
     + 'a new one means a new satisfier; update UNSATISFIABLE_TODAY and this count together');
+  // Three of the four name their key in SQL. The fourth —
+  // `satisfyObligationFromEnvelope` — binds it, so it is deliberately absent here
+  // and accounted for by `signatureSatisfiableKeys()` instead.
   assert.deepEqual([...writes.keys()].sort(), ['kyb_v1', 'kyc_v1', 'partner_msa_v1'],
     'the set of keys a satisfied-write is attributed to changed');
-  // Of those three, one is inert — so only two obligations in the whole system have a
-  // satisfier that has ever been able to run. Pinned, because that is the number the
-  // work after this file exists to move.
-  const working = [...writes.keys()].filter((k) => UNSATISFIABLE_TODAY[k]?.satisfier !== 'inert');
-  assert.deepEqual(working.sort(), ['kyc_v1', 'partner_msa_v1'],
-    'the set of obligations with a satisfier that can actually run changed');
+  assert.deepEqual([...signatureSatisfiableKeys()].sort(),
+    ['founder_nda_v1', 'investor_nda_v1', 'mentor_disclaimer_v1', 'mentor_nda_v1'],
+    'the signature satisfier\'s scope changed — if a key was added, delete its '
+    + 'UNSATISFIABLE_TODAY entry and prove it in obligation_signature_satisfier.test.ts; '
+    + 'accreditation_v1 in particular must not appear here without counsel');
+  // The number this file exists to move: obligations with a satisfier that can
+  // actually run. It was 2 when the measurement landed; it is 6 now, and the two
+  // that remain are the two nobody can close without a policy decision.
+  const working = [
+    ...[...writes.keys()].filter((k) => UNSATISFIABLE_TODAY[k]?.satisfier !== 'inert'),
+    ...signatureSatisfiableKeys(),
+  ].sort();
+  assert.deepEqual(working, [
+    'founder_nda_v1', 'investor_nda_v1', 'kyc_v1',
+    'mentor_disclaimer_v1', 'mentor_nda_v1', 'partner_msa_v1',
+  ], 'the set of obligations with a satisfier that can actually run changed');
 });
