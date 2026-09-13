@@ -106,9 +106,7 @@ export default function FounderGrowFocus() {
 
   const latest = snapshots[0] || null;
   const query = project?.id ? `?project_id=${project.id}` : '';
-  const read = useMemo(() => targets.map((t) => readTarget(t, latest)), [targets, latest]);
-  const metCount = read.filter((t) => t.met === true).length;
-  const measured = read.filter((t) => t.met !== null).length;
+  const readTargets = useMemo(() => targets.map((t) => readTarget(t, latest)), [targets, latest]);
   const selectedRows = useMemo(() => {
     // The Targets view is not a slice of the snapshot log — it is a different
     // table, one row per plan number. Returning the log's rows here would let
@@ -126,15 +124,28 @@ export default function FounderGrowFocus() {
   return <main className="a5-grow fg-focus" data-testid="founder-grow-focus"><div className="a5-grow-canvas"><div className="a5-grow-main">
     <header className="a5-grow-hero"><div className="fg-focus-crumb"><Link to={`/build/team${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Focus</b></div><div><h1>This month&apos;s focus</h1><p>The month&apos;s metric, targets, and experiment log.</p></div>{projects.length > 1 && <label className="fg-focus-picker"><span>Startup</span><select data-testid="select-grow-focus-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-focus-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Focus' ? 'is-active' : ''}>{label}</Link>)}</nav>
     <ZoneToolbar
-              filters={founderZoneFilters('grow/focus', { value: view, onChange: setView, counts: { targets: read.length } })}
+              filters={founderZoneFilters('grow/focus', { value: view, onChange: setView, counts: { targets: readTargets.length } })}
               actions={founderZoneActions('grow/focus', { query, view: { scope: project?.name, header: ['Snapshot', 'MRR', 'ARR', 'Active users', 'New users', 'Churn %', 'Source'], rows: selectedRows, cells: (r) => [r.snapshot_date, r.mrr, r.arr, r.active_users, r.new_users, r.monthly_churn_pct, r.source] } })}
             /></header>
     {error && <div className="a5-grow-error" data-testid="status-grow-focus-partial"><AlertCircle size={15} /><span>{error}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
-    {loading ? <FocusSkeleton /> : !project ? <EmptyFocus /> : <FocusContent project={project} latest={latest} snapshots={snapshots} selectedRows={selectedRows} view={view} setView={setView} current={current} query={query} targets={read} targetKeys={targetKeys} onSaved={load} />}
-  </div><FocusRail project={project} snapshots={snapshots} latest={latest} targets={read} /></div></main>;
+    {loading ? <FocusSkeleton /> : !project ? <EmptyFocus /> : <FocusContent project={project} latest={latest} snapshots={snapshots} selectedRows={selectedRows} view={view} setView={setView} current={current} query={query} targets={readTargets} targetKeys={targetKeys} onSaved={load} />}
+  </div><FocusRail project={project} snapshots={snapshots} latest={latest} targets={readTargets} /></div></main>;
 }
 
 function FocusContent({ project, latest, snapshots, selectedRows, view, setView, current, query, targets, targetKeys, onSaved }) {
+  // COUNTED HERE, IN THE FUNCTION THAT READS THEM. Both were declared in
+  // `FounderGrowFocus` and referenced only from this component — a different
+  // function, so they were undefined identifiers and the Target tile threw a
+  // ReferenceError that blanked the whole route the moment it rendered.
+  //
+  // esbuild bundles that happily and this repo has no lint step for it; CodeQL
+  // caught it on the PR, reported as two unused variables at the declaration
+  // rather than as the crash at the use. `profile_zone_actions.test.mjs`
+  // documents the same failure class for zone rows ("a ReferenceError that
+  // blanks the whole route at render … and it is NOT a build error"), and a
+  // Stat tile sits outside that test's reach.
+  const metCount = targets.filter((t) => t.met === true).length;
+  const measured = targets.filter((t) => t.met !== null).length;
   return <div className="a5-sections"><div className="fg-focus-context"><div><span>Selected startup</span><strong data-testid="text-grow-focus-project">{safeText(project.name)}</strong></div><div><span>Metric source</span><strong>{snapshots.length ? 'Stored metric snapshots' : 'Unavailable'}</strong></div></div>
         {/* Its four tabs are the zone header's now. Two of them — Experiments
         and Targets — had no store behind them and rendered an Unavailable
@@ -149,11 +160,11 @@ function FocusContent({ project, latest, snapshots, selectedRows, view, setView,
       about this project rather than about the product. */}
       <Stat
         label="Target"
-        value={read.length ? `${metCount} of ${measured || read.length} met` : 'None set'}
-        note={read.length
-          ? (measured < read.length ? `${read.length - measured} not measured by the latest snapshot` : `Against ${latest ? formatDate(latest.snapshot_date) : 'no snapshot'}`)
+        value={targets.length ? `${metCount} of ${measured || targets.length} met` : 'None set'}
+        note={targets.length
+          ? (measured < targets.length ? `${targets.length - measured} not measured by the latest snapshot` : `Against ${latest ? formatDate(latest.snapshot_date) : 'no snapshot'}`)
           : 'Set one in the Targets view'}
-        muted={!read.length}
+        muted={!targets.length}
       /><Stat label="Experiments" value="Unavailable" note="No experiment log source connected" muted /><Stat label="Moved the metric" value="Not recorded" note="No experiment effects are claimed" muted /></div>
     {view === 'targets'
       ? <section className="a5-card fg-focus-log"><Head icon={Crosshair} title="Targets" meta={latest ? `Read against ${formatDate(latest.snapshot_date)}` : 'No snapshot to read against yet'} /><TargetsPanel project={project} targets={targets} targetKeys={targetKeys} latest={latest} onSaved={onSaved} /></section>
