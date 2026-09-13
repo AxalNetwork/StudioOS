@@ -5,7 +5,7 @@ import {
   // own composition now, and `ProofTile` below is the tile that carries the
   // artboard's note under each figure.
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  Section, Field, SaveNote, UnlinkedZone, isNoPartnerProfile,
+  Section, Field, SaveNote, NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
@@ -471,9 +471,17 @@ export default function PartnerProofZone() {
   };
   const rowActions = partnerZoneActions('offers/proof', { handlers, view: { header: ['Outcome', 'Kind', 'Provenance', 'Founder', 'Consent', 'What it says'], rows: visible, cells: (r) => [r.title, r.kind, r.need_title, r.founder_name, CONSENT_LABEL[consentState(r)], r.outcome_note] } });
 
-  if (isNoPartnerProfile(state.error)) {
-    return <UnlinkedZone title="Proof" actions={rowActions} />;
-  }
+  // NOT AN EARLY RETURN ANY MORE. This was
+  //   `if (isNoPartnerProfile(state.error)) return <UnlinkedZone … />;`
+  // which drew a card INSTEAD of the zone — on twelve zones, so an admin
+  // reading this workspace saw twelve copies of one card and never a page.
+  // `ZoneBody` takes the line as a `notice` above its states, and the zone
+  // renders underneath in its own empty state, which is also the state that
+  // says what this zone holds. The gate itself is untouched: the read still
+  // 400s, so `isEmpty` is forced rather than inferred from rows that never
+  // arrived, and `error` is cleared so the shared "This did not load" card —
+  // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
+  const unlinked = isNoPartnerProfile(state.error);
 
   return (
     <>
@@ -482,17 +490,25 @@ export default function PartnerProofZone() {
           filters. The export takes `visible` rather than `items`: a file that
           did not match the chips on screen would be the same untruth as a chip
           that narrows nothing. */}
+      {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
+          An action states what the zone DOES and an export over nothing
+          loaded renders disabled and says so; a filter chip is a claim about
+          ROWS, and a selectable `Published` over a store this account cannot
+          read is the "an empty set reads as an answer" failure
+          `zoneFilterBuilder.js` exists to prevent, reached from a new
+          direction. `profile_zone_actions.test.mjs` asserts both halves. */}
       <ZoneToolbar
         className="mb-3"
         role="partner"
-        filters={partnerZoneFilters('offers/proof', { value: view, onChange: setView })}
+        filters={unlinked ? [] : partnerZoneFilters('offers/proof', { value: view, onChange: setView })}
         actions={rowActions}
       />
       <ZoneBody
         loading={state.loading}
-        error={state.error}
+        error={unlinked ? null : state.error}
         onRetry={load}
-        isEmpty={items.length === 0}
+        notice={unlinked ? <NoPartnerProfile /> : null}
+        isEmpty={unlinked || (items.length === 0)}
         empty={(
           <NothingYet
             title="No proof is recorded yet"

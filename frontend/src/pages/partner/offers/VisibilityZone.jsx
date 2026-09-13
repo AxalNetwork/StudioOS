@@ -6,7 +6,7 @@ import {
   // own composition now, and `VisTile` below is the tile that can render `Not
   // recorded` as a chip rather than as an em dash a reader reads as zero.
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  Section, Field, SaveNote, NotComputable, UnlinkedZone,
+  Section, Field, SaveNote, NotComputable, NoPartnerProfile,
   isNoPartnerProfile, inputClass, buttonClass, ghostButtonClass, moneyDollars,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
@@ -233,9 +233,17 @@ export default function PartnerVisibilityZone() {
   // which is what makes a header row over an unreadable store honest.
   const rowActions = partnerZoneActions('offers/visibility', { view: { header: ['Service', 'Kind', 'Price', 'Active', 'Engagements', 'Won value'], rows: visible, cells: (r) => [r.name, r.kind, r.price, r.is_active, r.engagement_count, r.won_value] } });
 
-  if (isNoPartnerProfile(state.error)) {
-    return <UnlinkedZone title="Visibility" actions={rowActions} />;
-  }
+  // NOT AN EARLY RETURN ANY MORE. This was
+  //   `if (isNoPartnerProfile(state.error)) return <UnlinkedZone … />;`
+  // which drew a card INSTEAD of the zone — on twelve zones, so an admin
+  // reading this workspace saw twelve copies of one card and never a page.
+  // `ZoneBody` takes the line as a `notice` above its states, and the zone
+  // renders underneath in its own empty state, which is also the state that
+  // says what this zone holds. The gate itself is untouched: the read still
+  // 400s, so `isEmpty` is forced rather than inferred from rows that never
+  // arrived, and `error` is cleared so the shared "This did not load" card —
+  // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
+  const unlinked = isNoPartnerProfile(state.error);
 
   return (
     <>
@@ -251,17 +259,25 @@ export default function PartnerVisibilityZone() {
           COUNT(es.id) DESC, s.name`) and the heading below already claims.
           A state whose value can never change would be a control that looks
           selectable and selects nothing. */}
+      {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
+          An action states what the zone DOES and an export over nothing
+          loaded renders disabled and says so; a filter chip is a claim about
+          ROWS, and a selectable `Published` over a store this account cannot
+          read is the "an empty set reads as an answer" failure
+          `zoneFilterBuilder.js` exists to prevent, reached from a new
+          direction. `profile_zone_actions.test.mjs` asserts both halves. */}
       <ZoneToolbar
         className="mb-3"
         role="partner"
-        filters={partnerZoneFilters('offers/visibility', { value: view })}
+        filters={unlinked ? [] : partnerZoneFilters('offers/visibility', { value: view })}
         actions={rowActions}
       />
       <ZoneBody
         loading={state.loading}
-        error={state.error}
+        error={unlinked ? null : state.error}
         onRetry={load}
-        isEmpty={items.length === 0}
+        notice={unlinked ? <NoPartnerProfile /> : null}
+        isEmpty={unlinked || (items.length === 0)}
         empty={(
           <NothingYet
             title="No surface is recorded yet"

@@ -6,7 +6,7 @@ import {
   // `StatCard` went with the four tiles it drew: the strip is the artboard's
   // own now, and one of its tiles has to draw an absence rather than a number.
   Section, Field, SaveNote, NotComputable, SeamRead,
-  UnlinkedZone, isNoPartnerProfile,
+  NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
@@ -572,23 +572,39 @@ export default function PartnerHealthZone() {
 
   const rowActions = partnerZoneActions('delivery/health', { view: { header: ['Engagement', 'Founder', 'Health', 'Utilisation %', 'Milestones', 'Deliverables sent', 'Open blockers', 'Renews'], rows: visible, cells: (r) => [r.need_title, r.founder_name, r.health, r.utilisation_pct, r.milestone_count, r.deliverables_sent, r.open_blockers?.length ?? 0, r.renews_at] } });
 
-  if (isNoPartnerProfile(state.error)) {
-    return <UnlinkedZone title="Health" actions={rowActions} />;
-  }
+  // NOT AN EARLY RETURN ANY MORE. This was
+  //   `if (isNoPartnerProfile(state.error)) return <UnlinkedZone … />;`
+  // which drew a card INSTEAD of the zone — on twelve zones, so an admin
+  // reading this workspace saw twelve copies of one card and never a page.
+  // `ZoneBody` takes the line as a `notice` above its states, and the zone
+  // renders underneath in its own empty state, which is also the state that
+  // says what this zone holds. The gate itself is untouched: the read still
+  // 400s, so `isEmpty` is forced rather than inferred from rows that never
+  // arrived, and `error` is cleared so the shared "This did not load" card —
+  // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
+  const unlinked = isNoPartnerProfile(state.error);
 
   return (
     <>
+      {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
+          An action states what the zone DOES and an export over nothing
+          loaded renders disabled and says so; a filter chip is a claim about
+          ROWS, and a selectable `Published` over a store this account cannot
+          read is the "an empty set reads as an answer" failure
+          `zoneFilterBuilder.js` exists to prevent, reached from a new
+          direction. `profile_zone_actions.test.mjs` asserts both halves. */}
       <ZoneToolbar
         className="mb-3"
         role="partner"
-        filters={partnerZoneFilters('delivery/health', { value: view, onChange: setView })}
+        filters={unlinked ? [] : partnerZoneFilters('delivery/health', { value: view, onChange: setView })}
         actions={rowActions}
       />
     <ZoneBody
       loading={state.loading}
-      error={state.error}
+      error={unlinked ? null : state.error}
       onRetry={load}
-      isEmpty={items.length === 0}
+      notice={unlinked ? <NoPartnerProfile /> : null}
+      isEmpty={unlinked || (items.length === 0)}
       empty={(
         <NothingYet
           title="No engagement to rate yet"

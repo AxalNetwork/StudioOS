@@ -11,7 +11,7 @@ import {
   // `StatCard` went with the four tiles it drew: the strip is the artboard's
   // own now, and `On a retainer` was never on it — `Under-consuming` is, and it
   // is the figure this whole page argues for.
-  Section, Field, SaveNote, NotComputable, UnlinkedZone,
+  Section, Field, SaveNote, NotComputable, NoPartnerProfile,
   isNoPartnerProfile, inputClass, buttonClass, ghostButtonClass,
   moneyCents, dollarsToCents, formatDay,
 } from '../kit';
@@ -444,9 +444,17 @@ export default function PartnerRetainersZone() {
           r.retained_hours, r.hours_used, r.utilisation_pct, r.retainer?.renews_at],
       } });
 
-  if (isNoPartnerProfile(state.error)) {
-    return <UnlinkedZone title="Retainers" actions={rowActions} />;
-  }
+  // NOT AN EARLY RETURN ANY MORE. This was
+  //   `if (isNoPartnerProfile(state.error)) return <UnlinkedZone … />;`
+  // which drew a card INSTEAD of the zone — on twelve zones, so an admin
+  // reading this workspace saw twelve copies of one card and never a page.
+  // `ZoneBody` takes the line as a `notice` above its states, and the zone
+  // renders underneath in its own empty state, which is also the state that
+  // says what this zone holds. The gate itself is untouched: the read still
+  // 400s, so `isEmpty` is forced rather than inferred from rows that never
+  // arrived, and `error` is cleared so the shared "This did not load" card —
+  // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
+  const unlinked = isNoPartnerProfile(state.error);
 
   return (
     <>
@@ -454,17 +462,25 @@ export default function PartnerRetainersZone() {
           what cadence, how much of the retained time is being used and when it
           comes up. A row with no retainer carries blanks rather than zeroes —
           an engagement without one is not an engagement billing nothing. */}
+      {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
+          An action states what the zone DOES and an export over nothing
+          loaded renders disabled and says so; a filter chip is a claim about
+          ROWS, and a selectable `Published` over a store this account cannot
+          read is the "an empty set reads as an answer" failure
+          `zoneFilterBuilder.js` exists to prevent, reached from a new
+          direction. `profile_zone_actions.test.mjs` asserts both halves. */}
       <ZoneToolbar
         className="mb-3"
         role="partner"
-        filters={partnerZoneFilters('pipeline/retainers', { value: view, onChange: setView })}
+        filters={unlinked ? [] : partnerZoneFilters('pipeline/retainers', { value: view, onChange: setView })}
         actions={rowActions}
       />
     <ZoneBody
       loading={state.loading}
-      error={state.error}
+      error={unlinked ? null : state.error}
       onRetry={load}
-      isEmpty={items.length === 0}
+      notice={unlinked ? <NoPartnerProfile /> : null}
+      isEmpty={unlinked || (items.length === 0)}
       empty={(
         <NothingYet
           title="No engagement to hold a retainer yet"
