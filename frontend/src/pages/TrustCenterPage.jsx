@@ -289,10 +289,25 @@ function Section({ icon: Icon, title, subtitle, children }) {
 // components are gone and so are the client methods; the baseline shrinks by
 // six entries, which is the measurable half of this change.
 //
-// What is NOT lost: POST /trust/kyb/start is real and is what the KYB
-// obligation's "Start" action already calls through ObligationList →
-// startObligation. Accreditation evidence has no upload route on either side,
-// so the tab says that rather than drawing a file input that cannot POST.
+// POST /trust/kyb/start IS real — but nothing calls it, and this comment used to
+// claim it was what the KYB obligation's "Start" action runs. It is not.
+// ObligationList → startObligation calls api.trustObligationStart, i.e.
+// POST /trust/obligation/:key/start, which only flips pending → in_review and
+// collects no entity evidence at all. /trust/kyb/start, which does collect it, is
+// orphaned on both sides: api.startKyb (lib/api.js) has no caller in frontend/src,
+// and the route has no other client.
+//
+// So a partner handed a required kyb_v1 at deal signature presses Start, lands on
+// in_review, and ObligationList renders no action for in_review — the button is
+// gone for good, while lib/trustCenter.js classes in_review as waiting on us.
+// Nothing is in review and nobody is looking. kyb_v1 is also one of the two
+// obligations nothing can satisfy at all
+// (cloudflare-worker/test/obligation_satisfiable.test.ts), so wiring this button
+// to /trust/kyb/start would collect evidence nothing can act on; both are recorded
+// as follow-ups rather than guessed at.
+//
+// Accreditation evidence has no upload route on either side, so the tab says that
+// rather than drawing a file input that cannot POST.
 
 function NdaCard({ items, onChanged }) {
   const [busy, setBusy] = useState(null);

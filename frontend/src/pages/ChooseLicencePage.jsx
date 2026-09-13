@@ -60,14 +60,18 @@ export default function ChooseLicencePage() {
   const [selected, setSelected] = useState(user?.suggested_role || 'founder');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // Starts false, always. This is the affirmative act the whole consent record
+  // rests on — pre-ticking it would make the checkbox decoration and the record
+  // a fiction, which is the state this screen previously shipped in.
+  const [accepted, setAccepted] = useState(false);
 
   const submit = async () => {
-    if (!selected) return;
+    if (!selected || !accepted) return;
     setBusy(true);
     setError('');
     track('onboarding_licence_submit', { licence: selected });
     try {
-      await api.onboardingChooseLicence(selected);
+      await api.onboardingChooseLicence(selected, accepted);
       await refresh({ force: true });
       const wizard = WIZARD_FOR_LICENCE[selected];
       navigate(wizard || '/exploring', { replace: true });
@@ -140,9 +144,38 @@ export default function ChooseLicencePage() {
           })}
         </div>
 
+        {/* The agreement, as an act rather than a notice. This screen used to
+            show the two documents only as footer links, while a comment here
+            claimed a member "accepts by continuing" — so nothing recorded an
+            acceptance and `tos_v1`/`privacy_v1` stayed pending on every account
+            for the life of the account. An explicit, unticked checkbox is what
+            makes that claim true and gives the record something to point at. */}
+        <label
+          className="mt-5 flex cursor-pointer items-start gap-2.5 text-left"
+          style={{ maxWidth: '62ch' }}
+        >
+          <input
+            type="checkbox"
+            checked={accepted}
+            onChange={(e) => setAccepted(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-[#6d28d9]"
+          />
+          <span className="text-[12.5px] leading-relaxed text-[#4a4458]">
+            I have read and agree to the{' '}
+            <Link to="/terms" className="font-semibold text-[#5b21b6] underline underline-offset-2">
+              Terms of Service
+            </Link>{' '}
+            and the{' '}
+            <Link to="/privacy" className="font-semibold text-[#5b21b6] underline underline-offset-2">
+              Privacy Policy
+            </Link>
+            .
+          </span>
+        </label>
+
         <button
           type="button"
-          disabled={busy || !selected}
+          disabled={busy || !selected || !accepted}
           onClick={submit}
           className={authV2.btnPrimary}
           style={{ background: authV2.purple, borderColor: authV2.purple, marginTop: 18, width: 'auto', paddingLeft: 28, paddingRight: 28 }}
@@ -151,11 +184,13 @@ export default function ChooseLicencePage() {
         </button>
       </AuthCard>
 
-      {/* The agreements a member accepts by continuing, and who they are
-          contracting with. This sits OUTSIDE the card and on the background
-          image, so its colours are the on-dark set rather than the card's
-          ink-on-white — the same treatment AuthShell's own header uses for
-          the logo and the email. */}
+      {/* Who the member is contracting with, and the documents again for a reader
+          who has not scrolled to the checkbox. ACCEPTANCE IS THE CHECKBOX ABOVE,
+          not this footer — that distinction used to be the other way around and
+          was the reason nothing was ever recorded. This sits OUTSIDE the card and
+          on the background image, so its colours are the on-dark set rather than
+          the card's ink-on-white — the same treatment AuthShell's own header uses
+          for the logo and the email. */}
       <footer className="mt-6 flex flex-col items-center gap-2 text-center">
         <nav className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
           {LEGAL_LINKS.map((l) => (
