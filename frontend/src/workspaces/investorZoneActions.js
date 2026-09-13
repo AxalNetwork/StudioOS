@@ -119,21 +119,26 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Comms log', unbuilt: 'no LP correspondence is stored' },
   ],
   'funds/calls': [
-    // THIS ONE IS NOT A MISSING FORM, AND THE OLD REASON SAID IT WAS. Two
-    // routes issue a call and neither gives this page something to show:
+    // THE GAP MOVED, AND THE REASON HAD TO MOVE WITH IT — twice now, which is
+    // why the history is kept.
     //
-    //   `POST /api/capital/calls` writes a real `capital_calls` row and is
-    //   ADMIN-ONLY (`role !== 'admin'` → 403), so an investor pressing a
-    //   button wired to it would be refused every time.
+    // It first said a form was missing. That was wrong: a form would have
+    // returned 200 over an empty ledger, because `POST
+    // /api/funds/:id/capital-call` enqueued a `capital_call_notice` job that
+    // wrote an activity line per LP and **no `capital_calls` row at all**. So the
+    // reason was rewritten to name the ledger as the thing that was missing.
     //
-    //   `POST /api/funds/:id/capital-call` IS open to the fund's own GP, and
-    //   what it does is enqueue a `capital_call_notice` job — which writes an
-    //   activity-log line per LP and bumps `vc_funds.deployed_capital`. It
-    //   creates no `capital_calls` row at all. A GP would press "New call",
-    //   get a 200, and watch the ledger stay empty.
+    // Task #197 built the ledger. The job now writes one `capital_calls` row per
+    // committed or active LP, pro-rata by commitment, idempotent on a per-call
+    // uid — so the second reason is false in its turn, and the ORIGINAL diagnosis
+    // is now the true one: what is missing is the screen. `api.fundCapitalCall`
+    // exists and `funds.ts` serves it for the fund's own GP; nothing in the SPA
+    // calls it. A form wired to it would now land rows this page can show.
     //
-    // So the gap is a call the fund's own ledger can read back, not a form.
-    { label: 'New call', unbuilt: 'a GP can issue a call notice, but it writes an activity line per LP rather than a call row, so nothing reaches the ledger on this page', hover: 'Issuing a call notifies each LP; it does not yet record a call this ledger can show.' },
+    // `POST /api/capital/calls` remains the wrong route to wire here regardless:
+    // it is ADMIN-ONLY (`role !== 'admin'` → 403), so an investor pressing it
+    // would be refused every time.
+    { label: 'New call', unbuilt: 'no screen offers the form yet — the route and the ledger behind it are both live, so this is a form away from working', hover: 'Issuing a call is served by the API and records a row per LP; no screen offers the form yet.' },
     { label: 'Send reminders', unbuilt: 'nothing on this desk sends mail' },
     { label: 'Export wires', unbuilt: 'no wire schedule is stored to export' },
   ],

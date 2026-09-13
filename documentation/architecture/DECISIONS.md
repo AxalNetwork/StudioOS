@@ -5086,3 +5086,109 @@ targeting `company_profiles`, when the page mounts a rail, when `eadwynConfig`
 declares a settings surface, and — the assertion that matters most — when Company
 Settings grows a twelfth editable column, because a new field is a new question
 that this reasoning has not answered.
+
+## D83 — A capital call becomes a receivable, and "deployed" goes back to meaning deployed
+
+**Task #197.** `POST /api/funds/:id/capital-call` enqueued a
+`capital_call_notice` job that did two things: wrote one `activity_logs` line per
+LP, and added the call amount to `vc_funds.deployed_capital`. It wrote **no
+`capital_calls` row**, which is the table the LP's own portal reads
+(`routes/funds.ts` `GET /lp-portal`, and the per-LP statement at
+`GET /:id/lp-report/:lpId`), the table `PartnerPortal.jsx` and `CapitalPage.jsx`
+render through `api.listCapitalCalls()`, and the table
+`quarterlyReportViewModel.js` folds into an LP's quarterly report.
+
+**The sharpest statement of the bug is that both of those pages carry a working
+Pay button.** `api.payCapitalCall()` is wired on both, and
+`POST /capital/calls/:id/pay` really does set `status = 'paid'` and stamp
+`paid_date`. It had nothing to act on. A GP issued a call, an LP saw a log line
+and a moved dashboard number, and the question "who owes what, by when" had no
+answer anywhere in the database.
+
+### The key is the call, not the job — and the job id would have been worse
+
+The handler is **re-run**. On the D1 path `Jobs.markFailed` puts the same
+`queue_jobs` row back to `pending`; on the CF Queue path the consumer deletes its
+own idempotency claim in the failure branch on purpose, so that "a CF retry
+actually re-runs the handler". `claimDelivery` dedupes concurrent redeliveries of
+one message and nothing else — its comment names the race it closed as the one
+where "both run the job and we double-charge LPs". A ledger row added naively here
+turns a missing receivable into a doubled one.
+
+So each row carries an explicit `uid` and the insert is `INSERT OR IGNORE`, which
+is the mechanism `GOTCHAS.md` already describes as this repo's answer to
+re-delivery: "the per-effect UNIQUE constraints are the dedup… there is no
+separate event-dedup table by design". No migration was needed —
+`capital_calls.uid` has been `TEXT UNIQUE NOT NULL` since the baseline.
+
+The uid is `cc:<call_uid>:<lp_id>`, where `call_uid` is minted **by the enqueueing
+route** and travels in the payload. It deliberately does not come from `job.id`:
+the CF Queue consumer calls `handleJob` with a hardcoded `id: 0`, so a job-keyed
+uid would be identical for every call ever issued and the *second* fund's real
+call would be silently swallowed — a worse bug than the one being fixed. The DLQ
+retry path mints a *fresh* delivery key on purpose, so that is no good either. A
+payload with no `call_uid` (in flight across the deploy, or hand-enqueued through
+`/api/infra/enqueue`) falls back to fund + amount, which dedupes per amount rather
+than per press: a lost duplicate rather than a doubled receivable.
+
+Notices are then sent only for rows that were actually new, so a retry that fills
+in what it missed does not tell everyone twice. The "was it new" flag reads
+`meta.changes` and never the `RETURNING` row, because the repo's own D1 test
+adapter models `batch` as a sequence of `run()` calls with no `results` — code
+keyed on the returned row reports "nothing inserted" under test while inserting
+fine in production, which is the worst direction for a money path to be wrong in.
+
+### And the issuance bump had to go, because writing the row is what made it wrong
+
+`POST /capital/calls/:id/pay` already adds a paid call's amount to
+`deployed_capital`, and `test/capital.test.ts` pins it: a 500 call marked paid
+leaves the figure at 500. Before this change the job could bump the same figure at
+issuance harmlessly, because it wrote no row and so nothing could ever be paid.
+**Writing the row makes issuing-then-paying count the same money twice on an
+investor's dashboard.**
+
+Of the three ways out, one is sound. Suppressing the pay-path bump per row needs a
+marker and leaves the figure meaning neither called nor deployed; dropping the
+*pay* bump instead would contradict an existing money invariant to fit a new
+feature. So the issuance bump goes — which is also the only option the readers
+agree with. `FundPerformancePage.jsx` labels this figure **"Invested into
+portfolio"**; `InvestorFundLanding.jsx` shows **Deployed** beside **Called**,
+expecting `called ≥ deployed`; and `services/fundRollup.ts` records that a capital
+call is not a dated cash receipt at all, which is why it refuses to compute IRR.
+
+**This is a visible behaviour change.** A fund dashboard no longer advances the
+moment a call is issued, only when an LP pays. The figure becomes true rather than
+becoming different, but somebody watching the number will notice, so it is stated
+here and in the PR rather than buried in a diff.
+
+### One writer, and what the extraction is NOT justified by
+
+`routes/capital.ts` had two inline inserts that already disagreed — one bound
+`due_date`, the other did not — so the job would have been a third set of
+defaults. They now share `routes/_capital_call_writes.ts`.
+
+The usual argument for this shape is D46's: *an automated path must call the
+function the manual form already calls.* **It does not apply here, and pretending
+it did would be the more comfortable lie.** `api.createCapitalCallV2()` has no
+caller anywhere in the SPA; there is no reachable manual form to match. The weaker
+reason is sufficient — one writer cannot drift from itself — and the unreachable
+create route is recorded as its own finding rather than dressed up as a
+justification.
+
+`due_date` is accepted and never invented. `legalcap.ts` defaults its
+auto-generated call to `+30 days`; that is its choice and is not copied, because a
+capital call's due date is a deadline an LP acts on. A row without one reads as
+"no due date recorded", which is true, and every reader already tolerates NULL.
+
+### What this does not touch
+
+`capital_calls` is **two different tables under one name**, the same failure as
+#183's `metrics_snapshots`. `routes/legalcap.ts` writes `(deal_id, syndicate_id,
+amount_cents, …)` against its own `ensureSchema`; no migration ever added those
+columns, so the baseline's LP shape is what production has and legalcap's path is
+the dead one — already on record in `scripts/sqlite-table-collisions-baseline.json`.
+It is worse than a dead write: `api.capitalCalls()` selects `cc.syndicate_id`, the
+client method swallows its own failure into `[]`, and three investor screens render
+a permanently empty capital-call list with no error shown. Deciding which shape
+wins is a product question about whether syndicate capital calls are a real
+feature, so it is its own task rather than folded in here.

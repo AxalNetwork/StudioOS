@@ -14,6 +14,7 @@ import { getSQL } from '../db';
 import { lpMembershipScope } from '../services/tenancyScope';
 import { claimLpRowsByEmail } from '../services/lpClaim';
 import { requireAuth, canViewLpData } from '../auth';
+import { insertCapitalCall, insertCapitalCalls } from './_capital_call_writes';
 
 const capital = new Hono<{ Bindings: Env }>();
 
@@ -174,11 +175,16 @@ capital.post('/calls', async (c) => {
     if (mapped.length > 0) resolvedLpId = mapped[0].id;
   }
   if (resolvedLpId == null) { await sql.end(); return c.json({ error: 'Investor not found' }, 404); }
-  const [call] = await sql`
-    INSERT INTO capital_calls (limited_partner_id, project_id, amount, due_date)
-    VALUES (${resolvedLpId}, ${data.project_id || null}, ${data.amount}, ${data.due_date || null})
-    RETURNING *
-  `;
+  // Task #197 — one writer for this table now (`_capital_call_writes.ts`), so
+  // this route, the fund-wide call below, and the `capital_call_notice` queue job
+  // cannot drift about what a call row contains. No `uid` is passed, so the
+  // column's own `randomblob` default mints one exactly as it did before.
+  const { row: call } = await insertCapitalCall(c.env, {
+    limitedPartnerId: resolvedLpId,
+    projectId: data.project_id || null,
+    amount: data.amount,
+    dueDate: data.due_date || null,
+  });
 
   // Phase 0.2 notify — fire after commit, never block the 201.
   try {
@@ -310,14 +316,19 @@ capital.post('/capitalCall', async (c) => {
 
   const perInvestor = Math.round((data.amount / investors.length) * 100) / 100;
   // Batch all inserts into a single D1 round-trip instead of one INSERT per
-  // active investor (was N+1). Mirrors the env.DB.batch pattern used elsewhere
-  // (e.g. models/distributions.ts).
-  const stmts = investors.map((inv: any) =>
-    c.env.DB.prepare(
-      `INSERT INTO capital_calls (limited_partner_id, project_id, amount) VALUES (?, ?, ?)`,
-    ).bind(inv.id, data.startup_id, perInvestor),
-  );
-  await c.env.DB.batch(stmts);
+  // active investor (was N+1). Task #197 moved the statement itself into
+  // `_capital_call_writes.ts` so this route and the queue job write the same
+  // row; `insertCapitalCalls` keeps the single round-trip this comment is about.
+  //
+  // NO `uid` HERE, DELIBERATELY. An explicit uid is what makes a write
+  // repeatable, and this route is a request rather than a retried job — a GP who
+  // presses it twice means two calls. The queue job is the caller that needs the
+  // uid, because it is the one that gets re-run.
+  await insertCapitalCalls(c.env, investors.map((inv: any) => ({
+    limitedPartnerId: inv.id,
+    projectId: data.startup_id,
+    amount: perInvestor,
+  })));
   const callsCreated = investors.map((inv: any) => ({
     investor_id: inv.id, investor_name: inv.name, amount: perInvestor,
   }));
