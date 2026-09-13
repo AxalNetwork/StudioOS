@@ -3,9 +3,11 @@
 // spin-out-lab-pipeline/project). Every number is real:
 //   - TAM / SAM / SOM come from the founder's project record (recalculated
 //     here via the assumptions drawer — the Week-1 "Size your market"
-//     deliverable) via PUT /projects/:id. Only tam/sam/som persist; the other
-//     assumption fields are page-local session state until backend columns
-//     exist (the drawer says so in plain words).
+//     deliverable) via PUT /projects/:id. The TWELVE INPUTS behind them persist
+//     too, since migration 247, in project_market_assumptions via
+//     /projects/:id/market-assumptions — they used to be page-local session
+//     state, so the page kept the conclusion and dropped the derivation the
+//     moment a tab closed.
 //   - Market dynamics / segments come from the platform Market-Intel
 //     aggregator (sector compass + founder lens), matched to the project's
 //     sector. Growth-outlook rows are founder assumptions, labeled as such.
@@ -103,33 +105,53 @@ const DIM_LABELS = {
 };
 
 // ---------------------------------------------------------------------------
-// Assumptions (drawer) — page-local session state. Only TAM/SAM/SOM persist
-// (PUT /projects/:id); the other fields need backend columns (or a
-// project_market_assumptions table) that don't exist yet, so they seed from
-// real project data where possible and otherwise start empty — never with
-// invented market numbers.
+// Assumptions (drawer) — PERSISTED since migration 247, in
+// `project_market_assumptions` via GET/PUT /projects/:id/market-assumptions.
+//
+// They used to be page-local session state, and this comment used to say so: only
+// TAM/SAM/SOM were saved and "the other fields need backend columns (or a
+// project_market_assumptions table) that don't exist yet". What that cost was a
+// page keeping the CONCLUSION and dropping the derivation — a founder typed a
+// population, an ACV, a geography, a CAGR, pressed Recalculate, and came back to
+// three numbers with nothing behind them. The inversions below are still here as
+// the FALLBACK for a project sized before 247, where the saved ratios are the
+// only trace of what the founder chose.
+//
+// Nothing seeds from an invented market number. Everything the store has no value
+// for starts empty, because empty is what the page says it means: not researched
+// yet.
 // ---------------------------------------------------------------------------
-function seedAssumptions(p) {
+function seedAssumptions(p, saved) {
   const tam = Number(p?.tam) || 0;
   const sam = Number(p?.sam) || 0;
   const som = Number(p?.som) || 0;
+  // A saved value always wins. `??` and not `||`: a field the founder cleared
+  // comes back as null and must stay cleared rather than re-seed from the
+  // project, and '0' is a figure somebody typed.
+  const s = (key, fallback = '') => {
+    const v = saved?.[key];
+    return v == null || v === '' ? fallback : String(v);
+  };
   return {
-    category: p?.sector || '',
-    geography: 'Global',
-    targetYear: '2026',
-    methodology: 'Top-down',
-    population: '',
-    acv: '',
-    tamOverride: '',
-    // Real inversions of the calculator when the record already has values.
-    samPct: tam > 0 && sam > 0 ? String(Math.round((sam / tam) * 100)) : '',
-    winRate: sam > 0 && som > 0 ? String(Math.round(((som / sam) / 2.2) * 100)) : '',
-    runway: '',
-    capacity: '',
-    cagr: '', // stays empty until the founder sets it — visuals fall back to the design's 24 default
-    growthDriver: '',
-    maturity: 'Growing',
-    segFilter: [],
+    category: s('category', p?.sector || ''),
+    geography: s('geography', 'Global'),
+    targetYear: s('targetYear', '2026'),
+    methodology: s('methodology', 'Top-down'),
+    population: s('population'),
+    acv: s('acv'),
+    tamOverride: s('tamOverride'),
+    // Real inversions of the calculator, for a project sized before 247 saved the
+    // percentages the founder actually chose.
+    samPct: s('samPct', tam > 0 && sam > 0 ? String(Math.round((sam / tam) * 100)) : ''),
+    winRate: s('winRate', sam > 0 && som > 0 ? String(Math.round(((som / sam) / 2.2) * 100)) : ''),
+    runway: s('runway'),
+    capacity: s('capacity'),
+    // Stays empty until the founder sets it — visuals fall back to the design's
+    // 24 and label it, which is a stated placeholder rather than a stored guess.
+    cagr: s('cagr'),
+    growthDriver: s('growthDriver'),
+    maturity: s('maturity', 'Growing'),
+    segFilter: Array.isArray(saved?.segFilter) ? saved.segFilter : [],
   };
 }
 
@@ -209,7 +231,7 @@ export default function SpinoutLabMarketPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [shared, setShared] = useState(false);
-  // Assumptions drawer (spec A) — session-local, see seedAssumptions().
+  // Assumptions drawer (spec A) — persisted since 247, see seedAssumptions().
   const [assume, setAssume] = useState(() => seedAssumptions(null));
   const [anim, setAnim] = useState(null); // {tam,sam,som} in dollars while the recalc tween runs
   const animRef = useRef(null);
@@ -265,7 +287,7 @@ export default function SpinoutLabMarketPage() {
         setState(s);
         const p = pickLabProject(projects, user);
         setProject(p);
-        const [cp, fl, src, cit, ft, comp] = await Promise.all([
+        const [cp, fl, src, cit, ft, comp, saved] = await Promise.all([
           api.miSectorCompass().catch(() => null),
           api.miFounderLens().catch(() => null),
           api.miSources().catch(() => null),
@@ -282,6 +304,10 @@ export default function SpinoutLabMarketPage() {
                 })
                 .catch(() => null)
             : Promise.resolve(null),
+          // Migration 247 — the drawer's own inputs. Before it, these lived only
+          // in `useState` and went when the tab did, so a founder came back to
+          // the three saved figures and none of the reasoning behind them.
+          p ? api.getMarketAssumptions(p.id).catch(() => null) : Promise.resolve(null),
         ]);
         if (!alive) return;
         setCompass(cp);
@@ -290,7 +316,7 @@ export default function SpinoutLabMarketPage() {
         setCitations(cit);
         setFit(ft);
         setCompAnalysis(comp);
-        setAssume(seedAssumptions(p));
+        setAssume(seedAssumptions(p, saved?.assumptions));
         setStatus('ready');
       })
       .catch((e) => {
@@ -382,13 +408,37 @@ export default function SpinoutLabMarketPage() {
     try {
       const updated = await api.updateProject(project.id, { tam, sam, som });
       setProject((prev) => ({ ...prev, ...updated }));
+      // THE REASONING GOES WITH THE RESULT, since migration 247. Saved AFTER the
+      // three figures and not instead of them: `projects.tam/.sam/.som` stay the
+      // canonical derived values every other surface reads, and this is what they
+      // were derived FROM. A failure here does not fail the recalculation — the
+      // figures are saved and correct — but it is reported, because assumptions
+      // that silently did not persist are what this page did for its whole life.
+      let assumptionsSaved = true;
+      try {
+        await api.saveMarketAssumptions(project.id, {
+          category: f.category, geography: f.geography, targetYear: f.targetYear,
+          methodology: f.methodology, population: f.population, acv: f.acv,
+          tamOverride: f.tamOverride, samPct: f.samPct, winRate: f.winRate,
+          runway: f.runway, capacity: f.capacity, cagr: f.cagr,
+          growthDriver: f.growthDriver, maturity: f.maturity, segFilter: f.segFilter,
+        });
+      } catch (e) {
+        reportError('SpinoutLabMarketPage:assumptions', e);
+        assumptionsSaved = false;
+        setSaveError('Your sizing saved. The assumptions behind it did not — press Recalculate again to keep them.');
+      }
       // W1 deliverable — sizing counts once both TAM and SAM are on record
       // (citations aggregate automatically from MI sources for the sector).
       if (tam != null && sam != null) await markMilestone(user, 'market_sizing_completed');
       finishRef.current.saved = true;
       if (finishRef.current.tween) setAnim(null);
       setAssumptionsReviewed(true);
-      setEditOpen(false);
+      // THE DRAWER STAYS OPEN WHEN THE ASSUMPTIONS DID NOT LAND, because
+      // `saveError` is drawn inside it: closing would file the one message that
+      // says what was lost behind a panel nobody has a reason to reopen, which is
+      // the silent failure this whole change exists to end.
+      if (assumptionsSaved) setEditOpen(false);
     } catch (e) {
       reportError('SpinoutLabMarketPage:save', e);
       clearInterval(animRef.current);
@@ -817,8 +867,8 @@ export default function SpinoutLabMarketPage() {
                     ? `No aggregator segment matches “${project.sector || 'your sector'}” — showing the current leader.`
                     : 'Live sector signal from the platform aggregator.'}
               </p>
-              {/* Growth outlook (spec E) — drawer-fed founder assumptions,
-                  local-only until backend columns exist. */}
+              {/* Growth outlook (spec E) — drawer-fed founder assumptions, saved
+                  in project_market_assumptions since migration 247. */}
               <div className="mb-3.5" data-testid="market-growth-outlook">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Growth outlook · founder assumptions</span>
@@ -1224,10 +1274,12 @@ export default function SpinoutLabMarketPage() {
             <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-start justify-between gap-3 flex-none">
               <div>
                 <div className="text-[15px] font-extrabold text-gray-900 dark:text-gray-50">Edit Market Assumptions</div>
-                {/* The design shows an "Auto-saves" chip here — omitted because
-                    it would lie: only TAM/SAM/SOM persist, on explicit recalc. */}
+                {/* The design shows an "Auto-saves" chip here. Still omitted, and
+                    for a narrower reason than before: migration 247 persists every
+                    field on this drawer, but on the explicit Recalculate — nothing
+                    is written as you type, so "Auto-saves" would still be wrong. */}
                 <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 max-w-[280px] leading-relaxed">
-                  Assumptions inform the calculator — only TAM/SAM/SOM are saved to your startup record yet.
+                  Saved with your startup when you recalculate — these figures, and the TAM/SAM/SOM they produce.
                 </div>
               </div>
               <button type="button" data-testid="button-close-sizing" onClick={() => setEditOpen(false)} disabled={saving} className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 flex items-center justify-center flex-none">

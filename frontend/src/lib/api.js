@@ -681,6 +681,14 @@ export const api = {
   getProject: (id) => request(`/projects/${id}`),
   createProject: (data) => request('/projects', { method: 'POST', body: JSON.stringify(data) }),
   updateProject: (id, data) => request(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  // Task #188/#198 — the sizing assumptions BEHIND tam/sam/som, which
+  // `SpinoutLabMarketPage` used to hold in session state and drop when the tab
+  // closed. A PATCH: fields left out are kept, which is what lets one cited fill
+  // write one figure without blanking the eleven the founder typed.
+  getMarketAssumptions: (id) => request(`/projects/${id}/market-assumptions`),
+  saveMarketAssumptions: (id, assumptions) => request(`/projects/${id}/market-assumptions`, {
+    method: 'PUT', body: JSON.stringify({ assumptions }),
+  }),
   deleteProject: (id) => request(`/projects/${id}`, { method: 'DELETE' }),
   // Task #7 (AM) — Admin > Trash management for soft-deleted projects.
   adminListProjectTrash: () => request('/admin/projects/trash'),

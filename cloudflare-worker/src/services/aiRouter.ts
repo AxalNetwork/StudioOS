@@ -49,6 +49,7 @@ export type TaskClass =
   | 'transcribe'
   | 'validate_tag_pains'
   | 'validate_draft_hypotheses'
+  | 'market_sizing_inputs'
   | 'research_ask';
 
 export type RefusalReason =
@@ -353,6 +354,30 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
     // do it; drafting writes the sentence a founder will put in front of an
     // investor. Offering a model that writes a worse claim, to save a
     // hundredth of a cent, is not a trade worth putting on screen.
+    alternates: [MID_LLAMA, SMALL_LLAMA],
+  },
+  // The market page's sizing INPUTS — an addressable population, an ACV
+  // benchmark — each proposed with a citation or dropped. The first `sourced`
+  // fill, so it is the first task in this table whose output is refused when it
+  // arrives unsupported rather than merely scored.
+  //
+  // A SEPARATE CLASS FROM THE TWO ABOVE, for this table's stated reason:
+  // `/api/ai/me/spend` groups by task and the rail quotes the caller's observed
+  // average per task. A sizing run reads a project's sector and its own library;
+  // folding it in with a tagging run would misreport both.
+  //
+  // No 3b in the alternates, and the asymmetry is the same one
+  // `validate_draft_hypotheses` makes. A shallower model asked for a market
+  // figure does not return a worse-written figure, it returns one whose citation
+  // is likelier to be invented — and the refusal path then drops the run
+  // entirely, so the cheaper model is not cheaper, it is a wasted call.
+  //
+  // Not cached. A sizing proposal reads the project's current sector and the
+  // documents in its library, which is exactly what changes between two asks.
+  market_sizing_inputs: {
+    provider: 'workers-ai',
+    model: MID_LLAMA,
+    fallbackChain: [SMALL_LLAMA],
     alternates: [MID_LLAMA, SMALL_LLAMA],
   },
   // Research · Ask — answering a question over the caller's own indexed

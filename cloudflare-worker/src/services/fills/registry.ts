@@ -33,9 +33,11 @@ import type { Env } from '../../types';
 import { getPainGroupsView, normPhrase } from '../painGroups';
 import {
   MAX_PROMPT_ITEMS, TAG_PROMPT, DRAFT_PROMPT,
-  parseTagProposals, parseDraftProposals,
+  extractJsonArray, parseTagProposals, parseDraftProposals,
 } from '../../routes/_founder_validate_proposals';
 import { MAX_PAIN_PHRASE, insertHypothesis, upsertPainAlias } from '../../routes/_founder_validate_writes';
+import { ASSUMPTION_COLUMNS, loadAssumptions, saveOneAssumption } from '../marketAssumptions';
+import { citeFor } from './citations';
 import type { FillKind, Gathered, Proposed } from './types';
 
 /**
@@ -52,6 +54,7 @@ import type { FillKind, Gathered, Proposed } from './types';
 const painTag: FillKind = {
   kind: 'pain_tag',
   surface: 'validate/pain-map',
+  assistSurface: 'workspace',
   fillClass: 'restatement',
   task: 'validate_tag_pains',
   copy: {
@@ -158,6 +161,7 @@ const painTag: FillKind = {
 const hypothesis: FillKind = {
   kind: 'hypothesis',
   surface: 'validate/hypotheses',
+  assistSurface: 'workspace',
   fillClass: 'restatement',
   task: 'validate_draft_hypotheses',
   copy: {
@@ -224,10 +228,199 @@ const hypothesis: FillKind = {
   },
 };
 
+/**
+ * `market/sizing` — an addressable population and an ACV, each with a citation.
+ *
+ * THE FIRST `sourced` FILL, AND THE REASON THE CLASS EXISTS. `SpinoutLabMarketPage`
+ * carries a comment its author wrote deliberately: "Design says AI-assisted
+ * estimates — these figures are founder-entered/derived, not AI output, so the
+ * copy drops that claim rather than lie about provenance." On screen it says
+ * "Nothing on this page is auto-invented — empty means not researched yet", and
+ * stamps each card "Founder research" or "Founder model". Three true statements,
+ * and this entry is built so they stay true rather than get contradicted.
+ *
+ * IT DOES NOT PROPOSE TAM. The page DERIVES TAM from population × ACV with the
+ * founder's own assumptions, so proposing a TAM would write over their arithmetic
+ * with a number whose reasoning is invisible — into `projects.tam`, a bare REAL
+ * with nothing beside it to say who produced it. What this proposes is the INPUTS,
+ * into `project_market_assumptions` (247), where a provenance row can point at
+ * one column and the page can mark that figure and not the rest.
+ *
+ * NO CITATION, NO PROPOSAL. `parse` asks `services/fills/citations.ts` for a
+ * passage supporting each figure — the founder's own library first, a research
+ * call second — and returns nothing for a figure it cannot source.
+ * `refuseReason` refuses it a second time on the write path, which is belt and
+ * braces on purpose: this is the one code path where a silent failure writes an
+ * invented number into a column a measured one occupies.
+ */
+const MARKET_FIELDS: Record<string, { label: string; asks: string }> = {
+  population: {
+    label: 'Addressable population',
+    asks: 'how many organisations or people are in the addressable market',
+  },
+  acv: {
+    label: 'Annual contract value',
+    asks: 'what a comparable product charges per customer per year',
+  },
+  cagr: {
+    label: 'Market growth rate',
+    asks: 'the compound annual growth rate of this market',
+  },
+};
+
+const marketSizing: FillKind = {
+  kind: 'market_input',
+  surface: 'market/sizing',
+  assistSurface: 'market',
+  fillClass: 'sourced',
+  task: 'market_sizing_inputs',
+  copy: {
+    run: 'Find sizing inputs',
+    heading: 'Proposal · sizing inputs, each with a source',
+    empty: 'Nothing proposed yet. Eadwyn looks for an addressable population, an ACV benchmark and a growth rate — and proposes only the ones it can cite.',
+    accept: 'Use this figure',
+  },
+  prompt: [
+    'You propose INPUTS to a market-sizing calculation. You never propose the market size itself.',
+    'Reply with ONE JSON array and nothing else. Each item:',
+    '{"field": "population" | "acv" | "cagr", "value": "the figure, as a person would write it", "asked": "the research question that would confirm it"}',
+    'Give at most one item per field, and only for fields the facts below leave empty.',
+    '"value" is a figure with its unit — "41,200 firms", "$18,000 / year", "11%".',
+    '"asked" is a question a researcher could look up, naming the market and the year.',
+    'Do NOT state a source in your reply. A source is looked up separately, and an item',
+    'whose figure cannot be supported is discarded rather than published.',
+    'If you cannot propose a figure for a field, omit the field. An empty array is a valid answer.',
+  ].join('\n'),
+  // A figure is the founder's the moment they correct it, and correcting a
+  // researched number against their own knowledge of the market is the normal
+  // case rather than the exception. `fill_provenance` keeps both values and marks
+  // it edited, which is what makes a corrected fill legible as neither the
+  // model's answer nor an unaided one.
+  editableField: 'value',
+  readable: (p) => {
+    const field = String(p.field || '');
+    const label = MARKET_FIELDS[field]?.label || field;
+    return `${label}: ${String(p.value ?? '')}`;
+  },
+
+  async gather(ctx): Promise<Gathered> {
+    const project = await ctx.env.DB.prepare(
+      'SELECT name, sector, description FROM projects WHERE id = ?',
+    ).bind(ctx.projectId).first<{ name: string; sector: string | null; description: string | null }>();
+    if (!project) {
+      return { facts: '', empty: true, emptyReason: 'This project could not be read.' };
+    }
+    // WHAT IS ALREADY FILLED IS NOT PROPOSED AGAIN. A founder who typed a
+    // population does not want it argued with, and spending a run to be offered
+    // a replacement for a figure they researched themselves is worse than
+    // spending nothing: it invites them to overwrite their own work.
+    const current = await loadAssumptions(ctx.env, ctx.projectId);
+    const open = Object.keys(MARKET_FIELDS)
+      .filter((f) => !String((current as unknown as Record<string, unknown>)[f] ?? '').trim());
+    if (!open.length) {
+      return {
+        facts: '', empty: true,
+        emptyReason: 'Every sizing input is already filled in. Clear one to have Eadwyn look for it.',
+      };
+    }
+    if (!String(project.sector || '').trim()) {
+      return {
+        facts: '', empty: true,
+        emptyReason: 'Set this venture’s sector first — without it there is no market to size.',
+      };
+    }
+    return {
+      facts: [
+        `Venture: ${project.name}`,
+        `Sector: ${project.sector}`,
+        project.description ? `What it does: ${String(project.description).slice(0, 600)}` : '',
+        current.geography ? `Geography: ${current.geography}` : '',
+        current.targetYear ? `Target year: ${current.targetYear}` : '',
+        '',
+        `Fields still empty, and what each one is: ${open.map((f) => `${f} (${MARKET_FIELDS[f].asks})`).join('; ')}`,
+      ].filter(Boolean).join('\n'),
+      // NOT A MATCH-BACK SET. `known` is the restatement mechanism and this kind
+      // is `sourced`; what it carries here is which fields may be proposed at
+      // all, so `parse` can drop an item naming one that is already filled.
+      known: open,
+    };
+  },
+
+  async parse(text, gathered, ctx): Promise<Proposed[]> {
+    const items = extractJsonArray(text);
+    const open = new Set(gathered.known || []);
+    const out: Proposed[] = [];
+    const seen = new Set<string>();
+    for (const raw of items.slice(0, MAX_PROMPT_ITEMS)) {
+      if (!raw || typeof raw !== 'object') continue;
+      const field = String((raw as any).field || '').trim();
+      const value = String((raw as any).value ?? '').trim().slice(0, 200);
+      const asked = String((raw as any).asked || '').trim().slice(0, 300);
+      // A field this project has not left open, or one this store has no column
+      // for, is a proposal with nowhere to go.
+      if (!MARKET_FIELDS[field] || !open.has(field) || seen.has(field)) continue;
+      if (!value) continue;
+      seen.add(field);
+
+      // THE CITATION IS FETCHED HERE AND THE PROPOSAL IS DROPPED WITHOUT ONE.
+      // The question comes from the model's own `asked` when it gave one and from
+      // the field's fixed description otherwise, so a model that skips the field
+      // cannot skip the search.
+      const query = asked || `${MARKET_FIELDS[field].asks} for ${gathered.facts.split('\n')[1] || 'this sector'}`;
+      const { citation } = await citeFor(ctx.env, Number(ctx.user.id), query);
+      if (!citation) continue;
+
+      out.push({
+        payload: { field, value, asked: query },
+        targetRef: `market_assumption:${field}`,
+        citation,
+        readable: `${MARKET_FIELDS[field].label}: ${value}`,
+      });
+    }
+    return out;
+  },
+
+  async apply(ctx, payload) {
+    // `saveOneAssumption` — the same store, sanitiser and patch semantics the
+    // drawer's own PUT goes through. A field name it does not know throws, which
+    // the accept route turns into a revert rather than a silent no-op.
+    const field = String(payload.field || '');
+    const value = String(payload.value ?? '').trim();
+    if (!MARKET_FIELDS[field]) throw new Error(`There is no sizing input called ${field}`);
+    if (!value) throw new Error('That proposal no longer carries a figure');
+    await saveOneAssumption(ctx.env, ctx.projectId, field, value, Number(ctx.user.id));
+    const row = await ctx.env.DB.prepare(
+      'SELECT id FROM project_market_assumptions WHERE project_id = ?',
+    ).bind(ctx.projectId).first<{ id: number }>();
+    return {
+      written: `${MARKET_FIELDS[field].label}: ${value}`,
+      // The assumptions row, and the column this fill wrote — which is what lets
+      // the page mark THIS figure "Eadwyn · sourced" and leave the founder's own
+      // figures beside it unlabelled.
+      target: row
+        ? { table: 'project_market_assumptions', rowId: Number(row.id), column: ASSUMPTION_COLUMNS[field] }
+        : undefined,
+      result: { kind: 'market_input', field, value },
+    };
+  },
+
+  target(payload) {
+    // The fallback, for a database that lost the row between the write and the
+    // read above. Row 0 cannot exist, so an unaddressed provenance row reads as
+    // unaddressed rather than pointing at somebody else's assumptions.
+    return {
+      table: 'project_market_assumptions',
+      rowId: 0,
+      column: ASSUMPTION_COLUMNS[String(payload.field || '')] || 'population',
+    };
+  },
+};
+
 /** Every kind, by its stable id. The one list a new surface is added to. */
 export const FILL_KINDS: Record<string, FillKind> = {
   [painTag.kind]: painTag,
   [hypothesis.kind]: hypothesis,
+  [marketSizing.kind]: marketSizing,
 };
 
 export const fillKind = (kind: string): FillKind | null => FILL_KINDS[kind] || null;

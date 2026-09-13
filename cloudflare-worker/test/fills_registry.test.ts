@@ -27,6 +27,7 @@ import { fileURLToPath } from 'node:url';
 
 import { FILL_KINDS, FILL_SURFACES, fillKind, kindsForSurface } from '../src/services/fills/registry.ts';
 import { FILL_CLASSES, isFillClass, refuseReason } from '../src/services/fills/types.ts';
+import { ASSUMPTION_COLUMNS } from '../src/services/marketAssumptions.ts';
 import { insertHypothesis, upsertPainAlias } from '../src/routes/_founder_validate_writes.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -155,13 +156,41 @@ const env = (db: InstanceType<typeof DatabaseSync>) => ({ DB: makeD1(db) }) as a
 const ctx = (db: InstanceType<typeof DatabaseSync>, projectId = P) =>
   ({ env: env(db), user: { id: 3, role: 'founder' } as any, projectId });
 
-test('both Validate kinds are registered, and nothing else slipped in', () => {
-  assert.deepEqual(Object.keys(FILL_KINDS).sort(), ['hypothesis', 'pain_tag']);
-  assert.deepEqual([...FILL_SURFACES].sort(), ['validate/hypotheses', 'validate/pain-map']);
+test('every kind is registered under its own surface, and nothing else slipped in', () => {
+  assert.deepEqual(Object.keys(FILL_KINDS).sort(), ['hypothesis', 'market_input', 'pain_tag']);
+  assert.deepEqual([...FILL_SURFACES].sort(),
+    ['market/sizing', 'validate/hypotheses', 'validate/pain-map']);
   assert.equal(fillKind('pain_tag')?.surface, 'validate/pain-map');
+  assert.equal(fillKind('market_input')?.surface, 'market/sizing');
   assert.equal(fillKind('nope'), null, 'an unknown kind must resolve to null, not undefined-shaped');
   assert.equal(kindsForSurface('validate/pain-map').length, 1);
-  assert.equal(kindsForSurface('grow/market').length, 0, 'a surface with no entry must offer nothing');
+  assert.equal(kindsForSurface('brand/positioning').length, 0,
+    'a surface with no entry must offer nothing');
+  // Two namespaces, and the ids in them must not be confused: a surface is an
+  // address for a blank, and a kind is what fills it.
+  for (const k of Object.values(FILL_KINDS)) {
+    assert.notEqual(k.kind, k.surface, `${k.kind} uses one id for both its kind and its surface`);
+  }
+});
+
+test('every kind names a rail that exists and declares a mode — D17', () => {
+  // D17 refused a mode toggle "until a page branches on the mode", because a
+  // switch that changes nothing is a control that cannot affect the product. The
+  // mirror image is what this checks: a fill whose rail has no `mode` entry is a
+  // CAPABILITY WITH NO SWITCH — it would run with no way to turn it off, and
+  // `manualNote`'s promise that nothing runs and nothing is spent would be false
+  // on that page.
+  const config = readFileSync(resolve(HERE, '../../frontend/src/ui/eadwynConfig.js'), 'utf8');
+  for (const k of Object.values(FILL_KINDS)) {
+    const at = config.indexOf(`\n  ${k.assistSurface}: {`);
+    assert.ok(at > 0, `eadwynConfig has no ASSIST_SURFACES entry called ${k.assistSurface}`);
+    const entry = config.slice(at, config.indexOf('\n  },', at));
+    assert.match(entry, /mode: \{/,
+      `${k.assistSurface} offers ${k.kind} with no mode entry, so it cannot be turned off`);
+    assert.match(entry, /kind: 'choice'/, `${k.assistSurface}'s mode is not a real choice`);
+    assert.match(entry, /manualNote:/,
+      `${k.assistSurface} says what ON does and not what OFF means`);
+  }
 });
 
 test('every entry declares a class the store admits and a task the router knows', () => {
@@ -297,19 +326,49 @@ test('a hypothesis accept addresses the row it actually inserted', async () => {
   );
 });
 
-test('the two Validate kinds are restatements, and neither may carry a citation', () => {
+test('each kind keeps the promise its class makes, and only that one', () => {
+  // The classes are not interchangeable, and the write-path check is what makes
+  // the difference real rather than documentary. A citation on a restatement
+  // would put a source beside a value the source did not supply; a `sourced` fill
+  // with none is an assertion with nothing behind it.
+  const citation = { kind: 'library' as const, document_id: 1, title: 't', chunk: 0, quote: 'a real sentence' };
+  const bare = { payload: {}, targetRef: 'x', readable: 'something' };
+  const expected: Record<string, string> = {
+    pain_tag: 'restatement', hypothesis: 'restatement', market_input: 'sourced',
+  };
   for (const k of Object.values(FILL_KINDS)) {
-    assert.equal(k.fillClass, 'restatement', `${k.kind} is no longer a restatement — re-check its guarantee`);
-    // A citation on a restatement would put a source beside a value the source
-    // did not supply. `refuseReason` is the write-path check; this is that it
-    // applies to these kinds.
-    const withCitation = {
-      payload: {}, targetRef: 'x', readable: 'something',
-      citation: { kind: 'library' as const, document_id: 1, title: 't', chunk: 0, quote: 'q' },
-    };
-    assert.match(String(refuseReason(k, withCitation)), /carrying a citation/);
-    assert.equal(refuseReason(k, { payload: {}, targetRef: 'x', readable: 'something' }), null);
+    assert.equal(k.fillClass, expected[k.kind],
+      `${k.kind} changed class — re-check the guarantee it now has to keep`);
+    if (k.fillClass === 'restatement') {
+      assert.match(String(refuseReason(k, { ...bare, citation })), /carrying a citation/);
+      assert.equal(refuseReason(k, bare), null);
+    } else {
+      assert.match(String(refuseReason(k, bare)), /no citation/,
+        `${k.kind} is sourced and would be written with nothing behind it`);
+      assert.equal(refuseReason(k, { ...bare, citation }), null);
+    }
   }
+});
+
+test('the market fill proposes the inputs and never the market size', async () => {
+  // THE WHOLE POINT OF THE SOURCED CLASS, and the thing #198 turns on. The page
+  // derives TAM from population × ACV with the founder's own assumptions and
+  // stamps each card "Founder research" or "Founder model". A fill that proposed
+  // a TAM would write over that arithmetic into `projects.tam` — a bare REAL with
+  // nothing beside it to say who produced the number — and make all three of the
+  // page's provenance statements false at once.
+  const market = fillKind('market_input')!;
+  const src = read('src/services/fills/registry.ts');
+  const entry = src.slice(src.indexOf('const marketSizing: FillKind = {'));
+  assert.doesNotMatch(entry.slice(0, entry.indexOf('\n};')), /projects\.tam|UPDATE projects/,
+    'the market fill can write projects.tam');
+  assert.match(market.prompt, /never propose the market size itself/i);
+  // The fields it may propose are exactly the store's own sizing inputs.
+  for (const field of ['population', 'acv', 'cagr']) {
+    assert.ok(ASSUMPTION_COLUMNS[field], `${field} is not a column this store has`);
+  }
+  assert.equal(market.target({ field: 'acv' }, '', ctx(freshDb())).table, 'project_market_assumptions');
+  assert.equal(market.target({ field: 'acv' }, '', ctx(freshDb())).column, 'acv');
 });
 
 test('a sourced fill with no citation is refused, and one with a hollow citation too', () => {
