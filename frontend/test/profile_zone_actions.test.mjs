@@ -52,7 +52,12 @@ const PROFILES = {
     canvas: /^Pages · Founder /,
     buckets: /^(validate|build|grow|network|raise|research)\//,
     zones: 30,
-    links: 17,
+    // 17 → 22. Five ops that were `unbuilt` are links, because their
+    // destination exists and the reader may open it: `Send to Problem slide`
+    // on two zones, `Configure zone`, `Edit templates` and `Send for
+    // signature`. Three of the five reasons were not merely gaps — they named
+    // a surface and were wrong about it. See the table's own comments.
+    links: 22,
     exports: 20,
     // Seven ops the PAGE performs: six of Validate's — three open a dialog the
     // workspace owns and three are server-side CSV downloads with a busy state —
@@ -73,6 +78,8 @@ const PROFILES = {
     // canvas's `Add fund · Brief me · Export` drew nothing at all. The identical
     // staleness `research/client-prep` carried on advisor and partner, found the
     // same way: by the filters half needing an action table for the same zone.
+    // Reviewed elsewhere-claims, by label — see the assertion below.
+    elsewhere: ['New deep-dive', 'Brief me'],
     excluded: [],
     embeddedGuards: 3,
     // Founder canvas routes are the live routes.
@@ -109,7 +116,23 @@ const PROFILES = {
     // store the reason correctly said was missing. A gap closed by building is
     // a different event from a gap that was never real, and this file should
     // not blur them.
-    handlers: 5,
+    //
+    // SIXTH AND SEVENTH: `deals/commit`'s `Close vote` and `funds/lps`'s
+    // `Add LP`, and both are the first kind again — a gap that was never real.
+    // Each reason said, correctly, that the API already served the op and only a
+    // screen was missing; task #195 added the screens. `PUT /api/ic/:uid` with a
+    // decision forces `decided` and stamps the time, and `POST
+    // /api/funds/:id/lps` inserts a `limited_partners` row the register on the
+    // same page reads straight back.
+    //
+    // THE THIRD OF THAT TRIO DID NOT MOVE, and that is the finding worth
+    // keeping. `funds/calls`'s `New call` carried the same idiom and turned out
+    // to be neither a missing form nor a missing store: its GP-reachable route
+    // enqueues a notice and never writes a call row, so a form would have
+    // returned 200 over a ledger that stayed empty. Same sentence, three
+    // different underlying facts — which is why each was read rather than
+    // batch-wired.
+    handlers: 7,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -118,6 +141,8 @@ const PROFILES = {
     // so with no key in the table they rendered an empty action row on an
     // artboard that specifies three ops each. The exclusion was hiding a
     // shipped gap rather than deferring one.
+    // Reviewed elsewhere-claims, by label — see the assertion below.
+    elsewhere: ['Edit rubric', 'Merge duplicates', 'New deep-dive'],
     excluded: [],
     embeddedGuards: 1,
     // `Pages · Investor Fund` names /fund/*; the router and shellConfig.js both
@@ -224,6 +249,8 @@ const PROFILES = {
     // is a body — `ClientPrepZone.jsx` takes `zoneActions` and renders a row
     // from it — so the exclusion was hiding three specified ops that drew
     // nothing, exactly as the investor Research pair did.
+    // Reviewed elsewhere-claims, by label — see the assertion below.
+    elsewhere: ['Attribution rules', 'Edit fit rules', 'Re-run stale'],
     excluded: [],
     embeddedGuards: 0,
     // The nine partner bodies that take the "no firm attached" branch —
@@ -332,6 +359,8 @@ const PROFILES = {
     // `practice/sessions` LEFT ON PR4, and one became none: every Practice
     // zone the canvas specifies ops for now has them. What remains excluded is
     // the two whose whole page IS the gap statement.
+    // Reviewed elsewhere-claims, by label — see the assertion below.
+    elsewhere: ['Ask for consent', 'Re-run stale'],
     excluded: [
       'expertise/visibility', 'network/organizations',
     ],
@@ -760,6 +789,59 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     }
   });
 
+  test(`${name}: an unbuilt reason that says the op happens elsewhere is a reviewed one`, () => {
+    // THE SECOND HALF OF THE TEST ABOVE, AND THE HALF THAT ACTUALLY BIT.
+    //
+    // That one refuses a reason carrying a literal `/path`. The three reasons
+    // that had to be corrected on 2026-09-13 carried none — they named a
+    // surface in PROSE and were wrong about it:
+    //
+    //   "share links are revoked where they are issued, in the deck builder"
+    //       — nothing revokes a deck link anywhere. A reader sent to the deck
+    //         builder finds no such control, and never learns why.
+    //   "landing templates are chosen in the brand builder, not edited"
+    //       — `/build/brand` step 3 IS a content editor for the chosen
+    //         template, so the clause after the comma denied the one thing the
+    //         named surface does.
+    //   "no e-signature provider is connected"
+    //       — `routes/esign.ts` defaults `provider` to `'native'` and signs
+    //         without a third party; `/legal/send` is mounted for a founder.
+    //
+    // All three are links now. What this assertion adds is that the NEXT one
+    // cannot be written quietly: a reason asserting the op is performed
+    // somewhere ("is/are …ed in/on/where/from …") must be on this reviewed
+    // list, and a new one fails until a person has read it and either turned
+    // the control into a `to:` link or written the label down here.
+    //
+    // WHAT IT DOES NOT CATCH, stated so the next reader does not over-trust
+    // it. It is a construction match, not comprehension: a false claim phrased
+    // any other way passes, and a listed label may have its reason re-worded
+    // without re-review. It narrows the opening; it does not close it.
+    //
+    // The listed reasons were each read when this landed, and three of them —
+    // investor's `Close vote`, `Add LP` and `New call` — say something worth
+    // acting on rather than pinning: the API already serves the op and only a
+    // screen is missing. That is a form, not a store.
+    const ELSEWHERE = /\b(?:are|is)\s+[a-z]+(?:ed|n)\s+(?:where|in|on|by|from|at)\b/;
+    const entries = [...SRC.matchAll(
+      /^ {4}\{ (?:canvas: '[^']+', )?label: '([^']+)', unbuilt: '((?:[^'\\]|\\.)*)'/gm)];
+    const claims = entries.filter(([, , note]) => ELSEWHERE.test(note)).map((m) => m[1]);
+    const reviewed = new Set(profile.elsewhere);
+    for (const label of claims) {
+      assert.ok(reviewed.has(label),
+        `"${label}" says the op is performed somewhere else. If it is, make it a `
+        + `to: link; if it is not, say so. Either way it does not belong in an `
+        + `unbuilt reason unreviewed — add it to this profile's \`elsewhere\` once read.`);
+    }
+    // Exact, not a subset: a label that stops making the claim must leave the
+    // list, or the list becomes a place stale names accumulate — which is how
+    // the collision baseline that hid the `service_offerings` read bug worked.
+    for (const label of reviewed) {
+      assert.ok(claims.includes(label),
+        `"${label}" is listed as a reviewed elsewhere-claim but no longer makes one`);
+    }
+  });
+
   test(`${name}: no action is given both a destination and an excuse`, () => {
     // The builder prefers `to`, so an `unbuilt` reason beside it would never be
     // read, and the entry would claim to be both built and not. `linkNote` is
@@ -1089,16 +1171,33 @@ test('a gap note describes the screen, never a capability the API already has', 
   // What is missing on those two zones is a form, not a store, and a reader
   // deciding what to build next is exactly the person the wrong version misled.
   //
-  // The tie runs both ways. If either method is removed, its note stops being
-  // true in the OTHER direction and this fails; if either note goes back to
-  // denying the capability, this fails too.
+  // `funds/lps` LEFT THIS LOOP BECAUSE THE FORM LANDED. Its row is
+  // `kind: 'handler'` now, which is what "if it was wired, delete this row"
+  // below always meant. `investor_deals_id3.test.mjs` asserts the wiring.
+  //
+  // AND `funds/calls` TURNED OUT TO BE A THIRD THING, which is why it stays
+  // with a narrower reason rather than becoming a form too. Both of its routes
+  // are real and neither gives this page a row to show: `POST /api/capital/calls`
+  // writes a `capital_calls` row and is admin-only, so an investor is refused;
+  // `POST /api/funds/:id/capital-call` is open to the fund's own GP and only
+  // enqueues a notice job, which writes an activity line per LP and bumps
+  // `vc_funds.deployed_capital` without creating a call row at all. "Served by
+  // the API, no screen yet" was true of the route and false about the outcome —
+  // a form there would return 200 over an empty ledger.
+  //
+  // The tie runs both ways. If the method is removed, the note stops being true
+  // in the OTHER direction and this fails; if the note goes back to denying the
+  // capability, this fails too.
   const api = read('frontend/src/lib/api.js');
   const worker = read('cloudflare-worker/src/routes/funds.ts');
   const table = read('frontend/src/workspaces/investorZoneActions.js');
   const DENIALS = /nothing writes|never issued|no such|is not stored|cannot be/i;
 
+  // Wired, so it is asserted as a handler rather than as a well-worded gap.
+  assert.match(table, /\{ label: 'Add LP', kind: 'handler', handler: 'addLp' \}/,
+    'Add LP is neither a handler nor in the gap loop below — it is unaccounted for');
+
   for (const [zone, label, method, route] of [
-    ['funds/lps', 'Add LP', 'fundAddLP', "post('/:id/lps'"],
     ['funds/calls', 'New call', 'fundCapitalCall', "post('/:id/capital-call'"],
   ]) {
     assert.match(api, new RegExp(`\\n  ${method}:`), `api.js no longer declares ${method}`);
@@ -1110,8 +1209,16 @@ test('a gap note describes the screen, never a capability the API already has', 
     assert.ok(note, `${zone}'s "${label}" is no longer a stated gap — if it was wired, delete this row`);
     assert.doesNotMatch(note[1], DENIALS,
       `${zone} "${label}" denies a capability ${method} provides: "${note[1]}"`);
-    assert.match(note[1], /no screen offers the form yet/,
+    // WHERE THE GAP IS — AND FOR THIS ZONE IT IS NO LONGER THE SCREEN. The old
+    // required phrase was "no screen offers the form yet", which was the right
+    // demand while both rows shared that idiom. `funds/calls` does not: its
+    // GP-reachable route runs and writes no call row, so a form would return 200
+    // over an empty ledger. The reason must name the LEDGER as what is missing,
+    // or the next reader builds the form and ships that 200.
+    assert.match(note[1], /ledger/,
       `${zone} "${label}" must say where the gap actually is`);
+    assert.doesNotMatch(note[1], /no screen offers the form yet/,
+      `${zone} "${label}" is back to blaming a missing screen, and a form there would show nothing`);
   }
 });
 

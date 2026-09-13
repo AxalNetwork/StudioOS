@@ -25,6 +25,7 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { transpileTs as transpile } from './_transpile-ts.mjs';
+import { codeOnly } from './_codeOnly.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -239,9 +240,18 @@ test('two founders cannot both accept one proposal', async () => {
   assert.match(body, /if \(!claim\.meta\?\.changes\)/,
     'the claim result is not checked, so a losing race writes anyway');
   assert.match(body, /409/, 'a lost race must be a 409, not a second write');
-  // Claim BEFORE the write, or two accepts can both pass the check.
-  assert.ok(body.indexOf("status = 'accepted'") < body.indexOf('insertHypothesis'),
-    'the row must be claimed before it is applied');
+  // Claim BEFORE the write, or two accepts can both pass the check. Compared in
+  // CODE ONLY: this assertion used to look for `insertHypothesis`, and once the
+  // dispatch moved to `services/fills/registry.ts` the only occurrence left in
+  // this handler was the comment explaining why that writer cannot be
+  // reimplemented — so the check was passing on prose. `spec.apply` is the write
+  // now, and a docblock mentioning it cannot satisfy this.
+  const code = codeOnly(body);
+  const claimedAt = code.indexOf("status = 'accepted'");
+  const writtenAt = code.indexOf('await spec.apply(');
+  assert.ok(claimedAt > 0, 'the claim statement is gone from the accept handler');
+  assert.ok(writtenAt > 0, 'the accept handler no longer applies through the registry');
+  assert.ok(claimedAt < writtenAt, 'the row must be claimed before it is applied');
 });
 
 test('a failed apply puts the proposal back rather than losing it', async () => {
@@ -251,11 +261,33 @@ test('a failed apply puts the proposal back rather than losing it', async () => 
   const body = handler(await routeSrc(), "founderValidate.post('/proposals/:id/accept'");
   assert.match(body, /const revert = async \(\) => \{/);
   assert.match(body, /status = 'pending', decided_by = NULL, decided_at = NULL/);
-  assert.match(body, /catch \(e\) \{\s*await revert\(\);/,
+
+  // REVERT IS THE FIRST THING THE CATCH DOES. Matched by position inside the
+  // catch rather than by a regex butted up against `catch (e) {`, because a
+  // comment between the two is not a behaviour change and this assertion should
+  // not fail on one.
+  const code = codeOnly(body);
+  const caught = code.slice(code.indexOf('} catch (e) {'));
+  assert.ok(caught.length > 20, 'the accept path no longer catches a failed apply');
+  assert.ok(caught.indexOf('await revert();') > 0
+    && caught.indexOf('await revert();') < caught.indexOf('return'),
     'a throw during apply leaves the proposal accepted and unwritten');
-  // A theme deleted between propose and accept is not a 500: it is a proposal
-  // that no longer applies, and it goes back rather than being swallowed.
-  assert.match(body, /if \(!ok\) \{ await revert\(\); return json\(\{ detail: 'That theme no longer exists' \}, 409\); \}/);
+
+  // A THEME DELETED BETWEEN PROPOSE AND ACCEPT IS NOT A 500: it is a proposal
+  // that no longer applies, and it goes back rather than being swallowed. The
+  // check itself moved into `services/fills/registry.ts` with the dispatch — the
+  // entry throws and this handler maps the throw — so the guarantee is asserted
+  // in both halves rather than dropped because the old one-liner is gone.
+  assert.match(code, /if \(\/no longer exists\/i\.test\(msg\)\) return json\(\{ detail: msg \}, 409\)/,
+    'a proposal whose theme is gone no longer comes back as a 409');
+  const registry = await readFile(resolve(__dirname, '../src/services/fills/registry.ts'), 'utf8');
+  assert.match(codeOnly(registry), /if \(!ok\) throw new Error\('That theme no longer exists'\)/,
+    'the pain tag entry no longer refuses a theme that is not this project’s');
+
+  // AND AN UNKNOWN KIND REVERTS TOO. A proposal whose kind has left the registry
+  // is the same "cannot be applied now" case, and a 500 would strand it accepted.
+  assert.match(code, /if \(!spec\) \{\s*await revert\(\);/,
+    'a proposal of an unregistered kind is not put back');
 });
 
 test('accepting writes through the same function the manual route uses', async () => {
@@ -264,11 +296,22 @@ test('accepting writes through the same function the manual route uses', async (
   // reissued; a second insert using `COUNT(*) + 1` would start handing out
   // duplicates the first time anything was retired.
   const src = await routeSrc();
-  assert.match(src, /import \{ insertHypothesis, upsertPainAlias \} from '\.\/_founder_validate_writes'/);
-  const inserts = [...src.matchAll(/INSERT INTO hypotheses/g)].length;
-  assert.equal(inserts, 0, `founder_validate.ts writes hypotheses directly (${inserts} statements)`);
-  const aliases = [...src.matchAll(/INSERT INTO pain_group_aliases/g)].length;
-  assert.equal(aliases, 0, 'founder_validate.ts writes pain aliases directly');
+  // ONE WRITER, WHEREVER THE CALLER LIVES. `insertHypothesis` stays imported here
+  // because `POST /hypotheses` — the manual form — is in this file. The alias
+  // upsert's callers moved: the accept path's is `services/fills/registry.ts` and
+  // the manual one is `progress.ts`. What this test protects is that no caller
+  // grew its own INSERT, which is checked directly below rather than inferred
+  // from an import list.
+  assert.match(src, /import \{ insertHypothesis \} from '\.\/_founder_validate_writes'/);
+  const registry = await readFile(resolve(__dirname, '../src/services/fills/registry.ts'), 'utf8');
+  assert.match(registry, /from '\.\.\/\.\.\/routes\/_founder_validate_writes'/,
+    'the fills registry no longer draws its writers from the shared module');
+  for (const [name, file] of [['founder_validate.ts', src], ['services/fills/registry.ts', registry]]) {
+    const inserts = [...file.matchAll(/INSERT INTO hypotheses/g)].length;
+    assert.equal(inserts, 0, `${name} writes hypotheses directly (${inserts} statements)`);
+    const aliases = [...file.matchAll(/INSERT INTO pain_group_aliases/g)].length;
+    assert.equal(aliases, 0, `${name} writes pain aliases directly`);
+  }
 
   // And the other caller went through it too, rather than keeping its copy.
   const progress = await readFile(resolve(__dirname, '../src/routes/progress.ts'), 'utf8');

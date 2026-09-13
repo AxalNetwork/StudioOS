@@ -1718,6 +1718,13 @@ function serializeSnap(s: MetricsSnapshot): SerializedSnap {
 
 function numOrNull(v: unknown): number | null {
   if (v == null || v === '') return null;
+  // AN ARRAY OR AN OBJECT IS NEVER A NUMBER A CALLER MEANT, and `Number()`
+  // disagrees: `Number([])` is 0 and `Number(['7'])` is 7, so a JSON body
+  // carrying `"mrr": []` stored a snapshot of zero and `"target_value": []` a
+  // target of zero — a figure nobody typed, indistinguishable afterwards from
+  // one they did. Found by `metric_targets_store.test.ts` asserting that a
+  // non-number is a 400; every caller of this helper had the same hole.
+  if (typeof v === 'object') return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
@@ -1867,6 +1874,202 @@ progress.delete('/metrics/:id', async (c) => {
   ensureCanEdit(project, user);
   await c.env.DB.prepare('DELETE FROM metrics_snapshots WHERE id = ?').bind(id).run();
   return c.json({ ok: true });
+});
+
+/**
+ * METRIC TARGETS — the plan number a snapshot is read against.
+ *
+ * `metric_targets` has existed since migration 173 and until now had NEITHER a
+ * reader NOR a writer anywhere in the worker or the SPA. That is the orphan-table
+ * shape migration 215's header names by example: a table shipped with the right
+ * columns and no end. Three surfaces have been telling a founder so, each in its
+ * own words — `grow/focus`'s "Targets" chip ("no metric target is stored"), the
+ * zone's Target stat tile ("No target source connected"), and the rail's
+ * `unavailable` line. One route pair closes all three.
+ *
+ * `direction` IS WHY THIS IS NOT A SINGLE NUMBER PER METRIC. Being over the
+ * number is good news for MRR and bad news for burn, and migration 173's own
+ * comment gives the reason it is stored rather than inferred: without it "the UI
+ * cannot tell whether being over the number is good news, and would colour a
+ * burn overage green." The default for a key the list below marks as a
+ * lower-is-better metric is therefore `down`, not the column default.
+ *
+ * NOTHING HERE DERIVES A STATUS. The route returns the target and the direction;
+ * whether the latest snapshot meets it is computed where the two are drawn
+ * together, from the snapshot the reader is looking at. Storing "met" would be a
+ * second copy of an answer that changes every time a snapshot lands.
+ */
+
+/**
+ * The keys a target may name, and the direction each one defaults to.
+ *
+ * TAKEN FROM THE SNAPSHOT, NOT FROM A LIST SOMEONE TYPED. Every key here is a
+ * column `serializeSnap` returns, because a target on a key no snapshot carries
+ * can never be compared against anything — it would sit in the Targets view
+ * forever reading "Not recorded" and look like a bug in the reader rather than a
+ * target for a metric this product does not store. Migration 173's comment lists
+ * the same twelve.
+ */
+const METRIC_TARGET_KEYS: Record<string, 'up' | 'down'> = {
+  mrr: 'up',
+  arr: 'up',
+  active_users: 'up',
+  new_users: 'up',
+  paying_accounts: 'up',
+  ltv: 'up',
+  nrr_pct: 'up',
+  headcount: 'up',
+  cash_balance: 'up',
+  // Lower is better on all three, and this is the half a caller gets wrong.
+  cac: 'down',
+  monthly_churn_pct: 'down',
+  net_burn: 'down',
+};
+
+interface MetricTargetRow {
+  id: number;
+  project_id: number;
+  metric_key: string;
+  target_value: number;
+  direction: string;
+  label: string | null;
+  updated_at: string | null;
+}
+
+/**
+ * Create `metric_targets` if this database has not run migration 173.
+ *
+ * The same lazy-ensure `ensureMetricsSnapshotsSchema` above does, and for the
+ * same reason: the dev SQLite file is not kept in sync with D1's migrations, so a
+ * route that assumes the table exists is a 500 on a developer's first request.
+ * The DDL is a copy of migration 173's, CHECK constraint included — if the two
+ * ever disagree, `metric_targets_store.test.ts` builds its fixture from the
+ * MIGRATION and fails.
+ */
+let _metricTargetsReady = false;
+async function ensureMetricTargetsSchema(env: Env): Promise<void> {
+  if (_metricTargetsReady) return;
+  try {
+    await env.DB.exec(
+      'CREATE TABLE IF NOT EXISTS metric_targets ('
+      + 'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+      + 'project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE, '
+      + 'metric_key TEXT NOT NULL, '
+      + 'target_value REAL NOT NULL, '
+      + "direction TEXT NOT NULL DEFAULT 'up' CHECK (direction IN ('up', 'down')), "
+      + 'label TEXT, '
+      + 'created_by INTEGER REFERENCES users(id), '
+      + "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
+      + "updated_at TEXT NOT NULL DEFAULT (datetime('now')), "
+      + 'UNIQUE (project_id, metric_key))',
+    );
+    await env.DB.exec(
+      'CREATE INDEX IF NOT EXISTS idx_metric_targets_project ON metric_targets(project_id)',
+    );
+    _metricTargetsReady = true;
+  } catch (e) {
+    console.error('[progress] ensureMetricTargetsSchema:', (e as Error).message);
+  }
+}
+
+function serializeTarget(row: MetricTargetRow) {
+  return {
+    id: row.id,
+    metric_key: row.metric_key,
+    target_value: row.target_value,
+    direction: row.direction === 'down' ? 'down' : 'up',
+    label: row.label ?? null,
+    updated_at: row.updated_at ?? null,
+  };
+}
+
+/** GET /progress/metrics/:projectId/targets — this project's plan numbers. */
+progress.get('/metrics/:projectId/targets', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+  const project = await loadProject(c, projectId, user);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanView(project, user);
+  await ensureMetricTargetsSchema(c.env);
+  let items: ReturnType<typeof serializeTarget>[] = [];
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT id, project_id, metric_key, target_value, direction, label, updated_at
+         FROM metric_targets WHERE project_id = ? ORDER BY metric_key`,
+    ).bind(projectId).all<MetricTargetRow>();
+    items = (rows.results || []).map(serializeTarget);
+  } catch (e) {
+    console.error('[progress] targets GET:', (e as Error).message);
+  }
+  // `keys` travels with the rows so the editor's picker is the route's own list
+  // rather than a second copy in the SPA that can drift from what a write accepts.
+  return c.json({ items, targets: items, keys: METRIC_TARGET_KEYS });
+});
+
+/**
+ * PUT /progress/metrics/:projectId/targets — set one, or clear it.
+ *
+ * UPSERT RATHER THAN POST-THEN-PUT, because the table's own
+ * `UNIQUE (project_id, metric_key)` says there is exactly one target per metric:
+ * a founder revising this quarter's MRR number is editing the same row, and a
+ * create/update split would make them find its id first to say so.
+ *
+ * `target_value: null` DELETES, and the alternative was worse. A target of 0 is a
+ * real target ("get churn to zero"), so 0 cannot mean "no target" — and leaving
+ * no way to clear one would make a mis-typed key permanent in the Targets view.
+ */
+progress.put('/metrics/:projectId/targets', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+  const project = await loadProject(c, projectId, user);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanEdit(project, user);
+  await ensureMetricTargetsSchema(c.env);
+
+  const body: Record<string, unknown> = await c.req.json().catch(() => ({}));
+  const metricKey = String(body.metric_key ?? '').trim();
+  if (!Object.prototype.hasOwnProperty.call(METRIC_TARGET_KEYS, metricKey)) {
+    return c.json({
+      detail: `Unknown metric_key: ${metricKey || '(missing)'}`,
+      keys: Object.keys(METRIC_TARGET_KEYS),
+    }, 400);
+  }
+
+  if (body.target_value === null) {
+    await c.env.DB.prepare('DELETE FROM metric_targets WHERE project_id = ? AND metric_key = ?')
+      .bind(projectId, metricKey).run();
+    return c.json({ ok: true, cleared: metricKey });
+  }
+
+  const value = numOrNull(body.target_value);
+  if (value == null) return c.json({ detail: 'target_value must be a number, or null to clear it' }, 400);
+  // A caller may override the default direction — "grow headcount" and "hold
+  // headcount down" are both real plans — but only to one of the two the CHECK
+  // constraint admits, or the write fails at the database with a stack trace
+  // where a 400 belongs.
+  const asked = body.direction != null ? String(body.direction) : '';
+  const direction = asked === 'up' || asked === 'down' ? asked : METRIC_TARGET_KEYS[metricKey];
+  const label = body.label != null && String(body.label).trim()
+    ? String(body.label).trim().slice(0, 120)
+    : null;
+
+  await c.env.DB.prepare(
+    `INSERT INTO metric_targets (project_id, metric_key, target_value, direction, label, created_by)
+          VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(project_id, metric_key) DO UPDATE
+        SET target_value = excluded.target_value,
+            direction    = excluded.direction,
+            label        = excluded.label,
+            updated_at   = datetime('now')`,
+  ).bind(projectId, metricKey, value, direction, label, user.id).run();
+
+  const fresh = await c.env.DB.prepare(
+    `SELECT id, project_id, metric_key, target_value, direction, label, updated_at
+       FROM metric_targets WHERE project_id = ? AND metric_key = ?`,
+  ).bind(projectId, metricKey).first<MetricTargetRow>();
+  return c.json({ ok: true, target: fresh ? serializeTarget(fresh) : null });
 });
 
 // Task #3 (DF) — time-series aggregator. Returns

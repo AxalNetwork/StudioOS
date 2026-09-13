@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import { useAuth } from '../../../hooks/useAuthSync';
 import { investorZoneActions } from '../../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../../workspaces/investorZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
@@ -93,8 +94,11 @@ const VOTE_TONE = { yes: 'ok', no: 'danger', abstain: 'neutral' };
 
 export default function InvestorCommitZone() {
   const navigate = useNavigate();
+  const { user } = useAuth() || {};
   const [room, setRoom] = useState(null);
   const [view, setView] = useState('current');
+  const [closing, setClosing] = useState(null);
+  const [closeError, setCloseError] = useState('');
 
   const load = useCallback(() => {
     setRoom(null);
@@ -124,7 +128,61 @@ export default function InvestorCommitZone() {
 
   const decisionRows = useMemo(() => (decisions?.available ? decisions.rows : []), [decisions]);
 
+  /**
+   * CLOSE VOTE — the screen the registry's reason said was missing.
+   *
+   * `PUT /api/ic/:uid` with a `decision` of invest | pass | defer forces the
+   * status to `decided` and stamps `decided_at`. Both were already served; only
+   * this form was absent, which is exactly what the row said.
+   *
+   * WHO MAY: the route admits the decision's AUTHOR and an admin, and refuses a
+   * colleague with a 403. So the op is supplied as a tuple rather than a bare
+   * click, and a partner who cannot close this one reads the reason on hover
+   * instead of discovering it by being refused. `created_by` travels on the
+   * commit-room summary for this.
+   *
+   * AND ONLY A DECISION THAT IS OPEN. A `decided` row has nothing to close, and
+   * offering the control over one would invite a second decision overwriting the
+   * first — the route would accept it, since it takes whatever `decision` it is
+   * given. Re-opening a closed vote is a governance act, not a button.
+   */
+  const mine = current != null && user?.id != null
+    && (Number(current.created_by) === Number(user.id) || user.role === 'admin');
+  const closeVote = useMemo(() => {
+    if (!current) {
+      return { onClick: () => {}, disabled: true, title: 'No decision is open, so there is nothing to close.' };
+    }
+    if (current.status === 'decided') {
+      return {
+        onClick: () => {},
+        disabled: true,
+        title: `This decision was already closed as “${current.decision || 'decided'}”. Re-opening one is not a control on this page.`,
+      };
+    }
+    if (!mine) {
+      return {
+        onClick: () => {},
+        disabled: true,
+        title: 'Only the partner who opened this decision, or an admin, may record its outcome.',
+      };
+    }
+    return { onClick: () => { setCloseError(''); setClosing(current.uid); }, busy: closing === current.uid };
+  }, [current, mine, closing]);
+
+  async function recordDecision(decision) {
+    if (!closing) return;
+    setCloseError('');
+    try {
+      await api.icUpdate(closing, { decision });
+      setClosing(null);
+      load();
+    } catch (cause) {
+      setCloseError(cause?.message || 'The decision could not be recorded.');
+    }
+  }
+
   const rowActions = investorZoneActions('deals/commit', {
+    handlers: { closeVote },
     view: {
       header: ['Decision', 'Stage', 'Votes', 'Rationales', 'Outcome'],
       rows: decisionRows,
@@ -146,6 +204,45 @@ export default function InvestorCommitZone() {
         filters={investorZoneFilters('deals/commit', { value: view, onChange: setView })}
         actions={rowActions}
       />
+      {/* THREE BUTTONS, NOT A FREE FIELD, because the store admits exactly
+          three outcomes — `invest`, `pass`, `defer` — and the route silently
+          coerces anything else to null, which would close nothing and look like
+          a save. The tally is restated here so the outcome is recorded beside
+          the votes it is meant to reflect rather than from memory. */}
+      {closing && (
+        <div className="rounded-[10px] border border-amber-300 bg-amber-50/70 p-3 mb-3 dark:border-amber-900 dark:bg-amber-950/25" data-testid="panel-close-vote">
+          <p className="text-[11px] font-bold text-gray-900 dark:text-gray-100">
+            Record the outcome of “{current?.title || closing}”
+          </p>
+          <p className="mt-1 text-[11px] text-gray-600 dark:text-gray-400">
+            {tallyText ? `${tallyText}. ` : ''}This closes the vote and stamps the time. It is not reversible from this page.
+          </p>
+          {closeError && (
+            <p className="mt-2 text-[11px] text-red-700 dark:text-red-400" role="alert" data-testid="status-close-vote-error">{closeError}</p>
+          )}
+          <div className="mt-2 flex flex-wrap gap-2">
+            {['invest', 'pass', 'defer'].map((decision) => (
+              <button
+                key={decision}
+                type="button"
+                data-testid={`button-close-vote-${decision}`}
+                onClick={() => recordDecision(decision)}
+                className="rounded-[7px] border border-gray-300 bg-white px-[11px] py-1.5 text-[11px] font-bold text-gray-800 hover:border-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+              >
+                {decision === 'invest' ? 'Invest' : decision === 'pass' ? 'Pass' : 'Defer'}
+              </button>
+            ))}
+            <button
+              type="button"
+              data-testid="button-close-vote-cancel"
+              onClick={() => { setClosing(null); setCloseError(''); }}
+              className="rounded-[7px] px-[11px] py-1.5 text-[11px] font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
       <ZoneBody
         loading={room === null}
         error={room === UNAVAILABLE ? 'The committee record could not be read.' : ''}
