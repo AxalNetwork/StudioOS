@@ -81,12 +81,17 @@ export const INVESTOR_ZONE_ACTIONS = {
   'deals/commit': [
     { label: 'Export minutes', unbuilt: 'no minutes are stored to export; ic_meetings carries an agenda, written before the room rather than after it', hover: 'No minutes are stored — the meeting record is its agenda, written before the room, not after it.' },
     { label: 'Add condition', unbuilt: 'conditions are not a stored record — the memo and terms are free text, and neither can block a later stage' },
-    // WAS: 'no vote is opened here, so none can be closed'. False — a vote
-    // opens when the first one is cast (POST /api/ic/:uid/vote moves draft →
-    // voting) and closes when a decision is set (PUT /api/ic/:uid forces
-    // decided and stamps decided_at). What is missing is the screen, which is
-    // the same shape as the LP row below: served, not offered.
-    { label: 'Close vote', unbuilt: 'closing a vote is served by the API — recording a decision against it moves it to decided — but no screen offers the form yet', hover: 'Recording a decision closes a vote, and no screen offers that form yet.' },
+    // THE SCREEN THIS ROW WAS WAITING FOR. It said, correctly, that closing a
+    // vote is served by the API — `PUT /api/ic/:uid` with a `decision` forces
+    // `decided` and stamps `decided_at` — and that no screen offered the form.
+    // `CommitZone` offers it now, so the op is the page's.
+    //
+    // IT IS SUPPLIED CONDITIONALLY, WHICH IS THE POINT. The route admits the
+    // decision's author and an admin and refuses a colleague with a 403. So
+    // the page hands back `{ onClick, disabled, title }` rather than a bare
+    // function, and a partner who cannot close this one reads why on hover
+    // instead of learning it from a failed request.
+    { label: 'Close vote', kind: 'handler', handler: 'closeVote' },
   ],
   'deals/closing': [
     // WAS: 'no closing templates are stored'. False — legal_templates ships the
@@ -103,12 +108,32 @@ export const INVESTOR_ZONE_ACTIONS = {
 
   // ── Fund ─────────────────────────────────────────────────────────────────
   'funds/lps': [
-    { label: 'Add LP', unbuilt: 'adding an LP is served by the API; no screen offers the form yet' },
+    // Same shape as `Close vote` above, and it was true the same way:
+    // `POST /api/funds/:id/lps` inserts a real `limited_partners` row, and the
+    // register on this very page reads it straight back. Only the form was
+    // missing. `requireFundGp` gates it — institutional tier AND the GP of
+    // record for this fund — so the page disables it when no fund is readable
+    // rather than posting into a 404.
+    { label: 'Add LP', kind: 'handler', handler: 'addLp' },
     { label: 'Export register', kind: 'export' },
     { label: 'Comms log', unbuilt: 'no LP correspondence is stored' },
   ],
   'funds/calls': [
-    { label: 'New call', unbuilt: 'issuing a call is served by the API; no screen offers the form yet' },
+    // THIS ONE IS NOT A MISSING FORM, AND THE OLD REASON SAID IT WAS. Two
+    // routes issue a call and neither gives this page something to show:
+    //
+    //   `POST /api/capital/calls` writes a real `capital_calls` row and is
+    //   ADMIN-ONLY (`role !== 'admin'` → 403), so an investor pressing a
+    //   button wired to it would be refused every time.
+    //
+    //   `POST /api/funds/:id/capital-call` IS open to the fund's own GP, and
+    //   what it does is enqueue a `capital_call_notice` job — which writes an
+    //   activity-log line per LP and bumps `vc_funds.deployed_capital`. It
+    //   creates no `capital_calls` row at all. A GP would press "New call",
+    //   get a 200, and watch the ledger stay empty.
+    //
+    // So the gap is a call the fund's own ledger can read back, not a form.
+    { label: 'New call', unbuilt: 'a GP can issue a call notice, but it writes an activity line per LP rather than a call row, so nothing reaches the ledger on this page', hover: 'Issuing a call notifies each LP; it does not yet record a call this ledger can show.' },
     { label: 'Send reminders', unbuilt: 'nothing on this desk sends mail' },
     { label: 'Export wires', unbuilt: 'no wire schedule is stored to export' },
   ],

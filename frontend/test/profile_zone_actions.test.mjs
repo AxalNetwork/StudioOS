@@ -116,7 +116,23 @@ const PROFILES = {
     // store the reason correctly said was missing. A gap closed by building is
     // a different event from a gap that was never real, and this file should
     // not blur them.
-    handlers: 5,
+    //
+    // SIXTH AND SEVENTH: `deals/commit`'s `Close vote` and `funds/lps`'s
+    // `Add LP`, and both are the first kind again — a gap that was never real.
+    // Each reason said, correctly, that the API already served the op and only a
+    // screen was missing; task #195 added the screens. `PUT /api/ic/:uid` with a
+    // decision forces `decided` and stamps the time, and `POST
+    // /api/funds/:id/lps` inserts a `limited_partners` row the register on the
+    // same page reads straight back.
+    //
+    // THE THIRD OF THAT TRIO DID NOT MOVE, and that is the finding worth
+    // keeping. `funds/calls`'s `New call` carried the same idiom and turned out
+    // to be neither a missing form nor a missing store: its GP-reachable route
+    // enqueues a notice and never writes a call row, so a form would have
+    // returned 200 over a ledger that stayed empty. Same sentence, three
+    // different underlying facts — which is why each was read rather than
+    // batch-wired.
+    handlers: 7,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -126,7 +142,7 @@ const PROFILES = {
     // artboard that specifies three ops each. The exclusion was hiding a
     // shipped gap rather than deferring one.
     // Reviewed elsewhere-claims, by label — see the assertion below.
-    elsewhere: ['Edit rubric', 'Close vote', 'Add LP', 'New call', 'Merge duplicates', 'New deep-dive'],
+    elsewhere: ['Edit rubric', 'Merge duplicates', 'New deep-dive'],
     excluded: [],
     embeddedGuards: 1,
     // `Pages · Investor Fund` names /fund/*; the router and shellConfig.js both
@@ -1155,16 +1171,33 @@ test('a gap note describes the screen, never a capability the API already has', 
   // What is missing on those two zones is a form, not a store, and a reader
   // deciding what to build next is exactly the person the wrong version misled.
   //
-  // The tie runs both ways. If either method is removed, its note stops being
-  // true in the OTHER direction and this fails; if either note goes back to
-  // denying the capability, this fails too.
+  // `funds/lps` LEFT THIS LOOP BECAUSE THE FORM LANDED. Its row is
+  // `kind: 'handler'` now, which is what "if it was wired, delete this row"
+  // below always meant. `investor_deals_id3.test.mjs` asserts the wiring.
+  //
+  // AND `funds/calls` TURNED OUT TO BE A THIRD THING, which is why it stays
+  // with a narrower reason rather than becoming a form too. Both of its routes
+  // are real and neither gives this page a row to show: `POST /api/capital/calls`
+  // writes a `capital_calls` row and is admin-only, so an investor is refused;
+  // `POST /api/funds/:id/capital-call` is open to the fund's own GP and only
+  // enqueues a notice job, which writes an activity line per LP and bumps
+  // `vc_funds.deployed_capital` without creating a call row at all. "Served by
+  // the API, no screen yet" was true of the route and false about the outcome —
+  // a form there would return 200 over an empty ledger.
+  //
+  // The tie runs both ways. If the method is removed, the note stops being true
+  // in the OTHER direction and this fails; if the note goes back to denying the
+  // capability, this fails too.
   const api = read('frontend/src/lib/api.js');
   const worker = read('cloudflare-worker/src/routes/funds.ts');
   const table = read('frontend/src/workspaces/investorZoneActions.js');
   const DENIALS = /nothing writes|never issued|no such|is not stored|cannot be/i;
 
+  // Wired, so it is asserted as a handler rather than as a well-worded gap.
+  assert.match(table, /\{ label: 'Add LP', kind: 'handler', handler: 'addLp' \}/,
+    'Add LP is neither a handler nor in the gap loop below — it is unaccounted for');
+
   for (const [zone, label, method, route] of [
-    ['funds/lps', 'Add LP', 'fundAddLP', "post('/:id/lps'"],
     ['funds/calls', 'New call', 'fundCapitalCall', "post('/:id/capital-call'"],
   ]) {
     assert.match(api, new RegExp(`\\n  ${method}:`), `api.js no longer declares ${method}`);
@@ -1176,8 +1209,16 @@ test('a gap note describes the screen, never a capability the API already has', 
     assert.ok(note, `${zone}'s "${label}" is no longer a stated gap — if it was wired, delete this row`);
     assert.doesNotMatch(note[1], DENIALS,
       `${zone} "${label}" denies a capability ${method} provides: "${note[1]}"`);
-    assert.match(note[1], /no screen offers the form yet/,
+    // WHERE THE GAP IS — AND FOR THIS ZONE IT IS NO LONGER THE SCREEN. The old
+    // required phrase was "no screen offers the form yet", which was the right
+    // demand while both rows shared that idiom. `funds/calls` does not: its
+    // GP-reachable route runs and writes no call row, so a form would return 200
+    // over an empty ledger. The reason must name the LEDGER as what is missing,
+    // or the next reader builds the form and ships that 200.
+    assert.match(note[1], /ledger/,
       `${zone} "${label}" must say where the gap actually is`);
+    assert.doesNotMatch(note[1], /no screen offers the form yet/,
+      `${zone} "${label}" is back to blaming a missing screen, and a form there would show nothing`);
   }
 });
 
