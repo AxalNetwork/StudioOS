@@ -70,8 +70,12 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
 // Reasons that cover several filters in the same zone are named once, so the
 // grouped rendering in ZoneToolbar collapses them into a single sentence and a
 // reworded copy cannot drift from its twin.
-const NO_WEEK_STAMP =
-  'a key result carries no week, so there is no earlier week to open';
+// `NO_WEEK_STAMP` stood here — "a key result carries no week, so there is no
+// earlier week to open" — and covered two of `build/this-week`'s labels. Migration
+// 252 records the column moves those weeks are derived from, so it is gone for the
+// same reason `NO_CADENCE_STORE` and `NO_SESSION_RECORD` are: a reason that
+// survives its own fix will be cited again. Three of these have now gone the same
+// way in this file, which is the pattern working rather than a coincidence.
 // `NO_CADENCE_STORE` stood here — "no ritual schedule or review archive is
 // stored for this startup" — and covered all four of `build/cadence`'s labels.
 // Migration 250 stored all three of those things, and removing the constant is
@@ -233,11 +237,25 @@ export const FOUNDER_ZONE_FILTERS = {
   // Reads the Now column of the stored roadmap. Nothing stamps a key result
   // with a week, and nothing records one moving between weeks, which is why the
   // page's own footnote already refuses to report a completion rate.
+  // ALL FOUR ARE LIVE AS OF MIGRATION 252. `okr_column_moves` logs every roadmap
+  // column change with the Monday of the week it happened in, and
+  // `GET /progress/roadmap/:id/weeks` derives the three windows from it —
+  // `services/okrWeeks.ts` holds the arithmetic.
+  //
+  // `This week` NEVER NEEDED THE HISTORY, which is why it alone was live: it is the
+  // current `kanban_status`. The other three each needed a fact `roadmap_okrs`
+  // does not have — `updated_at` moves when a TITLE is edited, so it cannot say
+  // when an objective was committed.
+  //
+  // THE LOG IS NOT BACKFILLED, and the page says so rather than letting the gap
+  // read as an answer: an objective already in Now has no logged move, so it is
+  // under `This week` and not under `Last 4`. The route returns `history_since`
+  // and the zone prints it.
   'build/this-week': [
     { canvas: 'This week', key: 'now', label: 'This week' },
-    { canvas: 'Last 4', unbuilt: NO_WEEK_STAMP },
-    { canvas: 'All 14', label: 'All weeks', unbuilt: NO_WEEK_STAMP },
-    { canvas: 'Carried only', unbuilt: 'nothing records a commitment moving from one week to the next' },
+    { canvas: 'Last 4', key: 'recent', label: 'Last 4 weeks' },
+    { canvas: 'All 14', key: 'all', label: 'All {n} weeks' },
+    { canvas: 'Carried only', key: 'carried' },
   ],
   // Cards are pipeline tasks with a stored `status` and `updated_at`. They
   // carry no lane and no assignee this page can compare against the reader, so

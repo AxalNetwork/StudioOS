@@ -1344,7 +1344,7 @@ test('a dynamic group renders its stored names and nothing else', () => {
   assert.match(talentRow.unbuilt, /no job post is linked/, 'the fallback reason stopped being recorded');
 });
 
-test('a zone whose store arrived draws four live chips, and this-week still does not', () => {
+test('two zones whose stores arrived draw live chips, and their shared reasons are gone', () => {
   // THIS TEST HAS BEEN THREE THINGS AND THE THIRD IS THE POINT.
   //
   // It began as `deepEqual(cadence, [])` under the title "rendered never" — the
@@ -1370,27 +1370,36 @@ test('a zone whose store arrived draws four live chips, and this-week still does
   // And the reason that covered all four is GONE from the module, not reworded.
   // `zoneFilterBuilder`'s history is that a reason outliving its fix gets cited
   // again; `NO_SESSION_RECORD` went the same way when migration 221 landed.
-  assert.ok(!FILTERS_SRC.includes('NO_CADENCE_STORE'),
-    'the cadence store reason survived the store being built');
 
-  const week = founderZoneFilters('build/this-week', { value: 'now' });
+  // AND `build/this-week` CROSSED THE SAME LINE IN THE SAME PASS. Its three dead
+  // chips — `Last 4`, `All weeks`, `Carried only` — shared one reason, "a key
+  // result carries no week", and migration 252 records the column moves those
+  // weeks are derived from. So the test's title stopped being true too: this-week
+  // does draw live chips now. Both halves are asserted the new way rather than one
+  // being loosened to match the other.
+  const week = founderZoneFilters('build/this-week', { value: 'recent', counts: { all: 14 } });
+  assert.equal(week.length, FOUNDER_ZONE_FILTERS['build/this-week'].length,
+    'the this-week row stopped drawing one chip per artboard filter');
   assert.ok(week.every((i) => !i.note), 'this-week renders prose in the chip row');
-  assert.ok(week.every((i) => (i.disabled ? !i.onSelect : Boolean(i.onSelect))),
-    'this-week draws a chip whose handler disagrees with its disabled state');
-  for (const label of ['Last 4', 'All weeks', 'Carried only']) {
-    const chip = week.find((i) => i.label === label);
-    assert.ok(chip, `${label} has no source and is not drawn at all`);
-    assert.equal(chip.disabled, true, `${label} has no source and is drawn live`);
-  }
+  assert.ok(week.every((i) => !i.disabled && typeof i.onSelect === 'function'),
+    'a this-week chip is still dead after migration 252 recorded the column moves');
+  assert.equal(week.filter((i) => i.active).length, 1, 'exactly one this-week chip is active');
+  assert.equal(week.find((i) => i.active).label, 'Last 4 weeks');
+  // `All {n} weeks` takes the page's own count. The canvas says "All 14"; printing
+  // 14 on an account with no history is the thing `withCount` exists to refuse, so
+  // the figure comes from the store and the clause drops when there is none.
+  assert.ok(week.some((i) => i.label === 'All 14 weeks'), 'the count clause is not filled from the page');
+  const noCount = founderZoneFilters('build/this-week', { value: 'now' });
+  assert.ok(noCount.some((i) => i.label === 'All weeks'),
+    'a zero count still printed a number into the chip');
 
-  // The reasons themselves stay in the table, distinct where they were distinct.
-  const reasons = new Set(FOUNDER_ZONE_FILTERS['build/this-week']
-    .filter((r) => r.unbuilt).map((r) => r.unbuilt));
-  assert.equal(reasons.size, 2, 'this-week\'s two distinct reasons were merged into one');
-  // Cadence has NO reason left, which is the other half of the inversion above.
-  // This asserted `size === 1` — one shared reason across four chips — and that
-  // was true until migration 250. Zero is now the correct number and a reappearing
-  // one would mean a chip went back to being a gap.
+  // Both shared reasons are gone from the module, not reworded.
+  for (const dead of ['NO_CADENCE_STORE', 'NO_WEEK_STAMP']) {
+    assert.ok(!FILTERS_SRC.includes(dead), `${dead} survived the store being built`);
+  }
+  assert.equal(FOUNDER_ZONE_FILTERS['build/this-week'].filter((r) => r.unbuilt).length, 0,
+    'a this-week chip is a gap again');
+
   assert.equal(FOUNDER_ZONE_FILTERS['build/cadence'].filter((r) => r.unbuilt).length, 0,
     'a cadence chip is a gap again');
   assert.equal(FOUNDER_ZONE_FILTERS['build/cadence'].filter((r) => r.key).length, 4,

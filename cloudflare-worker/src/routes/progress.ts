@@ -61,6 +61,10 @@ import { syncStripeForUser } from '../integrations/providers/stripe';
 // `/build/kpi`'s CSV importer (#176 FB5). The parser is a service so it can be
 // exercised without a database — every rejection reason is a unit test.
 import { planImport } from '../services/metricsCsv';
+// `/build/this-week`'s three week chips (#176 FB1). The arithmetic is a service
+// because an off-by-one Monday puts every commitment in the wrong week and raises
+// no error anywhere.
+import { weekStartOf, weekWindows, type MoveRow } from '../services/okrWeeks';
 import { summarise as summariseSaasMetrics, sparkline as saasSparkline, type Snapshot as SaasSnapshot } from '../services/saasMetrics';
 
 const progress = new Hono<{ Bindings: Env }>();
@@ -1202,9 +1206,13 @@ progress.put('/roadmap/okr/:id', async (c) => {
   const id = Number(c.req.param('id'));
   if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
 
+  // `kanban_status` is read here too, so the log can record where the card CAME
+  // FROM. Without it every row's `from_status` is NULL and "moved out of Now" is
+  // indistinguishable from "arrived in Now" — which is half of what the week
+  // history is for.
   const existing = await c.env.DB.prepare(
-    'SELECT id, project_id FROM roadmap_okrs WHERE id = ?',
-  ).bind(id).first<{ id: number; project_id: number }>();
+    'SELECT id, project_id, kanban_status FROM roadmap_okrs WHERE id = ?',
+  ).bind(id).first<{ id: number; project_id: number; kanban_status: string | null }>();
   if (!existing) return c.json({ detail: 'OKR not found' }, 404);
 
   const project = await loadProject(c, existing.project_id, user);
@@ -1248,9 +1256,13 @@ progress.delete('/roadmap/okr/:id', async (c) => {
   const id = Number(c.req.param('id'));
   if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
 
+  // `kanban_status` is read here too, so the log can record where the card CAME
+  // FROM. Without it every row's `from_status` is NULL and "moved out of Now" is
+  // indistinguishable from "arrived in Now" — which is half of what the week
+  // history is for.
   const existing = await c.env.DB.prepare(
-    'SELECT id, project_id FROM roadmap_okrs WHERE id = ?',
-  ).bind(id).first<{ id: number; project_id: number }>();
+    'SELECT id, project_id, kanban_status FROM roadmap_okrs WHERE id = ?',
+  ).bind(id).first<{ id: number; project_id: number; kanban_status: string | null }>();
   if (!existing) return c.json({ detail: 'OKR not found' }, 404);
 
   const project = await loadProject(c, existing.project_id, user);
@@ -1261,14 +1273,59 @@ progress.delete('/roadmap/okr/:id', async (c) => {
   return c.json({ deleted: id });
 });
 
+/**
+ * Migration 252's log, bootstrapped at runtime like its siblings.
+ *
+ * Keyed on `env.DB` rather than a module boolean, for the reason #203 found: a
+ * module-level flag lets the first database to bootstrap mark the job done for
+ * every database in the isolate.
+ */
+const OKR_MOVES_READY = new WeakMap<object, boolean>();
+async function ensureOkrMovesSchema(env: Env): Promise<boolean> {
+  const readyKey = env.DB as unknown as object;
+  if (OKR_MOVES_READY.get(readyKey)) return true;
+  try {
+    await env.DB.exec(
+      'CREATE TABLE IF NOT EXISTS okr_column_moves ('
+      + 'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+      + 'project_id INTEGER NOT NULL, '
+      + 'okr_id INTEGER NOT NULL, '
+      + 'from_status TEXT, '
+      + 'to_status TEXT NOT NULL, '
+      + 'week_start TEXT NOT NULL, '
+      + "moved_at TEXT NOT NULL DEFAULT (datetime('now')), "
+      + 'moved_by INTEGER)',
+    );
+    await env.DB.exec(
+      'CREATE INDEX IF NOT EXISTS idx_okr_moves_project_week'
+      + ' ON okr_column_moves(project_id, week_start DESC)',
+    );
+    await env.DB.exec(
+      'CREATE INDEX IF NOT EXISTS idx_okr_moves_okr ON okr_column_moves(okr_id, moved_at)',
+    );
+    OKR_MOVES_READY.set(readyKey, true);
+    return true;
+  } catch (e) {
+    console.error('[progress] ensureOkrMovesSchema:', (e as Error).message);
+    return false;
+  }
+}
+
+/** Today in UTC, as `YYYY-MM-DD`. The week the log is written against. */
+const utcToday = () => new Date().toISOString().slice(0, 10);
+
 progress.post('/roadmap/okr/:id/move', async (c) => {
   const user = await requireAuth(c);
   const id = Number(c.req.param('id'));
   if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
 
+  // `kanban_status` is read here too, so the log can record where the card CAME
+  // FROM. Without it every row's `from_status` is NULL and "moved out of Now" is
+  // indistinguishable from "arrived in Now" — which is half of what the week
+  // history is for.
   const existing = await c.env.DB.prepare(
-    'SELECT id, project_id FROM roadmap_okrs WHERE id = ?',
-  ).bind(id).first<{ id: number; project_id: number }>();
+    'SELECT id, project_id, kanban_status FROM roadmap_okrs WHERE id = ?',
+  ).bind(id).first<{ id: number; project_id: number; kanban_status: string | null }>();
   if (!existing) return c.json({ detail: 'OKR not found' }, 404);
 
   const project = await loadProject(c, existing.project_id, user);
@@ -1292,9 +1349,95 @@ progress.post('/roadmap/okr/:id/move', async (c) => {
       WHERE id = ?`,
   ).bind(kanbanStatus, sortOrder, new Date().toISOString(), id).run();
 
+  // MIGRATION 252 — log the transition, and only when the column actually changed.
+  //
+  // A re-order inside one column arrives here with the same `kanban_status`, and
+  // logging it would put a "moved to Now" row in every week a founder tidied their
+  // board — so `Carried only` would show nothing as carried, because every card
+  // would have a commitment in the current week. The reorder is not a commitment.
+  //
+  // THE LOG NEVER FAILS THE MOVE. A card that moved on the board and then reported
+  // an error is a card the founder will drag again; the history is worth less than
+  // the move it describes.
+  if (kanbanStatus !== (existing.kanban_status || '')) {
+    try {
+      if (await ensureOkrMovesSchema(c.env)) {
+        const today = utcToday();
+        await c.env.DB.prepare(
+          'INSERT INTO okr_column_moves'
+          + ' (project_id, okr_id, from_status, to_status, week_start, moved_by)'
+          + ' VALUES (?, ?, ?, ?, ?, ?)',
+        ).bind(
+          existing.project_id, id, existing.kanban_status || null, kanbanStatus,
+          weekStartOf(today) || today, user.id ?? null,
+        ).run();
+      }
+    } catch (e) {
+      console.error('[progress] okr move log:', (e as Error).message);
+    }
+  }
+
   const row = await c.env.DB.prepare(`${OKR_SELECT} WHERE id = ?`)
     .bind(id).first<OkrRow>();
   return c.json(serializeOkr(row as OkrRow));
+});
+
+/**
+ * GET /progress/roadmap/:projectId/weeks — the three week windows, as id sets.
+ *
+ * IDS AND NOT OBJECTIVES. The page already has every OKR from `listOkrs`; sending
+ * them again under four keys would be the same rows four times and a second answer
+ * to what an objective's title is. The page intersects.
+ *
+ * `history_since` IS THE HONEST PART. Migration 252 does not backfill — it says why
+ * — so an OKR committed before the log existed is in `This week` and not in
+ * `Last 4`. This field is the earliest week on record, and the page prints it, so a
+ * reader can see the history's age rather than concluding the filter is broken.
+ */
+progress.get('/roadmap/:projectId/weeks', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+  const project = await loadProject(c, projectId, user);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanView(project, user);
+
+  const empty = {
+    last_four: [], ever_committed: [], carried: [],
+    weeks: [], history_since: null, week_start: weekStartOf(utcToday()),
+  };
+  if (!(await ensureOkrMovesSchema(c.env))) return c.json(empty);
+
+  let moves: MoveRow[] = [];
+  let nowIds: number[] = [];
+  try {
+    const [m, n] = await Promise.all([
+      c.env.DB.prepare(
+        'SELECT okr_id, from_status, to_status, week_start, moved_at'
+        + ' FROM okr_column_moves WHERE project_id = ? ORDER BY moved_at ASC LIMIT 2000',
+      ).bind(projectId).all<MoveRow>(),
+      c.env.DB.prepare(
+        "SELECT id FROM roadmap_okrs WHERE project_id = ? AND kanban_status = 'now'",
+      ).bind(projectId).all<{ id: number }>(),
+    ]);
+    moves = m.results || [];
+    nowIds = (n.results || []).map((r) => Number(r.id));
+  } catch (e) {
+    console.error('[progress] roadmap weeks:', (e as Error).message);
+    return c.json(empty);
+  }
+
+  const w = weekWindows(moves, nowIds, utcToday());
+  return c.json({
+    last_four: w.lastFour,
+    ever_committed: w.everCommitted,
+    carried: w.carried,
+    weeks: w.weeks,
+    // The OLDEST week, which is what "the history starts here" means. `weeks` is
+    // newest-first, so it is the last element and not the first.
+    history_since: w.weeks.length ? w.weeks[w.weeks.length - 1] : null,
+    week_start: weekStartOf(utcToday()),
+  });
 });
 
 // ---------------------------------------------------------------------------

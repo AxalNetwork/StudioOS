@@ -5932,3 +5932,98 @@ mapping and asserts 403 exactly.
 `env.DB` to bootstrap marks the helper done for every database in the isolate.
 Production has one D1 and it never showed. Fixed to a `WeakMap` keyed on the
 binding rather than left sitting beside its own fix.
+
+---
+
+## D90 — `/build/this-week` gets a week history, and it is the transitions that are stored
+
+**Date:** 2026-09-13 · **Task:** #176 (FB1) · **Migration:** 252
+
+Three of `/build/this-week`'s four chips were `unbuilt` — `Last 4`, `All 14`,
+`Carried only` — under one reason that was true: "a key result carries no week, so
+there is no earlier week to open", and "nothing records a commitment moving from one
+week to the next". `roadmap_okrs` has a `kanban_status` and an `updated_at`, and
+`updated_at` moves when the **title** is edited, so it cannot say when an objective
+was committed. `unbuilt` renders nothing, so three quarters of the artboard's filter
+row was invisible.
+
+### The transition is the fact; the week is derived
+
+A `week_start` column on `roadmap_okrs` would hold one week — the current one — and
+answer none of the three questions. "Was it in Now four weeks ago" needs history,
+and history on a single column is a column that gets overwritten. So migration 252
+is an append-only log of column changes, `okr_column_moves`, and every window is
+derived:
+
+- **This week** — the OKR's current `kanban_status`, which needs no history and is
+  why that one chip alone kept working.
+- **Last 4** — has a move *to* `now` whose week is one of the last four.
+- **All weeks** — has ever had a move to `now`. The chip's count is WEEKS, not
+  objectives: the canvas says "All 14", meaning fourteen weeks.
+- **Carried only** — is in Now *now*, and its **earliest** move to Now was in an
+  earlier week. Reading the latest instead would make anything touched this week
+  look new, which is exactly how a three-week-old commitment escapes the chip that
+  exists to surface it.
+
+### A reorder is not a commitment, and that is the load-bearing condition
+
+A drag within one column arrives at the same endpoint with the same
+`kanban_status`. Logging it would put a "committed to Now" row in every week a
+founder tidied their board — so `Carried only` would find nothing carried, because
+every card would have a commitment in the current week. Live, selectable, always
+empty: the failure `zoneFilterBuilder.js` opens its docblock with. The log is
+written only when the column actually changed.
+
+### The log never fails the move
+
+A card that moved on the board and then reported an error is a card the founder
+will drag again. The write is wrapped, the failure is logged server-side, and the
+move returns 200.
+
+### No backfill, and the page says so instead
+
+An OKR already sitting in Now has no move row, so it appears under `This week` and
+not under `Last 4`. The only timestamp available to invent one from is `updated_at`,
+which may be when someone fixed a typo — a week derived from that would be a
+specific, confident, wrong answer. The route returns `history_since`, the earliest
+week on record, and the zone prints it: the empty state under a narrow chip says
+"the column history starts in the week of X" rather than repeating the
+nothing-in-Now sentence. The seam heals in four weeks of use and never lies.
+
+### `(day + 6) % 7`, and why that line has four tests
+
+`getUTCDay()` is 0 on **Sunday**. The offset back to Monday is therefore
+`(day + 6) % 7` — 0 on Monday, 6 on Sunday. `day - 1` is correct on six days in
+seven and sends every Sunday *forward* a day, which puts a Sunday commitment in
+next week, makes `Carried only` show this week's new work as carried, and raises no
+error anywhere. The arithmetic lives in `services/okrWeeks.ts` so it can be
+exercised by calling it; 15 mutations were applied to it and 15 caught.
+
+`Date.UTC(y, m - 1, d)` from the integers, never `Date.parse(iso)` — the trap
+`interview_date` and `lib/cadence.js` both already carry notes about. A malformed
+date returns null rather than falling back to the current week, and an unparseable
+"today" makes the carried set **empty** rather than everything: the chip's job is to
+single out a few rows, so failing open would make it useless and look like an
+answer.
+
+### Three refusals that outlived their fix, all in one pass
+
+`NO_WEEK_STAMP` joins `NO_CADENCE_STORE` (D88) and `NO_SESSION_RECORD` (migration
+221) as a shared `unbuilt` reason **deleted** rather than reworded once its store
+landed. Three in one file now. A reason that survives its own fix gets cited again,
+and the pattern of removing the constant — not just the entry — is what stops that.
+
+The page's stale claims go with them: a "Weekly history · Unavailable" stat card is
+now weeks on record; a card headed "Weekly history is unavailable" whose body said
+carry-overs "require a cadence history source that is not connected to this desk" is
+now the list of weeks; and the rail's `['Weekly history', 'No cadence archive is
+returned by the available founder read API.']` is replaced by what is genuinely
+absent — a plan the platform wrote.
+
+### A hand-written fixture was wrong on the first try, which is the argument
+
+`okr_move_log.test.ts` first spelled the column `key_results`; it is
+`key_results_json`, and every route call died on `no such column`. The fixture now
+takes `roadmap_okrs` from `schema_baseline.sql`. A hand-copied DDL that drifts makes
+every assertion above it true of a schema production does not have — the whole of
+#203 — and it happened here within minutes of the rule being restated.
