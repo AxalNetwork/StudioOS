@@ -83,10 +83,25 @@ function tableFromMigration(name: string, table: string): string {
   return `${src.slice(at, end)}\n);`;
 }
 
-/** The same, for an index — the upsert's ON CONFLICT target is part of the shape. */
+/**
+ * The same, for an index — the upsert's ON CONFLICT target is part of the shape.
+ *
+ * THE MIGRATION'S INDEX NAMES ARE READ ONCE WITH A LITERAL PATTERN and then
+ * looked up. Semgrep's `detect-non-literal-regexp` flagged the `new RegExp` this
+ * built from `index` (alert 6087) and the rule is right — a regex compiled from a
+ * variable is worth avoiding even where the variable is a literal in this file.
+ * Parsing the whole file's `CREATE INDEX` names into a map also handles the
+ * `UNIQUE` variant and any whitespace without an alternation to get wrong, and it
+ * keeps the word-boundary the old pattern needed: `idx_foo` can no longer be
+ * found by asking for `idx_foobar`, because the capture is the whole name.
+ */
 function indexFromMigration(name: string, index: string): string {
   const src = readFileSync(`${SQL}/migrations/${name}.sql`, 'utf8');
-  const at = src.search(new RegExp(`CREATE (UNIQUE )?INDEX IF NOT EXISTS ${index}\\b`));
+  const starts = new Map<string, number>();
+  for (const m of src.matchAll(/CREATE\s+(?:UNIQUE\s+)?INDEX\s+IF\s+NOT\s+EXISTS\s+([A-Za-z_][\w]*)/g)) {
+    if (!starts.has(m[1])) starts.set(m[1], m.index ?? -1);
+  }
+  const at = starts.get(index) ?? -1;
   assert.ok(at >= 0, `${index} is no longer created by migration ${name}`);
   return src.slice(at, src.indexOf(';', at) + 1);
 }
@@ -210,7 +225,7 @@ test('every kind has a host that mounts its band — the other half of D17', () 
   ].map((p) => readFileSync(resolve(HERE, '../..', p), 'utf8')).join('\n');
 
   for (const k of Object.values(FILL_KINDS)) {
-    assert.match(hosts, new RegExp(`kind="${k.kind}"`),
+    assert.ok(hosts.includes(`kind="${k.kind}"`),
       `${k.kind} is registered and no page offers it, so the switch does nothing`);
   }
   // And both sides read ONE mode store, so flipping the switch cannot leave the
@@ -531,7 +546,7 @@ test('a proposal row can carry a surface, a class, a citation and a target', () 
   // The four columns migration 246 added, and the read that has to select them.
   const migration = readFileSync(`${SQL}/migrations/246_fills_the_blanks_everywhere.sql`, 'utf8');
   for (const col of ['surface', 'fill_class', 'citation_json', 'target_ref']) {
-    assert.match(migration, new RegExp(`ADD COLUMN ${col} TEXT`), `246 no longer adds ${col}`);
+    assert.ok(migration.includes(`ADD COLUMN ${col} TEXT`), `246 no longer adds ${col}`);
   }
   // The backfill is what makes `surface` meaningful on landing rather than after
   // the next run, and it has to cover both existing kinds.

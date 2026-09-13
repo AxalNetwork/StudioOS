@@ -202,7 +202,7 @@ test('a withdrawn link is still listed, marked, and never hidden', () => {
     'the panel filters its share list — a withdrawn link must stay visible');
   // Every state has a colour, so none renders as unstyled text.
   for (const key of ['revoked', 'exhausted', 'expired', 'live']) {
-    assert.match(src, new RegExp(`  ${key}: 'text-`), `${key} has no tone`);
+    assert.ok(src.includes(`  ${key}: 'text-`), `${key} has no tone`);
   }
   assert.match(src, /<span className=\{SHARE_TONE\[st\.key\]\}>\{st\.label\}<\/span>/);
   // The old two-state render is gone. It called an EXPIRED link active, and after

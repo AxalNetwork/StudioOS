@@ -62,8 +62,13 @@ test('the drawer loads what was saved and saves what it shows', () => {
   // founder edits and loses, with nothing on screen to say which.
   const at = PAGE.indexOf('api.saveMarketAssumptions(project.id, {');
   const payload = PAGE.slice(at, PAGE.indexOf('});', at));
+  // THE PAYLOAD'S OWN KEYS, READ ONCE. A bare `includes(field)` would pass on a
+  // longer name that merely contains this one (`acv` inside `acvBenchmark`), and
+  // a regex compiled per field is what `detect-non-literal-regexp` objects to —
+  // so one literal pattern collects the keys and each field is looked up.
+  const sent = new Set([...payload.matchAll(/\b([A-Za-z_$][\w$]*)\s*:/g)].map((m) => m[1]));
   for (const field of FIELDS) {
-    assert.match(payload, new RegExp(`\\b${field}:`), `${field} is edited on the drawer and never saved`);
+    assert.ok(sent.has(field), `${field} is edited on the drawer and never saved`);
   }
 });
 
@@ -86,7 +91,7 @@ test('a saved value wins, and a cleared one stays cleared', () => {
   assert.match(fn, /winRate: s\('winRate', sam > 0 && som > 0/);
   // And no field seeds from an invented market figure.
   for (const field of ['population', 'acv', 'cagr', 'tamOverride', 'runway', 'capacity']) {
-    assert.match(fn, new RegExp(`${field}: s\\('${field}'\\)`),
+    assert.ok(fn.includes(`${field}: s('${field}')`),
       `${field} seeds from something other than the store`);
   }
 });
@@ -138,11 +143,11 @@ test('a figure Eadwyn supplied is marked, and one the founder replaced is not', 
 
   // Marked on exactly the fields the market fill can supply, and no others.
   for (const field of ['population', 'acv', 'cagr']) {
-    assert.match(PAGE, new RegExp(`<FilledMark fill=\\{filled\\.${field}\\} />`),
+    assert.ok(PAGE.includes(`<FilledMark fill={filled.${field}} />`),
       `${field} can be filled by Eadwyn and is never marked as such`);
   }
   for (const field of ['samPct', 'winRate', 'tamOverride']) {
-    assert.doesNotMatch(PAGE, new RegExp(`<FilledMark fill=\\{filled\\.${field}\\} />`),
+    assert.ok(!PAGE.includes(`<FilledMark fill={filled.${field}} />`),
       `${field} is the founder's own judgement and must not carry an Eadwyn stamp`);
   }
 

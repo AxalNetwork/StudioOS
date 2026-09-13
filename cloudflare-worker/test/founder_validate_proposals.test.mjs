@@ -189,8 +189,12 @@ test('the two kinds route to two task classes, both real', async () => {
     assert.ok(task, `${kind} has no task class`);
     // Registered in ROUTE, or every figure the rail reports for it is wrong —
     // and `run()` refuses an unknown task outright.
-    assert.match(router, new RegExp(`^  ${task}: \\{`, 'm'), `${task} is not a ROUTE entry`);
-    assert.match(router, new RegExp(`\\| '${task}'`), `${task} is not in the TaskClass union`);
+    // Literal probes, not a regex built from `task`: Semgrep's
+    // `detect-non-literal-regexp` is right that a pattern compiled from a
+    // variable is worth avoiding, and `\n  x: {` says the same thing as the
+    // multiline anchor did.
+    assert.ok(router.includes(`\n  ${task}: {`), `${task} is not a ROUTE entry`);
+    assert.ok(router.includes(`| '${task}'`), `${task} is not in the TaskClass union`);
   }
   // Distinct classes, because /api/ai/me/spend groups by task and the rail
   // quotes the caller's observed average per task.
@@ -380,8 +384,14 @@ test('a proposal is refused before it is stored, and the count is reported', asy
 
   // And the columns migration 246 added are written, or a stored proposal cannot
   // say which surface it belongs to or what it was drawn from.
+  // WORD TOKENS, PARSED ONCE. `includes` would be wrong here for the reason the
+  // old `\b…\b` existed: `surface` is a substring of `surface_ref`, so a bare
+  // substring check would pass on a column that is not the one asked for. One
+  // literal pattern over the body gives the same precision without compiling a
+  // regex per column — which is what `detect-non-literal-regexp` objects to.
+  const words = new Set([...body.matchAll(/[A-Za-z_][\w]*/g)].map((m) => m[0]));
   for (const column of ['surface', 'fill_class', 'citation_json', 'target_ref']) {
-    assert.match(body, new RegExp(`\\b${column}\\b`), `a stored proposal carries no ${column}`);
+    assert.ok(words.has(column), `a stored proposal carries no ${column}`);
   }
   assert.match(body, /p\.citation \? JSON\.stringify\(p\.citation\) : null,/);
 });

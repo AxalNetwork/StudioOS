@@ -44,9 +44,21 @@ import { codeOnly } from './_codeOnly.mjs';
 const PATH = 'frontend/src/pages/founder/FounderGrowFocus.jsx';
 const SRC = codeOnly(readFileSync(resolve(process.cwd(), PATH), 'utf8'));
 
-/** One top-level function's body, by brace balance from its own `function` line. */
+/**
+ * One top-level function's body, by brace balance from its own `function` line.
+ *
+ * LOCATED BY STRING SEARCH, NOT A CONSTRUCTED REGEX. Semgrep's
+ * `detect-non-literal-regexp` flagged the `new RegExp` this used to build from
+ * `name` (alert 6086), and it is right to: a regex compiled from a variable is
+ * worth avoiding even where the variable is a literal three lines below in the
+ * same file. The two forms a top-level declaration can take are two literal
+ * probes, which is also plainer than the alternation it replaces.
+ */
 function body(name) {
-  const at = SRC.search(new RegExp(`^(?:export default )?function ${name}\\(`, 'm'));
+  const at = [`\nfunction ${name}(`, `\nexport default function ${name}(`]
+    .map((probe) => SRC.indexOf(probe))
+    .filter((i) => i >= 0)
+    .reduce((lo, i) => (lo < 0 || i < lo ? i : lo), -1);
   assert.ok(at >= 0, `${PATH} no longer declares ${name}`);
   // Walk past the parameter list — a destructured props object opens a brace of
   // its own, and taking the first `{` after the name gives the props pattern
@@ -73,12 +85,20 @@ test('FocusContent reads nothing that only FounderGrowFocus has', () => {
   // The three names the bug was made of. Each was declared in the host and read
   // in the child; two were reported by CodeQL and the third — `read`, which
   // appeared four times in the child — was not.
+  // PARSED ONCE WITH LITERAL PATTERNS, then indexed — same reason as `body`
+  // above, and it reads better than compiling two regexes per name. `read` is a
+  // BARE identifier: not after a dot (that is a property) and not before a colon
+  // (that is a key or a label), which is what the lookaround pair encodes.
+  const readInChild = new Set(
+    [...child.matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)(?![\w$:])/g)].map((m) => m[1]),
+  );
+  const declaredInChild = new Set(
+    [...child.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)/g)].map((m) => m[1]),
+  );
   for (const name of ['metCount', 'measured', 'readTargets']) {
     assert.ok(host.includes(name) || name === 'metCount' || name === 'measured',
       `${name} left the host, so this assertion no longer describes anything`);
-    const readInChild = new RegExp(`(?<![.\\w$])${name}(?![\\w$:])`).test(child);
-    const declaredInChild = new RegExp(`\\b(?:const|let|var)\\s+${name}\\b`).test(child);
-    assert.ok(!readInChild || declaredInChild,
+    assert.ok(!readInChild.has(name) || declaredInChild.has(name),
       `FocusContent reads \`${name}\` without declaring it — a ReferenceError at render`);
   }
 });

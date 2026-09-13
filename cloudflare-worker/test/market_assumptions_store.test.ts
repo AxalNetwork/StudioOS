@@ -194,7 +194,11 @@ test('the keys the store accepts are the keys it tells a caller about', async ()
   // Every column the map names exists in the migration, spelled the same way.
   const migration = read(`sql/migrations/${MIGRATION}.sql`);
   for (const column of Object.values(ASSUMPTION_COLUMNS)) {
-    assert.match(migration, new RegExp(`^    ${column} TEXT`, 'm'),
+    // `\n    x TEXT` rather than a multiline-anchored regex built from `column`:
+    // the DDL's four-space indent is the anchor either way, and Semgrep's
+    // `detect-non-literal-regexp` is right about compiling a pattern from a
+    // variable. The trailing ` TEXT` keeps a prefix column from matching.
+    assert.ok(migration.includes(`\n    ${column} TEXT`),
       `${column} is in the column map and not in migration 247`);
   }
   assert.match(migration, /^    seg_filter_json TEXT,$/m);
