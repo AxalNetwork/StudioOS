@@ -260,3 +260,69 @@ test('the Spin-Out Lab keeps its own chrome, and the exclusion is scoped to the 
   assert.ok(lab.some((f) => /AssistLayout|AssistRail/.test(src(f))),
     'the three legitimate AssistRail mounts in the Lab have been stripped');
 });
+
+test('the scope badge names the active company, and no caller restates the rule', () => {
+  // ONE SLOT, ONE SOURCE, FOUR PROFILES. `scope` is where the shell says whose
+  // data a page is showing, and its docblock calls that rule "visible rather than
+  // assumed". It was not visible: the prop was passed in exactly THREE of the six
+  // callers and every one passed a LITERAL — `"One venture"`, `"One fund"`,
+  // `"One firm"`. Three pages restated the rule, the rest of the product said
+  // nothing, and no page named a company.
+  //
+  // It could not have named one. `useActiveCompany` had three consumers in the
+  // whole frontend — the switcher, the context file, and Company settings — so no
+  // workspace page knew which company was active. The shell is the consumer now.
+  const shell = src('frontend/src/workspaces/WorkspaceShell.jsx');
+  assert.match(shell, /import \{ useActiveCompany \} from '\.\.\/contexts\/ActiveCompanyContext'/,
+    'the shell no longer reads the active company, so the badge cannot name one');
+  assert.match(shell, /const scopeLabel = scope \|\| companyName \|\| null;/,
+    'the scope slot must fall back to the company name, and to nothing after that');
+
+  // READ, NEVER WRITTEN. `ui/CompanySwitcher.jsx`'s docblock states the rule:
+  // "pages read ActiveCompanyContext, and this component is the single writer."
+  // A shell that called `setCompany` would make every workspace page a second
+  // writer of the session's scope.
+  assert.ok(!/setCompany/.test(shell),
+    'the shell writes the active company — it is a reader, and the switcher is the single writer');
+
+  // NO BADGE WHEN THERE IS NO COMPANY. `"One venture"` over an account with no
+  // company membership is a claim about data that is not there, which is the
+  // absent-is-not-empty rule applied to a header.
+  assert.match(shell, /\{scopeLabel && \(/,
+    'the badge renders unconditionally, so an account with no company gets an empty pill');
+
+  // AND NO CALLER RESTATES THE RULE. A literal here is how the slot came to hold
+  // a slogan instead of a name, so the three that did are asserted gone and a
+  // fourth cannot be added quietly.
+  for (const caller of SHELL_CALLERS) {
+    const s = src(caller);
+    assert.ok(!/scope="One /.test(s),
+      `${caller} passes a literal scope — the shell fills that slot from the active company`);
+  }
+});
+
+test('the in-body startup pickers are counted, because deleting them is blocked', () => {
+  // Task #181 asks for these to go and is blocked on a product question: the
+  // sidebar switcher selects a COMPANY, each picker selects a PROJECT, and every
+  // one is guarded by `projects.length > 1` — so they are a second axis rather
+  // than a duplicate, and deleting them removes the only way a founder with two
+  // startups in one company can move between them.
+  //
+  // Task #84 removed these once, per-route, and they came back. This asserts the
+  // COUNTING exists, because the count is what stops a third report: the
+  // hand-written list in #181 named eleven, and the sweep finds twenty-one.
+  const guard = read('scripts/check-inline-project-pickers.mjs');
+  assert.match(guard, /inline-project-pickers-baseline\.json/);
+  const baseline = JSON.parse(read('scripts/inline-project-pickers-baseline.json'));
+  assert.ok(Array.isArray(baseline.pickers) && baseline.pickers.length >= 21,
+    `the ledger holds ${baseline.pickers?.length} pickers — the sweep found 21 when it was written`);
+  // Every entry is `<path>#<testid>`, so a picker cannot be recorded without
+  // saying where it is.
+  for (const entry of baseline.pickers) {
+    assert.match(entry, /^frontend\/src\/[^#]+\.jsx#select-[a-z0-9-]*project$/, `malformed ledger entry: ${entry}`);
+  }
+  // And it is in `test:guards`, or it is a script nobody runs.
+  const pkg = JSON.parse(read('package.json'));
+  assert.ok(pkg.scripts['test:guards'].includes('check-inline-project-pickers.mjs'),
+    'the picker guard is not in test:guards, so nothing runs it');
+});

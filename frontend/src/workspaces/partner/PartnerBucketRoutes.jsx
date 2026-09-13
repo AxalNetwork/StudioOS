@@ -502,11 +502,12 @@ export default function PartnerBucketRoutes() {
     },
   }[prefix];
 
+  // NO `scope` PROP — it read `scope="One firm"`, which named no firm. The shell
+  // fills the slot from `ActiveCompanyContext`, the same way in all four profiles.
   return (
     <WorkspaceShell
       role="partner"
       title={isRoot ? bucketTitle(bucket) : undefined}
-      scope="One firm"
       intro={INTRO[prefix]}
       activeSlug={isRoot ? null : undefined}
       rail={RAIL && (

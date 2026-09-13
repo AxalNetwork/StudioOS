@@ -104,10 +104,14 @@ export default function InvestorDealsRoutes() {
 
   const Zone = ZONES[zone?.slug];
 
+  // NO `scope` PROP. It read `scope="One fund"` — a literal, on one of only
+  // three surfaces in the product that passed the prop at all. `WorkspaceShell`
+  // fills that slot from `ActiveCompanyContext` now, so the badge names the
+  // company instead of restating the rule. A fund-scoped label belongs here only
+  // once a fund is actually selected on this route, and nothing selects one yet.
   return (
     <WorkspaceShell
       role="investor"
-      scope="One fund"
       title={isRoot ? bucketTitle(bucket) : undefined}
       activeSlug={isRoot ? null : undefined}
       intro={ZONE_LINES[zone?.slug] || ZONE_LINES.pipeline}

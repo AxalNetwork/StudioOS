@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import ZoneNav from './ZoneNav';
+import { useActiveCompany } from '../contexts/ActiveCompanyContext';
 import { bucketForPath, zoneForPath } from './shellConfig';
 
 /**
@@ -40,6 +41,30 @@ import { bucketForPath, zoneForPath } from './shellConfig';
  * rather than an optional flourish: no page in this product may show more than
  * one company's data, and a header that always has room to say which one makes
  * that rule visible rather than assumed.
+ *
+ * AND IT NOW SAYS WHICH ONE. Every caller that passed a `scope` passed a LITERAL
+ * — `"One venture"`, `"One fund"`, `"One firm"` — in the only three places the
+ * prop was used at all. Three pages restated the rule and every other workspace
+ * surface in the product said nothing, so the slot the rule is visible in was
+ * empty on most of the product and a slogan on the rest.
+ *
+ * So the shell reads `ActiveCompanyContext` itself and defaults the slot to the
+ * active company's NAME. One place rather than thirty callers, which is also the
+ * only way the four profiles end up with the same treatment.
+ *
+ * `useActiveCompany` had exactly three consumers before this — the switcher, the
+ * context file, and Company settings — so no workspace page knew which company
+ * was active. `ui/CompanySwitcher.jsx`'s own docblock states the rule this
+ * honours: "pages read ActiveCompanyContext, and this component is the single
+ * writer." The shell reads; it never writes.
+ *
+ * AN EXPLICIT `scope` STILL WINS, because a page genuinely scoped to something
+ * narrower than a company — one fund, one client engagement — is telling the
+ * truth about a different unit and the shell cannot know it. What is gone is the
+ * literal that names no one.
+ *
+ * NO COMPANY MEANS NO BADGE. An empty slot is honest; `"One venture"` over an
+ * account with no company membership is a claim about data that is not there.
  */
 export default function WorkspaceShell({
   role = 'founder',
@@ -54,6 +79,13 @@ export default function WorkspaceShell({
 }) {
   const location = useLocation();
   const bucket = bucketForPath(role, location.pathname);
+  // READ, NEVER WRITTEN. `useContext` on a provider-less tree returns the
+  // context's own default (`{ company: null, … }`), so a page rendered outside
+  // `ProtectedLayout` — a test harness, a public route — gets no badge rather
+  // than an exception.
+  const { company } = useActiveCompany();
+  const companyName = String(company?.company_name || '').trim();
+  const scopeLabel = scope || companyName || null;
   // `activeSlug === null` is the overview mode: a bucket root is above its
   // zones, so no zone is current — not in the pill row, and not in the crumb
   // or title either. `zoneForPath` defaults to the first zone, which is right
@@ -158,17 +190,17 @@ export default function WorkspaceShell({
           </div>
           <div className="flex items-center gap-2">
             {actions}
-            {scope && (
+            {scopeLabel && (
               scopeHref ? (
                 <Link
                   to={scopeHref}
                   className="inline-flex items-center gap-1.5 rounded-md border border-axal-hairline bg-white px-2.5 py-1.5 text-[11px] font-bold text-axal-muted hover:border-axal-faint"
                 >
-                  {scope}
+                  {scopeLabel}
                 </Link>
               ) : (
                 <span className="inline-flex items-center gap-1.5 rounded-md border border-axal-hairline bg-white px-2.5 py-1.5 text-[11px] font-bold text-axal-muted">
-                  {scope}
+                  {scopeLabel}
                 </span>
               )
             )}

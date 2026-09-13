@@ -1259,7 +1259,6 @@ export default function FounderValidateWorkspace() {
           fills
         />
       )}
-      scope="One venture"
       title={isRoot ? bucketTitle(bucket) : undefined}
       activeSlug={isRoot ? null : undefined}
       intro={INTRO[zone?.slug] || INTRO.interviews}

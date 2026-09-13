@@ -1,0 +1,26 @@
+{
+  "note": "In-body startup pickers, frozen. Task #181 asks for these to go, and it is BLOCKED on a product question: the sidebar switcher selects a COMPANY while each of these selects a PROJECT, and every one is guarded by `projects.length > 1` \u2014 so they are a second axis, not a duplicate. Deleting them removes the only way a founder with two startups in one company can move between them. This gate fails on a NEW picker and on an entry that no longer exists, so the list cannot go stale and the eventual deletion is self-documenting: remove the picker and its line together. Task #84 removed these once, per-route, and they came back because nothing counted them.",
+  "pickers": [
+    "frontend/src/pages/founder/FounderBuildBoard.jsx#select-board-project",
+    "frontend/src/pages/founder/FounderBuildCadence.jsx#select-cadence-project",
+    "frontend/src/pages/founder/FounderBuildKpi.jsx#select-kpi-project",
+    "frontend/src/pages/founder/FounderBuildRoadmap.jsx#select-roadmap-project",
+    "frontend/src/pages/founder/FounderBuildThisWeek.jsx#select-week-project",
+    "frontend/src/pages/founder/FounderGrowBrand.jsx#select-grow-brand-project",
+    "frontend/src/pages/founder/FounderGrowCapitalMatch.jsx#select-grow-capital-project",
+    "frontend/src/pages/founder/FounderGrowCustomers.jsx#select-grow-customers-project",
+    "frontend/src/pages/founder/FounderGrowDesk.jsx#select-grow-project",
+    "frontend/src/pages/founder/FounderGrowFocus.jsx#select-grow-focus-project",
+    "frontend/src/pages/founder/FounderGrowLaunch.jsx#select-grow-launch-project",
+    "frontend/src/pages/founder/FounderGrowPartnerships.jsx#select-grow-partnerships-project",
+    "frontend/src/pages/founder/FounderGrowTalent.jsx#select-grow-talent-project",
+    "frontend/src/pages/founder/FounderNetworkOrganizations.jsx#select-network-organizations-project",
+    "frontend/src/pages/founder/FounderNetworkRelationships.jsx#select-network-relationships-project",
+    "frontend/src/pages/founder/FounderRaiseCapital.jsx#select-capital-project",
+    "frontend/src/pages/founder/FounderRaiseDataRoom.jsx#select-data-room-project",
+    "frontend/src/pages/founder/FounderRaiseDesk.jsx#select-raise-project",
+    "frontend/src/pages/founder/FounderRaiseLegal.jsx#select-legal-project",
+    "frontend/src/pages/founder/FounderRaisePitch.jsx#select-pitch-project",
+    "frontend/src/pages/founder/FounderRaiseStatus.jsx#select-status-project"
+  ]
+}
