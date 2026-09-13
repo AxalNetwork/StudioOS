@@ -503,6 +503,21 @@ export async function resyncKycKyb(env: Env): Promise<{ scanned: number; updated
   }
 
   // -- KYB reconciliation (entity investors) --------------------------------
+  // THIS BRANCH IS INERT AND NOW SAYS SO. The SELECT joins
+  // `corporate_profiles.kyb_status`, which no table in this schema defines, so D1
+  // rejects it on every run. It used to be swallowed by a bare
+  // `.catch(() => ({ results: [] }))`, which is indistinguishable from "no rows to
+  // reconcile": the nightly cron reported `scanned=0, updated=0` and read as
+  // healthy while `kyb_v1` — which has no other satisfier — stayed pending for
+  // every entity investor and every partner handed one at deal signature.
+  //
+  // The statement is KEPT rather than removed. It is the only record of the
+  // intended flow, and `scripts/check-sqlite-columns.mjs` tracks that phantom
+  // column by name as the standing marker for this gap (asserted in
+  // `test/schema_guards.test.mjs`, and depended on by
+  // `test/obligation_satisfiable.test.ts`). Wiring KYB means giving the decision a
+  // real home — migration 220's `company_kyb_records.status` is the obvious
+  // candidate — and pointing this query at it; it is not a switch to flip.
   try {
     const pendingKyb: any = await env.DB.prepare(
       `SELECT lo.id AS oblig_id, lo.user_id, cp.kyb_status
@@ -510,7 +525,15 @@ export async function resyncKycKyb(env: Env): Promise<{ scanned: number; updated
          LEFT JOIN corporate_profiles cp ON cp.user_id = lo.user_id
         WHERE lo.obligation_key = 'kyb_v1'
           AND lo.status IN ('pending','in_review')`,
-    ).all().catch(() => ({ results: [] as any[] }));
+    ).all().catch((e: any) => {
+      console.warn(
+        '[trust] resyncKycKyb KYB inert — no KYB decision can be read: '
+        + 'corporate_profiles.kyb_status does not exist and no provider writes one, '
+        + 'so kyb_v1 cannot be satisfied by this reconciler '
+        + `(${e?.message || e})`,
+      );
+      return { results: [] as any[] };
+    });
     const rows: any[] = pendingKyb?.results || [];
     scanned += rows.length;
     for (const r of rows) {
@@ -537,6 +560,117 @@ export async function resyncKycKyb(env: Env): Promise<{ scanned: number; updated
   }
 
   return { scanned, updated };
+}
+
+// ---------------------------------------------------------------------------
+// Signature-backed obligations — recording what the e-sign flow already does.
+// ---------------------------------------------------------------------------
+
+/**
+ * The obligations a completed e-sign envelope is allowed to satisfy.
+ *
+ * AN ALLOWLIST, NOT A CONVENIENCE. `templateKeyForDocType` also resolves
+ * `accreditation_v1`, `partner_msa_v1` and `nda_3way_founder_investor_axal_v1`,
+ * and none of those may be satisfied here: accreditation is required of every
+ * investor and waiving or granting it is a securities question for counsel;
+ * `partner_msa_v1` already has its own satisfier at deal signature
+ * (`services/partnerDeals.ts`) and a second writer would race it; and the 3-way
+ * NDA is not an obligation key at all — it settles a `pairwise_ndas` row.
+ *
+ * So this set is the scope of the change, enforced rather than described.
+ */
+const SATISFIABLE_BY_SIGNATURE: ReadonlySet<ObligationKey> = new Set<ObligationKey>([
+  'founder_nda_v1',
+  'investor_nda_v1',
+  'mentor_nda_v1',
+  'mentor_disclaimer_v1',
+]);
+
+/**
+ * The validity window for a key, read off `ROLE_MATRIX` rather than restated.
+ *
+ * This matters more than it looks. `expireDueArtifacts` only expires rows whose
+ * `expires_at` is non-null, so hardcoding the wrong value here produces an NDA
+ * that never needs re-signing — a silent compliance hole rather than a visible
+ * bug. The three NDAs carry 24 months; the advisor disclaimer is a one-time
+ * acknowledgement and carries null.
+ *
+ * Returns undefined for a key no role seeds, which the caller treats as "not
+ * mine to satisfy" rather than "never expires".
+ */
+export function ttlForObligation(key: ObligationKey): number | null | undefined {
+  for (const defs of Object.values(ROLE_MATRIX)) {
+    const hit = defs.find((d) => d.key === key);
+    if (hit) return hit.ttlMs;
+  }
+  return undefined;
+}
+
+/**
+ * Records a completed signature against the obligation it satisfies.
+ *
+ * This is the write that `legal_obligations` was designed for and never got:
+ * migration 025 introduced `evidence_envelope_uuid` to "point at the esign
+ * envelope", and until now only `partner_msa_v1` ever set it. Four keys —
+ * the three NDAs and the advisor disclaimer — had a real signable document, a
+ * wired template body and a working send route, and nothing wrote the result
+ * back, so they sat `pending` for the life of the account
+ * (`test/obligation_satisfiable.test.ts`).
+ *
+ * THE KEY IS RESOLVED THROUGH `templateKeyForDocType`, NEVER FROM THE RAW
+ * `document_type`. The two are not the same string for three of the four:
+ * `investor_nda_v1` ships as `investor_nda_axal`, `mentor_nda_v1` as
+ * `mentor_nda_axal`, `mentor_disclaimer_v1` as `mentor_engagement_disclaimer`.
+ * A `WHERE obligation_key = document_type` join would look correct in review
+ * and silently satisfy only `founder_nda_v1`.
+ *
+ * Idempotent, and safe to call from a poller: the `status IN ('pending',
+ * 'in_review')` guard means a second pass changes nothing, an already
+ * `satisfied` row is not re-stamped, and a `waived` row is never resurrected.
+ * It also picks up rows stranded at `in_review` by the Trust Center's Start
+ * button, which collects no evidence and leaves the row with no further action.
+ *
+ * Returns what it did so a caller can log it; never throws for an envelope it
+ * has no business with.
+ */
+export async function satisfyObligationFromEnvelope(
+  env: Env,
+  envelopeId: number,
+): Promise<{ key: ObligationKey; changed: boolean } | null> {
+  // `./legalDocTypes`, NOT `./legalTemplates`. The latter re-exports this same
+  // helper but also imports nine `.md?raw` template bodies, which only a bundler
+  // can resolve — importing it here would pull those in for a lookup that needs
+  // none of them, and would make this function unloadable under `node --test`.
+  const { templateKeyForDocType } = await import('./legalDocTypes');
+
+  const env_row: any = await env.DB.prepare(
+    `SELECT id, envelope_uuid, user_id, document_type, status
+       FROM esign_envelopes WHERE id = ?`,
+  ).bind(envelopeId).first().catch(() => null);
+  if (!env_row) return null;
+
+  // An envelope still out for signature proves nothing.
+  if (env_row.status !== 'completed' || !env_row.user_id) return null;
+
+  const key = templateKeyForDocType(env_row.document_type) as ObligationKey | null;
+  if (!key || !SATISFIABLE_BY_SIGNATURE.has(key)) return null;
+
+  const ttl = ttlForObligation(key);
+  if (ttl === undefined) return null;
+  const expiresAt = ttl === null ? null : new Date(Date.now() + ttl).toISOString();
+
+  const upd: any = await env.DB.prepare(
+    `UPDATE legal_obligations
+        SET status = 'satisfied',
+            expires_at = ?,
+            evidence_envelope_uuid = COALESCE(?, evidence_envelope_uuid),
+            updated_at = CURRENT_TIMESTAMP
+      WHERE user_id = ?
+        AND obligation_key = ?
+        AND status IN ('pending','in_review')`,
+  ).bind(expiresAt, env_row.envelope_uuid || null, env_row.user_id, key).run().catch(() => null);
+
+  return { key, changed: Boolean((upd?.meta as any)?.changes) };
 }
 
 // ---------------------------------------------------------------------------

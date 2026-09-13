@@ -26,12 +26,10 @@ import partnerMsa                     from '../templates/legal/partner_msa_v1.md
 import accreditation                  from '../templates/legal/accreditation_v1.md?raw';
 import nda3Way                        from '../templates/legal/nda_3way_founder_investor_axal_v1.md?raw';
 
-export type LegalTemplateKey =
-  | 'tos_v1' | 'privacy_v1'
-  | 'founder_nda_v1' | 'investor_nda_v1'
-  | 'mentor_nda_v1' | 'mentor_disclaimer_v1'
-  | 'partner_msa_v1' | 'accreditation_v1'
-  | 'nda_3way_founder_investor_axal_v1';
+// Defined in `./legalDocTypes` (which holds no assets) and re-exported here so
+// the key set has exactly one definition.
+import type { LegalTemplateKey } from './legalDocTypes';
+export type { LegalTemplateKey };
 
 const TEMPLATES: Record<LegalTemplateKey, string> = {
   tos_v1: tos as unknown as string,
@@ -78,30 +76,11 @@ export const ALL_TEMPLATE_KEYS: LegalTemplateKey[] = Object.keys(TEMPLATES) as L
  * cloudflare-worker/src/routes/admin_contracts.ts and the W/X/Y doc
  * type labels emitted by the wizard.
  *
- * Returns null when no Y-1 template matches; callers should fall back
- * to the legacy `buildTemplateBody` path in that case (e.g. legacy
- * `Subscription Booklet & LPA` style document_type values used by the
- * older profile flows).
+ * MOVED to `./legalDocTypes`, and re-exported here so every existing caller
+ * keeps working. The table is routing data and holds no assets; this module
+ * imports nine `.md?raw` bodies, which only a bundler can resolve, so anything
+ * needing just the mapping used to be dragged into that dependency and could not
+ * run under `node --test` at all. `satisfyObligationFromEnvelope` needs the
+ * mapping and none of the bodies.
  */
-const DOC_TYPE_TO_TEMPLATE_KEY: Record<string, LegalTemplateKey> = {
-  tos_v1:                                 'tos_v1',
-  privacy_v1:                             'privacy_v1',
-  founder_nda_v1:                         'founder_nda_v1',
-  founder_nda_axal:                       'founder_nda_v1',
-  investor_nda_axal:                      'investor_nda_v1',
-  investor_nda_v1:                        'investor_nda_v1',
-  mentor_nda_axal:                        'mentor_nda_v1',
-  mentor_nda_v1:                          'mentor_nda_v1',
-  mentor_engagement_disclaimer:           'mentor_disclaimer_v1',
-  mentor_disclaimer_v1:                   'mentor_disclaimer_v1',
-  accreditation_v1:                       'accreditation_v1',
-  partner_services:                       'partner_msa_v1',
-  partner_msa_v1:                         'partner_msa_v1',
-  nda_3way_founder_investor_axal:         'nda_3way_founder_investor_axal_v1',
-  nda_3way_founder_investor_axal_v1:      'nda_3way_founder_investor_axal_v1',
-};
-
-export function templateKeyForDocType(docType: string | null | undefined): LegalTemplateKey | null {
-  if (!docType) return null;
-  return DOC_TYPE_TO_TEMPLATE_KEY[docType] ?? null;
-}
+export { templateKeyForDocType } from './legalDocTypes';

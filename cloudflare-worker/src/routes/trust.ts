@@ -850,6 +850,30 @@ trust.post('/pairwise-ndas/:id/void', async (c) => {
 // /api/kyc. Marks the kyb_v1 obligation as `in_review` and upserts a
 // minimal `corporate_profiles` row so subsequent KYC submissions have a
 // row to attach to.
+//
+// ORPHANED ON BOTH SIDES, and a comment in the SPA says otherwise.
+// `frontend/src/pages/TrustCenterPage.jsx` claims this route "is what the KYB
+// obligation's Start action already calls through ObligationList →
+// startObligation". It is not: `startObligation` calls `api.trustObligationStart`
+// → POST /trust/obligation/:key/start, which only flips pending → in_review and
+// collects no entity evidence at all. This route — the one that does collect it —
+// has no caller: `api.startKyb` is defined in `frontend/src/lib/api.js` and
+// referenced nowhere else under `frontend/src`. (The correction belongs in that
+// file too; it is held back only because a comment-only edit under `frontend/src`
+// rebuilds the bundle byte-identically, leaving nothing to commit in `docs/` and
+// failing `check-docs-fresh --strict` in the `og-tags` job.)
+//
+// The consequence is user-visible for partners, who are seeded a REQUIRED
+// `kyb_v1` when a deal is signed (`services/partnerDeals.ts`). Start moves the
+// row to `in_review`; `ObligationList` renders no action for `in_review`, so the
+// button disappears for good; and `lib/trustCenter.js` classes `in_review` as
+// waiting on us, so the page reports nothing needs their action. Nothing is in
+// review and nobody is looking.
+//
+// Wiring this button here would collect evidence nothing can act on: `kyb_v1` has
+// no working satisfier either — `resyncKycKyb` reads a column no table defines.
+// Both are recorded, with the rest of the obligation gap, in
+// `cloudflare-worker/test/obligation_satisfiable.test.ts`.
 // ---------------------------------------------------------------------------
 trust.post('/kyb/start', async (c) => {
   const user = await requireAuth(c);
