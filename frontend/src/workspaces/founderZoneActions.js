@@ -189,19 +189,22 @@ export const FOUNDER_ZONE_ACTIONS = {
   'raise/pitch': [
     { label: 'New version', to: '/raise/pitch?mode=workspace' },
     { label: 'Export PDF', to: '/raise/pitch?mode=workspace' },
-    // THIS REASON WAS SIMPLY UNTRUE, and it is the worst kind of untrue: it
-    // named a surface and sent the reader there to do something no surface
-    // does. `api.deckShare` issues a link (`routes/decks.ts`) and NOTHING
-    // revokes one — not the deck builder, not this desk, nowhere. What
-    // limits a leaked link today is only its own expiry, and
-    // `PitchDeckPage` issues every one with `{ expires_in_hours: 24,
-    // view_limit: 1 }`, so the hover states those two facts rather than
-    // pointing anywhere. The shape a revoke would copy exists one route over
-    // — `DELETE /api/captable/shares/:id` revokes by expiring, keeping the
-    // view history attributable — and building it needs a `revoked_at`
-    // column `pitch_deck_share_tokens` has not got. That is a store change,
-    // so it is a task and not a reword.
-    { label: 'Revoke a link', unbuilt: 'nothing revokes a deck share link anywhere in the product; each one expires on its own, after 24 hours or a single view', hover: 'A deck link cannot be revoked yet — it expires on its own, after 24 hours or one view.' },
+    // THIS WAS A REFUSAL AND IS NOW A LINK — task #196 built the thing it said
+    // did not exist, so the refusal became the false statement it was written to
+    // avoid. What it used to say was accurate when written: `api.deckShare`
+    // issued a link and NOTHING revoked one, anywhere, and the only limit on a
+    // leaked link was its own expiry. It also named the shape to copy —
+    // `DELETE /api/captable/shares/:id`, which revokes by expiring so the view
+    // history stays attributable — and the `revoked_at` column
+    // `pitch_deck_share_tokens` had not got. Migration 248 adds that column,
+    // `DELETE /api/decks/:id/shares/:shareId` sets it, and the Engagement panel
+    // in the deck builder carries the Withdraw control, next to the view counts
+    // that made the gap worth closing.
+    //
+    // The link goes to the workspace rather than to a zone of its own because
+    // the control lives beside the list of links it acts on; `linkNote` says
+    // which panel, so the reader is not sent to hunt for it.
+    { label: 'Revoke a link', to: '/raise/pitch?mode=workspace', linkNote: 'Withdraw sits in the deck builder’s Engagement panel, beside the link’s view count' },
   ],
   'raise/capital': [
     { label: 'Model a round', to: '/raise/capital/model' },

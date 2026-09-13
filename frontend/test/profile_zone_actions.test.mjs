@@ -52,12 +52,22 @@ const PROFILES = {
     canvas: /^Pages · Founder /,
     buckets: /^(validate|build|grow|network|raise|research)\//,
     zones: 30,
-    // 17 → 22. Five ops that were `unbuilt` are links, because their
-    // destination exists and the reader may open it: `Send to Problem slide`
-    // on two zones, `Configure zone`, `Edit templates` and `Send for
-    // signature`. Three of the five reasons were not merely gaps — they named
+    // 17 → 22 → 23. Five ops that were `unbuilt` became links because their
+    // destination already existed and the reader may open it: `Send to Problem
+    // slide` on two zones, `Configure zone`, `Edit templates` and `Send for
+    // signature`. Three of those five reasons were not merely gaps — they named
     // a surface and were wrong about it. See the table's own comments.
-    links: 22,
+    //
+    // THE SIXTH IS A DIFFERENT CASE AND WORTH DISTINGUISHING. `Revoke a link`
+    // was accurate when written: nothing in the product revoked a deck share
+    // link, and its reason said so and named the shape a revoke would copy.
+    // Task #196 built it — migration 248's `revoked_at`, `DELETE
+    // /api/decks/:id/shares/:shareId`, and the Withdraw control in the deck
+    // builder's Engagement panel — so the refusal became false and had to
+    // follow. That is this count's real job: a control whose gap is closed
+    // elsewhere in the same change must be turned into a link in the same
+    // change, or the product ships a feature while a header still denies it.
+    links: 23,
     exports: 20,
     // Seven ops the PAGE performs: six of Validate's — three open a dialog the
     // workspace owns and three are server-side CSV downloads with a busy state —
@@ -797,8 +807,17 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     // surface in PROSE and were wrong about it:
     //
     //   "share links are revoked where they are issued, in the deck builder"
-    //       — nothing revokes a deck link anywhere. A reader sent to the deck
-    //         builder finds no such control, and never learns why.
+    //       — nothing revoked a deck link anywhere. A reader sent to the deck
+    //         builder found no such control, and never learned why.
+    //       — AND IT IS TRUE NOW, which is worth stating rather than leaving as
+    //         a comment that reads as a live fact about the product. Task #196
+    //         built the control the sentence described, in the surface the
+    //         sentence named: migration 248's `revoked_at`, `DELETE
+    //         /api/decks/:id/shares/:shareId`, and Withdraw in the deck
+    //         builder's Engagement panel. The lesson survives the fix — the
+    //         claim was unverified when written and happened to be wrong — but
+    //         a test file that exists to catch false statements must not keep
+    //         one of its own.
     //   "landing templates are chosen in the brand builder, not edited"
     //       — `/build/brand` step 3 IS a content editor for the chosen
     //         template, so the clause after the comma denied the one thing the
