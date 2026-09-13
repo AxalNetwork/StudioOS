@@ -189,6 +189,17 @@ onboarding.post('/licence', async (c) => {
   const licence = String(body.licence || '').toLowerCase();
   if (!VALID_LICENCES.has(licence)) return c.json({ error: 'invalid licence' }, 400);
 
+  // THE CONSENT IS REQUIRED, NOT OPTIONAL. This gate is the one screen every
+  // fresh signup passes whatever the auth method, so it is where acceptance of
+  // the terms and privacy policy is actually collected — `/register` is skipped
+  // entirely by Google and magic-link arrivals. Rejecting the request when the
+  // flag is absent is the point: a crafted POST must not be able to take the
+  // licence and skip the record, which would put the account back in the state
+  // this change exists to end (accepted in theory, recorded nowhere).
+  if (body.accepted_terms !== true) {
+    return c.json({ error: 'terms_acceptance_required' }, 400);
+  }
+
   await ensureExploringSchema(c.env);
   await upsertSuggestedRole(c.env, user.id, licence);
   await ensureSchema(c.env);
@@ -217,6 +228,22 @@ onboarding.post('/licence', async (c) => {
          completed_at = datetime('now'),
          updated_at = datetime('now')`
     ).bind(user.id).run();
+  }
+
+  // Record the acceptance and let the obligations follow. Deliberately AFTER the
+  // licence is stored: the obligation rows are seeded per role, so recording
+  // first could satisfy rows that the role change then prunes. Wrapped because a
+  // bookkeeping failure must not cost the person their licence choice — they
+  // would land back on this gate with no way past it. The next call reconciles.
+  try {
+    const { recordTermsAcceptance } = await import('../services/trust');
+    await recordTermsAcceptance(c.env, user.id, {
+      surface: 'onboarding_licence',
+      ip: c.req.header('cf-connecting-ip') || null,
+      ua: c.req.header('user-agent') || null,
+    });
+  } catch (e) {
+    console.warn('[onboarding] recordTermsAcceptance failed', e);
   }
 
   return c.json({ ok: true, licence, suggested_role: licence });

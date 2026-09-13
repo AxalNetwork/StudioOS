@@ -673,6 +673,94 @@ export async function satisfyObligationFromEnvelope(
   return { key, changed: Boolean((upd?.meta as any)?.changes) };
 }
 
+/**
+ * The obligations an affirmative consent click satisfies.
+ *
+ * Two, and they are the ones with no document to sign: accepting terms is a
+ * click, not a signature. Everything else stays out — `accreditation_v1` in
+ * particular is not something a checkbox can establish.
+ */
+const SATISFIABLE_BY_CLICKWRAP: ReadonlySet<ObligationKey> = new Set<ObligationKey>([
+  'tos_v1',
+  'privacy_v1',
+]);
+
+/**
+ * Records an affirmative acceptance of the terms and privacy policy.
+ *
+ * Before this existed, acceptance happened nowhere a machine could see. The only
+ * consent text in the product was passive — "By continuing you agree", in 10px
+ * under a submit button on `/register`, and on the onboarding licence gate not
+ * even that: two link labels, with the claim that continuing constitutes
+ * acceptance living in code comments rather than on screen. So `tos_v1` and
+ * `privacy_v1` sat `pending` for every account, forever, and marking them
+ * satisfied would have asserted an act nobody performed.
+ *
+ * The caller's job is to have collected a real, explicit affirmative act. This
+ * function's job is to make it durable and then let the obligation follow.
+ *
+ * TWO WRITES, IN THAT ORDER, AND THE ORDER MATTERS. `legal_acceptances` is the
+ * append-only evidence and is written first; `legal_obligations` is the mutable
+ * current status and is derived from it. If the second write fails the evidence
+ * still exists and the next call reconciles; if they were reversed a crash
+ * between them would leave an account marked compliant with nothing behind it.
+ *
+ * Idempotent for the obligation (the `status IN ('pending','in_review')` guard),
+ * but NOT for the evidence: a second genuine acceptance is a second row, which
+ * is the whole point of an append-only record.
+ */
+export async function recordTermsAcceptance(
+  env: Env,
+  userId: number,
+  ctx: { surface: string; ip?: string | null; ua?: string | null },
+): Promise<{ keys: ObligationKey[]; satisfied: number }> {
+  await ensureTrustSchema(env);
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS legal_acceptances (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       user_id INTEGER NOT NULL,
+       obligation_key TEXT NOT NULL,
+       accepted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+       surface TEXT NOT NULL,
+       ip TEXT,
+       ua TEXT
+     )`,
+  ).run().catch(() => null);
+
+  const now = new Date().toISOString();
+  const keys = [...SATISFIABLE_BY_CLICKWRAP];
+  let satisfied = 0;
+
+  for (const key of keys) {
+    await env.DB.prepare(
+      `INSERT INTO legal_acceptances (user_id, obligation_key, accepted_at, surface, ip, ua)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).bind(userId, key, now, ctx.surface, ctx.ip || null, ctx.ua || null).run();
+
+    // `ttlForObligation` is consulted rather than assumed: both keys are
+    // `ttlMs: null` today, so acceptance does not expire, and if that ever
+    // changes this follows it instead of silently granting a permanent pass.
+    const ttl = ttlForObligation(key);
+    const expiresAt = ttl === null || ttl === undefined
+      ? null
+      : new Date(Date.now() + ttl).toISOString();
+
+    const upd: any = await env.DB.prepare(
+      `UPDATE legal_obligations
+          SET status = 'satisfied',
+              expires_at = ?,
+              evidence_meta = COALESCE(evidence_meta, json_object('source','signup_clickwrap','surface',?,'accepted_at',?)),
+              updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = ?
+          AND obligation_key = ?
+          AND status IN ('pending','in_review')`,
+    ).bind(expiresAt, ctx.surface, now, userId, key).run().catch(() => null);
+    if ((upd?.meta as any)?.changes) satisfied += 1;
+  }
+
+  return { keys, satisfied };
+}
+
 // ---------------------------------------------------------------------------
 // Trust Center v2 — provenance, the score, and its history.
 // ---------------------------------------------------------------------------
@@ -705,6 +793,10 @@ export function obligationSource(row: any): string | null {
   const LABEL: Record<string, string> = {
     kyc_provider: 'Synced from identity verification',
     kyb_provider: 'Synced from entity verification',
+    // Written by `recordTermsAcceptance`. Named rather than left to the fallback
+    // because "Synced from signup clickwrap" reads like a system import of
+    // somebody else's record, and this is the person's own act.
+    signup_clickwrap: 'Accepted at signup',
   };
   return LABEL[src] || `Synced from ${src.replace(/_/g, ' ')}`;
 }
