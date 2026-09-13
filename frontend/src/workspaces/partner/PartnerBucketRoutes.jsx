@@ -152,11 +152,28 @@ function Loading() {
  * licences could do. The marketplace itself is still at `/needs`, and the
  * zone's empty state links there.
  *
- * `embedded` suppresses each page's own heading block — the shell above has
- * already drawn the crumb, the h1 and the zone pills. It deliberately does NOT
- * suppress their tab rows: Browse / My quotes / Engagements and Perks / My
- * perks / My listings are views WITHIN a zone, not sibling zones, so they are
- * this page's controls rather than a second copy of the navigation.
+ * `embedded` MAKES EACH PAGE RENDER ITS ZONE AND NOTHING ELSE — no heading
+ * block of its own, because the shell above has already drawn the crumb, the h1
+ * and the zone pills, and no tab row either.
+ *
+ * The second half of that is a reversal. What stood here was: "It deliberately
+ * does NOT suppress their tab rows: Browse / My quotes / Engagements and Perks /
+ * My perks / My listings are views WITHIN a zone, not sibling zones, so they are
+ * this page's controls rather than a second copy of the navigation." The test it
+ * applied was whether a tab row is navigation or a control. The test that
+ * settles it is what the tabs select BETWEEN: Browse catalogue is every other
+ * firm's offerings, My perks is what this reader redeemed, Review queue is admin
+ * moderation, Stripe Connect is payouts. None is a view of "what this firm
+ * sells" or "this firm's own perk listings" — they are different subjects that
+ * share a component, and each keeps its own route (`/services`, `/perks`).
+ *
+ * The artboards agree and are the contract: PO1 and PO2 in `design/canvases/
+ * integrated/Pages · Partner Offers.dc.html` each declare one `filters` row and
+ * one `ops` row, which is the `ZoneToolbar` these tables already supply, and no
+ * tab row anywhere. And the cost was not cosmetic — `ServiceCatalogPage` starts
+ * on its `mine` tab only when `isPartner`, so every admin opening
+ * /offers/catalog got the public marketplace grid under the Catalog heading and
+ * never saw the LEDGER body at all.
  *
  * `PartnerEngagements` takes no `embedded`, and that is deliberate rather than
  * an oversight: it draws no heading and no rail of its own — its host has
