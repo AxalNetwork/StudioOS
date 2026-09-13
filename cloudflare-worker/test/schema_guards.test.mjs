@@ -351,18 +351,22 @@ test('the worker INSERTs, UPDATEs and SELECTs no column that does not exist', ()
   // gate; this keeps the property visible in the test suite too. Covers both
   // INSERT lists, UPDATE SET clauses, single-table SELECT lists, qualified
   // join references and single-table predicates.
-  // TWO reviewed gaps remain on record, and the second set arrived by the guard
-  // getting SHARPER rather than by new code being written.
+  // ONE reviewed gap remains on record: `corporate_profiles.kyb_status`, where
+  // nothing writes a KYB decision at all, so a column would not help.
   //
-  //   * `corporate_profiles.kyb_status` — nothing writes a KYB decision at all,
-  //     so a column would not help.
-  //   * the six `metrics_snapshots.*` — that name covers two different tables.
-  //     Production's is a DEAL metrics table (schema_baseline.sql:2994, created
-  //     at runtime by routes/pipeline.ts:54); services/queueWorker.ts reads and
-  //     writes a generic metric series, which is the retired
-  //     sql/historical/infrastructure.sql shape. The traction_review job is dead
-  //     end to end as a result. Recorded rather than renamed: the two uses want
-  //     different tables, not different column names.
+  // SIX `metrics_snapshots.*` ENTRIES WERE HERE AND ARE GONE, which is what
+  // closing a gap looks like in this file. That name covered two different
+  // tables: production's is a DEAL metrics table (created at runtime by
+  // `routes/pipeline.ts`), while `services/queueWorker.ts` read and wrote a
+  // generic metric series — the retired `sql/historical/infrastructure.sql`
+  // shape. Three jobs threw `no such column` as a result, and the sharpest was
+  // `liquidity_valuation`, which died before `Listings.updateValuation` and left
+  // a secondary listing showing "— pending" forever.
+  //
+  // Task #183 repointed all three at stores that already existed — the per-deal
+  // review to `metrics_snapshots.ai_review`, the global counter to
+  // `system_metrics` — so the six names are no longer written anywhere and their
+  // baseline lines are deleted. No new table and no migration.
   //
   // They were invisible until `knownColumns()` stopped unioning `sql/historical/`
   // into its harvest — that folder's own README says nothing builds from it, but
@@ -372,16 +376,11 @@ test('the worker INSERTs, UPDATEs and SELECTs no column that does not exist', ()
   // table has never had, and answered `D1_ERROR: no such column` to every
   // partner while this assertion was green.
   //
-  // Still an exact match, so a NEW unknown column fails here as before.
+  // Still an exact match, so a NEW unknown column fails here as before — and so
+  // does a re-added `metrics_snapshots.scope`.
   const unknown = [...unknownColumns().keys()].sort();
   assert.deepEqual(unknown, [
     'corporate_profiles.kyb_status',
-    'metrics_snapshots.captured_at',
-    'metrics_snapshots.extra',
-    'metrics_snapshots.metric_name',
-    'metrics_snapshots.scope',
-    'metrics_snapshots.scope_id',
-    'metrics_snapshots.value',
   ], `unexpected: ${unknown.join(', ')}`);
 });
 

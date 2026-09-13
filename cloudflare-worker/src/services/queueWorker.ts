@@ -22,6 +22,9 @@ import { Listings, Matches } from '../models/liquidity';
 import { Funds } from '../models/funds';
 import { Distributions } from '../models/distributions';
 import { insertCapitalCalls } from '../routes/_capital_call_writes';
+import {
+  recentSnapshots, metricPointsFrom, recordReview, latestMomentum,
+} from './tractionSnapshots';
 
 async function meter(env: Env, jobType: string, status: 'completed' | 'failed', latency: number) {
   try {
@@ -87,15 +90,35 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       return;
     }
     case 'traction_review': {
-      const snaps = await env.DB.prepare(
-        `SELECT metric_name, value, captured_at FROM metrics_snapshots
-         WHERE scope = 'project' AND scope_id = ? ORDER BY captured_at DESC LIMIT 30`
-      ).bind(payload.project_id).all<{ metric_name: string; value: number; captured_at: string }>();
-      const result = await aiTractionReview(env, { project_id: payload.project_id, snapshots: snaps.results || [] });
-      await env.DB.prepare(
-        `INSERT INTO metrics_snapshots (scope, scope_id, metric_name, value, extra)
-         VALUES ('project', ?, 'ai_momentum', ?, ?)`
-      ).bind(payload.project_id, result.momentum, JSON.stringify(result)).run();
+      // WAS DEAD END TO END against the generic-series shape `metrics_snapshots`
+      // does not have — `SELECT metric_name, value, captured_at … WHERE scope =
+      // 'project'` threw `no such column` before the AI ever ran, and the INSERT
+      // after it threw too. See `services/tractionSnapshots.ts` for the whole
+      // story and for why the review lands on `ai_review` rather than in a new
+      // table or on `traction_score`.
+      const projectId = Number(payload.project_id);
+      if (!projectId) throw new Error('missing project_id');
+      const rows = await recentSnapshots(env, projectId);
+      const snapshots = metricPointsFrom(rows);
+      const result = await aiTractionReview(env, { project_id: projectId, snapshots });
+      // NOTHING TO ANNOTATE IS NOT A FAILURE. A venture whose metrics nobody has
+      // entered has no snapshot to carry a review, and throwing here would put
+      // the job back to `pending` to fail again on every retry for as long as the
+      // venture stays un-measured.
+      if (!rows.length) {
+        console.warn(`[queueWorker] traction_review: project ${projectId} has no metrics snapshot to review`);
+        return;
+      }
+      await recordReview(env, rows[0].id, {
+        momentum: result.momentum,
+        trend: result.trend,
+        summary: result.summary,
+        reviewed_at: new Date().toISOString(),
+        // The count the review was actually based on. `aiTractionReview` returns
+        // `momentum: 0` with "No metrics captured yet" for an empty input, and a
+        // reader cannot otherwise tell that zero from a genuine zero.
+        points: snapshots.length,
+      });
       return;
     }
     case 'spinout_processing': {
@@ -149,14 +172,29 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       return;
     }
     case 'metrics_aggregation': {
-      // Roll up project metrics into a global snapshot (lightweight example).
+      // Roll up project metrics into a global counter.
+      //
+      // WRITES `system_metrics`, NOT `metrics_snapshots`. The old INSERT named
+      // `scope, scope_id, metric_name, value` on a DEAL metrics table and threw
+      // `no such column`, so this counter has never once been recorded. A global
+      // figure has no `deal_id` and never belonged in that table — and the
+      // generic named series it wanted already exists as `system_metrics`
+      // (`metric_name, value, labels`), which `meter()` twenty lines up writes to
+      // on every job and `analyticsReports.ts` reads in five places.
+      //
+      // Safe to add a name there: every existing read filters
+      // `metric_name = 'request'`, so `projects_24h` rows pollute nothing. The
+      // `labels` JSON carries the window so a reader is never guessing what "24h"
+      // was measured from.
       const totals = await env.DB.prepare(
         `SELECT COUNT(*) as n FROM projects WHERE created_at > datetime('now','-1 day')`
       ).first<{ n: number }>();
       await env.DB.prepare(
-        `INSERT INTO metrics_snapshots (scope, scope_id, metric_name, value)
-         VALUES ('global', NULL, 'projects_24h', ?)`
-      ).bind(totals?.n ?? 0).run();
+        `INSERT INTO system_metrics (metric_name, value, labels) VALUES ('projects_24h', ?, ?)`
+      ).bind(totals?.n ?? 0, JSON.stringify({
+        window: '24h',
+        trigger: typeof payload.trigger === 'string' ? payload.trigger : null,
+      })).run();
       return;
     }
     case 'liquidity_valuation': {
@@ -171,10 +209,18 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
         `SELECT total_score FROM score_snapshots WHERE project_id = ?
          ORDER BY id DESC LIMIT 1`
       ).bind(sub?.deal_id ?? 0).first();
-      const momentum: any = await env.DB.prepare(
-        `SELECT value FROM metrics_snapshots WHERE scope='project' AND scope_id=? AND metric_name='ai_momentum'
-         ORDER BY id DESC LIMIT 1`
-      ).bind(sub?.deal_id ?? 0).first();
+      // THE SHARPEST CONSEQUENCE OF THE COLLISION WAS HERE, not in the job the
+      // task was filed about. This read named `scope`, `scope_id`, `metric_name`
+      // and `value` — four columns `metrics_snapshots` does not have — and it sits
+      // BEFORE `Listings.updateValuation`, with no catch between. So the whole
+      // valuation job threw: a founder listed a subsidiary for sale,
+      // `ai_valuation_cents` stayed NULL, and `LiquidityPage.jsx:562` rendered
+      // "— pending" for that listing forever.
+      //
+      // `latestMomentum` reads it out of the review JSON and returns null rather
+      // than throwing on a row it cannot parse — because a valuation that dies on
+      // a malformed annotation is the failure this line already caused once.
+      const momentum = await latestMomentum(env, Number(sub?.deal_id ?? 0));
       const result = await aiValueAsset(env, {
         subsidiary_id: subId,
         subsidiary_name: sub?.subsidiary_name,
@@ -182,7 +228,7 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
         sector: sub?.sector,
         stage: sub?.stage,
         total_score: lastScore?.total_score,
-        momentum: momentum?.value,
+        momentum: momentum ?? undefined,
       });
       await Listings.updateValuation(env, listingId, result.valuation_cents);
       return;

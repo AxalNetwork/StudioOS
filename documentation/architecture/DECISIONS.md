@@ -5440,3 +5440,102 @@ and nothing writes a lane transition, so there is no history to read. That is a
 store this product does not have, not a query it forgot to write — the opposite
 of the three above — and a product question (what is a verdict snapshot *of*?)
 rather than an engineering one.
+
+## D86 — Two shapes under one name, and both already had homes
+
+**Task #183.** `metrics_snapshots` was two different tables. Production's is a
+DEAL metrics table — `deal_id, snapshot_date, key_metrics, traction_score,
+ai_review, created_by` plus ten named metric columns — and `routes/pipeline.ts`
+creates exactly that at runtime, so it is the one that exists.
+`services/queueWorker.ts` read and wrote a GENERIC METRIC SERIES (`scope,
+scope_id, metric_name, value, captured_at, extra`), which only
+`sql/historical/infrastructure.sql` ever declared, and nothing has built from
+`historical/` since the migration ledger became the build path.
+
+The collision was invisible until `check-sqlite-columns.mjs` stopped unioning
+`historical/` into its harvest. Before that, the two shapes merged into one
+17-column set that satisfied both queries.
+
+### What it cost, and the worst of it was not in the task title
+
+Three queue jobs threw `no such column`:
+
+- **`traction_review`** died on its first SELECT, so the AI never ran and no
+  review was ever written. This is the one the task was filed about.
+- **`metrics_aggregation`** died on its INSERT, so a counter that has existed for
+  as long as the job has was never recorded once.
+- **`liquidity_valuation`** died reading a momentum nothing had written — and it
+  dies **before** `Listings.updateValuation`, with no catch between. So a founder
+  lists a subsidiary for sale, `secondary_listings.ai_valuation_cents` stays NULL,
+  and `LiquidityPage.jsx:562` renders **"— pending" for that listing forever**.
+  A broken metric series turned into a marketplace that never prices anything.
+
+### The decision: no new table, because both shapes already had homes
+
+The task suggested a `metric_series` table or dropping the job. Neither was
+needed once the question was asked per-use rather than per-name:
+
+- **The per-deal AI review goes in `metrics_snapshots.ai_review`** — a TEXT
+  column that has existed since the baseline with **no writer and no reader
+  anywhere**. It is named for exactly this, and the momentum rides inside its
+  JSON.
+- **The global counter goes in `system_metrics`** (`metric_name, value, labels`),
+  which IS the generic named series this repo already has: `meter()` in
+  `queueWorker.ts` writes to it on every job and `analyticsReports.ts` reads it in
+  five places. Safe to add a name there because every existing read filters
+  `metric_name = 'request'`.
+
+`services/tractionSnapshots.ts` is the one place that knows this, so the three
+jobs cannot drift about where a traction review lives.
+
+### `traction_score` is deliberately not touched, and this is the load-bearing part
+
+That column is a **0-100 rule-based** score computed by `pipeline.ts` from
+users/revenue/engagement/growth, and `POST /pipeline/decision-gate/review`
+branches on it at **70** and **40**. `aiTractionReview` returns momentum on
+**0-10**.
+
+Writing one into the other is the exact trap the `ai_scoring` job's own comment
+already refuses — *"correcting the names would have started mixing the two
+instruments instead"* — and the consequence here is worse than a wrong number on a
+dashboard: every AI-reviewed venture would read as "iterate" at the gate that
+decides whether it spins out. A mutation that makes `recordReview` also write
+`traction_score` fails the suite.
+
+### A review annotates a measurement, so it is an UPDATE
+
+A new row per review would be a snapshot with all ten metrics NULL. That pollutes
+the series the next review reads and drags `pipeline.ts`'s "latest snapshot" reads
+onto a row carrying no metrics. So the review UPDATEs the snapshot it reviewed,
+which also makes it **idempotent by construction** — and it needs to be, because
+`Jobs.markFailed` puts the same row back to `pending` and the CF Queue consumer
+deletes its idempotency claim in the failure branch on purpose. A retry overwrites
+one column on one row. There is nothing to double.
+
+Two guards fall out of that, both asserted: a `traction_review` for a project with
+no snapshot returns instead of throwing (throwing would retry forever on a venture
+nobody has measured), and a missing `project_id` throws instead of returning
+(reviewing nothing quietly is how the original bug stayed silent).
+
+### Absent is not empty, where it reaches a model
+
+`metricPointsFrom` skips NULL metrics rather than sending zero. `net_burn=0` in a
+prompt is a statement about the venture that nobody made, and a model cannot tell
+it from a real zero burn. The first draft got the `key_metrics` branch wrong —
+`Number(null)` is `0` and `Number('')` is `0`, both `Number.isFinite` — so a field
+the founder left blank reached the prompt as `growth=0`, in the same function whose
+docblock forbids exactly that. Its own test caught it. The same rule reaches a
+price: `aiValueAsset` renders an absent momentum as `n/a`, and an asserted test
+keeps it from becoming `0`.
+
+### What is still on record, and why
+
+`scripts/sqlite-columns-baseline.json`'s six `metrics_snapshots.*` lines are
+**deleted** — the guard fails on an entry that has since been created, so the
+ledger cannot go stale, and the matching assertion in `schema_guards.test.mjs`
+shrank with it.
+
+`sqlite-table-collisions-baseline.json`'s entry **stays**, with its text
+corrected. The DDL files still disagree: `sql/infrastructure.sql` declares a shape
+nothing builds from and now nothing writes. That is a documentation collision
+rather than a live one, and retiring the file is its own small task.
