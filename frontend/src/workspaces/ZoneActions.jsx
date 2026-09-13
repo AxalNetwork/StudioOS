@@ -25,12 +25,15 @@ import { Link } from 'react-router-dom';
  * export, and promoting "New hypothesis" to a filled button would invent a
  * distinction the canvases deliberately do not draw. Hence one variant here.
  *
- * NO UNDECLARED TOKENS. `axal-ink-2`, `axal-ink-3`, `axal-surface-2` and
- * `axal-border-soft` are used ~400 times across `pages/` and `workspaces/` and
- * are declared nowhere — they emit no CSS. The declared set is in
- * `src/index.css`'s `@theme` block. This component uses Tailwind's own greys
- * instead, which `scripts/check-dark-mode.mjs` also knows how to require a
- * dark counterpart for.
+ * TAILWIND GREYS, AND THE REASON HAS CHANGED. `axal-ink-2`, `axal-ink-3`,
+ * `axal-surface-2` and `axal-border-soft` were used ~400 times while declared in no `@theme` block, so they emitted no
+ * CSS at all. All 575 such utilities have since been consolidated onto the
+ * declared neutrals — `axal-muted`, `-faint`, `-ground`, `-hairline` — and those
+ * spellings no longer appear in the tree. The greys here stay: the `index.css`
+ * auto-skin now pairs both vocabularies, so neither is the safer one and
+ * rewriting these would be churn. `scripts/check-dark-mode.mjs`
+ * knows how to require a dark counterpart for the greys, which is why they were
+ * the safe choice at the time.
  *
  * AN ACTION THAT CANNOT RUN IS NOT DRAWN AT ALL. This repo has shipped the
  * other thing — Trust Center's KYB form posted to a route the worker never

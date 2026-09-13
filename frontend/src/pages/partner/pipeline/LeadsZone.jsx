@@ -88,7 +88,7 @@ function LeadCard({ row, busy, onPass, note }) {
   return (
     <div className={`rounded-[11px] border p-4 ${
       row.excluded_by
-        ? 'border-axal-hairline bg-axal-surface-2 dark:border-gray-700 dark:bg-gray-900'
+        ? 'border-axal-hairline bg-axal-ground dark:border-gray-700 dark:bg-gray-900'
         : (strong
           ? 'border-amber-200 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/15'
           : 'border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900')
@@ -103,10 +103,10 @@ function LeadCard({ row, busy, onPass, note }) {
             {/* PROVENANCE, and there is one kind of it on this build. */}
             <Pill tone="seam">{row.source_label}</Pill>
             {row.days_old != null && (
-              <span className="text-[11px] text-axal-ink-3">{row.days_old}d ago</span>
+              <span className="text-[11px] text-axal-faint">{row.days_old}d ago</span>
             )}
           </div>
-          <p className="mt-1 text-[12.5px] leading-relaxed text-axal-ink-2">
+          <p className="mt-1 text-[12.5px] leading-relaxed text-axal-muted">
             {row.title}
             {/* DOLLARS STRAIGHT THROUGH. `founder_needs.budget_*` is the old
                 REAL-dollars pipeline and `moneyDollars` formats dollars, so a
@@ -118,7 +118,7 @@ function LeadCard({ row, busy, onPass, note }) {
             {row.timeline && ` · ${row.timeline}`}
           </p>
           {row.need && (
-            <p className="mt-1 text-[12px] leading-relaxed text-axal-ink-3">{row.need}</p>
+            <p className="mt-1 text-[12px] leading-relaxed text-axal-faint">{row.need}</p>
           )}
         </div>
         <div className="text-right">
@@ -136,7 +136,7 @@ function LeadCard({ row, busy, onPass, note }) {
                   {row.score}
                 </span>
               ))}
-          <div className="text-[10px] font-semibold uppercase tracking-[.07em] text-axal-ink-3">match</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[.07em] text-axal-faint">match</div>
         </div>
       </div>
 
@@ -150,10 +150,10 @@ function LeadCard({ row, busy, onPass, note }) {
         </div>
       )}
       {row.excluded_by && (
-        <p className="mt-2 text-[11.5px] leading-relaxed text-axal-ink-2">{row.excluded_by}</p>
+        <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">{row.excluded_by}</p>
       )}
       {row.score_note && (
-        <p className="mt-2 text-[11.5px] leading-relaxed text-axal-ink-2">{row.score_note}</p>
+        <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">{row.score_note}</p>
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -166,7 +166,7 @@ function LeadCard({ row, busy, onPass, note }) {
       </div>
 
       {passing && (
-        <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
+        <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
           <div className="grid gap-3 md:grid-cols-2">
             <Field label="Reason" hint="A pass without one is a lead you read again next quarter.">
               <select className={inputClass} value={draft.reason}
@@ -321,7 +321,7 @@ export default function PartnerLeadsZone() {
           </div>
 
           {d?.scoring === 'none' && (
-            <p className="text-[12.5px] leading-relaxed text-axal-ink-2">{d.scoring_note}</p>
+            <p className="text-[12.5px] leading-relaxed text-axal-muted">{d.scoring_note}</p>
           )}
 
           {view !== 'passed' && (
@@ -341,7 +341,7 @@ export default function PartnerLeadsZone() {
                 />
               ))}
               {items.length > 0 && visible.length === 0 && (
-                <p className="text-[12px] text-axal-ink-2">
+                <p className="text-[12px] text-axal-muted">
                   No lead is in this state. {items.length} open in total.
                 </p>
               )}

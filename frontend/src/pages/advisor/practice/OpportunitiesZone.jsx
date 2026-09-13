@@ -187,7 +187,7 @@ export default function OpportunitiesZone() {
           blurb="Sorted by what reaches its slot first, not by what arrived first."
         />
         {queue.length === 0
-          ? <p className="text-[12.5px] leading-relaxed text-axal-ink-2">Nothing is waiting on you. Requests appear here while they are still answerable — once a slot has started, an unanswered request moves to the log below as expired.</p>
+          ? <p className="text-[12.5px] leading-relaxed text-axal-muted">Nothing is waiting on you. Requests appear here while they are still answerable — once a slot has started, an unanswered request moves to the log below as expired.</p>
           : <ul className="space-y-2">{queue.map((r) => (
             <li key={r.raw.id} data-testid={`row-pr1-awaiting-${r.raw.id}`}
               className="rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
@@ -197,8 +197,8 @@ export default function OpportunitiesZone() {
                     <strong className="text-[13px] font-extrabold tracking-tight">{r.counterpartyName || 'Requester not recorded'}</strong>
                     <Pill tone="neutral">Founder</Pill>
                   </div>
-                  <p className="mt-1 text-[12.5px] leading-relaxed text-axal-ink-2">{r.raw.topic || r.note || 'No question was written with the request.'}</p>
-                  <p className="mt-1 text-[11px] text-axal-ink-3">
+                  <p className="mt-1 text-[12.5px] leading-relaxed text-axal-muted">{r.raw.topic || r.note || 'No question was written with the request.'}</p>
+                  <p className="mt-1 text-[11px] text-axal-faint">
                     Arrived {formatDateTime(r.raw.created_at)} · slot {r.startsAt ? formatDateTime(r.startsAt) : 'not recorded'}
                   </p>
                 </div>
@@ -211,12 +211,12 @@ export default function OpportunitiesZone() {
               </div>
               {declining === r.raw.id && (
                 <div className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-700">
-                  <label className="block text-[11px] font-extrabold uppercase tracking-[.05em] text-axal-ink-3">
+                  <label className="block text-[11px] font-extrabold uppercase tracking-[.05em] text-axal-faint">
                     Why, in your words
                     <input className={`${inputClass} mt-1`} value={reason} onChange={(e) => setReason(e.target.value)}
                       placeholder="Wanted implementation, not advice" />
                   </label>
-                  <p className="mt-1.5 text-[11px] leading-relaxed text-axal-ink-3">
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-axal-faint">
                     The reason is stored on the request and shown in the log below. A decline with a
                     reason keeps the relationship; the artboard&rsquo;s point is that saying nothing does not.
                   </p>
@@ -234,21 +234,21 @@ export default function OpportunitiesZone() {
           blurb={`${history.length} request${history.length === 1 ? '' : 's'} past the point of decision${filter === 'all' || filter === 'awaiting' ? '' : ` · showing ${visible.length}`}`}
         />
         {visible.length === 0
-          ? <p className="text-[12.5px] leading-relaxed text-axal-ink-2">{filter === 'awaiting'
+          ? <p className="text-[12.5px] leading-relaxed text-axal-muted">{filter === 'awaiting'
             ? 'Requests still awaiting a decision are in the queue above. This log holds only what is past the point of decision, which is why selecting that view empties it.'
             : 'No request sits under this view.'}</p>
           : <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-[12px]">
-            <thead><tr className="text-left text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-ink-3">
+            <thead><tr className="text-left text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint">
               <th className="pb-2">Requester</th><th className="pb-2">Decision</th><th className="pb-2">When</th><th className="pb-2">Reason</th>
             </tr></thead>
             <tbody>{visible.map((r) => (
               <tr key={r.raw.id} data-testid={`row-pr1-history-${r.raw.id}`} className="border-t border-axal-hairline dark:border-gray-700">
                 <td className="py-2 pr-3 font-semibold">{r.counterpartyName || 'Requester not recorded'}</td>
                 <td className="py-2 pr-3"><Pill tone={VIEW_TONE[r.bucket]}>{VIEW_LABEL[r.bucket]}</Pill>
-                  {r.raw.status === 'no_show' && <span className="mt-1 block text-[10.5px] text-axal-ink-3">Accepted, then recorded a no-show</span>}
+                  {r.raw.status === 'no_show' && <span className="mt-1 block text-[10.5px] text-axal-faint">Accepted, then recorded a no-show</span>}
                 </td>
-                <td className="py-2 pr-3 text-axal-ink-2">{r.raw.updated_at ? formatDateTime(r.raw.updated_at) : <Unrecorded />}</td>
-                <td className="py-2 text-axal-ink-2">{
+                <td className="py-2 pr-3 text-axal-muted">{r.raw.updated_at ? formatDateTime(r.raw.updated_at) : <Unrecorded />}</td>
+                <td className="py-2 text-axal-muted">{
                   r.bucket === 'expired' ? 'Never answered. The slot passed.'
                     : r.bucket === 'withdrawn' ? (r.raw.cancel_reason === 'capacity_race' ? 'The last seat went to someone else.' : 'You withdrew the whole slot.')
                       : r.raw.cancel_reason || <Unrecorded>No reason recorded</Unrecorded>
@@ -264,9 +264,9 @@ export default function OpportunitiesZone() {
           blurb="Your stored service definitions — what you offer, and on what terms."
         />
         {state.servicesUnavailable
-          ? <p className="text-[12.5px] leading-relaxed text-axal-ink-2">Your service definitions could not be read. That is not a claim that you have none.</p>
+          ? <p className="text-[12.5px] leading-relaxed text-axal-muted">Your service definitions could not be read. That is not a claim that you have none.</p>
           : state.services.length === 0
-            ? <p className="text-[12.5px] leading-relaxed text-axal-ink-2">No service is defined yet. Expertise &rsaquo; Services is where they are written, and they appear here once they are.</p>
+            ? <p className="text-[12.5px] leading-relaxed text-axal-muted">No service is defined yet. Expertise &rsaquo; Services is where they are written, and they appear here once they are.</p>
             : <ul className="space-y-2">{state.services.map((s) => (
               <li key={s.uid || s.id} data-testid={`row-pr1-template-${s.uid || s.id}`}
                 className="rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
@@ -275,8 +275,8 @@ export default function OpportunitiesZone() {
                   <Pill tone="neutral">{KIND_LABEL[s.kind] || s.kind}</Pill>
                   <span className="ml-auto text-[12px] font-semibold tabular-nums">{s.price_cents == null ? <Unrecorded>Price not recorded</Unrecorded> : money(s.price_cents, s.currency)}</span>
                 </div>
-                <p className="mt-1 text-[12px] leading-relaxed text-axal-ink-2">{s.scope || 'No scope is written for this service.'}</p>
-                {s.duration_note && <p className="mt-1 text-[11px] text-axal-ink-3">{s.duration_note}</p>}
+                <p className="mt-1 text-[12px] leading-relaxed text-axal-muted">{s.scope || 'No scope is written for this service.'}</p>
+                {s.duration_note && <p className="mt-1 text-[11px] text-axal-faint">{s.duration_note}</p>}
               </li>
             ))}</ul>}
       </Card>
@@ -319,9 +319,9 @@ export default function OpportunitiesZone() {
 function Stat({ label, value, note }) {
   return (
     <Card padding="md">
-      <div className="text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-ink-3">{label}</div>
+      <div className="text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint">{label}</div>
       <div className="mt-1.5 text-[22px] font-extrabold leading-none tracking-tight tabular-nums">{value}</div>
-      <div className="mt-1.5 text-[11px] leading-relaxed text-axal-ink-3">{note}</div>
+      <div className="mt-1.5 text-[11px] leading-relaxed text-axal-faint">{note}</div>
     </Card>
   );
 }

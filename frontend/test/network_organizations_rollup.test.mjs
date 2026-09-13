@@ -240,10 +240,20 @@ test('the zone is mounted for a partner, and the gap card is kept for a licence 
   assert.match(workspace, /<PartnerNetworkOrganizations/, 'the zone body is not mounted');
   // ADVISOR IS STILL OUT, and for the reason it always was: 403'd from
   // `/api/contacts`, with no book of its own to group.
-  assert.match(workspace, /const ORG_BACKED = new Set\(\['founder', 'investor', 'partner'\]\)/,
+  // READ FROM THE ONE DEFINITION, NOT FROM THIS FILE'S COPY OF IT. Asserting the
+  // literal here is how the drift lived: `boards/network.js` held a SECOND
+  // `ORG_BACKED` saying `{founder, investor}`, so the partner `/network` root
+  // printed "Organizations reads nothing on this licence" over this very zone —
+  // the one the two assertions above prove is mounted. Two pins guarded the copy
+  // that was right and none compared them. The set now lives in `noStoreCopy.js`
+  // and both consumers import it.
+  const sharedCopy = read('frontend/src/workspaces/noStoreCopy.js');
+  assert.match(sharedCopy, /export const ORG_BACKED = new Set\(\['founder', 'investor', 'partner'\]\)/,
     'the set of licences with an Organizations body has changed');
-  assert.ok(!/ORG_BACKED = new Set\(\[[^\]]*'advisor'/.test(workspace),
+  assert.ok(!/ORG_BACKED = new Set\(\[[^\]]*'advisor'/.test(sharedCopy),
     'an advisor has been told this zone is covered');
+  assert.ok(!/(const|let|var)\s+ORG_BACKED\s*=/.test(workspace),
+    'NetworkWorkspace declares its own ORG_BACKED again — that is the drift this removed');
 });
 
 test('the four chips and the ops row are live, and the "never" note was rewritten', () => {

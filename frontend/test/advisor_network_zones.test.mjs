@@ -117,9 +117,6 @@ test('the Network rail never claims read-only over a body that writes', () => {
   // relationship — a company name as text with no organization record behind
   // it, which is precisely what the `pn3` artboard reports. Advisor is still
   // out: 403'd from `/api/contacts`, with no book of its own.
-  assert.match(code, /const ORG_BACKED = new Set\(\['founder', 'investor', 'partner'\]\)/);
-  assert.ok(!/ORG_BACKED = new Set\(\[[^\]]*'advisor'/.test(code),
-    'an advisor has no store to roll up and must keep the gap card');
   assert.match(code, /orgGap\s*\?\s*'Organizations · no store behind it on this licence'/,
     'a licence with no organisation store must not be told the zone is covered');
 });
@@ -366,4 +363,41 @@ test('`chromeless` is not `embedded`, and the difference is load-bearing', () =>
     'Research · Companies must ask for the layout flag, not the lock');
   assert.doesNotMatch(cmount[0], /\bembedded\b/,
     'Research · Companies must not lock the analysis to a startup it was not handed');
+});
+
+test('ORG_BACKED has one definition, and both consumers decide with it', () => {
+  // ITS OWN TEST, BECAUSE A FAILURE SHOULD SAY WHY. These assertions first went
+  // into the rail test above, so breaking the consolidation reported "the Network
+  // rail never claims read-only over a body that writes" — true of the file, and
+  // nothing to do with the defect. Failing for the wrong reason is how a guard
+  // stops being read.
+  const code = codeOnly(netWorkspace);
+
+  // ONE DEFINITION, ASSERTED AS ONE. This used to read the literal out of
+  // `NetworkWorkspace`, which is exactly how the drift survived: a second copy
+  // in `boards/network.js` said `{founder, investor}`, so the partner
+  // `/network` root printed "Organizations reads nothing on this licence" over a
+  // zone that groups real rows — while that file's docblock claimed it was "the
+  // same set the zone body and the rail already consult". Nothing compared them.
+  // Now the set lives in `noStoreCopy.js` and both import it, and the assertion
+  // is that there is nothing left to compare.
+  const copy = codeOnly(read('frontend/src/workspaces/noStoreCopy.js'));
+  const board = codeOnly(read('frontend/src/workspaces/boards/network.js'));
+  assert.match(copy, /export const ORG_BACKED = new Set\(\['founder', 'investor', 'partner'\]\)/,
+    'the shared ORG_BACKED set moved or changed shape');
+  assert.ok(!/ORG_BACKED = new Set\(\[[^\]]*'advisor'/.test(copy),
+    'an advisor has no store to roll up and must keep the gap card');
+  for (const [name, text] of [['NetworkWorkspace.jsx', code], ['boards/network.js', board]]) {
+    assert.ok(!/(const|let|var)\s+ORG_BACKED\s*=/.test(text),
+      `${name} declares its own ORG_BACKED again — that is the drift this consolidation removed`);
+    // THE USE, NOT THE MENTION. Asserting only that `ORG_BACKED` appears let a
+    // mutation through: a local `const LOCAL = new Set(['founder','investor'])`
+    // driving `orgHasStore` passed, because the imported name still sat in the
+    // import line. What must be true is that the decision is COMPUTED from the
+    // shared set, so the membership test itself is what gets asserted.
+    assert.match(text, /ORG_BACKED\.has\(/,
+      `${name} imports the shared set but does not decide with it`);
+    assert.match(text, /from '\.\.?\/noStoreCopy(\.js)?'/,
+      `${name} must import the shared set rather than restate it`);
+  }
 });

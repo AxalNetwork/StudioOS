@@ -189,7 +189,7 @@ export default function ProfileZone() {
           {/* Canvas completeness meter — computed from the fields, not asserted. */}
           <Card padding="lg">
             <div className="flex flex-wrap items-baseline justify-between gap-3">
-              <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+              <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
                 Profile completeness · what every match surface reads
               </span>
               <span className="text-[13px] font-extrabold text-emerald-700 tabular-nums">
@@ -211,7 +211,7 @@ export default function ProfileZone() {
                 ))}
               </div>
             )}
-            <p className="mt-2 text-[11px] leading-relaxed text-axal-ink-3">
+            <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
               The meter counts only fields a match surface actually reads. Availability window is the costly gap: without it, a founder browsing the cohort surface cannot tell whether this practice takes new work this month.
             </p>
           </Card>
@@ -274,18 +274,18 @@ export default function ProfileZone() {
         </div>
 
         <Card variant="sunken" padding="lg">
-          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             As a founder sees it
           </div>
           <div className="mt-3 flex items-start gap-3">
             {state.profile?.headshot_url
               ? <img src={state.profile.headshot_url} alt="" className="h-12 w-12 rounded-full object-cover" />
-              : <div className="grid h-12 w-12 place-items-center rounded-full bg-axal-ground text-[10px] text-axal-ink-3 dark:bg-gray-800">No photo</div>}
+              : <div className="grid h-12 w-12 place-items-center rounded-full bg-axal-ground text-[10px] text-axal-faint dark:bg-gray-800">No photo</div>}
             <div className="min-w-0">
               <div className="truncate text-[13px] font-extrabold">
                 {state.profile?.display_name || <Unrecorded>Unnamed</Unrecorded>}
               </div>
-              <div className="text-[11.5px] text-axal-ink-2">
+              <div className="text-[11.5px] text-axal-muted">
                 {state.profile?.headline || <Unrecorded />}
               </div>
             </div>
@@ -297,7 +297,7 @@ export default function ProfileZone() {
               ['Languages', state.profile?.languages],
             ].map(([label, value]) => (
               <div key={label} className="flex gap-2">
-                <dt className="w-20 shrink-0 text-axal-ink-3">{label}</dt>
+                <dt className="w-20 shrink-0 text-axal-faint">{label}</dt>
                 <dd className="min-w-0">
                   {/* null is "never answered"; [] is "answered, and none". The
                       preview says which, because the difference is the whole
@@ -314,12 +314,12 @@ export default function ProfileZone() {
               ['Availability', state.profile?.availability_note],
             ].map(([label, value]) => (
               <div key={label} className="flex gap-2">
-                <dt className="w-20 shrink-0 text-axal-ink-3">{label}</dt>
+                <dt className="w-20 shrink-0 text-axal-faint">{label}</dt>
                 <dd className="min-w-0">{value || <Unrecorded />}</dd>
               </div>
             ))}
           </dl>
-          <p className="mt-4 text-[11px] leading-relaxed text-axal-ink-3">
+          <p className="mt-4 text-[11px] leading-relaxed text-axal-faint">
             This preview reads the saved record, not the form. What you see here is what a founder
             would see now.
           </p>

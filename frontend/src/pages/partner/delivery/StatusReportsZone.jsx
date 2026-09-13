@@ -79,7 +79,7 @@ function ReportCard({ report, busy, onEdit, onSend, onDelete, note }) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-extrabold tracking-tight">{report.period}</span>
-            <span className="text-[12.5px] text-axal-ink-2">
+            <span className="text-[12.5px] text-axal-muted">
               {report.founder_name || report.need_title || report.engagement_uid}
             </span>
             {sent
@@ -107,21 +107,21 @@ function ReportCard({ report, busy, onEdit, onSend, onDelete, note }) {
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
         <div>
-          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Shipped</div>
-          <p className="mt-1 whitespace-pre-wrap text-[12.5px] leading-relaxed text-axal-ink-2">
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Shipped</div>
+          <p className="mt-1 whitespace-pre-wrap text-[12.5px] leading-relaxed text-axal-muted">
             {report.shipped || <Unrecorded>Nothing written</Unrecorded>}
           </p>
         </div>
         <div>
-          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Next</div>
-          <p className="mt-1 whitespace-pre-wrap text-[12.5px] leading-relaxed text-axal-ink-2">
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Next</div>
+          <p className="mt-1 whitespace-pre-wrap text-[12.5px] leading-relaxed text-axal-muted">
             {report.next_up || <Unrecorded>Nothing written</Unrecorded>}
           </p>
         </div>
       </div>
 
       {sent ? (
-        <p className="mt-3 text-[11.5px] leading-relaxed text-axal-ink-3">
+        <p className="mt-3 text-[11.5px] leading-relaxed text-axal-faint">
           This is a record of what the client received, so it is not editable and
           not deletable. Write the next period’s report instead.
         </p>
@@ -191,7 +191,7 @@ function Composer({ engagements, busy, onSaved, onError, note }) {
   }, [engagementId, period]);
 
   return (
-    <div className="rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
+    <div className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
       <div className="grid gap-3 md:grid-cols-3">
         <Field label="Engagement">
           <select className={inputClass} value={engagementId}
@@ -230,32 +230,32 @@ function Composer({ engagements, busy, onSaved, onError, note }) {
 
           <div className="grid gap-4 md:grid-cols-3">
             <div>
-              <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+              <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
                 Shipped in {draft.period}
               </div>
               {draft.shipped_from_log.length === 0 ? (
-                <p className="mt-1 text-[12px] text-axal-ink-3">
+                <p className="mt-1 text-[12px] text-axal-faint">
                   Nothing in the deliverables log carries a send date in this period.
                 </p>
               ) : (
-                <ul className="mt-1 space-y-1 text-[12px] text-axal-ink-2">
+                <ul className="mt-1 space-y-1 text-[12px] text-axal-muted">
                   {draft.shipped_from_log.map((x, i) => (
                     <li key={`${x.title}-${i}`}>
                       {x.title}{x.version ? ` (${x.version})` : ''}
-                      {!x.opened && <span className="text-axal-ink-3"> · not opened</span>}
+                      {!x.opened && <span className="text-axal-faint"> · not opened</span>}
                     </li>
                   ))}
                 </ul>
               )}
             </div>
             <div>
-              <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+              <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
                 Next, from open milestones
               </div>
               {draft.next_from_milestones.length === 0 ? (
-                <p className="mt-1 text-[12px] text-axal-ink-3">No open milestone.</p>
+                <p className="mt-1 text-[12px] text-axal-faint">No open milestone.</p>
               ) : (
-                <ul className="mt-1 space-y-1 text-[12px] text-axal-ink-2">
+                <ul className="mt-1 space-y-1 text-[12px] text-axal-muted">
                   {draft.next_from_milestones.map((m, i) => (
                     <li key={`${m.title}-${i}`}>
                       {m.title}{m.due_at ? ` · due ${m.due_at}` : ''}
@@ -265,20 +265,20 @@ function Composer({ engagements, busy, onSaved, onError, note }) {
               )}
             </div>
             <div>
-              <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+              <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
                 Blocked
               </div>
               {draft.blocked.length === 0 ? (
-                <p className="mt-1 text-[12px] text-axal-ink-3">Nothing open.</p>
+                <p className="mt-1 text-[12px] text-axal-faint">Nothing open.</p>
               ) : (
-                <ul className="mt-1 space-y-1 text-[12px] text-axal-ink-2">
+                <ul className="mt-1 space-y-1 text-[12px] text-axal-muted">
                   {draft.blocked.map((b, i) => (
                     <li key={`${b.summary}-${i}`}>
                       <Pill tone={b.side === 'client' ? 'info' : 'warn'}>
                         {b.side === 'client' ? 'Client' : 'Ours'}
                       </Pill>{' '}
                       {b.summary}
-                      {b.days_open != null && <span className="text-axal-ink-3"> · {b.days_open}d</span>}
+                      {b.days_open != null && <span className="text-axal-faint"> · {b.days_open}d</span>}
                     </li>
                   ))}
                 </ul>
@@ -486,7 +486,7 @@ export default function PartnerStatusReportsZone() {
         </div>
 
         {d?.delivery_note && (
-          <p className="text-[12.5px] leading-relaxed text-axal-ink-2">{d.delivery_note}</p>
+          <p className="text-[12.5px] leading-relaxed text-axal-muted">{d.delivery_note}</p>
         )}
 
         <Instrument
@@ -527,7 +527,7 @@ export default function PartnerStatusReportsZone() {
         />
 
         {items.length > 0 && visible.length === 0 && (
-          <p className="text-[12px] text-axal-ink-2">
+          <p className="text-[12px] text-axal-muted">
             No report is in this state. {items.length} written in total.
           </p>
         )}

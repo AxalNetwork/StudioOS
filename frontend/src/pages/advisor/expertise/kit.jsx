@@ -15,7 +15,7 @@ import ZoneActions from '../../../workspaces/ZoneActions';
 
 /** Absent renders as absent. Never a zero, never an em-dash pretending to be one. */
 export function Unrecorded({ children = 'Not recorded' }) {
-  return <span className="text-axal-ink-3 italic">{children}</span>;
+  return <span className="text-axal-faint italic">{children}</span>;
 }
 
 /**
@@ -53,7 +53,7 @@ export function ZoneHeading({ title, blurb, action }) {
     <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
       <div className="max-w-2xl">
         <h2 className="text-sm font-extrabold tracking-tight">{title}</h2>
-        {blurb && <p className="mt-1 text-[12px] leading-relaxed text-axal-ink-2">{blurb}</p>}
+        {blurb && <p className="mt-1 text-[12px] leading-relaxed text-axal-muted">{blurb}</p>}
       </div>
       {action}
     </div>
@@ -83,11 +83,11 @@ export function ZoneBody({ loading, error, isEmpty, empty, onRetry, actions, chi
   if (error) {
     return wrap(
       <Card variant="dashed" padding="lg">
-        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
           Source unavailable
         </div>
         <h3 className="mt-2 text-sm font-extrabold tracking-tight">This did not load</h3>
-        <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-ink-2">
+        <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-muted">
           {error} Nothing is shown rather than an empty list, because an empty list here would
           say you have no records — and that is not something this page can currently know.
         </p>
@@ -109,7 +109,7 @@ export function NothingYet({ title, body, action }) {
   return (
     <Card variant="dashed" padding="lg">
       <h3 className="text-sm font-extrabold tracking-tight">{title}</h3>
-      <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-ink-2">{body}</p>
+      <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-muted">{body}</p>
       {action && <div className="mt-3">{action}</div>}
     </Card>
   );
@@ -127,7 +127,7 @@ export function NothingYet({ title, body, action }) {
 export function StatedLimit({ title, children }) {
   return (
     <Card variant="sunken" padding="md" className="mt-3">
-      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
         {title}
       </div>
       {/*
@@ -144,7 +144,7 @@ export function StatedLimit({ title, children }) {
         less than its canvas asked for usually has more than one thing to say,
         and "never pass a paragraph" is a rule the next author will not know.
       */}
-      <div className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-axal-ink-2">{children}</div>
+      <div className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-axal-muted">{children}</div>
     </Card>
   );
 }
@@ -152,9 +152,9 @@ export function StatedLimit({ title, children }) {
 export function Field({ label, hint, children }) {
   return (
     <label className="block">
-      <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{label}</span>
+      <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</span>
       {children}
-      {hint && <span className="mt-1 block text-[11px] leading-relaxed text-axal-ink-3">{hint}</span>}
+      {hint && <span className="mt-1 block text-[11px] leading-relaxed text-axal-faint">{hint}</span>}
     </label>
   );
 }

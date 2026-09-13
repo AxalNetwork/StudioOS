@@ -30,10 +30,13 @@ import { accentChipClass } from './shellConfig';
  * accent; the selected chip therefore comes from `accentChipClass(role)` and
  * the unselected one is grey in all four, so it lives here.
  *
- * NO UNDECLARED TOKENS. `axal-ink-2`, `axal-ink-3`, `axal-surface-2` and
- * `axal-border-soft` are used ~400 times across `pages/` and `workspaces/` and
- * are declared in no `@theme` block, so they emit no CSS at all. This file uses
- * Tailwind's own greys, as `ZoneActions.jsx` does for the same reason.
+ * TAILWIND GREYS, AND THE REASON HAS CHANGED. `axal-ink-2`, `axal-ink-3`,
+ * `axal-surface-2` and `axal-border-soft` were used ~400 times while declared in no `@theme` block, so they emitted no
+ * CSS at all. All 575 such utilities have since been consolidated onto the
+ * declared neutrals — `axal-muted`, `-faint`, `-ground`, `-hairline` — and those
+ * spellings no longer appear in the tree. The greys here stay: the `index.css`
+ * auto-skin now pairs both vocabularies, so neither is the safer one and
+ * rewriting these would be churn.
  *
  * A FILTER THAT CANNOT RUN IS NOT DRAWN AT ALL. `zoneFilterBuilder.js` argues
  * why this matters more for a filter than for a button: a dead filter does not

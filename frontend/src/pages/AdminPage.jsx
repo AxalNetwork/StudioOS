@@ -1007,7 +1007,7 @@ export default function AdminPage({ onImpersonate, section = null }) {
                             alert(`Failed to load document: ${e?.message || e}`);
                           }
                         }}
-                        className="inline-flex items-center gap-2 text-xs font-semibold text-axal-blue hover:text-axal-blue/80 underline"
+                        className="inline-flex items-center gap-2 text-xs font-semibold text-axal-violet hover:text-axal-violet/80 underline"
                       >
                         View ID Document &rarr;
                       </button>

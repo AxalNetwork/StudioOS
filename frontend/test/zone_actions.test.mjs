@@ -333,7 +333,7 @@ test('ZoneActions adopts no undeclared design token', () => {
   // only place it would matter.
   const zone = codeOnly(read('frontend/src/workspaces/ZoneActions.jsx'));
   for (const dead of ['axal-ink-2', 'axal-ink-3', 'axal-surface-2', 'axal-border-soft', 'axal-border']) {
-    assert.ok(!zone.includes(dead), `ZoneActions uses ${dead}, which is declared nowhere and emits no CSS`);
+    assert.ok(!zone.includes(dead), `ZoneActions uses ${dead}, a name the U11 sweep retired — it is declared nowhere and emits no CSS`);
   }
 });
 

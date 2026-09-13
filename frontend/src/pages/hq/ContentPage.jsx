@@ -37,7 +37,7 @@ function Zone({ title, sub, children }) {
     <Card>
       <div className="mb-2 flex items-baseline justify-between gap-3">
         <h2 className="text-[14.5px] font-extrabold tracking-tight">{title}</h2>
-        {sub && <span className="text-[11.5px] text-axal-ink-3">{sub}</span>}
+        {sub && <span className="text-[11.5px] text-axal-faint">{sub}</span>}
       </div>
       {children}
     </Card>
@@ -46,7 +46,7 @@ function Zone({ title, sub, children }) {
 
 function Absent({ reason }) {
   return (
-    <p className="text-[12.5px] leading-relaxed text-axal-ink-2">
+    <p className="text-[12.5px] leading-relaxed text-axal-muted">
       <Unrecorded /> — {reason}
     </p>
   );
@@ -54,12 +54,12 @@ function Absent({ reason }) {
 
 function Stat({ label, value, note }) {
   return (
-    <div className="rounded-xl border border-axal-line bg-axal-surface-2 p-3">
-      <div className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{label}</div>
+    <div className="rounded-xl border border-axal-hairline bg-axal-ground p-3">
+      <div className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</div>
       <div className="mt-1 text-lg font-extrabold tracking-tight tabular-nums text-axal-ink dark:text-white">
         {value ?? <Unrecorded />}
       </div>
-      {note && <div className="mt-0.5 text-[10px] text-axal-ink-3">{note}</div>}
+      {note && <div className="mt-0.5 text-[10px] text-axal-faint">{note}</div>}
     </div>
   );
 }
@@ -107,11 +107,11 @@ export default function ContentPage() {
         </div>
 
         <header className="mt-4">
-          <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+          <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             <FileStack size={13} /> HQ · Content
           </div>
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">Content</h1>
-          <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-ink-2">
+          <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
             The canvas calls this one pipeline replacing three systems. It is two now, not three — news already
             reads the articles store and answers with a deprecation notice. What is left is two meanings of
             &ldquo;published&rdquo;, shown apart because that is what they still are.
@@ -138,7 +138,7 @@ export default function ContentPage() {
                   ))}
                 </div>
                 {pipeline.rejected > 0 && (
-                  <p className="mt-2 text-[11.5px] text-axal-ink-2">
+                  <p className="mt-2 text-[11.5px] text-axal-muted">
                     {num(pipeline.rejected)} rejected, which is not a lane — a rejected piece is out of the
                     pipeline, not waiting in it.
                   </p>
@@ -153,9 +153,9 @@ export default function ContentPage() {
                 {pipeline.recent.length > 0 && (
                   <ul className="mt-3 space-y-1.5" data-testid="hq-content-recent">
                     {pipeline.recent.slice(0, 6).map((a) => (
-                      <li key={a.id} className="flex items-baseline justify-between gap-3 rounded-lg border border-axal-line bg-axal-surface-2 px-3 py-2 text-[11.5px]">
+                      <li key={a.id} className="flex items-baseline justify-between gap-3 rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[11.5px]">
                         <span className="truncate font-medium">{a.title}</span>
-                        <span className="shrink-0 font-mono text-[10px] text-axal-ink-3">
+                        <span className="shrink-0 font-mono text-[10px] text-axal-faint">
                           {a.status} · {day(a.updated_at)}
                         </span>
                       </li>
@@ -177,7 +177,7 @@ export default function ContentPage() {
                     <Stat key={status} label={status} value={num(n)} note="publication status" />
                   ))}
                 </div>
-                <p className="mt-3 text-[12.5px] leading-relaxed text-axal-ink-2" data-testid="hq-content-not-unified">
+                <p className="mt-3 text-[12.5px] leading-relaxed text-axal-muted" data-testid="hq-content-not-unified">
                   {ready ? data.unified_pipeline_reason : null}
                 </p>
               </>
@@ -194,7 +194,7 @@ export default function ContentPage() {
                     <Stat label="Templates" value={num(templates.templates)} note="legal template library" />
                     <Stat label="Versions" value={num(templates.versions)} note="archived versions stay binding" />
                   </div>
-                  <p className="mt-3 text-[12.5px] leading-relaxed text-axal-ink-2">
+                  <p className="mt-3 text-[12.5px] leading-relaxed text-axal-muted">
                     The artboard draws the library in this zone, but it already has a page. Two consoles over one
                     store drift apart, so this one counts and points.
                   </p>

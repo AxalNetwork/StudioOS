@@ -392,6 +392,49 @@ select::-ms-expand { display: none; }
   background-color: #374151;
 }
 
+/* The axal NEUTRALS get the same treatment as the greys above, and until now
+   they did not — which is how two HQ pages shipped unreadable.
+
+   `--color-axal-ink` is #18181b. `pages/hq/AccountsPage.jsx` and
+   `ContractsPage.jsx` carry zero `dark:` classes and head themselves with a
+   bare `text-axal-ink`, so on a dark surface that was near-black text on
+   #111827. Every other HQ page has some `dark:` coverage; those two had none,
+   and `pages/hq/README.md` says "Dark mode is not optional".
+
+   THE GUARD COULD NOT SEE IT. `scripts/check-dark-mode.mjs` pairs only
+   `bg-white`, `text-gray-700|800|900` and `border-gray-200|300`, and the skin
+   above rewrites only those same Tailwind greys. A token-based neutral was
+   outside both, so a near-black heading on a dark ground passed every check.
+
+   FIXED HERE RATHER THAN IN NINETY-ODD FILES, because that is what this block
+   is for. `text-axal-ink` appears in 59 files under pages/ and components/,
+   `border-axal-hairline` in 38, `bg-axal-ground` in 9; requiring an explicit
+   `dark:` beside each would be churn in place of a fix, and the next file to
+   use the token would be wrong again. `frontend/test/ui_design_tokens.test.mjs`
+   asserts that every declared axal neutral has a counterpart here, so a new one
+   cannot arrive without one.
+
+   ONLY THE NEUTRALS. The brand violets are legible on either ground and D2
+   keeps them at their spec values deliberately; a "dark variant" of a brand
+   colour would be a second palette, not a skin. Each mapping mirrors the grey
+   rule for the same role, so the two systems cannot drift into two different
+   dark greys. */
+:where(.dark [data-app-main] .text-axal-ink:not([data-keep-light] *):not([data-keep-light])) {
+  color: var(--app-text);
+}
+:where(.dark [data-app-main] .text-axal-muted:not([data-keep-light] *):not([data-keep-light])) {
+  color: var(--app-text-muted);
+}
+:where(.dark [data-app-main] .text-axal-faint:not([data-keep-light] *):not([data-keep-light])) {
+  color: #94a3b8;
+}
+:where(.dark [data-app-main] .border-axal-hairline:not([data-keep-light] *):not([data-keep-light])) {
+  border-color: var(--app-border);
+}
+:where(.dark [data-app-main] .bg-axal-ground:not([data-keep-light] *):not([data-keep-light])) {
+  background-color: var(--app-surface-2);
+}
+
 /* ---------------------------------------------------------------------------
    Task #8 — Article reader prose overrides.
    Scoped under .article-prose so it only affects the reading column.

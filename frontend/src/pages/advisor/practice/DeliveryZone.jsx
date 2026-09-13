@@ -259,11 +259,11 @@ export default function DeliveryZone() {
             blurb="One thread each, in the message inbox you both already have. Nothing else is sent on your behalf."
           />
           {targets.reachable.length === 0
-            ? <p className="text-[12.5px] leading-relaxed text-axal-ink-2">Nothing is sitting unopened, so there is nobody to nudge.</p>
+            ? <p className="text-[12.5px] leading-relaxed text-axal-muted">Nothing is sitting unopened, so there is nobody to nudge.</p>
             : <>
               <ul className="space-y-1.5">{targets.reachable.map((i) => (
-                <li key={i.id} className="text-[12px] text-axal-ink-2">
-                  <strong className="font-semibold text-axal-ink-1">{i.client_name}</strong>
+                <li key={i.id} className="text-[12px] text-axal-muted">
+                  <strong className="font-semibold text-axal-ink">{i.client_name}</strong>
                   {' · '}{i.title}{' · '}{seamLine(i, now)}
                 </li>
               ))}</ul>
@@ -352,7 +352,7 @@ export default function DeliveryZone() {
                   onChange={(e) => setDraft({ ...draft, link_url: e.target.value })} />
               </Field>
             </div>
-            <p className="mt-2 text-[11px] leading-relaxed text-axal-ink-3">
+            <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
               It opens at <strong>v1, not sent</strong>. Sending is its own step, because that is the
               moment the client can start reading it.
             </p>
@@ -364,12 +364,12 @@ export default function DeliveryZone() {
           </div>
         )}
         {visible.length === 0
-          ? <p className="text-[12.5px] leading-relaxed text-axal-ink-2">No work product sits under this view.</p>
+          ? <p className="text-[12.5px] leading-relaxed text-axal-muted">No work product sits under this view.</p>
           : <div className="grid gap-2.5">{visible.map((i) => (
             <Row key={i.id} item={i} now={now} busy={busy} selected={trail?.id === i.id}
               onTrail={() => setTrailFor(i.id)} onVersion={() => addVersion(i)} onSend={() => send(i)} />
           ))}</div>}
-        <p className="mt-3 text-[11.5px] leading-relaxed text-axal-ink-3">
+        <p className="mt-3 text-[11.5px] leading-relaxed text-axal-faint">
           Open state is the only honest measure of a deliverable, and it is the client&rsquo;s to give:
           nothing on this page marks a work product opened. A version that has sat unread is worth one
           message before the next one ships on top of it.
@@ -383,7 +383,7 @@ export default function DeliveryZone() {
             blurb={trail ? `${trail.client_name} · ${trail.title}` : 'Nothing to trail yet.'}
           />
           {!trail || !trail.versions?.length
-            ? <p className="text-[12.5px] leading-relaxed text-axal-ink-2">
+            ? <p className="text-[12.5px] leading-relaxed text-axal-muted">
               A trail appears once a work product has a version. Select a row above to trail it.
             </p>
             : <div className="grid gap-2">{trail.versions.map((v) => (
@@ -396,7 +396,7 @@ export default function DeliveryZone() {
                   <div className="text-[11.5px] font-semibold">
                     {v.summary || <Unrecorded>No change note recorded</Unrecorded>}
                   </div>
-                  <div className="mt-0.5 text-[10.5px] tabular-nums text-axal-ink-3">
+                  <div className="mt-0.5 text-[10.5px] tabular-nums text-axal-faint">
                     {v.sent_at ? `${shortMoment(v.sent_at)} · sent` : 'Not sent'}
                     {v.opened_at ? ` · opened ${shortMoment(v.opened_at)}` : ''}
                   </div>
@@ -414,7 +414,7 @@ export default function DeliveryZone() {
             title="Follow-ups from sessions"
             blurb="The artboard drafts one per recorded session, consent-gated. Nothing here can, and the gate is not the reason."
           />
-          <p className="text-[12px] leading-relaxed text-axal-ink-2">
+          <p className="text-[12px] leading-relaxed text-axal-muted">
             A summary of a session needs a transcript, a transcript needs a recording, and a recording
             needs consent recorded before it is made. <strong>None of those three exists for an advisory
             session.</strong> `advisor_bookings` carries thirteen columns and has been widened once, for
@@ -422,7 +422,7 @@ export default function DeliveryZone() {
             other people: one is investor deal-diligence and has answered 501 since it was written, the
             other is a founder&rsquo;s own customer-discovery work and is walled off three separate ways.
           </p>
-          <p className="mt-2 text-[12px] leading-relaxed text-axal-ink-2">
+          <p className="mt-2 text-[12px] leading-relaxed text-axal-muted">
             Five pieces would have to be built first — the columns, a consent step taken before the
             session, an audio upload path, transcription, and only then a summary. The artboard&rsquo;s
             own note says the consent gate working <em>is</em> the feature; a batch button over no
@@ -442,7 +442,7 @@ export default function DeliveryZone() {
           blurb="Still here, and not on this artboard: whether each held session has a review, and your own review of them."
         />
         {state.sessionsUnavailable
-          ? <p className="text-[12.5px] leading-relaxed text-axal-ink-2">
+          ? <p className="text-[12.5px] leading-relaxed text-axal-muted">
             Your held sessions could not be read. That is not a claim that you have none.
           </p>
           : <>
@@ -468,7 +468,7 @@ export default function DeliveryZone() {
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0">
                         <strong className="text-[12.5px] font-extrabold tracking-tight">{b.topic || 'Session'}</strong>
-                        <p className="mt-0.5 text-[11px] text-axal-ink-3">
+                        <p className="mt-0.5 text-[11px] text-axal-faint">
                           {b.founder_name || b.founder_email || `Member #${b.founder_user_id}`}
                           {' · '}{b.slot_starts_at ? formatDateTime(b.slot_starts_at) : <Unrecorded>date not recorded</Unrecorded>}
                         </p>
@@ -540,12 +540,12 @@ function Row({ item, now, busy, selected, onTrail, onVersion, onSend }) {
             <strong className="text-[13px] font-extrabold tracking-tight">{item.title}</strong>
             {versionTag(latest) && <Pill tone="neutral">{versionTag(latest)}</Pill>}
           </div>
-          <p className="mt-1 text-[11.5px] text-axal-ink-3">{item.client_name}</p>
+          <p className="mt-1 text-[11.5px] text-axal-faint">{item.client_name}</p>
           {seam && <p className="mt-1 text-[10.5px] tabular-nums leading-relaxed text-cyan-700 dark:text-cyan-300">{seam}</p>}
         </div>
         <div className="shrink-0 text-right">
-          <div className="text-[11px] tabular-nums text-axal-ink-3">{versionCountLabel(item.version_count)}</div>
-          <div className="mt-0.5 text-[10.5px] tabular-nums text-axal-ink-3">{sentLine(latest)}</div>
+          <div className="text-[11px] tabular-nums text-axal-faint">{versionCountLabel(item.version_count)}</div>
+          <div className="mt-0.5 text-[10.5px] tabular-nums text-axal-faint">{sentLine(latest)}</div>
         </div>
         <Pill tone={STATE_TONE[item.state]}>{STATE_LABEL[item.state] || item.state}</Pill>
       </div>
@@ -575,9 +575,9 @@ function Row({ item, now, busy, selected, onTrail, onVersion, onSend }) {
 function Stat({ label, value, note }) {
   return (
     <Card padding="md">
-      <div className="text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-ink-3">{label}</div>
+      <div className="text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint">{label}</div>
       <div className="mt-1.5 text-[22px] font-extrabold leading-none tracking-tight tabular-nums">{value}</div>
-      <div className="mt-1.5 text-[11px] leading-relaxed text-axal-ink-3">{note}</div>
+      <div className="mt-1.5 text-[11px] leading-relaxed text-axal-faint">{note}</div>
     </Card>
   );
 }
@@ -632,7 +632,7 @@ function ReviewForm({ booking, onFiled }) {
   }
   return (
     <form onSubmit={submit} className="mt-2 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
-      <div className="text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-ink-3">Your review of them</div>
+      <div className="text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint">Your review of them</div>
       <div className="mt-1.5 flex items-center gap-1">
         {[1, 2, 3, 4, 5].map((i) => (
           <button key={i} type="button" onClick={() => setRating(i)} aria-label={`${i} star${i === 1 ? '' : 's'}`}>
@@ -649,7 +649,7 @@ function ReviewForm({ booking, onFiled }) {
         <button type="submit" className={buttonClass} disabled={busy}>{busy ? 'Filing…' : 'File review'}</button>
         <button type="button" className={ghostButtonClass} onClick={() => { setOpen(false); setError(''); }}>Cancel</button>
       </div>
-      <p className="mt-2 text-[11px] leading-relaxed text-axal-ink-3">
+      <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
         Yours and theirs are separate records. Filing this does not show you theirs, and does not
         prompt them for one.
       </p>

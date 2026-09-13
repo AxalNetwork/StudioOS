@@ -296,13 +296,13 @@ export default function SessionsZone() {
         <Card padding="md">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h3 className="text-[13px] font-extrabold tracking-tight">The grid</h3>
-            <span className="text-[10.5px] text-axal-ink-3">Recording state per slot</span>
+            <span className="text-[10.5px] text-axal-faint">Recording state per slot</span>
           </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
             {days.map((day) => (
               <div key={day.key} data-testid={`day-pr4-${day.key}`}
                 className="rounded-[11px] border border-axal-hairline bg-axal-ground p-2.5 dark:border-gray-700 dark:bg-gray-900/40">
-                <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+                <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
                   {day.label}
                 </div>
                 <div className="mt-2 grid gap-1.5">
@@ -326,19 +326,19 @@ export default function SessionsZone() {
         <Card padding="md">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h3 className="text-[13px] font-extrabold tracking-tight">Availability rules</h3>
-            <span className="text-[10.5px] text-axal-ink-3">Configuration</span>
+            <span className="text-[10.5px] text-axal-faint">Configuration</span>
           </div>
           <RulesBody rules={rules} read={rulesRead} onSaved={loadRest} />
-          <p className="mt-3 text-[11px] leading-relaxed text-axal-ink-3">{ruleNote(counts)}</p>
+          <p className="mt-3 text-[11px] leading-relaxed text-axal-faint">{ruleNote(counts)}</p>
         </Card>
 
         <Card padding="md">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h3 className="text-[13px] font-extrabold tracking-tight">Session types</h3>
-            <span className="text-[10.5px] text-axal-ink-3">What can be booked</span>
+            <span className="text-[10.5px] text-axal-faint">What can be booked</span>
           </div>
           {types.length === 0 ? (
-            <p className="mt-3 text-[11.5px] leading-relaxed text-axal-ink-3">
+            <p className="mt-3 text-[11.5px] leading-relaxed text-axal-faint">
               Nothing is offered yet. A session type is what a booking link sells — a free intro, a
               single session, a pack, a retainer.
             </p>
@@ -349,7 +349,7 @@ export default function SessionsZone() {
                   className="flex items-start justify-between gap-3 rounded-[9px] border border-axal-hairline p-2.5 dark:border-gray-700">
                   <div className="min-w-0">
                     <div className="text-[12.5px] font-bold">{t.name}</div>
-                    <div className="mt-0.5 text-[11px] text-axal-ink-3">
+                    <div className="mt-0.5 text-[11px] text-axal-faint">
                       {[t.duration_minutes ? `${t.duration_minutes} min` : null, t.cadence_note]
                         .filter(Boolean).join(' · ') || <Unrecorded>No duration recorded</Unrecorded>}
                     </div>
@@ -372,10 +372,10 @@ export default function SessionsZone() {
         <Card padding="md">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h3 className="text-[13px] font-extrabold tracking-tight">Booking links</h3>
-            <span className="text-[10.5px] text-axal-ink-3">Only here</span>
+            <span className="text-[10.5px] text-axal-faint">Only here</span>
           </div>
           {links.length === 0 ? (
-            <p className="mt-3 text-[11.5px] leading-relaxed text-axal-ink-3">
+            <p className="mt-3 text-[11.5px] leading-relaxed text-axal-faint">
               No link is published. A link is how someone reaches this calendar without going
               through your profile — one per audience.
             </p>
@@ -385,7 +385,7 @@ export default function SessionsZone() {
                 <li key={l.id} data-testid={`link-pr4-${l.id}`}
                   className="rounded-[9px] border border-axal-hairline p-2.5 dark:border-gray-700">
                   <div className="font-mono text-[11.5px] font-bold break-all">axal.vc/b/{l.slug}</div>
-                  <div className="mt-1 text-[11px] leading-relaxed text-axal-ink-3">
+                  <div className="mt-1 text-[11px] leading-relaxed text-axal-faint">
                     {l.note || AUDIENCE_NOTE[l.audience] || null}
                     {l.requires_payout_account && (
                       <> Requires a verified payout account.</>
@@ -408,7 +408,7 @@ export default function SessionsZone() {
           <h3 className="text-[13px] font-extrabold tracking-tight">What each session was worth</h3>
           {unpriced > 0 && <Pill tone="warn">{unpriced} unpriced</Pill>}
         </div>
-        <p className="mt-1.5 max-w-2xl text-[11.5px] leading-relaxed text-axal-ink-3">
+        <p className="mt-1.5 max-w-2xl text-[11.5px] leading-relaxed text-axal-faint">
           Your own record of what you charged and whether you were paid. Nothing is billed,
           invoiced or collected through Axal — this is bookkeeping, not a payment rail.
         </p>
@@ -431,7 +431,7 @@ export default function SessionsZone() {
                         {STATE_LABEL[b.billing_state] || b.billing_state}
                       </Pill>
                     </div>
-                    <div className="mt-0.5 text-[11.5px] text-axal-ink-3">
+                    <div className="mt-0.5 text-[11.5px] text-axal-faint">
                       {b.counterpartyName || <Unrecorded>Counterparty not recorded</Unrecorded>}
                       {b.startsAt && ` · ${formatDateTime(b.startsAt)}`}
                       {slotMinutes({ starts_at: b.startsAt, ends_at: b.endsAt }) != null
@@ -451,7 +451,7 @@ export default function SessionsZone() {
                 {editing === b.id && <BillingEditor booking={b} onSaved={onSaved} />}
               </div>
             ))}
-            <p className="text-[11px] leading-relaxed text-axal-ink-3">
+            <p className="text-[11px] leading-relaxed text-axal-faint">
               Only confirmed and completed sessions are listed. A request you have not answered yet
               has no agreed session to price, and a cancelled or no-show session has no amount to
               record. The full booking history, including all three, is under{' '}
@@ -487,9 +487,9 @@ const AUDIENCE_NOTE = {
 function Stat({ label, value, note }) {
   return (
     <Card padding="md">
-      <div className="text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-ink-3">{label}</div>
+      <div className="text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint">{label}</div>
       <div className="mt-1.5 text-[22px] font-extrabold leading-none tracking-tight tabular-nums">{value}</div>
-      <div className="mt-1.5 text-[11px] leading-relaxed text-axal-ink-3">{note}</div>
+      <div className="mt-1.5 text-[11px] leading-relaxed text-axal-faint">{note}</div>
     </Card>
   );
 }
@@ -506,7 +506,7 @@ function SlotCard({ slot }) {
       <div className="text-[11.5px] font-bold tabular-nums">
         {slotTime(slot.starts_at) ?? <Unrecorded>No time</Unrecorded>}
       </div>
-      <div className="mt-0.5 text-[10.5px] leading-snug text-axal-ink-3">
+      <div className="mt-0.5 text-[10.5px] leading-snug text-axal-faint">
         {kind === 'blocked'
           ? (slot.blocked_reason || 'Blocked')
           : (slot.notes || KIND_LABEL[kind])}
@@ -571,7 +571,7 @@ function RulesBody({ rules, read, onSaved }) {
       <dl className="mt-3 grid gap-1.5">
         {rows.map(([k, v]) => (
           <div key={k} className="flex items-baseline justify-between gap-3">
-            <dt className="text-[11.5px] text-axal-ink-3">{k}</dt>
+            <dt className="text-[11.5px] text-axal-faint">{k}</dt>
             <dd className="text-[12px] font-bold tabular-nums">
               {v ?? <Unrecorded>{read ? 'Not set' : 'Not recorded'}</Unrecorded>}
             </dd>

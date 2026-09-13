@@ -1897,15 +1897,15 @@ function AppInner() {
             : <Navigate to="/research/ask" replace />} />
       <Route path="/research/ask" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/markets" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/funds" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/funds" element={guard(labRoles(['admin', 'founder']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/library" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/diligence" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/benchmarking" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/client-prep" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/diligence" element={guard(labRoles(['admin', 'investor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/benchmarking" element={guard(labRoles(['admin', 'investor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/client-prep" element={guard(labRoles(['admin', 'advisor', 'partner']), <ResearchWorkspace role={researchRole} user={user} />)} />
       {/* Legacy Customer Discovery folds into the unified Discovery workspace. */}
       <Route path="/customer-discovery" element={<Navigate to="/build/discovery" replace />} />
-      <Route path="/build/roadmap" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <FounderBuildRoadmap />)} />
+      <Route path="/build/roadmap" element={guard(labRoles(['admin', 'founder']), <FounderBuildRoadmap />)} />
       <Route path="/build/cadence" element={guard(labRoles(['admin', 'founder']), <FounderBuildCadence />)} />
       <Route path="/build/kpi" element={guard(labRoles(['admin', 'founder']), <FounderBuildKpi />)} />
       <Route path="/build/metrics" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('build', <FounderWorkspaceTabs set="build" user={user}><MetricsPage /></FounderWorkspaceTabs>))} />
@@ -2177,7 +2177,7 @@ function AppInner() {
           workspace still renders all four sections and the route scrolls to
           one. Splitting it into four pages is a content decision, not a
           routing one. */}
-      <Route path="/deals/pipeline" element={guard(['admin', 'partner', 'investor'], <InvestorDealsRoutes />)} />
+      <Route path="/deals/pipeline" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/screening" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/commit" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/closing" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
@@ -2274,7 +2274,7 @@ function AppInner() {
       <Route path="/ic" element={guard(['admin', 'partner', 'investor'], <ICDecisionsPage />)} />
       <Route path="/ic/:uid" element={guard(['admin', 'partner', 'investor'], <ICDecisionPage />)} />
       <Route path="/lp-reports" element={guard(['admin', 'investor'], investorFundWorkspace(<FundOpsWorkspace />))} />
-      <Route path="/portfolio/updates" element={guard(['admin', 'partner', 'investor', 'founder'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
+      <Route path="/portfolio/updates" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/portfolio/positions" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       {/* Advisor sections shell — three tabbed workspaces (Network, Advisory,
           Research) scoped to the advisor (and admin) roles. Each tab deep-links
@@ -2475,14 +2475,27 @@ function AppInner() {
           names advisors as referrers. Network · Relationships reads these rows,
           so leaving the page unreachable made that section permanently empty
           with no way to fill it. */}
-      <Route path="/referrals" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], partnerPrivateWorkspace(<ReferralsPage />))} />
-      <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferRedirect />)} />
+      {/* NOT wrapped in `partnerPrivateWorkspace`. That wrapper bounces an admin
+          previewing Partner to /studio, and it was doing so over a page the comment
+          above correctly describes as having no role branch at all: every endpoint
+          is `requireAuth` scoped to `referrer_user_id`, so the rows an admin sees
+          are their own, exactly as in the plain Admin view where the wrapper never
+          fired. There is no partner-private boundary here to state, so there is
+          nothing for a notice to say either — the wrapper was not this route's to
+          carry.
+
+          /refer and /payouts are ALIASES of this route: they exist only to arrive
+          here, so all three carry the same role list. Both omitted advisor while
+          this one admitted it, so an advisor following a /refer link bounced off a
+          page /referrals would have shown them. */}
+      <Route path="/referrals" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <ReferralsPage />)} />
+      <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <ReferRedirect />)} />
       <Route path="/company-settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Suspense fallback={null}><CompanySettingsPage /></Suspense>)} />
       {/* Integrations now lives inside Settings; /integrations redirects there
           (preserving any ?query= so OAuth-return states still show). Available
           to every authenticated profile, matching the all-roles Settings tab. */}
       <Route path="/integrations" element={authOnly(<IntegrationsRedirect />)} />
-      <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <Navigate to="/referrals" replace />)} />
+      <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Navigate to="/referrals" replace />)} />
       <Route path="/matches" element={guard(['admin', 'partner', 'investor'], partnerPrivateWorkspace(<PartnerWorkspaceTabs set="pipeline" user={user}><MatchesPage /></PartnerWorkspaceTabs>))} />
       <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><NetworkEffectsPage /></FounderWorkspaceTabs>))} />
       {/* /pipeline lives with the Partner bucket routes above — the partner

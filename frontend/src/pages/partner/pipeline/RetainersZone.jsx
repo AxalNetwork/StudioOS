@@ -105,11 +105,11 @@ function Utilisation({ pct, note, used, retained }) {
         <span className={`text-sm font-extrabold tabular-nums ${over ? 'text-red-700 dark:text-red-300' : ''}`}>
           {pct}%
         </span>
-        <span className="text-[11px] text-axal-ink-3 tabular-nums">
+        <span className="text-[11px] text-axal-faint tabular-nums">
           {used}h of {retained}h
         </span>
       </div>
-      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-axal-surface-2">
+      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-axal-ground">
         <div
           className={`h-full rounded-full ${over ? 'bg-red-500' : low ? 'bg-amber-500' : 'bg-emerald-500'}`}
           style={{ width: `${Math.min(100, pct)}%` }}
@@ -157,7 +157,7 @@ function RetainerForm({ row, onSave, onDelete, busy, note }) {
   }
 
   return (
-    <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
+    <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
       <div className="grid gap-3 md:grid-cols-3">
         <Field label="Shape" hint="An embedded seat is a person inside the client's systems, not a scope of work.">
           <select className={inputClass} value={shape} onChange={(e) => setShape(e.target.value)}>
@@ -215,7 +215,7 @@ function UsageForm({ row, onSave, onDelete, busy }) {
 
   return (
     <div className="mt-3 rounded-lg border border-axal-hairline p-3 dark:border-gray-700">
-      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
         Hours for {period}
       </div>
       <div className="mt-2 grid gap-3 md:grid-cols-3">
@@ -247,7 +247,7 @@ function UsageForm({ row, onSave, onDelete, busy }) {
         </div>
       </div>
       {(row.usage || []).length > 1 && (
-        <p className="mt-2 text-[11.5px] text-axal-ink-3">
+        <p className="mt-2 text-[11.5px] text-axal-faint">
           Also logged:{' '}
           {(row.usage || []).filter((u) => u.period !== period)
             .map((u) => `${u.period} · ${u.hours_used}h`).join(', ')}
@@ -269,7 +269,7 @@ function RetainerRow({ row, onSaveRetainer, onDeleteRetainer, onSaveUsage, onDel
           <div className="text-sm font-extrabold tracking-tight">
             {row.founder_name || row.need_title || <Unrecorded>Unnamed client</Unrecorded>}
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11.5px] text-axal-ink-3">
+          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11.5px] text-axal-faint">
             <span>{row.engagement_uid}</span>
             {row.need_title && row.founder_name && <span>· {row.need_title}</span>}
             <span>· {row.engagement_status}</span>
@@ -288,15 +288,15 @@ function RetainerRow({ row, onSaveRetainer, onDeleteRetainer, onSaveUsage, onDel
       {r && (
         <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Amount</div>
+            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Amount</div>
             <div className="mt-0.5 text-sm font-extrabold tabular-nums">
               {r.amount_cents != null
-                ? <>{moneyCents(r.amount_cents)} <span className="text-[11px] font-semibold text-axal-ink-3">/ {CADENCE_LABEL[r.cadence]?.toLowerCase()}</span></>
+                ? <>{moneyCents(r.amount_cents)} <span className="text-[11px] font-semibold text-axal-faint">/ {CADENCE_LABEL[r.cadence]?.toLowerCase()}</span></>
                 : <Unrecorded>No amount recorded</Unrecorded>}
             </div>
           </div>
           <div>
-            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
               This period ({row.current_period})
             </div>
             <div className="mt-0.5">
@@ -307,17 +307,17 @@ function RetainerRow({ row, onSaveRetainer, onDeleteRetainer, onSaveUsage, onDel
             </div>
           </div>
           <div>
-            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Renews</div>
+            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Renews</div>
             <div className="mt-0.5 text-[12.5px]">
               {r.renews_at
-                ? <>{formatDay(r.renews_at)}{days !== null && <span className="ml-1.5 text-axal-ink-3">({days < 0 ? `${-days}d ago` : `in ${days}d`})</span>}</>
+                ? <>{formatDay(r.renews_at)}{days !== null && <span className="ml-1.5 text-axal-faint">({days < 0 ? `${-days}d ago` : `in ${days}d`})</span>}</>
                 : <Unrecorded>No renewal date</Unrecorded>}
             </div>
           </div>
           <div>
-            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Ended</div>
+            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Ended</div>
             <div className="mt-0.5 text-[12.5px]">
-              {r.ended_at ? formatDay(r.ended_at) : <span className="text-axal-ink-2">Running</span>}
+              {r.ended_at ? formatDay(r.ended_at) : <span className="text-axal-muted">Running</span>}
             </div>
           </div>
         </div>
@@ -525,7 +525,7 @@ export default function PartnerRetainersZone() {
         </div>
 
         {d?.mrr_note && d?.mrr_cents != null && (
-          <p className="text-[12px] leading-relaxed text-axal-ink-2">{d.mrr_note}</p>
+          <p className="text-[12px] leading-relaxed text-axal-muted">{d.mrr_note}</p>
         )}
 
         {/* ══ THE BOOK — the artboard's ledger ══════════════════════════════

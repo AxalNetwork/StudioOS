@@ -117,10 +117,10 @@ export const buttonClass =
 export function NotComputable({ children, why }) {
   return (
     <span className="inline-flex items-baseline gap-1.5">
-      <span className="whitespace-nowrap rounded border border-axal-border bg-axal-surface-2 px-1.5 py-0.5 text-[10px] font-bold text-axal-ink-3">
+      <span className="whitespace-nowrap rounded border border-axal-hairline bg-axal-ground px-1.5 py-0.5 text-[10px] font-bold text-axal-faint">
         {children || 'Not recorded'}
       </span>
-      {why && <span className="text-[11px] leading-relaxed text-axal-ink-3">{why}</span>}
+      {why && <span className="text-[11px] leading-relaxed text-axal-faint">{why}</span>}
     </span>
   );
 }
@@ -155,17 +155,17 @@ export function SeamRead({ children }) {
  */
 export function NoPartnerProfile() {
   return (
-    <div className="rounded-xl border border-dashed border-axal-border p-5">
+    <div className="rounded-xl border border-dashed border-axal-hairline p-5">
       <h3 className="text-sm font-extrabold tracking-tight">
         This account is not linked to a firm yet
       </h3>
-      <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-ink-2">
+      <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-muted">
         Everything in the partner workspace hangs off a firm record, and this
         sign-in is not attached to one. That is an account link rather than
         anything you have or have not done here — nothing is missing from your
         data, because there is no firm for it to be missing from yet.
       </p>
-      <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-ink-2">
+      <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-muted">
         An admin can attach it, under Partners → Firm links. Until then every
         zone in this workspace will say the same thing.
       </p>
@@ -178,7 +178,7 @@ export function NoPartnerProfile() {
           the one act with no subject and no audit trail. Impersonation is the
           way in, which is the same answer `AdvisorPreviewNotice` gives on the
           other half of the product. */}
-      <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-ink-3">
+      <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-faint">
         Reading this as an admin? Previewing the Partner role attaches you to
         nobody. Impersonate one of a firm’s accounts to open its workspace —
         that names whose book is being read and records it.
