@@ -37,6 +37,7 @@ import {
 } from '../../routes/_founder_validate_proposals';
 import { MAX_PAIN_PHRASE, insertHypothesis, upsertPainAlias } from '../../routes/_founder_validate_writes';
 import { ASSUMPTION_COLUMNS, loadAssumptions, saveOneAssumption } from '../marketAssumptions';
+import { analysisForProject, insertManualCandidate } from '../../routes/_competitor_writes';
 import { citeFor } from './citations';
 import type { FillKind, Gathered, Proposed } from './types';
 
@@ -416,11 +417,186 @@ const marketSizing: FillKind = {
   },
 };
 
+
+/**
+ * `market/competitors` — name a competitor the founder has not listed, with a source.
+ *
+ * ALSO `sourced`, and the reason is sharper here than for a figure. A market size
+ * that is 20% off is a bad estimate; an invented company is a fabrication, and a
+ * founder who puts it in a board pack finds out from an investor who has heard of
+ * the real ones. So each name needs a passage that mentions it, or it is dropped.
+ *
+ * IT ADDS TO A LIST AND CANNOT START ONE. `competitor_analyses` is created by a
+ * run that does discovery and a public-web crawl — `SpinoutLabMarketPage`'s own
+ * comment says it "may take a while" — so a fill that bootstrapped one would spend
+ * a founder's budget on a job they did not ask for inside a run they asked to be
+ * cheap. With no analysis it refuses and says how to make one, which is the same
+ * shape as the pain tagger: D46's *"the tagger sorts phrases into themes the
+ * founder wrote and cannot create one"*.
+ *
+ * `apply` calls `insertManualCandidate` — the function `POST
+ * /competitors/:id/candidates` calls, extracted from that route's body for exactly
+ * this reason. See `_competitor_writes.ts` for what a second copy would have got
+ * wrong: `position`, which orders the board, and the `edited = 1` that stops the
+ * next discovery run deleting the row.
+ */
+const competitorScan: FillKind = {
+  kind: 'competitor',
+  surface: 'market/competitors',
+  assistSurface: 'market',
+  fillClass: 'sourced',
+  task: 'competitor_scan',
+  copy: {
+    run: 'Find competitors',
+    heading: 'Proposal · competitors, each with a source',
+    empty: 'Nothing proposed yet. Eadwyn looks for companies in your space that are not on your list — and proposes only the ones it can cite. It adds to your list; it never starts one.',
+    accept: 'Add to the list',
+  },
+  prompt: [
+    'You name companies that compete with a venture. You never describe one you cannot name.',
+    'Reply with ONE JSON array and nothing else. Each item:',
+    '{"name": "the company", "category": "direct" | "adjacent", "note": "one line on what they do", "asked": "a research question that would confirm they exist and compete"}',
+    'At most four items. Do not repeat a company already on the list below.',
+    '"direct" means they solve the same problem for the same buyer; "adjacent" means they overlap.',
+    'Do NOT state a source in your reply. A source is looked up separately, and an item',
+    'whose company cannot be supported is discarded rather than published.',
+    'Never invent a company, a product name or a URL. An empty array is a valid answer.',
+  ].join('\n'),
+  // The note is prose about somebody else's product and the founder owns their
+  // own description of a rival. The NAME is not editable through this field: a
+  // renamed company is a different company, and the citation was found for the one
+  // the model named.
+  editableField: 'note',
+  readable: (p) => {
+    const name = String(p.name || '');
+    const note = String(p.note || '').trim();
+    return note ? `${name} — ${note}` : name;
+  },
+
+  async gather(ctx): Promise<Gathered> {
+    const project = await ctx.env.DB.prepare(
+      'SELECT name, sector, description FROM projects WHERE id = ?',
+    ).bind(ctx.projectId).first<{ name: string; sector: string | null; description: string | null }>();
+    if (!project) {
+      return { facts: '', empty: true, emptyReason: 'This project could not be read.' };
+    }
+    if (!String(project.sector || '').trim()) {
+      return {
+        facts: '', empty: true,
+        emptyReason: 'Set this venture’s sector first — without it there is no field to look in.',
+      };
+    }
+    const analysis = await analysisForProject(ctx.env, Number(ctx.user.id), ctx.projectId);
+    if (!analysis) {
+      return {
+        facts: '', empty: true,
+        emptyReason: 'Add one competitor by hand first, or run a competitor analysis. Eadwyn adds to your list — it does not start one.',
+      };
+    }
+    return {
+      facts: [
+        `Venture: ${project.name}`,
+        `Sector: ${project.sector}`,
+        project.description ? `What it does: ${String(project.description).slice(0, 600)}` : '',
+        '',
+        analysis.names.length
+          ? `Already on the list, do not repeat: ${analysis.names.slice(0, MAX_PROMPT_ITEMS).join('; ')}`
+          : 'Nothing on the list yet.',
+      ].filter(Boolean).join('\n'),
+      // Not a match-back set — this kind is `sourced`. `known` carries the names
+      // already listed so `parse` can drop a duplicate the model returned anyway.
+      known: analysis.names,
+      // The analysis this fill writes into, travelling to `parse` so the proposal
+      // can address it and to `apply` through `targetRef`.
+      analysisId: analysis.id,
+    } as Gathered & { analysisId: string };
+  },
+
+  async parse(text, gathered, ctx): Promise<Proposed[]> {
+    const analysisId = (gathered as Gathered & { analysisId?: string }).analysisId || '';
+    if (!analysisId) return [];
+    const taken = new Set((gathered.known || []).map((n) => String(n).trim().toLowerCase()));
+    const priors = new Set((gathered.priors || []).map((p) => String(p).split(' — ')[0].trim().toLowerCase()));
+    const out: Proposed[] = [];
+    for (const raw of extractJsonArray(text).slice(0, MAX_PROMPT_ITEMS)) {
+      if (!raw || typeof raw !== 'object') continue;
+      const name = String((raw as any).name || '').trim().slice(0, 120);
+      if (!name) continue;
+      const key = name.toLowerCase();
+      // Already listed, already offered, or offered twice in one reply.
+      if (taken.has(key) || priors.has(key)) continue;
+      taken.add(key);
+      const category = String((raw as any).category || '').trim() === 'adjacent' ? 'adjacent' : 'direct';
+      const note = String((raw as any).note || '').trim().slice(0, 400);
+      const asked = String((raw as any).asked || '').trim().slice(0, 300);
+
+      // NO CITATION, NO PROPOSAL — and for a company name this is the whole point.
+      const { citation } = await citeFor(
+        ctx.env, Number(ctx.user.id), asked || `${name} competitor in ${String(gathered.facts).split('\n')[1] || 'this sector'}`,
+      );
+      if (!citation) continue;
+
+      out.push({
+        payload: { name, category, note, analysis_id: analysisId },
+        targetRef: `competitor_analysis:${analysisId}`,
+        citation,
+        readable: note ? `${name} — ${note}` : name,
+      });
+    }
+    return out;
+  },
+
+  async apply(ctx, payload, targetRef) {
+    const name = String(payload.name || '').trim();
+    if (!name) throw new Error('That proposal no longer names a company');
+    // The analysis is re-resolved rather than trusted from the payload: a proposal
+    // can sit pending while a founder deletes the analysis it was drawn from, and
+    // writing into an id that no longer belongs to them is the one mistake this
+    // path must not make.
+    const analysis = await analysisForProject(ctx.env, Number(ctx.user.id), ctx.projectId);
+    const wanted = String(payload.analysis_id || targetRef.replace('competitor_analysis:', ''));
+    if (!analysis || (wanted && analysis.id !== wanted)) {
+      throw new Error('That competitor list no longer exists');
+    }
+    const written = await insertManualCandidate(
+      ctx.env, Number(ctx.user.id), analysis.id, analysis.inputs,
+      {
+        name,
+        category: String(payload.category || 'direct'),
+        summary: String(payload.note || '').trim(),
+        // NEVER CRAWL ON ACCEPT. `buildManualCandidate` will fetch the company's
+        // site when asked, and an accept is a click a founder expects to be
+        // instant — a crawl turns it into a wait and a second outbound request
+        // they did not ask for. The manual form offers the same choice and
+        // defaults the same way.
+        crawl: false,
+      },
+    );
+    return {
+      written: String(payload.note || '').trim() ? `${written.name} — ${String(payload.note).trim()}` : written.name,
+      target: { table: 'competitor_candidates', rowId: 0, column: 'name' },
+      result: { kind: 'competitor', candidate: written },
+    };
+  },
+
+  target(_payload) {
+    // `competitor_candidates.id` is a TEXT uid, and `fill_provenance.target_row_id`
+    // is an INTEGER — so this row cannot be addressed the way the other kinds' can.
+    // Recorded as row 0 against the column, which says "a competitor name Eadwyn
+    // supplied on this project" without pretending to point at a specific row. The
+    // honest alternative is a schema change to widen the address, and that is its
+    // own task rather than a silent coercion that would land every competitor on
+    // row NaN.
+    return { table: 'competitor_candidates', rowId: 0, column: 'name' };
+  },
+};
+
 /** Every kind, by its stable id. The one list a new surface is added to. */
 export const FILL_KINDS: Record<string, FillKind> = {
   [painTag.kind]: painTag,
   [hypothesis.kind]: hypothesis,
   [marketSizing.kind]: marketSizing,
+  [competitorScan.kind]: competitorScan,
 };
 
 export const fillKind = (kind: string): FillKind | null => FILL_KINDS[kind] || null;

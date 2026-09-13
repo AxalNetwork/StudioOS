@@ -304,6 +304,24 @@ export default function SpinoutLabMarketPage() {
    * Eadwyn is what put it there. Reading only the first would leave the stamp
    * missing until a reload.
    */
+  /**
+   * Re-read the competitor analysis after an accept, for the same reason.
+   *
+   * The board is rendered from `compAnalysis`, so without this an accepted
+   * competitor lands in D1 and the list on screen does not change — and the band
+   * has already removed the proposal, so pressing again does nothing either.
+   */
+  const reloadCompetitors = async () => {
+    if (!project) return;
+    try {
+      const list = await api.competitors.list();
+      const hit = (list?.analyses || []).find((a) => Number(a.project_id) === Number(project.id));
+      setCompAnalysis(hit ? await api.competitors.get(hit.id) : null);
+    } catch (e) {
+      reportError('SpinoutLabMarketPage:reloadCompetitors', e);
+    }
+  };
+
   const reloadAssumptions = async () => {
     if (!project) return;
     try {
@@ -793,6 +811,20 @@ export default function SpinoutLabMarketPage() {
           kind="market_input"
           enabled={fillsOn}
           onApplied={reloadAssumptions}
+        />
+      )}
+      {/* The second band on this page, and a separate kind rather than a second
+          shape in one: a sizing input is a number on the drawer and a competitor
+          is a row on a list, so they have different writers, different empties and
+          different costs. `/api/ai/me/spend` groups by task, which is why the
+          router has two classes for them too. */}
+      {project && (
+        <FillProposals
+          key="market-competitors"
+          projectId={project.id}
+          kind="competitor"
+          enabled={fillsOn}
+          onApplied={reloadCompetitors}
         />
       )}
 

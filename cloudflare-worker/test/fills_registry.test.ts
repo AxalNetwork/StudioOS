@@ -157,9 +157,10 @@ const ctx = (db: InstanceType<typeof DatabaseSync>, projectId = P) =>
   ({ env: env(db), user: { id: 3, role: 'founder' } as any, projectId });
 
 test('every kind is registered under its own surface, and nothing else slipped in', () => {
-  assert.deepEqual(Object.keys(FILL_KINDS).sort(), ['hypothesis', 'market_input', 'pain_tag']);
+  assert.deepEqual(Object.keys(FILL_KINDS).sort(),
+    ['competitor', 'hypothesis', 'market_input', 'pain_tag']);
   assert.deepEqual([...FILL_SURFACES].sort(),
-    ['market/sizing', 'validate/hypotheses', 'validate/pain-map']);
+    ['market/competitors', 'market/sizing', 'validate/hypotheses', 'validate/pain-map']);
   assert.equal(fillKind('pain_tag')?.surface, 'validate/pain-map');
   assert.equal(fillKind('market_input')?.surface, 'market/sizing');
   assert.equal(fillKind('nope'), null, 'an unknown kind must resolve to null, not undefined-shaped');
@@ -363,7 +364,8 @@ test('each kind keeps the promise its class makes, and only that one', () => {
   const citation = { kind: 'library' as const, document_id: 1, title: 't', chunk: 0, quote: 'a real sentence' };
   const bare = { payload: {}, targetRef: 'x', readable: 'something' };
   const expected: Record<string, string> = {
-    pain_tag: 'restatement', hypothesis: 'restatement', market_input: 'sourced',
+    pain_tag: 'restatement', hypothesis: 'restatement',
+    market_input: 'sourced', competitor: 'sourced',
   };
   for (const k of Object.values(FILL_KINDS)) {
     assert.equal(k.fillClass, expected[k.kind],
@@ -398,6 +400,69 @@ test('the market fill proposes the inputs and never the market size', async () =
   }
   assert.equal(market.target({ field: 'acv' }, '', ctx(freshDb())).table, 'project_market_assumptions');
   assert.equal(market.target({ field: 'acv' }, '', ctx(freshDb())).column, 'acv');
+});
+
+test('the competitor fill adds to a list and cannot start one', async () => {
+  // D46's rule for the tagger, applied to a second surface: *"the tagger sorts
+  // phrases into themes the founder wrote and cannot create one"*. Starting a
+  // competitor analysis runs discovery and a public-web crawl, so a fill that
+  // bootstrapped one would spend a founder's budget on a job they did not ask for
+  // inside a run they asked to be cheap.
+  const competitor = fillKind('competitor')!;
+  const src = read('src/services/fills/registry.ts');
+  const entry = src.slice(src.indexOf('const competitorScan: FillKind = {'));
+  const body = entry.slice(0, entry.indexOf('\n};'));
+  assert.doesNotMatch(body, /runCompetitorAnalysis|INSERT INTO competitor_analyses/,
+    'the competitor fill can start an analysis');
+  assert.match(body, /Eadwyn adds to your list — it does not start one/);
+  assert.match(competitor.prompt, /Never invent a company, a product name or a URL\./);
+
+  // IT WRITES THROUGH THE FORM'S OWN WRITER, which is why that writer was
+  // extracted from the route body at all. A second copy would have got `position`
+  // wrong (the board is ordered by it) and would have forgotten `edited = 1`,
+  // which is what stops the next discovery run deleting an accepted row.
+  assert.match(body, /await insertManualCandidate\(/);
+  const route = read('src/routes/competitors.ts');
+  assert.match(route, /await insertManualCandidate\(c\.env, user\.id, id, inputs, \{/,
+    'the manual route no longer goes through the shared writer');
+  // SCOPED TO THE ADD-ONE HANDLER, not the whole file. Two other inserts into
+  // `competitor_candidates` are legitimately different operations and must stay:
+  // `persistResult` replaces the whole set after a discovery run, and the bulk
+  // `PUT /:id` rewrites the board from a client-supplied array. A file-wide ban
+  // would have forbidden both, which is how a guard starts being worked around.
+  const addHandler = (() => {
+    const at = route.indexOf("competitors.post('/:id/candidates'");
+    assert.ok(at > 0, 'the add-a-competitor route is gone');
+    return route.slice(at, route.indexOf('\n});', at));
+  })();
+  assert.doesNotMatch(addHandler, /INSERT INTO competitor_candidates/,
+    'the add-one handler kept its own copy of the insert');
+  assert.doesNotMatch(addHandler, /MAX\(position\)/,
+    'the add-one handler still allocates its own position');
+  const writes = read('src/routes/_competitor_writes.ts');
+  assert.match(writes, /UPDATE competitor_analyses SET edited = 1/,
+    'the shared writer no longer protects manual rows from a re-run');
+  assert.match(writes, /COALESCE\(MAX\(position\), -1\) AS maxpos/,
+    'the shared writer no longer allocates a position');
+
+  // AND IT NEVER CRAWLS ON ACCEPT. An accept is a click a founder expects to be
+  // instant; a crawl turns it into a wait and an outbound request they did not ask
+  // for. `buildManualCandidate` will do it when asked, so this has to say no.
+  assert.match(body, /crawl: false,/, 'accepting a competitor triggers a web crawl');
+
+  // The name is not the editable field: a renamed company is a different company,
+  // and the citation was found for the one the model named.
+  assert.equal(competitor.editableField, 'note');
+
+  // THE ADDRESS LIMIT IS STATED RATHER THAN FUDGED. `competitor_candidates.id` is
+  // a TEXT uid and `fill_provenance.target_row_id` is an INTEGER, so this row
+  // cannot be addressed the way the others are. Row 0 says "on this project"
+  // without pretending to point at a row; coercing the uid would put every
+  // competitor on NaN.
+  const t = competitor.target({ name: 'x' }, '', ctx(freshDb()));
+  assert.equal(t.table, 'competitor_candidates');
+  assert.equal(t.rowId, 0);
+  assert.match(body, /is an INTEGER/, 'the address limitation is no longer written down');
 });
 
 test('a sourced fill with no citation is refused, and one with a hollow citation too', () => {

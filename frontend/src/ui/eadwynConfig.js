@@ -141,7 +141,7 @@ export const ASSIST_SURFACES = {
     mode: {
       kind: 'choice',
       label: 'AI fills the blanks',
-      note: 'Looks for the sizing inputs this page multiplies — an addressable population, an ACV benchmark, a growth rate — and proposes only figures it can cite. It never proposes your TAM: the page derives that from your own assumptions. Every figure is yours to accept, edit or discard, and a card says when Eadwyn supplied it.',
+      note: 'Two things, each proposed only when Eadwyn can cite it. The sizing inputs this page multiplies — an addressable population, an ACV benchmark, a growth rate — and competitors not yet on your list. It never proposes your TAM: the page derives that from your own assumptions. And it adds to your competitor list rather than starting one. Every item is yours to accept, edit or discard, and a card says when Eadwyn supplied it.',
       manualNote: 'Nothing runs and nothing is spent. Every figure on this page is one you researched or derived.',
     },
   },

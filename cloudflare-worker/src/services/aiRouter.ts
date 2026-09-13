@@ -50,6 +50,7 @@ export type TaskClass =
   | 'validate_tag_pains'
   | 'validate_draft_hypotheses'
   | 'market_sizing_inputs'
+  | 'competitor_scan'
   | 'research_ask';
 
 export type RefusalReason =
@@ -375,6 +376,25 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // Not cached. A sizing proposal reads the project's current sector and the
   // documents in its library, which is exactly what changes between two asks.
   market_sizing_inputs: {
+    provider: 'workers-ai',
+    model: MID_LLAMA,
+    fallbackChain: [SMALL_LLAMA],
+    alternates: [MID_LLAMA, SMALL_LLAMA],
+  },
+  // Naming competitors a founder has not listed, each with a citation or dropped.
+  //
+  // ITS OWN CLASS FOR THIS TABLE'S STATED REASON — `/api/ai/me/spend` groups by
+  // task and the rail quotes the caller's observed average — and for a second one
+  // that is specific to it: a sizing run reads a sector and returns numbers, and
+  // this reads a sector and returns names of real companies. The failure modes
+  // differ (a wrong number is a wrong number; an invented company is a
+  // fabrication), so their averages should not be folded into one figure that
+  // describes neither.
+  //
+  // Same alternates as sizing, and the same reason a 3b is absent: a shallower
+  // model asked to name competitors returns ones whose citation is likelier to be
+  // invented, and the refusal path then drops the run — so it is not cheaper.
+  competitor_scan: {
     provider: 'workers-ai',
     model: MID_LLAMA,
     fallbackChain: [SMALL_LLAMA],

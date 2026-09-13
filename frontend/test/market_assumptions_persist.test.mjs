@@ -172,10 +172,20 @@ test('the market rail can be turned off, and says what off means — D17', () =>
   assert.match(entry, /kind: 'choice'/);
   assert.match(entry, /manualNote: 'Nothing runs and nothing is spent\./);
 
-  // AND IT PROMISES WHAT THE REGISTRY ACTUALLY DOES. The note says Eadwyn never
-  // proposes the TAM, which is only true because the fill writes assumption
-  // inputs; a note that over-promised here would be the page's fourth provenance
-  // claim and the first false one.
-  assert.match(entry, /It never proposes your TAM/);
-  assert.match(entry, /proposes only figures it can cite/);
+  // AND IT PROMISES WHAT THE REGISTRY ACTUALLY DOES, for BOTH kinds this surface
+  // now offers. A note that over-promised here would be the page's fourth
+  // provenance claim and the first false one — so it has to carry the citation
+  // rule and both refusals, which are the two things a founder would otherwise
+  // reasonably expect it to do.
+  assert.match(entry, /only when Eadwyn can cite it/,
+    'the note no longer says a proposal needs a source');
+  assert.match(entry, /It never proposes your TAM/,
+    'the note no longer says the page derives TAM from the founder’s own assumptions');
+  assert.match(entry, /adds to your competitor list rather than starting one/,
+    'the note no longer says Eadwyn cannot start a competitor analysis');
+
+  // Both kinds are named, because a note that describes one of two capabilities
+  // reads as the complete list of what the switch does.
+  assert.match(entry, /sizing inputs/);
+  assert.match(entry, /competitors/);
 });
