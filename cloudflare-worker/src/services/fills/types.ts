@@ -115,8 +115,25 @@ export interface FillTarget {
 
 /** What `apply` did, for the provenance row and the HTTP response. */
 export interface Applied {
-  /** The value actually written, as a person reads it. */
+  /**
+   * The value actually written, AS A PERSON READS IT AND IN THE SAME SHAPE AS
+   * `readable(payload)`. `recordFill` derives `edited` by comparing the two, so a
+   * kind that returns a raw column value here while `readable` returns a sentence
+   * marks every accept as corrected. The pair is an audit record, not two
+   * different views.
+   */
   written: string;
+  /**
+   * The address, when only the write knows it.
+   *
+   * `target()` is computed before `apply` runs and cannot name a row an INSERT is
+   * about to allocate — `insertHypothesis` returns its id, and a pain alias upsert
+   * lands on a row whose id depends on whether the phrase was already grouped. A
+   * kind that writes one of those returns the address it actually wrote, and the
+   * accept route prefers it. `target()` stays for kinds whose address is known up
+   * front, and as the fallback when this is absent.
+   */
+  target?: FillTarget;
   /** Anything the surface wants echoed back — an id, a code. */
   result?: Record<string, unknown>;
 }
@@ -144,6 +161,27 @@ export interface FillKind {
   copy: { run: string; heading: string; empty: string; accept: string };
   /** The system prompt. A `string[].join('\n')`, per this repo's convention. */
   prompt: string;
+
+  /**
+   * Which payload key a founder may rewrite before accepting, or null when none.
+   *
+   * NOT EVERY FILL IS EDITABLE, AND SAYING SO IS THE POINT. A `pain_tag`'s phrase
+   * is the PROJECT'S OWN STRING — `parseTagProposals` emits the logged phrase
+   * rather than the model's echo of it, precisely so a near-miss spelling cannot
+   * become a second phrase. Letting a founder retype it would break the one
+   * guarantee a restatement makes: that the value matches a row already on file.
+   * What they would actually want to change there is the THEME, which is a picker
+   * and not a text box, so the kind declares `null` and the route refuses an edit
+   * with that as its reason rather than silently accepting the original.
+   *
+   * A `hypothesis` claim is the opposite: prose the founder owns the moment they
+   * touch it, and the canvas has offered "Edit the claim" since the band was
+   * drawn.
+   */
+  editableField: string | null;
+
+  /** The proposal as a person reads it — what `fill_provenance` stores. */
+  readable(payload: Record<string, unknown>): string;
 
   gather(ctx: FillContext): Promise<Gathered>;
   parse(text: string, gathered: Gathered): Proposed[];

@@ -40,7 +40,14 @@ import {
   verdictFor, laneFor, barNoteFor, evidenceFor, isIcp, VALIDATION_BAR,
   type ProjectRef,
 } from './_founder_validate_helpers';
-import { insertHypothesis, upsertPainAlias } from './_founder_validate_writes';
+// `insertHypothesis` stays — `POST /hypotheses`, the MANUAL form, is in this
+// file. `upsertPainAlias` left with the accept path's dispatch: the pain tag's
+// registry entry calls it now, and this file's own alias write lives in
+// `progress.ts`. Both callers still go through the one writer, which is the
+// point; only the caller moved.
+import { insertHypothesis } from './_founder_validate_writes';
+import { fillKind } from '../services/fills/registry';
+import { recordFill } from '../services/fills/provenance';
 import {
   DRAFT_PROMPT, MAX_PROMPT_ITEMS, PROPOSAL_KINDS, TAG_PROMPT, TASK_FOR_KIND,
   listPending, parseDraftProposals, parseTagProposals, priorPayloads,
@@ -669,12 +676,21 @@ founderValidate.get('/proposals/:projectId', async (c) => {
 
 type ProposalRow = {
   id: number; project_id: number; kind: string; payload_json: string; status: string;
+  // Migration 246. Null on a row written before it, and on a dev database that
+  // has not applied it — both read as "no citation, no explicit target".
+  target_ref: string | null; citation_json: string | null;
+  model: string | null; task: string | null;
 };
 
 /** The proposal plus the project that owns it, or null. */
 async function loadProposal(env: Env, id: number): Promise<ProposalRow | null> {
+  // `target_ref`, `citation_json`, `model` and `task` join the select because
+  // the accept path now writes a provenance row and all four travel onto it.
+  // Migration 246 added the first two; a database that has not run it returns
+  // them as null, which is what the coalescing reads below expect.
   return env.DB.prepare(
-    'SELECT id, project_id, kind, payload_json, status FROM validate_proposals WHERE id = ?',
+    `SELECT id, project_id, kind, payload_json, status, target_ref, citation_json, model, task
+       FROM validate_proposals WHERE id = ?`,
   ).bind(id).first<ProposalRow>();
 }
 
@@ -711,21 +727,81 @@ founderValidate.post('/proposals/:id/accept', async (c) => {
   try { payload = JSON.parse(row.payload_json); } catch { payload = null; }
   if (!payload) { await revert(); return json({ detail: 'That proposal could not be read' }, 422); }
 
-  try {
-    if (row.kind === 'pain_tag') {
-      const ok = await upsertPainAlias(c.env, row.project_id, Number(payload.pain_group_id), String(payload.phrase));
-      // The theme may have been renamed away or deleted since the proposal was
-      // written. That is not an error in the proposal and not a 500: it is a
-      // proposal that no longer applies, and it goes back to pending so the
-      // founder sees it rather than silently losing it.
-      if (!ok) { await revert(); return json({ detail: 'That theme no longer exists' }, 409); }
-      return json({ ok: true, kind: row.kind });
-    }
-    const written = await insertHypothesis(c.env, row.project_id, String(payload.claim || '').trim());
-    return json({ ok: true, kind: row.kind, hypothesis: written }, 201);
-  } catch (e) {
+  // THE DISPATCH IS THE REGISTRY'S NOW, and it was `if (row.kind ===
+  // 'pain_tag')` here until task #188. Two branches in a file about Validate is
+  // fine for two kinds and is the wrong place for a third: `services/fills/`
+  // holds one entry per kind, each naming its own `apply`, and the invariant
+  // that entry must keep is the one this route always kept — `apply` calls the
+  // function the manual form calls, so accepting and typing produce the same
+  // row. See that file's header for why `insertHypothesis` in particular cannot
+  // be reimplemented.
+  //
+  // AN UNKNOWN KIND REVERTS RATHER THAN THROWS. A proposal whose kind has left
+  // the registry is a row this build cannot apply, which is exactly the
+  // no-longer-applies case the theme check below already handles: back to
+  // pending, so a founder sees it rather than losing it to a 500.
+  const spec = fillKind(row.kind);
+  if (!spec) {
     await revert();
-    return json({ detail: 'That proposal could not be applied', error: (e as Error).message }, 500);
+    return json({ detail: 'That kind of proposal is no longer offered' }, 409);
+  }
+
+  // EDIT-ON-ACCEPT. The canvas has said accept / edit / discard since this band
+  // was drawn and only two of the three existed. A founder who corrects a
+  // proposed value before accepting it has produced something that is neither
+  // the model's answer nor an unaided human one, so `fill_provenance` keeps
+  // BOTH — `edited` is derived there from comparing them, never passed in.
+  const body = await c.req.json().catch(() => ({} as any));
+  const editedValue = body?.value != null ? String(body.value).slice(0, 4000).trim() : null;
+  if (editedValue && !spec.editableField) {
+    // Refused rather than ignored. Accepting the original under an edit the
+    // caller believes was applied is the worse of the two, and for a
+    // `restatement` the reason is real: the value has to stay the row it matched.
+    await revert();
+    return json({
+      detail: 'This proposal is not editable — its value has to stay the one it matched in your project.',
+    }, 422);
+  }
+  const applyPayload = editedValue && spec.editableField
+    ? { ...payload, [spec.editableField]: editedValue }
+    : payload;
+
+  try {
+    const applied = await spec.apply(
+      { env: c.env, user: s.user, projectId: row.project_id }, applyPayload, String(row.target_ref || ''),
+    );
+    // RECORDED AFTER THE WRITE AND NOT SWALLOWED. A value written with no
+    // provenance row is the state `fill_provenance` exists to prevent — on this
+    // page it would mean a figure nothing can attribute — so a failure here
+    // reverts the claim rather than leaving one behind.
+    await recordFill(c.env, {
+      // THE ADDRESS THE WRITE FOUND, when it found one. An INSERT allocates the
+      // row id and an upsert lands on one that depends on what was already there,
+      // so neither is knowable before `apply` runs; `target()` is the fallback for
+      // a kind whose address is fixed up front. Preferring the other way round
+      // would file a hypothesis's provenance against a row that is not it.
+      target: applied.target ?? spec.target(applyPayload, String(row.target_ref || ''), {
+        env: c.env, user: s.user, projectId: row.project_id,
+      }),
+      proposalId: row.id,
+      fillClass: spec.fillClass,
+      proposedValue: spec.readable(payload),
+      writtenValue: applied.written,
+      citation: row.citation_json ? JSON.parse(row.citation_json) : null,
+      model: row.model ?? null,
+      task: row.task ?? null,
+      decidedBy: s.user.id,
+    });
+    return json({ ok: true, kind: row.kind, ...(applied.result || {}) }, row.kind === 'hypothesis' ? 201 : 200);
+  } catch (e) {
+    // The theme may have been renamed away or deleted since the proposal was
+    // written. That is not an error in the proposal and not a 500: it is a
+    // proposal that no longer applies, and it goes back to pending so the
+    // founder sees it rather than silently losing it.
+    await revert();
+    const msg = (e as Error).message;
+    if (/no longer exists/i.test(msg)) return json({ detail: msg }, 409);
+    return json({ detail: 'That proposal could not be applied', error: msg }, 500);
   }
 });
 
