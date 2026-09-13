@@ -241,11 +241,34 @@ test('Client prep blames the access rule, not a table that is actually there', (
   // asserts at both ends: searching a whole file instead is how a sibling test
   // matched an unrelated key three hundred lines down and failed for the wrong
   // reason.
-  const copy = block(copyCode, 'RESEARCH_CLIENT_PREP_COPY');
-  assert.match(copy, /access decision, not an absent table/,
-    'the card must name the access decision as the obstacle');
-  assert.match(copy, /carries their founder id and a project carries the same id/,
-    'the card must say the join exists, since claiming otherwise is what was wrong');
+  // THE OBSTACLE IS NOW ASSERTED WHERE A READER MEETS IT, AND THAT IS THE POINT
+  // OF THE MOVE. It used to be read out of `RESEARCH_CLIENT_PREP_COPY`, which
+  // `boards/research.js` rendered as a no-store GAP on both `/research` roots —
+  // eyebrow "No store behind this yet", heading "The client brief is not built
+  // yet" — over a zone that is in `LIVE_ZONES`, renders a real body and reads
+  // five API methods. The comment above this test already said the reason
+  // "belongs in the zone's own empty state ... rather than in a no-store note
+  // above a card that no longer exists"; the board had not caught up.
+  //
+  // The zone says it PER ROLE, which one board sentence could not: a partner is
+  // told nothing here requests a record, an advisor is told where the half they
+  // already hold lives. That is strictly more accurate than the copy this
+  // replaces, so the assertion moved rather than being dropped.
+  const zone = codeOnly(read('frontend/src/pages/research/ClientPrepZone.jsx'));
+  assert.match(zone, /No client has opened their record to you/,
+    'the zone must name the access decision as the obstacle, not an absent store');
+  assert.match(zone, /A founder opens their record to you by name, and chooses how much of it/,
+    'the advisor arm must say the join exists and is gated by permission');
+  assert.match(zone, /Nothing here requests one — an empty list means none is open/,
+    'the partner arm must distinguish "none open" from "a request is pending"');
+  assert.ok(!/RESEARCH_CLIENT_PREP_COPY/.test(copyCode),
+    'the dead no-store copy is back; a gap object for a live zone gets re-adopted');
+
+  // And the board must not gap a live zone again.
+  const researchBoard = codeOnly(read('frontend/src/workspaces/boards/research.js'));
+  assert.ok(!/gap:/.test(researchBoard.slice(researchBoard.indexOf("'client-prep'") - 200,
+    researchBoard.indexOf("'client-prep'") + 200)),
+    'client-prep is a gap section again, over a zone that renders a real body');
 });
 
 test('Client prep gives the two roles that see it their own reason', () => {
