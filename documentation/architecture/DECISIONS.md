@@ -5048,3 +5048,41 @@ describing the artboard. Accepting a value a founder would have corrected teache
 them to discard and retype — the same work with the proposal's provenance thrown
 away. An unchanged edit is sent as a plain accept, because a table where every row
 is marked corrected says nothing about any of them.
+
+### The fourth surface is a refusal, and the plan's premise for it was wrong
+
+The plan named four surfaces. Three are live — Validate's two restatements, market
+sizing and competitors as `sourced`, brand copy's provenance as `composition`. The
+fourth, company and account settings, gets **no fill**, and the reasoning is worth
+more than the feature would have been.
+
+The plan's guardrail was right: *"Never fill an identity field the platform cannot
+verify — it is the one place a wrong fill carries legal weight."* Its premise was
+not. It listed *"Legal name, jurisdiction, sector, description, links"*, and
+`company_profiles` **has no legal name, no jurisdiction and no incorporation date**.
+Those live on `entities` and `compliance_events` — a legal-filing surface, and a
+different piece of work. So the guardrail had nothing to guard on this page.
+
+What Company Settings actually edits is eleven columns, and applying the same
+tests every other kind passes refuses all eleven:
+
+| Fields | Why no class can keep its promise |
+| --- | --- |
+| `company_name` | Identity. The legal-weight case, and the only one the plan anticipated correctly. |
+| `website`, `linkedin_url`, `logo_url` | **A URL is a model's likeliest fabrication.** The competitor fill's own prompt forbids inventing one; a fill whose entire output *is* a URL cannot make that promise. |
+| `stage`, `revenue_range`, `employee_count`, `international_presence` | Facts only the company holds. Nothing in the project to match back against and nothing outside it to cite, so neither `restatement` nor `sourced` applies — and `composition` may not occupy a column holding a measured value. |
+| `expansion_goals` | Intent, which only the founder has. |
+| `description`, `current_products` | Prose, and **already served**. The brand builder's autofill drafts exactly this from `project.description` and `.problem_statement`, and that path now keeps its provenance. A second mechanism drafting the same sentences from the same source into a different column is a second answer to one question. |
+
+And the page has no AI rail. Adding one to reach a single field would put a spend
+meter and a model card on an administrative form — `eadwynConfig`'s rule is that
+config follows a mount, and the mount would exist only to justify the config.
+
+**The refusal is written as a test, not just as prose.** Deciding not to build
+something leaves no code behind, which means it leaves nothing to disagree with
+later: the next person reads the plan, finds a surface listed as planned, and finds
+no trace of why it is absent. `settings_no_fill.test.ts` fails when a fill starts
+targeting `company_profiles`, when the page mounts a rail, when `eadwynConfig`
+declares a settings surface, and — the assertion that matters most — when Company
+Settings grows a twelfth editable column, because a new field is a new question
+that this reasoning has not answered.
