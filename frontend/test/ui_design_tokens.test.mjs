@@ -172,3 +172,59 @@ test('Inter and Roboto Mono are both declared and actually loaded', () => {
   assert.match(html, /media="print" onload="this\.media='all'"/);
   assert.doesNotMatch(css, /@import url\("https:\/\/fonts\.googleapis/, 'render-blocking font @import is back');
 });
+
+/**
+ * Every axal NEUTRAL that paints text, a border or a surface must have a
+ * dark-mode counterpart in the auto-skin.
+ *
+ * WHY THIS ASSERTION AND NOT A `dark:` PAIRING RULE. Two HQ pages shipped with
+ * near-black `text-axal-ink` headings on a dark ground —
+ * `pages/hq/AccountsPage.jsx` and `ContractsPage.jsx` carry zero `dark:`
+ * classes — and nothing caught it, because `scripts/check-dark-mode.mjs` pairs
+ * only `bg-white`, `text-gray-700|800|900` and `border-gray-200|300`, and the
+ * auto-skin rewrote only those same Tailwind greys. A token-based neutral fell
+ * between the two.
+ *
+ * Requiring an explicit `dark:` beside each use was the obvious fix and the
+ * wrong one: `text-axal-ink` appears in 59 files under pages/ and components/,
+ * `border-axal-hairline` in 38, `bg-axal-ground` in 9. That is churn in place of
+ * a fix, and the next file to reach for the token would be wrong again. The
+ * skin covers all of them at once, so what has to be guarded is the SKIN's
+ * coverage — one rule per neutral — rather than ninety-odd call sites.
+ *
+ * ONLY THE NEUTRALS ARE LISTED. The brand violets read on either ground and D2
+ * pins them to their spec values on purpose; a dark variant of a brand colour
+ * would be a second palette rather than a skin.
+ */
+test('every axal neutral that paints has a dark-mode counterpart in the skin', () => {
+  // The utility prefix each neutral is actually used through. A token painting
+  // in a role the skin does not cover is the defect, so the ROLE is named here
+  // rather than inferred from the token name.
+  const NEUTRALS = [
+    ['axal-ink', 'text'],
+    ['axal-muted', 'text'],
+    ['axal-faint', 'text'],
+    ['axal-hairline', 'border'],
+    ['axal-ground', 'bg'],
+  ];
+
+  const declared = new Set(
+    [...css.matchAll(/--(?:color|radius|tracking|font)-(axal-[a-z0-9-]+)\s*:/g)].map((m) => m[1]),
+  );
+
+  const missing = [];
+  for (const [token, role] of NEUTRALS) {
+    assert.ok(declared.has(token),
+      `${token} is in the neutrals list but @theme no longer declares it — `
+      + 'update the list or restore the token, do not leave them disagreeing');
+    // The skin's own shape: zero-specificity `:where(.dark [data-app-main] …)`
+    // so an explicit `dark:` utility still wins. Matching on the class plus the
+    // `.dark` scope is what distinguishes a skin rule from the @theme
+    // declaration that mints the utility.
+    const rule = new RegExp(`\\.dark \\[data-app-main\\] \\.${role}-${token}:not`);
+    if (!rule.test(css)) missing.push(`${role}-${token}`);
+  }
+  assert.deepEqual(missing, [],
+    'these neutrals paint with no dark counterpart, so they render their light '
+    + `value on a dark ground:\n  ${missing.join('\n  ')}`);
+});
