@@ -431,11 +431,17 @@ export default function PartnerRetainersZone() {
   // Hoisted so the gate branch below and the live row draw the SAME row.
   // With nothing loaded the export renders disabled and says so itself,
   // which is what makes a header row over an unreadable store honest.
+  // `utilisation_pct` is TOP-LEVEL on the row, spread there by `utilisationFor()`
+  // — it is not part of the nested `retainer` record, unlike the four fields
+  // beside it. Exporting it as `r.retainer?.utilisation_pct` gave an empty
+  // Utilisation column while the table above rendered the real number from
+  // `r.utilisation_pct`. Nobody saw it because the export is disabled until
+  // rows load, and this firm had none.
   const rowActions = partnerZoneActions('pipeline/retainers', { view: {
         header: ['Client', 'Engagement', 'Amount (cents)', 'Cadence', 'Retained hours', 'Used', 'Utilisation %', 'Renews'],
         rows: visible,
         cells: (r) => [r.founder_name, r.need_title, r.retainer?.amount_cents, r.retainer?.cadence,
-          r.retained_hours, r.hours_used, r.retainer?.utilisation_pct, r.retainer?.renews_at],
+          r.retained_hours, r.hours_used, r.utilisation_pct, r.retainer?.renews_at],
       } });
 
   if (isNoPartnerProfile(state.error)) {

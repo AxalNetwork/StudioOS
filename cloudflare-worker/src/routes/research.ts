@@ -1757,14 +1757,29 @@ const DRAFT_SURFACES: Record<string, {
               AND NOT EXISTS (SELECT 1 FROM partner_lead_passes lp WHERE lp.need_id = n.id AND lp.partner_id = ?)
             ORDER BY n.created_at DESC LIMIT 25`
         ).bind(me.partner_id, me.partner_id).all<any>(),
+        // THE SAME `service_offerings` MISTAKE THAT TOOK /pipeline/leads DOWN,
+        // twice in one string. The table keys on `owner_user_id REFERENCES
+        // users(id)` and has never had a `partner_id`, so `o.partner_id` was
+        // "no such column" both in the predicate and in the correlated count —
+        // which meant this gather, the one behind the "draft a proposal" action
+        // on that very page, failed the same way the list did.
+        //
+        // `e.partner_id` IS right: engagements key on `partners(id)`, so only
+        // the `= o.partner_id` half was broken. `firm_wins` counts the whole
+        // firm's engagements and is therefore the same number on every row, so
+        // it takes the bound partner id directly rather than correlating to a
+        // column the offerings table does not have. Offerings are reached the
+        // way migration 200 populated them (200_service_offerings_shape.sql:174):
+        // through `users.partner_id`, for the firm rather than one member.
         c.env.DB.prepare(
           `SELECT o.title, o.category,
                   (SELECT COUNT(*) FROM engagements e
                      JOIN quotes q ON q.id = e.quote_id
-                    WHERE e.partner_id = o.partner_id) AS firm_wins
+                    WHERE e.partner_id = ?) AS firm_wins
              FROM service_offerings o
-            WHERE o.partner_id = ? AND o.is_active = 1 LIMIT 25`
-        ).bind(me.partner_id).all<any>(),
+            WHERE o.owner_user_id IN (SELECT id FROM users WHERE partner_id = ?)
+              AND o.is_active = 1 LIMIT 25`
+        ).bind(me.partner_id, me.partner_id).all<any>(),
         c.env.DB.prepare(
           `SELECT kind, value, floor_cents, statement FROM partner_fit_rules
             WHERE partner_id = ? AND is_active = 1 LIMIT 50`

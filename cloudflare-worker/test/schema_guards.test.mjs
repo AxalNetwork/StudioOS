@@ -351,10 +351,38 @@ test('the worker INSERTs, UPDATEs and SELECTs no column that does not exist', ()
   // gate; this keeps the property visible in the test suite too. Covers both
   // INSERT lists, UPDATE SET clauses, single-table SELECT lists, qualified
   // join references and single-table predicates.
-  // One reviewed gap remains on record: corporate_profiles.kyb_status, where
-  // nothing writes a KYB decision at all, so a column would not help.
+  // TWO reviewed gaps remain on record, and the second set arrived by the guard
+  // getting SHARPER rather than by new code being written.
+  //
+  //   * `corporate_profiles.kyb_status` — nothing writes a KYB decision at all,
+  //     so a column would not help.
+  //   * the six `metrics_snapshots.*` — that name covers two different tables.
+  //     Production's is a DEAL metrics table (schema_baseline.sql:2994, created
+  //     at runtime by routes/pipeline.ts:54); services/queueWorker.ts reads and
+  //     writes a generic metric series, which is the retired
+  //     sql/historical/infrastructure.sql shape. The traction_review job is dead
+  //     end to end as a result. Recorded rather than renamed: the two uses want
+  //     different tables, not different column names.
+  //
+  // They were invisible until `knownColumns()` stopped unioning `sql/historical/`
+  // into its harvest — that folder's own README says nothing builds from it, but
+  // `walk()` recursed into it anyway, so retired shapes merged with live ones and
+  // the union satisfied every query. That masked a live outage:
+  // `partner_pipeline.ts` read `service_offerings.partner_id`, a column that
+  // table has never had, and answered `D1_ERROR: no such column` to every
+  // partner while this assertion was green.
+  //
+  // Still an exact match, so a NEW unknown column fails here as before.
   const unknown = [...unknownColumns().keys()].sort();
-  assert.deepEqual(unknown, ['corporate_profiles.kyb_status'], `unexpected: ${unknown.join(', ')}`);
+  assert.deepEqual(unknown, [
+    'corporate_profiles.kyb_status',
+    'metrics_snapshots.captured_at',
+    'metrics_snapshots.extra',
+    'metrics_snapshots.metric_name',
+    'metrics_snapshots.scope',
+    'metrics_snapshots.scope_id',
+    'metrics_snapshots.value',
+  ], `unexpected: ${unknown.join(', ')}`);
 });
 
 test('a map is resolved by name, never by proximity', () => {
