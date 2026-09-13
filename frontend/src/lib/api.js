@@ -1360,7 +1360,13 @@ export const api = {
   proposeValidate: (projectId, data) => request(`/founder/validate/propose/${projectId}`, {
     method: 'POST', timeoutMs: 60_000, body: JSON.stringify(data),
   }),
-  acceptValidateProposal: (id) => request(`/founder/validate/proposals/${id}/accept`, { method: 'POST' }),
+  // `body` carries `{ value }` for an accept-with-edit and is omitted otherwise.
+  // Omitted rather than sent as the unchanged original, because `fill_provenance`
+  // derives `edited` from comparing the two and a table where every row is marked
+  // corrected says nothing about any of them.
+  acceptValidateProposal: (id, body) => request(`/founder/validate/proposals/${id}/accept`, {
+    method: 'POST', ...(body ? { body: JSON.stringify(body) } : {}),
+  }),
   discardValidateProposal: (id) => request(`/founder/validate/proposals/${id}/discard`, { method: 'POST' }),
 
   // ---------- Validate · interview recordings (migration 215) ----------

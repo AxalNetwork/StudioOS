@@ -46,7 +46,7 @@ import {
 // `progress.ts`. Both callers still go through the one writer, which is the
 // point; only the caller moved.
 import { insertHypothesis } from './_founder_validate_writes';
-import { fillKind } from '../services/fills/registry';
+import { FILL_KINDS, fillKind } from '../services/fills/registry';
 import { recordFill } from '../services/fills/provenance';
 import {
   DRAFT_PROMPT, MAX_PROMPT_ITEMS, PROPOSAL_KINDS, TAG_PROMPT, TASK_FOR_KIND,
@@ -669,8 +669,32 @@ founderValidate.get('/proposals/:projectId', async (c) => {
       kind: row.kind,
       model: row.model,
       created_at: row.created_at,
+      // Migration 246. Null on a row written before it; the band shows the
+      // citation only when there is one, which is also what tells a reader a
+      // `sourced` fill is sourced rather than merely labelled.
+      fill_class: row.fill_class ?? null,
+      citation: (() => {
+        try { return row.citation_json ? JSON.parse(row.citation_json) : null; } catch { return null; }
+      })(),
       payload: (() => { try { return JSON.parse(row.payload_json); } catch { return null; } })(),
     })).filter((p) => p.payload !== null),
+    // THE BAND'S COPY COMES FROM THE REGISTRY, with the list that needs it.
+    //
+    // `ValidateProposals.jsx` held its own `COPY` map, hardcoded to the two kinds,
+    // and a third kind meant editing it as well as the registry — two places for
+    // one fact, which is the thing the registry was built to stop. Travelling on
+    // the list response rather than through a new endpoint keeps it one request
+    // and keeps `eadwynConfig`'s rule intact: config follows a mount.
+    //
+    // `editable` is what the Edit control is drawn from. A kind that declares no
+    // editable field must not offer one — a `pain_tag`'s phrase is the project's
+    // own logged string, and the accept route refuses an edit to it with that as
+    // the reason, so drawing the control would be a button that always fails.
+    kinds: Object.fromEntries(Object.values(FILL_KINDS).map((k) => [k.kind, {
+      copy: k.copy,
+      fill_class: k.fillClass,
+      editable: k.editableField != null,
+    }])),
   });
 });
 
