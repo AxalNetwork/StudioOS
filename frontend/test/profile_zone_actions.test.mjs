@@ -1194,15 +1194,28 @@ test('a gap note describes the screen, never a capability the API already has', 
   // `kind: 'handler'` now, which is what "if it was wired, delete this row"
   // below always meant. `investor_deals_id3.test.mjs` asserts the wiring.
   //
-  // AND `funds/calls` TURNED OUT TO BE A THIRD THING, which is why it stays
-  // with a narrower reason rather than becoming a form too. Both of its routes
-  // are real and neither gives this page a row to show: `POST /api/capital/calls`
-  // writes a `capital_calls` row and is admin-only, so an investor is refused;
-  // `POST /api/funds/:id/capital-call` is open to the fund's own GP and only
-  // enqueues a notice job, which writes an activity line per LP and bumps
-  // `vc_funds.deployed_capital` without creating a call row at all. "Served by
-  // the API, no screen yet" was true of the route and false about the outcome —
-  // a form there would return 200 over an empty ledger.
+  // `funds/calls` WAS A THIRD THING AND HAS SINCE BECOME THE FIRST AGAIN, which
+  // is the whole reason this assertion is worth its length.
+  //
+  // It used to be that both of its routes were real and neither gave this page a
+  // row to show: `POST /api/capital/calls` writes a `capital_calls` row but is
+  // admin-only, so an investor is refused; `POST /api/funds/:id/capital-call` is
+  // open to the fund's own GP and only enqueued a notice job, which wrote an
+  // activity line per LP and bumped `vc_funds.deployed_capital` without creating
+  // a call row at all. "Served by the API, no screen yet" was true of the route
+  // and false about the outcome — a form there would have returned 200 over an
+  // empty ledger, so this test DEMANDED the reason name the ledger and FORBADE
+  // the missing-screen phrasing.
+  //
+  // TASK #197 BUILT THE LEDGER, so both of those demands inverted. The job writes
+  // one `capital_calls` row per committed or active LP, pro-rata and idempotent
+  // (`cloudflare-worker/test/capital_call_ledger.test.ts`), and it no longer
+  // touches `deployed_capital` — that figure moves when an LP pays, which is the
+  // only reading its own labels support. A form here would now land rows this
+  // page can show, so the missing screen is once again the true gap and the
+  // ledger claim is the false one. The assertions below are flipped to match,
+  // and this paragraph is why: the demand was right when written and is wrong
+  // now, which is a property of the product changing rather than of the test.
   //
   // The tie runs both ways. If the method is removed, the note stops being true
   // in the OTHER direction and this fails; if the note goes back to denying the
@@ -1228,16 +1241,26 @@ test('a gap note describes the screen, never a capability the API already has', 
     assert.ok(note, `${zone}'s "${label}" is no longer a stated gap — if it was wired, delete this row`);
     assert.doesNotMatch(note[1], DENIALS,
       `${zone} "${label}" denies a capability ${method} provides: "${note[1]}"`);
-    // WHERE THE GAP IS — AND FOR THIS ZONE IT IS NO LONGER THE SCREEN. The old
-    // required phrase was "no screen offers the form yet", which was the right
-    // demand while both rows shared that idiom. `funds/calls` does not: its
-    // GP-reachable route runs and writes no call row, so a form would return 200
-    // over an empty ledger. The reason must name the LEDGER as what is missing,
-    // or the next reader builds the form and ships that 200.
-    assert.match(note[1], /ledger/,
-      `${zone} "${label}" must say where the gap actually is`);
-    assert.doesNotMatch(note[1], /no screen offers the form yet/,
-      `${zone} "${label}" is back to blaming a missing screen, and a form there would show nothing`);
+    // WHERE THE GAP IS — AND FOR THIS ZONE IT IS THE SCREEN AGAIN, since #197.
+    // The reason must say a screen is what is missing, because that is now true
+    // and because it is what tells the next reader the form is worth building.
+    assert.match(note[1], /no screen offers the form yet/,
+      `${zone} "${label}" must say the screen is what is missing — the route and ledger are live`);
+    // AND IT MUST NOT GO BACK TO BLAMING THE LEDGER. That claim was true for one
+    // release and is now the stale one: a reason saying nothing reaches the
+    // ledger would talk a reader out of building the one thing left to build.
+    assert.doesNotMatch(note[1], /nothing reaches the ledger|rather than a call row/,
+      `${zone} "${label}" still says the ledger is empty, which #197 fixed`);
+    // The tie to the store, so this cannot drift back silently: the job writes
+    // the rows, and it does not move the figure that means money paid out.
+    const job = read('cloudflare-worker/src/services/queueWorker.ts');
+    const at2 = job.indexOf("case 'capital_call_notice'");
+    assert.ok(at2 > 0, 'the capital call job is gone');
+    const handler = job.slice(at2, job.indexOf('\n    case ', at2 + 10));
+    assert.match(handler, /insertCapitalCalls\(env, billable\.map\(/,
+      'the call job no longer writes a capital_calls row, so this reason is wrong again');
+    assert.doesNotMatch(handler, /SET deployed_capital = deployed_capital \+/,
+      'the call job bumps deployed_capital again, which double-counts against the pay path');
   }
 });
 
