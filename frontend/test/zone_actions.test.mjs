@@ -239,6 +239,11 @@ test('each zone\'s view map holds exactly the live chips its table declares', ()
     'validate/interviews': 'const INTERVIEW_VIEWS = {',
     'validate/hypotheses': 'const HYPOTHESIS_VIEWS = {',
     'validate/verdict': 'const SUMMARY_VIEWS = {',
+    // JOINED WHEN ITS FIRST CHIP WENT LIVE. `Need-to-have` was prose because
+    // `interview_pain_severities` had no reader and no writer; it has both now,
+    // so the zone has a live key and needs its predicate under this guard like
+    // the other three. The other three labels on that row are still prose.
+    'validate/pain-map': 'const PAIN_VIEWS = {',
   };
   for (const [zone, decl] of Object.entries(MAPS)) {
     const live = (FOUNDER_ZONE_FILTERS[zone] || []).filter((f) => f.key).map((f) => f.key).sort();
@@ -249,12 +254,20 @@ test('each zone\'s view map holds exactly the live chips its table declares', ()
       + `${JSON.stringify(keys)} — a chip with no predicate falls back to the default view `
       + 'and answers a different question');
   }
-  // And the zone whose four labels are ALL prose has no map at all: an empty one
-  // would be a place for a chip to reappear without its table entry changing.
-  const painMap = FOUNDER_ZONE_FILTERS['validate/pain-map'] || [];
-  assert.equal(painMap.filter((f) => f.key).length, 0,
-    'validate/pain-map gained a live chip; it needs a view map and an entry above');
-  assert.ok(!/const PAIN_MAP_VIEWS/.test(src), 'a pain-map view map appeared with no live chip to serve');
+  // WAS "the zone whose four labels are ALL prose has no map at all", asserting
+  // `validate/pain-map` had zero live chips and no map — "an empty one would be
+  // a place for a chip to reappear without its table entry changing". That was
+  // a true statement about a schedule, and the loop above is the invariant: a
+  // zone's map holds exactly its live keys, whether that is none or four. The
+  // zone is now in `MAPS` and checked by the same rule as its siblings.
+  //
+  // What the sentence was protecting is kept, generalised: a map with no zone
+  // in `MAPS` is a map nothing checks.
+  const declared = [...src.matchAll(/^const ([A-Z_]+_VIEWS) = \{/gm)].map((m) => m[1]).sort();
+  const guarded = Object.values(MAPS).map((d) => d.slice('const '.length, d.indexOf(' = {'))).sort();
+  assert.deepEqual(declared, guarded,
+    `this file declares ${JSON.stringify(declared)} and the guard covers ${JSON.stringify(guarded)} — `
+    + 'a view map nobody checks is a chip row that can drift from its table');
 });
 
 test('every api method the handlers name is one that exists', () => {
