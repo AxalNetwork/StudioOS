@@ -107,7 +107,7 @@ function ConsentRow({ consent, onWithdraw, busy }) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
             <span className="font-semibold">{consent.consenter_name}</span>
-            {consent.consenter_role && <span className="text-axal-ink-3">{consent.consenter_role}</span>}
+            {consent.consenter_role && <span className="text-axal-faint">{consent.consenter_role}</span>}
             {live && <Pill tone="ok">Agreed</Pill>}
             {consent.withdrawn_at && <Pill tone="neutral">Withdrawn</Pill>}
             {!live && !consent.withdrawn_at && <Pill tone="warn">Not answered</Pill>}
@@ -116,11 +116,11 @@ function ConsentRow({ consent, onWithdraw, busy }) {
             /* The exact words agreed to, quoted. Consent to "a case study" and
                consent to "a case study naming our revenue" are different
                consents, so a boolean cannot stand in for the wording. */
-            <p className="mt-1 max-w-xl text-[12px] italic leading-relaxed text-axal-ink-2">
+            <p className="mt-1 max-w-xl text-[12px] italic leading-relaxed text-axal-muted">
               “{consent.consent_text}”
             </p>
           )}
-          <div className="mt-0.5 text-[11px] text-axal-ink-3">
+          <div className="mt-0.5 text-[11px] text-axal-faint">
             {consent.requested_at && <>Asked {formatDay(consent.requested_at)}</>}
             {consent.consent_given_at && <> · agreed {formatDay(consent.consent_given_at)}</>}
             {consent.withdrawn_at && <> · withdrawn {formatDay(consent.withdrawn_at)}</>}
@@ -155,7 +155,7 @@ function AskPanel({ item, onAsk, busy, issuedToken }) {
         <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-amber-deep dark:text-amber-300">
           Copy this link now
         </div>
-        <p className="mt-1 text-[12.5px] leading-relaxed text-axal-ink-2">
+        <p className="mt-1 text-[12.5px] leading-relaxed text-axal-muted">
           This is the only time it is shown. It is {issuedToken.consenter_name}’s
           credential for answering, so no later read returns it — a firm that
           could read it back could answer on their client’s behalf, which would
@@ -167,7 +167,7 @@ function AskPanel({ item, onAsk, busy, issuedToken }) {
           value={link}
           onFocus={(e) => e.target.select()}
         />
-        <p className="mt-2 text-[11.5px] text-axal-ink-3">
+        <p className="mt-2 text-[11.5px] text-axal-faint">
           Nothing was emailed. Send it however you already talk to them.
         </p>
       </div>
@@ -175,7 +175,7 @@ function AskPanel({ item, onAsk, busy, issuedToken }) {
   }
 
   return (
-    <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
+    <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
       <div className="grid gap-3 md:grid-cols-3">
         <Field label="Who is being asked">
           <input className={inputClass} value={form.consenter_name} maxLength={200}
@@ -197,7 +197,7 @@ function AskPanel({ item, onAsk, busy, issuedToken }) {
       >
         Create the ask
       </button>
-      <p className="mt-2 text-[11.5px] leading-relaxed text-axal-ink-3">
+      <p className="mt-2 text-[11.5px] leading-relaxed text-axal-faint">
         This records the ask and gives you a link. It does not send anything —
         whether this product should email your client on your behalf is not a
         decision a form should make quietly.
@@ -227,7 +227,7 @@ function ProofCard({ item, onSave, onDelete, onAsk, onWithdraw, busy, note, issu
               ? <Pill tone="ok">Published with consent</Pill>
               : <Pill tone="warn">Self-stated</Pill>}
           </div>
-          <div className="mt-0.5 text-[11.5px] text-axal-ink-3">
+          <div className="mt-0.5 text-[11.5px] text-axal-faint">
             {item.need_title
               ? <>From {item.need_title}{item.founder_name ? ` · ${item.founder_name}` : ''}</>
               : <Unrecorded>No engagement attached</Unrecorded>}
@@ -244,13 +244,13 @@ function ProofCard({ item, onSave, onDelete, onAsk, onWithdraw, busy, note, issu
       </div>
 
       {item.detail && (
-        <p className="mt-2 max-w-2xl text-[12.5px] leading-relaxed text-axal-ink-2">{item.detail}</p>
+        <p className="mt-2 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">{item.detail}</p>
       )}
       {item.outcome_note && (
-        <p className="mt-2 max-w-2xl text-[12.5px] leading-relaxed text-axal-ink-2">
+        <p className="mt-2 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
           <span className="font-semibold">Result claimed: </span>{item.outcome_note}
           {!item.is_published && (
-            <span className="text-axal-ink-3">
+            <span className="text-axal-faint">
               {' '}— the firm’s own account of it, with nothing confirming it yet.
             </span>
           )}
@@ -258,7 +258,7 @@ function ProofCard({ item, onSave, onDelete, onAsk, onWithdraw, busy, note, issu
       )}
 
       {edit && (
-        <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
+        <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
           <div className="grid gap-3 md:grid-cols-2">
             <Field label="Title">
               <input className={inputClass} value={draft.title || ''} maxLength={200}
@@ -303,7 +303,7 @@ function ProofCard({ item, onSave, onDelete, onAsk, onWithdraw, busy, note, issu
 
       {item.consents.length > 0 && (
         <div className="mt-3">
-          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             Consent record
           </div>
           <div className="mt-1">
@@ -348,7 +348,7 @@ function AskModal({ items, busy, issued, onAsk, onClose }) {
           <button type="button" className={ghostButtonClass} onClick={onClose}>Close</button>
         </div>
         {items.length === 0 ? (
-          <p className="mt-3 text-[12.5px] leading-relaxed text-axal-ink-2">
+          <p className="mt-3 text-[12.5px] leading-relaxed text-axal-muted">
             There is nothing to ask about yet. Record a case study or an outcome first —
             a consent is about a specific claim, so there has to be one.
           </p>
@@ -590,7 +590,7 @@ export default function PartnerProofZone() {
           />
 
           {adding && (
-            <div className="rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
+            <div className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
               <div className="grid gap-3 md:grid-cols-2">
                 <Field label="Title">
                   <input className={inputClass} value={newItem.title} maxLength={200}
@@ -630,7 +630,7 @@ export default function PartnerProofZone() {
                 as "you have no proof", which is a different and much worse
                 claim than "none of it is in this state". */}
             {items.length > 0 && visible.length === 0 && (
-              <p className="mb-3 text-[12px] text-axal-ink-2">
+              <p className="mb-3 text-[12px] text-axal-muted">
                 No item is in this state. {items.length} recorded in total.
               </p>
             )}

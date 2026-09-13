@@ -99,13 +99,13 @@ function takeRatePct(rate) {
 function Stat({ label, value, note, tone }) {
   return (
     <Card padding="md">
-      <div className="text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-ink-3">{label}</div>
+      <div className="text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint">{label}</div>
       <div className={`mt-1.5 text-[22px] font-extrabold leading-none tracking-tight tabular-nums ${
         tone === 'warn' ? 'text-amber-700 dark:text-amber-400'
           : tone === 'ok' ? 'text-emerald-700 dark:text-emerald-400' : ''}`}>
         {value}
       </div>
-      <div className="mt-1.5 text-[11px] leading-relaxed text-axal-ink-3">{note}</div>
+      <div className="mt-1.5 text-[11px] leading-relaxed text-axal-faint">{note}</div>
     </Card>
   );
 }
@@ -113,14 +113,14 @@ function Stat({ label, value, note, tone }) {
 function Figure({ label, cents, hint, strong = false }) {
   return (
     <Card variant={strong ? 'accent' : 'plain'} padding="md">
-      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{label}</div>
+      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</div>
       <div className={`mt-1 tabular-nums font-extrabold ${strong ? 'text-[22px]' : 'text-[18px]'}`}>
         {/* A roll-up over zero rows is a real zero — the advisor has recorded
             nothing collected. That is different from Sessions, where a NULL
             price means "not answered"; here the sum is a fact. */}
         {money(cents) ?? <Unrecorded />}
       </div>
-      {hint && <p className="mt-1 text-[11px] leading-relaxed text-axal-ink-3">{hint}</p>}
+      {hint && <p className="mt-1 text-[11px] leading-relaxed text-axal-faint">{hint}</p>}
     </Card>
   );
 }
@@ -458,7 +458,7 @@ export default function EarningsZone() {
             <Card padding="md" className="mt-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h3 className="text-[13px] font-extrabold tracking-tight">By client · {window_.label}</h3>
-                <span className="text-[10.5px] text-axal-ink-3">
+                <span className="text-[10.5px] text-axal-faint">
                   Only here · the compressed zone shows one month, unsplit
                 </span>
               </div>
@@ -467,7 +467,7 @@ export default function EarningsZone() {
                   <thead>
                     <tr className="border-b border-axal-hairline text-left dark:border-gray-700">
                       {['Client', 'Sessions', 'Retainer', 'Gross', 'Cut', 'You receive'].map((h, i) => (
-                        <th key={h} className={`px-2 py-2 text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-ink-3 ${i ? 'text-right' : ''}`}>
+                        <th key={h} className={`px-2 py-2 text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint ${i ? 'text-right' : ''}`}>
                           {h}
                         </th>
                       ))}
@@ -489,7 +489,7 @@ export default function EarningsZone() {
                             </div>
                           )}
                           {r.engagement_shape === 'equity' && (
-                            <div className="mt-0.5 text-[10.5px] text-axal-ink-3">
+                            <div className="mt-0.5 text-[10.5px] text-axal-faint">
                               Paid in equity — real compensation a cash ledger cannot hold
                             </div>
                           )}
@@ -521,7 +521,7 @@ export default function EarningsZone() {
                   </tbody>
                 </table>
               </div>
-              <p className="mt-3 text-[11.5px] leading-relaxed text-axal-ink-3">
+              <p className="mt-3 text-[11.5px] leading-relaxed text-axal-faint">
                 {cutNote({
                   cutLabel: money(totals?.cut_cents),
                   concentration: L.concentration,
@@ -546,7 +546,7 @@ export default function EarningsZone() {
         <Card padding="md">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h3 className="text-[13px] font-extrabold tracking-tight">Payout account</h3>
-            <span className="text-[10.5px] text-axal-ink-3">All three states · gates charging</span>
+            <span className="text-[10.5px] text-axal-faint">All three states · gates charging</span>
           </div>
           <div className="mt-3 grid gap-2">
             {PAYOUT_STATES.map(([key, label, tone, gate]) => (
@@ -559,7 +559,7 @@ export default function EarningsZone() {
                   <Pill tone={tone}>{label}</Pill>
                   {key === currentState && <Pill tone="ok">Yours</Pill>}
                 </div>
-                <p className="mt-1.5 text-[11px] leading-relaxed text-axal-ink-3">{gate}</p>
+                <p className="mt-1.5 text-[11px] leading-relaxed text-axal-faint">{gate}</p>
               </div>
             ))}
           </div>
@@ -584,7 +584,7 @@ export default function EarningsZone() {
 
           {/* NOT YET ASKED IS NOT REFUSED, and the two look identical in the
               card above. `last_checked_at` is what separates them. */}
-          <p className="mt-3 text-[11px] leading-relaxed text-axal-ink-3">
+          <p className="mt-3 text-[11px] leading-relaxed text-axal-faint">
             {payout == null
               ? 'Your payout account could not be read, so the state above is not yours — reload to try again.'
               : payout?.started
@@ -607,10 +607,10 @@ export default function EarningsZone() {
         <Card padding="md">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h3 className="text-[13px] font-extrabold tracking-tight">Payout history</h3>
-            <span className="text-[10.5px] text-axal-ink-3">Audit trail · only here</span>
+            <span className="text-[10.5px] text-axal-faint">Audit trail · only here</span>
           </div>
           {payouts.length === 0 ? (
-            <p className="mt-3 text-[11.5px] leading-relaxed text-axal-ink-3">
+            <p className="mt-3 text-[11.5px] leading-relaxed text-axal-faint">
               No payout has been recorded. Nothing settles through Axal today, so this is the honest
               state rather than an empty list waiting to fill.
             </p>
@@ -621,7 +621,7 @@ export default function EarningsZone() {
                 return (
                   <li key={p.uid} data-testid={`payoutrow-d4-${p.uid}`}
                     className="flex flex-wrap items-center justify-between gap-2 rounded-[9px] border border-axal-hairline p-2.5 dark:border-gray-700">
-                    <span className="text-[11px] tabular-nums text-axal-ink-3">
+                    <span className="text-[11px] tabular-nums text-axal-faint">
                       {when.text ?? <Unrecorded>No date</Unrecorded>}
                       {when.kind === 'scheduled' && ' · expected'}
                     </span>
@@ -655,7 +655,7 @@ export default function EarningsZone() {
             {note && !editing ? (
               <>
                 <p className="mt-2 whitespace-pre-wrap text-[12px] leading-relaxed">{note?.body}</p>
-                <p className="mt-1.5 text-[10.5px] text-axal-ink-3">
+                <p className="mt-1.5 text-[10.5px] text-axal-faint">
                   {note?.source === 'ai' ? 'Drafted by Eadwyn, accepted as written.'
                     : note?.source === 'edited' ? 'Drafted by Eadwyn, edited by you.'
                       : 'Written by you.'}
@@ -698,7 +698,7 @@ export default function EarningsZone() {
               )}
             </div>
             <SaveNote note={saveNote} />
-            <p className="mt-2 text-[10.5px] leading-relaxed text-axal-ink-3">
+            <p className="mt-2 text-[10.5px] leading-relaxed text-axal-faint">
               The draft is written from the figures above as summary lines — counts and totals this
               page already shows — and never from the rows behind them, so no client's name reaches
               the model.
@@ -719,7 +719,7 @@ export default function EarningsZone() {
           <Card padding="md">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h3 className="text-[13px] font-extrabold tracking-tight">Whether it arrived</h3>
-              <span className="text-[10.5px] text-axal-ink-3">Your own bookkeeping · all time</span>
+              <span className="text-[10.5px] text-axal-faint">Your own bookkeeping · all time</span>
             </div>
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Figure strong label="Collected" cents={d.collected_cents}
@@ -734,9 +734,9 @@ export default function EarningsZone() {
               <table className="w-full text-[12.5px]">
                 <thead>
                   <tr className="border-b border-axal-hairline text-left dark:border-gray-700">
-                    <th className="px-2 py-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">State</th>
-                    <th className="px-2 py-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Sessions</th>
-                    <th className="px-2 py-2 text-right text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Total</th>
+                    <th className="px-2 py-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">State</th>
+                    <th className="px-2 py-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Sessions</th>
+                    <th className="px-2 py-2 text-right text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Total</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -746,7 +746,7 @@ export default function EarningsZone() {
                       <tr key={row.state} className="border-b border-axal-hairline/60 last:border-0 dark:border-gray-800">
                         <td className="px-2 py-2.5">
                           <Pill tone={tone}>{label}</Pill>
-                          <div className="mt-1 text-[11px] text-axal-ink-3">{hint}</div>
+                          <div className="mt-1 text-[11px] text-axal-faint">{hint}</div>
                         </td>
                         <td className="px-2 py-2.5 tabular-nums">{row.bookings}</td>
                         <td className="px-2 py-2.5 text-right font-semibold tabular-nums">
@@ -775,7 +775,7 @@ export default function EarningsZone() {
                 inside a className must not be allowed to open one. A comment
                 explaining a ban must therefore not reproduce the banned
                 string. D75. */}
-            <p className="mt-3 text-[11px] leading-relaxed text-axal-ink-3">
+            <p className="mt-3 text-[11px] leading-relaxed text-axal-faint">
               Amounts are in {d.currency || 'USD'} and are your own record. Axal does not invoice
               your clients and holds no money on your behalf.{' '}
               {d.settlement === 'none' ? (

@@ -61,7 +61,7 @@ function PropositionCard({ row, onAnswered }) {
           <div className="text-[13px] font-extrabold tracking-tight">
             {row.target?.name || <Unrecorded>Name not recorded</Unrecorded>}
           </div>
-          <div className="mt-0.5 text-[11.5px] text-axal-ink-3">
+          <div className="mt-0.5 text-[11.5px] text-axal-faint">
             {[row.target?.role, row.target?.headline, row.target?.country].filter(Boolean).join(' · ') || null}
           </div>
         </div>
@@ -124,7 +124,7 @@ export default function IntroductionsZone({ role = 'advisor', zoneFilters = null
           title="Introductions proposed to you"
           blurb="Double opt-in: an introduction only becomes one when both sides accept, and a decline is never reported back."
           action={(
-            <span className="text-[12px] text-axal-ink-2">
+            <span className="text-[12px] text-axal-muted">
               Credits:{' '}
               {balance == null ? <Unrecorded /> : <span className="font-extrabold">{balance}</span>}
             </span>

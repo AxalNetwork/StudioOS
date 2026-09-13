@@ -196,7 +196,7 @@ export default function PartnerProposalsZone() {
           </div>
 
           {d?.read_receipts_note && (
-            <p className="text-[12.5px] leading-relaxed text-axal-ink-2">{d.read_receipts_note}</p>
+            <p className="text-[12.5px] leading-relaxed text-axal-muted">{d.read_receipts_note}</p>
           )}
 
           <Instrument
@@ -235,7 +235,7 @@ export default function PartnerProposalsZone() {
           />
 
           {items.length > 0 && visible.length === 0 && (
-            <p className="text-[12px] text-axal-ink-2">
+            <p className="text-[12px] text-axal-muted">
               No proposal is in this state. {items.length} in total.
             </p>
           )}
@@ -362,7 +362,7 @@ export default function PartnerProposalsZone() {
 
             {items.some((r) => r.state === 'Lost') && (
               <div className="mt-5 border-t border-axal-hairline pt-4 dark:border-gray-700">
-                <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+                <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
                   Why a proposal was lost
                 </div>
                 <div className="mt-2 space-y-2">

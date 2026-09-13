@@ -90,8 +90,8 @@ const TERM_TONE = {
 /** Days stalled, in the words the canvas uses, or the absence said plainly. */
 function StalledFor({ days }) {
   if (days === null || days === undefined) return <Unrecorded>Not moved yet</Unrecorded>;
-  if (days <= 0) return <span className="text-axal-ink-2">Moved today</span>;
-  const tone = days >= 7 ? 'font-semibold text-amber-700 dark:text-amber-400' : 'text-axal-ink-2';
+  if (days <= 0) return <span className="text-axal-muted">Moved today</span>;
+  const tone = days >= 7 ? 'font-semibold text-amber-700 dark:text-amber-400' : 'text-axal-muted';
   return <span className={tone}>{days}d since it moved</span>;
 }
 
@@ -104,9 +104,9 @@ function TermRow({ term, onSave, onDelete, busy }) {
     return (
       <tr className="border-t border-axal-hairline align-top">
         <td className="py-2 pr-3 font-semibold">{term.label}</td>
-        <td className="py-2 pr-3 text-axal-ink-2">{term.our_position || <Unrecorded />}</td>
-        <td className="py-2 pr-3 text-axal-ink-2">{term.their_position || <Unrecorded />}</td>
-        <td className="py-2 pr-3 text-axal-ink-2">{term.landing || <Unrecorded>Not landed</Unrecorded>}</td>
+        <td className="py-2 pr-3 text-axal-muted">{term.our_position || <Unrecorded />}</td>
+        <td className="py-2 pr-3 text-axal-muted">{term.their_position || <Unrecorded />}</td>
+        <td className="py-2 pr-3 text-axal-muted">{term.landing || <Unrecorded>Not landed</Unrecorded>}</td>
         <td className="py-2 pr-3"><Pill tone={TERM_TONE[term.state]}>{TERM_STATE_LABEL[term.state] || term.state}</Pill></td>
         <td className="py-2 text-right">
           <button type="button" className={ghostButtonClass} onClick={() => setEdit(true)}>Edit</button>
@@ -178,7 +178,7 @@ function NegotiationCard({ row, onSaveNegotiation, onAddTerm, onSaveTerm, onDele
           <div className="text-sm font-extrabold tracking-tight">
             {row.need_title || <Unrecorded>Untitled need</Unrecorded>}
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11.5px] text-axal-ink-3">
+          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11.5px] text-axal-faint">
             <span>{row.quote_uid}</span>
             {row.need_category && <span>· {row.need_category}</span>}
             <span>· quote {row.quote_status}</span>
@@ -196,13 +196,13 @@ function NegotiationCard({ row, onSaveNegotiation, onAddTerm, onSaveTerm, onDele
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px]">
-        <span className="text-axal-ink-3">
-          Ball with <span className="font-semibold text-axal-ink-1">{ball === 'us' ? 'us' : 'them'}</span>
+        <span className="text-axal-faint">
+          Ball with <span className="font-semibold text-axal-ink">{ball === 'us' ? 'us' : 'them'}</span>
         </span>
         <StalledFor days={n?.days_stalled ?? null} />
       </div>
 
-      <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink-2">
+      <p className="mt-2 text-[12.5px] leading-relaxed text-axal-muted">
         {n?.open_question
           ? <><span className="font-semibold">Blocking: </span>{n.open_question}</>
           : (
@@ -213,7 +213,7 @@ function NegotiationCard({ row, onSaveNegotiation, onAddTerm, onSaveTerm, onDele
       </p>
 
       {open && (
-        <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
+        <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
           <div className="grid gap-3 md:grid-cols-3">
             <Field label="Stage">
               <select className={inputClass} value={draftStage}
@@ -262,7 +262,7 @@ function NegotiationCard({ row, onSaveNegotiation, onAddTerm, onSaveTerm, onDele
 
       <div className="mt-3">
         <div className="flex items-center justify-between gap-3">
-          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             Terms on the table
           </div>
           <button type="button" className={ghostButtonClass} onClick={() => setAdding((v) => !v)}>
@@ -271,7 +271,7 @@ function NegotiationCard({ row, onSaveNegotiation, onAddTerm, onSaveTerm, onDele
         </div>
 
         {row.terms.length === 0 && !adding && (
-          <p className="mt-2 text-[12px] leading-relaxed text-axal-ink-3">
+          <p className="mt-2 text-[12px] leading-relaxed text-axal-faint">
             No clause is tracked on this one yet. A term is what is being
             negotiated — payment days, scope cap, exclusivity — with what each
             side asked beside it.
@@ -281,7 +281,7 @@ function NegotiationCard({ row, onSaveNegotiation, onAddTerm, onSaveTerm, onDele
         {row.terms.length > 0 && (
           <div className="mt-2 overflow-x-auto">
             <table className="w-full text-left text-[12.5px]">
-              <thead className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+              <thead className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
                 <tr>
                   <th className="pb-1 pr-3">Term</th>
                   <th className="pb-1 pr-3">We asked</th>
@@ -302,7 +302,7 @@ function NegotiationCard({ row, onSaveNegotiation, onAddTerm, onSaveTerm, onDele
         )}
 
         {adding && (
-          <div className="mt-2 rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
+          <div className="mt-2 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
             <div className="grid gap-3 md:grid-cols-2">
               <Field label="Term">
                 <input className={inputClass} value={newTerm.label} maxLength={160}
@@ -533,14 +533,14 @@ export default function PartnerNegotiationsZone() {
           {LANES.map(([key, name]) => {
             const cards = visible.filter((r) => r.negotiation.stage === key);
             return (
-              <div key={key} className="rounded-[10px] border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700 dark:bg-gray-900/40">
+              <div key={key} className="rounded-[10px] border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700 dark:bg-gray-900/40">
                 <div className="flex items-baseline justify-between gap-2">
                   <Eyebrow>{name}</Eyebrow>
-                  <span className="font-mono text-[11px] font-bold text-axal-ink-3">{cards.length}</span>
+                  <span className="font-mono text-[11px] font-bold text-axal-faint">{cards.length}</span>
                 </div>
                 <div className="mt-2 space-y-2">
                   {cards.length === 0
-                    ? <p className="text-[11px] text-axal-ink-3">Nothing here</p>
+                    ? <p className="text-[11px] text-axal-faint">Nothing here</p>
                     : cards.map((r) => (
                       <div
                         key={r.quote_id}
@@ -553,13 +553,13 @@ export default function PartnerNegotiationsZone() {
                         <div className="text-[12px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">
                           {r.founder_name || r.need_title || `Quote ${r.quote_id}`}
                         </div>
-                        <div className="mt-0.5 text-[11px] text-axal-ink-2">
+                        <div className="mt-0.5 text-[11px] text-axal-muted">
                           {moneyDollars(r.price ?? 0)}
                         </div>
                         {/* THE ONE OPEN QUESTION IS THE CARD'S REASON FOR
                             EXISTING, so a card without one says that rather
                             than looking complete. */}
-                        <div className="mt-1.5 text-[11px] leading-snug text-axal-ink-2">
+                        <div className="mt-1.5 text-[11px] leading-snug text-axal-muted">
                           {r.negotiation.open_question
                             || <Unrecorded>No blocker named</Unrecorded>}
                         </div>
@@ -569,7 +569,7 @@ export default function PartnerNegotiationsZone() {
                           </Pill>
                           <span className={`text-[10.5px] ${
                             (r.negotiation.days_stalled ?? 0) >= 7
-                              ? 'font-semibold text-red-700 dark:text-red-300' : 'text-axal-ink-3'
+                              ? 'font-semibold text-red-700 dark:text-red-300' : 'text-axal-faint'
                           }`}
                           >
                             {r.negotiation.days_stalled ?? 0} d

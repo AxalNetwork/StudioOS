@@ -230,7 +230,7 @@ export default function PartnerDeliveryBoardZone() {
           />
 
           {items.length > 0 && visible.length === 0 && (
-            <p className="text-[12px] text-axal-ink-2">
+            <p className="text-[12px] text-axal-muted">
               No engagement is in this state. {items.length} on the board in total.
             </p>
           )}

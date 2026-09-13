@@ -321,7 +321,7 @@ export default function PartnerCapacityZone() {
           />
 
           {visible.length === 0 && people.length > 0 && (
-            <p className="text-[12px] text-axal-ink-2">
+            <p className="text-[12px] text-axal-muted">
               Nobody is in this state. {people.length} on the roster for {d?.period}.
             </p>
           )}
@@ -337,7 +337,7 @@ export default function PartnerCapacityZone() {
           />
 
           {granting && (
-            <div className="rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
+            <div className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
               <div className="grid gap-3 md:grid-cols-3">
                 <Field label="Engagement">
                   <select className={inputClass} value={grant.engagement_id}
@@ -381,7 +381,7 @@ export default function PartnerCapacityZone() {
                 Record the seat
               </button>
               {roster.length === 0 && (
-                <p className="mt-2 text-[11.5px] leading-relaxed text-axal-ink-3">
+                <p className="mt-2 text-[11.5px] leading-relaxed text-axal-faint">
                   No one is attached to this firm yet, so there is nobody to hold a
                   seat. That is an account link an admin makes, not something this
                   page can do.
@@ -441,7 +441,7 @@ export default function PartnerCapacityZone() {
                 </button>
               </div>
             </div>
-            <p className="mt-2 text-[11.5px] leading-relaxed text-axal-ink-2">
+            <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">
               {d?.cap_hours == null
                 ? d?.cap_note
                 : `Firm default: ${d.cap_hours} h a week${d.cap_note ? ` — ${d.cap_note}` : ''}. A person with their own number overrides it.`}
@@ -539,20 +539,20 @@ export default function PartnerCapacityZone() {
 
           <Section title="Seats inside client systems">
             {seats.length === 0 ? (
-              <p className="text-[12.5px] text-axal-ink-2">No seat has been recorded.</p>
+              <p className="text-[12.5px] text-axal-muted">No seat has been recorded.</p>
             ) : (
               <div>
                 {seats.map((s) => (
                   <div key={s.id} className="flex flex-wrap items-center gap-2 border-t border-axal-hairline py-2 first:border-t-0 text-[12.5px]">
-                    <span className={s.revoked_at ? 'text-axal-ink-3 line-through' : 'font-semibold'}>
+                    <span className={s.revoked_at ? 'text-axal-faint line-through' : 'font-semibold'}>
                       {s.holder_name || <NotRecorded>Unnamed</NotRecorded>}
                     </span>
-                    <span className="text-axal-ink-3">at</span>
-                    <span className={s.revoked_at ? 'text-axal-ink-3 line-through' : ''}>
+                    <span className="text-axal-faint">at</span>
+                    <span className={s.revoked_at ? 'text-axal-faint line-through' : ''}>
                       {s.founder_name || s.need_title || s.engagement_uid}
                     </span>
                     {s.scope && <Pill tone="neutral">{s.scope}</Pill>}
-                    <span className="text-[11px] text-axal-ink-3">
+                    <span className="text-[11px] text-axal-faint">
                       granted {formatDay(s.granted_at)}
                       {s.days_held != null && ` · ${s.days_held}d`}
                     </span>

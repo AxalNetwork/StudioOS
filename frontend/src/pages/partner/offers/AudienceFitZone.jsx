@@ -122,7 +122,7 @@ function RuleForm({ initial, onSubmit, onCancel, busy, submitLabel }) {
   }
 
   return (
-    <div className="rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
+    <div className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
       <div className="grid gap-3 md:grid-cols-2">
         <Field label="Kind">
           <select className={inputClass} value={kind} onChange={(e) => setKind(e.target.value)}>
@@ -200,7 +200,7 @@ function RuleRow({ rule, onSave, onDelete, busy, note }) {
             {!rule.is_active && <Pill tone="neutral">Not in use</Pill>}
           </div>
           {rule.statement ? (
-            <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-ink-2">
+            <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
               {rule.statement}
             </p>
           ) : (
@@ -212,8 +212,8 @@ function RuleRow({ rule, onSave, onDelete, busy, note }) {
             </p>
           )}
           {rule.referred_to && (
-            <p className="mt-1 text-[12px] text-axal-ink-3">
-              Refer instead to <span className="font-semibold text-axal-ink-2">{rule.referred_to}</span>
+            <p className="mt-1 text-[12px] text-axal-faint">
+              Refer instead to <span className="font-semibold text-axal-muted">{rule.referred_to}</span>
             </p>
           )}
         </div>
@@ -268,12 +268,12 @@ function PassReasons({ rules, onClose }) {
           <h3 className="text-sm font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Pass reasons</h3>
           <button type="button" className={ghostButtonClass} onClick={onClose}>Close</button>
         </div>
-        <p className="mt-2 text-[11.5px] leading-relaxed text-axal-ink-2">
+        <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">
           The sentence each exclusion would be passed with, assembled from what you wrote.
           Nothing sends these — a pass is still yours to make and yours to word.
         </p>
         {rules.length === 0 ? (
-          <p className="mt-3 text-[12.5px] leading-relaxed text-axal-ink-2">
+          <p className="mt-3 text-[12.5px] leading-relaxed text-axal-muted">
             No exclusion is written yet, so a pass has nothing to quote. That is the silence
             this zone exists to replace.
           </p>
@@ -294,7 +294,7 @@ function PassReasons({ rules, onClose }) {
                   </div>
                   {text ? (
                     <>
-                      <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink-2">{text}</p>
+                      <p className="mt-2 text-[12.5px] leading-relaxed text-axal-muted">{text}</p>
                       <button
                         type="button" className={`${ghostButtonClass} mt-2`}
                         onClick={() => {
@@ -583,7 +583,7 @@ export default function PartnerAudienceFitZone() {
                 empty list under a selected chip reads as "you have written no
                 rules", which is the silence this zone exists to replace. */}
             {items.length > 0 && visible.length === 0 && (
-              <p className="mb-3 text-[12px] text-axal-ink-2">
+              <p className="mb-3 text-[12px] text-axal-muted">
                 No profile is graded {SIGNAL_LABEL[view]?.toLowerCase() || view}.{' '}
                 {items.length} rule{items.length === 1 ? '' : 's'} recorded in total,{' '}
                 {profiles.length} of them profiles.

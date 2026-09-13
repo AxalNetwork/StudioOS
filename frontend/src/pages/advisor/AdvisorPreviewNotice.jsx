@@ -25,20 +25,20 @@ import { Card } from '../../ui';
  */
 export default function AdvisorPreviewNotice() {
   return (
-    <Card className="border-dashed bg-axal-surface-2 p-6" data-testid="advisor-preview-notice">
+    <Card className="border-dashed bg-axal-ground p-6" data-testid="advisor-preview-notice">
       <div className="max-w-2xl">
-        <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+        <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
           <UserCog size={13} /> Advisor preview
         </div>
         <h2 className="mt-2 text-lg font-extrabold tracking-tight">
           This workspace belongs to one advisor
         </h2>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink-2">
+        <p className="mt-2 text-[12.5px] leading-relaxed text-axal-muted">
           You are previewing the Advisor role, not a person. Practice and Expertise render a
           single advisor’s clients, bookings, engagements and profile — there is no practice to
           show until the workspace is scoped to someone.
         </p>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink-2">
+        <p className="mt-2 text-[12.5px] leading-relaxed text-axal-muted">
           Impersonate a specific advisor to open theirs. That is a deliberate act with an audit
           trail behind it, which is the difference between reading a role and reading a person’s
           book.

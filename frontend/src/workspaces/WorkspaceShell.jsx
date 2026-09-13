@@ -129,7 +129,7 @@ export default function WorkspaceShell({
       */}
       <div className="min-w-0 flex-1 p-5">
         {bucket && (
-          <div className="mb-2 flex items-center gap-2 text-[11.5px] text-axal-ink-3">
+          <div className="mb-2 flex items-center gap-2 text-[11.5px] text-axal-faint">
             <Link to={bucket.prefix} className="hover:underline">
               {bucket.label}
             </Link>
@@ -162,12 +162,12 @@ export default function WorkspaceShell({
               scopeHref ? (
                 <Link
                   to={scopeHref}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-axal-border bg-white px-2.5 py-1.5 text-[11px] font-bold text-axal-ink-2 hover:border-axal-ink-3"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-axal-hairline bg-white px-2.5 py-1.5 text-[11px] font-bold text-axal-muted hover:border-axal-faint"
                 >
                   {scope}
                 </Link>
               ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-md border border-axal-border bg-white px-2.5 py-1.5 text-[11px] font-bold text-axal-ink-2">
+                <span className="inline-flex items-center gap-1.5 rounded-md border border-axal-hairline bg-white px-2.5 py-1.5 text-[11px] font-bold text-axal-muted">
                   {scope}
                 </span>
               )
@@ -175,7 +175,7 @@ export default function WorkspaceShell({
           </div>
         </div>
 
-        {intro && <p className="mt-1.5 max-w-3xl text-xs leading-relaxed text-axal-ink-2">{intro}</p>}
+        {intro && <p className="mt-1.5 max-w-3xl text-xs leading-relaxed text-axal-muted">{intro}</p>}
 
         {bucket && <ZoneNav bucket={bucket} role={role} activeSlug={activeSlug} className="mt-3" />}
 
@@ -209,7 +209,7 @@ export default function WorkspaceShell({
       */}
       {rail && (
         <div
-          className="fwr-shell-slot hidden shrink-0 border-l border-axal-border-soft bg-white px-[18px] pb-7 pt-[18px] xl:block dark:border-gray-800 dark:bg-gray-900"
+          className="fwr-shell-slot hidden shrink-0 border-l border-axal-hairline bg-white px-[18px] pb-7 pt-[18px] xl:block dark:border-gray-800 dark:bg-gray-900"
           style={{ width: 'var(--fwr-track, 280px)' }}
         >
           <div className="sticky top-20">{rail}</div>
@@ -227,7 +227,7 @@ export default function WorkspaceShell({
  */
 export function NotRecorded({ children }) {
   return (
-    <span className="inline-flex whitespace-nowrap rounded border border-axal-border bg-axal-surface-2 px-1.5 py-0.5 text-[10px] font-bold text-axal-ink-3">
+    <span className="inline-flex whitespace-nowrap rounded border border-axal-hairline bg-axal-ground px-1.5 py-0.5 text-[10px] font-bold text-axal-faint">
       {children || 'Not recorded'}
     </span>
   );

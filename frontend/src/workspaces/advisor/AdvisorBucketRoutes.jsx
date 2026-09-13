@@ -399,10 +399,10 @@ export default function AdvisorBucketRoutes({ preview = false }) {
       {body}
       {!preview && prefix === '/practice' && slug === 'opportunities' && !isRoot && (
         <Card className="mt-4 p-4">
-          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             Still here, still working
           </div>
-          <p className="mt-2 text-[11.5px] leading-relaxed text-axal-ink-2">
+          <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">
             <Link to="/advisor/advisory/clients" className="text-emerald-700 underline">Clients</Link> and{' '}
             <Link to="/advisor/advisory/contracts" className="text-emerald-700 underline">Contracts</Link> are
             live tabs the canvas has no zone for. They keep their routes rather than being dropped — a working

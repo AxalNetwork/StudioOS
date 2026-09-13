@@ -76,11 +76,11 @@ function StatRow({ items }) {
     <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
       {items.map((it) => (
         <Card key={it.label} className="px-3 py-2.5">
-          <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{it.label}</div>
+          <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{it.label}</div>
           {it.value === null || it.value === undefined
             ? <div className="mt-1.5"><NotRecorded /></div>
             : <div className="mt-1 text-base font-extrabold tabular-nums tracking-tight">{it.value}</div>}
-          {it.note && <div className="mt-1 text-[10px] leading-snug text-axal-ink-3">{it.note}</div>}
+          {it.note && <div className="mt-1 text-[10px] leading-snug text-axal-faint">{it.note}</div>}
         </Card>
       ))}
     </div>
@@ -181,7 +181,7 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
         <Card className="p-4">
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <span className="text-sm font-extrabold tracking-tight">Interview log</span>
-            <span className="text-[11px] text-axal-ink-3">
+            <span className="text-[11px] text-axal-faint">
               {view === 'all' ? 'One venture · newest first' : `${shown.length} of ${rows.length} · newest first`}
             </span>
           </div>
@@ -192,11 +192,11 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
             true here — the log has rows, none of them in this view.
           */}
           {shown.length === 0 && (
-            <p className="py-2 text-[11px] text-axal-ink-3" data-testid="text-interviews-view-empty">
+            <p className="py-2 text-[11px] text-axal-faint" data-testid="text-interviews-view-empty">
               No interview in this log matches that view. The count in the strip above is the full log.
             </p>
           )}
-          <ul className="divide-y divide-axal-border-soft">
+          <ul className="divide-y divide-axal-hairline">
             {shown.slice(0, 25).map((r) => {
               const pains = r.pain_points || r.pains || [];
               return (
@@ -218,15 +218,15 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
                     <div className="truncate text-xs font-semibold text-axal-ink">
                       {r.interviewee_name || <NotRecorded>Name not recorded</NotRecorded>}
                     </div>
-                    <div className="mt-0.5 truncate text-[11px] text-axal-ink-3">
+                    <div className="mt-0.5 truncate text-[11px] text-axal-faint">
                       {r.interviewee_company || r.interviewee_role || <NotRecorded>No company recorded</NotRecorded>}
                     </div>
                   </div>
                   <div className="shrink-0 text-right">
-                    <div className="text-[11px] tabular-nums text-axal-ink-2">
+                    <div className="text-[11px] tabular-nums text-axal-muted">
                       {r.interview_date || <NotRecorded>No date</NotRecorded>}
                     </div>
-                    <div className="mt-0.5 text-[10px] text-axal-ink-3">
+                    <div className="mt-0.5 text-[10px] text-axal-faint">
                       {pains.length ? `${pains.length} pain${pains.length === 1 ? '' : 's'}` : 'no pain recorded'}
                     </div>
                     </div>
@@ -246,7 +246,7 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
               );
             })}
           </ul>
-          <p className="mt-3 border-t border-axal-border-soft pt-3 text-[11px] leading-relaxed text-axal-ink-3">
+          <p className="mt-3 border-t border-axal-hairline pt-3 text-[11px] leading-relaxed text-axal-faint">
             These are the same records Discovery writes — one log, two doors. Consent to quote is a real field on
             an interview and it is three-state: yes, no, or never asked. Never-asked is counted apart from
             declined rather than folded into it, and nothing here presumes an interview quotable — that is the one
@@ -256,8 +256,8 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
       )}
 
       <Card className="p-4">
-        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Still here, still working</div>
-        <p className="mt-2 text-[11.5px] leading-relaxed text-axal-ink-2">
+        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Still here, still working</div>
+        <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">
           The Needs Marketplace and AI Advisory have no zone in the four evidence stages, so they keep their own
           routes rather than being dropped to make the taxonomy fit — {' '}
           <Link to="/build/marketplace" className="text-axal-violet underline">Marketplace</Link> and{' '}
@@ -327,7 +327,7 @@ function PainMap({ projectId, ready, zoneFilters, zoneActions }) {
         <Card className="p-4">
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <span className="text-sm font-extrabold tracking-tight">Pain themes</span>
-            <span className="text-[11px] text-axal-ink-3">Frequency across {total} interview{total === 1 ? '' : 's'}</span>
+            <span className="text-[11px] text-axal-faint">Frequency across {total} interview{total === 1 ? '' : 's'}</span>
           </div>
           <ul className="space-y-2.5">
             {ranked.map((g) => {
@@ -337,11 +337,11 @@ function PainMap({ projectId, ready, zoneFilters, zoneActions }) {
                 <li key={g.id}>
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="truncate text-xs font-semibold">{g.title}</span>
-                    <span className="shrink-0 text-[11px] tabular-nums text-axal-ink-3">
+                    <span className="shrink-0 text-[11px] tabular-nums text-axal-faint">
                       {n} phrase{n === 1 ? '' : 's'}{total ? ` · ${pct}%` : ''}
                     </span>
                   </div>
-                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-axal-surface-2">
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-axal-ground">
                     <div className="h-full rounded-full bg-axal-violet" style={{ width: `${Math.min(pct, 100)}%` }} />
                   </div>
                 </li>
@@ -349,12 +349,12 @@ function PainMap({ projectId, ready, zoneFilters, zoneActions }) {
             })}
           </ul>
           {ungrouped.length > 0 && (
-            <p className="mt-3 text-[11px] text-axal-ink-3">
+            <p className="mt-3 text-[11px] text-axal-faint">
               {ungrouped.length} phrase{ungrouped.length === 1 ? '' : 's'} not yet in a theme. They count in the log and
               not in the map — a phrase in no theme is evidence, not a finding.
             </p>
           )}
-          <p className="mt-3 border-t border-axal-border-soft pt-3 text-[11px] leading-relaxed text-axal-ink-3">
+          <p className="mt-3 border-t border-axal-hairline pt-3 text-[11px] leading-relaxed text-axal-faint">
             Percentages are phrases over interviews, so a theme two people named twice each does not read as four
             people. {top ? `“${top.title}” leads at ${total ? Math.round(((top.phrases?.length || 0) / total) * 100) : 0}%.` : ''}{' '}
             Severity tiering — need-to-have, good-to-have, nice-to-have — is what the canvas adds here, and it needs a
@@ -433,8 +433,8 @@ function NoVenture({ what }) {
 function FitGap({ base }) {
   if (!base || !base.fit_not_recorded) return null;
   return (
-    <Card className="border-dashed bg-axal-surface-2 px-3.5 py-2.5">
-      <p className="text-[12px] leading-relaxed text-axal-ink-2">
+    <Card className="border-dashed bg-axal-ground px-3.5 py-2.5">
+      <p className="text-[12px] leading-relaxed text-axal-muted">
         <span className="font-semibold">{base.fit_not_recorded}</span>
         {base.fit_not_recorded === 1 ? ' interview has ' : ' interviews have '}
         no ICP fit recorded. Those cannot count toward a claim, so any verdict that
@@ -505,7 +505,7 @@ function HypothesisBoard({ projectId, ready, board, onNew, onRetire, retiring, z
         // A live chip that matches nothing has to say which question it just
         // answered. Falling through to the board's own "No hypotheses yet" would
         // report an empty board, which is a different and untrue claim.
-        <p className="text-[12px] text-axal-ink-3" data-testid="text-hypotheses-view-empty">
+        <p className="text-[12px] text-axal-faint" data-testid="text-hypotheses-view-empty">
           {view === 'retired'
             ? 'No claim has been retired. A retired claim stays on the record — it is never deleted — so this view fills the first time you retire one.'
             : 'No claim is waiting on an ICP fit. Every hypothesis on the board has the evidence it needs for a verdict.'}
@@ -518,20 +518,20 @@ function HypothesisBoard({ projectId, ready, board, onNew, onRetire, retiring, z
             return (
               <Card key={lane} className="p-3.5">
                 <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{label}</span>
-                  <span className="text-[11px] tabular-nums text-axal-ink-3">{cards.length}</span>
+                  <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</span>
+                  <span className="text-[11px] tabular-nums text-axal-faint">{cards.length}</span>
                 </div>
                 <ul className="mt-2.5 space-y-2.5">
                   {cards.map((h) => (
-                    <li key={h.id} className="rounded-lg border border-axal-border-soft p-2.5">
+                    <li key={h.id} className="rounded-lg border border-axal-hairline p-2.5">
                       <div className="text-[12.5px] font-semibold leading-snug">
-                        <span className="text-axal-ink-3">{h.code} · </span>{h.claim}
+                        <span className="text-axal-faint">{h.code} · </span>{h.claim}
                       </div>
-                      <div className="mt-1 text-[11px] tabular-nums text-axal-ink-3">
+                      <div className="mt-1 text-[11px] tabular-nums text-axal-faint">
                         {h.evidence.supporting} support · {h.evidence.contradicting} contradict
                         {h.evidence.fitUnrecorded > 0 && ` · ${h.evidence.fitUnrecorded} of unknown fit`}
                       </div>
-                      <div className="mt-0.5 text-[11px] text-axal-ink-3">
+                      <div className="mt-0.5 text-[11px] text-axal-faint">
                         {h.bar_note || 'Distance to the bar cannot be computed until the fits above are recorded.'}
                       </div>
                       {/*
@@ -551,7 +551,7 @@ function HypothesisBoard({ projectId, ready, board, onNew, onRetire, retiring, z
                           onClick={() => onRetire(h.id, !h.retired_at)}
                           disabled={retiring === h.id}
                           data-testid={`button-retire-hypothesis-${h.id}`}
-                          className="mt-1.5 text-[11px] font-semibold text-axal-ink-3 underline decoration-dotted underline-offset-2 hover:text-axal-violet disabled:opacity-50"
+                          className="mt-1.5 text-[11px] font-semibold text-axal-faint underline decoration-dotted underline-offset-2 hover:text-axal-violet disabled:opacity-50"
                         >
                           {retiring === h.id
                             ? 'Saving…'
@@ -567,7 +567,7 @@ function HypothesisBoard({ projectId, ready, board, onNew, onRetire, retiring, z
         </div>
       )}
 
-      <p className="text-[11px] leading-relaxed text-axal-ink-3">
+      <p className="text-[11px] leading-relaxed text-axal-faint">
         Lanes are computed from the evidence, never dragged: a claim sits where its
         interviews put it. The canvas also draws “Recently moved”, and nothing
         records a claim changing lanes — so that chip is not shown at all, rather
@@ -641,7 +641,7 @@ function ValidationSummary({ projectId, ready, board, zoneFilters, zoneActions }
           action={<Link to="/validate/hypotheses" className="text-axal-violet underline">See hypotheses</Link>}
         />
       ) : shown.length === 0 ? (
-        <p className="text-[12px] text-axal-ink-3" data-testid="text-summary-view-empty">
+        <p className="text-[12px] text-axal-faint" data-testid="text-summary-view-empty">
           No claim has been retired. Retiring one on the hypothesis board keeps it
           here rather than deleting it, and this view is where it lands.
         </p>
@@ -651,12 +651,12 @@ function ValidationSummary({ projectId, ready, board, zoneFilters, zoneActions }
             <span className="text-sm font-extrabold tracking-tight">
               {view === 'retired' ? 'Retired claims, with their receipts' : 'Every verdict, with its receipts'}
             </span>
-            <span className="text-[11px] text-axal-ink-3">Computed from the interview log</span>
+            <span className="text-[11px] text-axal-faint">Computed from the interview log</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-[12.5px]">
               <thead>
-                <tr className="text-left text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+                <tr className="text-left text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
                   <th className="py-1.5 pr-3">Hypothesis</th>
                   <th className="py-1.5 pr-3 text-right">For</th>
                   <th className="py-1.5 pr-3 text-right">Against</th>
@@ -664,18 +664,18 @@ function ValidationSummary({ projectId, ready, board, zoneFilters, zoneActions }
                   <th className="py-1.5">Bar</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-axal-border-soft">
+              <tbody className="divide-y divide-axal-hairline">
                 {shown.map((h) => (
                   <tr key={h.id} className="align-top">
                     <td className="py-2 pr-3">
-                      <span className="text-axal-ink-3">{h.code} · </span>{h.claim}
+                      <span className="text-axal-faint">{h.code} · </span>{h.claim}
                     </td>
                     <td className="py-2 pr-3 text-right tabular-nums">{h.evidence.supporting}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{h.evidence.contradicting}</td>
                     <td className="py-2 pr-3">
                       {h.verdict ? VERDICT_LABEL[h.verdict] : <NotRecorded />}
                     </td>
-                    <td className="py-2 text-[11px] text-axal-ink-3">
+                    <td className="py-2 text-[11px] text-axal-faint">
                       {h.bar_note || h._note || '—'}
                     </td>
                   </tr>
@@ -687,12 +687,12 @@ function ValidationSummary({ projectId, ready, board, zoneFilters, zoneActions }
       )}
 
       <Card className="p-4">
-        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
           What the venture decided
         </div>
         {current === undefined ? <div className="mt-2"><Skeleton className="h-10" /></div>
           : current === null ? (
-            <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink-2">
+            <p className="mt-2 text-[12.5px] leading-relaxed text-axal-muted">
               {decision === null
                 ? 'Not shown here. A venture’s proceed, pivot or stop is its own — the board above is read by studio staff and service partners, and this is not.'
                 : 'No decision recorded. The summary above is evidence; this is the call a person makes in front of it, and nobody has made one yet.'}
@@ -701,9 +701,9 @@ function ValidationSummary({ projectId, ready, board, zoneFilters, zoneActions }
             <>
               <div className="mt-1.5 text-base font-extrabold capitalize tracking-tight">{current.decision}</div>
               {current.reasoning && (
-                <p className="mt-1.5 text-[12.5px] leading-relaxed text-axal-ink-2">{current.reasoning}</p>
+                <p className="mt-1.5 text-[12.5px] leading-relaxed text-axal-muted">{current.reasoning}</p>
               )}
-              <div className="mt-1.5 text-[11px] text-axal-ink-3">
+              <div className="mt-1.5 text-[11px] text-axal-faint">
                 Recorded {String(current.decided_at || '').slice(0, 10)}
                 {(decision?.history?.length || 0) > 1 && ` · ${decision.history.length - 1} earlier decision(s) kept`}
               </div>

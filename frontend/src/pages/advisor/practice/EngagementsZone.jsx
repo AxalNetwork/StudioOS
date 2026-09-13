@@ -287,7 +287,7 @@ export default function EngagementsZone() {
                   onChange={(e) => setDraft({ ...draft, amount: e.target.value })} />
               </Field>
             </div>
-            <p className="mt-2 text-[11px] leading-relaxed text-axal-ink-3">
+            <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
               A new engagement opens in <strong>Drafting</strong>. Signing it is a move on the board,
               because that is what starts the first term and gives the row a renewal to decide.
             </p>
@@ -304,15 +304,15 @@ export default function EngagementsZone() {
               <div key={lane.key} data-testid={`lane-pr2-${lane.key}`}
                 className="rounded-[11px] border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700 dark:bg-gray-900/40">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{lane.label}</span>
-                  <span className="text-[10.5px] font-bold tabular-nums text-axal-ink-3">{cards.length}</span>
+                  <span className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{lane.label}</span>
+                  <span className="text-[10.5px] font-bold tabular-nums text-axal-faint">{cards.length}</span>
                 </div>
                 <div className="mt-2.5 grid gap-2">
                   {cards.length === 0
                     /* EVERY LANE NEEDS THIS and the canvas fixture never shows
                        one, because its own data fills all four. A lane with no
                        cards and no sentence reads as a rendering failure. */
-                    ? <p className="py-2 text-[10.5px] leading-relaxed text-axal-ink-3">Nothing here.</p>
+                    ? <p className="py-2 text-[10.5px] leading-relaxed text-axal-faint">Nothing here.</p>
                     : cards.map((e) => <BoardCard key={e.id} e={e} busy={busy === e.id}
                       onAdvance={advance} candidates={candidates} onLink={linkClient} />)}
                 </div>
@@ -329,12 +329,12 @@ export default function EngagementsZone() {
             blurb="Only here — the number that judges a practice. Every engagement that has run at least one term, including the ones that ended."
           />
           {renewals.length === 0
-            ? <p className="text-[12.5px] leading-relaxed text-axal-ink-2">
+            ? <p className="text-[12.5px] leading-relaxed text-axal-muted">
               No engagement has run a term yet. A row appears here when one is signed — its first term
               counts as a cycle, and the outcome fills in when you record a renewal decision.
             </p>
             : <div className="overflow-x-auto"><table className="w-full min-w-[460px] text-[12px]">
-              <thead><tr className="text-left text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-ink-3">
+              <thead><tr className="text-left text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint">
                 <th className="pb-2">Client</th><th className="pb-2">Cycles</th><th className="pb-2">Outcome</th><th className="pb-2">Note</th>
               </tr></thead>
               <tbody>{renewals.map((e) => (
@@ -344,12 +344,12 @@ export default function EngagementsZone() {
                   <td className="py-2 pr-3">{e.outcome
                     ? <Pill tone={OUTCOME_TONE[e.outcome]}>{OUTCOME_LABEL[e.outcome]}</Pill>
                     : <Unrecorded>No decision</Unrecorded>}</td>
-                  <td className="py-2 text-axal-ink-2">{e.renewal_note || <Unrecorded>No note recorded</Unrecorded>}</td>
+                  <td className="py-2 text-axal-muted">{e.renewal_note || <Unrecorded>No note recorded</Unrecorded>}</td>
                 </tr>
               ))}</tbody>
             </table></div>}
           {totals.decided > 0 && (
-            <p className="mt-3 text-[11.5px] leading-relaxed text-axal-ink-3">
+            <p className="mt-3 text-[11.5px] leading-relaxed text-axal-faint">
               The renewal rate is {totals.renewed} of {totals.decided} terms that reached a decision.
               The {totals.ended === 1 ? 'one that ended is' : `${totals.ended} that ended are`} counted,
               because a rate that excludes its failures is not a rate.
@@ -360,7 +360,7 @@ export default function EngagementsZone() {
         <Card padding="md">
           <ZoneHeading title="Scope on file" blurb="What each contract actually says." />
           {scopes.length === 0
-            ? <p className="text-[12.5px] leading-relaxed text-axal-ink-2">
+            ? <p className="text-[12.5px] leading-relaxed text-axal-muted">
               No engagement is under contract, so there is no scope on file. A draft carries a proposal,
               which is not the same thing as terms both sides hold.
             </p>
@@ -368,7 +368,7 @@ export default function EngagementsZone() {
               <div key={e.id} data-testid={`row-pr2-scope-${e.id}`}
                 className="rounded-[9px] border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700 dark:bg-gray-900/40">
                 <div className="text-[12px] font-extrabold tracking-tight">{e.client_name}</div>
-                <p className="mt-1.5 text-[10.5px] leading-relaxed text-axal-ink-2">
+                <p className="mt-1.5 text-[10.5px] leading-relaxed text-axal-muted">
                   {e.scope_includes || <Unrecorded>No inclusions recorded</Unrecorded>}
                 </p>
                 {/* AMBER, AND ITS OWN LINE. The canvas gives exclusions their
@@ -380,7 +380,7 @@ export default function EngagementsZone() {
                 </p>
               </div>
             ))}</div>}
-          <p className="mt-3 text-[11px] leading-relaxed text-axal-ink-3">
+          <p className="mt-3 text-[11px] leading-relaxed text-axal-faint">
             Exclusions are stored as first-class text, not as an absence. &ldquo;Not in scope: fundraising
             introductions&rdquo; is the sentence that prevents the conversation.
           </p>
@@ -395,7 +395,7 @@ export default function EngagementsZone() {
           blurb="The one write that moves a cycle and an outcome. A renewal starts a term and adds a cycle; ending records the loss and closes the lane."
         />
         {ordered.filter((e) => canDecideRenewal(e.lane)).length === 0
-          ? <p className="text-[12.5px] leading-relaxed text-axal-ink-2">
+          ? <p className="text-[12.5px] leading-relaxed text-axal-muted">
             Nothing is under contract, so there is no renewal to decide. A draft or a proposal has no term
             behind it — the worker refuses a decision on one rather than inventing an outcome for it.
           </p>
@@ -409,7 +409,7 @@ export default function EngagementsZone() {
                     <Pill tone={e.lane === 'renewal_due' ? 'warn' : 'neutral'}>{LANE_LABEL[e.lane]}</Pill>
                     <Pill tone="neutral">{SHAPE_LABEL[e.shape] || e.shape}</Pill>
                   </div>
-                  <p className="mt-1 text-[11px] text-axal-ink-3">
+                  <p className="mt-1 text-[11px] text-axal-faint">
                     {e.cycles === 1 ? 'First term' : `${e.cycles} terms`} · {dueLine(e)}
                     {e.amount_cents == null
                       ? <> · <Unrecorded>amount not recorded</Unrecorded></>
@@ -449,7 +449,7 @@ export default function EngagementsZone() {
                       onClick={() => recordRenewal(e)}>
                       {decision.decision === 'renewed' ? 'Record the renewal' : 'Record the ending'}
                     </button>
-                    <p className="mt-1.5 text-[11px] leading-relaxed text-axal-ink-3">
+                    <p className="mt-1.5 text-[11px] leading-relaxed text-axal-faint">
                       Either answer counts toward the renewal rate. Ending here is how a lost renewal
                       reaches the denominator — the board&rsquo;s lane control deliberately will not do it.
                     </p>
@@ -505,10 +505,10 @@ function BoardCard({ e, busy, onAdvance, candidates, onLink }) {
         ? 'border-amber-200 bg-amber-50/60 dark:border-amber-900/60 dark:bg-amber-950/20'
         : 'border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900'}`}>
       <div className="text-[12px] font-bold tracking-tight">{e.client_name}</div>
-      <div className="mt-1 text-[10.5px] leading-relaxed text-axal-ink-3">
+      <div className="mt-1 text-[10.5px] leading-relaxed text-axal-faint">
         {e.scope_label || SHAPE_LABEL[e.shape] || 'No scope line recorded'}
       </div>
-      <div className={`mt-1.5 text-[10px] font-semibold tabular-nums ${due ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink-3'}`}>
+      <div className={`mt-1.5 text-[10px] font-semibold tabular-nums ${due ? 'text-amber-700 dark:text-amber-300' : 'text-axal-faint'}`}>
         {dueLine(e)}
       </div>
       {moves.length > 0 && (
@@ -524,7 +524,7 @@ function BoardCard({ e, busy, onAdvance, candidates, onLink }) {
         </div>
       )}
       <div className="mt-2 border-t border-axal-hairline pt-2 dark:border-gray-700">
-        <label className="block text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-ink-3"
+        <label className="block text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint"
           htmlFor={`link-pr2-${e.id}`}>Client account</label>
         <select id={`link-pr2-${e.id}`} data-testid={`link-pr2-${e.id}`} disabled={busy}
           value={e.founder_user_id || ''} onChange={(ev) => onLink(e, ev.target.value)}
@@ -532,7 +532,7 @@ function BoardCard({ e, busy, onAdvance, candidates, onLink }) {
           <option value="">Not linked — a name only</option>
           {options.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
-        <p className="mt-1 text-[9.5px] leading-relaxed text-axal-ink-3">
+        <p className="mt-1 text-[9.5px] leading-relaxed text-axal-faint">
           {e.founder_user_id
             ? 'Linked. Work products can be sent to them, and they can record having opened one.'
             : options.length === 0
@@ -547,9 +547,9 @@ function BoardCard({ e, busy, onAdvance, candidates, onLink }) {
 function Stat({ label, value, note }) {
   return (
     <Card padding="md">
-      <div className="text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-ink-3">{label}</div>
+      <div className="text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint">{label}</div>
       <div className="mt-1.5 text-[22px] font-extrabold leading-none tracking-tight tabular-nums">{value}</div>
-      <div className="mt-1.5 text-[11px] leading-relaxed text-axal-ink-3">{note}</div>
+      <div className="mt-1.5 text-[11px] leading-relaxed text-axal-faint">{note}</div>
     </Card>
   );
 }

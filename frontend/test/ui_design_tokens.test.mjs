@@ -21,31 +21,40 @@ function jsxUnder(dir, out = []) {
 }
 
 /**
- * The eight tokens the workspace layer names and `@theme` has never minted.
+ * EMPTY, AND IT STAYS EMPTY. This held eight tokens the workspace layer named and
+ * `@theme` never minted — each one a class emitting no CSS at all, so text meant
+ * to be muted inherited its parent's colour and borders meant to be hairlines
+ * were simply absent. It read as "slightly wrong" rather than broken, which is
+ * why 397 of them survived, and 575 by the time the sweep was taken.
  *
- * THIS LIST MAY ONLY SHRINK. It is not permission — every entry is a class that
- * emits no CSS at all, so text meant to be muted inherits its parent's colour
- * and borders meant to be hairlines are simply absent. It reads as "slightly
- * wrong" rather than broken, which is why 397 of them survived.
+ * THE SWEEP WENT A THIRD WAY. This docblock used to record two options and reject
+ * both: declare the eight — "not one of the 397 call sites has a `dark:`
+ * counterpart, so minting eight light values would flip the whole workspace
+ * surface to light-only in dark mode" — or move every call site to Tailwind's
+ * greys, a restyle across four licences. The third way was to move them onto the
+ * five neutrals ALREADY declared, which the objection to option one does not
+ * reach: the same branch gave `axal-ink`, `-muted`, `-faint`, `-hairline` and
+ * `-ground` dark counterparts in the `index.css` skin, so a call site landing on
+ * one is skinned the moment it lands. A rename, not a restyle.
  *
- * WHY THE SWEEP IS NOT DONE HERE. Either the eight get declared — which means
- * choosing eight colours in BOTH themes, and not one of the 397 call sites has
- * a `dark:` counterpart, so minting eight light values would flip the whole
- * workspace surface to light-only in dark mode — or the call sites move to
- * Tailwind's own greys, which is a restyle across four licences needing its own
- * render pass. Doing either inside this commit would be a large uninspected
- * visual change. `workspaces/bucketOverview.css` is the only place in the tree
- * that assigns concrete values to three of them (#4b5563 / #6b7280 / #e5e7eb),
- * and is the anchor for whoever takes the sweep.
+ * The mapping came from how each name was applied, not from its digits:
+ * `ink-1` only ever wrapped `<strong>` emphasis inside muted prose (→ `ink`),
+ * `ink-2` was 11.5-12.5px `leading-relaxed` body copy (→ `muted`), `ink-3` was
+ * 9-11px uppercase micro-labels, captions and empty states (→ `faint`),
+ * `surface-2` was the tint already paired with hairline borders (→ `ground`), and
+ * `border`/`border-soft`/`line` were one hairline under three names.
+ * `workspaces/bucketOverview.css` was the only place assigning concrete values
+ * (#4b5563 / #6b7280 / #e5e7eb) and it read as a tighter pair than role does —
+ * recorded in the commit rather than followed, since one component's fallbacks
+ * are not the system's ramp.
+ *
+ * An entry here would mean a painting class that emits nothing, so there is no
+ * value it could hold that is not a bug. Leave it empty.
  *
  * U11 asked for exactly this guard, and said why: "a guard that fails a NEW
  * undeclared `axal-*` class, so the number can only go down."
  */
-const UNDECLARED_TODAY = new Set([
-  'axal-ink-1', 'axal-ink-2', 'axal-ink-3',
-  'axal-surface-2', 'axal-border', 'axal-border-soft',
-  'axal-line', 'axal-blue',
-]);
+const UNDECLARED_TODAY = new Set([]);
 
 // Every `axal-` token a ui/ primitive references must actually be minted in the
 // @theme block. Tailwind v4 tree-shakes theme tokens nothing references, and it

@@ -24,7 +24,7 @@ export { StatedLimit } from '../expertise/kit';
  */
 export function FromTheLab({ children }) {
   return (
-    <p className="flex flex-wrap items-center gap-2 text-[11px] leading-relaxed text-axal-ink-3">
+    <p className="flex flex-wrap items-center gap-2 text-[11px] leading-relaxed text-axal-faint">
       <SeamChip>From the founder</SeamChip>
       {children || 'read-only — cohort data belongs to the Lab and to the founder, never to the practice'}
     </p>
@@ -60,7 +60,7 @@ export function BatchPicker({ items, value, onChange }) {
   if (!items || items.length < 2) return null;
   return (
     <label className="flex flex-wrap items-center gap-2 text-[12px]">
-      <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Batch</span>
+      <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Batch</span>
       <select
         className="rounded-lg border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] dark:border-gray-700 dark:bg-gray-900"
         value={value ?? ''}
