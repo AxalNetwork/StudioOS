@@ -10,7 +10,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { ensureTier } from '../middleware/requireTier';
+import { ensureTier, type TierUser } from '../middleware/requireTier';
 import {
   isAdmin, isFounder, mapError, nowIso, newUid, jload, trimOrNull, role,
 } from './_t13t14t15_helpers';
@@ -25,8 +25,14 @@ import {
   PAYOUT_GATE, cutCents, derivePayoutState, settlementMode, takeRate, totalLines,
 } from '../services/advisorMoney';
 import {
-  connectLink, ensurePayoutAccount, loadPayoutAccount, refreshAccount,
+  PayoutAccountNotReady, SettlementDisabled,
+  chargeSession, connectLink, ensurePayoutAccount, loadPayoutAccount, refreshAccount,
 } from '../services/advisorConnect';
+// The platform customer the destination charge is made against. Reused rather
+// than re-derived: `routes/wellbeing.ts` charges its own bookings through this
+// same helper, and a second way of deciding who a customer is would be a second
+// answer to that question.
+import { ensurePaymentsCustomer } from './payments';
 import { ensureCohortGuidanceSchema } from '../services/cohortGuidanceSchema';
 import {
   guidanceCounts, oldestOpenHours, collisions, withinDays,
@@ -1399,6 +1405,171 @@ advisors.patch('/me/bookings/:id/billing', async (c) => {
       .bind(row.id).first<BookingRow & { amount_cents: number | null; billing_state: string }>();
     return c.json(bookingDto(fresh!, advisorMoney(fresh!)));
   } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * The founder pays for a session the advisor has priced.
+ *
+ * THE MISSING MIDDLE OF A STATE MACHINE THAT WAS BUILT FROM BOTH ENDS. The
+ * PATCH above writes `billing_state = 'billed'` and stamps `amount_cents`,
+ * `platform_cut_cents` and `take_rate_bps`; `markSessionCharged` in
+ * `services/advisorConnect.ts` writes `'collected'` when Stripe's webhook says
+ * the money arrived. Nothing wrote the transition between them, which is why
+ * `chargeSession` was an exported function with no caller anywhere in the worker
+ * — only its own test file referenced it. This route is that caller. D81.
+ *
+ * CLIENT-FACING, AND DELIBERATELY NOT UNDER `/me`. Everything under `/me` in
+ * this file is the advisor reading or editing their own practice; `/bookings/:id/*`
+ * is the family the founder acts on (`confirm`, `cancel`, `complete`, `review`).
+ * Paying is the founder's act, so it belongs in the second family. An advisor
+ * cannot charge a client from here, and neither can an admin: the only caller
+ * who passes the ownership check is the person whose money it is.
+ *
+ * IT RETURNS 503 IN EVERY ENVIRONMENT TODAY, and that is the point rather than a
+ * defect. `settlementMode()` answers `'none'` until `ADVISOR_CHARGING_ENABLED`
+ * is exactly `'1'` AND a Stripe key is present, and that variable is set
+ * nowhere. What changes is that the flag is now SUFFICIENT: before this route
+ * existed, flipping it would have told advisors settlement was live — the value
+ * is reported as `settlement:` by seven OTHER handlers in this file — while
+ * nothing on any path could take a payment. D75, D81.
+ *
+ * THE SETTLEMENT CHECK IS FIRST AMONG THE NON-AUTH GUARDS, AND THAT ORDERING IS
+ * LOAD-BEARING. `chargeSession` throws `SettlementDisabled` on its own, so the
+ * route would refuse either way — but it throws AFTER this handler would have
+ * called `ensurePaymentsCustomer`, which creates a Stripe customer and writes
+ * `users.stripe_customer_id`. Checking here means a charge that cannot succeed
+ * leaves no customer behind, no `held_unpaid` on the slot, and no D1 write of
+ * any kind. The `catch` below still maps `SettlementDisabled`, because a guard
+ * a caller can reorder is not a guard.
+ */
+advisors.post('/bookings/:id/pay', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const row = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?')
+      .bind(Number(c.req.param('id'))).first<BookingRow>();
+    // 404 ON SOMEONE ELSE'S BOOKING, NEVER 403. A 403 distinguishes "exists but
+    // is not yours" from "does not exist", which is an enumeration oracle over
+    // other people's sessions. The two answers are deliberately identical.
+    if (!row || row.founder_user_id !== user.id) {
+      return c.json({ detail: 'Booking not found' }, 404);
+    }
+
+    const mode = settlementMode(c.env);
+    if (mode === 'none') {
+      return c.json({
+        detail: 'Advisory charging is not switched on, so this session cannot be paid here yet.',
+        settlement: mode,
+      }, 503);
+    }
+
+    // THE BILLING STATE DECIDES, AND EACH REFUSAL NAMES WHOSE MOVE IT IS.
+    // Collapsing these into one "cannot pay" would leave a founder unable to
+    // tell "your advisor has not priced it" from "you already paid".
+    if (row.billing_state === 'collected') {
+      return c.json({ detail: 'This session is already paid.', billing_state: row.billing_state }, 409);
+    }
+    if (row.billing_state === 'written_off') {
+      return c.json({ detail: 'This session was written off, so there is nothing to pay.' }, 409);
+    }
+    if (row.billing_state !== 'billed') {
+      // `unpriced` lands here, and so would any state a later migration adds:
+      // an unrecognised state is not a licence to charge.
+      return c.json({ detail: 'Your advisor has not priced this session yet.' }, 409);
+    }
+
+    // A PRICE OF NULL OR ZERO IS NOT A FREE SESSION. `chargeSession` refuses it
+    // too; this says which of its three refusals applied before a Stripe call.
+    const gross = row.amount_cents == null ? null : Number(row.amount_cents);
+    if (gross == null || !Number.isFinite(gross) || gross <= 0) {
+      return c.json({ detail: 'This session has no amount to charge.' }, 409);
+    }
+
+    const account = await loadPayoutAccount(c.env, row.advisor_id);
+    const state = derivePayoutState(account);
+    if (!account || state !== 'verified') {
+      // MIGRATION 240'S `held_unpaid` FINALLY HAS A WRITER. That column was
+      // created to record "a slot taken by a booking that could not be charged",
+      // and until now nothing ever set it — `markSessionCharged` only
+      // transitions OUT of it. Scoped to `not_applicable` so a slot already
+      // charged or refunded by another booking on the same capacity is never
+      // walked backwards, and best-effort because the founder's answer does not
+      // depend on the bookkeeping succeeding.
+      try {
+        await c.env.DB.prepare(
+          `UPDATE advisor_office_hour_slots
+              SET payment_state = 'held_unpaid'
+            WHERE id = ? AND payment_state = 'not_applicable'`,
+        ).bind(row.slot_id).run();
+      } catch (e: any) {
+        console.warn('[advisors] held_unpaid write failed:', String(e?.message || e));
+      }
+      // The gate sentence comes from `PAYOUT_GATE`, which exists so the worker
+      // and the page cannot word the same state differently.
+      return c.json({
+        detail: 'This advisor cannot take payment yet.',
+        payout_state: state,
+        gate: PAYOUT_GATE[state] ?? null,
+      }, 409);
+    }
+
+    const customerId = await ensurePaymentsCustomer(c.env, user as TierUser);
+    const intent = await chargeSession(c.env, {
+      account,
+      bookingUid: row.uid,
+      bookingId: row.id,
+      advisorId: row.advisor_id,
+      // THE BOOKING'S OWN STORED PRICE, never a recomputation. The advisor may
+      // have discounted this one session below the catalogue, and 241 stamped
+      // the cut against this figure; charging anything else would divide a
+      // number the ledger does not hold.
+      amountCents: gross,
+      description: row.topic ? `Advisory session · ${row.topic}` : 'Advisory session',
+      customerId,
+    });
+
+    // NO `payment_intent_id` IS STORED, and that is a decision rather than an
+    // omission. `advisor_bookings` has no column for one and adding it is a
+    // migration; nothing needs it, because `markSessionCharged` finds the
+    // booking by `metadata.booking_uid` and `chargeSession`'s idempotency key
+    // is derived from that same uid, so the intent is recoverable from Stripe
+    // without a second copy here. D81 records it as a possible follow-up.
+    return c.json({
+      booking_uid: row.uid,
+      client_secret: intent.client_secret,
+      payment_intent_id: intent.payment_intent_id,
+      amount_cents: gross,
+      application_fee_cents: intent.application_fee_cents,
+      take_rate_bps: intent.take_rate_bps,
+      settlement: intent.mode,
+    });
+  } catch (e: any) {
+    // The service's own refusals, mapped rather than surfaced as 500s. Both are
+    // reachable even with the checks above, because the service is the authority
+    // and a race between the two reads is exactly what it guards against.
+    if (e instanceof SettlementDisabled) {
+      // THE MODE COMES OFF THE THROWER, not from a literal and not from a second
+      // `settlementMode()` read. `advisor_connect_leg.test.ts` forbids hard-coding
+      // the mode anywhere in this file — a constant would keep reporting the same
+      // word after the flag flips — and that guard caught the first draft of this
+      // line. Note it scans the whole file as text, so it objects to the forbidden
+      // pair appearing even in a comment; that is why this one describes it
+      // instead of quoting it. Re-reading the env here would be wrong in a
+      // different way: it could answer `test` about a refusal that happened
+      // because the answer was `none`. `e.mode` is what the service decided.
+      return c.json({
+        detail: 'Advisory charging is not switched on, so this session cannot be paid here yet.',
+        settlement: e.mode,
+      }, 503);
+    }
+    if (e instanceof PayoutAccountNotReady) {
+      return c.json({
+        detail: 'This advisor cannot take payment yet.',
+        payout_state: e.state,
+        gate: PAYOUT_GATE[e.state] ?? null,
+      }, 409);
+    }
+    return mapError(c, e);
+  }
 });
 
 /**
