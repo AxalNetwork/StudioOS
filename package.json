@@ -43,7 +43,7 @@
     "@react-pdf/renderer": "^4.9.0",
     "@replit/connectors-sdk": "^0.4.3",
     "@simplewebauthn/browser": "^13.3.0",
-    "@simplewebauthn/server": "^13.3.3",
+    "@simplewebauthn/server": "^14.0.1",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^6.1.1",
     "autoprefixer": "^10.5.5",
