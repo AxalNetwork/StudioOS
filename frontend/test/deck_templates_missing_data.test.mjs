@@ -52,6 +52,13 @@ import { SAMPLE_DATA as SALES_SAMPLE } from '../src/decks/templates/sales_commer
 import { SAMPLE_DATA as PARTNERSHIP_SAMPLE } from '../src/decks/templates/partnership_bd_app.tsx';
 import { SAMPLE_DATA as MINIMAL_SAMPLE } from '../src/decks/templates/minimal_seed.tsx';
 import { SAMPLE_DATA as DEMODAY_SAMPLE } from '../src/decks/templates/demo_day_app.tsx';
+// #201 — pinned by render, not by the compiler. `minimal_seed_app` is the one
+// `_app` variant no wrapper re-exports, so this suite is the only thing that
+// looks at it; see the two tests at the bottom of this file.
+import {
+  Deck_minimal_seed_app,
+  SAMPLE_DATA as MINIMAL_APP_SAMPLE,
+} from '../src/decks/templates/minimal_seed_app.tsx';
 
 const render = (Comp, data) => renderToStaticMarkup(React.createElement(Comp, { data }));
 const countFrames = (html) => (html.match(/data-slide-frame=""/g) || []).length;
@@ -178,4 +185,45 @@ test('demo_day_app — empty render shows the sample fallback + holds 12 frames'
   // The full sample render must also stay crash-free + 12 frames.
   assert.doesNotThrow(() => render(Deck_demo_day_app, DEMODAY_SAMPLE));
   assert.equal(countFrames(render(Deck_demo_day_app, DEMODAY_SAMPLE)), 12, 'sample render should emit 12 slide frames');
+});
+
+// ── #201: what a type-check found, pinned by what actually renders ──
+//
+// A green `tsc --noEmit` is not evidence that a deck draws the right thing —
+// it is evidence that nothing contradicts the types. These two assert the
+// output, so reverting either fix fails here as well as in the compiler.
+
+test('minimal_seed_app — the JOURNEY timeline draws achievements, not blanks', () => {
+  // `TimelineDots` reads `date`/`label`; `achievements` carries `year`/`event`.
+  // Before the component was widened to accept both, this strip rendered its
+  // dots over three EMPTY columns — no year, no caption. The compiler is what
+  // found it; this is what proves it fixed.
+  const html = render(Deck_minimal_seed_app, MINIMAL_APP_SAMPLE);
+  for (const a of MINIMAL_APP_SAMPLE.achievements) {
+    assert.ok(html.includes(a.year.toUpperCase()), `achievement year "${a.year}" is missing from the render`);
+    assert.ok(html.includes(a.event), `achievement caption "${a.event}" is missing from the render`);
+  }
+  // And the other caller must keep working — `milestones` is the {date,label}
+  // shape the component was originally written for, and widening a prop type is
+  // exactly the change that can silently drop the case it already handled.
+  for (const m of MINIMAL_APP_SAMPLE.milestones) {
+    assert.ok(html.includes(m.date.toUpperCase()), `milestone date "${m.date}" is missing from the render`);
+    assert.ok(html.includes(m.label), `milestone label "${m.label}" is missing from the render`);
+  }
+});
+
+test('series_a_growth_app — customer logos never render the string "undefined"', () => {
+  // #201 predicted this one renders `undefined` because it reads `.initials`
+  // off a fallback that carries only `name`. It does not: the read is
+  // `l.initials || safeUpper(l.name).slice(0, 6)`, so the fallback was always
+  // covered and the diagnostic was type-only. Asserted rather than argued,
+  // because "it already falls back" is the kind of claim that stops being true.
+  const empty = render(Deck_series_a_growth_app, {});
+  const populated = render(Deck_series_a_growth_app, SERIES_A_SAMPLE);
+  for (const [label, html] of [['empty', empty], ['sample', populated]]) {
+    assert.ok(!html.includes('>undefined<'), `series_a_growth_app ${label} render emitted a literal "undefined"`);
+  }
+  // The twelve-name fallback is what a project with no logos gets; at least the
+  // first of them has to survive to the page.
+  assert.ok(empty.includes('ACME'), 'the customer-logo fallback did not render');
 });

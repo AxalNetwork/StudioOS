@@ -29,7 +29,7 @@ represents a bug that reached production once:
 | `check-inline-project-pickers.mjs` | A twenty-second in-body startup picker. Task #181 asks for the existing twenty-one to go and is BLOCKED on a product question — the sidebar switcher selects a COMPANY, each picker selects a PROJECT, and every one is guarded by `projects.length > 1`, so they are a second axis rather than a duplicate. The set is frozen in `inline-project-pickers-baseline.json` instead of banned: the gate fails on a new one AND on an entry that no longer exists, so the eventual deletion is self-documenting. Task #84 removed these once, per-route, and they came back because nothing counted them — and the hand-written list in #181 named eleven of the twenty-one. |
 | `check-folder-docs.mjs` | A folder that carries weight without explaining itself, or a README naming a file that does not exist. |
 | `check-unused-imports.mjs` | A name a module binds and never uses — both `import { a } from '…'` and a destructured `const { a } = obj`. CodeQL reports these as alerts, so the choice is here or in a CI round trip; it raised three in one session before this existed. Deliberately narrow in both halves, because a false positive demands a change that breaks working code: named imports only (never default or namespace), and for destructuring `const` only — never a parameter list, and never a pattern with a rest element, since `const { password, ...safe } = user` names the field precisely to exclude it. Its own tests are the evidence it can fail, because **zero** destructured bindings in the repo are currently dead: `frontend/test/unused_imports_guard.test.mjs`. |
-| `check-react-hook-imports.mjs` | The other half of that rule — a name USED but never imported. `useState` shipped undefined to the apex once and took the public site down on first paint; a missing binding is a runtime error, so the bundle was clean and no test rendered the component. Since `lint:undef` below, this is coverage-redundant across `frontend/src`'s JS and JSX (verified by mutation) and kept for the TS and TSX files the linter cannot parse, plus a message that names the failure. |
+| `check-react-hook-imports.mjs` | The other half of that rule — a name USED but never imported. `useState` shipped undefined to the apex once and took the public site down on first paint; a missing binding is a runtime error, so the bundle was clean and no test rendered the component. Since `lint:undef` below, this is coverage-redundant across `frontend/src`'s JS and JSX (verified by mutation); since `test:types:frontend` (#201, D96) it is redundant across the TS and TSX files too — a deleted `useState` import in `demo_day_app.tsx` was caught by BOTH, which is how that was established rather than assumed. **It now earns its place on its message alone**, which names the hook and the file in one line where `tsc` gives a TS2304 per call site. Kept for that; not for coverage. |
 | `npm-audit-gate.mjs` | A critical advisory in a production dependency — and, separately, a registry that did not answer. `npm audit` exits 1 for both, so a 503 from the advisory endpoint went red exactly like a real CVE. The gate retries a transport failure, names the advisories on a real finding, and still fails when the database is unreachable rather than passing on a question it could not ask. |
 | `check-dark-mode.mjs` | A surface with no dark variant. |
 
@@ -56,15 +56,37 @@ so every new account with no startups got the `ReferenceError`), and
 `SpinoutLabPage.jsx` read an unimported `LAB_APPLY_HREF`. Config and the
 reasoning behind what it deliberately leaves off are in `eslint.config.mjs`.
 
-**It does not cover the whole SPA.** The glob is `{js,jsx}` — espree cannot parse
-TypeScript — and `frontend/src`'s 27 TS and TSX files are type-checked by
-nothing: `test:types` compiles `cloudflare-worker` only, the SPA has no tsconfig,
-and Vite strips those types without checking them. Against this bug class they
-are covered only by the 14 hook names in `check-react-hook-imports.mjs`. The gap
-is currently empty (zero TS2304 across those files) and closing it means a
-frontend `tsc --noEmit` behind 15 pre-existing type errors — see
-`documentation/architecture/DECISIONS.md` D84, which also records why the hook
-script stays despite being coverage-redundant across JS and JSX now.
+**The SPA's other 27 files are covered by `npm run test:types:frontend`, not by
+this.** The glob is `{js,jsx}` because espree cannot parse TypeScript, so
+`frontend/src`'s 27 TS and TSX files needed a compiler rather than a linter.
+They have one since #201 (D96): `frontend/tsconfig.json` + `tsc --noEmit`,
+chained into `test:drift` beside the worker's `test:types`. It catches the same
+bug class with the same force — a deleted `import { Editable }` fails it by file
+and line — which means `check-react-hook-imports.mjs` no longer has any unique
+cover, and is kept for its message alone. D84 recorded that gap as open; D96
+closes it and says what changed.
+
+## The compiler that covers what the linter cannot parse
+
+`npm run test:types:frontend` — `tsc --noEmit -p frontend/tsconfig.json`. Like
+`lint:undef` it is not a `check-*.mjs`; `test:drift` runs it directly, next to
+the worker's `test:types`.
+
+Added by #201, and the thing worth carrying forward is that **strict was the
+cheap option**. Measured over exactly those 27 files: fully loose reports 15
+errors, `noImplicitAny` alone 18, strict 10, strict + `allowJs` **9**. Loose mode
+reads `data.features[idx] ?? {}` in `demo_day_app.tsx` as narrowing to the empty
+type and files seven complaints against a defensive fallback that is already
+correct; `strictNullChecks` makes all seven vanish. The nine were fixed rather
+than tolerated — see D96 for what each one was.
+
+**`docs/` digests are not a valid before/after test for a build change.**
+`build-frontend.mjs` keeps a rolling asset-retention window, so hashing all of
+`docs/` moves on every run even with identical input — it says a build "changed"
+when nothing did. Adding `frontend/tsconfig.json` had to be checked for exactly
+that (Vite reads a project-root tsconfig for `jsx`/`target`), and the way to do
+it is two `vite build --outDir <tmp>` runs, with and without the file, compared
+file by file. They came out byte-identical.
 
 ## The live probes
 

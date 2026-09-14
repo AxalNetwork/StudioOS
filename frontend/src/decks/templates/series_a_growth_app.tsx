@@ -186,7 +186,7 @@ const Editable: React.FC<{
   placeholder?: string;
   className?: string;
   style?: React.CSSProperties;
-  as?: keyof JSX.IntrinsicElements;
+  as?: keyof React.JSX.IntrinsicElements;
 }> = ({ value, path, editable, onEdit, placeholder, className, style, as = 'div' }) => {
   const Tag: any = as;
   return (
@@ -1097,7 +1097,14 @@ const Slide8RevenueGrowth: React.FC<DeckProps> = ({ data = {} }) => {
 };
 
 const Slide9Adoption: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) => {
-  const logos = data.customer_logos?.length
+  // The annotation is what #201 added, and the asymmetry is worth knowing:
+  // `minimal_seed_app`'s identical pattern does NOT error because its fallback
+  // is an ARRAY LITERAL, which the conditional widens to the other branch's
+  // type. `Array.from`'s callback is inferred on its own, so the union kept a
+  // constituent with no `initials` and the read below failed to compile.
+  // Nothing rendered wrong — `l.initials || safeUpper(l.name)` already falls
+  // back — so this is a type repair, not the output bug #201 predicted.
+  const logos: NonNullable<SeriesAData['customer_logos']> = data.customer_logos?.length
     ? data.customer_logos
     : Array.from({ length: 12 }, (_, i) => ({ name: ['Acme', 'Nimbus', 'Lattice', 'Northwind', 'Atlas', 'Verdant', 'Helio', 'Cobalt', 'Quanta', 'Apex', 'Prism', 'Vector'][i] || `Logo ${i+1}` }));
   const retention = data.retention_cohort?.length
