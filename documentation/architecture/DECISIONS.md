@@ -6697,3 +6697,64 @@ import each fail the gate by file and line; reverting the timeline normalisation
 and breaking the initials fallback each fail a render assertion, not just the
 compiler; drifting and deleting the root TypeScript pin each fail
 `repo_layout.test.mjs`.
+
+---
+
+## D97 — a share link may not promise what its own next step cannot deliver
+
+**Date:** 2026-09-14 · **Task:** #205 · **Migration:** none
+
+### The bug, and why neither file could see it
+
+`ShareDeckCTA` decided its copy with `category === 'commercial'` and let
+everything else inherit the fundraising card: *"the SAFE, term sheet, and side
+letters are ready for your review."* `ShareViewerSignupModal` gated both the
+deal-pack fetch and the post-NDA branch on `category === 'fundraising'`.
+
+For `'event'` — the category `demo_day` and `axal_spinout_demoday` both carry —
+those two disagreed. A Demo Day viewer read the promise, **signed the NDA on the
+strength of it**, and arrived at a post-NDA step with no branch at all. Not an
+error, not an empty state: nothing rendered. The signature was already recorded.
+
+The reason it survived is the shape, not the oversight: **two files each held
+their own idea of what a category meant, and neither could see the other's.**
+Every individual line was defensible on its own.
+
+### The rule now lives in one place
+
+`frontend/src/lib/shareDeckAudience.js` maps a category to one of `FEEDBACK`,
+`DEAL_PACK`, or `null`, and both files ask it. `'event'` is `DEAL_PACK` **by
+decision** rather than by fall-through: a Demo Day viewer is there to evaluate
+the company, which is what the deal pack is for.
+
+### `'narrative'` renders nothing, and the reason is a finding
+
+The repo does not agree with itself about what a narrative deck is. The worker
+files two methods under `'narrative'` (`services/decks/methods.ts`:
+`sequoia_classic` and `narrative_brand`) while the frontend registry calls the
+first **`fundraising`** and the second **`commercial`** — and the two sources
+reach different screens: `PitchDeckPage.jsx:1570` prefers the methods value
+(`m.category || tpl.category`), `PitchDeckPrintPage.jsx:714`, which renders this
+CTA, reads the registry's.
+
+So a CTA that mapped `'narrative'` would be guessing which half of that
+disagreement is right, and guessing wrong is exactly the bug above. It renders
+nothing until the repo settles it. Raised separately; not decided here.
+
+An unrecognised value renders nothing for the same reason. **Defaulting to the
+deal pack is how a Demo Day deck came to offer documents in the first place.**
+
+### The assertion that outlives the others
+
+`share_deck_cta_audience.test.mjs` pins the rendered copy per category — but the
+durable one is the last test: **neither file may compare `category` to a literal
+again.** The render tests pin what the code does today; that one pins the thing
+that let it be wrong. Its value showed in the mutation sweep: restoring the bare
+`category === 'fundraising'` in the modal's prefetch — the precise line that left
+the panel blank — was caught by **that test alone**, because every rendered
+output still looked right.
+
+**3 mutations applied, 3 caught**, each by a different assertion class: dropping
+`'event'` from the map fails the unit test, the cross-file invariant and the
+render test; the bare literal in the modal fails only the coupling guard; letting
+the CTA default an unknown category to the deal pack fails the render tests.
