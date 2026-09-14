@@ -101,7 +101,7 @@ const Editable: React.FC<{
   placeholder?: string;
   className?: string;
   style?: React.CSSProperties;
-  as?: keyof JSX.IntrinsicElements;
+  as?: keyof React.JSX.IntrinsicElements;
 }> = ({ value, path, editable, onEdit, placeholder, className, style, as = 'div' }) => {
   const Tag: any = as;
   return (
@@ -506,7 +506,31 @@ const LogoChip: React.FC<{ name: string; initials?: string }> = ({ name, initial
   );
 };
 
-const TimelineDots: React.FC<{ items: { date: string; label: string }[]; activeIdx?: number }> = ({
+/**
+ * Two data shapes reach this component and only one of them used to render.
+ *
+ * `milestones` is `{date,label}` (the renderer-native shape) and `achievements`
+ * is `{year,event}` — both declared on `MinimalSeedData` above, and both passed
+ * to `TimelineDots` from this file. The prop type admitted only the first, so
+ * the achievements call handed over objects whose `date` and `label` are
+ * `undefined`: the dots still drew and the JOURNEY strip rendered three empty
+ * columns. Nothing said so, because nothing type-checked this file (#201).
+ *
+ * SCOPE IT HONESTLY: no user has seen those empty columns. Unlike its seven
+ * siblings, this `_app` variant is re-exported by nothing — `minimal_seed.tsx`
+ * is its own full implementation rather than the one-line re-export that
+ * `demo_day.tsx` and `series_a_growth.tsx` are — so the registry never reaches
+ * this file. It is real code with a real bug, and it was not shipping.
+ *
+ * The fix is the one `minimal_seed.tsx` and `kawasaki_10_20_30.tsx` already made
+ * — widen the component and normalise here, so the two callers stay symmetric —
+ * rather than renaming `achievements`' fields, which are what the autofill and
+ * the team-timeline overlay actually produce.
+ */
+const TimelineDots: React.FC<{
+  items: { date?: string; year?: string; label?: string; event?: string }[];
+  activeIdx?: number;
+}> = ({
   items,
   activeIdx = -1,
 }) => (
@@ -539,10 +563,10 @@ const TimelineDots: React.FC<{ items: { date: string; label: string }[]; activeI
               textAlign: 'center',
             }}
           >
-            {(m.date || '').toUpperCase()}
+            {(m.date || m.year || '').toUpperCase()}
           </div>
           <div style={{ fontSize: 13, color: INK, marginTop: 6, lineHeight: 1.35, textAlign: 'center' }}>
-            {m.label}
+            {m.label || m.event || ''}
           </div>
         </div>
       ))}

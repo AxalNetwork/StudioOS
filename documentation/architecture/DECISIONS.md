@@ -6592,3 +6592,108 @@ identifier names. It now pins the same property on the new latches **and** asser
 each is a `WeakMap` — an assertion that would have failed before this change. Its
 production-short-circuit test likewise requires the `.set(bindingKey(env), true)`
 form, so a file that drops back to a boolean fails there as well as in the guard.
+
+---
+
+## D96 — the SPA gets a type-check, and strict turned out to be the cheap option
+
+**Date:** 2026-09-14 · **Task:** #201 · **Migration:** none
+
+### What was unchecked
+
+`frontend/src` holds 27 `.ts`/`.tsx` files — the deck templates, `DeckBase`,
+`Thumbnail`, `brand/gvpn` — and **nothing looked at their types**. `test:types`
+compiles the worker; the SPA had no `tsconfig.json` and no `typescript`
+dependency at all; Vite 8 hands TypeScript to oxc, which strips types and never
+checks them. `lint:undef` is globbed `{js,jsx}` because espree cannot parse
+TypeScript, so against a missing import — a runtime `ReferenceError` the bundler
+emits without complaint, which is the entire reason `lint:undef` exists — those
+27 files were covered by fourteen hard-coded hook names and nothing else.
+
+D84 recorded this gap and left it open on purpose: closing it meant landing a
+`tsc --noEmit` behind pre-existing errors, and several of those were judgements
+about what a deck should render rather than type pedantry.
+
+### Strict is the SMALLER error set, which is not the obvious way round
+
+#201's own guidance was *"keep `strict` off at first if that is what it takes to
+land the gate"*. Measured with the repo's pinned compiler (TypeScript 7.0.2) over
+exactly those files:
+
+| config | errors |
+| --- | --- |
+| fully loose (`strict:false, noImplicitAny:false, strictNullChecks:false`) | **15** |
+| `noImplicitAny` only | **18** |
+| `noImplicitAny` + `strictNullChecks` | **10** |
+| `strict: true` (TS 7's default) | **10** — identical to the row above |
+| **`strict: true` + `allowJs: true`** | **9** |
+
+The mechanism is worth keeping because it decides the fix and not just the flag.
+`demo_day_app.tsx` reads `const raw = data.features[idx] ?? {}` and then six
+`raw.x ?? <default>` lines, under a comment saying autofill may write `{name}`
+only. Loose mode cannot narrow through `??`, reduces the union to `{}`, and files
+**seven** complaints against a defensive fallback that is already correct;
+`strictNullChecks` knows the left side is non-nullish, drops the `{}`, and all
+seven vanish. Following #201's item 4 — *"needs the real slot type, not a cast"* —
+would have meant tightening a guard that exists precisely to tolerate a partial
+payload. `allowJs` takes the last one: `decks/spinout/deckData.js` is the only
+`.js` any of these files import, and admitting it (one extra file, `checkJs` off)
+lets TS infer instead of refusing. The whole check runs in about 1.4 s.
+
+### The nine, and what each turned out to be
+
+| site | verdict |
+| --- | --- |
+| `templates/index.ts:57,58` — `category: 'event'` | **the type was wrong, not the data.** `PitchDeckPage.jsx` hard-codes an `'event'` filter tab, so both decks were always visible; the worker's own union is `fundraising \| commercial \| event \| narrative`. Widened to match, `'narrative'` included. Not widened to `string` — `ShareDeckCTA` branches on it. |
+| `minimal_seed_app.tsx:1160` — timeline shape | **a real rendering bug.** `TimelineDots` reads `date`/`label`; `achievements` carries `year`/`event`, so the JOURNEY strip drew its dots over three empty columns. Fixed the way `minimal_seed.tsx` and `kawasaki_10_20_30.tsx` already had — widen the component and normalise — rather than renaming the data the autofill produces. |
+| `series_a_growth_app.tsx:1164` — `.initials` | **type-only, and #201 was wrong about it.** The task predicted it "renders `undefined`"; the line is `l.initials \|\| safeUpper(l.name).slice(0, 6)`, so it never did. The union simply lost the declared `initials?` because the fallback is `Array.from` (whose callback is inferred alone) rather than an array literal (which the conditional widens) — which is why `minimal_seed_app`'s identical pattern does not error. |
+| `yc_seed.tsx:381` | type-only: the one `Editable` in the file reading a raw optional instead of going through `v(data, …)`. The component already rendered `{value \|\| placeholder \|\| ''}`. |
+| four × `keyof JSX.IntrinsicElements` | **not the "probe-config artifact" #201 guessed.** React 19's `@types/react` removed the global `JSX` namespace; the spelling is `React.JSX`. Those four template-local `Editable`s diverged from `DeckBase`, which sidesteps it with a literal union. |
+
+### Scope the timeline bug honestly
+
+`minimal_seed_app.tsx` is the one `_app` variant **no wrapper re-exports** — the
+other seven reach the registry through one-line re-export files (`demo_day.tsx`,
+`series_a_growth.tsx`, …), while `minimal_seed.tsx` is its own full
+implementation. So nothing imported the file and no user saw those empty columns.
+It is real code with a real bug that was not shipping, and saying otherwise would
+be the same overstatement this decision exists to correct. Whether that variant
+should be adopted or deleted is a separate question and is not answered here.
+
+### The gate, and the two dependency facts under it
+
+`frontend/tsconfig.json` (strict, `allowJs`, `checkJs: false`, `noEmit`) plus
+`npm run test:types:frontend`, chained into `test:drift` beside `test:types`.
+Two things had to become explicit first:
+
+- **No TypeScript was reachable.** `npx tsc` from `frontend/` resolved a *global*
+  6.0.2 that CI does not have. The root now pins `typescript` at the worker's
+  `^7.0.2`, and `repo_layout.test.mjs` fails if the two pins drift — the same
+  answer the repo already gave the duplicated `image-size` override.
+- **`@types/react` was transitive.** A gate reading JSX through a type package no
+  one declared is a gate an unrelated dependency bump can silently change.
+  `@types/react` and `@types/react-dom` are `frontend` devDependencies now.
+
+### `docs/` digests cannot test a build change
+
+Adding a project-root `tsconfig.json` is build-affecting in principle — Vite reads
+one for `jsx`/`target` — so it had to be checked. Hashing all of `docs/` before
+and after said the build moved; **the instrument was wrong**. `build-frontend.mjs`
+keeps a rolling asset-retention window, so a third build with no input change
+moved the digest again. Two `vite build --outDir <tmp>` runs, with and without the
+file, came out **byte-identical**. Compare bundler output, never `docs/`.
+
+### `check-react-hook-imports.mjs` keeps its place, on a narrower claim
+
+D84 kept it for two reasons: the TS/TSX the linter cannot parse, and a message
+that names the failure. This removes the first — a deleted `useState` import in
+`demo_day_app.tsx` is caught by both, established by mutation rather than
+assumed. It stays for the second alone: one line naming the hook and the file,
+where `tsc` gives a TS2304 per call site. That is a real difference and a small
+one, and the record now says so instead of claiming coverage it no longer has.
+
+**6 mutations applied, 6 caught**: a deleted named import and a deleted hook
+import each fail the gate by file and line; reverting the timeline normalisation
+and breaking the initials fallback each fail a render assertion, not just the
+compiler; drifting and deleting the root TypeScript pin each fail
+`repo_layout.test.mjs`.

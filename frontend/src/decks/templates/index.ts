@@ -20,7 +20,23 @@ import { Deck_narrative_brand } from './narrative_brand';
 // Task #15 — Axal 28-day Spin-Out Lab Demo Day deck (10 slides · editorial).
 import { Deck_axal_spinout_demoday } from './axal_spinout_demoday_app';
 
-export type TemplateCategory = 'commercial' | 'fundraising';
+/**
+ * The four values a template's `category` may take.
+ *
+ * WIDENED IN #201, AND THE TYPE WAS THE ONLY THING THAT DISAGREED. It read
+ * `'commercial' | 'fundraising'` while `demo_day` and `axal_spinout_demoday`
+ * below both write `'event'`, `PitchDeckPage.jsx` hard-codes an `'event'` tab in
+ * its filter row, and the worker's own union
+ * (`services/decks/methods.ts`) is exactly these four. So the two decks were
+ * never dropped from the picker — nothing filtered them out — and the narrower
+ * type was simply false about data that has shipped all along. `'narrative'` is
+ * included because the worker emits it; the picker offers no tab for it yet, so
+ * such a method is reachable only under "All".
+ *
+ * Widening to `string` would have been the wrong repair: the point of the union
+ * is that `ShareDeckCTA` branches on it.
+ */
+export type TemplateCategory = 'commercial' | 'fundraising' | 'event' | 'narrative';
 
 export type BrandTheme = 'full' | 'accent_only' | 'off';
 
@@ -33,9 +49,13 @@ export interface TemplateMeta {
   /**
    * Task #6 — classifies the deck for share-link end-of-deck CTA routing.
    * `commercial` → customer-discovery feedback flow (Sales / Partnership /
-   * One-Pager / Narrative Brand). `fundraising` → auto-generated deal-pack
-   * + e-sign flow (everything else, including Demo Day even though its
-   * backend `category` is 'event').
+   * One-Pager / Narrative Brand). Everything else falls through to the
+   * auto-generated deal-pack + e-sign flow, because `ShareDeckCTA` branches on
+   * `=== 'commercial'` and treats the remainder as fundraising.
+   *
+   * The previous wording said Demo Day was `fundraising` "even though its
+   * backend category is 'event'" — it is `'event'` here too, on the two entries
+   * below, and has been since they were added (#201).
    */
   category: TemplateCategory;
   Component: React.FC<DeckProps>;
