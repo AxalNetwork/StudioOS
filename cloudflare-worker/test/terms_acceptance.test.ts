@@ -271,3 +271,67 @@ test('migration 245 is D1-applicable and every column has a writer', () => {
     assert.ok(insert.slice(0, 260).includes(c), `legal_acceptances.${c} has no writer`);
   }
 });
+
+/* ------------------------------------------------------------------ *
+ * Provenance — task #178
+ * ------------------------------------------------------------------ */
+
+test('the caller names its own source, and the default keeps the first one honest', async () => {
+  // `evidence_meta.source` is what `obligationSource` renders on the Trust
+  // Center row, and it was HARDCODED to 'signup_clickwrap' here for every
+  // surface — fine while `onboarding_licence` was the only caller, false the
+  // moment a second one existed. Task #178's interstitial asks accounts that
+  // PREDATE the signup checkbox; telling them they accepted at signup would be
+  // a statement about an event that never happened.
+  const { env, db } = makeEnv();
+  seedPending(db, 20, ['tos_v1', 'privacy_v1']);
+  await recordTermsAcceptance(env, 20, CTX);
+  const first = JSON.parse(oblig(db, 20, 'tos_v1').evidence_meta);
+  assert.equal(first.source, 'signup_clickwrap',
+    'the original caller passes no source and must be unchanged by the new parameter');
+  assert.equal(first.surface, 'onboarding_licence');
+
+  const { env: env2, db: db2 } = makeEnv();
+  seedPending(db2, 21, ['tos_v1', 'privacy_v1']);
+  await recordTermsAcceptance(env2, 21, {
+    ...CTX, surface: 'reacceptance_interstitial', source: 'reacceptance_interstitial',
+  });
+  const second = JSON.parse(oblig(db2, 21, 'tos_v1').evidence_meta);
+  assert.equal(second.source, 'reacceptance_interstitial',
+    'the source is still hardcoded — the Trust Center will say "Accepted at signup" '
+    + 'over an act that happened years later');
+  assert.equal(second.surface, 'reacceptance_interstitial');
+});
+
+test('the Trust Center names the interstitial rather than the signup it never saw', () => {
+  assert.equal(
+    obligationSource({ evidence_meta: JSON.stringify({ source: 'signup_clickwrap' }) }),
+    'Accepted at signup',
+  );
+  assert.equal(
+    obligationSource({ evidence_meta: JSON.stringify({ source: 'reacceptance_interstitial' }) }),
+    'Re-accepted in the app',
+    'a labelled source fell through to the verbatim branch — the row would read '
+    + '"Synced from reacceptance interstitial", which describes a system import '
+    + 'of somebody else\'s record rather than this person\'s own act',
+  );
+});
+
+test('nothing writes a source literal into the SQL any more', () => {
+  // THE ASSERTION THAT OUTLIVES THE TWO ABOVE. They pin what the function does
+  // for the two callers that exist; this pins the shape that made it possible
+  // for one caller's provenance to be silently applied to another's. A third
+  // caller that forgets its `source` gets the honest default, not a borrowed
+  // sentence.
+  const svc = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/services/trust.ts'), 'utf8');
+  const fn = svc.slice(
+    svc.indexOf('export async function recordTermsAcceptance'),
+    svc.indexOf('export function obligationSource'),
+  );
+  assert.ok(fn.length > 0, 'recordTermsAcceptance moved — this assertion is reading nothing');
+  assert.doesNotMatch(fn, /json_object\('source'\s*,\s*'/,
+    'the UPDATE writes a literal source again; pass `ctx.source` so a caller cannot '
+    + 'inherit another caller\'s provenance');
+  assert.match(fn, /ctx\.source \|\| 'signup_clickwrap'/,
+    'the default must stay, or the existing onboarding caller loses its label');
+});

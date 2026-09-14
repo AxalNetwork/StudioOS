@@ -25,6 +25,23 @@
 export const ONBOARDING_COMPLETE_EVENT = 'axal:onboarding-complete';
 
 /**
+ * Fired on `window` the moment POST /auth/accept-terms succeeds, so the app
+ * shell can retire its own cached "still owes an acceptance" belief.
+ *
+ * Task #178's interstitial has exactly the problem the event above was built
+ * for, one gate along. `RequireAuth` reads `terms_acceptance_pending` off /me in
+ * the same effect keyed on `[user?.id]` — once per session, never again — so
+ * without this the screen the user just accepted on would re-render itself
+ * immediately, with no way past it short of a full reload. Announcing is
+ * cheaper and more reliable than re-fetching a fact we have already been told,
+ * and it is the same reasoning, so it is the same mechanism rather than a
+ * second one.
+ *
+ * No `detail`: there is one thing to say and it is in the name.
+ */
+export const TERMS_ACCEPTED_EVENT = 'axal:terms-accepted';
+
+/**
  * Where an investor goes when their wizard ends.
  *
  * The finish button says "See deal flow" and this used to answer `/studio`,

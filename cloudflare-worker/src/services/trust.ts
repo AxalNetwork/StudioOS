@@ -709,11 +709,23 @@ const SATISFIABLE_BY_CLICKWRAP: ReadonlySet<ObligationKey> = new Set<ObligationK
  * Idempotent for the obligation (the `status IN ('pending','in_review')` guard),
  * but NOT for the evidence: a second genuine acceptance is a second row, which
  * is the whole point of an append-only record.
+ *
+ * `ctx.source` AND `ctx.surface` ARE DIFFERENT FIELDS AND BOTH MATTER, which
+ * was not obvious until a second caller existed. `surface` is the audit trail's
+ * own value in `legal_acceptances`. `source` is what `obligationSource` reads
+ * back off `evidence_meta` to render the Trust Center's provenance line — and it
+ * was HARDCODED to `'signup_clickwrap'` here, for every surface, because there
+ * was only ever one caller. Task #178's interstitial would therefore have made
+ * the Trust Center say "Accepted at signup" over an act performed years later,
+ * in a different screen, by an account that had never seen that checkbox. It
+ * defaults to `'signup_clickwrap'` so the original caller is unchanged; a new
+ * caller must pass its own and add the matching `LABEL` entry, or the line falls
+ * through to the verbatim branch and reads badly rather than falsely.
  */
 export async function recordTermsAcceptance(
   env: Env,
   userId: number,
-  ctx: { surface: string; ip?: string | null; ua?: string | null },
+  ctx: { surface: string; source?: string; ip?: string | null; ua?: string | null },
 ): Promise<{ keys: ObligationKey[]; satisfied: number }> {
   await ensureTrustSchema(env);
   await env.DB.prepare(
@@ -730,6 +742,7 @@ export async function recordTermsAcceptance(
 
   const now = new Date().toISOString();
   const keys = [...SATISFIABLE_BY_CLICKWRAP];
+  const source = ctx.source || 'signup_clickwrap';
   let satisfied = 0;
 
   for (const key of keys) {
@@ -746,16 +759,22 @@ export async function recordTermsAcceptance(
       ? null
       : new Date(Date.now() + ttl).toISOString();
 
+    // `COALESCE` keeps the FIRST acceptance's meta, which is the right answer
+    // for a field that says where this obligation came to be satisfied. A
+    // re-acceptance by someone who already accepted at signup does not rewrite
+    // that history — it adds a `legal_acceptances` row, which is where a second
+    // act belongs. The `status IN ('pending','in_review')` guard means the UPDATE
+    // is a no-op for them anyway.
     const upd: any = await env.DB.prepare(
       `UPDATE legal_obligations
           SET status = 'satisfied',
               expires_at = ?,
-              evidence_meta = COALESCE(evidence_meta, json_object('source','signup_clickwrap','surface',?,'accepted_at',?)),
+              evidence_meta = COALESCE(evidence_meta, json_object('source',?,'surface',?,'accepted_at',?)),
               updated_at = CURRENT_TIMESTAMP
         WHERE user_id = ?
           AND obligation_key = ?
           AND status IN ('pending','in_review')`,
-    ).bind(expiresAt, ctx.surface, now, userId, key).run().catch(() => null);
+    ).bind(expiresAt, source, ctx.surface, now, userId, key).run().catch(() => null);
     if ((upd?.meta as any)?.changes) satisfied += 1;
   }
 
@@ -798,6 +817,14 @@ export function obligationSource(row: any): string | null {
     // because "Synced from signup clickwrap" reads like a system import of
     // somebody else's record, and this is the person's own act.
     signup_clickwrap: 'Accepted at signup',
+    // Task #178. The SAME act, and a different sentence, because for these
+    // accounts the first one would be false: they predate the signup checkbox
+    // entirely — it did not exist when they joined — and accepted in the
+    // interstitial instead. `recordTermsAcceptance` used to hardcode
+    // `signup_clickwrap` for every surface, so without this pair (a `source`
+    // parameter there, an entry here) the Trust Center would have said
+    // "Accepted at signup" over an act that happened years after the signup.
+    reacceptance_interstitial: 'Re-accepted in the app',
   };
   return LABEL[src] || `Synced from ${src.replace(/_/g, ' ')}`;
 }

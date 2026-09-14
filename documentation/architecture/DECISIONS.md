@@ -6876,3 +6876,126 @@ one without (the new capability — the old gate passed it), restoring a baselin
 entry with no picker behind it, dropping a page's `?project_id=` read, restoring
 the "New Startup" button, deleting the `?new=1` effect, and restoring Liquidity's
 dangling sentence.
+
+## D99 — the terms nobody ever accepted, asked for once, and the provenance line that would have lied about it
+
+**Date:** 2026-09-14 · **Task:** #178 · **Migration:** none
+
+### What #549 left behind
+
+PR #549 made the terms consent real: an explicit, unticked checkbox on the
+onboarding licence gate, and `recordTermsAcceptance` to make the act permanent.
+But that gate is passed only by fresh Auth-v2 signups. Admins, impersonated
+sessions, `access_level = 'limited'` accounts, the legacy `flow='chat'` rows and
+**every account older than #549** still had `tos_v1` and `privacy_v1` sitting
+`pending` — satisfiable since #549, satisfied by nothing. What those people had
+been shown was "By continuing you agree" in 10px under a submit button, which is
+a notice and not an act.
+
+Marking the obligations satisfied would have been a one-line change and a false
+record. So they get asked, once, and the answer is theirs to give.
+
+### The signal rides `GET /auth/me`, and every other candidate writes
+
+`recovery_pending` in the same response literal is the shape: an inline IIFE
+doing its own `SELECT`, swallowing errors to a safe default. The new
+`terms_acceptance_pending` sits beside it.
+
+The alternative was an obligation endpoint, and it is disqualified on mechanics
+rather than taste. Every read-shaped `/trust/*` GET calls `seedObligations`,
+which is one unconditional `UPDATE` plus **one `INSERT … ON CONFLICT DO UPDATE`
+per obligation def, in a loop** — and `GET /trust/score/:userId` does that to
+*another user's* rows. Gating page load on one would put those writes on every
+navigation.
+
+**The flag is a fact, not a policy.** An admin really does have these rows
+pending and `/me` says so; whether a session is interrupted over it is decided in
+one place, `App.jsx`, beside the licence and KYC gates whose exclusions it
+copies. Two places deciding is how they come to disagree.
+
+**Absent reads as "do not gate", in all four of its forms**: a DB error, a
+missing table, an account with no obligation rows, and the dev FastAPI, whose
+`/me` has no such key. The SPA therefore tests `=== true` and initialises to
+`false`. The inverse of any one of those would put an unskippable consent screen
+in front of every session — including one whose own accept call is failing.
+
+### The gate renders in place rather than navigating
+
+This is the one structural difference from the two gates above it, and it buys
+two things. It blocks every path including `/onboarding/*`, so there is no
+exemption list to keep in step with the KYC gate's; and `onLogout` is already in
+scope in `RequireAuth`, so **Decline runs the app's own session teardown** rather
+than a second copy that drifts from it. The reader keeps their URL, so accepting
+drops them exactly where they were going.
+
+`licenceGateOwnsConsent` is what stops anyone being asked twice: a fresh signup
+mid licence flow will accept at the licence screen, so the interstitial stands
+down for them. Stated as a fact about the account rather than a path test,
+because a path test would have to name every screen that flow can be on.
+
+**A consent screen with no exit is not consent.** Clickwrap was chosen over
+implied acceptance because it is the stronger record, and a record collected from
+someone with nowhere else to go is weaker than the notice it replaces. Decline
+signs out, changes nothing, and the question is asked again next time.
+
+**No version is claimed.** Migration 245 deliberately stores no document hash —
+`/terms` and `/privacy` are JSX while the `tos_v1`/`privacy_v1` templates are
+different documents, so nothing knows which bytes a reader saw. Saying "version
+3" would invent the one fact the schema refused to guess.
+
+### The defect this would otherwise have shipped
+
+The task's own research said to "add a matching `obligationSource` label or
+provenance falls through to the verbatim branch". **Neither would have
+happened.** `obligationSource` keys off `evidence_meta.source`, not `surface` —
+and `recordTermsAcceptance` **hardcoded** `'source','signup_clickwrap'` for every
+surface, because there had only ever been one caller. So the Trust Center would
+have told an account that predates the signup checkbox entirely that it had
+**"Accepted at signup"**. The label lookup would never have seen the new surface
+at all.
+
+`source` is now a parameter defaulting to `'signup_clickwrap'` — additive, the
+existing caller unchanged — and `reacceptance_interstitial` has its own entry:
+*"Re-accepted in the app."* The durable assertion is neither of those: it is that
+the SQL may not contain a source literal again, so a third caller that forgets
+its own gets the honest default rather than a borrowed sentence.
+
+`evidence_meta` stays under `COALESCE`, which keeps the *first* acceptance's
+provenance. That is right for a field that says where an obligation came to be
+satisfied; a second act belongs in `legal_acceptances`, which is append-only and
+is where it goes.
+
+### No new `status='satisfied'` write site, and no backfill
+
+The accept route calls the existing `recordTermsAcceptance`, so
+`obligation_satisfiable.test.ts`'s `sites === 5` pin is untouched — if it ever
+moves, a new satisfier was added and that is a different change.
+
+Migration 245 **does not** reserve an `'admin backfill'` surface, contrary to what
+the task recorded: `surface` is plain `TEXT NOT NULL` with no CHECK and no enum,
+and the phrase appears once, in the migration's prose. The rule needs no schema
+to enforce it — **an acceptance recorded on somebody's behalf forges the record
+this change exists to make honest** — so the refusal lives where it could
+otherwise happen: the route takes no user id, the client sends no body, and a
+test asserts both.
+
+### The score jump, decided rather than left open
+
+Satisfying two required rows moves partner/admin 0→100, founder 0→67, advisor
+0→50, crossing the band threshold at 60. Two facts bound it: `trust_score_snapshots`
+is pull-based (`INSERT OR IGNORE` per user-month, written only by `GET /trust/me`),
+so there is no mass write; and the 60/90 thresholds are frontend-only.
+
+**Decision: no bespoke score-delta annotation.** The provenance fix is what makes
+the jump explainable — the obligation's own line now says it was re-accepted in
+the app rather than at signup — and a second, parallel explanation of the same
+event is how two surfaces start disagreeing. Recorded here so the choice is
+visible rather than silent.
+
+**15 mutations applied, 15 caught.** Seven on the worker: dropping `required = 1`,
+dropping the obligation-key filter, counting `satisfied` as owing, failing closed
+on a DB error, taking a user id from the request, re-hardcoding the source, and
+deleting the new label. Eight on the SPA: pre-ticking the checkbox, removing the
+decline control, removing the announcement, claiming a document version, dropping
+`!isImpersonating` from the gate, reading the flag loosely, initialising it to
+`true`, and unsubscribing the shell from the accepted event.
