@@ -42,9 +42,10 @@
  *   cd frontend && npm ci && cd .. && npm run build && git add docs && git commit -m "Rebuild docs/"
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { sourceTreeHash } from './lib/sourceTreeHash.mjs';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 
@@ -77,8 +78,73 @@ const skip = (why) => {
   process.exit(0);
 };
 
-if (!existsSync(join(ROOT, '.git'))) skip('not a git checkout');
 if (!existsSync(join(ROOT, 'docs'))) skip('no docs/ directory');
+
+// ---------------------------------------------------------------------------
+// THE DIRECT ANSWER, WHEN THE BUILD LEFT ONE.
+//
+// Everything below this block is the commit-timestamp proxy, and a proxy is all
+// it was: "docs/ was committed after frontend/src" is evidence that someone
+// probably rebuilt, not that they did. It is wrong in both directions.
+//
+//   FALSE PASS — commit docs/ without rebuilding and the timestamps say fresh
+//   forever. Nothing caught that.
+//   FALSE FAIL — a comment-only or type-only edit to frontend/src emits a
+//   BYTE-IDENTICAL bundle (the minifier strips comments, tsc erases types), so
+//   `npm run build` leaves docs/ untouched, there is nothing to `git add`, and
+//   the gate fails with no way to satisfy it. Its own printed fix — rebuild and
+//   commit — cannot pass, because `git commit` on an empty change refuses.
+//   #207's PR hit exactly this and is why this block exists (D103).
+//
+// So `scripts/build-frontend.mjs` now stamps the retention ledger with a hash
+// of the source tree it consumed, and the question becomes the real one: is the
+// committed docs/ the build of THIS source? That needs no git history, so it
+// also answers in a tarball, where the proxy could only refuse.
+// ---------------------------------------------------------------------------
+// NOT `docs/.asset-retention.json`, which is the other file every build writes:
+// that one is gitignored on purpose (45 KB of churn), so CI never sees it.
+const STAMP = join(ROOT, 'docs', '.build-source');
+const SRC = join(ROOT, 'frontend', 'src');
+
+const stampedSource = (() => {
+  try {
+    const v = readFileSync(STAMP, 'utf8').trim();
+    return /^[0-9a-f]{64}$/.test(v) ? v : null;
+  } catch {
+    return null;  // docs/ built before builds recorded their source
+  }
+})();
+
+if (stampedSource && existsSync(SRC)) {
+  const actual = sourceTreeHash(SRC);
+  if (actual === stampedSource) {
+    console.log('✓ check-docs-fresh: committed docs/ is the build of the current frontend/src.');
+    process.exit(0);
+  }
+  const mark = strict ? '✖' : '⚠';
+  const write = strict ? console.error : console.warn;
+  write(`
+${mark} check-docs-fresh: the committed docs/ build is not the build of this source.
+
+  docs/ was built from:  ${stampedSource.slice(0, 12)}…
+  frontend/src is now:   ${actual.slice(0, 12)}…
+
+  The live SPA is fine — \`npm run deploy\` rebuilds docs/ before deploying.
+  What IS stale is everything served from the committed bytes: prerendered OG
+  metadata and social link previews, and the og-tags CI job that validates them.
+
+  Fix (the npm ci matters — building from drifted dependency versions emits a
+  bundle that differs from the deploy's, which is worse than a stale one):
+    cd frontend && npm ci && cd .. && npm run build && git add docs && git commit -m "Rebuild docs/"
+`);
+  process.exit(strict ? 1 : 0);
+}
+
+// ---------------------------------------------------------------------------
+// FALLBACK: the commit-timestamp proxy, for a docs/ built before the stamp
+// existed. Kept rather than deleted so an older checkout still gets an answer.
+// ---------------------------------------------------------------------------
+if (!existsSync(join(ROOT, '.git'))) skip('not a git checkout');
 
 // A SHALLOW CHECKOUT CANNOT ANSWER THIS, AND USED TO PASS ANYWAY.
 //

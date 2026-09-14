@@ -7296,3 +7296,84 @@ three tables in turn; flipping all three to `narrative` together (agreement
 holds, routability and retirement both fail); removing a deck from the dev
 mirror only; re-admitting `narrative` to the worker's union; and dropping the
 `event` chip from the picker row.
+
+---
+
+## D103 — `docs/` records the source it was built from, because "which commit is newer" was never the question
+
+**Date:** 2026-09-14 · **Task:** #207 · **Migration:** none
+
+`scripts/build-frontend.mjs` now writes `docs/.build-source`: a SHA-256 over the
+sorted (path, content) pairs of `frontend/src`, stamped last so it only ever
+describes a build that finished. `scripts/check-docs-fresh.mjs` reads it and
+asks the real question — *is the committed `docs/` the build of this source?* —
+falling back to the old commit-timestamp comparison only when the stamp is
+absent.
+
+### The gate had a state it could not leave
+
+`check-docs-fresh --strict` compared the newest commit touching `frontend/src`
+against the newest touching `docs/`. #207's own PR broke that, and the way it
+broke is the interesting part: every source change in it was a **comment or a
+type**. The minifier strips comments and `tsc` erases types, so a full rebuild
+emitted a **byte-identical** bundle — verified, not assumed: `npm run build` at
+that head left `git status -- docs` completely empty.
+
+So there was nothing to `git add`, and the gate's own printed fix —
+`npm run build && git add docs && git commit` — **cannot be carried out**, because
+`git commit` on an empty change refuses. The PR was red with no way to go green
+that did not involve either fabricating output churn or weakening the check.
+
+### The proxy was wrong in the other direction too
+
+A timestamp says *someone committed `docs/` after `frontend/src`*, which is
+evidence that they probably rebuilt, not that they did. Commit `docs/` without
+rebuilding and the gate reads fresh **forever** — a stale-bytes failure it was
+written to catch and structurally could not see. The stamp catches it, so this
+is a strengthening, not a workaround for one PR.
+
+It also answers in a tarball, where the proxy could only `skip()` — and under
+`--strict` a skip is a failure.
+
+### Not a key in the retention ledger, which is the obvious wrong home
+
+`docs/.asset-retention.json` is already rewritten by every build, so it looks
+like the place for this. It is **gitignored on purpose** (45 KB that churns
+wholesale — `.gitignore` says so and explains the trade), so CI never sees it
+and a stamp inside it would answer nobody. Caught by checking `git check-ignore`
+before pushing, not after. `.build-source` is one line and moves only when the
+source does.
+
+### Two tests that could not fail, and why that is the lesson
+
+`sourceTreeHash`'s guarantees were mutation-checked, and **two mutations
+escaped** — both because the test was wrong, not the code.
+
+- **Dropping the path from the digest survived a rename test.** Renaming `a.js`
+  to `renamed.js` in a tree containing `b.js` moves the file past `b.js` in sort
+  order, so the CONTENT sequence changes from `[1,2]` to `[2,1]` and the hash
+  differs whether or not the path is hashed. It was testing ordering while
+  claiming to test paths. The fixture is now `a.js` → `b.js` beside `z.js`,
+  which holds the sorted content sequence fixed, plus a sibling test that moves
+  a file between directories.
+- **Deleting `.sort()` survived an order test, and a second one written to
+  replace it.** ext4 enumerates a directory by filename hash rather than
+  creation order, so building the same tree twice in different orders returns
+  the same sequence either way — and asserting `sourceFiles(dir)` comes back
+  sorted fails for the same reason, since the raw walk is already sorted here.
+  The sort is real defence on filesystems that return creation order, and on
+  this one it is unobservable. `sourceFiles` and `sourceTreeHash` now take an
+  injectable `readdir`; the test hands them one that reverses, which is the only
+  way the assertion can fail.
+
+The second is the durable lesson: **an assertion that cannot fail on the
+machines that run it is not a guard**, however reasonable it reads. Two
+successive attempts at it looked correct and proved nothing.
+
+**9 mutations applied, 9 caught** — two only after the test was rewritten.
+On the helper: drop the path, drop the sort, skip empty files, swallow a missing
+directory. On the gate: edit `frontend/src` without rebuilding (strict fails,
+local still warns), and remove the stamp (falls back to timestamps as designed).
+`npm run test:retention` now globs `scripts/lib/*.test.mjs` rather than naming
+one file, so the suite went 7 → 15 tests and a future helper's tests run without
+a package.json edit.
