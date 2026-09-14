@@ -6758,3 +6758,121 @@ output still looked right.
 `'event'` from the map fails the unit test, the cross-file invariant and the
 render test; the bare literal in the modal fails only the coupling guard; letting
 the CTA default an unknown category to the deal pack fails the render tests.
+
+## D98 — one company, one startup: the 25 in-body pickers go, and the ledger that counted them was four short
+
+**Date:** 2026-09-14 · **Task:** #181 (with #177, #179) · **Migration:** none
+
+### The question that blocked this for two rounds
+
+A startup is not a company. The sidebar's `CompanySwitcher` selects a **company**
+— sent as `X-Company-Id`, verified against `user_company_links`, and the worker
+narrows a founder's projects by `company_id` (migrations 189, 193-198). Each
+in-body picker selected a **project**, and every one sat behind
+`projects.length > 1`: *more than one startup inside the already-selected
+company.* That made it a second axis rather than a duplicate, and deleting it
+looked like removing the only way such a founder could move between startups.
+
+So the question was never "is this chrome redundant" but "can a company hold two
+startups". It is answered, and it was **measured, not assumed**: production D1
+holds **5 projects across 5 founders, one project each**, `company_id` NULL on
+all five (legacy rows predating migration 189). `projects.length > 1` was false
+for every live account, so **not one of these pickers rendered for anybody**.
+The deletion removes no capability any account was using.
+
+`projects.company_id` handling is untouched. It is written on creation
+(`routes/projects.ts:437,515`, `imports.ts:117`) and read with a deliberate
+`OR p.company_id IS NULL` for those five legacy rows. The schema still permits
+more than one project per company; the UI simply no longer offers to switch.
+
+### The ledger was counting the wrong thing
+
+Task #84 removed these once, per route, and they came back, because nothing
+counted them. #181 then added `scripts/check-inline-project-pickers.mjs`, which
+swept for `data-testid="select-<something>-project"`. That sweep found **21** and
+corrected the task, which had named eleven by hand.
+
+It was still wrong. **Four more pickers carried no test attribute at all** —
+`FounderRaiseLiquidity`, `MarketIntelPage`, `RaisePipelinePage`,
+`raise/DataRoomPage` — so a ledger reporting "21 in-body startup pickers, all on
+record" was reporting a number it had no way to complete. The real count was
+**25**. A guard keyed on a *test attribute* can be defeated by leaving the
+attribute off, which is not a hypothetical: four authors already had.
+
+The sweep now also keys on `projects.length > 1` used as a render guard, which is
+the property that *defines* the control — a scope switcher that appears only when
+a second startup exists. The mutation sweep pins the difference: a picker written
+without a testid fails the new gate and **passes the old one**.
+
+A `<select>` over projects that is *not* behind that guard is deliberately out of
+scope. On `/cap-table`, `/discovery`, `/build/brand` and twenty other legacy tool
+pages the picker is the tool's own input, shown whether you have one startup or
+ten. Those ask "which startup is this tool about"; these asked "which startup is
+this page about", on a page the sidebar had already scoped.
+
+### Deleting a control means checking what reached through it
+
+Twenty-two of the 25 pages read `?project_id=` and still do.
+`MarketIntelPage` and `RaisePipelinePage` never did — they resolve the first
+project their own fetch returns, which is exactly what they did on every account
+where the picker was hidden. `inline_project_pickers_retired.test.mjs` holds that
+as a per-file table, so a page that later loses its URL read fails there instead
+of quietly showing project #1 forever.
+
+Nine pages were left holding a `projects` array that nothing read once the picker
+was gone, and one (`DataRoomPage`) a `projectUid` with no setter. Both are
+deleted rather than left as a fetch feeding nothing — `check-unused-imports` sees
+neither shape, so this was a manual sweep.
+
+### The "New Startup" button, and the thing it was hiding
+
+`CreateStartupForm` rendered its own button to toggle its own form, in the Build
+desk's header. That is the same class of control: a body-level handle on
+something the URL already addresses — thirteen places across the SPA link to
+`/build?new=1` (the Command Palette's "Create startup", ten empty states, two Lab
+pages). The button is gone; a closed `CreateStartupForm` now renders **nothing**.
+
+Removing it exposed a bug the button had been covering. `creating` was seeded by
+a `useState` **initializer** reading `?new=1`, which runs once. Twelve of the
+thirteen links arrive from another route and remount the desk, so they worked.
+The Command Palette is the thirteenth and can be opened **from /build itself**,
+where `nav('/build?new=1')` changes the search string without remounting: the
+initializer never re-ran and the entry did nothing at all. The desk now follows
+the param when it changes. Had the button simply been deleted, the palette entry
+would have gone from silently-broken to visibly-broken.
+
+### Two "Open workspace" links went with them
+
+#179 recorded the user's words about Grow · Brand — *"Open workspace has nothing
+to do there"* — and #177 flagged the identical link on Raise · Liquidity. Both
+are body-level controls whose whole function is to send the reader somewhere
+else, and both destinations remain reachable: Brand's from the zone header's own
+`New page` action (same URL), Liquidity's from the sidebar ("Liquidity & Exits")
+and the Raise workspace tab row.
+
+Liquidity's copy had to move with its link. The page said *"Use the workspace for
+supported actions"* — a sentence pointing at a control the page no longer has. It
+now names where modelling an exit actually is, the zone header's `Model an exit`.
+**A dangling instruction is worse than the duplicate link was**, and it is the
+failure mode a deletion-only change would have shipped.
+
+### What the tests pin that the count cannot
+
+`check-inline-project-pickers.mjs` counts; that is the right tool for counting,
+and the ledger stays at zero so a twenty-sixth has to argue for itself in a diff.
+`inline_project_pickers_retired.test.mjs` asserts the three things a text sweep
+cannot see: that every page can still be aimed at a startup, that a closed
+`CreateStartupForm` renders the empty string while an open one still renders the
+form, and that `?new=1` is followed on change rather than only at mount.
+
+`frontend/test/_codeOnly.mjs` gained `codeOnlyJsx`, because three of those
+assertions failed against correct code: each deletion left a `{/* … */}` in the
+markup naming what went, and those comments contain the exact strings the
+assertions ban. Same lesson as `codeOnly`'s own docblock, one layer in — **the
+comment you want to keep is the one that names the thing.**
+
+**7 mutations applied, 7 caught.** Re-adding a picker with a testid, re-adding
+one without (the new capability — the old gate passed it), restoring a baseline
+entry with no picker behind it, dropping a page's `?project_id=` read, restoring
+the "New Startup" button, deleting the `?new=1` effect, and restoring Liquidity's
+dangling sentence.

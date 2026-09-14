@@ -301,26 +301,38 @@ test('the scope badge names the active company, and no caller restates the rule'
   }
 });
 
-test('the in-body startup pickers are counted, because deleting them is blocked', () => {
-  // Task #181 asks for these to go and is blocked on a product question: the
-  // sidebar switcher selects a COMPANY, each picker selects a PROJECT, and every
-  // one is guarded by `projects.length > 1` — so they are a second axis rather
-  // than a duplicate, and deleting them removes the only way a founder with two
-  // startups in one company can move between them.
+test('the in-body startup picker ledger is empty, and the sweep that fills it is not blind', () => {
+  // THIS TEST USED TO PIN THE BLOCKED STATE — `pickers.length >= 21`, because the
+  // deletion waited on a product question: the sidebar switcher selects a
+  // COMPANY, each picker selected a PROJECT behind `projects.length > 1`, so the
+  // picker was a second axis rather than a duplicate. The question is answered
+  // (one company, one startup, measured against production D1: 5 projects, 5
+  // founders, one project each), all 25 are gone, and the ledger is empty. The
+  // assertion moves with the invariant rather than being deleted: an empty
+  // ledger is a claim too, and this is what checks it.
   //
-  // Task #84 removed these once, per-route, and they came back. This asserts the
-  // COUNTING exists, because the count is what stops a third report: the
-  // hand-written list in #181 named eleven, and the sweep finds twenty-one.
+  // Task #84 removed these once, per route, and they came back, which is why the
+  // counting outlives the deletion.
   const guard = read('scripts/check-inline-project-pickers.mjs');
   assert.match(guard, /inline-project-pickers-baseline\.json/);
   const baseline = JSON.parse(read('scripts/inline-project-pickers-baseline.json'));
-  assert.ok(Array.isArray(baseline.pickers) && baseline.pickers.length >= 21,
-    `the ledger holds ${baseline.pickers?.length} pickers — the sweep found 21 when it was written`);
-  // Every entry is `<path>#<testid>`, so a picker cannot be recorded without
-  // saying where it is.
-  for (const entry of baseline.pickers) {
-    assert.match(entry, /^frontend\/src\/[^#]+\.jsx#select-[a-z0-9-]*project$/, `malformed ledger entry: ${entry}`);
-  }
+  assert.ok(Array.isArray(baseline.pickers), 'the ledger must still be a list');
+  assert.deepEqual(baseline.pickers, [],
+    'a picker is back on the ledger — that is a product change and needs a recorded decision');
+
+  // THE SWEEP HAS TO LOOK FOR BOTH SHAPES, and this is the part worth pinning.
+  // The original sweep keyed only on `data-testid="select-*-project"`. It found
+  // 21 and corrected the task, which had named eleven — and it was still wrong:
+  // FOUR pickers carried no testid at all, so a ledger reporting "21, all on
+  // record" was reporting a number it could not complete. The render guard is
+  // the property that actually defines the control, and cannot be left off.
+  assert.match(guard, /data-testid="\(select-\[a-z0-9-\]\*project\)"/,
+    'the testid sweep must stay — a picker may still carry one');
+  assert.match(guard, /projects\\s\*\\\.\\s\*length\\s\*>\\s\*1/,
+    'the guard must also sweep for the `projects.length > 1` render guard, or a picker '
+    + 'without a test attribute is invisible to it — which is how four of the 25 stayed '
+    + 'uncounted while the ledger claimed to hold them all');
+
   // And it is in `test:guards`, or it is a script nobody runs.
   const pkg = JSON.parse(read('package.json'));
   assert.ok(pkg.scripts['test:guards'].includes('check-inline-project-pickers.mjs'),
