@@ -27,6 +27,7 @@ import { fileURLToPath } from 'node:url';
 
 import { Hono } from 'hono';
 import founderBoard from '../src/routes/founder_board.ts';
+import { tableFromBaseline, wordInText } from './_baseline.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SQL = resolve(HERE, '../sql');
@@ -41,13 +42,6 @@ const PARTNER = 102;
 const PROJECT = 9401;
 const OTHER_PROJECT = 9402;
 
-function tableFromBaseline(name: string): string {
-  const re = new RegExp(`^CREATE TABLE (?:IF NOT EXISTS )?"?${name}"?\\s*\\(`, 'im');
-  const m = re.exec(BASELINE);
-  if (!m) throw new Error(`schema_baseline.sql has no ${name}`);
-  const end = BASELINE.indexOf(');', m.index);
-  return BASELINE.slice(m.index, end + 2);
-}
 
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
@@ -89,7 +83,7 @@ function freshDb(withMigration = true) {
     );
     CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT NOT NULL, founder_id INTEGER);
   `);
-  db.exec(tableFromBaseline('mvp_tasks'));
+  db.exec(tableFromBaseline(BASELINE, 'mvp_tasks'));
   const u = db.prepare('INSERT INTO users (id, role, founder_id) VALUES (?,?,?)');
   u.run(OWNER, 'founder', OWNER);
   u.run(OTHER, 'founder', OTHER);
@@ -163,7 +157,7 @@ const cardLanes = (db: InstanceType<typeof DatabaseSync>) =>
 test('migration 253 carries no transaction statement', () => {
   const code = MIGRATION.replace(/^\s*--.*$/gm, '');
   for (const kw of ['BEGIN', 'COMMIT', 'ROLLBACK', 'END TRANSACTION']) {
-    assert.ok(!new RegExp(`\\b${kw}\\b`, 'i').test(code), `migration 253 contains ${kw}`);
+    assert.ok(!wordInText(code.toUpperCase(), kw), `migration 253 contains ${kw}`);
   }
 });
 

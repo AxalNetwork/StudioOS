@@ -24,27 +24,13 @@ import { fileURLToPath } from 'node:url';
 import { Hono } from 'hono';
 import progress from '../src/routes/progress.ts';
 import { weekStartOf } from '../src/services/okrWeeks.ts';
+import { tableFromBaseline, wordInText } from './_baseline.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SQL = resolve(HERE, '../sql');
 const MIGRATION = readFileSync(`${SQL}/migrations/252_okr_column_moves.sql`, 'utf8');
 const BASELINE = readFileSync(`${SQL}/schema_baseline.sql`, 'utf8');
 
-/**
- * `roadmap_okrs` TAKEN FROM THE BASELINE, not hand-written — and a failing test is
- * why. The first version of this fixture spelled the column `key_results`; it is
- * `key_results_json`, so every route call died on `no such column`. A hand-copied
- * DDL that drifts makes every assertion above it true of a schema production does
- * not have, which is the whole of #203, and it happened here on the first attempt.
- */
-function tableFromBaseline(name: string): string {
-  const re = new RegExp(`^CREATE TABLE (?:IF NOT EXISTS )?"?${name}"?\\s*\\(`, 'im');
-  const m = re.exec(BASELINE);
-  if (!m) throw new Error(`schema_baseline.sql has no ${name}`);
-  const end = BASELINE.indexOf(');', m.index);
-  if (end < 0) throw new Error(`unterminated CREATE TABLE for ${name}`);
-  return BASELINE.slice(m.index, end + 2);
-}
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 
 const OWNER = 90;
@@ -100,7 +86,13 @@ function freshDb(withMigration = true) {
       company_id INTEGER
     );
   `);
-  db.exec(tableFromBaseline('roadmap_okrs'));
+  // `roadmap_okrs` TAKEN FROM THE BASELINE, not hand-written — and a failing test
+  // is why. The first version of this fixture spelled the column `key_results`; it
+  // is `key_results_json`, so every route call died on `no such column`. That is
+  // the whole of #203, and it happened here on the first attempt. `_baseline.mjs`
+  // is the shared reader; what it must not lose is pinned in
+  // `baseline_reader.test.mjs`.
+  db.exec(tableFromBaseline(BASELINE, 'roadmap_okrs'));
   const u = db.prepare('INSERT INTO users (id, role, founder_id) VALUES (?,?,?)');
   u.run(OWNER, 'founder', OWNER);
   u.run(OUTSIDER, 'founder', OUTSIDER);
@@ -164,7 +156,7 @@ const logRows = (db: InstanceType<typeof DatabaseSync>) =>
 test('migration 252 carries no transaction statement', () => {
   const code = MIGRATION.replace(/^\s*--.*$/gm, '');
   for (const kw of ['BEGIN', 'COMMIT', 'ROLLBACK', 'END TRANSACTION']) {
-    assert.ok(!new RegExp(`\\b${kw}\\b`, 'i').test(code), `migration 252 contains ${kw}`);
+    assert.ok(!wordInText(code.toUpperCase(), kw), `migration 252 contains ${kw}`);
   }
 });
 

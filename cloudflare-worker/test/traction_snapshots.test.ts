@@ -40,6 +40,7 @@ import {
   metricPointsFrom, recentSnapshots, recordReview, latestMomentum,
   TRACTION_METRIC_COLUMNS,
 } from '../src/services/tractionSnapshots.ts';
+import { tableFromBaseline as readTable, stripForeignKeys, wordInText } from './_baseline.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '../..');
@@ -90,17 +91,12 @@ function tableFromBaseline(table: string): string {
   // projects"), which was luck: a looser fixture that happened to satisfy the
   // queries would have passed over the wrong schema, which is the exact failure
   // this whole task exists to fix.
-  const re = new RegExp(`^CREATE TABLE (?:IF NOT EXISTS )?"?${table}"?\\s*\\(`, 'im');
-  const m = BASELINE.match(re);
-  assert.ok(m, `${table} is not declared at the start of a line in schema_baseline.sql`);
-  const at = BASELINE.indexOf(m![0]);
-  const end = BASELINE.indexOf(');', at);
-  assert.ok(end > at, `${table}'s DDL is not terminated in the baseline`);
-  return BASELINE.slice(at, end + 2)
-    .replace(
-      /\s+REFERENCES\s+"?\w+"?\s*\([^)]*\)(\s+ON\s+(DELETE|UPDATE)\s+(CASCADE|SET\s+NULL|SET\s+DEFAULT|RESTRICT|NO\s+ACTION))*/gi,
-      '',
-    );
+  //
+  // The anchor now lives in `_baseline.mjs`, shared with the two other fixtures
+  // that had copied this function, and `baseline_reader.test.mjs` holds it there
+  // with this exact case: `projects` must resolve to its own `CREATE TABLE` and
+  // never to a `REFERENCES projects(id)` inside another one.
+  return stripForeignKeys(readTable(BASELINE, table));
 }
 
 function freshDb() {
@@ -454,7 +450,7 @@ test('no handler names the generic-series columns any more', () => {
   const src = readFileSync(resolve(ROOT, 'cloudflare-worker/src/services/queueWorker.ts'), 'utf8');
   const sqlOnly = [...src.matchAll(/`([^`]*metrics_snapshots[^`]*)`/g)].map((m) => m[1]).join('\n');
   for (const col of ['scope', 'scope_id', 'metric_name', 'captured_at', 'extra']) {
-    assert.ok(!new RegExp(`\\b${col}\\b`).test(sqlOnly),
+    assert.ok(!wordInText(sqlOnly, col),
       `a queueWorker SQL string names metrics_snapshots.${col}, which production does not have`);
   }
   // `value` is too common a word to ban outright, so it is checked as a column
