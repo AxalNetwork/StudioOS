@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
 import { ArrowRight, MessageSquare, FileSignature } from 'lucide-react';
 import ShareViewerSignupModal from './ShareViewerSignupModal';
+import { asksForFeedback, shareDeckFlow } from '../lib/shareDeckAudience';
 
 // Task #6 — end-of-deck call-to-action shown only when the viewer is on
 // a share link (PitchDeckPrintPage renders this with shareMode=true).
-// `category` decides the copy + which post-NDA flow we route into:
-//   - commercial → customer-discovery feedback capture
-//   - fundraising → auto-generated deal-pack ready to sign
+// `category` decides the copy + which post-NDA flow we route into, and
+// `lib/shareDeckAudience` is the ONE place that decides which — this file used
+// to ask `=== 'commercial'` and let everything else inherit the fundraising
+// copy, while the modal gated its post-NDA step on `=== 'fundraising'`. An
+// `'event'` deck therefore promised a deal pack and then showed a blank panel
+// (#205). Both files now ask the same question.
 // The card itself is intentionally lightweight — the heavy lifting
 // (account creation, NDA signing, capture / deal-pack rendering) lives
 // in ShareViewerSignupModal so it can be opened from anywhere later.
@@ -22,9 +26,13 @@ export default function ShareDeckCTA({
   slides, embedded = false,
 }) {
   const [open, setOpen] = useState(false);
-  if (!category) return null;
+  // No flow means no card. Absent, undecided (`'narrative'`) and unrecognised
+  // all land here, because the honest response to all three is the same: say
+  // nothing rather than promise something this deck's post-NDA step cannot
+  // deliver.
+  if (!shareDeckFlow(category)) return null;
 
-  const isCommercial = category === 'commercial';
+  const isCommercial = asksForFeedback(category);
   const title = isCommercial
     ? 'Tell the team what you think'
     : 'Want to review the deal?';
