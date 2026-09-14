@@ -12,7 +12,7 @@
     "lint": "npm run lint:no-console && tsc --noEmit"
   },
   "dependencies": {
-    "@simplewebauthn/server": "^13.3.3",
+    "@simplewebauthn/server": "^14.0.1",
     "hono": "^4.13.7",
     "jose": "^6.2.10",
     "mimetext": "^3.0.28",
