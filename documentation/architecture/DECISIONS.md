@@ -6288,3 +6288,110 @@ And the route test answered 500 where production answers 401, because `requireAu
 refuses by `throw` and only `index.ts`'s app-level `onError` maps it — the third
 time that has bitten in this pass (D89's `progress.ts` tests, and again here). The
 mapping is composed into the test app, and the refusal is asserted as 401 exactly.
+
+---
+
+## D93 — four of Raise's seven refusals were false, and one constant was hiding three of them
+
+**Date:** 2026-09-14 · **Task:** #177 · **Migration:** none
+
+`/raise/*` carried seven `unbuilt` entries. **Four were not true.** No migration,
+no route and no table was needed to close them: every one was already served by an
+endpoint the founder could already call.
+
+| Refusal | Verdict |
+| --- | --- |
+| `raise/status` → `Timeline` | **false** — both sources carry dates |
+| `raise/pitch` → `Shares` | **false** — the page was already holding the array |
+| `raise/liquidity` → `Restrictions` | **false** — the ledger is mounted and founder-reachable |
+| `raise/liquidity` → `History` | **false** — same endpoint, same array |
+| `raise/liquidity` → `Tender` | true, and it needed its own sentence |
+| `raise/pitch` → `Variants` | true — `pitch_decks` has no variant column |
+| `raise/status` → `Share war-room` | true — no share mechanism exists for this view |
+
+### The refusal that described its own mapper
+
+`Timeline` said "the assembled rows carry a state but no date, so they cannot be
+put in order". That is a true statement about the twenty lines above it and a
+false one about the data: `raise_prospects` and `legal_documents` both carry
+`created_at` and `updated_at`, and **both routes `SELECT *`**, so every date was
+already on the page. The mapper simply did not copy it into the row.
+
+This is the sharpest version of the pattern D91 recorded for `/build/board`'s
+`Mine` and D92 for `/build/roadmap`'s `Dependencies`: a refusal written from a
+belief about the source rather than from the source. The fix is two lines —
+`at: x.updated_at || x.created_at || null` on each — plus a sort.
+
+`updated_at` leads because the question is "what moved last", not "what was filed
+first". A row with neither is kept and sorts last, and an unparseable stamp sorts
+last rather than as epoch zero — which would put it **first** under a heading that
+says most recent.
+
+### The refusal to data that was already on screen
+
+`Shares` said "share links are held by the deck builder and are not returned to
+this page". `GET /decks/:id/engagement` returns a `shares` array — id, created,
+expires, view_limit, view_count, exhausted and, since #196, `revoked_at` — and
+`FounderRaisePitch.jsx` was **already calling that endpoint and already reading
+that array** to build the Analytics table. The links were never absent; they were
+on screen in the shape of their *readers*. `Shares` asks the other question: which
+links exist and which still open.
+
+### One constant covering three absences, two of which were not absences
+
+`NO_LIQUIDITY_LEDGER` — "no restriction, tender or liquidity-event ledger is
+connected" — sat on `Restrictions`, `Tender` and `History`. But
+`liquidity_events`, `secondary_listings` and `secondary_rofr_notices` all exist,
+`routes/liquidity.ts` is mounted at `/api/liquidity`, and nine `api.liquidity*`
+methods reach it.
+
+**The gate is the fact that mattered.** `GET /liquidity/events` is restricted to
+admin, partner and investor — a founder is refused there, which is probably how
+the belief formed. `GET /liquidity/my-portfolio` is `requireAuth` **only**, and it
+returns `my_listings` and `exit_history`: exactly the two arrays those two chips
+needed. The ledger was connected the whole time, through a different door.
+
+The constant is **deleted**, not reworded — the D88/D90 pattern, and this file's
+own note about `NO_SESSION_RECORD` had already recorded why: one sentence covering
+several absences stops being true one absence at a time and nothing notices. Three
+in one file now, and this is the first where the shared reason was false when
+written rather than falsified later.
+
+`Tender` keeps a refusal and gains its own words. A tender is the **company**
+offering to buy shares back; `secondary_listings` is one holder offering to sell.
+Nothing records the first, and calling a seller's listing a tender would misname
+the party doing the buying.
+
+### Two live controls that did nothing, found on the way
+
+- **`/raise/liquidity` drew its filter row twice** — the zone header's chips and an
+  in-body copy with four hardcoded labels. The copy rendered `Tender` as
+  selectable while the registry refused it, and would have kept drawing the old
+  four after this change. Removed; one filter row, owned by the registry. Same
+  doubled chrome #37 and #40 removed elsewhere.
+- **The `Restriction coverage` card had four hardcoded "Not recorded" rows** under
+  one sentence saying no source was connected. Two of the four are answerable from
+  the ROFR notice (`company_elected`, `investors_elected`); the other two — board
+  approval, lockup — are clauses in the Bylaws or the SAFE that nothing parses.
+  They are now marked **"No source"** rather than "Not recorded", because those
+  are different claims: one says nobody filled it in, the other says nobody could.
+
+### What the page refuses to round
+
+The ROFR window is a **contract term stored per notice** — `secondary_rofr_notices`
+says in its own comment that 30 days is common but "a term of the specific
+agreement". So the stat reports a single window only when every notice agrees, a
+range when they do not, and never an average, which would be a number nobody
+signed. And a listing with **no notice served is not clear to transfer** — the
+table's comment says a NULL `notice_date` "reads as 'not_started' and therefore
+NOT clear" — so the absence is shown as an unanswered question, not a green light.
+
+### Raised, not fixed here
+
+**80 schema bootstraps cache readiness in a module-level boolean** (task #204),
+including `rofrSchemaReady` in this same liquidity route. 13 files use the
+`WeakMap` keyed on `env.DB` that #203 settled on; there is no guard, and
+`GOTCHAS.md` does not record the rule, which is why the pattern kept spreading
+after the decision. Stated at its real severity: a module flag is only wrong when
+one isolate serves two different bindings, so this is a latent hazard that
+reliably breaks tests — not a production outage.
