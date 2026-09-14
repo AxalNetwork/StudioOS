@@ -1,4 +1,5 @@
 import { reportError } from './log';
+import { csrfCookieNameFor } from './branchHost';
 
 const BASE = '/api';
 
@@ -45,12 +46,15 @@ const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 function getCsrfHeader(method) {
   if (!method || !MUTATING_METHODS.has(method.toUpperCase())) return {};
   if (typeof document === 'undefined') return {};
+  // On a branch host the cookie is `studioos_csrf_<code>`; HQ's plain
+  // `studioos_csrf` is present there too and is not ours (D104, branchHost.js).
+  const name = csrfCookieNameFor(typeof window === 'undefined' ? '' : window.location.hostname);
   const cookie = document.cookie || '';
   for (const part of cookie.split(';')) {
     const trimmed = part.trim();
     const eq = trimmed.indexOf('=');
     if (eq === -1) continue;
-    if (trimmed.slice(0, eq) === 'studioos_csrf') {
+    if (trimmed.slice(0, eq) === name) {
       return { 'X-CSRF-Token': trimmed.slice(eq + 1) };
     }
   }

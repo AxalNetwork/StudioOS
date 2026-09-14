@@ -7377,3 +7377,63 @@ local still warns), and remove the stamp (falls back to timestamps as designed).
 `npm run test:retention` now globs `scripts/lib/*.test.mjs` rather than naming
 one file, so the suite went 7 → 15 tests and a future helper's tests run without
 a package.json edit.
+
+## D104 — a branch session never leaves its host: host-only, branch-named cookies on a branch Worker, and why HQ keeps `.axal.vc` for now
+
+**Date:** 2026-09-14 · **Task:** #211 (HQ and branches plan, PR 1) · **Migration:** none
+
+A Worker deployed for a branch — `studioos-<code>` at `<code>.axal.vc`, with
+`BRANCH_CODE=<code>` in its generated config — now sets **host-only** cookies
+whose **names carry the code**: `studioos_auth_<code>` and
+`studioos_csrf_<code>`. It reads only those names, and its passkey ceremonies
+accept only its own origin. HQ (`BRANCH_CODE` unset) is unchanged: it still
+sets `studioos_auth` and `studioos_csrf` for `.axal.vc`. `util/branch.ts` is
+the one place the Worker decides which it is; `frontend/src/lib/branchHost.js`
+makes the same decision from the page's hostname, so the SPA mirrors the
+right CSRF cookie without asking.
+
+### The plan said host-only everywhere, and the code said no
+
+The build plan (D.4) called for dropping the `Domain=.axal.vc` attribute on
+every host. Reading the sign-in path before doing it found the reason it
+exists: the Google callback still lands on `app.axal.vc`
+(`OAUTH_CALLBACK_BASE_URL`, `routes/auth_google.ts:119`), sets the session
+there (`:687`), and then redirects to the apex (`:701`), where the SPA reads
+it. That handoff works **only because** the cookie is scoped to the
+registrable domain — `wrangler.toml:145-151` records exactly this, and names
+the step that would end it: register the redirect URI on `axal.vc` at the
+provider and drop the override. That step is a person's, at Google's console,
+not a code change; until it is taken, host-only cookies on HQ would break
+Google sign-in on the first attempt. So HQ keeps the domain cookie, and
+`authCookieDomainAttr` says so at the line that decides it.
+
+### Why a different name, not just a different scope
+
+Host-only on the branch is necessary and not sufficient. HQ's `.axal.vc`
+cookies are sent by the browser to every subdomain regardless, so a branch
+host carries HQ's `studioos_auth` beside the branch's own. Two cookies with
+one name on one host are delivered in an order the user agent chooses — RFC
+6265 §5.4 sorts by path length, then creation time — and the Worker's cookie
+parser takes the first match. A branch reading the plain name would therefore
+accept its own user only when HQ's cookie happened to come second: a login
+that works in one browser and not another, with nothing in the logs but 401s.
+Naming the cookie after the branch removes the race instead of arguing about
+its odds, and `branch_cookies.test.ts` pins it by presenting both cookies in
+both orders.
+
+### What changes when the redirect URI moves
+
+One line: `authCookieDomainAttr` returns `''` unconditionally, and the dual
+form in `clearAuthCookies` — which already exists from the last cookie-domain
+migration — purges the legacy `.axal.vc` cookie on logout for one release.
+Nothing else in this decision depends on that day.
+
+### What is guarded
+
+`cloudflare-worker/test/branch_cookies.test.ts`: a branch never emits a
+`Domain` attribute and never clears HQ's cookie names; `extractJwtCandidates`
+and the CSRF middleware read the branch's cookie in either order beside HQ's
+and treat HQ's pair as no session at all; `expectedOrigins` on a branch is
+exactly its own origin; a malformed `BRANCH_CODE` throws rather than reading
+as HQ. `frontend/test/branch_host.test.mjs`: the hostname rule, and that
+`api.js` mirrors the derived name rather than the literal.

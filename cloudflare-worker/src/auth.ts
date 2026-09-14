@@ -2,6 +2,7 @@ import type { Context } from 'hono';
 import { SignJWT, jwtVerify } from 'jose';
 import type { Env, User, JWTPayload } from './types';
 import { getSQL } from './db';
+import { branchOf, authCookieName, csrfCookieName } from './util/branch';
 
 const JWT_ALGORITHM = 'HS256';
 const JWT_EXPIRY_HOURS = 24;
@@ -150,13 +151,17 @@ export function extractJwtCandidates(c: Context<{ Bindings: Env }>): { bearer: s
   const bearer = (authHeader && authHeader.startsWith('Bearer ')) ? (authHeader.slice(7) || null) : null;
   let cookie: string | null = null;
   const cookieHeader = c.req.header('Cookie') || '';
+  // On a branch the session cookie is `studioos_auth_<code>`. HQ's
+  // `studioos_auth`, which the browser also sends to every subdomain, is
+  // not ours there and is skipped by name (D104, util/branch.ts).
+  const cookieName = authCookieName(c.env);
   if (cookieHeader) {
     for (const part of cookieHeader.split(';')) {
       const trimmed = part.trim();
       if (!trimmed) continue;
       const eq = trimmed.indexOf('=');
       if (eq === -1) continue;
-      if (trimmed.slice(0, eq) === 'studioos_auth') {
+      if (trimmed.slice(0, eq) === cookieName) {
         cookie = trimmed.slice(eq + 1) || null;
         break;
       }
@@ -760,6 +765,15 @@ export function generateCsrfToken(): string {
 // host-only cookies still work.
 function authCookieDomainAttr(c: Context<{ Bindings: Env }>): string {
   const host = (c.req.header('host') || '').toLowerCase();
+  // A branch Worker's cookies are host-only, and their NAMES carry the branch
+  // code (util/branch.ts): a session minted on fr.axal.vc is never presented
+  // to dach.axal.vc or to HQ, and HQ's own `.axal.vc` cookies — which the
+  // browser keeps sending to every subdomain — are never read as the
+  // branch's. HQ itself keeps the registrable-domain cookie below because the
+  // Google callback still lands on app.axal.vc (OAUTH_CALLBACK_BASE_URL) and
+  // sets the cookie the SPA then reads on the apex; it can go host-only the
+  // day that redirect URI is registered on axal.vc. D104.
+  if (branchOf(c.env)) return '';
   // Localhost / preview workers — host-only cookies (no cross-host issue)
   if (host === 'localhost' || host === '127.0.0.1' || host.endsWith('.workers.dev')) {
     return '';
@@ -775,8 +789,8 @@ function authCookieDomainAttr(c: Context<{ Bindings: Env }>): string {
 export function setAuthCookies(c: Context<{ Bindings: Env }>, jwt: string, csrf: string): void {
   const dom = authCookieDomainAttr(c);
   const common = `Secure; SameSite=Lax; Path=/${dom}; Max-Age=${AUTH_COOKIE_TTL}`;
-  c.header('Set-Cookie', `studioos_auth=${jwt}; HttpOnly; ${common}`, { append: true });
-  c.header('Set-Cookie', `studioos_csrf=${csrf}; ${common}`, { append: true });
+  c.header('Set-Cookie', `${authCookieName(c.env)}=${jwt}; HttpOnly; ${common}`, { append: true });
+  c.header('Set-Cookie', `${csrfCookieName(c.env)}=${csrf}; ${common}`, { append: true });
 }
 
 export function clearAuthCookies(c: Context<{ Bindings: Env }>): void {
@@ -785,11 +799,13 @@ export function clearAuthCookies(c: Context<{ Bindings: Env }>): void {
   // AND without it, so any legacy host-only cookie issued before this
   // change still gets cleaned up on logout. Two Set-Cookie headers per
   // cookie is the standard pattern for cookie-domain migrations.
-  c.header('Set-Cookie', `studioos_auth=; HttpOnly; Secure; SameSite=Lax; Path=/${dom}; Max-Age=0`, { append: true });
-  c.header('Set-Cookie', `studioos_csrf=; Secure; SameSite=Lax; Path=/${dom}; Max-Age=0`, { append: true });
+  const authName = authCookieName(c.env);
+  const csrfName = csrfCookieName(c.env);
+  c.header('Set-Cookie', `${authName}=; HttpOnly; Secure; SameSite=Lax; Path=/${dom}; Max-Age=0`, { append: true });
+  c.header('Set-Cookie', `${csrfName}=; Secure; SameSite=Lax; Path=/${dom}; Max-Age=0`, { append: true });
   if (dom) {
-    c.header('Set-Cookie', 'studioos_auth=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0', { append: true });
-    c.header('Set-Cookie', 'studioos_csrf=; Secure; SameSite=Lax; Path=/; Max-Age=0', { append: true });
+    c.header('Set-Cookie', `${authName}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`, { append: true });
+    c.header('Set-Cookie', `${csrfName}=; Secure; SameSite=Lax; Path=/; Max-Age=0`, { append: true });
   }
 }
 
