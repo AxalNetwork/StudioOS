@@ -209,6 +209,7 @@ import founderValidate from './routes/founder_validate';
 import founderCadence from './routes/founder_cadence';
 // Swimlanes and the WIP limit on the execution board (#176 FB2). Migration 253.
 import founderBoard from './routes/founder_board';
+import founderRoadmap from './routes/founder_roadmap';
 import insightsRoutes from './routes/insights';
 // Signals — founder decision-engine over public company data (not a trading UI).
 import signalsRoutes from './routes/signals';
@@ -262,6 +263,7 @@ import { Jobs } from './models/jobs';
 import { writeCronRunHistory } from './util/cronHistory';
 import { enqueueReembedChunks } from './util/reembedSweep';
 import { rebuildUsersRoleCheckForInvestor, rebuildUsersRoleCheckForAdvisor } from './util/usersRoleRebuild';
+import { bindingKey } from './util/schemaBootstrap';
 // Task #9 — 'exploring' holding-state role (CHECK relax + user_role_review side table).
 import { ensureExploringSchema, exploringSchemaReady } from './services/exploringSchema';
 import { queueConsumer, dlqConsumer } from './queue-consumer';
@@ -1025,6 +1027,7 @@ app.route('/api/founder/cadence', founderCadence);
 // keys on `deal_id` — a `projects.id`, the same misnaming D86 recorded. This router
 // is the founder's own view of them, gated by the Validate predicates.
 app.route('/api/founder/board', founderBoard);
+app.route('/api/founder/roadmap', founderRoadmap);
 app.route('/api/insights', insightsRoutes);
 // Signals — founder-actionable opportunity engine over public-market evidence.
 app.route('/api/signals', signalsRoutes);
@@ -1081,15 +1084,19 @@ import { withThrownResponses } from './util/thrownResponse';
 // Lazy, idempotent, runs at most once per worker isolate. We piggy-back on the
 // fetch entry point because workers have no startup hook; the cold-start
 // penalty is one cheap PRAGMA + two CREATE/ALTER ... IF NOT EXISTS calls.
-let _investorSchemaReady = false;
-let _investorSchemaBootstrap: Promise<void> | null = null;
+const INVESTOR_SCHEMA_READY = new WeakMap<object, boolean>();
+const INVESTOR_SCHEMA_IN_FLIGHT = new WeakMap<object, Promise<void>>();
 async function ensureInvestorSchema(env: Env): Promise<void> {
-  if (_investorSchemaReady) return;
+  const key = bindingKey(env);
+  if (INVESTOR_SCHEMA_READY.get(key)) return;
   // A cold isolate can receive several requests before its first D1 operation
   // settles. Share the migration work inside that isolate rather than issuing
-  // overlapping CREATE/ALTER/rebuild statements for every concurrent request.
-  if (_investorSchemaBootstrap) return _investorSchemaBootstrap;
-  _investorSchemaBootstrap = (async () => {
+  // overlapping CREATE/ALTER/rebuild statements for every concurrent request —
+  // per DATABASE, so a second binding is not handed the first one's promise and
+  // told a users-table rebuild it never saw has already happened (#204).
+  const pending = INVESTOR_SCHEMA_IN_FLIGHT.get(key);
+  if (pending) return pending;
+  const started = (async () => {
   try {
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS investors (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL, user_id INTEGER, investor_type TEXT NOT NULL DEFAULT 'angel', accreditation_status TEXT NOT NULL DEFAULT 'unverified', check_size_min REAL, check_size_max REAL, sector_focus TEXT, stage_focus TEXT, notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
@@ -1113,7 +1120,7 @@ async function ensureInvestorSchema(env: Env): Promise<void> {
     // public-id data or index is lost the first time the rebuild commits.
     // Latch-on-success only (mirrors ensureExploringSchema): a failed rebuild
     // must retry on the next request in this isolate, or role changes to
-    // 'investor' 500 forever behind a permanently-set _investorSchemaReady.
+    // 'investor' 500 forever behind a permanently-latched INVESTOR_SCHEMA_READY.
     let investorRebuildOk = true;
     try {
       await rebuildUsersRoleCheckForInvestor(env);
@@ -1135,14 +1142,15 @@ async function ensureInvestorSchema(env: Env): Promise<void> {
     } catch (e) {
       console.warn('[boot] investor promote step skipped:', (e as Error).message);
     }
-    if (investorRebuildOk) _investorSchemaReady = true;
+    if (investorRebuildOk) INVESTOR_SCHEMA_READY.set(key, true);
   } catch (e) {
     console.error('[boot] ensureInvestorSchema failed:', (e as Error).message);
   } finally {
-    _investorSchemaBootstrap = null;
+    INVESTOR_SCHEMA_IN_FLIGHT.delete(key);
   }
   })();
-  return _investorSchemaBootstrap;
+  INVESTOR_SCHEMA_IN_FLIGHT.set(key, started);
+  return started;
 }
 
 // Task #74 — Mentor→Advisor rename. Idempotent, runs at most once per isolate.
@@ -1152,14 +1160,17 @@ async function ensureInvestorSchema(env: Env): Promise<void> {
 // cannot do this safely (it would abort on any chain-only DB). Every step is
 // existence-checked + try/catch so a partially-migrated prod DB can never abort
 // the boot path.
-let _advisorSchemaReady = false;
-let _advisorSchemaBootstrap: Promise<void> | null = null;
+const ADVISOR_SCHEMA_READY = new WeakMap<object, boolean>();
+const ADVISOR_SCHEMA_IN_FLIGHT = new WeakMap<object, Promise<void>>();
 async function ensureAdvisorSchema(env: Env): Promise<void> {
-  if (_advisorSchemaReady) return;
+  const key = bindingKey(env);
+  if (ADVISOR_SCHEMA_READY.get(key)) return;
   // See ensureInvestorSchema: concurrent first requests must not race the
-  // live-DDL migration path against each other.
-  if (_advisorSchemaBootstrap) return _advisorSchemaBootstrap;
-  _advisorSchemaBootstrap = (async () => {
+  // live-DDL migration path against each other, and the coalescing is per
+  // database so two bindings cannot share one rebuild.
+  const pending = ADVISOR_SCHEMA_IN_FLIGHT.get(key);
+  if (pending) return pending;
+  const started = (async () => {
   try {
     // (a) relax the users.role CHECK so 'advisor' is accepted before any flip.
     // Latch-on-success only (mirrors ensureExploringSchema): a failed rebuild
@@ -1209,14 +1220,15 @@ async function ensureAdvisorSchema(env: Env): Promise<void> {
     try { await env.DB.exec("UPDATE OR IGNORE field_sources SET question_id = 'advisor.' || substr(question_id, 8) WHERE question_id LIKE 'mentor.%'"); } catch {}
     // (g) rename the spinout-lab milestone key so existing week-3 progress is preserved.
     try { await env.DB.exec("UPDATE OR IGNORE spinout_lab_milestones SET milestone_key = 'advisor_meeting_booked' WHERE milestone_key = 'mentor_meeting_booked'"); } catch {}
-    if (advisorRebuildOk) _advisorSchemaReady = true;
+    if (advisorRebuildOk) ADVISOR_SCHEMA_READY.set(key, true);
   } catch (e) {
     console.error('[boot] ensureAdvisorSchema failed:', (e as Error).message);
   } finally {
-    _advisorSchemaBootstrap = null;
+    ADVISOR_SCHEMA_IN_FLIGHT.delete(key);
   }
   })();
-  return _advisorSchemaBootstrap;
+  ADVISOR_SCHEMA_IN_FLIGHT.set(key, started);
+  return started;
 }
 
 /**
@@ -1316,13 +1328,13 @@ export default {
     // verified anonymous public reads, and telemetry endpoints are safe without
     // these schemas and must stay responsive during cold starts and D1 contention.
     if (requiresBlockingRoleSchemaBootstrap(pathname, request.method) && env.DB) {
-      if (!_investorSchemaReady) {
+      if (!INVESTOR_SCHEMA_READY.get(bindingKey(env))) {
         await ensureInvestorSchema(env);
       }
-      if (!_advisorSchemaReady) {
+      if (!ADVISOR_SCHEMA_READY.get(bindingKey(env))) {
         await ensureAdvisorSchema(env);
       }
-      if (!exploringSchemaReady()) {
+      if (!exploringSchemaReady(env)) {
         await ensureExploringSchema(env);
       }
     }

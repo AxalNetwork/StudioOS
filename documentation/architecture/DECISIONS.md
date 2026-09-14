@@ -6173,3 +6173,422 @@ and it counts the table's `label:` keys by a separate route so it can be compare
 against the entries it actually parsed — read fewer than the table has and the file
 says so instead of quietly asserting less. Reformatting the entry back onto one line
 would have made the suite green and left the next multi-line entry invisible.
+
+---
+
+## D92 — `/build/roadmap` gets a dependency graph, and a chip that was live over nothing
+
+**Date:** 2026-09-14 · **Task:** #176 (FB3) · **Migration:** 254
+
+Two of this zone's four chips were wrong in opposite directions, and the second is
+the one worth recording.
+
+`Scenarios` was honestly refused — "no roadmap scenario is stored", which was true.
+
+**`Dependencies` was LIVE and could never show a row.** `FounderBuildRoadmap.jsx`
+filtered on `item.dependency || item.dependencies || item.blocks`; `roadmap_okrs`
+has none of those columns and `progress.ts`'s `OKR_SELECT` returns none of them.
+Selecting the chip emptied the table under the caption "items naming a
+dependency", which a founder reads as *this venture has none* rather than
+*nothing here can have one*. The `Blocks` column said "Not recorded" on every row
+and the `At risk` stat said "Unavailable" — the same emptiness in three different
+words.
+
+### Why no guard caught it, and what now does
+
+The zone suites count **refusals**: an `unbuilt` entry has to justify itself, the
+links/exports/handlers/gaps sum has to balance, a reason may not name a path. This
+was not a refusal. It was a working control over a store that did not exist, which
+is the failure `zoneFilterBuilder.js` opens its own docblock with and the one thing
+those counts are structurally unable to see. Same class as #93.
+
+`frontend/test/roadmap_zone_contract.test.mjs` ties the page to the route by name:
+every `item.<field>` the page reads must be a key the handler writes, and every
+live `key` in the filter registry must be a branch the page implements. It is
+narrow — one zone, one shape — and narrow is what makes it checkable.
+
+### A dependency is an edge, not a column
+
+`depends_on TEXT` on `roadmap_okrs` would hold one unvalidated name and could not
+answer "what does this block", which is the column the artboard draws. So
+`okr_dependencies` is its own table, indexed both ways, and the edge points from
+the **blocker** to the **blocked** — the direction the cell reads.
+
+Four refusals on the write, each a state the graph cannot hold rather than a
+policy: no self-link; both ends on the same roadmap (without which naming another
+venture's objective id would confirm it exists); no duplicate edge; and **no
+cycle**, because two objectives blocking each other can never be cleared by
+anybody and would make the state walk meaningless. The unique index is on the
+*ordered* pair, so the table itself will happily store `A→B` and `B→A` — the route
+is the only thing standing between the founder and that trap, which is why the
+cycle check has its own tests at one, three and four hops.
+
+### `At risk` is not derivable, and a provably-empty state nearly shipped
+
+The artboard's `State` column draws Blocked, In flight, At risk and Provisional.
+The first draft of `services/okrGraph.ts` derived **At risk** as "downstream of
+something blocked, but not itself blocked" — and that set is **always empty**. If
+`B` is blocked then `B` is not done, so any `X` that `B` blocks has an unresolved
+direct upstream and is blocked by the direct rule. There is nothing the transitive
+rule can reach that the direct rule has not already claimed.
+
+Shipping it would have re-introduced the exact live-but-empty bug this change
+exists to fix, one file from its own fix. It was caught by reasoning the rule
+through before building on it, and `okr_graph.test.ts` now asserts that **every
+state in `STATE_LABELS` is reachable** — a state no input can produce is a chip
+that draws and never fills.
+
+Nor can the artboard's rows be reverse-engineered into a rule: `Handoff schema` is
+Blocked and blocks two items, one drawn **In flight** and the other **At risk**.
+Two items with the identical relationship to the identical blocker carry different
+states, so the copy is illustrative and there is no rule in it to recover.
+
+**So risk stays unanswered and the page says why.** `Blocked` is the honest version
+of that number, and a card beside it explains what would have to be stored for risk
+to mean anything — when an objective became stuck, which nothing records.
+
+### A scenario is saved and compared, never applied
+
+`Saved scenarios · 2 · "raise slips 6wk"` is the artboard's stat, so a scenario is
+a named what-if somebody wrote down. It stores **an alternative quarter per item**
+and nothing else: the quarter is the only field a what-if plausibly moves, and
+copying whole OKRs would make a scenario go stale the moment somebody fixed a typo
+on the live one.
+
+It does not write back, and the dialog says so. The artboard offers `New scenario`,
+`Export` and `Configure` and no "apply" anywhere; a bulk edit of every quarter on
+the board from a control nobody drew is inventing the feature. Saving replaces the
+item list rather than merging it, because a scenario is one coherent story — merging
+would leave an objective the founder removed still in it.
+
+`New scenario` stops being a link to `/execution/roadmap`. That note said
+"objectives and key results are edited in Execution", which was true of objectives
+and beside the point here: that editor writes the **live** quarter, which is the one
+thing a what-if must not do.
+
+### `Configure` stays a stated gap
+
+The same argument as `/build/board`'s `Automations` (D91): the artboard names the
+control and specifies no setting for it to change — no default quarter, no horizon,
+no ordering rule, no example. A settings screen invented from a button label is
+worse than a disabled control that says why.
+
+### Two test-harness traps this change walked into, both now shared
+
+`splitStatements` in `cloudflare-worker/test/_baseline.mjs` exists because the
+fixtures' `sql.split(';')` cut migration 254's own prose in half — "…`item.blocks`;
+`roadmap_okrs` has none of those columns" — and handed the second half to SQLite,
+which failed quoting the migration's comment. **51 migrations have a semicolon
+inside a `--` comment**, and at least five put one in a *trailing* comment after
+real SQL, which stripping whole-line comments does not fix. The shared splitter
+tracks string literals instead: `--` opens a comment and `;` ends a statement only
+outside a quoted string, with `''` as the escape.
+
+And the route test answered 500 where production answers 401, because `requireAuth`
+refuses by `throw` and only `index.ts`'s app-level `onError` maps it — the third
+time that has bitten in this pass (D89's `progress.ts` tests, and again here). The
+mapping is composed into the test app, and the refusal is asserted as 401 exactly.
+
+---
+
+## D93 — four of Raise's seven refusals were false, and one constant was hiding three of them
+
+**Date:** 2026-09-14 · **Task:** #177 · **Migration:** none
+
+`/raise/*` carried seven `unbuilt` entries. **Four were not true.** No migration,
+no route and no table was needed to close them: every one was already served by an
+endpoint the founder could already call.
+
+| Refusal | Verdict |
+| --- | --- |
+| `raise/status` → `Timeline` | **false** — both sources carry dates |
+| `raise/pitch` → `Shares` | **false** — the page was already holding the array |
+| `raise/liquidity` → `Restrictions` | **false** — the ledger is mounted and founder-reachable |
+| `raise/liquidity` → `History` | **false** — same endpoint, same array |
+| `raise/liquidity` → `Tender` | true, and it needed its own sentence |
+| `raise/pitch` → `Variants` | true — `pitch_decks` has no variant column |
+| `raise/status` → `Share war-room` | true — no share mechanism exists for this view |
+
+### The refusal that described its own mapper
+
+`Timeline` said "the assembled rows carry a state but no date, so they cannot be
+put in order". That is a true statement about the twenty lines above it and a
+false one about the data: `raise_prospects` and `legal_documents` both carry
+`created_at` and `updated_at`, and **both routes `SELECT *`**, so every date was
+already on the page. The mapper simply did not copy it into the row.
+
+This is the sharpest version of the pattern D91 recorded for `/build/board`'s
+`Mine` and D92 for `/build/roadmap`'s `Dependencies`: a refusal written from a
+belief about the source rather than from the source. The fix is two lines —
+`at: x.updated_at || x.created_at || null` on each — plus a sort.
+
+`updated_at` leads because the question is "what moved last", not "what was filed
+first". A row with neither is kept and sorts last, and an unparseable stamp sorts
+last rather than as epoch zero — which would put it **first** under a heading that
+says most recent.
+
+### The refusal to data that was already on screen
+
+`Shares` said "share links are held by the deck builder and are not returned to
+this page". `GET /decks/:id/engagement` returns a `shares` array — id, created,
+expires, view_limit, view_count, exhausted and, since #196, `revoked_at` — and
+`FounderRaisePitch.jsx` was **already calling that endpoint and already reading
+that array** to build the Analytics table. The links were never absent; they were
+on screen in the shape of their *readers*. `Shares` asks the other question: which
+links exist and which still open.
+
+### One constant covering three absences, two of which were not absences
+
+`NO_LIQUIDITY_LEDGER` — "no restriction, tender or liquidity-event ledger is
+connected" — sat on `Restrictions`, `Tender` and `History`. But
+`liquidity_events`, `secondary_listings` and `secondary_rofr_notices` all exist,
+`routes/liquidity.ts` is mounted at `/api/liquidity`, and nine `api.liquidity*`
+methods reach it.
+
+**The gate is the fact that mattered.** `GET /liquidity/events` is restricted to
+admin, partner and investor — a founder is refused there, which is probably how
+the belief formed. `GET /liquidity/my-portfolio` is `requireAuth` **only**, and it
+returns `my_listings` and `exit_history`: exactly the two arrays those two chips
+needed. The ledger was connected the whole time, through a different door.
+
+The constant is **deleted**, not reworded — the D88/D90 pattern, and this file's
+own note about `NO_SESSION_RECORD` had already recorded why: one sentence covering
+several absences stops being true one absence at a time and nothing notices. Three
+in one file now, and this is the first where the shared reason was false when
+written rather than falsified later.
+
+`Tender` keeps a refusal and gains its own words. A tender is the **company**
+offering to buy shares back; `secondary_listings` is one holder offering to sell.
+Nothing records the first, and calling a seller's listing a tender would misname
+the party doing the buying.
+
+### Two live controls that did nothing, found on the way
+
+- **`/raise/liquidity` drew its filter row twice** — the zone header's chips and an
+  in-body copy with four hardcoded labels. The copy rendered `Tender` as
+  selectable while the registry refused it, and would have kept drawing the old
+  four after this change. Removed; one filter row, owned by the registry. Same
+  doubled chrome #37 and #40 removed elsewhere.
+- **The `Restriction coverage` card had four hardcoded "Not recorded" rows** under
+  one sentence saying no source was connected. Two of the four are answerable from
+  the ROFR notice (`company_elected`, `investors_elected`); the other two — board
+  approval, lockup — are clauses in the Bylaws or the SAFE that nothing parses.
+  They are now marked **"No source"** rather than "Not recorded", because those
+  are different claims: one says nobody filled it in, the other says nobody could.
+
+### What the page refuses to round
+
+The ROFR window is a **contract term stored per notice** — `secondary_rofr_notices`
+says in its own comment that 30 days is common but "a term of the specific
+agreement". So the stat reports a single window only when every notice agrees, a
+range when they do not, and never an average, which would be a number nobody
+signed. And a listing with **no notice served is not clear to transfer** — the
+table's comment says a NULL `notice_date` "reads as 'not_started' and therefore
+NOT clear" — so the absence is shown as an unanswered question, not a green light.
+
+### Raised, not fixed here
+
+**80 schema bootstraps cache readiness in a module-level boolean** (task #204),
+including `rofrSchemaReady` in this same liquidity route. 13 files use the
+`WeakMap` keyed on `env.DB` that #203 settled on; there is no guard, and
+`GOTCHAS.md` does not record the rule, which is why the pattern kept spreading
+after the decision. Stated at its real severity: a module flag is only wrong when
+one isolate serves two different bindings, so this is a latent hazard that
+reliably breaks tests — not a production outage.
+
+---
+
+## D94 — four more false refusals in Grow, and the two that were right for the same reason
+
+**Date:** 2026-09-14 · **Task:** #179 · **Migration:** none
+
+Grow carried **fourteen** `unbuilt` entries across seven subpages — the largest set
+of the three founder buckets. **Four were false.** As with #177, closing them needed
+no migration, no route and no table.
+
+| Refusal | Verdict |
+| --- | --- |
+| `talent` → `Post a role` | **false** — `job_postings` is the store; `/jobs/new` is mounted |
+| `talent` → `Bulk reject` | **false as written** — the records exist; the gap is the writer |
+| `customers` → `Stalled` | **false** — four activity stamps, all returned |
+| `capital-match` → `Warm path only` | **false** — the join has its own migration |
+| the other ten | true, and left alone |
+
+### The refusal that denied a whole feature somebody else had built
+
+`Post a role` said "no role posting is stored". **Task #68 built the job board.**
+`job_postings` exists and carries a `project_id` — the very column this desk's own
+role chips filter on — `jobs.create()` writes one, `routes/jobs.ts` serves it, and
+`/jobs/new` is a route `App.jsx` mounts for a founder. The posting surface existed
+the whole time; this desk had simply never pointed at it. It is a `to:` link now,
+the same correction #193 made four times over.
+
+### The refusal that was right about the gap and wrong about where it was
+
+`Bulk reject` said "no candidate records exist to act on". `job_applications`
+exists, `jobs.applications(id)` reads it — its own comment calls it "the sole PII
+surface" — and **this page already puts those candidates in a table**. What is
+genuinely missing is a **writer**: `routes/jobs.ts` has no endpoint that sets an
+application's status, so a reject has nothing to call.
+
+The distinction matters because of who reads the reason. "No records exist" sends
+the next engineer to build a store that is already there; "no endpoint sets a
+status" sends them to add eleven lines to a route. The refusal stays — correctly —
+and now says which.
+
+### A timeline that was there all along
+
+`Stalled` said "no activity timeline is stored, so no account can be called
+stalled". `waitlist_signups` carries `created_at`, `invited_at`, `followed_up_at`
+and `promoted_at`; `WAITLIST_SELECT` returns every one, and that route's own comment
+calls them "independent activity marks".
+
+**The newest stamp is the last touch**, not `created_at` — an account invited
+yesterday is not stalled because it signed up in March. And a row whose stamps are
+all unparseable is **not** called stalled: silence about a date is not evidence of
+neglect, and the false accusation sends a founder chasing a live account.
+
+### A join with its own migration
+
+`Warm path only` said "nothing joins a prospect to a relationship in the network
+book". **Migration 128 is named `contact_promotion.sql`**, it adds
+`raise_prospects.contact_id`, and it indexes it as `idx_raise_prospects_contact`.
+`contacts` is the network book. A prospect carrying a contact id was reached through
+somebody the founder already knows — which is the chip, exactly. Nothing is inferred
+from a shared domain or a similar firm name.
+
+### A stale guard inverted, not deleted — and its second half was never true
+
+`profile_zone_filters.test.mjs` **pinned `Stalled` as drawn-dead**, and its comment
+gave the reason: the chip had once shipped live with a predicate of `return []`, so
+clicking it answered "you have no stalled accounts" over a store that — the note
+said — "records no stalling at all".
+
+The first half was a real bug, rightly caught. **The second half was never true.**
+The guard now holds the opposite state and a stronger claim: the chip must be
+selectable *and* the page must compute the predicate from those four stamps. This is
+the third stale guard inverted rather than dropped (D88, D90); what is new is that
+this one encoded a *false belief* rather than a fact that later changed.
+
+### Getting it wrong in the other direction is also possible
+
+Two of the ten survivors are **dynamic-group** reasons — `talent`'s role chips and
+`capital-match`'s stage chips — and both were tempting to call false, because
+`job_postings.project_id` and `raise_prospects.stage` both exist. They are correct
+as they stand: each page **does** supply names from rows it has loaded
+(`dynamic: { roles: jobs… }`, `dynamic: { stages: stages… }`), and the reason covers
+only the empty case, which is what a dynamic group's reason is for.
+
+An earlier draft of this work recorded the Talent zone as fetching nothing at all.
+That was wrong — the page imports `jobs as jobsApi` and a grep for `api.` missed it.
+Deleting those two reasons as false would have been the same error as the four above,
+pointing the other way, so the guard now asserts the supply as well as the reason.
+
+### Where the four buckets stand
+
+Across #176, #177 and #179, **ten refusals turned out to be false** and every one
+was a belief about the source rather than a reading of it. None needed a new store.
+The guards that count refusals cannot see this class, which is why each bucket now
+has a contract test tying its claims to the thing that makes them true or false.
+
+---
+
+## D95 — schema readiness is a property of the database, not of the module
+
+**Date:** 2026-09-14 · **Task:** #204 · **Migration:** none
+
+### The bug, stated precisely
+
+115 lazy schema bootstraps remembered "already done" in a module-level
+`let _ready = false`. A module is instantiated **once per isolate**; the flag
+therefore means *some database this isolate has served is bootstrapped*, while
+every `if (_ready) return` reads it as *this database is bootstrapped*. When one
+isolate serves two bindings, the second is told the work is done and its DDL never
+runs — and what follows is not an exception. It is a `SELECT` against a table that
+does not exist, or a read that succeeds against an older shape.
+
+This is #203 with the scope widened: that task found the bug once, in a live
+break, and settled on a `WeakMap` keyed on `env.DB`. 16 files adopted it. The
+other 115 were never swept, and nothing stopped a new one being written.
+
+### Severity, stated honestly
+
+**This reliably breaks tests and does not reliably break production.** One
+production isolate serves one binding, so the flag is usually right by accident.
+The realistic failure paths are a test running two fixtures through one module
+instance, a preview Worker beside production, and a scheduled handler against a
+second database. Filing it at that severity is the point: a latent hazard is
+worth a guard, not an incident report, and overstating it would have bought a
+rushed fix instead of a swept one.
+
+### The conversion
+
+Every flag becomes `const READY = new WeakMap<object, boolean>()`, read and
+written through `bindingKey(env)` — a new one-line export in
+`util/schemaBootstrap.ts`, which already owned per-binding schema state. The cast
+`env.DB as unknown as object` now exists in exactly **one** place, because a cache
+keyed on the wrong thing does not throw; it simply never hits, or hits for a
+stranger.
+
+**The identifier was renamed on purpose.** `_ready` → `READY` means a half-converted
+file fails to compile, so `tsc --noEmit` — not a reviewer's eye — is what proves
+every read and write moved. A same-name conversion would have left
+`if (READY)` reading a WeakMap as always-truthy: green build, dead cache.
+
+**Three in-flight promise latches moved with the booleans** and are the more
+dangerous half. `ensureInvestorSchema`, `ensureAdvisorSchema` and
+`ensureExploringSchema` each coalesced concurrent callers on a module-level
+`Promise<void> | null`. Shared across bindings that hands database B the promise
+of a users-table CHECK rebuild that ran against database A — B is told the rebuild
+happened when nothing touched it. They are `WeakMap<object, Promise<void>>` now,
+so two bindings get one rebuild **each** rather than one between them.
+
+### One file is exempt, and says so
+
+`services/aiRouter.ts` keeps its own inline cast and imports nothing. Its test
+loads the file by reading the bytes, stripping the single `import type` line and
+evaluating the rest inside `new Function`; a value import would survive that strip
+and throw `Cannot use import statement outside a module`. Having no value import
+is a property that test depends on, so the file carries the cast and a comment
+saying why. A documented exception beats a helper nobody may use.
+
+### The guard found a real bug on its first run
+
+`scripts/check-schema-readiness.mjs` bans the boolean and the promise latch, and
+additionally fails any `WeakMap<object, …>` in a file that never names the binding.
+That third rule caught `services/projectAccess.ts`, whose comment said "keyed
+per-DB … mirrors the ensureProject*Columns pattern in routes/projects.ts" — and
+which keyed on `env`, the whole environment object, while `projects.ts` keys on
+`env.DB` seven times over. Wrong in both directions: two bindings arriving with one
+`env` share an entry describing only the first, and a fresh `env` per request never
+hits, so a ten-statement bootstrap re-ran every time. The false comment is what
+made it invisible to reading.
+
+### What the guard does not check, and why
+
+Whether the latch is set before or after the work, and whether a failure latches.
+Those differ legitimately — `ensureExploringSchema` latches only if the role-CHECK
+rebuild succeeded, `ensureXSchema` latches inside its `try` — and a check that
+forced one shape would push the next author into the wrong one. Source shape is all
+`check-schema-readiness` can see, so behaviour is pinned separately by
+`cloudflare-worker/test/schema_readiness.test.ts`: two bindings each get their DDL,
+one binding gets it once, a failed bootstrap does not latch, and `projectAccess`
+keys on the binding. Reverting `xSchema` to a boolean fails three of those five;
+reverting `projectAccess` to `env` fails exactly the one written for it.
+
+### A dead test seam is deleted rather than kept
+
+`__resetWorkflowSchemaCache()` existed for one stated reason — "the module-level
+cache would otherwise leak across cases" — which is no longer true, and it had no
+caller anywhere. `aiRouter`'s `__resetForTest()` has twenty, so it stays, now
+reassigning the map and with a docblock saying it is belt-and-braces rather than
+load-bearing. A seam whose reason has evaporated is a false claim the next reader
+will trust.
+
+### Two existing guard tests were updated, not loosened
+
+`apex_cutover_bootstrap.test.mjs` pinned the single-flight property by the old
+identifier names. It now pins the same property on the new latches **and** asserts
+each is a `WeakMap` — an assertion that would have failed before this change. Its
+production-short-circuit test likewise requires the `.set(bindingKey(env), true)`
+form, so a file that drops back to a boolean fails there as well as in the guard.

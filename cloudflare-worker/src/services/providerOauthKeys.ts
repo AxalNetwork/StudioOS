@@ -15,6 +15,7 @@
 import type { Env } from '../types';
 import { encryptString, decryptString } from './cryptoBox';
 import { maskClientId } from './cloudflareSecrets';
+import { bindingKey } from '../util/schemaBootstrap';
 
 export type ManagedProviderKey =
   | 'slack'
@@ -80,9 +81,9 @@ interface CacheEntry {
 const CACHE_TTL_MS = 60_000;
 const cache = new Map<ManagedProviderKey, CacheEntry>();
 
-let schemaEnsured = false;
+const SCHEMA_ENSURED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
-  if (schemaEnsured) return;
+  if (SCHEMA_ENSURED.get(bindingKey(env))) return;
   try {
     await env.DB.prepare(
       `CREATE TABLE IF NOT EXISTS provider_oauth_keys (
@@ -95,7 +96,7 @@ async function ensureSchema(env: Env): Promise<void> {
          updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
        )`,
     ).run();
-    schemaEnsured = true;
+    SCHEMA_ENSURED.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[providerOauthKeys] ensureSchema failed', e);
   }

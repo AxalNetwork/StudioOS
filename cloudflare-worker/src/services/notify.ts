@@ -25,6 +25,7 @@
 import type { Env } from '../types';
 import { stripTrailingSlashes } from '../util/url';
 import { getUserSettings, isInQuietHours } from './userSettings';
+import { bindingKey } from '../util/schemaBootstrap';
 
 export type NotifyChannel = 'in_app' | 'email' | 'slack';
 export type NotifyCategory =
@@ -65,9 +66,9 @@ export interface NotifyArgs {
   category?: NotifyCategory;
 }
 
-let inboxMigrated = false;
+const INBOX_MIGRATED = new WeakMap<object, boolean>();
 async function ensureInbox(env: Env): Promise<boolean> {
-  if (inboxMigrated) return true;
+  if (INBOX_MIGRATED.get(bindingKey(env))) return true;
   try {
     await env.DB.prepare(
       `CREATE TABLE IF NOT EXISTS notifications_inbox (
@@ -120,7 +121,7 @@ async function ensureInbox(env: Env): Promise<boolean> {
       `CREATE INDEX IF NOT EXISTS idx_outbox_user_pending
          ON notification_outbox(user_id, flushed_at)`,
     ).run();
-    inboxMigrated = true;
+    INBOX_MIGRATED.set(bindingKey(env), true);
     return true;
   } catch (e) {
     console.error('[notify] inbox migration failed', e);

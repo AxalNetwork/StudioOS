@@ -118,9 +118,21 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Configure lanes', kind: 'handler', handler: 'configureLanes' },
   ],
   'build/roadmap': [
-    { label: 'New scenario', to: '/execution/roadmap', linkNote: 'objectives and key results are edited in Execution' },
+    // `New scenario` STOPS BEING A LINK TO SOMEWHERE ELSE. It pointed at
+    // `/execution/roadmap` with the note "objectives and key results are edited in
+    // Execution", which was true of objectives and beside the point for scenarios:
+    // the Execution editor writes the LIVE quarter on an item, which is the one
+    // thing a what-if must not do. Migration 254 stores the alternative beside the
+    // roadmap instead, so the form belongs on this desk.
+    { label: 'New scenario', kind: 'handler', handler: 'newScenario' },
     { label: 'Export', kind: 'export' },
-    { label: 'Configure', unbuilt: 'no roadmap settings are stored' },
+    // `Configure` STAYS A GAP, on the same argument as `/build/board`'s
+    // `Automations`: the artboard names the control and specifies no setting for it
+    // to change — no default quarter, no horizon, no ordering rule, no example.
+    // Inventing a settings screen from a button label is the one thing #176 asks
+    // not to do, and a settings page nobody specified is worse than a disabled
+    // control that says why.
+    { label: 'Configure', unbuilt: 'the artboard names this control but specifies no roadmap setting for it to change, so there is nothing an editor could write', hover: 'No roadmap setting is specified yet — there is nothing here to change.' },
   ],
   // ALL THREE ARE LIVE AS OF MIGRATION 250, and all three were `unbuilt` for the
   // same reason: there was no cadence store. There is one now
@@ -158,8 +170,20 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
   ],
   'grow/talent': [
-    { label: 'Post a role', unbuilt: 'no role posting is stored' },
-    { label: 'Bulk reject', unbuilt: 'no candidate records exist to act on' },
+    // "NO ROLE POSTING IS STORED" WAS PLAINLY FALSE. `job_postings` is the store —
+    // it even carries a `project_id`, which is how this page's role chips find the
+    // ones linked to this startup — `jobs.create()` writes one, and `/jobs/new` is
+    // a mounted route a founder may open. The posting surface existed the whole
+    // time; this desk just never pointed at it. Task #68 built it.
+    { label: 'Post a role', to: '/jobs/new', linkNote: 'A posting is written in the job editor and appears here once it names this startup.' },
+    // "NO CANDIDATE RECORDS EXIST TO ACT ON" WAS FALSE AND THE REAL GAP IS
+    // NARROWER. `job_applications` exists, `jobs.applications(id)` reads it, and
+    // this page already puts those candidates in a table. What is missing is a
+    // WRITER: `routes/jobs.ts` has no endpoint that sets an application's status,
+    // so there is nothing for a reject — bulk or single — to call. A refusal that
+    // denied the records sent the next reader to build a store that is already
+    // there.
+    { label: 'Bulk reject', unbuilt: 'the candidates are stored and read, but no endpoint sets an application status, so a reject has nothing to write', hover: 'Candidates are listed here, but nothing can change an application’s status yet.' },
     { label: 'Export', kind: 'export' },
   ],
   'grow/customers': [

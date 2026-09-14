@@ -13,14 +13,15 @@
  */
 import type { Env } from '../types';
 import { resolveReferralCode, normaliseReferralCode } from './referrals/resolveCode';
+import { bindingKey } from '../util/schemaBootstrap';
 
 // Mirrors the payouts approval window so a purchase attributed today is still
 // inside the refund/clawback window when its commission is evaluated.
 export const ATTRIBUTION_WINDOW_DAYS = 30;
 
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 export async function ensureAttributionSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS referral_attributions (
       id                          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,7 +38,7 @@ export async function ensureAttributionSchema(env: Env): Promise<void> {
        ON referral_attributions(referrer_user_id)`,
   ];
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch { /* idempotent */ } }
-  _schemaReady = true;
+  SCHEMA_READY.set(bindingKey(env), true);
 }
 
 export interface ResolvedAttribution {

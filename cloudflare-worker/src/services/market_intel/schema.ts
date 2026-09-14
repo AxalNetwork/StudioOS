@@ -7,11 +7,12 @@
  * file via `wrangler d1 execute --remote` (see CHANGELOG).
  */
 import type { Env } from '../../types';
+import { bindingKey } from '../../util/schemaBootstrap';
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 export async function ensureMarketIntelSchema(env: Env): Promise<void> {
-  if (_ready) return;
+  if (READY.get(bindingKey(env))) return;
   const stmts: string[] = [
     `CREATE TABLE IF NOT EXISTS market_intel_rows (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -88,5 +89,5 @@ export async function ensureMarketIntelSchema(env: Env): Promise<void> {
       }
     }
   }
-  _ready = true;
+  READY.set(bindingKey(env), true);
 }

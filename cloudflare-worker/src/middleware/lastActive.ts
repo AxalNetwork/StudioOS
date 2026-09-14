@@ -17,6 +17,7 @@
 import type { MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
 import { withDeadline } from '../util/deadline';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const SKIP_PREFIXES = ['/api/health', '/api/monitoring/'];
 const STAMP_DEADLINE_MS = 2_000;
@@ -25,12 +26,12 @@ const TTL_SECONDS = 300; // 5 min — matches the cookie/session refresh cadence
 // Lazy bootstrap — guarantees `users.last_active_at` exists before the
 // middleware ever issues an UPDATE. Mirrors ensureProfileColumns() so a
 // stale dev D1 self-heals on the first authenticated request.
-let lastActiveColumnReady = false;
+const LAST_ACTIVE_COLUMN_READY = new WeakMap<object, boolean>();
 async function ensureLastActiveColumn(env: Env): Promise<void> {
-  if (lastActiveColumnReady) return;
+  if (LAST_ACTIVE_COLUMN_READY.get(bindingKey(env))) return;
   try { await env.DB.prepare(`ALTER TABLE users ADD COLUMN last_active_at TIMESTAMP`).run(); } catch {}
   try { await env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_users_last_active ON users(last_active_at)`).run(); } catch {}
-  lastActiveColumnReady = true;
+  LAST_ACTIVE_COLUMN_READY.set(bindingKey(env), true);
 }
 
 export const lastActiveMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {

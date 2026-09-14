@@ -1445,6 +1445,21 @@ export const api = {
   updateOkr: (id, data) => request(`/progress/roadmap/okr/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   moveOkr: (id, kanban_status, sort_order = 0) => request(`/progress/roadmap/okr/${id}/move`, { method: 'POST', body: JSON.stringify({ kanban_status, sort_order }) }),
   deleteOkr: (id) => request(`/progress/roadmap/okr/${id}`, { method: 'DELETE' }),
+  // Task #176 (FB3) — the roadmap's dependency graph and its saved scenarios.
+  //
+  // ONE READ FOR THE WHOLE ZONE, because `/build/roadmap` needs every objective
+  // to turn a `Blocks` edge into a name anyway: splitting it would make the page
+  // fetch three times to draw one table.
+  //
+  // This is what the `Dependencies` chip was missing. It was LIVE before migration
+  // 254 and filtered on `item.dependency || item.dependencies || item.blocks`,
+  // none of which `roadmap_okrs` has or `/progress/roadmap/:id` returns — so it
+  // emptied the table under words that read as "this venture has none".
+  roadmapGraph: (projectId) => request(`/founder/roadmap/${projectId}`),
+  addOkrDependency: (projectId, data) => request(`/founder/roadmap/${projectId}/dependencies`, { method: 'POST', body: JSON.stringify(data) }),
+  deleteOkrDependency: (id) => request(`/founder/roadmap/dependencies/${id}`, { method: 'DELETE' }),
+  saveRoadmapScenario: (projectId, data) => request(`/founder/roadmap/${projectId}/scenarios`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteRoadmapScenario: (id) => request(`/founder/roadmap/scenarios/${id}`, { method: 'DELETE' }),
   // Task #13 — MVP Scope prioritization (value-ranked feature planning).
   listMvpFeatures: (projectId) => request(`/progress/mvp-scope/${projectId}`),
   createMvpFeature: (projectId, data) => request(`/progress/mvp-scope/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),

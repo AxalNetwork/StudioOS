@@ -12,6 +12,7 @@
  * exists even before the migration is applied.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
 export interface FeatureUnlockRow {
   id: number;
@@ -22,11 +23,11 @@ export interface FeatureUnlockRow {
   created_at: string;
 }
 
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 
 /** Idempotent schema bootstrap — mirrors migration 098_feature_unlocks.sql. */
 export async function ensureFeatureUnlockSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       'CREATE TABLE IF NOT EXISTS feature_unlocks (' +
@@ -46,7 +47,7 @@ export async function ensureFeatureUnlockSchema(env: Env): Promise<void> {
       'CREATE INDEX IF NOT EXISTS idx_feature_unlocks_user_feature ' +
         'ON feature_unlocks(user_id, feature_key)',
     );
-    _schemaReady = true;
+    SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[featureUnlocks] ensureFeatureUnlockSchema failed:', (e as Error).message);
   }

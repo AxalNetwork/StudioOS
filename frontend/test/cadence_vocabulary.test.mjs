@@ -31,11 +31,27 @@ const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 
 const WORKER = codeOnly(read('cloudflare-worker/src/routes/founder_cadence.ts'));
 
+/**
+ * Every `export const NAME = ['a', 'b'] as const;` in the worker route, by name.
+ *
+ * ONE LITERAL PATTERN, MATCHED ONCE — not a pattern built around the name asked
+ * for. Semgrep flagged the previous shape under `detect-non-literal-regexp`
+ * (alert 6091), and the reason that actually bites a source-scanning guard is the
+ * one `_escapeRe.mjs` gives: a metacharacter in an interpolated name changes what
+ * the pattern means silently, so the assertion still passes and now checks
+ * something else. Reading every declaration once and looking the name up cannot
+ * do that, and it costs nothing — the names are the map's keys either way.
+ */
+const SERVER_LISTS = new Map(
+  [...WORKER.matchAll(/export const ([A-Z_]+) = \[([^\]]*)\]/g)]
+    .map((m) => [m[1], [...m[2].matchAll(/'([^']+)'/g)].map((x) => x[1])]),
+);
+
 /** `export const NAME = ['a', 'b'] as const;` → `['a','b']`. */
 function serverList(name) {
-  const m = new RegExp(`export const ${name} = \\[([^\\]]*)\\]`).exec(WORKER);
-  assert.ok(m, `${name} is no longer a one-line array literal in founder_cadence.ts`);
-  return [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]);
+  const list = SERVER_LISTS.get(name);
+  assert.ok(list, `${name} is no longer a one-line array literal in founder_cadence.ts`);
+  return list;
 }
 
 test('the four ritual kinds are the same four on both sides', () => {

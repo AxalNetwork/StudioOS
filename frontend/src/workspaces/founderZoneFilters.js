@@ -82,8 +82,19 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
 // the point: a reason that survives its own fix is a reason that will be cited
 // again. This is the second one to go the same way (`NO_SESSION_RECORD`, below,
 // went when migration 221 landed), which is the pattern working.
-const NO_LIQUIDITY_LEDGER =
-  'no restriction, tender or liquidity-event ledger is connected';
+// `NO_LIQUIDITY_LEDGER` STOOD HERE — "no restriction, tender or liquidity-event
+// ledger is connected" — over `Restrictions`, `Tender` and `History`. It was FALSE
+// for two of the three, and the file's own note about `NO_SESSION_RECORD` two
+// paragraphs down had already recorded the shape of that mistake: one sentence
+// covering several different absences stops being true one absence at a time, and
+// nothing notices.
+//
+// `liquidity_events`, `secondary_listings` and `secondary_rofr_notices` all exist,
+// `routes/liquidity.ts` is mounted at `/api/liquidity`, and nine `api.liquidity*`
+// methods reach it. `GET /liquidity/my-portfolio` is `requireAuth` ONLY — a founder
+// may call it — and it returns both `my_listings` and `exit_history`. So the ledger
+// was connected the whole time; only `Tender` had nothing behind it, and it now
+// says so in its own words.
 // `NO_SESSION_RECORD` stood here — "no session history is stored, so no past
 // question, kept answer or discarded one exists to look through" — and covered
 // all four of Ask's labels. Migration 221 stored the history, and removing the
@@ -297,8 +308,16 @@ export const FOUNDER_ZONE_FILTERS = {
   'build/roadmap': [
     { canvas: 'Timeline', key: 'timeline' },
     { canvas: 'Board', key: 'board' },
+    // `Dependencies` WAS THE WORST KIND OF LIVE CHIP and is the reason migration
+    // 254 exists. It drew, it selected, and it could never show a row: the page
+    // filtered on `item.dependency || item.dependencies || item.blocks`, and
+    // `roadmap_okrs` has none of those columns while `OKR_SELECT` returns none of
+    // them either. A founder choosing it saw an empty table under "items naming a
+    // dependency" and read that as "you have none". An `unbuilt` reason at least
+    // explains itself; this explained nothing, and no guard here could see it —
+    // they count refusals, and this was not one.
     { canvas: 'Dependencies', key: 'dependencies' },
-    { canvas: 'Scenarios', unbuilt: 'no roadmap scenario is stored' },
+    { canvas: 'Scenarios', key: 'scenarios' },
   ],
   // ALL FOUR ARE LIVE AS OF MIGRATION 250. Rituals, the runs that archive them
   // and their templates are stored per project (`routes/founder_cadence.ts`), so
@@ -334,7 +353,13 @@ export const FOUNDER_ZONE_FILTERS = {
     { canvas: 'Overview', key: 'overview' },
     { canvas: 'Blockers', key: 'blockers' },
     { canvas: 'Investors', key: 'investors' },
-    { canvas: 'Timeline', unbuilt: 'the assembled rows carry a state but no date, so they cannot be put in order' },
+    // THE REFUSAL WAS ABOUT THIS PAGE'S OWN MAPPER, NOT ABOUT THE DATA. It read
+    // "the assembled rows carry a state but no date, so they cannot be put in
+    // order" — true of the rows, and a fact about the twenty lines that build
+    // them. Both sources carry `created_at` and `updated_at`, and both routes
+    // `SELECT *`, so every date was already on the page and was being dropped on
+    // the way into the row. Same shape as `/build/board`'s `Mine`.
+    { canvas: 'Timeline', key: 'timeline' },
   ],
   // Deck versions are stored and engagement is returned per version. A deck has
   // versions rather than narrative variants, and a share link is minted and
@@ -342,7 +367,12 @@ export const FOUNDER_ZONE_FILTERS = {
   'raise/pitch': [
     { canvas: 'Versions', key: 'versions' },
     { canvas: 'Variants', unbuilt: 'a deck stores versions; no narrative variant is a separate record' },
-    { canvas: 'Shares', unbuilt: 'share links are held by the deck builder and are not returned to this page' },
+    // ALSO FALSE, and by a wider margin: `GET /decks/:id/engagement` returns a
+    // `shares` array — id, created, expires, view_limit, view_count, exhausted and
+    // (since #196) `revoked_at` — and this page already calls that endpoint and
+    // already reads that array to build the Analytics table. The links were never
+    // "held by the deck builder"; they were on screen in a different shape.
+    { canvas: 'Shares', key: 'shares' },
     { canvas: 'Analytics', key: 'analytics' },
   ],
   // The one zone where the canvas asks for five views and the store has all
@@ -373,10 +403,19 @@ export const FOUNDER_ZONE_FILTERS = {
   // ledger this product has never had, which is also why all four stats on this
   // page read Unavailable rather than zero.
   'raise/liquidity': [
-    { canvas: 'Restrictions', unbuilt: NO_LIQUIDITY_LEDGER },
+    { canvas: 'Restrictions', key: 'restrictions' },
     { canvas: 'Waterfall', key: 'waterfall' },
-    { canvas: 'Tender', unbuilt: NO_LIQUIDITY_LEDGER },
-    { canvas: 'History', unbuilt: NO_LIQUIDITY_LEDGER },
+    // THE ONE OF THE THREE THAT WAS GENUINELY ABSENT, and it needed its own
+    // sentence to say so. A tender is the COMPANY offering to buy its own shares
+    // back; `secondary_listings` is one holder offering to sell theirs. No table,
+    // route or field expresses the first, and calling a seller's listing a tender
+    // would misname the party doing the buying.
+    {
+      canvas: 'Tender',
+      unbuilt: 'a tender is the company offering to buy shares back, and only holder-side listings are stored — nothing records an offer made by the company',
+      hover: 'Only holder-side listings are stored — no company buy-back is recorded.',
+    },
+    { canvas: 'History', key: 'history' },
   ],
 
   // ── Grow ─────────────────────────────────────────────────────────────────
@@ -409,7 +448,12 @@ export const FOUNDER_ZONE_FILTERS = {
       label: 'One chip per segment',
       unbuilt: 'no market segment is stored on a customer record',
     },
-    { canvas: 'Stalled', unbuilt: 'no activity timeline is stored, so no account can be called stalled' },
+    // "NO ACTIVITY TIMELINE IS STORED" WAS FALSE. `waitlist_signups` carries four
+    // activity stamps — `created_at`, `invited_at`, `followed_up_at`,
+    // `promoted_at` — and `WAITLIST_SELECT` returns every one; the route's own
+    // comment calls them "independent activity marks". Stalled is the newest of
+    // them being old, which is arithmetic over data the page already receives.
+    { canvas: 'Stalled', key: 'stalled' },
   ],
   'grow/partnerships': [
     { canvas: 'All', key: 'all' },
@@ -421,7 +465,12 @@ export const FOUNDER_ZONE_FILTERS = {
   // are the Network relationship book's, and nothing joins the two records.
   'grow/capital-match': [
     { canvas: 'Best fit', key: 'all', label: 'All prospects' },
-    { canvas: 'Warm path only', unbuilt: 'nothing joins a prospect to a relationship in the network book' },
+    // "NOTHING JOINS A PROSPECT TO A RELATIONSHIP" WAS FALSE, and the join even has
+    // its own migration: 128_contact_promotion.sql adds `raise_prospects.contact_id`
+    // and indexes it as `idx_raise_prospects_contact`. `contacts` IS the network
+    // book. A prospect carrying a contact id is one reached through somebody the
+    // founder already knows — which is exactly what this chip asks for.
+    { canvas: 'Warm path only', key: 'warm' },
     { canvas: 'Right stage', dynamic: 'stages', label: 'One chip per stage', unbuilt: 'no prospect records a stage yet' },
     { canvas: 'Passed', key: 'passed' },
   ],

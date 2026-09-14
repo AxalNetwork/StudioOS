@@ -17,6 +17,7 @@
  */
 import type { Env } from '../types';
 import { withDeadline } from '../util/deadline';
+import { bindingKey } from '../util/schemaBootstrap';
 
 // Eleven sequential D1 statements on the most latency-sensitive route in the
 // product. On a migrated database every one is a no-op that still costs a round
@@ -29,7 +30,7 @@ const BOOTSTRAP_DEADLINE_MS = 3_000;
 // compounds instead of degrading.
 const BOOTSTRAP_COOLDOWN_MS = 60_000;
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 let _skipUntil = 0;
 
 /**
@@ -41,7 +42,7 @@ let _skipUntil = 0;
  * reports a genuinely missing table — this function's silence never does.
  */
 export async function ensureAuthBlockersSchema(env: Env): Promise<void> {
-  if (_ready) return;
+  if (READY.get(bindingKey(env))) return;
   if (Date.now() < _skipUntil) return;
   try {
     await withDeadline(bootstrap(env), BOOTSTRAP_DEADLINE_MS, 'authBlockersSchema');
@@ -124,5 +125,5 @@ async function bootstrap(env: Env): Promise<void> {
     try { await db.prepare(ddl).run(); } catch {}
   }
 
-  _ready = true;
+  READY.set(bindingKey(env), true);
 }

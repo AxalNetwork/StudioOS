@@ -16,6 +16,7 @@
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import type { Tier } from '../middleware/requireTier';
+import { bindingKey } from '../util/schemaBootstrap';
 
 export type ProviderStatus = 'live' | 'beta' | 'coming_soon';
 export type AuthType = 'api_key' | 'oauth2' | 'webhook';
@@ -334,9 +335,9 @@ export function getDescriptor(key: string): ProviderDescriptor | null {
  * idempotent, called per-request. Lets fresh deploys serve before the
  * wrangler migration is applied.
  */
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 export async function ensureIntegrationsSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       'CREATE TABLE IF NOT EXISTS integrations (' +
@@ -392,7 +393,7 @@ export async function ensureIntegrationsSchema(env: Env): Promise<void> {
       'UNIQUE(user_id, provider_key))',
     );
     await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_integration_waitlist_provider ON integration_waitlist(provider_key)');
-    _schemaReady = true;
+    SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[integrations] ensureIntegrationsSchema failed:', (e as Error).message);
   }

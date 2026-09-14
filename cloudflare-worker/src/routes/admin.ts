@@ -19,15 +19,16 @@ import { ensureExploringSchema } from '../services/exploringSchema';
 // Task #102 — admin Spin-Out Lab participants endpoint derives week/tool
 // unlocks from the shared milestone catalog (single source of truth).
 import { MILESTONES as SPINOUT_MILESTONES, unlockedFeaturesThrough } from '../services/spinoutLabCatalog';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const admin = new Hono<{ Bindings: Env }>();
 
 // Lazy schema migration — adds the columns the admin profile UI relies on
 // without breaking older databases. Idempotent and cheap (CF wraps the
 // PRAGMA-style ALTER in IF NOT EXISTS semantics for column adds via try/catch).
-let profileSchemaMigrated = false;
+const PROFILE_SCHEMA_MIGRATED = new WeakMap<object, boolean>();
 async function ensureProfileColumns(env: Env): Promise<void> {
-  if (profileSchemaMigrated) return;
+  if (PROFILE_SCHEMA_MIGRATED.get(bindingKey(env))) return;
   const stmts = [
     `ALTER TABLE users ADD COLUMN admin_notes TEXT`,
     `ALTER TABLE users ADD COLUMN last_active_at TIMESTAMP`,
@@ -39,7 +40,7 @@ async function ensureProfileColumns(env: Env): Promise<void> {
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); } catch {} // duplicate-column errors are expected
   }
-  profileSchemaMigrated = true;
+  PROFILE_SCHEMA_MIGRATED.set(bindingKey(env), true);
 }
 
 admin.get('/users', async (c) => {
@@ -348,9 +349,9 @@ admin.get('/users/:user_id/profile', async (c) => {
 // emitted when the column is genuinely missing from PRAGMA
 // table_info(). Safe to call on every request, on a fresh DB, and on
 // a DB that already has the canonical schema.
-let adminAuditLogTableReady = false;
+const ADMIN_AUDIT_LOG_TABLE_READY = new WeakMap<object, boolean>();
 export async function ensureAdminAuditLogTable(env: Env): Promise<void> {
-  if (adminAuditLogTableReady) return;
+  if (ADMIN_AUDIT_LOG_TABLE_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS admin_audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER NOT NULL REFERENCES users(id), action TEXT NOT NULL, report_type TEXT, format TEXT, filters_json TEXT, storage_key TEXT, download_url TEXT, exported_at TEXT NOT NULL DEFAULT (datetime('now')), viewed_user_id INTEGER, conversation_id INTEGER, viewed_at TEXT)",
@@ -384,16 +385,16 @@ export async function ensureAdminAuditLogTable(env: Env): Promise<void> {
       );
     } catch {}
   } catch {}
-  adminAuditLogTableReady = true;
+  ADMIN_AUDIT_LOG_TABLE_READY.set(bindingKey(env), true);
 }
 
 // Task #1 (DB) — dedicated profile-view audit trail with first-class
 // columns (admin_user_id, viewed_user_id, conversation_id, viewed_at)
 // for SQL-friendly investigator queries. Bridged into admin_audit_log
 // above so existing oversight reports keep working unchanged.
-let adminProfileAuditReady = false;
+const ADMIN_PROFILE_AUDIT_READY = new WeakMap<object, boolean>();
 async function ensureAdminProfileAuditTable(env: Env): Promise<void> {
-  if (adminProfileAuditReady) return;
+  if (ADMIN_PROFILE_AUDIT_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS admin_profile_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER NOT NULL, viewed_user_id INTEGER NOT NULL, conversation_id INTEGER, action TEXT NOT NULL, viewed_at TEXT NOT NULL DEFAULT (datetime('now')))",
@@ -405,7 +406,7 @@ async function ensureAdminProfileAuditTable(env: Env): Promise<void> {
       'CREATE INDEX IF NOT EXISTS idx_admin_profile_audit_admin ON admin_profile_audit(admin_user_id, viewed_at DESC)',
     );
   } catch {}
-  adminProfileAuditReady = true;
+  ADMIN_PROFILE_AUDIT_READY.set(bindingKey(env), true);
 }
 
 async function auditConversationView(
@@ -465,9 +466,9 @@ async function auditConversationView(
 // (`users.admin_view_suppressed = 1`). Best-effort: any failure here is
 // logged and the request continues — the audit row is the authoritative
 // trail; the inbox row is courtesy.
-let _adminSuppressColReady = false;
+const ADMIN_SUPPRESS_COL_READY = new WeakMap<object, boolean>();
 async function ensureAdminViewSuppressColumn(env: Env): Promise<void> {
-  if (_adminSuppressColReady) return;
+  if (ADMIN_SUPPRESS_COL_READY.get(bindingKey(env))) return;
   try {
     const info: any = await env.DB.prepare(`PRAGMA table_info(users)`).all();
     const have = new Set((info?.results || []).map((r: any) => r.name));
@@ -475,7 +476,7 @@ async function ensureAdminViewSuppressColumn(env: Env): Promise<void> {
       try { await env.DB.exec(`ALTER TABLE users ADD COLUMN admin_view_suppressed INTEGER DEFAULT 0`); }
       catch { /* duplicate-column race */ }
     }
-    _adminSuppressColReady = true;
+    ADMIN_SUPPRESS_COL_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[admin/notify] ensureAdminViewSuppressColumn failed', (e as Error).message);
   }
@@ -955,9 +956,9 @@ admin.post('/users/:user_id/notes', async (c) => {
 // verification link for users who haven't completed verification.
 // Task #7 — Spin-Out Lab cohort admission. Uses a sidecar table because
 // users hit D1's 100-column ALTER TABLE limit (migration 154).
-let spinoutAdmissionSchemaMigrated = false;
+const SPINOUT_ADMISSION_SCHEMA_MIGRATED = new WeakMap<object, boolean>();
 async function ensureSpinoutAdmissionColumns(env: Env): Promise<void> {
-  if (spinoutAdmissionSchemaMigrated) return;
+  if (SPINOUT_ADMISSION_SCHEMA_MIGRATED.get(bindingKey(env))) return;
   try {
     await env.DB.prepare(
       `CREATE TABLE IF NOT EXISTS user_spinout_flags (
@@ -968,7 +969,7 @@ async function ensureSpinoutAdmissionColumns(env: Env): Promise<void> {
       )`
     ).run();
   } catch {}
-  spinoutAdmissionSchemaMigrated = true;
+  SPINOUT_ADMISSION_SCHEMA_MIGRATED.set(bindingKey(env), true);
 }
 
 // POST /api/admin/users/:user_id/spinout-admit — admit a founder to the

@@ -27,6 +27,7 @@
  * `fill_provenance` exists to prevent one layer down.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
 /**
  * The writable fields, and the column each lands in.
@@ -110,9 +111,9 @@ export interface MarketAssumptions {
  * `market_assumptions_store.test.ts` builds its fixture FROM THE MIGRATION, so a
  * disagreement between the two fails the test rather than the product.
  */
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 export async function ensureMarketAssumptionsSchema(env: Env): Promise<void> {
-  if (_ready) return;
+  if (READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       'CREATE TABLE IF NOT EXISTS project_market_assumptions ('
@@ -128,7 +129,7 @@ export async function ensureMarketAssumptionsSchema(env: Env): Promise<void> {
       + "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
       + "updated_at TEXT NOT NULL DEFAULT (datetime('now')))",
     );
-    _ready = true;
+    READY.set(bindingKey(env), true);
   } catch (e) {
     console.error('[market] ensureMarketAssumptionsSchema:', (e as Error).message);
   }

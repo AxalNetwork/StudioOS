@@ -13,8 +13,9 @@
  */
 import type { Env } from '../types';
 import { jload } from '../routes/_t13t14t15_helpers';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 /** Origins whose email a founder is allowed to see in the directory. */
 export const TRUSTED_ADVISOR_SOURCES = ['brand-landing', 'referral', 'staff-rec'] as const;
@@ -83,7 +84,7 @@ export function shapeAdvisorProfile(row: AdvisorProfileRow, assignments: Advisor
 }
 
 export async function ensureAdvisorProfilesSchema(env: Env): Promise<void> {
-  if (_ready) return;
+  if (READY.get(bindingKey(env))) return;
   try {
     await env.DB.batch([
       env.DB.prepare(`CREATE TABLE IF NOT EXISTS advisor_profiles (
@@ -137,7 +138,7 @@ export async function ensureAdvisorProfilesSchema(env: Env): Promise<void> {
         await env.DB.prepare(`ALTER TABLE advisor_profiles ADD COLUMN ${col}`).run();
       } catch { /* column already exists */ }
     }
-    _ready = true;
+    READY.set(bindingKey(env), true);
   } catch (err) {
     console.warn('[advisorProfilesSchema] ensure failed', err);
   }
