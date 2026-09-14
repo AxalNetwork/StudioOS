@@ -118,7 +118,7 @@ suite.
 
 | Folder | What lives there |
 | --- | --- |
-| `lib/` | Shared helpers (`migrationPlan.mjs`, `assetRetention.mjs`) and their unit tests. |
+| `lib/` | Shared helpers (`migrationPlan.mjs`, `assetRetention.mjs`, `sourceTreeHash.mjs`) and their unit tests — `npm run test:retention` runs every `*.test.mjs` here. |
 | `ci/` | CI-only entry points. |
 | `og-assets/` | Open Graph image sources. |
 | `__pycache__/` | Python bytecode. Not source. |

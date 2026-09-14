@@ -52,13 +52,6 @@ import { SAMPLE_DATA as SALES_SAMPLE } from '../src/decks/templates/sales_commer
 import { SAMPLE_DATA as PARTNERSHIP_SAMPLE } from '../src/decks/templates/partnership_bd_app.tsx';
 import { SAMPLE_DATA as MINIMAL_SAMPLE } from '../src/decks/templates/minimal_seed.tsx';
 import { SAMPLE_DATA as DEMODAY_SAMPLE } from '../src/decks/templates/demo_day_app.tsx';
-// #201 — pinned by render, not by the compiler. `minimal_seed_app` is the one
-// `_app` variant no wrapper re-exports, so this suite is the only thing that
-// looks at it; see the two tests at the bottom of this file.
-import {
-  Deck_minimal_seed_app,
-  SAMPLE_DATA as MINIMAL_APP_SAMPLE,
-} from '../src/decks/templates/minimal_seed_app.tsx';
 
 const render = (Comp, data) => renderToStaticMarkup(React.createElement(Comp, { data }));
 const countFrames = (html) => (html.match(/data-slide-frame=""/g) || []).length;
@@ -193,20 +186,29 @@ test('demo_day_app — empty render shows the sample fallback + holds 12 frames'
 // it is evidence that nothing contradicts the types. These two assert the
 // output, so reverting either fix fails here as well as in the compiler.
 
-test('minimal_seed_app — the JOURNEY timeline draws achievements, not blanks', () => {
-  // `TimelineDots` reads `date`/`label`; `achievements` carries `year`/`event`.
-  // Before the component was widened to accept both, this strip rendered its
-  // dots over three EMPTY columns — no year, no caption. The compiler is what
-  // found it; this is what proves it fixed.
-  const html = render(Deck_minimal_seed_app, MINIMAL_APP_SAMPLE);
-  for (const a of MINIMAL_APP_SAMPLE.achievements) {
+test('minimal_seed — the JOURNEY timeline draws achievements, not blanks', () => {
+  // `TimelineDots` is handed two different shapes by two callers in this file:
+  // `milestones` is `{date,label}` — the shape it was written for — and
+  // `achievements` is `{year,event}`. A component that read only the first would
+  // draw its dots over three EMPTY columns on the JOURNEY strip: no year, no
+  // caption, nothing to say so.
+  //
+  // #206 MOVED THIS TEST HERE, AND THAT IS THE POINT OF IT. #201 found the
+  // missing case in `minimal_seed_app.tsx` and pinned it there — but that file
+  // was a stale fork the registry never reached, and `minimal_seed.tsx`, the one
+  // `templates/index.ts` actually ships, had already made the same fix
+  // (`minimal_seed.tsx:523` widens the prop, `:534` normalises `date || year`).
+  // So the assertion was guarding the copy nobody could see while the shipping
+  // template carried the behaviour untested. The fork is deleted; the test now
+  // reads the deck a founder opens.
+  const html = render(Deck_minimal_seed, MINIMAL_SAMPLE);
+  for (const a of MINIMAL_SAMPLE.achievements) {
     assert.ok(html.includes(a.year.toUpperCase()), `achievement year "${a.year}" is missing from the render`);
     assert.ok(html.includes(a.event), `achievement caption "${a.event}" is missing from the render`);
   }
-  // And the other caller must keep working — `milestones` is the {date,label}
-  // shape the component was originally written for, and widening a prop type is
-  // exactly the change that can silently drop the case it already handled.
-  for (const m of MINIMAL_APP_SAMPLE.milestones) {
+  // And the other caller must keep working — widening a prop type is exactly the
+  // change that can silently drop the case it already handled.
+  for (const m of MINIMAL_SAMPLE.milestones) {
     assert.ok(html.includes(m.date.toUpperCase()), `milestone date "${m.date}" is missing from the render`);
     assert.ok(html.includes(m.label), `milestone label "${m.label}" is missing from the render`);
   }

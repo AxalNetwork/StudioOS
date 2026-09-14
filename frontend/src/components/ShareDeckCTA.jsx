@@ -26,10 +26,11 @@ export default function ShareDeckCTA({
   slides, embedded = false,
 }) {
   const [open, setOpen] = useState(false);
-  // No flow means no card. Absent, undecided (`'narrative'`) and unrecognised
-  // all land here, because the honest response to all three is the same: say
-  // nothing rather than promise something this deck's post-NDA step cannot
-  // deliver.
+  // No flow means no card. Absent and unrecognised both land here, because the
+  // honest response to either is the same: say nothing rather than promise
+  // something this deck's post-NDA step cannot deliver. (A third case,
+  // `'narrative'`, was undecided rather than unknown until #207 retired it from
+  // every source — see `lib/shareDeckAudience.js`.)
   if (!shareDeckFlow(category)) return null;
 
   const isCommercial = asksForFeedback(category);

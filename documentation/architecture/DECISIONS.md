@@ -7110,3 +7110,270 @@ newest-first, dropping the project scope, comparing the stamp as a string,
 falling back to today's verdict when nothing is old enough, counting a first
 observation as a move, putting either chip back to `unbuilt`, and dropping
 `verdict_history_since` from the board.
+
+---
+
+## D101 — a fork the picker never reached, and the test that was guarding the copy nobody could see
+
+**Date:** 2026-09-14 · **Task:** #206 · **Migration:** none
+
+`frontend/src/decks/templates/minimal_seed_app.tsx` is **deleted**. It was 1,643
+lines and 60 KB, and `templates/index.ts` has never been able to reach it.
+
+### The premise on the task had expired, and the expiry is the interesting part
+
+The task read "a deck variant nothing imports — adopt it or delete it", and D97's
+sibling note at `DECISIONS.md:6655` says the same. That was true when #201 was
+written and **stopped being true the same day**: `c9a134dc1` (#570) added
+`frontend/test/deck_templates_missing_data.test.mjs`, which imports the file at
+module scope. Deleting it without touching that import takes all 26 tests in the
+suite down before the first one runs, and with them `test:frontend`,
+`test:decks`, `test:drift` and CI.
+
+So the file was not unreferenced. It was referenced by **exactly one thing, and
+that thing existed only because nothing else referenced it** — the suite's own
+comment said so: *"the one `_app` variant no wrapper re-exports, so this suite is
+the only thing that looks at it."*
+
+### The test was pinning a real behaviour on the wrong file
+
+`minimal_seed_app.tsx`'s `TimelineDots` took two shapes from two callers —
+`milestones` is `{date,label}`, `achievements` is `{year,event}` — and admitted
+only the first, so the JOURNEY strip drew its dots over three empty columns.
+#201 found it with the compiler and pinned the fix with a render assertion.
+
+But `minimal_seed.tsx` — the template `templates/index.ts:75` actually ships —
+**already had that fix**, and the deleted file's own docblock said so: *"The fix
+is the one `minimal_seed.tsx` and `kawasaki_10_20_30.tsx` already made."* The
+live file widens the prop at `:523` and normalises `m.date || m.year` at `:534`.
+
+So the assertion was guarding the copy nobody could open, while the deck a
+founder actually opens carried the same behaviour with nothing watching it. The
+test is **moved, not deleted** — it now renders `Deck_minimal_seed` against
+`minimal_seed.tsx`'s own `SAMPLE_DATA`, and both mutations (dropping `|| m.year`,
+dropping `|| m.event`) fail it. The suite stays at 26 tests and covers more than
+it did.
+
+### Two arguments for adopting it instead, and why neither survived contact
+
+**"It is the only Minimal Seed with a live single-screen presenter."** It is not.
+`minimal_seed.tsx:1454` exports the same `MinimalSeedDeckApp` — Framer Motion
+shell, prev/next, `AnimatePresence`, `useReducedMotion`, keyboard nav — and says
+so in its own header at `:11-13`. This claim was in the plan for this task and
+was simply wrong; the file was read before the delete, not after.
+
+**"Someone shipped it on purpose."** They did, and then un-shipped it on purpose.
+`ab9e3b81c` (2026-05-23) removed it from the registry hours after `6898a2449`
+added it, on explicit user feedback — *"Minimal Seed must stay at slot 4 … not
+appear as separate `_app` entries"* — and in that same commit the sibling
+`series_a_growth_app.tsx` was rescued by rewriting `series_a_growth.tsx` into a
+one-line re-export. `minimal_seed_app.tsx` got no such rescue because
+`minimal_seed.tsx` was already a complete implementation. Every touch since is a
+sweep: a rebrand, a scanner pass, a security pass, a delivery audit, and #201.
+
+### What it would have cost to keep
+
+The two files are **83% byte-identical**, and the live one is a commit ahead:
+`d56f61491` gave every template brand-kit theming, so `minimal_seed.tsx:17`
+imports `BrandProvider` and `:1620-1626` wraps the deck in it, while the fork
+still hardcoded `const ACCENT = '#5E6AD2'` at `:70`. Adopting meant shipping a
+brand-theming regression or hand-merging 277 lines into a duplicate that should
+not exist. A stale fork is not free storage — it is a second place for the next
+fix to be applied to, and #201 applied one there.
+
+### Left in place deliberately
+
+The three `attached_assets/Pasted-Here-s-the-complete-Minimal-Seed-deck-…txt`
+transcripts this file was pasted from are **kept**. They are an archive of where
+the code came from, which is what that folder is for, and deleting the source
+makes that provenance the only remaining trace rather than a redundant one.
+
+One citation was re-pointed rather than left to rot: `series_a_growth_app.tsx`
+explained a TypeScript inference asymmetry by contrast with this file's
+array-literal fallback. `minimal_seed.tsx:992` has the identical pattern
+(`partner_logos`, same optional `initials`), so the comment now cites that.
+
+**2 mutations applied, 2 caught.** Dropping `|| m.year` and dropping `|| m.event`
+from the live `TimelineDots` each fail the moved test — which is the whole point
+of moving it, since neither would have failed anything before.
+
+---
+
+## D102 — a deck's category says who it is for, so `narrative` was never one
+
+**Date:** 2026-09-14 · **Task:** #207 · **Migration:** none
+
+D97 found that the repo did not agree with itself about what a narrative deck
+is, declined to guess, and said so: *"Raised separately; not decided here."*
+This is that decision.
+
+### What the disagreement actually was
+
+The same thirteen decks are described in three places, each with its own
+`id → category` table: the worker's `services/decks/methods.ts` (production,
+served by `GET /api/decks/methods`), the SPA's `decks/templates/index.ts`, and
+the FastAPI dev mirror `_DECK_METHODS_DEV` in `backend/app/api/routes/decks.py`.
+Eleven decks agreed. Two did not:
+
+| deck | worker | registry |
+| --- | --- | --- |
+| `sequoia_classic` | `narrative` | `fundraising` |
+| `narrative_brand` | `narrative` | `commercial` |
+
+### `narrative` is a STYLE in a vocabulary of AUDIENCES
+
+That is the whole finding, and `lib/shareDeckAudience.js` is the proof: every
+entry in it answers *who is looking and what do they want next* — `commercial`
+asks for feedback, `fundraising` and `event` open the deal pack. A writing style
+has no answer to that question, which is exactly why the value could not be
+mapped and why D97 was right to refuse. The field's own declaration said
+"Suggested category badge in the picker", but the picker was never its only
+reader.
+
+So `narrative` is retired at its source rather than taught to more code. The
+registry's values were correct all along: Sequoia Classic is the template
+founders raise money with, and a brand deck goes to customers and partners.
+
+### It was a live defect, not a tidiness problem
+
+`PitchDeckPage.jsx:1570` merges the two sources as
+`m.category || tpl.category || 'general'` — **the worker wins** — and the filter
+row at `:1604` is the hard-coded list `all | fundraising | commercial | event`.
+So both decks displayed "NARRATIVE" on their picker cards and fell out of every
+chip but "All". A founder filtering by Fundraising could not find the Sequoia
+template. It read as two missing templates rather than as a filter row one entry
+short.
+
+### Deciding it upstream is what left the NDA path untouched
+
+The share CTA reads the registry (`PitchDeckPrintPage.jsx:714`) and the share
+endpoint (`routes/decks.ts:893-900`) ships `method_id` and deliberately no
+category, so **no share link's promise changes**. The alternatives — the
+registry adopting `narrative`, or collapsing to one table and piping the
+worker's value into the share payload — would both have forced
+`shareDeckAudience.js` to answer D97's question on the path where answering it
+wrong *was* #205. That asymmetry, not a preference between two spellings, is
+what picked this direction.
+
+`ShareDeckCTA`'s `return null` for an unrecognised category **stays**. It is not
+vestigial now that the undecided case is gone: it is what stops the next new
+category from silently inheriting the deal pack, which is how a Demo Day deck
+came to offer documents in the first place.
+
+### The deliverable is the guard, not the two values
+
+`frontend/test/deck_category_sources_agree.test.mjs` parses all three tables out
+of source — TypeScript, TSX and Python — and holds them to one answer. It exists
+because **nothing was watching**: `scripts/check-deck-templates.mjs` guards the
+registry but its `REQUIRED_FIELDS` deliberately omits `category`,
+`decks.autofill.test.ts` reads `methods.ts` for slide counts only, and
+`_DECK_METHODS_DEV` was covered by nothing at all. Three tables were free to
+drift independently and two of them did, visibly, for months, without failing
+anything. Fixing the two values would have left that freedom in place.
+
+Four things it asserts, and each caught its own mutation:
+
+- every source parses to **thirteen** decks — a regex that matches nothing
+  agrees with everything, so the evidence is checked before the verdict;
+- all three tables give every deck the same category;
+- every category any of them emits is one `shareDeckFlow` can route — **three
+  tables agreeing on an unroutable value still fails**, because agreement is not
+  correctness;
+- `narrative` may not come back, in any table or in the worker's union type.
+
+A fifth assertion guards the same defect from the other side: the picker must
+offer a chip for every category a deck can hold. Agreeing tables would not have
+saved a new category from being reachable only under "All".
+
+`share_deck_cta_audience.test.mjs`'s `WORKER_UNION` was a hand-written list and
+is now **parsed from `methods.ts`** — it named `narrative` for exactly as long as
+the worker did, so the loop over it could only ever check what someone had
+remembered to type. A fifth category added to the worker without a flow now
+fails on the spot.
+
+**7 mutations applied, 7 caught.** Flipping `sequoia_classic` in each of the
+three tables in turn; flipping all three to `narrative` together (agreement
+holds, routability and retirement both fail); removing a deck from the dev
+mirror only; re-admitting `narrative` to the worker's union; and dropping the
+`event` chip from the picker row.
+
+---
+
+## D103 — `docs/` records the source it was built from, because "which commit is newer" was never the question
+
+**Date:** 2026-09-14 · **Task:** #207 · **Migration:** none
+
+`scripts/build-frontend.mjs` now writes `docs/.build-source`: a SHA-256 over the
+sorted (path, content) pairs of `frontend/src`, stamped last so it only ever
+describes a build that finished. `scripts/check-docs-fresh.mjs` reads it and
+asks the real question — *is the committed `docs/` the build of this source?* —
+falling back to the old commit-timestamp comparison only when the stamp is
+absent.
+
+### The gate had a state it could not leave
+
+`check-docs-fresh --strict` compared the newest commit touching `frontend/src`
+against the newest touching `docs/`. #207's own PR broke that, and the way it
+broke is the interesting part: every source change in it was a **comment or a
+type**. The minifier strips comments and `tsc` erases types, so a full rebuild
+emitted a **byte-identical** bundle — verified, not assumed: `npm run build` at
+that head left `git status -- docs` completely empty.
+
+So there was nothing to `git add`, and the gate's own printed fix —
+`npm run build && git add docs && git commit` — **cannot be carried out**, because
+`git commit` on an empty change refuses. The PR was red with no way to go green
+that did not involve either fabricating output churn or weakening the check.
+
+### The proxy was wrong in the other direction too
+
+A timestamp says *someone committed `docs/` after `frontend/src`*, which is
+evidence that they probably rebuilt, not that they did. Commit `docs/` without
+rebuilding and the gate reads fresh **forever** — a stale-bytes failure it was
+written to catch and structurally could not see. The stamp catches it, so this
+is a strengthening, not a workaround for one PR.
+
+It also answers in a tarball, where the proxy could only `skip()` — and under
+`--strict` a skip is a failure.
+
+### Not a key in the retention ledger, which is the obvious wrong home
+
+`docs/.asset-retention.json` is already rewritten by every build, so it looks
+like the place for this. It is **gitignored on purpose** (45 KB that churns
+wholesale — `.gitignore` says so and explains the trade), so CI never sees it
+and a stamp inside it would answer nobody. Caught by checking `git check-ignore`
+before pushing, not after. `.build-source` is one line and moves only when the
+source does.
+
+### Two tests that could not fail, and why that is the lesson
+
+`sourceTreeHash`'s guarantees were mutation-checked, and **two mutations
+escaped** — both because the test was wrong, not the code.
+
+- **Dropping the path from the digest survived a rename test.** Renaming `a.js`
+  to `renamed.js` in a tree containing `b.js` moves the file past `b.js` in sort
+  order, so the CONTENT sequence changes from `[1,2]` to `[2,1]` and the hash
+  differs whether or not the path is hashed. It was testing ordering while
+  claiming to test paths. The fixture is now `a.js` → `b.js` beside `z.js`,
+  which holds the sorted content sequence fixed, plus a sibling test that moves
+  a file between directories.
+- **Deleting `.sort()` survived an order test, and a second one written to
+  replace it.** ext4 enumerates a directory by filename hash rather than
+  creation order, so building the same tree twice in different orders returns
+  the same sequence either way — and asserting `sourceFiles(dir)` comes back
+  sorted fails for the same reason, since the raw walk is already sorted here.
+  The sort is real defence on filesystems that return creation order, and on
+  this one it is unobservable. `sourceFiles` and `sourceTreeHash` now take an
+  injectable `readdir`; the test hands them one that reverses, which is the only
+  way the assertion can fail.
+
+The second is the durable lesson: **an assertion that cannot fail on the
+machines that run it is not a guard**, however reasonable it reads. Two
+successive attempts at it looked correct and proved nothing.
+
+**9 mutations applied, 9 caught** — two only after the test was rewritten.
+On the helper: drop the path, drop the sort, skip empty files, swallow a missing
+directory. On the gate: edit `frontend/src` without rebuilding (strict fails,
+local still warns), and remove the stamp (falls back to timestamps as designed).
+`npm run test:retention` now globs `scripts/lib/*.test.mjs` rather than naming
+one file, so the suite went 7 → 15 tests and a future helper's tests run without
+a package.json edit.
