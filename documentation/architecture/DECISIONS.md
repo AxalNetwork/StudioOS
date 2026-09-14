@@ -6490,3 +6490,105 @@ Across #176, #177 and #179, **ten refusals turned out to be false** and every on
 was a belief about the source rather than a reading of it. None needed a new store.
 The guards that count refusals cannot see this class, which is why each bucket now
 has a contract test tying its claims to the thing that makes them true or false.
+
+---
+
+## D95 — schema readiness is a property of the database, not of the module
+
+**Date:** 2026-09-14 · **Task:** #204 · **Migration:** none
+
+### The bug, stated precisely
+
+115 lazy schema bootstraps remembered "already done" in a module-level
+`let _ready = false`. A module is instantiated **once per isolate**; the flag
+therefore means *some database this isolate has served is bootstrapped*, while
+every `if (_ready) return` reads it as *this database is bootstrapped*. When one
+isolate serves two bindings, the second is told the work is done and its DDL never
+runs — and what follows is not an exception. It is a `SELECT` against a table that
+does not exist, or a read that succeeds against an older shape.
+
+This is #203 with the scope widened: that task found the bug once, in a live
+break, and settled on a `WeakMap` keyed on `env.DB`. 16 files adopted it. The
+other 115 were never swept, and nothing stopped a new one being written.
+
+### Severity, stated honestly
+
+**This reliably breaks tests and does not reliably break production.** One
+production isolate serves one binding, so the flag is usually right by accident.
+The realistic failure paths are a test running two fixtures through one module
+instance, a preview Worker beside production, and a scheduled handler against a
+second database. Filing it at that severity is the point: a latent hazard is
+worth a guard, not an incident report, and overstating it would have bought a
+rushed fix instead of a swept one.
+
+### The conversion
+
+Every flag becomes `const READY = new WeakMap<object, boolean>()`, read and
+written through `bindingKey(env)` — a new one-line export in
+`util/schemaBootstrap.ts`, which already owned per-binding schema state. The cast
+`env.DB as unknown as object` now exists in exactly **one** place, because a cache
+keyed on the wrong thing does not throw; it simply never hits, or hits for a
+stranger.
+
+**The identifier was renamed on purpose.** `_ready` → `READY` means a half-converted
+file fails to compile, so `tsc --noEmit` — not a reviewer's eye — is what proves
+every read and write moved. A same-name conversion would have left
+`if (READY)` reading a WeakMap as always-truthy: green build, dead cache.
+
+**Three in-flight promise latches moved with the booleans** and are the more
+dangerous half. `ensureInvestorSchema`, `ensureAdvisorSchema` and
+`ensureExploringSchema` each coalesced concurrent callers on a module-level
+`Promise<void> | null`. Shared across bindings that hands database B the promise
+of a users-table CHECK rebuild that ran against database A — B is told the rebuild
+happened when nothing touched it. They are `WeakMap<object, Promise<void>>` now,
+so two bindings get one rebuild **each** rather than one between them.
+
+### One file is exempt, and says so
+
+`services/aiRouter.ts` keeps its own inline cast and imports nothing. Its test
+loads the file by reading the bytes, stripping the single `import type` line and
+evaluating the rest inside `new Function`; a value import would survive that strip
+and throw `Cannot use import statement outside a module`. Having no value import
+is a property that test depends on, so the file carries the cast and a comment
+saying why. A documented exception beats a helper nobody may use.
+
+### The guard found a real bug on its first run
+
+`scripts/check-schema-readiness.mjs` bans the boolean and the promise latch, and
+additionally fails any `WeakMap<object, …>` in a file that never names the binding.
+That third rule caught `services/projectAccess.ts`, whose comment said "keyed
+per-DB … mirrors the ensureProject*Columns pattern in routes/projects.ts" — and
+which keyed on `env`, the whole environment object, while `projects.ts` keys on
+`env.DB` seven times over. Wrong in both directions: two bindings arriving with one
+`env` share an entry describing only the first, and a fresh `env` per request never
+hits, so a ten-statement bootstrap re-ran every time. The false comment is what
+made it invisible to reading.
+
+### What the guard does not check, and why
+
+Whether the latch is set before or after the work, and whether a failure latches.
+Those differ legitimately — `ensureExploringSchema` latches only if the role-CHECK
+rebuild succeeded, `ensureXSchema` latches inside its `try` — and a check that
+forced one shape would push the next author into the wrong one. Source shape is all
+`check-schema-readiness` can see, so behaviour is pinned separately by
+`cloudflare-worker/test/schema_readiness.test.ts`: two bindings each get their DDL,
+one binding gets it once, a failed bootstrap does not latch, and `projectAccess`
+keys on the binding. Reverting `xSchema` to a boolean fails three of those five;
+reverting `projectAccess` to `env` fails exactly the one written for it.
+
+### A dead test seam is deleted rather than kept
+
+`__resetWorkflowSchemaCache()` existed for one stated reason — "the module-level
+cache would otherwise leak across cases" — which is no longer true, and it had no
+caller anywhere. `aiRouter`'s `__resetForTest()` has twenty, so it stays, now
+reassigning the map and with a docblock saying it is belt-and-braces rather than
+load-bearing. A seam whose reason has evaporated is a false claim the next reader
+will trust.
+
+### Two existing guard tests were updated, not loosened
+
+`apex_cutover_bootstrap.test.mjs` pinned the single-flight property by the old
+identifier names. It now pins the same property on the new latches **and** asserts
+each is a `WeakMap` — an assertion that would have failed before this change. Its
+production-short-circuit test likewise requires the `.set(bindingKey(env), true)`
+form, so a file that drops back to a boolean fails there as well as in the guard.

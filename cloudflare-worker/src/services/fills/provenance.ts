@@ -31,6 +31,7 @@
  */
 import type { Env } from '../../types';
 import type { Citation, FillClass, FillTarget } from './types';
+import { bindingKey } from '../../util/schemaBootstrap';
 
 export interface RecordFillInput {
   target: FillTarget;
@@ -55,9 +56,9 @@ export interface RecordFillInput {
  * copy of 246's; `fill_provenance_store.test.ts` builds its fixture from THE
  * MIGRATION, so if the two ever disagree the test fails rather than the product.
  */
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 export async function ensureFillProvenanceSchema(env: Env): Promise<void> {
-  if (_ready) return;
+  if (READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       'CREATE TABLE IF NOT EXISTS fill_provenance ('
@@ -83,7 +84,7 @@ export async function ensureFillProvenanceSchema(env: Env): Promise<void> {
     await env.DB.exec(
       'CREATE INDEX IF NOT EXISTS idx_fill_provenance_proposal ON fill_provenance (proposal_id)',
     );
-    _ready = true;
+    READY.set(bindingKey(env), true);
   } catch (e) {
     console.error('[fills] ensureFillProvenanceSchema:', (e as Error).message);
   }

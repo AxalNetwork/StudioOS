@@ -13,10 +13,11 @@
  */
 import type { Env } from '../types';
 import { encryptColumn, decryptColumn, last4 } from './columnCipher';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
-  if (migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS auth_sms (
        user_id INTEGER PRIMARY KEY,
@@ -41,7 +42,7 @@ async function ensureSchema(env: Env): Promise<void> {
       }
     }
   }
-  migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 export interface SmsRow {

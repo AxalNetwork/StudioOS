@@ -11,11 +11,12 @@
  *                          user can compare regenerations.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 export async function ensureDeckReviewSchema(env: Env): Promise<void> {
-  if (_ready) return;
+  if (READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS deck_reviews (id TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, project_id INTEGER, source TEXT NOT NULL DEFAULT 'upload', filename TEXT, mime TEXT, size INTEGER NOT NULL DEFAULT 0, r2_key TEXT, raw_retained INTEGER NOT NULL DEFAULT 0, extraction_status TEXT NOT NULL DEFAULT 'pending', chunks_json TEXT NOT NULL DEFAULT '[]', sections_json TEXT NOT NULL DEFAULT '[]', review_json TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'draft', title TEXT, edited INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))",
@@ -29,7 +30,7 @@ export async function ensureDeckReviewSchema(env: Env): Promise<void> {
     await env.DB.exec(
       "CREATE INDEX IF NOT EXISTS idx_deck_review_history_review ON deck_review_history (review_id, created_at)",
     );
-    _ready = true;
+    READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[deckReviewSchema] ensure failed:', (e as Error).message);
   }

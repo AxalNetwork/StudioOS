@@ -37,6 +37,7 @@ import { esignEnvelopeScope } from '../services/tenancyScope';
 import { sendAgreementAssignedEmail } from '../services/email';
 import { renderAgreementPdf, sha256Hex } from '../services/pdf';
 import { PDFDocument } from 'pdf-lib';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const esign = new Hono<{ Bindings: Env }>();
 
@@ -47,9 +48,9 @@ const MAX_SIGNATURE_BYTES = 256 * 1024; // 256 KB
 // ---------------------------------------------------------------------------
 // Schema (defensive lazy migration — same pattern as other routes).
 // ---------------------------------------------------------------------------
-let migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
-  if (migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS esign_envelopes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -137,7 +138,7 @@ async function ensureSchema(env: Env): Promise<void> {
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); } catch {}
   }
-  migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 // ---------------------------------------------------------------------------

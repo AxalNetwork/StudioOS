@@ -8,15 +8,16 @@ import { Jobs, JobType } from '../models/jobs';
 import { enqueueJob } from '../services/queue';
 import { processQueueBatch } from '../services/queueWorker';
 import { getRealtimeStats } from '../services/realtime';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const infra = new Hono<{ Bindings: Env }>();
 
 // Defensive self-heal — the three tables /queue and /dlq read from were
 // created by migrations, but if any deploy lands on a D1 instance where
 // those migrations didn't run, every infra route 500s with "no such table".
-let infraMigrated = false;
+const INFRA_MIGRATED = new WeakMap<object, boolean>();
 async function ensureInfraSchema(env: Env) {
-  if (infraMigrated) return;
+  if (INFRA_MIGRATED.get(bindingKey(env))) return;
   // queue_jobs MUST match the canonical shape used by models/jobs.ts
   // (max_retries / updated_at / dead_at). A defensive CREATE TABLE IF NOT
   // EXISTS that omitted these would let the table win the race on a fresh
@@ -90,7 +91,7 @@ async function ensureInfraSchema(env: Env) {
       console.error('infra ensureSchema:', e?.message);
     }
   }
-  if (allOk) infraMigrated = true;
+  if (allOk) INFRA_MIGRATED.set(bindingKey(env), true);
 }
 
 // GET /api/infra/queue — admin queue dashboard.

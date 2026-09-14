@@ -9,6 +9,7 @@
  * avoids a circular import between routes/settings and services/notify.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
 export type Theme = 'light' | 'dark' | 'system';
 export type Density = 'comfy' | 'compact';
@@ -65,9 +66,9 @@ const DEFAULT_ROW = {
   dismissed_explainers: '[]',
 };
 
-let migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 export async function ensureUserSettings(env: Env): Promise<void> {
-  if (migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   try {
     await env.DB.prepare(
       `CREATE TABLE IF NOT EXISTS user_settings (
@@ -111,7 +112,7 @@ export async function ensureUserSettings(env: Env): Promise<void> {
         `ALTER TABLE user_settings ADD COLUMN matching_opt_in INTEGER DEFAULT 0`,
       ).run();
     } catch {}
-    migrated = true;
+    MIGRATED.set(bindingKey(env), true);
   } catch (e) {
     console.error('[user_settings] migration failed', e);
   }

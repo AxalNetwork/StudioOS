@@ -9,8 +9,9 @@
  * on the Spin-Out deck's Mentors & Network slide.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 export const NETWORK_KINDS = ['mentor', 'partner', 'advisor', 'investor'] as const;
 export type NetworkKind = typeof NETWORK_KINDS[number];
@@ -35,9 +36,9 @@ export const SKILL_CATALOG = [
 export type SkillAxis = typeof SKILL_CATALOG[number];
 
 export async function ensureNetworkProfilesSchema(env: Env): Promise<void> {
-  if (_ready) return;
+  if (READY.get(bindingKey(env))) return;
   if (env.ENVIRONMENT === 'production') {
-    _ready = true;
+    READY.set(bindingKey(env), true);
     return;
   }
   try {
@@ -65,7 +66,7 @@ export async function ensureNetworkProfilesSchema(env: Env): Promise<void> {
     // duplicate-column errors on re-run are swallowed.
     try { await env.DB.exec(`ALTER TABLE network_profiles ADD COLUMN company TEXT`); }
     catch (_e) { /* column already exists */ }
-    _ready = true;
+    READY.set(bindingKey(env), true);
   } catch (err) {
      
     console.warn('[networkProfilesSchema] ensure failed', err);

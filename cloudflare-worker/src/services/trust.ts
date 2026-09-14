@@ -27,6 +27,7 @@
  * populates `evidence_meta` and flips status -> 'satisfied'.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
 // ---------------------------------------------------------------------------
 // Obligation matrix
@@ -102,9 +103,9 @@ export function obligationsForRole(role: string): ObligationDef[] {
 // Schema bootstrap (defensive — same lazy pattern as other routes)
 // ---------------------------------------------------------------------------
 
-let trustSchemaReady = false;
+const TRUST_SCHEMA_READY = new WeakMap<object, boolean>();
 export async function ensureTrustSchema(env: Env): Promise<void> {
-  if (trustSchemaReady) return;
+  if (TRUST_SCHEMA_READY.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS legal_obligations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -167,7 +168,7 @@ export async function ensureTrustSchema(env: Env): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_renewal_notices_user ON renewal_notices(user_id, notified_at DESC)`,
   ];
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
-  trustSchemaReady = true;
+  TRUST_SCHEMA_READY.set(bindingKey(env), true);
 }
 
 // ---------------------------------------------------------------------------

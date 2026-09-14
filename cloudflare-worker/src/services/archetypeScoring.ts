@@ -23,6 +23,7 @@
  */
 import type { Env } from '../types';
 import { fitMeasuresIndex, type FitPersona } from './advisor/questionBank.ts';
+import { bindingKey } from '../util/schemaBootstrap';
 
 // ---------------------------------------------------------------------------
 // The 4 shared trait axes. Every archetype centroid is a point in this 0..5
@@ -285,11 +286,11 @@ export interface ArchetypeResult extends ArchetypeClassification {
   computed_at: string;
 }
 
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 
 /** Self-healing bootstrap — mirrors ensureAxalFitSchema. */
 export async function ensureArchetypeSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS profile_archetypes (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, persona TEXT NOT NULL, archetype_slug TEXT NOT NULL, archetype_label TEXT NOT NULL, traits_json TEXT, confidence REAL NOT NULL DEFAULT 0, distance REAL NOT NULL DEFAULT 0, narrative TEXT, computed_at TEXT NOT NULL DEFAULT (datetime('now')))",
@@ -297,7 +298,7 @@ export async function ensureArchetypeSchema(env: Env): Promise<void> {
     await env.DB.exec(
       "CREATE INDEX IF NOT EXISTS idx_profile_archetypes_latest ON profile_archetypes (user_id, persona, computed_at)",
     );
-    _schemaReady = true;
+    SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[archetypeScoring] ensure schema failed:', (e as Error).message);
   }

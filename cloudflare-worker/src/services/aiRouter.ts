@@ -581,18 +581,26 @@ async function cacheKeyFor(opts: RunOptions, model: string): Promise<string | nu
 
 // ---------------------------------------------------------------------------
 // Schema bootstrap for ai_usage_logs (mirrors migration 040). Cheap, gated
-// behind a once-per-isolate flag so dev/SQLite is self-healing.
+// per D1 BINDING so dev/SQLite is self-healing and a second database in the
+// same isolate is not told the work is already done (#204).
+//
+// THE CAST IS SPELLED OUT HERE rather than taken from `util/schemaBootstrap`'s
+// `bindingKey`, and that is deliberate: `aiRouter.test.mjs` loads this file by
+// reading its bytes, stripping the single `import type` line and evaluating the
+// rest inside `new Function`. A value import would survive that strip and throw
+// `Cannot use import statement outside a module`. This module having no value
+// import is a property that test depends on, so it keeps its own cast.
 // ---------------------------------------------------------------------------
-let _logSchemaReady = false;
+let LOG_SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensureLogSchema(env: Env): Promise<void> {
-  if (_logSchemaReady) return;
+  if (LOG_SCHEMA_READY.get(env.DB as unknown as object)) return;
   try {
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))",
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_user_created ON ai_usage_logs(user_id, created_at DESC)");
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_task_created ON ai_usage_logs(task, created_at DESC)");
-    _logSchemaReady = true;
+    LOG_SCHEMA_READY.set(env.DB as unknown as object, true);
   } catch (e) {
     console.warn('[aiRouter] log schema:', (e as Error).message);
   }
@@ -1196,10 +1204,13 @@ export async function loadAiUsageReport(env: Env, days = 7): Promise<AiUsageRepo
   };
 }
 
-// Test-only export — lets the test harness reset the once-per-isolate
-// schema flag between scenarios.
+// Test-only export — drops what every binding has bootstrapped, so a scenario
+// that reuses one D1 stub still starts from a cold schema. Keyed per binding
+// (#204) this matters less than it did: a test handing over a FRESH stub now
+// gets a cold cache with no reset at all. It stays because the suites that
+// reuse a stub across cases still need it, not because the cache leaks.
 export function __resetForTest(): void {
-  _logSchemaReady = false;
+  LOG_SCHEMA_READY = new WeakMap<object, boolean>();
 }
 
 // Spec phrased the public entry point as `run(task, payload, opts)`.

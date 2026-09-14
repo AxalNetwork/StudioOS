@@ -66,6 +66,7 @@ import { planImport } from '../services/metricsCsv';
 // no error anywhere.
 import { weekStartOf, weekWindows, type MoveRow } from '../services/okrWeeks';
 import { summarise as summariseSaasMetrics, sparkline as saasSparkline, type Snapshot as SaasSnapshot } from '../services/saasMetrics';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const progress = new Hono<{ Bindings: Env }>();
 
@@ -1464,9 +1465,9 @@ interface MvpRow {
 }
 
 // Lazy bootstrap so the route works even before migration 153 runs in prod.
-let mvpSchemaReady = false;
+const MVP_SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensureMvpSchema(env: Env): Promise<void> {
-  if (mvpSchemaReady) return;
+  if (MVP_SCHEMA_READY.get(bindingKey(env))) return;
   await env.DB.prepare(
     `CREATE TABLE IF NOT EXISTS mvp_features (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1485,7 +1486,7 @@ async function ensureMvpSchema(env: Env): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_mvp_features_project_order
        ON mvp_features (project_id, sort_order)`,
   ).run();
-  mvpSchemaReady = true;
+  MVP_SCHEMA_READY.set(bindingKey(env), true);
 }
 
 function mvpDerived(value: string): { scope_tier: string; cycle_assigned: string } {

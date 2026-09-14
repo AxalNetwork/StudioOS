@@ -22,6 +22,7 @@ import { projectInActiveCompany } from '../services/tenancyScope';
 import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import type { Env } from '../types';
 import { requireAuth, canAccessFounderResource } from '../auth';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const financials = new Hono<{ Bindings: Env }>();
 
@@ -33,7 +34,7 @@ const financials = new Hono<{ Bindings: Env }>();
 // stale-schema prod, lazily PRAGMA-check the table on first request and
 // CREATE / ADD COLUMN whatever's missing. Idempotent + single-flight.
 // ---------------------------------------------------------------------------
-let _financialsSchemaReady = false;
+const FINANCIALS_SCHEMA_READY = new WeakMap<object, boolean>();
 // Legacy `schema.sql` shape includes `name TEXT NOT NULL` and
 // `inputs_json TEXT NOT NULL DEFAULT '{}'` (Task #36 marketplace
 // placeholder). Track which legacy NOT-NULL columns exist so the PUT
@@ -41,7 +42,7 @@ let _financialsSchemaReady = false;
 let _financialsLegacyCols: Set<string> = new Set();
 function getFinancialsLegacyCols(): Set<string> { return _financialsLegacyCols; }
 async function ensureFinancialsModelSchema(env: Env): Promise<void> {
-  if (_financialsSchemaReady) return;
+  if (FINANCIALS_SCHEMA_READY.get(bindingKey(env))) return;
   try {
     const cols = await env.DB
       .prepare(`PRAGMA table_info(financial_models)`)
@@ -93,7 +94,7 @@ async function ensureFinancialsModelSchema(env: Env): Promise<void> {
     try { await env.DB.exec(
       `CREATE UNIQUE INDEX IF NOT EXISTS idx_financial_models_project_unique ON financial_models(project_id)`,
     ); } catch (e) { void e; }
-    _financialsSchemaReady = true;
+    FINANCIALS_SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.error('[financials] ensureFinancialsModelSchema:', (e as Error).message);
   }

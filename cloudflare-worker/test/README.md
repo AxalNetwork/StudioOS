@@ -19,6 +19,10 @@ fixture is the schema production has rather than a hand-copy that drifts from it
 three tests had each grown their own copy of that reader, and one of the copies
 had already been caught reading a column name production does not use.
 `baseline_reader.test.mjs` holds it to what the regex it replaced returned.
+`schema_readiness.test.ts` runs the real bootstraps against two recording D1 stubs
+and asserts each database gets its own DDL — the half `scripts/check-schema-readiness.mjs`
+cannot see, since reading the source tells you a `WeakMap` is there but not that it
+is consulted with the binding as its key.
 `_codeOnly.mjs` gives a source-scanning test the code without the prose, plus
 `callArgs` for reading one call's arguments past the braces a regex chokes on —
 an assertion that bans a shape fails on the comment explaining why that shape is

@@ -22,6 +22,7 @@
 import type { Env } from '../types';
 import { stripeCall } from '../routes/billing';
 import { writeFeatureUnlock } from './featureUnlocks';
+import { bindingKey } from '../util/schemaBootstrap';
 
 // Stripe rejects PaymentIntents below the per-currency minimum (~50 cents for
 // USD). A discount that drops a one-time charge below this is treated as "free"
@@ -64,11 +65,11 @@ export interface PromoView {
   created_at: string;
 }
 
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 
 /** Idempotent schema bootstrap — mirrors migration 099_promo_codes.sql. */
 export async function ensurePromoSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       'CREATE TABLE IF NOT EXISTS promo_codes (' +
@@ -109,7 +110,7 @@ export async function ensurePromoSchema(env: Env): Promise<void> {
     await env.DB.exec(
       'CREATE INDEX IF NOT EXISTS idx_promo_redemptions_promo ON promo_redemptions(promo_id)',
     );
-    _schemaReady = true;
+    SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[promos] ensurePromoSchema failed:', (e as Error).message);
   }

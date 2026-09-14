@@ -28,12 +28,13 @@ import { getDeckBrand, setStudioWatermark, ensureMethodAllowed, fetchLandingPage
 import { type RenderableDeck } from '../services/decks/render';
 import { renderDeckPPTX, renderDeckPPTXWithImages } from '../services/decks/pptx';
 import { stripTrailingSlashes } from '../util/url';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const decks = new Hono<{ Bindings: Env }>();
 
-let _migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
-  if (_migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS pitch_decks (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -101,7 +102,7 @@ async function ensureSchema(env: Env): Promise<void> {
       try { await env.DB.prepare(`ALTER TABLE pitch_deck_share_tokens ADD COLUMN revoked_at TEXT`).run(); } catch {}
     }
   } catch {}
-  _migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 // Task #14 — lazy bootstrap of the projects columns added by migration

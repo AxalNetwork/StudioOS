@@ -27,12 +27,13 @@ import { activeCompanyFor } from '../middleware/activeCompany';
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { run as aiRouterRun } from '../services/aiRouter';
 import { ingestContact } from './contacts';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const brand = new Hono<{ Bindings: Env }>();
 
-let _migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
-  if (_migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const stmts = [
     // Multi-page sites: project_id is deliberately NOT unique (one project can
     // own many pages); (project_id, page_slug) uniqueness is enforced by
@@ -96,7 +97,7 @@ async function ensureSchema(env: Env): Promise<void> {
   }
   // Brand-kit columns on pre-existing tables (CREATE above only covers fresh DBs).
   await ensureLandingPageBrandKitColumns(env);
-  _migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 function slugify(name: string): string {

@@ -13,13 +13,14 @@
 // concurrent submit + nightly audit + retried jobs.
 import type { Env } from '../types';
 import { sendFlaggedScoreEmail, sendFlaggedScoreDigestEmail } from './email';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const NOTIFY_KIND_FLAGGED = 'flagged_score_alert';
 const NOTIFY_KIND_DIGEST = 'flagged_score_digest';
 
-let notifMigrated = false;
+const NOTIF_MIGRATED = new WeakMap<object, boolean>();
 async function ensureNotificationsSchema(env: Env): Promise<boolean> {
-  if (notifMigrated) return true;
+  if (NOTIF_MIGRATED.get(bindingKey(env))) return true;
   // Each step must succeed; if any throws, leave the flag false so the
   // next call retries. Notify callers fail closed (return false from
   // insert helper) when the schema isn't ready.
@@ -48,7 +49,7 @@ async function ensureNotificationsSchema(env: Env): Promise<boolean> {
       `CREATE INDEX IF NOT EXISTS idx_notifications_user_unread
          ON notifications(user_id, read_at, created_at)`,
     ).run();
-    notifMigrated = true;
+    NOTIF_MIGRATED.set(bindingKey(env), true);
     return true;
   } catch (e) {
     console.error('[notifications] schema migration failed', e);

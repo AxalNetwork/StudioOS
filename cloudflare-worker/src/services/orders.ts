@@ -24,6 +24,7 @@ import {
   type PromoRow,
 } from './promos';
 import { sendBrandedInvoiceEmail } from './email';
+import { bindingKey } from '../util/schemaBootstrap';
 
 // ---------------------------------------------------------------------------
 // Money helpers.
@@ -94,9 +95,9 @@ interface OrderRow {
 // ---------------------------------------------------------------------------
 // Schema bootstrap (idempotent; mirrors sql/migrations/152_cart_orders.sql).
 // ---------------------------------------------------------------------------
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 export async function ensureOrdersSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS orders (
       id                TEXT PRIMARY KEY,
@@ -140,7 +141,7 @@ export async function ensureOrdersSchema(env: Env): Promise<void> {
       console.warn('[orders] ensureOrdersSchema stmt failed:', (e as Error).message);
     }
   }
-  _schemaReady = true;
+  SCHEMA_READY.set(bindingKey(env), true);
 }
 
 // ---------------------------------------------------------------------------
