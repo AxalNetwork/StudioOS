@@ -20,19 +20,27 @@
  * `'event'` is DEAL_PACK by decision, not by fall-through: a Demo Day viewer is
  * there to evaluate the company, which is what the deal pack is for.
  *
- * `'narrative'` RENDERS NOTHING, and that is the interesting one. The repo does
- * not agree with itself about what a narrative deck is. The worker files two
- * methods under it (`services/decks/methods.ts`: `sequoia_classic` and
- * `narrative_brand`) while the frontend registry calls the first `fundraising`
- * and the second `commercial` — and the two sources reach different screens:
- * `PitchDeckPage.jsx` prefers the methods value, `PitchDeckPrintPage.jsx` (which
- * renders this CTA) reads the registry's. A CTA that picked one would be
- * guessing which half of that disagreement is right, and guessing wrong here is
- * precisely the bug above. Until the repo settles it, no promise is made.
+ * THERE IS NO `'narrative'` ANY MORE, AND NOT MAPPING IT IS WHAT BOUGHT THE
+ * TIME TO FIND OUT WHY. This file used to carry a fourth case: the worker filed
+ * `sequoia_classic` and `narrative_brand` under `'narrative'` while the registry
+ * called them `fundraising` and `commercial`, the two sources reached different
+ * screens, and a CTA that picked a side would have been guessing which half of
+ * the repo was right — the same guess as the bug above. So it promised nothing
+ * and D97 raised the question instead of answering it.
  *
- * An unrecognised value renders nothing for the same reason. Defaulting to the
- * deal pack is how a Demo Day deck ended up offering documents in the first
- * place.
+ * #207 answered it at the source (D102). `'narrative'` named a deck's STYLE in
+ * a vocabulary of AUDIENCES — this map is the proof: every entry below answers
+ * "who is looking, and what do they want next", which is not a question a
+ * writing style has an answer to. The value is retired from
+ * `services/decks/methods.ts`, its Python dev mirror and the registry's own
+ * union; `frontend/test/deck_category_sources_agree.test.mjs` keeps all three
+ * saying one thing. Nothing here changed, which was the point: settling it
+ * upstream left every live share link's promise exactly as it was.
+ *
+ * An unrecognised value still renders nothing, and that guard is not
+ * vestigial — it is what stops the next new category from silently inheriting
+ * the deal pack. Defaulting is how a Demo Day deck came to offer documents in
+ * the first place.
  */
 
 /** The viewer is asked for structured feedback. */
@@ -49,9 +57,11 @@ const BY_CATEGORY = new Map([
 /**
  * The flow this category's share link offers, or `null` for no CTA.
  *
- * Null covers three different situations on purpose — absent, undecided
- * (`'narrative'`), and unrecognised — because the caller's response to all
- * three is the same: show nothing rather than promise something.
+ * Null covers two different situations on purpose — absent, and unrecognised —
+ * because the caller's response to both is the same: show nothing rather than
+ * promise something. (It covered a third until #207: `'narrative'`, which was
+ * undecided rather than unknown. Deciding it removed the case; it did not
+ * remove the rule.)
  */
 export function shareDeckFlow(category) {
   if (!category) return null;

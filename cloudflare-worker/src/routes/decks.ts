@@ -1331,7 +1331,7 @@ async function sha256Hex(s: string): Promise<string> {
 // Task #16 (DE) — Pitch Deck Builder rewrite endpoints.
 // =====================================================================
 
-/** GET /api/decks/methods — list all 12 templates with lock status. */
+/** GET /api/decks/methods — list all 13 templates with lock status. */
 decks.get('/methods', async (c) => {
   const user = await requireAuth(c);
   const tier = String((user as any).subscription_tier || 'free').toLowerCase();

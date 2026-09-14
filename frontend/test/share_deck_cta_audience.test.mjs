@@ -34,18 +34,43 @@ import { codeOnly } from './_codeOnly.mjs';
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const render = (props) => renderToStaticMarkup(React.createElement(ShareDeckCTA, props));
 
-/** Every value the worker's own union admits, plus the two non-values. */
-const WORKER_UNION = ['fundraising', 'commercial', 'event', 'narrative'];
+/**
+ * Every value the worker's own union admits — READ OUT OF THE SOURCE, not
+ * copied.
+ *
+ * It was a hand-written list until #207, and that is precisely how it went
+ * stale: it named `'narrative'` for as long as the worker did, so the loop
+ * below could only ever check what someone remembered to type here. Parsed, the
+ * constant cannot lag the union — add a fifth category to `methods.ts` without
+ * mapping it and the next test fails on the spot.
+ */
+const WORKER_UNION = (() => {
+  const src = raw('cloudflare-worker/src/services/decks/methods.ts');
+  const decl = /category:\s*((?:'[a-z_]+'\s*\|\s*)*'[a-z_]+')\s*;/.exec(src);
+  assert.ok(decl, "could not find the `category` union in methods.ts — has the field been renamed?");
+  return [...decl[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+})();
 
-test('the flow is decided per category, and undecided is not a synonym for deal pack', () => {
+test('the union the worker admits is exactly the set this map can route', () => {
+  // THE HOLE #207 CAME THROUGH. A category the worker emits but this map does
+  // not know renders NO CTA — correct as a failure mode, silent as a release.
+  // `'narrative'` sat in that gap for as long as it existed.
+  assert.deepEqual([...WORKER_UNION].sort(), ['commercial', 'event', 'fundraising']);
+  for (const category of WORKER_UNION) {
+    assert.ok(shareDeckFlow(category),
+      `the worker can emit "${category}" and no share link knows what to promise for it`);
+  }
+});
+
+test('the flow is decided per category, and unknown is not a synonym for deal pack', () => {
   assert.equal(shareDeckFlow('commercial'), FEEDBACK);
   assert.equal(shareDeckFlow('fundraising'), DEAL_PACK);
   assert.equal(shareDeckFlow('event'), DEAL_PACK, 'an event deck no longer falls through — it is a decision now');
 
-  // `'narrative'` is the interesting null. The repo does not agree with itself:
-  // the worker files `sequoia_classic` and `narrative_brand` under it, while the
-  // frontend registry calls the first `fundraising` and the second `commercial`.
-  // Picking one would be guessing which half is right, which is the bug.
+  // `'narrative'` is a RETIRED value, and it must keep refusing. #207 removed it
+  // from all three tables (D102) after D97 left it deliberately unmapped; a
+  // stored deck, a cached response or an old link can still carry the string,
+  // and the right answer for it is the same as it always was — promise nothing.
   assert.equal(shareDeckFlow('narrative'), null);
   assert.equal(shareDeckFlow('made_up'), null);
   assert.equal(shareDeckFlow(''), null);
@@ -80,7 +105,9 @@ test('each category renders the copy it can honour, and the rest render nothing'
     assert.match(html, /Basepoint/, `${category} should name the startup`);
   }
 
-  // Nothing promised where nothing can be delivered.
+  // Nothing promised where nothing can be delivered. `'narrative'` is here as a
+  // retired value rather than an undecided one since #207 — a string an old link
+  // may still carry, and still not a promise.
   for (const category of ['narrative', 'made_up', '', undefined, null]) {
     assert.equal(render({ category, projectName: 'Basepoint' }), '',
       `category ${JSON.stringify(category)} must render no CTA at all`);
@@ -93,7 +120,7 @@ test('the embedded variant follows the same rule as the standalone card', () => 
   // second place the promise is made and a second place it could drift.
   const event = render({ category: 'event', projectName: 'Basepoint', embedded: true });
   assert.match(event, /Want to review the deal\?/);
-  assert.equal(render({ category: 'narrative', projectName: 'Basepoint', embedded: true }), '');
+  assert.equal(render({ category: 'retired_or_unknown', projectName: 'Basepoint', embedded: true }), '');
 });
 
 test('neither file may compare `category` to a literal again', () => {

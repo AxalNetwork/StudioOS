@@ -7196,3 +7196,103 @@ array-literal fallback. `minimal_seed.tsx:992` has the identical pattern
 **2 mutations applied, 2 caught.** Dropping `|| m.year` and dropping `|| m.event`
 from the live `TimelineDots` each fail the moved test — which is the whole point
 of moving it, since neither would have failed anything before.
+
+---
+
+## D102 — a deck's category says who it is for, so `narrative` was never one
+
+**Date:** 2026-09-14 · **Task:** #207 · **Migration:** none
+
+D97 found that the repo did not agree with itself about what a narrative deck
+is, declined to guess, and said so: *"Raised separately; not decided here."*
+This is that decision.
+
+### What the disagreement actually was
+
+The same thirteen decks are described in three places, each with its own
+`id → category` table: the worker's `services/decks/methods.ts` (production,
+served by `GET /api/decks/methods`), the SPA's `decks/templates/index.ts`, and
+the FastAPI dev mirror `_DECK_METHODS_DEV` in `backend/app/api/routes/decks.py`.
+Eleven decks agreed. Two did not:
+
+| deck | worker | registry |
+| --- | --- | --- |
+| `sequoia_classic` | `narrative` | `fundraising` |
+| `narrative_brand` | `narrative` | `commercial` |
+
+### `narrative` is a STYLE in a vocabulary of AUDIENCES
+
+That is the whole finding, and `lib/shareDeckAudience.js` is the proof: every
+entry in it answers *who is looking and what do they want next* — `commercial`
+asks for feedback, `fundraising` and `event` open the deal pack. A writing style
+has no answer to that question, which is exactly why the value could not be
+mapped and why D97 was right to refuse. The field's own declaration said
+"Suggested category badge in the picker", but the picker was never its only
+reader.
+
+So `narrative` is retired at its source rather than taught to more code. The
+registry's values were correct all along: Sequoia Classic is the template
+founders raise money with, and a brand deck goes to customers and partners.
+
+### It was a live defect, not a tidiness problem
+
+`PitchDeckPage.jsx:1570` merges the two sources as
+`m.category || tpl.category || 'general'` — **the worker wins** — and the filter
+row at `:1604` is the hard-coded list `all | fundraising | commercial | event`.
+So both decks displayed "NARRATIVE" on their picker cards and fell out of every
+chip but "All". A founder filtering by Fundraising could not find the Sequoia
+template. It read as two missing templates rather than as a filter row one entry
+short.
+
+### Deciding it upstream is what left the NDA path untouched
+
+The share CTA reads the registry (`PitchDeckPrintPage.jsx:714`) and the share
+endpoint (`routes/decks.ts:893-900`) ships `method_id` and deliberately no
+category, so **no share link's promise changes**. The alternatives — the
+registry adopting `narrative`, or collapsing to one table and piping the
+worker's value into the share payload — would both have forced
+`shareDeckAudience.js` to answer D97's question on the path where answering it
+wrong *was* #205. That asymmetry, not a preference between two spellings, is
+what picked this direction.
+
+`ShareDeckCTA`'s `return null` for an unrecognised category **stays**. It is not
+vestigial now that the undecided case is gone: it is what stops the next new
+category from silently inheriting the deal pack, which is how a Demo Day deck
+came to offer documents in the first place.
+
+### The deliverable is the guard, not the two values
+
+`frontend/test/deck_category_sources_agree.test.mjs` parses all three tables out
+of source — TypeScript, TSX and Python — and holds them to one answer. It exists
+because **nothing was watching**: `scripts/check-deck-templates.mjs` guards the
+registry but its `REQUIRED_FIELDS` deliberately omits `category`,
+`decks.autofill.test.ts` reads `methods.ts` for slide counts only, and
+`_DECK_METHODS_DEV` was covered by nothing at all. Three tables were free to
+drift independently and two of them did, visibly, for months, without failing
+anything. Fixing the two values would have left that freedom in place.
+
+Four things it asserts, and each caught its own mutation:
+
+- every source parses to **thirteen** decks — a regex that matches nothing
+  agrees with everything, so the evidence is checked before the verdict;
+- all three tables give every deck the same category;
+- every category any of them emits is one `shareDeckFlow` can route — **three
+  tables agreeing on an unroutable value still fails**, because agreement is not
+  correctness;
+- `narrative` may not come back, in any table or in the worker's union type.
+
+A fifth assertion guards the same defect from the other side: the picker must
+offer a chip for every category a deck can hold. Agreeing tables would not have
+saved a new category from being reachable only under "All".
+
+`share_deck_cta_audience.test.mjs`'s `WORKER_UNION` was a hand-written list and
+is now **parsed from `methods.ts`** — it named `narrative` for exactly as long as
+the worker did, so the loop over it could only ever check what someone had
+remembered to type. A fifth category added to the worker without a flow now
+fails on the spot.
+
+**7 mutations applied, 7 caught.** Flipping `sequoia_classic` in each of the
+three tables in turn; flipping all three to `narrative` together (agreement
+holds, routability and retirement both fail); removing a deck from the dev
+mirror only; re-admitting `narrative` to the worker's union; and dropping the
+`event` chip from the picker row.
