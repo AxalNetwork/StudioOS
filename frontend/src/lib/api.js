@@ -1427,6 +1427,20 @@ export const api = {
   // because it is not backfilled and an older commitment would otherwise look
   // like a broken filter.
   listOkrWeeks: (projectId) => request(`/progress/roadmap/${projectId}/weeks`),
+  // #176 FB2 — swimlanes on the execution board. Migration 253 puts a `lane` on the
+  // card and the LIST of lanes in `project_lanes`, which is what turns
+  // `Configure lanes` from "there is nothing for an editor to change" into an editor.
+  //
+  // THE CARDS COME BACK WITH THE LANES, not from `pipelineDealDetail`. Reading lanes
+  // from one call and cards from another shows a card in a lane it has been moved
+  // out of; and the detail endpoint's `SELECT *` predates the column.
+  getBoardLanes: (projectId) => request(`/founder/board/${projectId}`),
+  setBoardLane: (projectId, data) => request(`/founder/board/${projectId}/lanes`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteBoardLane: (id) => request(`/founder/board/lanes/${id}`, { method: 'DELETE' }),
+  // `Bulk move`. All-or-nothing: a move that would put a lane over its WIP limit
+  // writes nothing and answers 409 with the lane and the overage, because the
+  // artboard's own note says "the limit is a configuration, not a suggestion".
+  bulkMoveBoardCards: (projectId, data) => request(`/founder/board/${projectId}/cards/bulk`, { method: 'POST', body: JSON.stringify(data) }),
   createOkr: (projectId, data) => request(`/progress/roadmap/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
   updateOkr: (id, data) => request(`/progress/roadmap/okr/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   moveOkr: (id, kanban_status, sort_order = 0) => request(`/progress/roadmap/okr/${id}/move`, { method: 'POST', body: JSON.stringify({ kanban_status, sort_order }) }),

@@ -6027,3 +6027,149 @@ absent — a plan the platform wrote.
 takes `roadmap_okrs` from `schema_baseline.sql`. A hand-copied DDL that drifts makes
 every assertion above it true of a schema production does not have — the whole of
 #203 — and it happened here within minutes of the rule being restated.
+
+---
+
+## D91 — `/build/board` gets swimlanes, and the WIP limit refuses the move
+
+**Date:** 2026-09-14 · **Task:** #176 (FB2) · **Migration:** 253
+
+Two of this zone's five chips were not in the registry **at all**. `Engineering` and
+`GTM` were one entry reading "a card carries a stage, not a lane, and no lane is
+stored", and `unbuilt` renders nothing — so the artboard's five-chip row drew three.
+`Configure lanes` and `Bulk move` were `unbuilt` too, and the first of the two named
+its own fix: "the six lanes are written into the code twice and no per-project stage
+list is stored, so there is nothing for an editor to change."
+
+### A lane is not a status, and that is the whole reason this was buildable
+
+The status is **where** a card has got to in its life (todo → doing → done); the lane
+is **whose** work it is (Engineering, GTM, Ops). The canvas's own instrument carries
+both on every row — `Card | Lane | Age | Owner` — and its note depends on the
+difference: "Engineering is one card over its WIP limit of four, which is why the
+permissions card sits in backlog rather than starting." A WIP limit counts cards in
+flight *within* a lane, which cannot be expressed at all if the lane **is** the
+status.
+
+Read as a stage list this looked impossible, because the six pipeline stages are a
+literal written twice (`FounderBuildBoard.jsx` and `pages/PipelinePage.jsx`) and are
+genuinely not a founder's to change. Read as a lane it was a table and a nullable
+column: `project_lanes` per project, `mvp_tasks.lane` per card. The stages are still
+a literal, still written twice, and this change does not touch them.
+
+### The lane is stored as a name, not a `project_lanes.id`
+
+The alternative makes a rename either break every card in the lane or need a cascade.
+The name is what the founder typed and what the board draws, so a rename is one
+`UPDATE` on the cards and one on the lane — and `PUT /:projectId/lanes` with an `id`
+does exactly that pair, which is why renaming carries the cards rather than orphaning
+them.
+
+The cost is real and is paid in the open: a card can name a lane that no longer
+exists. `DELETE /lanes/:id` **unassigns** its cards rather than deleting them, the
+read returns those names as `orphan_lanes`, and the board draws them as their own
+group. A card nobody can see is worse than a lane nobody configured.
+
+### Nothing is seeded, and unassigned is a group rather than an absence
+
+A project that has never configured lanes has none, and all its cards are
+`lane IS NULL`. The board draws them as one "Unassigned" group; it does not invent
+Engineering, GTM and Ops on the board of a solo founder building a design tool. The
+dynamic chip group therefore keeps a reason — `zoneFilterBuilder` draws nothing for a
+group with no names, and "the page forgot to pass them" and "this venture has none"
+are different problems with the same appearance.
+
+### `wip_limit` NULL is not `wip_limit` 0
+
+Zero is a **real** limit: a lane closed to new work, which is how a founder pauses a
+workstream without deleting its cards. `Number('')` is 0 and finite, so a blank
+coerced before being tested would close a lane the founder meant to leave unlimited —
+the `Number(null) === 0` trap #203 was built out of, hit again three files later.
+Emptiness is checked before `Number()` in `intOrNull`, and the dialog sends `null`
+for a blank rather than `0`.
+
+### The limit refuses, all-or-nothing, and the refusal is rendered
+
+`POST /:projectId/cards/bulk` counts what the destination lane would hold and answers
+**409** with `{ lane, wip_limit, would_be, moved: 0 }` — nothing moves. A partial move
+that reported an error would leave the founder to work out which cards landed, which
+is worse than a refusal.
+
+`BulkMoveDialog` reads those **fields**, not the message: "Engineering would hold 6 in
+flight, over its limit of 4. Nothing was moved." A generic "something went wrong"
+there would hide the one number the founder needs to decide between raising the limit
+and moving fewer cards.
+
+### What counts as in flight, and why an unknown status counts
+
+`NOT_IN_FLIGHT` is `todo`, `backlog`, `done`, `cancelled`, `archived`. Backlog is
+excluded because the canvas's own note has a card sitting there *because* the lane is
+full — counting it would make the limit self-fulfilling.
+
+`mvp_tasks.status` is free text from the client, so the list cannot be exhaustive, and
+the conservative reading of a status nobody recognises is "somebody is doing this".
+An unknown status therefore **counts**: the limit holds a little too tightly rather
+than not at all. A WIP limit that can be walked past by inventing a status is not a
+limit.
+
+### `Mine` was a false refusal, not a gap — and the Owner cell was worse
+
+This is a #193-class finding rather than anything migration 253 built.
+`mvp_tasks.assigned_to` is an **INTEGER user id**, so "Mine" was always answerable
+from data the board already had; the chip was refused on a belief about the column.
+The page now filters on the reader's own id from `useAuth()`.
+
+The related defect was upstream of the chip: the table's Owner cell was printing the
+raw integer. A founder read "Owner: 41" on their own board. It now names the reader
+where the id is theirs and says "assigned" or "unassigned" otherwise, which is all
+this route can honestly say — `mvp_tasks` has no join to a user's name, and inventing
+one here would be a second table's work.
+
+### `Automations` stays a stated gap, deliberately
+
+The artboard reports "Automations · 3 · 1 paused" and gives nothing else: no trigger
+vocabulary, no action vocabulary, no example rule. A rules engine built from a count
+would be inventing the feature rather than integrating it — the one thing #176 asks
+not to do. The entry keeps its engineering reason and gains a founder-facing `hover:`
+under the tooltip cap, so the disabled control explains itself on the board instead of
+only in the source.
+
+### The one interpolated SQL statement in this route, and why it is safe
+
+A bulk update over N selected cards needs N placeholders:
+`const placeholders = ids.map(() => '?').join(',')`. The interpolated text is derived
+from the *length* of an array of numbers that have each been through `Number.isFinite`
+— no caller-supplied character reaches it — and every value is still bound. It is
+recorded in `scripts/sql-prepare-baseline.json`, the argument is in the docblock beside
+it, and a test asserts the statement's shape so a future edit that interpolated a
+value instead would fail rather than pass quietly.
+
+### Two things the tests found that review had not
+
+A typo'd bulk status fell through to "Nothing to change": an unrecognised status
+resolves to null, the body then looked empty, and the route answered 200 having done
+nothing. The unknown-status 400 now comes first, so a client sending `in-progress` for
+`in_progress` is told.
+
+And a lane with no limit was accepted as a destination without counting anything,
+which is correct — but nothing asserted it, so a mutation that made an unlimited lane
+*refuse* survived. The gap is closed with an assertion rather than left as a passing
+sweep: 22 mutations applied, 22 caught.
+
+### The guard that a reformat silently shrank
+
+Worth recording because it is general, and because it nearly hid this work's own
+regression. Five assertions in `frontend/test/profile_zone_actions.test.mjs` each
+extracted the zone-action table with their own line-anchored
+`/^ {4}\{ …label: '…'/gm`, which is correct only while every entry fits on one line.
+`Automations` gained its `hover:` string, went multi-line in the house style every
+other list in this repo uses, and vanished from all five at once: the canvas-order
+comparison saw a zone one op short, and the links + exports + handlers + gaps sum
+stayed balanced *because the entry had left both sides of it*. One test failed, and it
+failed pointing at the canvas.
+
+The fix is not a formatting convention. The reader now closes an entry at its own `}`,
+and it counts the table's `label:` keys by a separate route so it can be compared
+against the entries it actually parsed — read fewer than the table has and the file
+says so instead of quietly asserting less. Reformatting the entry back onto one line
+would have made the suite green and left the next multi-line entry invisible.

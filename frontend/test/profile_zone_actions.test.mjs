@@ -90,11 +90,18 @@ const PROFILES = {
     //   · `build/kpi`'s `Import CSV` (`services/metricsCsv.ts`) and `Definitions`
     //     (migration 251).
     //
-    // All four open a form the page owns, which is the shape D67 named this kind
-    // for. All four were `unbuilt`, so the gap count below falls by FIVE — those
-    // four plus cadence's `Export archive`, which became an export. Every count in
-    // this block moved in one run and each was read before it was changed.
-    handlers: 12,
+    // 8 → 14 across three changes in one pass, and the arithmetic is the point:
+    //
+    //   · `build/cadence`'s `New ritual` and `Edit templates` (migration 250);
+    //   · `build/kpi`'s `Import CSV` (`services/metricsCsv.ts`) and `Definitions`
+    //     (migration 251);
+    //   · `build/board`'s `Bulk move` and `Configure lanes` (migration 253).
+    //
+    // All six open a form the page owns, which is the shape D67 named this kind for,
+    // and all six were `unbuilt`. The gap count therefore falls by SEVEN — those six
+    // plus cadence's `Export archive`, which became an export. Every count in this
+    // block moved in one run and each was read before it was changed.
+    handlers: 14,
     // NOTHING IS EXCLUDED ANY MORE. `research/funds` sat here as "a card in
     // `ResearchWorkspace`'s ZONE_COPY, not a body" — true when it was written
     // and untrue since `ZONE_COPY` became `{}` and `LIVE_ZONES` gained `funds`.
@@ -405,17 +412,70 @@ const PROFILES = {
  * dropped, and dropping it would tell this guard the canvas never drew it.
  */
 function tableLabels(src) {
-  const start = src.search(/export const [A-Z_]+_ZONE_ACTIONS/);
-  const body = src.slice(start, src.indexOf('\n};', start));
   const out = {};
-  let zone = null;
-  for (const line of body.split('\n')) {
-    const z = line.match(/^ {2}'([a-z-]+\/[a-z-]+)':/);
-    if (z) { zone = z[1]; out[zone] = []; continue; }
-    const l = line.match(/^ {4}\{ (?:canvas: '([^']+)', )?label: '([^']+)'/);
-    if (l && zone) out[zone].push(l[1] ?? l[2]);
+  for (const [zone, entries] of tableEntries(src).zones) {
+    out[zone] = entries.map((e) => e.canvas ?? e.label);
   }
   return out;
+}
+
+/**
+ * The same table read ENTRY BY ENTRY rather than line by line, which is the
+ * only way to read it that a reformat cannot shrink.
+ *
+ * WHAT WENT WRONG, because it is the argument for the extra thirty lines. Five
+ * assertions in this file — this map, the four-kinds sum, the unchecked-path
+ * scan, the elsewhere-claim review and the destination-and-excuse check — each
+ * extracted entries with their own copy of `/^ {4}\{ …label: '…'/gm`. That is
+ * correct only while every entry fits on one line. `build/board`'s
+ * `Automations` gained a `hover:` string, went multi-line in the house style
+ * every other list here uses, and became INVISIBLE to all five at once: the
+ * canvas-order comparison saw a zone one op short, and the
+ * links+exports+handlers+gaps sum stayed balanced because the entry had left
+ * both sides of it. Only the order check failed, and it failed pointing at the
+ * canvas rather than at the reader.
+ *
+ * A guard a formatting change can silently shrink is worse than no guard, so an
+ * entry now closes at its own `}` and `labelKeys` counts the table's `label:`
+ * keys by a different route entirely. The test below compares the two: read
+ * fewer entries than there are keys and this file says so instead of quietly
+ * asserting less.
+ */
+function tableEntries(src) {
+  const start = src.search(/export const [A-Z_]+_ZONE_ACTIONS/);
+  // Standalone comment lines go first. These tables carry more prose than code
+  // and a paragraph about an entry must not read as one.
+  const body = codeOnly(src.slice(start, src.indexOf('\n};', start)));
+  const zones = new Map();
+  const entries = [];
+  let zone = null;
+  let open = null;
+  const close = (text) => {
+    // `[{,] *key:` rather than a bare `key:`: a joined multi-line entry puts the
+    // keys after commas, and requiring the delimiter keeps a `hover:` sentence
+    // that happens to contain "label: " from being read as one.
+    const canvas = text.match(/[{,] *canvas: '((?:[^'\\]|\\.)*)'/);
+    const label = text.match(/[{,] *label: '((?:[^'\\]|\\.)*)'/);
+    const at = label ? text.indexOf(label[0]) + label[0].length : 0;
+    const entry = { zone, text, canvas: canvas?.[1], label: label?.[1], rest: text.slice(at) };
+    entries.push(entry);
+    zones.get(zone)?.push(entry);
+  };
+  for (const line of body.split('\n')) {
+    if (open) {
+      open.push(line.trim());
+      if (/^\},?$/.test(line.trim())) { close(open.join(' ')); open = null; }
+      continue;
+    }
+    const z = line.match(/^ {2}'([a-z-]+\/[a-z-]+)':/);
+    if (z) { zone = z[1]; zones.set(zone, []); continue; }
+    if (!/^ {4}\{/.test(line)) continue;
+    if (/\},?$/.test(line.trim())) close(line.trim());
+    else open = [line.trim()];
+  }
+  // Counted off the line starts as well as the delimiters, so a `label:` the
+  // walker above never reached still registers here.
+  return { zones, entries, labelKeys: [...body.matchAll(/(?:^|[{,])\s*label: '/gm)].length };
 }
 
 /**
@@ -797,14 +857,25 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     // NOWHERE — the builder drops the entry — which makes an unchecked path in
     // it worse, not better: a reader of this file would act on a route that may
     // not exist, and no rendering would ever contradict them.
-    const notes = [...SRC.matchAll(/^ {4}\{ (?:canvas: '[^']+', )?label: '[^']+', unbuilt: '([^']*)'/gm)].map((m) => m[1]);
+    const table = tableEntries(SRC);
+    const notes = table.entries
+      .map((e) => e.rest.match(/[{,] *unbuilt: '((?:[^'\\]|\\.)*)'/))
+      .filter(Boolean).map((m) => m[1]);
     // Exact rather than a floor: every action is a link, an export, a
     // page-supplied handler or a gap, and nothing is untyped. An entry that is
     // none of the four would render as a dead button — which is the one thing
     // this whole pass forbids. `handlers` joined this sum when Validate's ops
     // came into the table; before that, a fourth kind could have been added and
     // every count here would still have balanced by coincidence.
-    const actions = [...SRC.matchAll(/^ {4}\{ (?:canvas: '[^']+', )?label: '/gm)].length;
+    const actions = table.entries.length;
+    // THE READER'S OWN CHECK, and it belongs on this assertion rather than on a
+    // test of its own: the sum below is the one that stayed green while an entry
+    // vanished, because a dropped entry leaves both sides of it at once. Reading
+    // fewer entries than the table has `label:` keys is therefore not a detail —
+    // it is this assertion asserting less than it says it does.
+    assert.equal(actions, table.labelKeys,
+      `${name}'s table has ${table.labelKeys} labelled entries but the reader saw `
+      + `${actions}. An entry it cannot parse is an entry nothing below checks.`);
     assert.equal(profile.links + profile.exports + profile.handlers + notes.length, actions,
       `${name} has ${actions} actions but ${profile.links} links, ${profile.exports} exports, `
       + `${profile.handlers} page-supplied and ${notes.length} gaps`);
@@ -856,9 +927,9 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     // acting on rather than pinning: the API already serves the op and only a
     // screen is missing. That is a form, not a store.
     const ELSEWHERE = /\b(?:are|is)\s+[a-z]+(?:ed|n)\s+(?:where|in|on|by|from|at)\b/;
-    const entries = [...SRC.matchAll(
-      /^ {4}\{ (?:canvas: '[^']+', )?label: '([^']+)', unbuilt: '((?:[^'\\]|\\.)*)'/gm)];
-    const claims = entries.filter(([, , note]) => ELSEWHERE.test(note)).map((m) => m[1]);
+    const claims = tableEntries(SRC).entries
+      .map((e) => [e.label, e.rest.match(/[{,] *unbuilt: '((?:[^'\\]|\\.)*)'/)?.[1]])
+      .filter(([, note]) => note && ELSEWHERE.test(note)).map(([label]) => label);
     const reviewed = new Set(profile.elsewhere);
     for (const label of claims) {
       assert.ok(reviewed.has(label),
@@ -879,7 +950,7 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     // The builder prefers `to`, so an `unbuilt` reason beside it would never be
     // read, and the entry would claim to be both built and not. `linkNote` is
     // the deliberate way to qualify a link, and it renders as the title.
-    const entries = [...SRC.matchAll(/^ {4}\{ (?:canvas: '[^']+', )?label: '[^']+',([^\n]*)$/gm)].map((m) => m[1]);
+    const entries = tableEntries(SRC).entries.map((e) => e.rest);
     assert.ok(entries.length >= profile.zones * 2, `expected every action, found ${entries.length}`);
     for (const rest of entries) {
       assert.ok(!(/\bto: /.test(rest) && /\bunbuilt: /.test(rest)),

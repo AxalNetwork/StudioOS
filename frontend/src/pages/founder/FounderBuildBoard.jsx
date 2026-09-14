@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, Clock3, Filter, Layers3, RefreshCw, ShieldCheck } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -7,6 +7,8 @@ import './founderBuildBoard.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
+import { useAuth } from '../../hooks/useAuthSync';
+import { BulkMoveDialog, LanesDialog } from './BoardDialogs';
 
 const STAGES = [
   ['idea', 'Idea'],
@@ -17,19 +19,39 @@ const STAGES = [
   ['iterate', 'Iterate'],
 ];
 /**
- * "Stale > 7d" over the one timestamp a stored card actually carries.
+ * The header filter's predicate — now over four kinds of thing, not one.
  *
- * The canvas's other three header filters are lanes and "Mine", and neither is
- * a stored field — a card records a stage and an owner NAME, which is not the
- * account reading the page. `founderZoneFilters.js` states both, so this is the
- * only one of the four that needs a predicate.
+ * THIS DOCBLOCK USED TO SAY the other three chips were unbackable: "a card records
+ * a stage and an owner NAME, which is not the account reading the page". Half of
+ * that was simply wrong. `mvp_tasks.assigned_to` is an **INTEGER user id**, and
+ * `useAuth().user.id` is the reader's — so `Mine` needed no store at all and was
+ * refused for four months on a false premise. The lanes half was true, and
+ * migration 253 fixes it: a card carries a `lane`, and `project_lanes` holds the
+ * list.
+ *
+ * `stale` AND A LANE COMPOSE RATHER THAN FIGHT, which is why this is one function
+ * over a key rather than a chain: the chip row is single-select, so exactly one of
+ * these applies at a time and the in-card status row below narrows further.
  */
 const STALE_AFTER_DAYS = 7;
-function matchesLane(task, lane) {
-  if (lane !== 'stale') return true;
-  const stamp = new Date(task.updated_at || task.created_at).getTime();
-  if (!Number.isFinite(stamp)) return false;   // undated is not the same as fresh
-  return (Date.now() - stamp) / 86400000 > STALE_AFTER_DAYS;
+function matchesLane(task, lane, meId) {
+  if (lane === 'all') return true;
+  if (lane === 'stale') {
+    const stamp = new Date(task.updated_at || task.created_at).getTime();
+    if (!Number.isFinite(stamp)) return false;   // undated is not the same as fresh
+    return (Date.now() - stamp) / 86400000 > STALE_AFTER_DAYS;
+  }
+  if (lane === 'mine') {
+    // A CARD WITH NO OWNER IS NOT MINE. `Number(null)` is 0, so comparing without
+    // the null check would make every unassigned card belong to user 0 — and to
+    // nobody's reading of "Mine".
+    if (task.assigned_to == null || meId == null) return false;
+    return Number(task.assigned_to) === Number(meId);
+  }
+  // Anything else is a lane NAME, sent as `lane:<name>` so a lane called "mine" or
+  // "stale" cannot collide with the two reserved keys above.
+  if (lane.startsWith('lane:')) return String(task.lane || '') === lane.slice(5);
+  return true;
 }
 
 const TASK_STATUS = [
@@ -64,6 +86,16 @@ export default function FounderBuildBoard() {
   const [lane, setLane] = useState('all');
   const [taskFilter, setTaskFilter] = useState('all');
   const [query, setQuery] = useState('');
+  // Migration 253's half of the board: the lane list, and the cards with their
+  // lanes. Read together, because lanes from one call and cards from another shows a
+  // card in a lane it has been moved out of.
+  const [board, setBoard] = useState(null);
+  const [selection, setSelection] = useState([]);
+  const [dialog, setDialog] = useState(null);   // 'lanes' | 'bulk'
+  const [opError, setOpError] = useState('');
+  // `Mine` compares the card's `assigned_to` — an INTEGER user id — against the
+  // reader's own. No store was needed for this and none is added.
+  const { user: me } = useAuth();
 
   const load = async () => {
     setStatus('loading');
@@ -81,6 +113,9 @@ export default function FounderBuildBoard() {
         return;
       }
       if (String(chosen.id) !== requestedId) setParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(chosen.id)); return next; }, { replace: true });
+      // The lane read is soft: without it the board is what it was — cards with no
+      // lane — rather than broken.
+      api.getBoardLanes(chosen.id).then(setBoard).catch(() => setBoard(null));
       try {
         const result = await api.pipelineDealDetail(chosen.id);
         setDetail(result);
@@ -109,13 +144,36 @@ export default function FounderBuildBoard() {
   };
 
   useEffect(() => { load(); }, [requestedId]);
+
+  /** After a lane edit or a bulk move: re-read the lanes AND the cards. */
+  const reloadBoard = useCallback(async () => {
+    if (!selectedId) return;
+    setSelection([]);
+    const [fresh, detailAgain] = await Promise.all([
+      api.getBoardLanes(selectedId).catch(() => null),
+      api.pipelineDealDetail(selectedId).catch(() => null),
+    ]);
+    if (fresh) setBoard(fresh);
+    if (detailAgain) setDetail(detailAgain);
+  }, [selectedId]);
+
   const selectedProject = useMemo(() => projects.find((project) => project.id === selectedId) || detail?.project, [projects, selectedId, detail]);
-  const tasks = detail?.tasks || [];
+  /**
+   * The cards, preferring the read that carries the lane.
+   *
+   * `/founder/board/:id` returns the five fields the artboard's table has columns
+   * for plus `lane`; `pipelineDealDetail` returns `SELECT *` from before the column
+   * existed. Falling back to the detail read keeps the board working on a database
+   * where migration 253 has not landed — the lane is then simply absent, which is
+   * what `matchesLane` already treats as "no lane".
+   */
+  const tasks = board?.cards?.length ? board.cards : (detail?.tasks || []);
+  const lanes = board?.lanes || [];
   const filteredTasks = useMemo(() => tasks.filter((task) => {
     const matchesStatus = taskFilter === 'all' || task.status === taskFilter;
     const haystack = `${task.title || ''} ${task.description || ''} ${task.assigned_to || ''}`.toLowerCase();
-    return matchesStatus && matchesLane(task, lane) && haystack.includes(query.toLowerCase());
-  }), [tasks, taskFilter, lane, query]);
+    return matchesStatus && matchesLane(task, lane, me?.id) && haystack.includes(query.toLowerCase());
+  }), [tasks, taskFilter, lane, query, me]);
   const counts = useMemo(() => ({
     total: tasks.length,
     todo: tasks.filter((task) => task.status === 'todo').length,
@@ -143,12 +201,50 @@ export default function FounderBuildBoard() {
               <Link to={`/build/kpi${selectedId ? `?project_id=${selectedId}` : ''}`}>KPI entry</Link>
             </nav>
             <ZoneToolbar
-              filters={founderZoneFilters('build/board', { value: lane, onChange: setLane })}
-              actions={founderZoneActions('build/board', { query: selectedId ? `?project_id=${selectedId}` : '' })}
+              filters={founderZoneFilters('build/board', {
+                value: lane,
+                onChange: setLane,
+                // ONE CHIP PER STORED LANE, in the lane list's own order. The canvas
+                // draws two and fills them with sample names; the real names come
+                // from `project_lanes`, and with none configured the group
+                // contributes nothing rather than drawing "Engineering" at a
+                // venture that has never had an engineering lane.
+                dynamic: {
+                  lanes: lanes.map((l) => ({
+                    key: `lane:${l.name}`,
+                    // The WIP state rides in the label, because a lane over its
+                    // limit is the one thing the board most needs to say and the
+                    // chip is where a reader is already looking.
+                    label: l.over_limit ? `${l.name} · over` : l.name,
+                  })),
+                },
+                counts: {
+                  all: tasks.length,
+                  mine: me?.id != null ? tasks.filter((t) => Number(t.assigned_to) === Number(me.id)).length : 0,
+                },
+              })}
+              actions={founderZoneActions('build/board', {
+                query: selectedId ? `?project_id=${selectedId}` : '',
+                handlers: {
+                  bulkMove: {
+                    onClick: () => { setOpError(''); setDialog('bulk'); },
+                    disabled: !selection.length,
+                    title: selection.length
+                      ? undefined
+                      : 'Select cards first — a bulk move needs something to move.',
+                  },
+                  configureLanes: {
+                    onClick: () => { setOpError(''); setDialog('lanes'); },
+                    disabled: !selectedId,
+                    title: selectedId ? undefined : 'Select a startup first — lanes belong to one.',
+                  },
+                },
+              })}
             />
           </header>
 
           {status === 'error' && <div className="fb-alert" role="alert" data-testid="status-board-error"><AlertCircle size={16} /><span>{error}</span><button type="button" onClick={load} data-testid="button-retry-board"><RefreshCw size={13} /> Retry</button></div>}
+          {opError && <div className="fb-alert" role="alert" data-testid="status-board-op-error"><AlertCircle size={16} /><span>{opError}</span></div>}
           {status === 'loading' && <BoardSkeleton />}
           {status === 'empty' && <EmptyBoard />}
           {status === 'ready' && selectedProject && (
@@ -163,7 +259,26 @@ export default function FounderBuildBoard() {
               <section className="fb-card fb-instrument">
                 <div className="fb-card-head"><div><Layers3 size={16} /><h2>Stored task record</h2></div><span>{counts.total} task{counts.total === 1 ? '' : 's'} · newest activity first</span></div>
                 <div className="fb-toolbar"><div className="fb-filters"><Filter size={13} />{TASK_STATUS.map(([value, label]) => <button type="button" key={value} className={taskFilter === value ? 'is-selected' : ''} onClick={() => setTaskFilter(value)} data-testid={`button-filter-task-${value}`}>{label}</button>)}</div><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search stored tasks" aria-label="Search stored tasks" data-testid="input-search-board-tasks" /></div>
-                {filteredTasks.length ? <div className="fb-table-wrap"><table><thead><tr><th>Card</th><th>Status</th><th>Owner</th><th>Due</th><th>Updated</th></tr></thead><tbody>{filteredTasks.map((task) => <TaskRow key={task.id} task={task} />)}</tbody></table></div> : <div className="fb-inline-empty"><CircleDot size={18} /><div><strong>{detailUnavailable ? 'Task-level board records are unavailable.' : tasks.length ? 'No stored tasks match this view.' : 'No execution tasks are recorded.'}</strong><p>{detailUnavailable ? 'The selected startup is available, but this backend does not expose its detailed task record.' : tasks.length ? 'Change the status filter or search terms; no cards are inferred.' : 'This page does not create cards for founder accounts.'}</p></div></div>}
+                {filteredTasks.length ? <div className="fb-table-wrap"><table><thead><tr>
+                  {/* THE SELECT COLUMN IS WHAT MAKES `Bulk move` A MOVE. Without it
+                      the op has nothing to act on, which is why it was `unbuilt`
+                      alongside the lane store rather than only because of it. */}
+                  <th className="fb-select-col"><input
+                    type="checkbox"
+                    data-testid="check-board-all"
+                    aria-label="Select every card in this view"
+                    checked={filteredTasks.length > 0 && selection.length === filteredTasks.length}
+                    onChange={(e) => setSelection(e.target.checked ? filteredTasks.map((t) => t.id) : [])}
+                  /></th>
+                  <th>Card</th><th>Lane</th><th>Status</th><th>Owner</th><th>Updated</th></tr></thead><tbody>{filteredTasks.map((task) => <TaskRow
+                    key={task.id}
+                    task={task}
+                    mine={me?.id != null && Number(task.assigned_to) === Number(me.id)}
+                    selected={selection.includes(task.id)}
+                    onToggle={() => setSelection((old) => (old.includes(task.id)
+                      ? old.filter((x) => x !== task.id)
+                      : [...old, task.id]))}
+                  />)}</tbody></table></div> : <div className="fb-inline-empty"><CircleDot size={18} /><div><strong>{detailUnavailable ? 'Task-level board records are unavailable.' : tasks.length ? 'No stored tasks match this view.' : 'No execution tasks are recorded.'}</strong><p>{detailUnavailable ? 'The selected startup is available, but this backend does not expose its detailed task record.' : tasks.length ? 'Change the status filter or search terms; no cards are inferred.' : 'This page does not create cards for founder accounts.'}</p></div></div>}
                 <p className="fb-note">{detailUnavailable ? 'Project and stage context come from the authenticated pipeline list. Task rows, lane ownership, WIP policy, and automation rules are unavailable and are intentionally not inferred.' : 'This board reports task rows returned by the authenticated pipeline detail endpoint. Lane ownership, WIP policy, and automation rules are not present in the available record and are intentionally not inferred.'}</p>
               </section>
               <div className="fb-lower-grid"><StageTimeline stages={detail?.stages || []} current={detail?.current_stage} /><EvidenceSummary detail={detail} unavailable={detailUnavailable} /></div>
@@ -172,12 +287,69 @@ export default function FounderBuildBoard() {
         </section>
         <PageRail taskCount={detailUnavailable ? null : counts.total} project={selectedProject} />
       </div>
+
+      {dialog === 'lanes' && (
+        <LanesDialog
+          lanes={lanes}
+          unassigned={board?.unassigned_cards || 0}
+          orphans={board?.orphan_lanes || []}
+          onClose={() => setDialog(null)}
+          onSave={async (data) => { await api.setBoardLane(selectedId, data); await reloadBoard(); }}
+          onDelete={async (id) => { await api.deleteBoardLane(id); await reloadBoard(); }}
+        />
+      )}
+      {dialog === 'bulk' && (
+        <BulkMoveDialog
+          count={selection.length}
+          lanes={lanes}
+          onClose={() => setDialog(null)}
+          onMove={async (body) => {
+            await api.bulkMoveBoardCards(selectedId, { ids: selection, ...body });
+            setDialog(null);
+            await reloadBoard();
+          }}
+        />
+      )}
     </main>
   );
 }
 
 function Stat({ label, value, note, muted }) { return <div className={`fb-stat ${muted ? 'is-muted' : ''}`} data-testid={`stat-board-${label.toLowerCase().replace(/\s+/g, '-')}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
-function TaskRow({ task }) { return <tr data-testid={`row-board-task-${task.id}`}><td><strong>{text(task.title)}</strong>{task.description && <small>{task.description}</small>}{task.ai_generated && <em>AI-generated source flag</em>}</td><td><span className={`fb-status status-${task.status}`}>{pretty(task.status)}</span></td><td>{text(task.assigned_to, 'Unassigned')}</td><td>{date(task.due_date, 'Not due')}</td><td>{date(task.updated_at || task.created_at)}</td></tr>; }
+/**
+ * One card. The Lane column is new; so is the Owner column meaning something.
+ *
+ * `assigned_to` IS A USER ID AND WAS BEING PRINTED AS ONE. The cell read
+ * `{text(task.assigned_to, 'Unassigned')}` — so an owned card showed the founder the
+ * number `417`. The canvas's column holds a name ("Amara", "Rin", "unassigned"), and
+ * the page does not have the user table; what it DOES have is whether the card is
+ * the reader's own, which is the question the Owner column is scanned for and the
+ * only one that can be answered honestly here. Resolving ids to names needs the
+ * team read, which is its own change.
+ */
+function TaskRow({ task, mine, selected, onToggle }) {
+  return (
+    <tr data-testid={`row-board-task-${task.id}`} className={selected ? 'is-selected' : ''}>
+      <td className="fb-select-col"><input
+        type="checkbox"
+        data-testid={`check-board-task-${task.id}`}
+        aria-label={`Select ${text(task.title, 'this card')}`}
+        checked={selected}
+        onChange={onToggle}
+      /></td>
+      <td>
+        <strong>{text(task.title)}</strong>
+        {task.description && <small>{task.description}</small>}
+        {task.ai_generated && <em>AI-generated source flag</em>}
+      </td>
+      <td>{task.lane ? <span className="fb-lane-tag">{task.lane}</span> : <span className="fb-lane-tag is-none">No lane</span>}</td>
+      <td><span className={`fb-status status-${task.status}`}>{pretty(task.status)}</span></td>
+      <td>{task.assigned_to == null
+        ? 'Unassigned'
+        : <span className={mine ? 'fb-owner is-mine' : 'fb-owner'}>{mine ? 'You' : 'Assigned'}</span>}</td>
+      <td>{date(task.updated_at || task.created_at)}</td>
+    </tr>
+  );
+}
 function StageTimeline({ stages, current }) { return <section className="fb-card fb-timeline"><div className="fb-card-head"><div><Clock3 size={16} /><h2>Stage history</h2></div><span>Pipeline record</span></div>{stages.length ? <div className="fb-stage-list">{stages.map((stage) => <div key={stage.id} className={stage.stage_name === current ? 'is-current' : ''}><span className="fb-stage-dot">{stage.stage_name === current ? <CheckCircle2 size={13} /> : <CircleDot size={13} />}</span><div><strong>{pretty(stage.stage_name)}</strong><small>{stage.status === 'active' ? 'Active stage' : `Recorded ${date(stage.end_date || stage.start_date)}`}</small></div></div>)}</div> : <Unavailable text="Stage history is not recorded for this project." />}</section>; }
 function EvidenceSummary({ detail, unavailable }) { const metrics = detail?.metrics || []; const gates = detail?.gates || []; return <section className="fb-card fb-evidence"><div className="fb-card-head"><div><ShieldCheck size={16} /><h2>Evidence surface</h2></div><span>Available source records</span></div><div className="fb-evidence-row"><span>Metrics</span><strong>{unavailable ? '—' : metrics.length}</strong><small>{unavailable ? 'Detail record unavailable' : metrics.length ? 'Stored pipeline metrics' : 'Not recorded'}</small></div><div className="fb-evidence-row"><span>Decision gates</span><strong>{unavailable ? '—' : gates.length}</strong><small>{unavailable ? 'Detail record unavailable' : gates.length ? 'Stored gate records' : 'Not recorded'}</small></div><p className="fb-note">No score, owner, WIP limit, or automation value is displayed unless it is returned by the authenticated API.</p></section>; }
 function PageRail({ taskCount, project }) {

@@ -260,10 +260,36 @@ export const FOUNDER_ZONE_FILTERS = {
   // Cards are pipeline tasks with a stored `status` and `updated_at`. They
   // carry no lane and no assignee this page can compare against the reader, so
   // the canvas's two sample lanes and its "Mine" are stated, not drawn.
+  // ALL FOUR SLOTS ARE LIVE, AND THE TWO REASONS WERE WRONG IN DIFFERENT WAYS.
+  //
+  // `Mine` said "a card records an owner name, which is not the same as the account
+  // reading it". `mvp_tasks.assigned_to` is an INTEGER USER ID and `useAuth().user.id`
+  // is the reader's — so this chip needed no store at all and was refused for months
+  // on a premise nobody re-checked. That is the #193 class of finding, not a gap.
+  //
+  // `Engineering` and `GTM` said "a card carries a stage, not a lane, and no lane is
+  // stored". That WAS true, and migration 253 fixes it: `mvp_tasks.lane` plus
+  // `project_lanes`, which is also what gives `Configure lanes` something to edit.
+  //
+  // THE LANE GROUP IS DYNAMIC, so the chips carry the venture's OWN lane names. The
+  // canvas draws two and fills them with sample names; printing "Engineering" at a
+  // venture that has never had an engineering lane is the thing `withCount` and the
+  // `dynamic` group both exist to refuse. With no lane configured the group draws
+  // nothing and the row is three chips.
   'build/board': [
-    { canvas: 'All lanes', key: 'all', label: 'All cards' },
-    { canvas: ['Engineering', 'GTM'], label: 'Engineering and GTM', unbuilt: 'a card carries a stage, not a lane, and no lane is stored' },
-    { canvas: 'Mine', unbuilt: 'a card records an owner name, which is not the same as the account reading it' },
+    { canvas: 'All lanes', key: 'all', label: 'All {n} cards' },
+    // THE REASON STAYS ON A DYNAMIC GROUP, and the guard is right to demand it:
+    // `zoneFilterBuilder` draws NOTHING for a group the page supplies no names for,
+    // so this sentence is the only explanation a developer gets for an empty slot —
+    // and "the page forgot to pass them" and "the venture has none" are different
+    // problems with the same appearance.
+    {
+      canvas: ['Engineering', 'GTM'],
+      dynamic: 'lanes',
+      unbuilt: 'no lane is configured on this venture yet, and none is invented — the group draws one chip per stored lane once there is one',
+      hover: 'Add a lane in Configure lanes and it gets its own chip here.',
+    },
+    { canvas: 'Mine', key: 'mine' },
     { canvas: 'Stale > 7d', key: 'stale' },
   ],
   // Objectives carry a quarter, a kanban column and a dependency field. No

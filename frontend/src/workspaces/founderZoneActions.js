@@ -89,16 +89,33 @@ export const FOUNDER_ZONE_ACTIONS = {
     // destination `New scenario` below already uses for the same reason.
     { label: 'Configure zone', to: '/execution/roadmap', linkNote: 'This desk reads the roadmap’s Now column; the roadmap is edited in Execution.' },
   ],
+  // TWO OF THESE THREE ARE LIVE AS OF MIGRATION 253. `Bulk move` is a multi-select
+  // plus one all-or-nothing UPDATE that the lane's WIP limit can refuse;
+  // `Configure lanes` is the editor its own old reason asked for.
+  //
+  // `Automations` STAYS A GAP, and deliberately. The canvas reports "Automations · 3
+  // · 1 paused" and gives no other content: no trigger vocabulary, no action
+  // vocabulary, no example rule. Building a rules engine from a count would be
+  // inventing the feature rather than integrating it, which is the one thing #176
+  // asks not to do — "if a store genuinely cannot be built, say so to the user
+  // rather than shipping a chip that lies."
   'build/board': [
-    { label: 'Bulk move', unbuilt: 'no bulk stage change is stored; a deal moves from its own row' },
-    { label: 'Automations', unbuilt: 'no automation rules are stored' },
-    // THE REASON HERE CLAIMED MORE THAN THE CODE HAS. It said the lanes were
-    // "the pipeline’s stored stages", which implies a table an editor could
-    // one day write to. There is none: the six stages are a literal, written
-    // twice — `FounderBuildBoard.jsx` and `pages/PipelinePage.jsx` — and a
-    // founder cannot even drag between them (`PipelinePage` gates `canEdit`
-    // on admin or partner). Configuring them needs a stage table first.
-    { label: 'Configure lanes', unbuilt: 'the six lanes are written into the code twice and no per-project stage list is stored, so there is nothing for an editor to change', hover: 'The six lanes are fixed in code — no per-project stage list is stored yet.' },
+    { label: 'Bulk move', kind: 'handler', handler: 'bulkMove' },
+    // The `unbuilt:` string stays the engineering reason; `hover:` is what a founder
+    // reads on the disabled control, under the 120-char tooltip cap.
+    {
+      label: 'Automations',
+      unbuilt: 'no automation rules are stored, and the artboard specifies a count without a trigger or action vocabulary to build one from',
+      hover: 'No automation rule is stored yet — nothing here can fire on a card moving.',
+    },
+    // THE REASON HERE ONCE CLAIMED MORE THAN THE CODE HAD — it said the lanes were
+    // "the pipeline’s stored stages", implying a table an editor could write to —
+    // and was then corrected to say a stage table was needed first. Migration 253
+    // built one, and it is a LANE table rather than a stage table, which is the
+    // distinction that made it possible: the six pipeline stages are still a literal
+    // written twice (`FounderBuildBoard.jsx` and `pages/PipelinePage.jsx`) and still
+    // not a founder's to change, but a lane is the founder's own axis and always was.
+    { label: 'Configure lanes', kind: 'handler', handler: 'configureLanes' },
   ],
   'build/roadmap': [
     { label: 'New scenario', to: '/execution/roadmap', linkNote: 'objectives and key results are edited in Execution' },
