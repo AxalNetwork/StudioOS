@@ -352,7 +352,7 @@ export default function SpinoutLabCapTablePage() {
   const week = num(user?.spinout_lab_week) || state?.week || 4;
 
   return (
-    <div className="max-w-[1200px] mx-auto px-4 py-6 space-y-5" data-testid="page-spinout-captable">
+    <div className="w-full px-2 sm:px-4 py-3 space-y-5" data-testid="page-spinout-captable">
       {/* Header — canonical Lab header. The Carta chip rides in `titleExtra`
           (inert, still only rendered from a real /captable/live response); the
           two A-row actions ride in `actions`, ahead of the week pill. */}

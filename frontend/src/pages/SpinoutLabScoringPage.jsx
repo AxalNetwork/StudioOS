@@ -340,7 +340,7 @@ export default function SpinoutLabScoringPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6 space-y-4" data-testid="page-spinout-scoring">
+    <div className="w-full px-2 sm:px-4 py-3 space-y-4" data-testid="page-spinout-scoring">
       {/* Canonical Lab header. The teal diligence-phase stripe (design L34) is
           kept via ruleClassName; its -mx-4 -mt-6 bleed is dropped because the
           rule now sits inside the header block.

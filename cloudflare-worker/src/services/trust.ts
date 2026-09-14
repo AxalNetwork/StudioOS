@@ -27,6 +27,7 @@
  * populates `evidence_meta` and flips status -> 'satisfied'.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
 // ---------------------------------------------------------------------------
 // Obligation matrix
@@ -102,9 +103,9 @@ export function obligationsForRole(role: string): ObligationDef[] {
 // Schema bootstrap (defensive — same lazy pattern as other routes)
 // ---------------------------------------------------------------------------
 
-let trustSchemaReady = false;
+const TRUST_SCHEMA_READY = new WeakMap<object, boolean>();
 export async function ensureTrustSchema(env: Env): Promise<void> {
-  if (trustSchemaReady) return;
+  if (TRUST_SCHEMA_READY.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS legal_obligations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -121,6 +122,20 @@ export async function ensureTrustSchema(env: Env): Promise<void> {
     )`,
     `CREATE INDEX IF NOT EXISTS idx_legal_obligations_user   ON legal_obligations(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_legal_obligations_status ON legal_obligations(status)`,
+    // Migration 243 creates this on a fresh build; it is repeated here for the
+    // same reason every other table in this list is — `ensureTrustSchema` is
+    // the runtime self-heal for a D1 that predates the migration, and
+    // `recordAndCompareScore` must not be the thing that discovers the table
+    // is missing.
+    `CREATE TABLE IF NOT EXISTS trust_score_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      captured_month TEXT NOT NULL,
+      score INTEGER NOT NULL CHECK (score >= 0 AND score <= 100),
+      captured_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_trust_score_snapshots_month ON trust_score_snapshots(user_id, captured_month)`,
+    `CREATE INDEX IF NOT EXISTS idx_trust_score_snapshots_user ON trust_score_snapshots(user_id, captured_month DESC)`,
     `CREATE TABLE IF NOT EXISTS pairwise_ndas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       party_a_user_id INTEGER NOT NULL,
@@ -136,9 +151,24 @@ export async function ensureTrustSchema(env: Env): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_pairwise_ndas_a       ON pairwise_ndas(party_a_user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_pairwise_ndas_b       ON pairwise_ndas(party_b_user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_pairwise_ndas_status  ON pairwise_ndas(status)`,
+    // Task #163 (migration 244) — which renewal warnings have already gone
+    // out. `user_id` is in the unique key because a pairwise NDA has two
+    // parties and both must be warned; `expires_at` is in it so a renewed
+    // deadline re-arms all three thresholds.
+    `CREATE TABLE IF NOT EXISTS renewal_notices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      subject_kind TEXT NOT NULL,
+      subject_id INTEGER NOT NULL,
+      threshold_days INTEGER NOT NULL,
+      expires_at TEXT NOT NULL,
+      notified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_renewal_notices_once ON renewal_notices(user_id, subject_kind, subject_id, threshold_days, expires_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_renewal_notices_user ON renewal_notices(user_id, notified_at DESC)`,
   ];
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
-  trustSchemaReady = true;
+  TRUST_SCHEMA_READY.set(bindingKey(env), true);
 }
 
 // ---------------------------------------------------------------------------
@@ -474,6 +504,21 @@ export async function resyncKycKyb(env: Env): Promise<{ scanned: number; updated
   }
 
   // -- KYB reconciliation (entity investors) --------------------------------
+  // THIS BRANCH IS INERT AND NOW SAYS SO. The SELECT joins
+  // `corporate_profiles.kyb_status`, which no table in this schema defines, so D1
+  // rejects it on every run. It used to be swallowed by a bare
+  // `.catch(() => ({ results: [] }))`, which is indistinguishable from "no rows to
+  // reconcile": the nightly cron reported `scanned=0, updated=0` and read as
+  // healthy while `kyb_v1` — which has no other satisfier — stayed pending for
+  // every entity investor and every partner handed one at deal signature.
+  //
+  // The statement is KEPT rather than removed. It is the only record of the
+  // intended flow, and `scripts/check-sqlite-columns.mjs` tracks that phantom
+  // column by name as the standing marker for this gap (asserted in
+  // `test/schema_guards.test.mjs`, and depended on by
+  // `test/obligation_satisfiable.test.ts`). Wiring KYB means giving the decision a
+  // real home — migration 220's `company_kyb_records.status` is the obvious
+  // candidate — and pointing this query at it; it is not a switch to flip.
   try {
     const pendingKyb: any = await env.DB.prepare(
       `SELECT lo.id AS oblig_id, lo.user_id, cp.kyb_status
@@ -481,7 +526,15 @@ export async function resyncKycKyb(env: Env): Promise<{ scanned: number; updated
          LEFT JOIN corporate_profiles cp ON cp.user_id = lo.user_id
         WHERE lo.obligation_key = 'kyb_v1'
           AND lo.status IN ('pending','in_review')`,
-    ).all().catch(() => ({ results: [] as any[] }));
+    ).all().catch((e: any) => {
+      console.warn(
+        '[trust] resyncKycKyb KYB inert — no KYB decision can be read: '
+        + 'corporate_profiles.kyb_status does not exist and no provider writes one, '
+        + 'so kyb_v1 cannot be satisfied by this reconciler '
+        + `(${e?.message || e})`,
+      );
+      return { results: [] as any[] };
+    });
     const rows: any[] = pendingKyb?.results || [];
     scanned += rows.length;
     for (const r of rows) {
@@ -508,4 +561,726 @@ export async function resyncKycKyb(env: Env): Promise<{ scanned: number; updated
   }
 
   return { scanned, updated };
+}
+
+// ---------------------------------------------------------------------------
+// Signature-backed obligations — recording what the e-sign flow already does.
+// ---------------------------------------------------------------------------
+
+/**
+ * The obligations a completed e-sign envelope is allowed to satisfy.
+ *
+ * AN ALLOWLIST, NOT A CONVENIENCE. `templateKeyForDocType` also resolves
+ * `accreditation_v1`, `partner_msa_v1` and `nda_3way_founder_investor_axal_v1`,
+ * and none of those may be satisfied here: accreditation is required of every
+ * investor and waiving or granting it is a securities question for counsel;
+ * `partner_msa_v1` already has its own satisfier at deal signature
+ * (`services/partnerDeals.ts`) and a second writer would race it; and the 3-way
+ * NDA is not an obligation key at all — it settles a `pairwise_ndas` row.
+ *
+ * So this set is the scope of the change, enforced rather than described.
+ */
+const SATISFIABLE_BY_SIGNATURE: ReadonlySet<ObligationKey> = new Set<ObligationKey>([
+  'founder_nda_v1',
+  'investor_nda_v1',
+  'mentor_nda_v1',
+  'mentor_disclaimer_v1',
+]);
+
+/**
+ * The validity window for a key, read off `ROLE_MATRIX` rather than restated.
+ *
+ * This matters more than it looks. `expireDueArtifacts` only expires rows whose
+ * `expires_at` is non-null, so hardcoding the wrong value here produces an NDA
+ * that never needs re-signing — a silent compliance hole rather than a visible
+ * bug. The three NDAs carry 24 months; the advisor disclaimer is a one-time
+ * acknowledgement and carries null.
+ *
+ * Returns undefined for a key no role seeds, which the caller treats as "not
+ * mine to satisfy" rather than "never expires".
+ */
+export function ttlForObligation(key: ObligationKey): number | null | undefined {
+  for (const defs of Object.values(ROLE_MATRIX)) {
+    const hit = defs.find((d) => d.key === key);
+    if (hit) return hit.ttlMs;
+  }
+  return undefined;
+}
+
+/**
+ * Records a completed signature against the obligation it satisfies.
+ *
+ * This is the write that `legal_obligations` was designed for and never got:
+ * migration 025 introduced `evidence_envelope_uuid` to "point at the esign
+ * envelope", and until now only `partner_msa_v1` ever set it. Four keys —
+ * the three NDAs and the advisor disclaimer — had a real signable document, a
+ * wired template body and a working send route, and nothing wrote the result
+ * back, so they sat `pending` for the life of the account
+ * (`test/obligation_satisfiable.test.ts`).
+ *
+ * THE KEY IS RESOLVED THROUGH `templateKeyForDocType`, NEVER FROM THE RAW
+ * `document_type`. The two are not the same string for three of the four:
+ * `investor_nda_v1` ships as `investor_nda_axal`, `mentor_nda_v1` as
+ * `mentor_nda_axal`, `mentor_disclaimer_v1` as `mentor_engagement_disclaimer`.
+ * A `WHERE obligation_key = document_type` join would look correct in review
+ * and silently satisfy only `founder_nda_v1`.
+ *
+ * Idempotent, and safe to call from a poller: the `status IN ('pending',
+ * 'in_review')` guard means a second pass changes nothing, an already
+ * `satisfied` row is not re-stamped, and a `waived` row is never resurrected.
+ * It also picks up rows stranded at `in_review` by the Trust Center's Start
+ * button, which collects no evidence and leaves the row with no further action.
+ *
+ * Returns what it did so a caller can log it; never throws for an envelope it
+ * has no business with.
+ */
+export async function satisfyObligationFromEnvelope(
+  env: Env,
+  envelopeId: number,
+): Promise<{ key: ObligationKey; changed: boolean } | null> {
+  // `./legalDocTypes`, NOT `./legalTemplates`. The latter re-exports this same
+  // helper but also imports nine `.md?raw` template bodies, which only a bundler
+  // can resolve — importing it here would pull those in for a lookup that needs
+  // none of them, and would make this function unloadable under `node --test`.
+  const { templateKeyForDocType } = await import('./legalDocTypes');
+
+  const env_row: any = await env.DB.prepare(
+    `SELECT id, envelope_uuid, user_id, document_type, status
+       FROM esign_envelopes WHERE id = ?`,
+  ).bind(envelopeId).first().catch(() => null);
+  if (!env_row) return null;
+
+  // An envelope still out for signature proves nothing.
+  if (env_row.status !== 'completed' || !env_row.user_id) return null;
+
+  const key = templateKeyForDocType(env_row.document_type) as ObligationKey | null;
+  if (!key || !SATISFIABLE_BY_SIGNATURE.has(key)) return null;
+
+  const ttl = ttlForObligation(key);
+  if (ttl === undefined) return null;
+  const expiresAt = ttl === null ? null : new Date(Date.now() + ttl).toISOString();
+
+  const upd: any = await env.DB.prepare(
+    `UPDATE legal_obligations
+        SET status = 'satisfied',
+            expires_at = ?,
+            evidence_envelope_uuid = COALESCE(?, evidence_envelope_uuid),
+            updated_at = CURRENT_TIMESTAMP
+      WHERE user_id = ?
+        AND obligation_key = ?
+        AND status IN ('pending','in_review')`,
+  ).bind(expiresAt, env_row.envelope_uuid || null, env_row.user_id, key).run().catch(() => null);
+
+  return { key, changed: Boolean((upd?.meta as any)?.changes) };
+}
+
+/**
+ * The obligations an affirmative consent click satisfies.
+ *
+ * Two, and they are the ones with no document to sign: accepting terms is a
+ * click, not a signature. Everything else stays out — `accreditation_v1` in
+ * particular is not something a checkbox can establish.
+ */
+const SATISFIABLE_BY_CLICKWRAP: ReadonlySet<ObligationKey> = new Set<ObligationKey>([
+  'tos_v1',
+  'privacy_v1',
+]);
+
+/**
+ * Records an affirmative acceptance of the terms and privacy policy.
+ *
+ * Before this existed, acceptance happened nowhere a machine could see. The only
+ * consent text in the product was passive — "By continuing you agree", in 10px
+ * under a submit button on `/register`, and on the onboarding licence gate not
+ * even that: two link labels, with the claim that continuing constitutes
+ * acceptance living in code comments rather than on screen. So `tos_v1` and
+ * `privacy_v1` sat `pending` for every account, forever, and marking them
+ * satisfied would have asserted an act nobody performed.
+ *
+ * The caller's job is to have collected a real, explicit affirmative act. This
+ * function's job is to make it durable and then let the obligation follow.
+ *
+ * TWO WRITES, IN THAT ORDER, AND THE ORDER MATTERS. `legal_acceptances` is the
+ * append-only evidence and is written first; `legal_obligations` is the mutable
+ * current status and is derived from it. If the second write fails the evidence
+ * still exists and the next call reconciles; if they were reversed a crash
+ * between them would leave an account marked compliant with nothing behind it.
+ *
+ * Idempotent for the obligation (the `status IN ('pending','in_review')` guard),
+ * but NOT for the evidence: a second genuine acceptance is a second row, which
+ * is the whole point of an append-only record.
+ *
+ * `ctx.source` AND `ctx.surface` ARE DIFFERENT FIELDS AND BOTH MATTER, which
+ * was not obvious until a second caller existed. `surface` is the audit trail's
+ * own value in `legal_acceptances`. `source` is what `obligationSource` reads
+ * back off `evidence_meta` to render the Trust Center's provenance line — and it
+ * was HARDCODED to `'signup_clickwrap'` here, for every surface, because there
+ * was only ever one caller. Task #178's interstitial would therefore have made
+ * the Trust Center say "Accepted at signup" over an act performed years later,
+ * in a different screen, by an account that had never seen that checkbox. It
+ * defaults to `'signup_clickwrap'` so the original caller is unchanged; a new
+ * caller must pass its own and add the matching `LABEL` entry, or the line falls
+ * through to the verbatim branch and reads badly rather than falsely.
+ */
+export async function recordTermsAcceptance(
+  env: Env,
+  userId: number,
+  ctx: { surface: string; source?: string; ip?: string | null; ua?: string | null },
+): Promise<{ keys: ObligationKey[]; satisfied: number }> {
+  await ensureTrustSchema(env);
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS legal_acceptances (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       user_id INTEGER NOT NULL,
+       obligation_key TEXT NOT NULL,
+       accepted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+       surface TEXT NOT NULL,
+       ip TEXT,
+       ua TEXT
+     )`,
+  ).run().catch(() => null);
+
+  const now = new Date().toISOString();
+  const keys = [...SATISFIABLE_BY_CLICKWRAP];
+  const source = ctx.source || 'signup_clickwrap';
+  let satisfied = 0;
+
+  for (const key of keys) {
+    await env.DB.prepare(
+      `INSERT INTO legal_acceptances (user_id, obligation_key, accepted_at, surface, ip, ua)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).bind(userId, key, now, ctx.surface, ctx.ip || null, ctx.ua || null).run();
+
+    // `ttlForObligation` is consulted rather than assumed: both keys are
+    // `ttlMs: null` today, so acceptance does not expire, and if that ever
+    // changes this follows it instead of silently granting a permanent pass.
+    const ttl = ttlForObligation(key);
+    const expiresAt = ttl === null || ttl === undefined
+      ? null
+      : new Date(Date.now() + ttl).toISOString();
+
+    // `COALESCE` keeps the FIRST acceptance's meta, which is the right answer
+    // for a field that says where this obligation came to be satisfied. A
+    // re-acceptance by someone who already accepted at signup does not rewrite
+    // that history — it adds a `legal_acceptances` row, which is where a second
+    // act belongs. The `status IN ('pending','in_review')` guard means the UPDATE
+    // is a no-op for them anyway.
+    const upd: any = await env.DB.prepare(
+      `UPDATE legal_obligations
+          SET status = 'satisfied',
+              expires_at = ?,
+              evidence_meta = COALESCE(evidence_meta, json_object('source',?,'surface',?,'accepted_at',?)),
+              updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = ?
+          AND obligation_key = ?
+          AND status IN ('pending','in_review')`,
+    ).bind(expiresAt, source, ctx.surface, now, userId, key).run().catch(() => null);
+    if ((upd?.meta as any)?.changes) satisfied += 1;
+  }
+
+  return { keys, satisfied };
+}
+
+// ---------------------------------------------------------------------------
+// Trust Center v2 — provenance, the score, and its history.
+// ---------------------------------------------------------------------------
+
+/**
+ * The one-line "where this status came from" the v2 canvas draws under an
+ * obligation row.
+ *
+ * The fact was never missing, only unexposed: `evidence_meta` has carried
+ * `{"source":"kyc_provider","synced_at":…}` since the KYC sync landed, and
+ * `evidence_envelope_uuid` names the signed envelope. `/me` simply never
+ * returned either, so the page had nothing to render.
+ *
+ * Returns null rather than a filler string when there is no evidence — an
+ * obligation nobody has satisfied yet HAS no provenance, and "Added manually"
+ * over a row nothing touched would be an invention (D56/D68).
+ */
+export function obligationSource(row: any): string | null {
+  const uuid = row?.evidence_envelope_uuid;
+  if (uuid) return `Signed envelope ${String(uuid).slice(0, 8)}`;
+  const raw = row?.evidence_meta;
+  if (!raw) return null;
+  let meta: any = null;
+  try { meta = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return null; }
+  const src = meta && typeof meta.source === 'string' ? meta.source.trim() : '';
+  if (!src) return null;
+  // The two writers in `resyncKycKyb` are the only producers today; anything
+  // else is shown verbatim rather than dropped, so a new writer surfaces
+  // instead of silently rendering nothing.
+  const LABEL: Record<string, string> = {
+    kyc_provider: 'Synced from identity verification',
+    kyb_provider: 'Synced from entity verification',
+    // Written by `recordTermsAcceptance`. Named rather than left to the fallback
+    // because "Synced from signup clickwrap" reads like a system import of
+    // somebody else's record, and this is the person's own act.
+    signup_clickwrap: 'Accepted at signup',
+    // Task #178. The SAME act, and a different sentence, because for these
+    // accounts the first one would be false: they predate the signup checkbox
+    // entirely — it did not exist when they joined — and accepted in the
+    // interstitial instead. `recordTermsAcceptance` used to hardcode
+    // `signup_clickwrap` for every surface, so without this pair (a `source`
+    // parameter there, an entry here) the Trust Center would have said
+    // "Accepted at signup" over an act that happened years after the signup.
+    reacceptance_interstitial: 'Re-accepted in the app',
+  };
+  return LABEL[src] || `Synced from ${src.replace(/_/g, ' ')}`;
+}
+
+/**
+ * The worker's copy of the frontend's `computeTrustScore`.
+ *
+ * DUPLICATED ON PURPOSE, AND GUARDED. The score has to be computed here
+ * because it is written to `trust_score_snapshots` and a history the caller
+ * can set is not a history. Production code never imports across the
+ * `frontend/src` ↔ `cloudflare-worker/src` line in this repo, so the rule
+ * exists twice — and `cloudflare-worker/test/trust_score_parity.test.ts`
+ * imports BOTH (this one and `frontend/src/lib/trustCenter.js`), runs them
+ * over the same fixtures, and fails if they ever disagree. The frontend's
+ * copy had to move out of `TrustScoreBadge.jsx` for that to be possible: a
+ * rule exported from a `.jsx` drags React into any test that imports it.
+ *
+ * A user with no REQUIRED obligations scores 100: nothing is being asked of
+ * them, so nothing is outstanding. That is the frontend's rule too, and the
+ * parity test pins it.
+ */
+export function trustScoreOf(obligations: any[]): number {
+  const required = (obligations || []).filter(o => o.required);
+  if (required.length === 0) return 100;
+  const satisfied = required.filter(
+    o => o.status === 'satisfied' || o.status === 'waived',
+  ).length;
+  return Math.round((satisfied / required.length) * 100);
+}
+
+/** '2026-09' for the instant given — a calendar label, never re-parsed. */
+export function monthLabel(d: Date): string {
+  // UTC deliberately: the label keys a row that must be stable for a user
+  // whatever timezone they read from, and a local-month boundary would give
+  // two readers on the same day different months.
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Record this month's score (once) and report the most recent EARLIER month
+ * on file.
+ *
+ * The write is `INSERT OR IGNORE` against the UNIQUE (user_id, captured_month)
+ * index, so the first read in a month records it and every later read that
+ * month is a no-op — the stored number is the score as it stood when the month
+ * was first observed, not the last.
+ *
+ * The comparison is against the most recent month STRICTLY BEFORE this one,
+ * and the month is returned alongside the number, because a user who did not
+ * open the page for a while is being compared with whenever they last did —
+ * calling that "last month" when it was four months ago would be wrong. The
+ * page names the month it found.
+ *
+ * Never throws: a missing table on a stale D1 degrades to "no history", which
+ * renders as the stated absence, not as a zero delta.
+ */
+export async function recordAndCompareScore(
+  env: Env,
+  userId: number,
+  score: number,
+  now: Date = new Date(),
+): Promise<{ previousScore: number | null; previousMonth: string | null }> {
+  const month = monthLabel(now);
+  try {
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO trust_score_snapshots (user_id, captured_month, score)
+       VALUES (?, ?, ?)`,
+    ).bind(userId, month, score).run();
+  } catch (e) {
+    console.error('[trust] score snapshot write failed', e);
+  }
+  try {
+    const prev: any = await env.DB.prepare(
+      `SELECT captured_month, score FROM trust_score_snapshots
+        WHERE user_id = ? AND captured_month < ?
+        ORDER BY captured_month DESC LIMIT 1`,
+    ).bind(userId, month).first();
+    if (!prev) return { previousScore: null, previousMonth: null };
+    return {
+      previousScore: Number(prev.score),
+      previousMonth: String(prev.captured_month),
+    };
+  } catch (e) {
+    console.error('[trust] score history read failed', e);
+    return { previousScore: null, previousMonth: null };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Envelope history — Trust Center v2's per-agreement timeline.
+// ---------------------------------------------------------------------------
+
+/**
+ * One row of the timeline the canvas draws when an agreement is expanded.
+ * Deliberately narrow: a label and an instant, nothing else.
+ */
+export interface EnvelopeEvent { action: string; at: string }
+
+/**
+ * The audit actions `routes/esign.ts` actually appends, and nothing else.
+ *
+ * The canvas draws Sent / Viewed / Signed, and all three are real here —
+ * `envelope_created`, `envelope_viewed` and `envelope_signed` are written by
+ * `appendAudit` on the live signing flow. Nothing had to be invented, which
+ * is why this is a timeline and not a derivation from two timestamps.
+ *
+ * An action NOT on this list is still returned, humanised, for the same
+ * reason `obligationSource` shows an unknown provenance: a new writer should
+ * surface on the page rather than be silently dropped by a stale list.
+ */
+export const ENVELOPE_EVENT_LABELS: Record<string, string> = {
+  envelope_created: 'Sent',
+  envelope_viewed: 'Viewed',
+  envelope_signed: 'Signed',
+  envelope_rejected: 'Declined',
+  // Not an audit action — synthesised below from `esign_envelopes.completed_at`,
+  // which the last signature sets and nothing appends an event for.
+  envelope_completed: 'Completed',
+  document_downloaded: 'Downloaded',
+  document_downloaded_by_recipient: 'Downloaded',
+  document_forwarded: 'Forwarded',
+};
+
+/**
+ * The caller's own timeline for one envelope.
+ *
+ * AUTHORISATION, and the shape of what is NOT returned:
+ *
+ *   - The caller must be a recipient of the envelope. Matched on
+ *     `r.user_id` OR the lowercased email, because `recipient_user_id` is not
+ *     set on legacy rows — the same join `/agreements` uses to build the
+ *     pending list, so a row that appears there can always be expanded.
+ *   - A non-recipient gets `null`, which the route turns into a 404 rather
+ *     than a 403: the existing `/my_signing_url` handler already refuses to
+ *     confirm that an envelope exists, and this must not become the oracle
+ *     that one isn't.
+ *   - `esign_audit_events` carries `ip`, `ua`, `signer_email` and `meta`.
+ *     NONE of them leave the worker. A counterparty's IP address is not part
+ *     of what the canvas draws and not something this page has any reason to
+ *     disclose; the full trail stays available to admins through
+ *     `GET /api/legal/esign/:id`.
+ *
+ * Legacy rows fall back to the `audit_log` JSON column, which was the source
+ * of truth before `esign_audit_events` existed and is described in
+ * `routes/esign.ts` as "kept for backward compatibility but no longer written
+ * to". Without the fallback every envelope created before that switch would
+ * expand to an empty timeline and look as though nothing had happened to it.
+ */
+export async function envelopeHistory(
+  env: Env,
+  envelopeUuid: string,
+  caller: { id: number; email?: string | null },
+): Promise<EnvelopeEvent[] | null> {
+  const row: any = await env.DB.prepare(
+    `SELECT e.id, e.completed_at, e.audit_log
+       FROM esign_envelopes e
+       JOIN esign_recipients r ON r.envelope_id = e.id
+      WHERE e.envelope_uuid = ?
+        AND (r.user_id = ? OR LOWER(IFNULL(r.recipient_email,'')) = LOWER(?))
+      LIMIT 1`,
+  ).bind(envelopeUuid, caller.id, caller.email || '').first().catch(() => null);
+  if (!row) return null;
+
+  const events: EnvelopeEvent[] = [];
+  try {
+    const res: any = await env.DB.prepare(
+      `SELECT action, ts FROM esign_audit_events
+        WHERE envelope_id = ? ORDER BY ts ASC, id ASC LIMIT 200`,
+    ).bind(row.id).all();
+    for (const e of (res?.results || []) as any[]) {
+      if (e?.action && e?.ts) events.push({ action: String(e.action), at: String(e.ts) });
+    }
+  } catch { /* table absent on a stale D1 — fall through to the JSON column */ }
+
+  if (events.length === 0 && row.audit_log) {
+    try {
+      const legacy = JSON.parse(String(row.audit_log));
+      if (Array.isArray(legacy)) {
+        for (const e of legacy) {
+          if (e?.action && e?.ts) events.push({ action: String(e.action), at: String(e.ts) });
+        }
+      }
+    } catch { /* a malformed blob is no history, not a 500 */ }
+  }
+
+  // `completed_at` is set by the LAST signature and has no audit action of
+  // its own, so the timeline would otherwise end on "Signed" for an envelope
+  // that is finished. Appended rather than synthesised from the signatures:
+  // it is a stored column, not a guess about what the events imply.
+  if (row.completed_at) events.push({ action: 'envelope_completed', at: String(row.completed_at) });
+
+  events.sort((a, b) => (Date.parse(a.at) || 0) - (Date.parse(b.at) || 0));
+  return events;
+}
+
+// ---------------------------------------------------------------------------
+// Task #163 — warn people BEFORE something lapses.
+// ---------------------------------------------------------------------------
+
+/**
+ * How far ahead a warning goes out, largest first.
+ *
+ * Three, each sent once, then silence until `expireDueArtifacts` flips the
+ * row. Chosen with the user over a single 30-day notice (one miss and you
+ * hear nothing again) and over a weekly drumbeat (four or five per item is
+ * how a compliance notice teaches people to ignore compliance notices).
+ */
+export const RENEWAL_THRESHOLDS = [30, 14, 7] as const;
+
+/** What a warning is about. Widened only by adding a table above. */
+export type RenewalSubjectKind = 'obligation' | 'pairwise_nda';
+
+export interface RenewalItem {
+  userId: number;
+  kind: RenewalSubjectKind;
+  subjectId: number;
+  /** The stored deadline, verbatim — the claim key depends on it. */
+  expiresAt: string;
+  /** Whole days from `now` to the deadline, rounded down. */
+  daysLeft: number;
+  /** Which of RENEWAL_THRESHOLDS this crossing belongs to. */
+  threshold: number;
+  /** What to call it in the notice. */
+  label: string;
+}
+
+/**
+ * Which threshold a deadline this far out belongs to, or null if none.
+ *
+ * THE SMALLEST CROSSED ONE, not the nearest. A sweep that misses a night —
+ * a failed cron, a deploy, a D1 blip — would otherwise skip that threshold
+ * forever, because the next run finds the item already past it. Taking the
+ * smallest crossed threshold means a missed 14-day run still warns at 13,
+ * once, under the 14-day claim.
+ */
+export function renewalThresholdFor(daysLeft: number): number | null {
+  if (!Number.isFinite(daysLeft) || daysLeft < 0) return null;
+  let hit: number | null = null;
+  for (const t of RENEWAL_THRESHOLDS) if (daysLeft <= t) hit = t;
+  return hit;
+}
+
+/** Whole days between two instants, floored. Negative once past. */
+export function daysUntil(expiresAt: string, now: Date): number | null {
+  const t = Date.parse(String(expiresAt || ''));
+  if (!Number.isFinite(t)) return null;
+  return Math.floor((t - now.getTime()) / 86_400_000);
+}
+
+/**
+ * The obligation keys as a person would say them.
+ *
+ * Deliberately duplicated from `OBLIGATION_META` in `TrustCenterPage.jsx`
+ * rather than imported: production code never crosses the
+ * `frontend/src` <-> `cloudflare-worker/src` line in this repo. The guard
+ * test imports both and compares them, the same treatment the trust score
+ * and the envelope-event labels get.
+ */
+export const OBLIGATION_LABELS: Record<string, string> = {
+  tos_v1: 'Terms of Service',
+  privacy_v1: 'Privacy Policy',
+  founder_nda_v1: 'Founder NDA',
+  investor_nda_v1: 'Investor NDA',
+  mentor_nda_v1: 'Advisor NDA',
+  mentor_disclaimer_v1: 'Advisor disclaimer',
+  partner_msa_v1: 'Partner MSA',
+  kyc_v1: 'Identity verification (KYC)',
+  kyb_v1: 'Entity verification (KYB)',
+  accreditation_v1: 'Accreditation evidence',
+};
+
+export function obligationLabel(key: string): string {
+  return OBLIGATION_LABELS[String(key || '')] || String(key || 'Obligation');
+}
+
+/**
+ * One line per expiring item: what it is and how long is left.
+ *
+ * A STATE, NOT A DATE. `expires 3/14/2027` reads the same whether it is two
+ * years out or next Tuesday, which is exactly the defect `expiryNote` was
+ * written to fix on `/trust`. The notice repeats that lesson rather than
+ * re-learning it.
+ */
+export function renewalItemLine(item: { label: string; daysLeft: number }): string {
+  const d = item.daysLeft;
+  if (d <= 0) return `${item.label} — expires today`;
+  return `${item.label} — expires in ${d} ${d === 1 ? 'day' : 'days'}`;
+}
+
+/**
+ * The digest one person receives.
+ *
+ * ONE DERIVATION OF "how many", used by the title and the body both. The
+ * Trust Center shipped a frame where a tally and a sentence beside it
+ * disagreed about the same rows; a notice that says "2 items" over a list of
+ * three would be the same defect delivered by email.
+ *
+ * The soonest deadline drives the title, because that is the one that
+ * decides how urgently this needs reading.
+ */
+export function renewalDigest(items: RenewalItem[]): { title: string; body: string } {
+  const sorted = [...items].sort((a, b) => a.daysLeft - b.daysLeft);
+  const n = sorted.length;
+  const soonest = sorted[0];
+  const title = n === 1
+    ? `${soonest.label} expires in ${Math.max(0, soonest.daysLeft)} ${soonest.daysLeft === 1 ? 'day' : 'days'}`
+    : `${n} items expire soon — the first in ${Math.max(0, soonest.daysLeft)} ${soonest.daysLeft === 1 ? 'day' : 'days'}`;
+  const lines = sorted.map(i => `• ${renewalItemLine(i)}`);
+  return {
+    title,
+    // No instruction the platform cannot honour: the Trust Center is where
+    // these are resolved, and the link goes there.
+    body: `${lines.join('\n')}\n\nRenew them from your Trust Center before they lapse.`,
+  };
+}
+
+/**
+ * Nightly: find what is about to lapse, claim each warning exactly once, and
+ * send one digest per person.
+ *
+ * COVERS EXACTLY THE ROWS `expireDueArtifacts` FLIPS — `legal_obligations`
+ * that are `satisfied` with a deadline, and `pairwise_ndas` that are
+ * `active` with one. That predicate is copied on purpose rather than
+ * reinvented: if the warning and the expiry disagreed about what expires,
+ * someone would be warned about an item that never lapses, or lapse without
+ * a warning. It also gives the "never warn about an already-settled row"
+ * rule for free — a `waived`, `revoked` or already-`expired` row is not
+ * `satisfied`/`active` and never matches.
+ *
+ * Every D1 call is wrapped: one unreadable row must not cost everyone else
+ * their warning, the same posture `expireDueArtifacts` and `resyncKycKyb`
+ * already take.
+ */
+export async function renewalSweep(
+  env: Env,
+  now: Date = new Date(),
+  deps: { notify?: (env: Env, args: any) => Promise<unknown> } = {},
+): Promise<{ scanned: number; claimed: number; notified: number }> {
+  await ensureTrustSchema(env);
+  const horizon = new Date(now.getTime() + RENEWAL_THRESHOLDS[0] * 86_400_000).toISOString();
+  const nowIso = now.toISOString();
+  const candidates: RenewalItem[] = [];
+  let scanned = 0;
+
+  // -- obligations ----------------------------------------------------------
+  try {
+    const res: any = await env.DB.prepare(
+      `SELECT id, user_id, obligation_key, expires_at
+         FROM legal_obligations
+        WHERE status = 'satisfied'
+          AND expires_at IS NOT NULL
+          AND expires_at > ?
+          AND expires_at <= ?`,
+    ).bind(nowIso, horizon).all();
+    for (const r of ((res?.results || []) as any[])) {
+      scanned += 1;
+      const daysLeft = daysUntil(r.expires_at, now);
+      if (daysLeft === null) continue;
+      const threshold = renewalThresholdFor(daysLeft);
+      if (threshold === null) continue;
+      candidates.push({
+        userId: Number(r.user_id), kind: 'obligation', subjectId: Number(r.id),
+        expiresAt: String(r.expires_at), daysLeft, threshold,
+        label: obligationLabel(r.obligation_key),
+      });
+    }
+  } catch (e) { console.error('[trust] renewal scan (obligations) failed', e); }
+
+  // -- pairwise NDAs --------------------------------------------------------
+  // BOTH PARTIES. One row, two people who lose cover when it lapses — and
+  // the claim key carries user_id precisely so the first party's warning
+  // does not swallow the second's.
+  try {
+    const res: any = await env.DB.prepare(
+      `SELECT id, party_a_user_id, party_b_user_id, valid_until
+         FROM pairwise_ndas
+        WHERE status = 'active'
+          AND valid_until IS NOT NULL
+          AND valid_until > ?
+          AND valid_until <= ?`,
+    ).bind(nowIso, horizon).all();
+    for (const r of ((res?.results || []) as any[])) {
+      scanned += 1;
+      const daysLeft = daysUntil(r.valid_until, now);
+      if (daysLeft === null) continue;
+      const threshold = renewalThresholdFor(daysLeft);
+      if (threshold === null) continue;
+      for (const uid of [r.party_a_user_id, r.party_b_user_id]) {
+        if (!Number.isFinite(Number(uid)) || Number(uid) <= 0) continue;
+        candidates.push({
+          userId: Number(uid), kind: 'pairwise_nda', subjectId: Number(r.id),
+          expiresAt: String(r.valid_until), daysLeft, threshold,
+          label: 'Mutual NDA',
+        });
+      }
+    }
+  } catch (e) { console.error('[trust] renewal scan (NDAs) failed', e); }
+
+  // -- claim, then group ----------------------------------------------------
+  // THE INSERT IS THE DECISION. `INSERT OR IGNORE` succeeds exactly once per
+  // (person, item, threshold, deadline); a second run the same night claims
+  // nothing and therefore sends nothing. Two overlapping runs cannot
+  // double-send for the same reason.
+  const byUser = new Map<number, RenewalItem[]>();
+  let claimed = 0;
+  for (const c of candidates) {
+    let won = false;
+    try {
+      const ins: any = await env.DB.prepare(
+        `INSERT OR IGNORE INTO renewal_notices
+           (user_id, subject_kind, subject_id, threshold_days, expires_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      ).bind(c.userId, c.kind, c.subjectId, c.threshold, c.expiresAt).run();
+      won = Number((ins?.meta as any)?.changes ?? 0) === 1;
+    } catch (e) { console.error('[trust] renewal claim failed', e); }
+    if (!won) continue;
+    claimed += 1;
+    const list = byUser.get(c.userId) || [];
+    list.push(c);
+    byUser.set(c.userId, list);
+  }
+
+  // -- one notice per person ------------------------------------------------
+  const send = deps.notify
+    || (async (e: Env, a: any) => (await import('./notify')).notify(e, a));
+  let notified = 0;
+  for (const [userId, items] of byUser) {
+    const { title, body } = renewalDigest(items);
+    try {
+      await send(env, {
+        userId,
+        type: 'renewal_due',
+        // NOT critical, deliberately. An omitted or critical category
+        // bypasses quiet hours AND the digest buffer (notify.ts), which is
+        // the opposite of what a batched renewal notice is for.
+        category: 'compliance',
+        title,
+        body,
+        link: '/trust',
+        channels: ['in_app', 'email'],
+        payload: {
+          items: items.map(i => ({
+            kind: i.kind, subject_id: i.subjectId, label: i.label,
+            expires_at: i.expiresAt, days_left: i.daysLeft, threshold: i.threshold,
+          })),
+        },
+      });
+      notified += 1;
+    } catch (e) {
+      // The claim already succeeded, so a failed send costs this person this
+      // warning rather than repeating it nightly. That is the safe direction:
+      // the next threshold still fires, and the alternative — rolling the
+      // claim back — turns a flaky notifier into a nightly spammer.
+      console.error('[trust] renewal notify failed', userId, e);
+    }
+  }
+
+  return { scanned, claimed, notified };
 }

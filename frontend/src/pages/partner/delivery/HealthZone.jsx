@@ -6,7 +6,7 @@ import {
   // `StatCard` went with the four tiles it drew: the strip is the artboard's
   // own now, and one of its tiles has to draw an absence rather than a number.
   Section, Field, SaveNote, NotComputable, SeamRead,
-  UnlinkedZone, isNoPartnerProfile,
+  NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
@@ -177,7 +177,7 @@ function Utilisation({ row }) {
   return (
     <span className="inline-flex items-baseline">
       <span className="text-[12.5px] font-semibold tabular-nums">{row.utilisation_pct}%</span>
-      <span className="ml-1 text-[11px] text-axal-ink-3 tabular-nums">
+      <span className="ml-1 text-[11px] text-axal-faint tabular-nums">
         ({row.hours_used}h of {row.retained_hours}h)
       </span>
       <SeamRead>Pipeline · Retainers</SeamRead>
@@ -213,20 +213,20 @@ function MilestoneEditor({ engagementId, busy, onChanged, onError }) {
   if (error) {
     return <p className="text-[12px] text-red-700 dark:text-red-300">{error}</p>;
   }
-  if (!ready) return <p className="text-[12px] text-axal-ink-3">Loading…</p>;
+  if (!ready) return <p className="text-[12px] text-axal-faint">Loading…</p>;
 
   return (
     <div>
       {rows.length === 0 && (
-        <p className="text-[12px] leading-relaxed text-axal-ink-3">
+        <p className="text-[12px] leading-relaxed text-axal-faint">
           No milestone recorded. Without one, nothing here can be overdue — which
           is why this engagement may be unrated rather than healthy.
         </p>
       )}
       {rows.map((m) => (
         <div key={m.id} className="flex flex-wrap items-center gap-2 border-t border-axal-hairline py-1.5 first:border-t-0 text-[12.5px]">
-          <span className={m.completed_at ? 'text-axal-ink-3 line-through' : 'font-semibold'}>{m.title}</span>
-          <span className="text-[11px] text-axal-ink-3">
+          <span className={m.completed_at ? 'text-axal-faint line-through' : 'font-semibold'}>{m.title}</span>
+          <span className="text-[11px] text-axal-faint">
             {m.due_at ? `due ${m.due_at}` : 'no due date'}
             {m.days_overdue > 0 && !m.completed_at && (
               <span className="ml-1 font-semibold text-amber-700 dark:text-amber-400">
@@ -309,12 +309,12 @@ function BlockerEditor({ engagementId, busy, onChanged, onError }) {
   useEffect(() => { load(); }, [load]);
 
   if (error) return <p className="text-[12px] text-red-700 dark:text-red-300">{error}</p>;
-  if (!ready) return <p className="text-[12px] text-axal-ink-3">Loading…</p>;
+  if (!ready) return <p className="text-[12px] text-axal-faint">Loading…</p>;
 
   return (
     <div>
       {rows.length === 0 && (
-        <p className="text-[12px] leading-relaxed text-axal-ink-3">Nothing blocked.</p>
+        <p className="text-[12px] leading-relaxed text-axal-faint">Nothing blocked.</p>
       )}
       {rows.map((b) => (
         <div key={b.id} className="flex flex-wrap items-center gap-2 border-t border-axal-hairline py-1.5 first:border-t-0 text-[12.5px]">
@@ -324,9 +324,9 @@ function BlockerEditor({ engagementId, busy, onChanged, onError }) {
           <Pill tone={b.side === 'client' ? 'info' : 'warn'}>
             {b.side === 'client' ? 'Client side' : 'Our side'}
           </Pill>
-          <span className={b.cleared_at ? 'text-axal-ink-3 line-through' : ''}>{b.summary}</span>
+          <span className={b.cleared_at ? 'text-axal-faint line-through' : ''}>{b.summary}</span>
           {b.days_open != null && (
-            <span className="text-[11px] text-axal-ink-3">{b.days_open}d open</span>
+            <span className="text-[11px] text-axal-faint">{b.days_open}d open</span>
           )}
           <button
             type="button" className={`${ghostButtonClass} ml-auto`} disabled={busy}
@@ -388,7 +388,7 @@ function HealthRow({ row, roster, busy, onChanged, onError, onSaveFacts, note })
             </span>
             {row.shape === 'embedded_seat' && <Pill tone="neutral">Embedded seat</Pill>}
           </div>
-          <div className="mt-0.5 text-[11.5px] text-axal-ink-3">
+          <div className="mt-0.5 text-[11.5px] text-axal-faint">
             {row.engagement_uid} · {row.status}
             {row.need_title && row.founder_name && <> · {row.need_title}</>}
           </div>
@@ -401,13 +401,13 @@ function HealthRow({ row, roster, busy, onChanged, onError, onSaveFacts, note })
       {/* The reasons the worker used, always shown. A judgement a reader cannot
           explain is not one they should act on — and where health is null this
           is where the "nothing recorded" sentence lands. */}
-      <p className="mt-2 max-w-2xl text-[12.5px] leading-relaxed text-axal-ink-2">
+      <p className="mt-2 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
         {row.health_note || (row.health_reasons || []).join(' · ')}
       </p>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div>
-          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Milestones</div>
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Milestones</div>
           <div className="mt-0.5 text-[12.5px] tabular-nums">
             {row.milestone_count === 0
               ? <Unrecorded>None recorded</Unrecorded>
@@ -415,10 +415,10 @@ function HealthRow({ row, roster, busy, onChanged, onError, onSaveFacts, note })
           </div>
         </div>
         <div>
-          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Blockers</div>
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Blockers</div>
           <div className="mt-0.5 text-[12.5px]">
             {row.open_blockers.length === 0
-              ? <span className="text-axal-ink-2">None open</span>
+              ? <span className="text-axal-muted">None open</span>
               : row.open_blockers.map((b, i) => (
                 <span key={`${b.side}-${i}`} className="mr-1.5">
                   <Pill tone={b.side === 'client' ? 'info' : 'warn'}>
@@ -429,7 +429,7 @@ function HealthRow({ row, roster, busy, onChanged, onError, onSaveFacts, note })
           </div>
         </div>
         <div>
-          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Sent, unopened</div>
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Sent, unopened</div>
           <div className="mt-0.5 text-[12.5px] tabular-nums">
             {row.deliverables_sent === 0
               ? <Unrecorded>Nothing sent</Unrecorded>
@@ -437,22 +437,22 @@ function HealthRow({ row, roster, busy, onChanged, onError, onSaveFacts, note })
           </div>
         </div>
         <div>
-          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Utilisation</div>
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Utilisation</div>
           <div className="mt-0.5"><Utilisation row={row} /></div>
         </div>
       </div>
 
       {open && (
-        <div className="mt-3 space-y-4 rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
+        <div className="mt-3 space-y-4 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
           <div>
-            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Milestones</div>
+            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Milestones</div>
             <div className="mt-1">
               <MilestoneEditor engagementId={row.engagement_id} busy={busy}
                 onChanged={onChanged} onError={onError} />
             </div>
           </div>
           <div>
-            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Blockers</div>
+            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Blockers</div>
             <div className="mt-1">
               <BlockerEditor engagementId={row.engagement_id} busy={busy}
                 onChanged={onChanged} onError={onError} />
@@ -464,7 +464,7 @@ function HealthRow({ row, roster, busy, onChanged, onError, onSaveFacts, note })
               sentence somebody at the firm states, and this is where they
               state it. */}
           <div>
-            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
               What this firm says about it
             </div>
             <div className="mt-1">
@@ -572,23 +572,39 @@ export default function PartnerHealthZone() {
 
   const rowActions = partnerZoneActions('delivery/health', { view: { header: ['Engagement', 'Founder', 'Health', 'Utilisation %', 'Milestones', 'Deliverables sent', 'Open blockers', 'Renews'], rows: visible, cells: (r) => [r.need_title, r.founder_name, r.health, r.utilisation_pct, r.milestone_count, r.deliverables_sent, r.open_blockers?.length ?? 0, r.renews_at] } });
 
-  if (isNoPartnerProfile(state.error)) {
-    return <UnlinkedZone title="Health" actions={rowActions} />;
-  }
+  // NOT AN EARLY RETURN ANY MORE. This was
+  //   `if (isNoPartnerProfile(state.error)) return <UnlinkedZone … />;`
+  // which drew a card INSTEAD of the zone — on twelve zones, so an admin
+  // reading this workspace saw twelve copies of one card and never a page.
+  // `ZoneBody` takes the line as a `notice` above its states, and the zone
+  // renders underneath in its own empty state, which is also the state that
+  // says what this zone holds. The gate itself is untouched: the read still
+  // 400s, so `isEmpty` is forced rather than inferred from rows that never
+  // arrived, and `error` is cleared so the shared "This did not load" card —
+  // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
+  const unlinked = isNoPartnerProfile(state.error);
 
   return (
     <>
+      {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
+          An action states what the zone DOES and an export over nothing
+          loaded renders disabled and says so; a filter chip is a claim about
+          ROWS, and a selectable `Published` over a store this account cannot
+          read is the "an empty set reads as an answer" failure
+          `zoneFilterBuilder.js` exists to prevent, reached from a new
+          direction. `profile_zone_actions.test.mjs` asserts both halves. */}
       <ZoneToolbar
         className="mb-3"
         role="partner"
-        filters={partnerZoneFilters('delivery/health', { value: view, onChange: setView })}
+        filters={unlinked ? [] : partnerZoneFilters('delivery/health', { value: view, onChange: setView })}
         actions={rowActions}
       />
     <ZoneBody
       loading={state.loading}
-      error={state.error}
+      error={unlinked ? null : state.error}
       onRetry={load}
-      isEmpty={items.length === 0}
+      notice={unlinked ? <NoPartnerProfile /> : null}
+      isEmpty={unlinked || (items.length === 0)}
       empty={(
         <NothingYet
           title="No engagement to rate yet"
@@ -651,7 +667,7 @@ export default function PartnerHealthZone() {
         </div>
 
         {d?.unrated_note && (
-          <p className="text-[12.5px] leading-relaxed text-axal-ink-2">{d.unrated_note}</p>
+          <p className="text-[12.5px] leading-relaxed text-axal-muted">{d.unrated_note}</p>
         )}
 
         {/* THE ARTBOARD'S LEGEND, two entries — drawn only where the table
@@ -713,7 +729,7 @@ export default function PartnerHealthZone() {
         />
 
         {items.length > 0 && visible.length === 0 && (
-          <p className="text-[12px] text-axal-ink-2">
+          <p className="text-[12px] text-axal-muted">
             No engagement is in this state. {items.length} in the book in total.
           </p>
         )}

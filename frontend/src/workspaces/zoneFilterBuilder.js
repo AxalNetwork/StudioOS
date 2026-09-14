@@ -20,21 +20,40 @@
  *
  *   `key: 'blockers'` — it narrows the rows the page has loaded. Rendered as a
  *                       chip; selecting it sets the page's own view state.
- *   `unbuilt: '…'`    — nothing in the store distinguishes it. The entry stays
- *                       so `canvasFilterLabels` can still prove this table
- *                       accounted for every string the artboard drew, and so a
- *                       reader of this file learns why. IT RENDERS NOTHING —
- *                       not a chip, and not a sentence either.
+ *   `unbuilt: '…'`    — nothing in the store distinguishes it. Rendered as a
+ *                       DISABLED chip whose hover says why, so the row is the
+ *                       artboard's row and every chip on it is honest about
+ *                       whether it can run. `hover: '…'` overrides the tooltip
+ *                       where the engineering reason is too long to be one.
  *
- * WHY IT RENDERS NOTHING, WHEN IT USED TO RENDER ITS OWN REASON. The field was
- * called `note`, and `ZoneToolbar` collected the notes into prose beneath the
- * chips, so the design's four-word filter row shipped as three paragraphs
- * explaining which of its filters the store cannot tell apart. Not drawing a
- * dead chip is right and has not changed. Printing the reason in the chip row
- * put design-review commentary on the customer surface — and `noteAlways`,
- * which appended a standing sentence BESIDE working chips, did it on rows that
- * were otherwise entirely fine. The reason belongs in this file. What the
- * reader needs on the page is the filters that work.
+ * THE HISTORY OF THAT SECOND LINE, because it has now been three things and
+ * the difference between them is the whole of what this file is about.
+ *
+ * It began as `note`, and `ZoneToolbar` collected the notes into PROSE BENEATH
+ * THE CHIPS — so the design's four-word filter row shipped as three paragraphs
+ * explaining which filters the store cannot tell apart, and `noteAlways`
+ * appended a standing sentence beside chips that were working fine. That was
+ * design-review commentary drawn, unasked, on the customer surface.
+ *
+ * The correction was to render NOTHING. That fixed the paragraphs and created
+ * the report this change answers: across four profiles, 170 canvas controls
+ * were invisible, and every one of them was read as a missing feature. Five
+ * separate reports in one week said "elements are missing" about zones that had
+ * dropped nothing at all.
+ *
+ * So: drawn, disabled, with the reason on HOVER. The distinction that makes
+ * this different from `note` rather than a return to it is that a tooltip is
+ * opt-in. Nothing is printed beside the chips; the row reads as the artboard's
+ * row, and the explanation appears only for a reader who asks for it. Recorded
+ * as the user's decision of 2026-09-13, taken after the trade-off was put to
+ * them — a disabled control can read as broken, which is exactly what the
+ * greyed exports were reported as.
+ *
+ * A DISABLED CHIP CANNOT LIE THE WAY A LIVE ONE COULD. The failure this file
+ * opens with — a live `Stalled` chip whose predicate was `return []`, so
+ * clicking it answered "you have no stalled accounts" when nothing records
+ * stalling — needs the chip to be SELECTABLE. It is not; `onSelect` is absent
+ * and `disabled` is set, so there is no click and no empty set to misread.
  *
  * `canvas` IS THE PROVENANCE AND IS ALWAYS THE ARTBOARD'S OWN STRING.
  * `label` is what renders, and defaults to `canvas`. They differ only where the
@@ -96,7 +115,16 @@ export function makeZoneFilters(TABLE) {
         if (!supplied.length) return [];
         return supplied.map((one) => chip(one.key, one.label));
       }
-      if (item.unbuilt) return [];
+      if (item.unbuilt) {
+        // No `onSelect` and no `active`: a chip that cannot run must not be
+        // selectable, or the empty set it returns reads as an answer.
+        return [{
+          label: withCount(item.label || first, counts[item.key]),
+          testid: id(item.label || first),
+          disabled: true,
+          title: item.hover || item.unbuilt,
+        }];
+      }
       return [chip(item.key, item.label || first)];
     });
   };

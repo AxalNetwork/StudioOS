@@ -7,7 +7,7 @@ import {
   // own composition now, and `ShipTile` below can draw an absence as a chip
   // rather than as an em dash a reader mistakes for zero.
   Section, Field, SaveNote, NotComputable,
-  UnlinkedZone, isNoPartnerProfile,
+  NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
@@ -41,7 +41,7 @@ import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit'
  */
 
 function OpenedState({ row }) {
-  if (!row.sent_at) return <span className="text-axal-ink-3">Not sent yet</span>;
+  if (!row.sent_at) return <span className="text-axal-faint">Not sent yet</span>;
   if (row.signed_off_at) return <Pill tone="ok">Signed off {formatDay(row.signed_off_at)}</Pill>;
   if (row.opened_at) return <Pill tone="info">Opened {formatDay(row.opened_at)}</Pill>;
   // NOT a red "ignored" pill. The absence is ours, not the client's.
@@ -66,7 +66,7 @@ function DeliverableRow({ row, busy, onSave, onDelete, note }) {
             {row.version && <Pill tone="neutral">{row.version}</Pill>}
             <OpenedState row={row} />
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-[11.5px] text-axal-ink-3">
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-[11.5px] text-axal-faint">
             <span>{row.founder_name || row.need_title || row.engagement_uid}</span>
             {row.sent_at
               ? <span>sent {formatDay(row.sent_at)}{row.days_since_sent != null && ` · ${row.days_since_sent}d ago`}</span>
@@ -84,7 +84,7 @@ function DeliverableRow({ row, busy, onSave, onDelete, note }) {
       </div>
 
       {edit && (
-        <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
+        <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
           <div className="grid gap-3 md:grid-cols-2">
             <Field label="Title">
               <input className={inputClass} value={draft.title || ''} maxLength={200}
@@ -109,7 +109,7 @@ function DeliverableRow({ row, busy, onSave, onDelete, note }) {
             record a metric about itself and would make every opened count in
             the product worthless.
           */}
-          <p className="mt-2 text-[11.5px] leading-relaxed text-axal-ink-3">
+          <p className="mt-2 text-[11.5px] leading-relaxed text-axal-faint">
             There is no control here for “opened” or “signed off”. Those are the
             client’s to set, and this product has no surface where they can —
             so every sent item reads unopened, and that reflects us rather than
@@ -239,23 +239,39 @@ export default function PartnerDeliverablesZone() {
 
   const rowActions = partnerZoneActions('delivery/deliverables', { view: { header: ['Client', 'Deliverable', 'Version', 'Sent', 'Age', 'Opened', 'Signed off'], rows: ordered, cells: (r) => [r.founder_name, r.title, r.version, r.sent_at, r.days_since_sent, r.opened_at, r.signed_off_at] } });
 
-  if (isNoPartnerProfile(state.error)) {
-    return <UnlinkedZone title="Deliverables" actions={rowActions} />;
-  }
+  // NOT AN EARLY RETURN ANY MORE. This was
+  //   `if (isNoPartnerProfile(state.error)) return <UnlinkedZone … />;`
+  // which drew a card INSTEAD of the zone — on twelve zones, so an admin
+  // reading this workspace saw twelve copies of one card and never a page.
+  // `ZoneBody` takes the line as a `notice` above its states, and the zone
+  // renders underneath in its own empty state, which is also the state that
+  // says what this zone holds. The gate itself is untouched: the read still
+  // 400s, so `isEmpty` is forced rather than inferred from rows that never
+  // arrived, and `error` is cleared so the shared "This did not load" card —
+  // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
+  const unlinked = isNoPartnerProfile(state.error);
 
   return (
     <>
+      {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
+          An action states what the zone DOES and an export over nothing
+          loaded renders disabled and says so; a filter chip is a claim about
+          ROWS, and a selectable `Published` over a store this account cannot
+          read is the "an empty set reads as an answer" failure
+          `zoneFilterBuilder.js` exists to prevent, reached from a new
+          direction. `profile_zone_actions.test.mjs` asserts both halves. */}
       <ZoneToolbar
         className="mb-3"
         role="partner"
-        filters={partnerZoneFilters('delivery/deliverables', { value: view, onChange: setView })}
+        filters={unlinked ? [] : partnerZoneFilters('delivery/deliverables', { value: view, onChange: setView })}
         actions={rowActions}
       />
     <ZoneBody
       loading={state.loading}
-      error={state.error}
+      error={unlinked ? null : state.error}
       onRetry={load}
-      isEmpty={items.length === 0}
+      notice={unlinked ? <NoPartnerProfile /> : null}
+      isEmpty={unlinked || (items.length === 0)}
       empty={(
         <NothingYet
           title="Nothing logged yet"
@@ -318,11 +334,11 @@ export default function PartnerDeliverablesZone() {
         </div>
 
         {d?.unopened_note && (
-          <p className="text-[12.5px] leading-relaxed text-axal-ink-2">{d.unopened_note}</p>
+          <p className="text-[12.5px] leading-relaxed text-axal-muted">{d.unopened_note}</p>
         )}
 
         {adding && (
-          <div className="rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
+          <div className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
             <div className="grid gap-3 md:grid-cols-2">
               <Field label="Engagement">
                 <select className={inputClass} value={newItem.engagement_id}

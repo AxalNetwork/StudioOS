@@ -88,8 +88,8 @@ export default function FoundersZone() {
             <table className="w-full text-[12.5px]">
               <thead>
                 <tr className="border-b border-axal-hairline text-left dark:border-gray-700">
-                  <th className="px-4 py-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Founder</th>
-                  <th className="px-4 py-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Contact</th>
+                  <th className="px-4 py-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Founder</th>
+                  <th className="px-4 py-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Contact</th>
                 </tr>
               </thead>
               <tbody>

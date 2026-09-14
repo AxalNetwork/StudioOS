@@ -1,11 +1,10 @@
 import { ShieldCheck, ShieldAlert } from 'lucide-react';
 
-export function computeTrustScore(obligations = []) {
-  const required = obligations.filter(o => o.required);
-  if (required.length === 0) return 100;
-  const satisfied = required.filter(o => o.status === 'satisfied' || o.status === 'waived').length;
-  return Math.round((satisfied / required.length) * 100);
-}
+// The rule itself now lives in `lib/trustCenter.js` — a pure module, so the
+// worker's copy of it can be held to the same fixtures by a parity test
+// without dragging React in. Re-exported here because every existing caller
+// imports it from this component and none of them needed to change.
+export { computeTrustScore } from '../lib/trustCenter';
 
 const SIZE = {
   sm: { ring: 36, stroke: 4, font: 'text-[10px]', icon: 12 },

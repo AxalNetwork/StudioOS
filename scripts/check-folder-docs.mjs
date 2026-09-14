@@ -69,6 +69,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/admin/assessment',     'the assessment game editor'],
   ['frontend/src/pages/founder',              'founder workspace landing pages and shared shell'],
   ['frontend/src/pages/investor',             'investor workspace landing pages, mirroring frontend/src/pages/founder'],
+  ['frontend/src/pages/advisor/practice',      'one file per Practice artboard, plus the pure module each keeps its derivations in'],
   ['frontend/src/templates/components',       'landing-page section blocks'],
   ['cloudflare-worker/src/middleware',        'the gates every request passes'],
   ['cloudflare-worker/src/util',              'small shared helpers'],

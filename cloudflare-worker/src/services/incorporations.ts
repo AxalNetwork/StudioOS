@@ -1,10 +1,11 @@
 import type { Env } from '../types';
 import { enqueueJob } from './queue';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let _migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 
 export async function ensureIncorporationsSchema(env: Env): Promise<void> {
-  if (_migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS incorporations (
       id                     INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -32,7 +33,7 @@ export async function ensureIncorporationsSchema(env: Env): Promise<void> {
       if (!/duplicate column|already exists/i.test(msg)) throw e;
     }
   }
-  _migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 export interface CreatePendingArgs {

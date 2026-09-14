@@ -34,11 +34,14 @@
   "devDependencies": {
     "@playwright/test": "^1.62.0",
     "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.9",
     "@vitejs/plugin-react": "^6.1.1",
     "tailwindcss": "^4.0.0",
     "vite": "^8.2.2"
   },
   "overrides": {
-    "postcss": "^8.5.10"
+    "postcss": "^8.5.10",
+    "image-size": "npm:image-size-next@1.2.2"
   }
 }

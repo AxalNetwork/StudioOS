@@ -38,6 +38,7 @@
 import type { Env } from '../../types';
 import type { SpinoutDeckBundle, SpinoutDeckData } from './spinoutDeckData';
 import { flattenSpinoutDeckData } from './spinoutDeckData';
+import { bindingKey } from '../../util/schemaBootstrap';
 
 /**
  * The narrative fields a founder may override at deck level, as dotted paths
@@ -224,9 +225,9 @@ export function applySpinoutOverrides(
  * 164 is the canonical DDL; this exists so a preview/dev D1 that has not been
  * migrated still serves the route instead of 500ing on "no such table".
  */
-let _overridesReady = false;
+const OVERRIDES_READY = new WeakMap<object, boolean>();
 export async function ensureSpinoutDeckOverridesSchema(env: Env): Promise<void> {
-  if (_overridesReady) return;
+  if (OVERRIDES_READY.get(bindingKey(env))) return;
   await env.DB.exec(
     'CREATE TABLE IF NOT EXISTS spinout_deck_overrides (' +
       'id INTEGER PRIMARY KEY AUTOINCREMENT, ' +
@@ -241,7 +242,7 @@ export async function ensureSpinoutDeckOverridesSchema(env: Env): Promise<void> 
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_spinout_deck_overrides_project_key ' +
       'ON spinout_deck_overrides(project_id, field_key)',
   );
-  _overridesReady = true;
+  OVERRIDES_READY.set(bindingKey(env), true);
 }
 
 /** Read a project's stored overrides as a plain map. Never throws on a missing table. */

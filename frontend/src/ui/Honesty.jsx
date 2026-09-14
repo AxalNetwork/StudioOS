@@ -35,14 +35,14 @@ import { CircleAlert, RefreshCw } from 'lucide-react';
  * not literally "not recorded" ("Unavailable", "Not yet measured").
  */
 export function Unrecorded({ children = 'Not recorded', reason }) {
-  // Real Tailwind greys, and deliberately not the `axal-ink-3` ink the
-  // page-level copies of this component reach for. That token is on U11's
-  // undeclared list: Tailwind v4 tree-shakes a theme token nothing declares
-  // and does not warn, so a utility naming one silently produces no style at
-  // all — those copies are not actually muted, they just inherit. `ui/`
-  // holds the stricter rule ("the number can only go down"), and the guard
-  // reads this file as plain text, so the prefixed spelling is not written
-  // here even in a comment.
+  // Real Tailwind greys. The page-level copies of this component used to reach
+  // for `axal-ink-3`, which was on U11's undeclared list — Tailwind v4 emits
+  // nothing for a token no `@theme` declares and does not warn, so those copies
+  // were not actually muted, they just inherited. That name is gone: the sweep
+  // moved all 575 such utilities onto the declared neutrals, so those copies now
+  // paint `axal-faint` and this one keeps its greys. Both have a dark
+  // counterpart in the `index.css` skin. The guard reads this file as plain
+  // text, so no prefixed spelling is written here even in a comment.
   return (
     <span className="italic text-gray-500 dark:text-gray-400" title={reason || undefined}>
       {children}

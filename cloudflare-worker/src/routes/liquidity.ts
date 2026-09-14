@@ -19,6 +19,7 @@ import { computeNetProceeds, rofrStatus } from '../services/secondaryProceeds';
 import { logActivity } from './partnernet';
 import { lpSelfScope } from '../services/tenancyScope';
 import { claimLpRowsByEmail } from '../services/lpClaim';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const liquidity = new Hono<{ Bindings: Env }>();
 
@@ -286,9 +287,9 @@ liquidity.get('/events', async (c) => {
 // 100, so the round trip is exact.
 // ---------------------------------------------------------------------------
 
-let rofrSchemaReady = false;
+const ROFR_SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensureRofrSchema(env: Env): Promise<void> {
-  if (rofrSchemaReady) return;
+  if (ROFR_SCHEMA_READY.get(bindingKey(env))) return;
   await env.DB.prepare(
     `CREATE TABLE IF NOT EXISTS secondary_rofr_notices (
        listing_id        INTEGER PRIMARY KEY REFERENCES secondary_listings(id) ON DELETE CASCADE,
@@ -304,7 +305,7 @@ async function ensureRofrSchema(env: Env): Promise<void> {
        updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
      )`,
   ).run();
-  rofrSchemaReady = true;
+  ROFR_SCHEMA_READY.set(bindingKey(env), true);
 }
 
 /** The listing, if this user is allowed to see its private side. 404 either way. */

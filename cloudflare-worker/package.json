@@ -24,6 +24,6 @@
     "@cloudflare/workers-types": "^5.20260831.1",
     "@types/qrcode": "^1.5.5",
     "typescript": "^7.0.2",
-    "wrangler": "^4.127.1"
+    "wrangler": "^4.131.0"
   }
 }

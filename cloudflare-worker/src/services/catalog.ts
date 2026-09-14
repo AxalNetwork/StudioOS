@@ -15,6 +15,7 @@
  */
 import type { Env } from '../types';
 import { stripeCall } from '../routes/billing';
+import { bindingKey } from '../util/schemaBootstrap';
 
 export type ProductKind = 'subscription' | 'incorporation' | 'session' | 'alacarte';
 
@@ -176,9 +177,9 @@ const KV_TTL_SECONDS = 60;
 // ---------------------------------------------------------------------------
 // Schema bootstrap (idempotent; mirrors migration 097).
 // ---------------------------------------------------------------------------
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 export async function ensureCatalogSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       'CREATE TABLE IF NOT EXISTS stripe_products (' +
@@ -193,7 +194,7 @@ export async function ensureCatalogSchema(env: Env): Promise<void> {
     );
     await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_stripe_products_kind ON stripe_products(kind)');
     await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_stripe_products_active ON stripe_products(active)');
-    _schemaReady = true;
+    SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[catalog] ensureCatalogSchema failed:', (e as Error).message);
   }

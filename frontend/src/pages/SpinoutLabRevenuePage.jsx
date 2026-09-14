@@ -321,7 +321,7 @@ export default function SpinoutLabRevenuePage() {
   ];
 
   return (
-    <div className="max-w-[1200px] mx-auto px-4 py-6 space-y-5" data-testid="page-spinout-revenue">
+    <div className="w-full px-2 sm:px-4 py-3 space-y-5" data-testid="page-spinout-revenue">
       {/* Header — shared Lab header (LabPageHeader owns the rule, back link,
           icon tile, title/status/week chips and the action cluster). */}
       <LabPageHeader

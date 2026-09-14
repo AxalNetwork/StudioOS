@@ -19,10 +19,28 @@ yarn-error.log*
 .npm/
 .yarn/
 
-# Vite / build output (frontend builds to docs/ which IS committed
-# because GitHub Pages serves from there; uncomment if you change that).
+# Vite / build output. `docs/` IS committed — the Cloudflare Worker serves it
+# from its `[assets]` binding on both axal.vc and app.axal.vc, and the og-tags
+# CI job validates the committed bytes (CLAUDE.md fact 4; GitHub Pages and the
+# Cloudflare Pages mirror are both decommissioned, DECISIONS.md D36).
 # docs/
 .vite/
+
+# ...except the asset-retention ledger, which is per-build local state rather
+# than anything a crawler, a reviewer or a check reads. Only
+# `scripts/build-frontend.mjs` touches it, and `planAssetRetention` handles its
+# absence deliberately: with no ledger it seeds the committed `docs/assets` as
+# a synthetic prior build, so no client holding the previous shell breaks.
+#
+# WORTH KNOWING, because intent and reality differ here: the window is
+# ASSET_RETAIN_BUILDS=3, but a deploy rebuilds `docs/` in a fresh checkout,
+# so without a committed ledger it only ever sees that one synthetic entry —
+# the effective window on production is one build, not three. That is the safe
+# direction (it prunes less, never more) and it has been true for as long as
+# the ledger has existed unversioned. Committing the ledger is how you'd get
+# the other two builds back; it would add a 45 KB file that churns wholesale
+# on every rebuild, so it is a deliberate trade rather than an oversight.
+docs/.asset-retention.json
 
 # ---- Python ----
 __pycache__/

@@ -12,8 +12,9 @@
  * the founder-facing hiring board.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 const STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS job_postings (
@@ -67,11 +68,11 @@ const STATEMENTS: string[] = [
 ];
 
 export async function ensureJobBoardSchema(env: Env): Promise<boolean> {
-  if (_ready) return true;
+  if (READY.get(bindingKey(env))) return true;
   // Production migrations own this schema. Keep the lazy setup for local and
   // preview databases only; do not spend a public request on DDL at the edge.
   if (env.ENVIRONMENT === 'production') {
-    _ready = true;
+    READY.set(bindingKey(env), true);
     return true;
   }
   try {
@@ -84,7 +85,7 @@ export async function ensureJobBoardSchema(env: Env): Promise<boolean> {
         console.warn('[jobBoardSchema] statement failed (continuing)', (e as Error).message);
       }
     }
-    _ready = true;
+    READY.set(bindingKey(env), true);
     return true;
   } catch (e) {
     console.error('[jobBoardSchema] bootstrap failed', e);

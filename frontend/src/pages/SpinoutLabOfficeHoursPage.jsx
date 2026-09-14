@@ -573,7 +573,7 @@ export default function SpinoutLabOfficeHoursPage() {
     : { text: 'Questions missing', cls: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' });
 
   return (
-    <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-6" data-testid="spinout-office-hours-page">
+    <div className="w-full px-2 sm:px-4 py-3" data-testid="spinout-office-hours-page">
       {/* Header. The design's 3px teal accent rule (Office Hours.dc.html L30)
           survives as the shared header's top rule, recoloured teal. */}
       <LabPageHeader

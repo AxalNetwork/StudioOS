@@ -362,7 +362,7 @@ export default function SpinoutLabStartupPage() {
   ];
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6" data-testid="page-spinout-startup">
+    <div className="w-full px-2 sm:px-4 py-3" data-testid="page-spinout-startup">
       {/* Header — back control sits INLINE with the title (design handoff),
           and every action stays inside the Lab rather than navigating out. */}
       <LabPageHeader

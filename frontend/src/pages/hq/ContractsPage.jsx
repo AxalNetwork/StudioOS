@@ -18,11 +18,11 @@ export default function HqContractsPage() {
   return (
     <div className="space-y-5" data-testid="hq-contracts-page">
       <header>
-        <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+        <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
           <FileText size={13} /> HQ · Contracts
         </div>
         <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink">Contracts</h1>
-        <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-ink-2">
+        <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
           The master templates every tenant instantiates from, versioned. Doc-type
           registry: <Unrecorded /> — the platform holds template versions, not a registry of
           what a contract can be. Cross-tenant oversight: <Unrecorded /> — no contract names

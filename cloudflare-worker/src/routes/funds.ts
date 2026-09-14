@@ -600,8 +600,16 @@ funds.post('/:id/lps', async (c) => {
   const lp = await LPs.create(c.env, { ...body, fund_id: fundId });
   if (!lp) return c.json({ error: 'create failed' }, 500);
   // First-call automation: enqueue a notice immediately if amount provided.
+  // Task #197 — `call_uid` identifies THIS call, so the job's ledger rows are
+  // idempotent across retries without two presses colliding. See
+  // `_capital_call_writes.ts` for why it cannot come from the job id.
   if (body?.first_call_cents && body.first_call_cents > 0) {
-    await Jobs.enqueue(c.env, 'capital_call_notice', { fund_id: fundId, amount_cents: body.first_call_cents });
+    await Jobs.enqueue(c.env, 'capital_call_notice', {
+      fund_id: fundId,
+      amount_cents: body.first_call_cents,
+      call_uid: crypto.randomUUID(),
+      due_date: body?.first_call_due_date || null,
+    });
   }
   return c.json({ ok: true, lp }, 201);
 });
@@ -628,13 +636,28 @@ funds.post('/lps/:lpId/sign-lpa', async (c) => {
 funds.post('/:id/capital-call', async (c) => {
   const fundId = parseInt(c.req.param('id'), 10);
   await requireFundGp(c, fundId);
-  const body = await c.req.json<{ amount_cents?: number; amount?: number; note?: string }>();
+  const body = await c.req.json<{
+    amount_cents?: number; amount?: number; note?: string; due_date?: string;
+  }>();
   const amountCents = Math.round(body.amount_cents ?? Number(body.amount ?? 0) * 100);
   if (!amountCents || amountCents <= 0) return c.json({ error: 'amount/amount_cents must be > 0' }, 400);
+  // Task #197 — two new fields on the payload, for two different reasons.
+  //
+  // `call_uid` identifies this call so the job's `capital_calls` rows survive a
+  // retry without doubling, and so two deliberate presses stay two calls. It is
+  // minted HERE rather than in the job because the job is the thing that gets
+  // re-run — see `_capital_call_writes.ts`.
+  //
+  // `due_date` is passed through and NEVER DEFAULTED. A capital call's due date
+  // is a deadline an LP acts on; a date the platform invented would carry legal
+  // weight nobody typed. Absent means the row says "no due date recorded".
+  const dueDate = typeof body.due_date === 'string' && body.due_date.trim()
+    ? body.due_date.trim() : null;
   const job = await Jobs.enqueue(c.env, 'capital_call_notice', {
     fund_id: fundId, amount_cents: amountCents, note: body.note,
+    call_uid: crypto.randomUUID(), due_date: dueDate,
   });
-  return c.json({ ok: true, enqueued_job: job });
+  return c.json({ ok: true, enqueued_job: job, due_date: dueDate });
 });
 
 // ---------- Distributions ----------

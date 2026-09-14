@@ -60,6 +60,7 @@ import {
   normalizeProposalForApply,
   type ImportProposal,
 } from '../services/linkedinImport';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const settings = new Hono<{ Bindings: Env }>();
 
@@ -80,9 +81,9 @@ const SETTINGS_USER_COLUMNS: Array<[string, string]> = [
   // at D1's 100-column limit); ensured by ensureProfileExpansionSchema.
 ];
 
-let migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env) {
-  if (migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const db = env.DB;
   for (const [col, type] of SETTINGS_USER_COLUMNS) {
     try { await db.prepare(`ALTER TABLE users ADD COLUMN ${col} ${type}`).run(); } catch {}
@@ -136,7 +137,7 @@ async function ensureSchema(env: Env) {
     await db.prepare(`CREATE INDEX IF NOT EXISTS idx_fi_inviter ON founder_invites(inviter_user_id)`).run();
     await db.prepare(`CREATE INDEX IF NOT EXISTS idx_fi_project ON founder_invites(project_id)`).run();
   } catch {}
-  migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 const FOUNDER_INVITE_CAP_PER_PROJECT = 10;

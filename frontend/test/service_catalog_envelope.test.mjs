@@ -104,13 +104,35 @@ test('/offers/catalog mounts the catalogue rather than a card pointing at it', (
     'a no-store card in front of a working page tells an operator a built feature is missing');
 });
 
-test('the embedded flag suppresses the heading and nothing else', () => {
+test('the embedded mount is the LEDGER body alone — no tab row, no second heading', () => {
   const code = codeOnly(PAGE);
-  // Same correction as above: the rule is what `embedded` DOES, not how many
-  // props sit beside it in the signature.
+  // The rule is what `embedded` DOES, not how many props sit beside it.
   assert.match(code, /function ServiceCatalogPage\(\{[^}]*\buser\b[^}]*\bembedded = false\b[^}]*\}\)/);
-  const guards = code.match(/!embedded/g) || [];
-  assert.equal(guards.length, 1,
-    'Browse / My offerings / Stripe Connect are views WITHIN the catalog, not sibling zones — '
-    + 'they are this page’s controls and must survive being embedded');
+
+  // WHAT THIS ASSERTION USED TO SAY, AND WHY IT SAYS THE OPPOSITE NOW. It read
+  // `assert.equal((code.match(/!embedded/g) || []).length, 1)` under the
+  // message "Browse / My offerings / Stripe Connect are views WITHIN the
+  // catalog, not sibling zones — they are this page's controls and must
+  // survive being embedded". The test was right that the decision deserved
+  // pinning and wrong about which way.
+  //
+  // Browse catalogue lists every OTHER firm's offerings and Stripe Connect is
+  // payouts; neither is a view of "what this firm sells", which is what PO1
+  // defines /offers/catalog to be. And the tab row could select them: `tab`
+  // initialises to `'mine'` only when `isPartner`, so an admin opening the
+  // zone got the public marketplace grid under the "Service catalog" heading
+  // and never reached the LEDGER body at all. A row that can put a different
+  // subject under the zone's own h1 is navigation, and the shell already drew
+  // the navigation. Both subjects keep their home on the unembedded
+  // `/services` mount, which is why this is a move and not a removal.
+  const embeddedReturn = code.slice(code.indexOf('if (embedded)'));
+  assert.match(embeddedReturn.slice(0, 200), /return <MineTab\b/,
+    'the zone mount must return the LEDGER body itself, not a shell that chooses a tab');
+
+  // And the two subjects it no longer draws still have somewhere to be drawn:
+  // the tab list is intact below the early return, for `/services`.
+  assert.match(code, /key: 'browse', label: 'Browse catalogue'/,
+    'Browse catalogue must survive on the standalone /services mount');
+  assert.match(code, /key: 'stripe', label: 'Stripe Connect'/,
+    'Stripe Connect must survive on the standalone /services mount');
 });

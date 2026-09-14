@@ -254,12 +254,11 @@ jobs:
       # one, and still FAILS when the database is unreachable: it just says which
       # of the two happened. See scripts/npm-audit-gate.mjs.
       #
-      # Threshold is `critical`, not `high`. The two highs it tolerates today
-      # are `image-size` (ICNS and JXL/HEIF parsers, both infinite-loop DoS)
-      # and `pptxgenjs`, which reaches them through `image-size` — both used
-      # only to measure and embed images while generating a deck, never on a
-      # request path. The gate prints the live list on every run, so this
-      # comment can be checked against the log rather than trusted.
+      # Threshold is `critical`, not `high`. Remaining highs (if any) print
+      # on every run — do not hard-code a tolerated list here. The previous
+      # pair was `image-size` (ICNS/JXL/HEIF DoS) and `pptxgenjs`, which
+      # reached it; both lockfiles now override `image-size` to the patched
+      # `image-size-next@1.2.2` fork (Dependabot #161).
       - name: npm audit (prod deps, critical fail)
         run: node ../scripts/npm-audit-gate.mjs --level=critical
 
