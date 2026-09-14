@@ -595,6 +595,11 @@ export const api = {
   smsVerifyChallenge: (email, session_info, code) =>
     request('/auth/sms/verify-challenge', { method: 'POST', body: JSON.stringify({ email, session_info, code }) }),
   getMe: () => request('/auth/me'),
+  // Task #178 — the affirmative act the re-acceptance interstitial collects.
+  // No body: the only thing the server needs is who is calling, and the one
+  // thing it must never accept is a user id — an acceptance recorded on
+  // somebody's behalf forges the record this exists to make honest.
+  acceptTerms: () => request('/auth/accept-terms', { method: 'POST' }),
   // Task #51 — "Continue with Google" sign-in. /auth/google/start returns
   // {url} when called with Accept: application/json so the SPA can do a
   // top-level navigation (window.location.href = url). 503 means the

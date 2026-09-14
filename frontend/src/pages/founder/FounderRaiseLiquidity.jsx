@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, BarChart3, Clock3, FileText, LockKeyhole, RefreshCw, ShieldCheck, Sparkles, Waves } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Clock3, FileText, LockKeyhole, RefreshCw, ShieldCheck, Sparkles, Waves } from 'lucide-react';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderRaiseCapital.css';
@@ -27,7 +27,6 @@ const pct = (value) => Number.isFinite(Number(value)) ? `${Number(value).toFixed
 export default function FounderRaiseLiquidity() {
   const [params, setParams] = useSearchParams();
   const requestedId = params.get('project_id');
-  const [projects, setProjects] = useState([]);
   const [project, setProject] = useState(null);
   const [scenario, setScenario] = useState(null);
   // `GET /liquidity/my-portfolio` is `requireAuth` ONLY, so a founder may call it,
@@ -45,7 +44,7 @@ export default function FounderRaiseLiquidity() {
     try {
       const available = list(await api.listProjects(), 'items', 'projects');
       const selected = available.find((item) => String(item.id) === requestedId) || available[0] || null;
-      setProjects(available); setProject(selected);
+      setProject(selected);
       if (!selected) { setScenario(null); return; }
       if (String(selected.id) !== requestedId) {
         setParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(selected.id)); return next; }, { replace: true });
@@ -79,20 +78,19 @@ export default function FounderRaiseLiquidity() {
     return sum + Number(meta.investment || 0) + Object.values(meta.safe_preferences || {}).reduce((inner, value) => inner + Number(value || 0), 0);
   }, 0), [rounds]);
   const query = project?.id ? `?project_id=${project.id}` : '';
-  const workspaceQuery = project?.id ? `?mode=workspace&project_id=${project.id}` : '?mode=workspace';
 
   return <main className="fr-capital fr-liquidity" data-testid="founder-raise-liquidity"><div className="fr-capital-shell"><section className="fr-capital-main">
-    <header className="fr-capital-header"><div className="fr-capital-crumb"><Link to={`/raise/status${query}`}><ArrowLeft size={13} /> Raise</Link><span>/</span><strong>Liquidity</strong></div><div className="fr-capital-title-row"><div><h1>Liquidity &amp; exits</h1><p className="fr-capital-subtitle">Secondaries, ROFR, tender state and the exit waterfall.</p></div>{projects.length > 1 && <label className="fr-capital-picker"><span>Startup</span><select value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}</div><nav className="fr-capital-zone-nav" aria-label="Raise sections"><Link to={`/raise/status${query}`}>Status</Link><Link to={`/raise/pitch${query}`}>Pitch</Link><Link to={`/raise/capital${query}`}>Capital</Link><Link to={`/raise/legal${query}`}>Legal</Link><Link to={`/raise/data-room${query}`}>Data room</Link><Link to={`/raise/liquidity${query}`} className="is-active">Liquidity</Link></nav>
+    <header className="fr-capital-header"><div className="fr-capital-crumb"><Link to={`/raise/status${query}`}><ArrowLeft size={13} /> Raise</Link><span>/</span><strong>Liquidity</strong></div><div className="fr-capital-title-row"><div><h1>Liquidity &amp; exits</h1><p className="fr-capital-subtitle">Secondaries, ROFR, tender state and the exit waterfall.</p></div></div><nav className="fr-capital-zone-nav" aria-label="Raise sections"><Link to={`/raise/status${query}`}>Status</Link><Link to={`/raise/pitch${query}`}>Pitch</Link><Link to={`/raise/capital${query}`}>Capital</Link><Link to={`/raise/legal${query}`}>Legal</Link><Link to={`/raise/data-room${query}`}>Data room</Link><Link to={`/raise/liquidity${query}`} className="is-active">Liquidity</Link></nav>
     <ZoneToolbar
               filters={founderZoneFilters('raise/liquidity', { value: view, onChange: setView })}
               actions={founderZoneActions('raise/liquidity', { query, view: { scope: project?.name, header: ['Holder', 'Type', 'Ownership %', 'Preference', 'Payout', 'Source'], rows: waterfall?.rows || [], cells: (r) => [r.holder, r.type, r.pct, r.preference, r.payout, r.source] } })}
             /></header>
     {error && <div className="fr-capital-alert" role="alert"><AlertCircle size={16} /><span>{error}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
-    {loading ? <div className="fr-capital-loading"><i /><i /><div><i /><i /><i /></div></div> : !project ? <EmptyState /> : <LiquidityContent project={project} result={result} scenario={scenario} rounds={rounds} finalLedger={finalLedger} waterfall={waterfall} preferenceOverhang={preferenceOverhang} view={view} setView={setView} workspaceQuery={workspaceQuery} error={error} portfolio={portfolio} portfolioError={portfolioError} />}
+    {loading ? <div className="fr-capital-loading"><i /><i /><div><i /><i /><i /></div></div> : !project ? <EmptyState /> : <LiquidityContent project={project} result={result} scenario={scenario} rounds={rounds} finalLedger={finalLedger} waterfall={waterfall} preferenceOverhang={preferenceOverhang} view={view} setView={setView} error={error} portfolio={portfolio} portfolioError={portfolioError} />}
   </section><PageRail project={project} result={result} error={error} /></div></main>;
 }
 
-function LiquidityContent({ project, result, scenario, rounds, finalLedger, waterfall, preferenceOverhang, view, setView, workspaceQuery, error, portfolio, portfolioError }) {
+function LiquidityContent({ project, result, scenario, rounds, finalLedger, waterfall, preferenceOverhang, view, setView, error, portfolio, portfolioError }) {
   // EVERY ONE OF THESE WAS THE STRING 'Unavailable'. All three are answerable
   // from `my-portfolio`, which this page can call and never did.
   const listings = list(portfolio?.my_listings);
@@ -119,7 +117,14 @@ function LiquidityContent({ project, result, scenario, rounds, finalLedger, wate
     HARDCODED labels, so it drew `Tender` as selectable while the registry refused
     it, and would have kept drawing the old four after this change. One filter row,
     owned by the registry — the doubled chrome #37 and #40 removed elsewhere. */}
-<div className="fr-capital-toolbar"><div className="fr-capital-actions"><span><ShieldCheck size={13} /> Read-only ledger</span><Link to={`/liquidity${project?.id ? `?project_id=${project.id}` : ''}`} data-testid="link-open-liquidity-workspace"><BarChart3 size={13} /> Open workspace</Link></div></div>{view === 'waterfall' ? <Waterfall waterfall={waterfall} rounds={rounds} finalLedger={finalLedger} error={error} /> : view === 'restrictions' ? <Restrictions listings={listings} error={portfolioError} /> : view === 'history' ? <History events={history} error={portfolioError} /> : <TenderUnavailable />}</section>
+{/* AND THE ONE BUTTON BESIDE THE LABEL IS GONE TOO (#177, swept with #181).
+    It was an "Open workspace" link to `/liquidity` — a surface already carried
+    by the sidebar ("Liquidity & Exits") and by the Raise workspace tab row, so
+    the body was a third handle on it and the only one that read as an action of
+    this zone. The user's words on the identical control in Grow · Brand were
+    "Open workspace has nothing to do there". The "Read-only ledger" label stays:
+    it states what this view is, which is the opposite of deflecting from it. */}
+<div className="fr-capital-toolbar"><div className="fr-capital-actions"><span><ShieldCheck size={13} /> Read-only ledger</span></div></div>{view === 'waterfall' ? <Waterfall waterfall={waterfall} rounds={rounds} finalLedger={finalLedger} error={error} /> : view === 'restrictions' ? <Restrictions listings={listings} error={portfolioError} /> : view === 'history' ? <History events={history} error={portfolioError} /> : <TenderUnavailable />}</section>
     <div className="fr-capital-lower-grid"><section className="fr-capital-card"><div className="fr-capital-card-head"><div><LockKeyhole size={16} /><h2>Restriction coverage</h2></div><span>{portfolioError ? 'Source unavailable' : `${restricted.length} notice${restricted.length === 1 ? '' : 's'}`}</span></div>
       {/* TWO OF THESE FOUR ARE NOW ANSWERABLE AND TWO ARE STILL NOT, which is why
           they no longer share one sentence. `secondary_rofr_notices` carries
@@ -130,7 +135,7 @@ function LiquidityContent({ project, result, scenario, rounds, finalLedger, wate
       <Coverage label="Board approval" value="No source" />
       <Coverage label="Lockup" value="No source" />
       <p className="fr-capital-note">ROFR elections come from the notice served on each listing. Board approval and lockup are clauses in the Bylaws or the SAFE, and nothing here reads those documents — so they are marked as having no source rather than as not recorded.</p></section><section className="fr-capital-card"><div className="fr-capital-card-head"><div><FileText size={16} /><h2>Capital basis</h2></div><span>{result ? 'Stored result' : 'Unavailable'}</span></div><Coverage label="Completed rounds" value={result ? rounds.length : 'Unavailable'} /><Coverage label="Ledger holders" value={result ? finalLedger.length : 'Unavailable'} /><Coverage label="Shares outstanding" value={result?.totals?.shares_outstanding ? Number(result.totals.shares_outstanding).toLocaleString() : 'Not recorded'} /><p className="fr-capital-note">{result ? 'Waterfall values are only shown when the stored scenario includes one.' : 'No cap-table result was returned for this startup.'}</p></section></div>
-    <section className="fr-capital-card fr-capital-waterfall"><div className="fr-capital-card-head"><div><Sparkles size={16} /><h2>Read-only assumptions</h2></div><span>Source-derived</span></div><div className="fr-capital-unavailable"><Sparkles size={17} /><div><strong>{result ? 'No restriction summary is generated here.' : 'No capital ledger is available.'}</strong><p>This collection does not model an exit, save a restriction summary, create a tender, or mutate ROFR state. Use the workspace for supported actions.</p></div></div></section>
+    <section className="fr-capital-card fr-capital-waterfall"><div className="fr-capital-card-head"><div><Sparkles size={16} /><h2>Read-only assumptions</h2></div><span>Source-derived</span></div><div className="fr-capital-unavailable"><Sparkles size={17} /><div><strong>{result ? 'No restriction summary is generated here.' : 'No capital ledger is available.'}</strong><p>This collection does not save a restriction summary, create a tender, or mutate ROFR state. Modelling an exit is the zone header&rsquo;s <b>Model an exit</b> action, which opens the capital model.</p></div></div></section>
   </div>;
 }
 function Waterfall({ waterfall, rounds, finalLedger, error }) {

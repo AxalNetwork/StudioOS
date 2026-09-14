@@ -48,7 +48,6 @@ const isCold = (row) => {
 export default function FounderNetworkRelationships({ embedded = false, role = 'founder', zoneFilters = null }) {
   const [params, setParams] = useSearchParams();
   const requestedId = params.get('project_id');
-  const [projects, setProjects] = useState([]);
   const [project, setProject] = useState(null);
   const [contacts, setContacts] = useState([]);
   const [filter, setFilter] = useState('everyone');
@@ -61,7 +60,6 @@ export default function FounderNetworkRelationships({ embedded = false, role = '
     const available = projectResult.status === 'fulfilled' ? list(projectResult.value, 'items', 'projects') : [];
     const requested = Number(requestedId);
     const chosen = available.find((item) => Number(item.id) === requested) || available[0] || (requestedId ? { id: requested, name: 'Selected startup' } : null);
-    setProjects(available.length ? available : chosen ? [chosen] : []);
     setProject(chosen);
     if (chosen && String(chosen.id) !== requestedId) {
       setParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(chosen.id)); return next; }, { replace: true });
@@ -88,7 +86,7 @@ export default function FounderNetworkRelationships({ embedded = false, role = '
   const query = project?.id ? `?project_id=${project.id}` : '';
 
   return <main className={`fn-rel${embedded ? ' is-embedded' : ''}`} data-testid="founder-network-relationships"><div className="fn-rel-shell"><section className="fn-rel-main">
-    {!embedded && <header className="fn-rel-header"><div className="fn-rel-crumb"><Link to={`/network${query}`}><ArrowLeft size={13} /> Network</Link><span>‹</span><strong>Relationships</strong></div><div className="fn-rel-title-row"><div><h1>Relationship book</h1><p>Project-linked contacts, relationship context and explicit last activity.</p></div>{projects.length > 1 && <label><span>Startup</span><select data-testid="select-network-relationships-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}</div><nav aria-label="Network sections"><Link className="is-active" to={`/network/relationships${query}`}>Relationships</Link><Link to={`/network/introductions${query}`}>Introductions</Link><Link to={`/network/organizations${query}`}>Organizations</Link></nav></header>}
+    {!embedded && <header className="fn-rel-header"><div className="fn-rel-crumb"><Link to={`/network${query}`}><ArrowLeft size={13} /> Network</Link><span>‹</span><strong>Relationships</strong></div><div className="fn-rel-title-row"><div><h1>Relationship book</h1><p>Project-linked contacts, relationship context and explicit last activity.</p></div></div><nav aria-label="Network sections"><Link className="is-active" to={`/network/relationships${query}`}>Relationships</Link><Link to={`/network/introductions${query}`}>Introductions</Link><Link to={`/network/organizations${query}`}>Organizations</Link></nav></header>}
     {/* Outside the header on purpose. These three zones only ever render
         through NetworkWorkspace, which passes `embedded` and draws the crumb,
         heading and zone nav itself — so everything inside that guard is dead

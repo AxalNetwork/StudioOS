@@ -124,7 +124,6 @@ export default function FounderRaiseDesk() {
       <div className="raise-main">
         <header className="raise-hero">
           <div className="raise-heading"><div><h1>Get capital, stay legal</h1><p>The highest-stakes page in the product. Its model menu leads with quality, because a wrong answer here costs more than tokens.</p></div>
-            {projects.length > 1 && <select data-testid="select-raise-project" value={projectId || ''} onChange={(event) => setProjectId(Number(event.target.value))}>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
           </div>
           <nav className="raise-anchors" aria-label="Raise desk sections">{SECTIONS.map(([label, slug]) => <NavLink data-testid={`link-raise-anchor-${slug}`} to={`/raise/${slug}${query}`} key={label} className={zonePillClass}>{label}</NavLink>)}</nav>
         </header>

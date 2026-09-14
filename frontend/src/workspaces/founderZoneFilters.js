@@ -37,7 +37,16 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  *
  * WHY EACH ENTRY NEEDED A LOOK AT THE STORE, NOT A GUESS. The rule in
  * `zoneFilterBuilder.js` — a filter that cannot run is prose, never a chip —
- * only helps if the live/prose split is true. Every `key` below was checked
+ * only helps if the live/prose split is true.
+ *
+ * (THAT RULE HAS MOVED SINCE, and this paragraph would otherwise disagree with
+ * the builder it describes: #180 changed `unbuilt` from contributing NO chip to
+ * contributing a `disabled` one carrying its reason as a hover title. Inert
+ * rather than invisible, which is better and is still not an answer — so
+ * everything below about checking the store before writing a `key` stands
+ * unchanged. What changed is only how loudly a refusal shows.)
+ *
+ * Every `key` below was checked
  * against the predicate the page can actually write over the records its own
  * `api.*` calls return, and every `note` says what is missing rather than that
  * something is missing. Three of these were shipped the other way round and
@@ -143,16 +152,15 @@ const NO_GROUP_TO_AGE =
 // fourth kind of reason this table has needed. See the zone's entry below.
 const CATEGORY_IS_PER_COMPETITOR =
   'each competitor inside an analysis is filed as direct or adjacent, but this row narrows the saved analyses, and an analysis carries no relation of its own';
-// `/validate/verdict`. Both time-travel labels share one absence, and it is not
-// a missing column. `validation_decisions` DOES carry `decided_at` and
-// `superseded_at`, the route returns the full history, and the POST supersedes
-// rather than overwrites — a real ledger. What no store holds is the thing these
-// two labels name: a per-claim verdict is recomputed from the evidence on every
-// request (`verdictFor`), never written down, so there is no state of the board
-// as of last week to return to. Snapshotting it is a change to the model, not a
-// predicate this row can carry.
-const NO_VERDICT_SNAPSHOT =
-  'a claim’s verdict is recomputed from its evidence on every request and never stored, so no earlier state of the board exists to compare against';
+// `NO_VERDICT_SNAPSHOT` stood here — "a claim's verdict is recomputed from its
+// evidence on every request and never stored, so no earlier state of the board
+// exists to compare against" — and covered both of `validate/verdict`'s
+// time-travel labels. It said the right thing and it said one more: that
+// snapshotting the verdict "is a change to the model, not a predicate this row
+// can carry". Migration 255 made that change, so the constant goes, for the same
+// reason `NO_WEEK_STAMP`, `NO_CADENCE_STORE` and `NO_SESSION_RECORD` went before
+// it: a reason that survives its own fix will be cited again by the next chip.
+// Four have now gone the same way in this file, which is the pattern working.
 
 export const FOUNDER_ZONE_FILTERS = {
   // ── Validate ─────────────────────────────────────────────────────────────
@@ -235,13 +243,28 @@ export const FOUNDER_ZONE_FILTERS = {
   'validate/hypotheses': [
     { canvas: 'All', key: 'all' },
     { canvas: 'Blocking the verdict', key: 'blocking' },
-    { canvas: 'Recently moved', unbuilt: 'the board selects id, code, claim, sort_order and retired_at — no `updated_at` reaches the page, and nothing records a claim moving between lanes', hover: 'Nothing records a claim moving between lanes, and no update time reaches this board.' },
+    // LIVE AS OF MIGRATION 255, and `updated_at` was never the answer. The old
+    // reason was right that nothing recorded a claim moving between lanes, and
+    // right to refuse the obvious substitute: `hypotheses.updated_at` moves when
+    // the CLAIM TEXT is edited, so a "recently moved" built on it would have
+    // reported typo fixes as evidence changing. `hypothesis_verdict_history`
+    // records the lane beside the verdict, which is what a question about the
+    // board's columns actually needs.
+    { canvas: 'Recently moved', key: 'moved' },
     { canvas: 'Retired', key: 'retired' },
   ],
+  // ALL FOUR ARE LIVE AS OF MIGRATION 255, and two of them are time travel
+  // rather than filters: `As of last week` shows the verdict that was in force
+  // then, not today's under an earlier heading.
+  //
+  // NOTHING IS BACKFILLED, and the page says so rather than letting the gap read
+  // as an answer. A claim with no observation that far back is left OUT of `As
+  // of last week`, and the zone prints `verdict_history_since` — the same seam
+  // `/build/this-week` carries for `okr_column_moves`, handled the same way.
   'validate/verdict': [
     { canvas: 'Current', key: 'current' },
-    { canvas: 'As of last week', unbuilt: NO_VERDICT_SNAPSHOT },
-    { canvas: 'Changed this month', unbuilt: NO_VERDICT_SNAPSHOT },
+    { canvas: 'As of last week', key: 'lastweek' },
+    { canvas: 'Changed this month', key: 'changed' },
     { canvas: 'Retired claims', key: 'retired' },
   ],
   // ── Build ────────────────────────────────────────────────────────────────

@@ -6758,3 +6758,355 @@ output still looked right.
 `'event'` from the map fails the unit test, the cross-file invariant and the
 render test; the bare literal in the modal fails only the coupling guard; letting
 the CTA default an unknown category to the deal pack fails the render tests.
+
+## D98 — one company, one startup: the 25 in-body pickers go, and the ledger that counted them was four short
+
+**Date:** 2026-09-14 · **Task:** #181 (with #177, #179) · **Migration:** none
+
+### The question that blocked this for two rounds
+
+A startup is not a company. The sidebar's `CompanySwitcher` selects a **company**
+— sent as `X-Company-Id`, verified against `user_company_links`, and the worker
+narrows a founder's projects by `company_id` (migrations 189, 193-198). Each
+in-body picker selected a **project**, and every one sat behind
+`projects.length > 1`: *more than one startup inside the already-selected
+company.* That made it a second axis rather than a duplicate, and deleting it
+looked like removing the only way such a founder could move between startups.
+
+So the question was never "is this chrome redundant" but "can a company hold two
+startups". It is answered, and it was **measured, not assumed**: production D1
+holds **5 projects across 5 founders, one project each**, `company_id` NULL on
+all five (legacy rows predating migration 189). `projects.length > 1` was false
+for every live account, so **not one of these pickers rendered for anybody**.
+The deletion removes no capability any account was using.
+
+`projects.company_id` handling is untouched. It is written on creation
+(`routes/projects.ts:437,515`, `imports.ts:117`) and read with a deliberate
+`OR p.company_id IS NULL` for those five legacy rows. The schema still permits
+more than one project per company; the UI simply no longer offers to switch.
+
+### The ledger was counting the wrong thing
+
+Task #84 removed these once, per route, and they came back, because nothing
+counted them. #181 then added `scripts/check-inline-project-pickers.mjs`, which
+swept for `data-testid="select-<something>-project"`. That sweep found **21** and
+corrected the task, which had named eleven by hand.
+
+It was still wrong. **Four more pickers carried no test attribute at all** —
+`FounderRaiseLiquidity`, `MarketIntelPage`, `RaisePipelinePage`,
+`raise/DataRoomPage` — so a ledger reporting "21 in-body startup pickers, all on
+record" was reporting a number it had no way to complete. The real count was
+**25**. A guard keyed on a *test attribute* can be defeated by leaving the
+attribute off, which is not a hypothetical: four authors already had.
+
+The sweep now also keys on `projects.length > 1` used as a render guard, which is
+the property that *defines* the control — a scope switcher that appears only when
+a second startup exists. The mutation sweep pins the difference: a picker written
+without a testid fails the new gate and **passes the old one**.
+
+A `<select>` over projects that is *not* behind that guard is deliberately out of
+scope. On `/cap-table`, `/discovery`, `/build/brand` and twenty other legacy tool
+pages the picker is the tool's own input, shown whether you have one startup or
+ten. Those ask "which startup is this tool about"; these asked "which startup is
+this page about", on a page the sidebar had already scoped.
+
+### Deleting a control means checking what reached through it
+
+Twenty-two of the 25 pages read `?project_id=` and still do.
+`MarketIntelPage` and `RaisePipelinePage` never did — they resolve the first
+project their own fetch returns, which is exactly what they did on every account
+where the picker was hidden. `inline_project_pickers_retired.test.mjs` holds that
+as a per-file table, so a page that later loses its URL read fails there instead
+of quietly showing project #1 forever.
+
+Nine pages were left holding a `projects` array that nothing read once the picker
+was gone, and one (`DataRoomPage`) a `projectUid` with no setter. Both are
+deleted rather than left as a fetch feeding nothing — `check-unused-imports` sees
+neither shape, so this was a manual sweep.
+
+### The "New Startup" button, and the thing it was hiding
+
+`CreateStartupForm` rendered its own button to toggle its own form, in the Build
+desk's header. That is the same class of control: a body-level handle on
+something the URL already addresses — thirteen places across the SPA link to
+`/build?new=1` (the Command Palette's "Create startup", ten empty states, two Lab
+pages). The button is gone; a closed `CreateStartupForm` now renders **nothing**.
+
+Removing it exposed a bug the button had been covering. `creating` was seeded by
+a `useState` **initializer** reading `?new=1`, which runs once. Twelve of the
+thirteen links arrive from another route and remount the desk, so they worked.
+The Command Palette is the thirteenth and can be opened **from /build itself**,
+where `nav('/build?new=1')` changes the search string without remounting: the
+initializer never re-ran and the entry did nothing at all. The desk now follows
+the param when it changes. Had the button simply been deleted, the palette entry
+would have gone from silently-broken to visibly-broken.
+
+### Two "Open workspace" links went with them
+
+#179 recorded the user's words about Grow · Brand — *"Open workspace has nothing
+to do there"* — and #177 flagged the identical link on Raise · Liquidity. Both
+are body-level controls whose whole function is to send the reader somewhere
+else, and both destinations remain reachable: Brand's from the zone header's own
+`New page` action (same URL), Liquidity's from the sidebar ("Liquidity & Exits")
+and the Raise workspace tab row.
+
+Liquidity's copy had to move with its link. The page said *"Use the workspace for
+supported actions"* — a sentence pointing at a control the page no longer has. It
+now names where modelling an exit actually is, the zone header's `Model an exit`.
+**A dangling instruction is worse than the duplicate link was**, and it is the
+failure mode a deletion-only change would have shipped.
+
+### What the tests pin that the count cannot
+
+`check-inline-project-pickers.mjs` counts; that is the right tool for counting,
+and the ledger stays at zero so a twenty-sixth has to argue for itself in a diff.
+`inline_project_pickers_retired.test.mjs` asserts the three things a text sweep
+cannot see: that every page can still be aimed at a startup, that a closed
+`CreateStartupForm` renders the empty string while an open one still renders the
+form, and that `?new=1` is followed on change rather than only at mount.
+
+`frontend/test/_codeOnly.mjs` gained `codeOnlyJsx`, because three of those
+assertions failed against correct code: each deletion left a `{/* … */}` in the
+markup naming what went, and those comments contain the exact strings the
+assertions ban. Same lesson as `codeOnly`'s own docblock, one layer in — **the
+comment you want to keep is the one that names the thing.**
+
+**7 mutations applied, 7 caught.** Re-adding a picker with a testid, re-adding
+one without (the new capability — the old gate passed it), restoring a baseline
+entry with no picker behind it, dropping a page's `?project_id=` read, restoring
+the "New Startup" button, deleting the `?new=1` effect, and restoring Liquidity's
+dangling sentence.
+
+## D99 — the terms nobody ever accepted, asked for once, and the provenance line that would have lied about it
+
+**Date:** 2026-09-14 · **Task:** #178 · **Migration:** none
+
+### What #549 left behind
+
+PR #549 made the terms consent real: an explicit, unticked checkbox on the
+onboarding licence gate, and `recordTermsAcceptance` to make the act permanent.
+But that gate is passed only by fresh Auth-v2 signups. Admins, impersonated
+sessions, `access_level = 'limited'` accounts, the legacy `flow='chat'` rows and
+**every account older than #549** still had `tos_v1` and `privacy_v1` sitting
+`pending` — satisfiable since #549, satisfied by nothing. What those people had
+been shown was "By continuing you agree" in 10px under a submit button, which is
+a notice and not an act.
+
+Marking the obligations satisfied would have been a one-line change and a false
+record. So they get asked, once, and the answer is theirs to give.
+
+### The signal rides `GET /auth/me`, and every other candidate writes
+
+`recovery_pending` in the same response literal is the shape: an inline IIFE
+doing its own `SELECT`, swallowing errors to a safe default. The new
+`terms_acceptance_pending` sits beside it.
+
+The alternative was an obligation endpoint, and it is disqualified on mechanics
+rather than taste. Every read-shaped `/trust/*` GET calls `seedObligations`,
+which is one unconditional `UPDATE` plus **one `INSERT … ON CONFLICT DO UPDATE`
+per obligation def, in a loop** — and `GET /trust/score/:userId` does that to
+*another user's* rows. Gating page load on one would put those writes on every
+navigation.
+
+**The flag is a fact, not a policy.** An admin really does have these rows
+pending and `/me` says so; whether a session is interrupted over it is decided in
+one place, `App.jsx`, beside the licence and KYC gates whose exclusions it
+copies. Two places deciding is how they come to disagree.
+
+**Absent reads as "do not gate", in all four of its forms**: a DB error, a
+missing table, an account with no obligation rows, and the dev FastAPI, whose
+`/me` has no such key. The SPA therefore tests `=== true` and initialises to
+`false`. The inverse of any one of those would put an unskippable consent screen
+in front of every session — including one whose own accept call is failing.
+
+### The gate renders in place rather than navigating
+
+This is the one structural difference from the two gates above it, and it buys
+two things. It blocks every path including `/onboarding/*`, so there is no
+exemption list to keep in step with the KYC gate's; and `onLogout` is already in
+scope in `RequireAuth`, so **Decline runs the app's own session teardown** rather
+than a second copy that drifts from it. The reader keeps their URL, so accepting
+drops them exactly where they were going.
+
+`licenceGateOwnsConsent` is what stops anyone being asked twice: a fresh signup
+mid licence flow will accept at the licence screen, so the interstitial stands
+down for them. Stated as a fact about the account rather than a path test,
+because a path test would have to name every screen that flow can be on.
+
+**A consent screen with no exit is not consent.** Clickwrap was chosen over
+implied acceptance because it is the stronger record, and a record collected from
+someone with nowhere else to go is weaker than the notice it replaces. Decline
+signs out, changes nothing, and the question is asked again next time.
+
+**No version is claimed.** Migration 245 deliberately stores no document hash —
+`/terms` and `/privacy` are JSX while the `tos_v1`/`privacy_v1` templates are
+different documents, so nothing knows which bytes a reader saw. Saying "version
+3" would invent the one fact the schema refused to guess.
+
+### The defect this would otherwise have shipped
+
+The task's own research said to "add a matching `obligationSource` label or
+provenance falls through to the verbatim branch". **Neither would have
+happened.** `obligationSource` keys off `evidence_meta.source`, not `surface` —
+and `recordTermsAcceptance` **hardcoded** `'source','signup_clickwrap'` for every
+surface, because there had only ever been one caller. So the Trust Center would
+have told an account that predates the signup checkbox entirely that it had
+**"Accepted at signup"**. The label lookup would never have seen the new surface
+at all.
+
+`source` is now a parameter defaulting to `'signup_clickwrap'` — additive, the
+existing caller unchanged — and `reacceptance_interstitial` has its own entry:
+*"Re-accepted in the app."* The durable assertion is neither of those: it is that
+the SQL may not contain a source literal again, so a third caller that forgets
+its own gets the honest default rather than a borrowed sentence.
+
+`evidence_meta` stays under `COALESCE`, which keeps the *first* acceptance's
+provenance. That is right for a field that says where an obligation came to be
+satisfied; a second act belongs in `legal_acceptances`, which is append-only and
+is where it goes.
+
+### No new `status='satisfied'` write site, and no backfill
+
+The accept route calls the existing `recordTermsAcceptance`, so
+`obligation_satisfiable.test.ts`'s `sites === 5` pin is untouched — if it ever
+moves, a new satisfier was added and that is a different change.
+
+Migration 245 **does not** reserve an `'admin backfill'` surface, contrary to what
+the task recorded: `surface` is plain `TEXT NOT NULL` with no CHECK and no enum,
+and the phrase appears once, in the migration's prose. The rule needs no schema
+to enforce it — **an acceptance recorded on somebody's behalf forges the record
+this change exists to make honest** — so the refusal lives where it could
+otherwise happen: the route takes no user id, the client sends no body, and a
+test asserts both.
+
+### The score jump, decided rather than left open
+
+Satisfying two required rows moves partner/admin 0→100, founder 0→67, advisor
+0→50, crossing the band threshold at 60. Two facts bound it: `trust_score_snapshots`
+is pull-based (`INSERT OR IGNORE` per user-month, written only by `GET /trust/me`),
+so there is no mass write; and the 60/90 thresholds are frontend-only.
+
+**Decision: no bespoke score-delta annotation.** The provenance fix is what makes
+the jump explainable — the obligation's own line now says it was re-accepted in
+the app rather than at signup — and a second, parallel explanation of the same
+event is how two surfaces start disagreeing. Recorded here so the choice is
+visible rather than silent.
+
+**15 mutations applied, 15 caught.** Seven on the worker: dropping `required = 1`,
+dropping the obligation-key filter, counting `satisfied` as owing, failing closed
+on a DB error, taking a user id from the request, re-hardcoding the source, and
+deleting the new label. Eight on the SPA: pre-ticking the checkbox, removing the
+decline control, removing the announcement, claiming a document version, dropping
+`!isImpersonating` from the gate, reading the flag loosely, initialising it to
+`true`, and unsubscribing the shell from the accepted event.
+
+## D100 — a verdict that was only ever derived gets a history, and it is written on the read
+
+**Date:** 2026-09-14 · **Task:** #175 · **Migration:** 255
+
+### Three chips that could not answer their own question
+
+`/validate/verdict`'s `As of last week` and `Changed this month`, and
+`/validate/hypotheses`' `Recently moved`, were registered `unbuilt` under a
+reason that was exactly right and said so in the file:
+
+> a claim's verdict is recomputed from its evidence on every request and never
+> stored, so no earlier state of the board exists to compare against …
+> snapshotting it is a change to the model, not a predicate this row can carry.
+
+Migration 255 is that model change. The derived values stay derived — storing
+the CURRENT verdict would be a second answer to a question the interviews
+already answer — and what is stored is the other thing entirely: an append-only
+record of what the derived pair HAS BEEN.
+
+**The lane is recorded beside the verdict, and that is what makes the third chip
+work.** `laneFor(verdict, evidence)` is derived too, and a claim moves from
+`none` to `testing` the moment its first supporting interview lands with no
+verdict change at all. A chip about the board's columns has to ask about
+columns.
+
+### CORRECTION TO THE PLAN: there were three chips, not six
+
+The approved plan named six, three of them on `/build/this-week`. **Those were
+already done.** `NO_WEEK_STAMP` is gone, migration 252's `okr_column_moves` logs
+every roadmap column change, and all four of that zone's chips are live. The
+plan was written off an audit finding rather than off the code.
+
+### CORRECTION TO THE PLAN: written on the read, not on the write path
+
+The plan said to instrument "the evidence-write path". **There is no such path,
+singular.** `verdictFor(evidenceFor(links, interviews))` depends on
+`hypothesis_pain_links`, on every interview's `icp_fit`, and on which pain
+groups each interview's `pains_json` resolves to through `pain_group_aliases` —
+so a verdict moves on a link insert, a link delete, an ICP-fit patch, a newly
+logged interview, an edited pains blob and a pain-tag re-grouping. Six writers
+across three route files today, and **the failure mode of missing one is
+silent**: that path produces no history, and a history with a hole in it looks
+exactly like one without.
+
+So it follows `trust_score_snapshots` instead, which solved the same problem the
+same way: pull-based, idempotent, written only by the read that needs it. The
+cost is stated rather than hidden — a board nobody opens records nothing, so the
+board returns `verdict_history_since` and both zones print it.
+
+**It is not `seedObligations`, and the difference is the whole reason this is
+acceptable on a read.** That one performs an unconditional UPDATE plus one upsert
+per obligation definition on every call. This performs ONE SELECT and writes only
+when a recomputed pair differs from the last row — **zero statements in the
+steady state**, which is almost every request. A test asserts exactly that: five
+consecutive reads of an unchanged board write nothing.
+
+### Nothing is backfilled, and the refusal is per claim
+
+The only timestamp a past verdict could be invented from is
+`hypotheses.updated_at`, which moves when the CLAIM TEXT is edited. A verdict
+dated from that would be a specific, confident, wrong answer.
+
+So `As of last week` **excludes** a claim with no observation that old rather
+than showing today's verdict under an earlier heading, and the zone says when the
+record starts. Same seam as `/build/this-week`'s un-backfilled log, handled the
+same way.
+
+`Recently moved` and `Changed this month` ask a different question and needed a
+different shape. "Differs from what it was at `since`" quietly refuses the most
+interesting case — a claim first observed three days ago that moved yesterday HAS
+moved this week. A change is an adjacent pair of observations that disagree, and
+the window is about **when** the change happened, not how far back the record
+reaches. A first observation is never a change: counting it would report every
+claim as recently moved for as long as the record is younger than the window.
+
+### The bug that would have made two chips answer everything
+
+SQLite's `datetime('now')` writes `2026-09-14 11:20:00` — a space, no zone. `'T'`
+sorts **after** `' '`, so `'2026-09-07 12:00:01' < '2026-09-07T12:00:00.000Z'` is
+TRUE: a stamp one second inside a window compares as outside it, and other pairs
+compare the other way. Every comparison goes through `parseObserved`, and the
+test carries the boundary fixture where the two answers differ — without it the
+string-comparison mutation escaped.
+
+### A claim I had to correct mid-build
+
+I wrote, four times, that an `unbuilt` entry "renders NOTHING". **That has not
+been true since #180**, which changed the builder to draw a `disabled` chip
+carrying its reason as a hover title — inert rather than invisible, which is
+better and is still not an answer. The mutation that put a chip back to `unbuilt`
+ESCAPED the first version of this test, because the test counted chips and a
+refusing chip is still in the array. What separates live from refusing is
+`disabled` and `onSelect`, and that is what it asserts now.
+
+`founderZoneFilters.js`'s own docblock still described the old rule, two hundred
+lines above the new entries. Corrected in place rather than left to disagree with
+itself.
+
+`NO_VERDICT_SNAPSHOT` is **deleted, not reworded** — the fourth constant in that
+file to go when its store arrived, after `NO_WEEK_STAMP`, `NO_CADENCE_STORE` and
+`NO_SESSION_RECORD`. A shared reason that survives its own fix does not sit
+harmlessly; it gets cited by the next chip.
+
+**11 mutations applied, 11 caught — two only after being closed.** Writing
+unconditionally, ignoring the lane in the comparison, caching readiness per
+isolate instead of per binding (the #204 shape), returning the history
+newest-first, dropping the project scope, comparing the stamp as a string,
+falling back to today's verdict when nothing is old enough, counting a first
+observation as a move, putting either chip back to `unbuilt`, and dropping
+`verdict_history_since` from the board.

@@ -36,6 +36,9 @@ import {
 } from './_founder_validate_exports';
 import { ensureDiscoveryEvidenceColumns, ensureDiscoveryRecordingColumns } from '../services/discoveryInterviewSchema';
 import {
+  recordVerdictChanges, loadVerdictHistory, type VerdictObservation,
+} from '../services/verdictHistory';
+import {
   canReadBoard, canReadDecision, canWrite,
   verdictFor, laneFor, barNoteFor, evidenceFor, isIcp, VALIDATION_BAR,
   type ProjectRef,
@@ -195,6 +198,29 @@ async function buildBoard(env: Env, projectId: number) {
     };
   });
 
+  // WHAT THE BOARD USED TO SAY (#175, migration 255). Everything above is
+  // derived and stored nowhere, which is correct and stays — but it left three
+  // chips with nothing to stand on: `As of last week` and `Changed this month`
+  // on /validate/verdict, and `Recently moved` on /validate/hypotheses. The
+  // history is recorded here, on the read, and the reasoning for that is in
+  // `services/verdictHistory.ts`: there is no single evidence-write path to hang
+  // it on, and the failure mode of missing one of the six is a hole nothing can
+  // see. Writes only on a change, so this is one SELECT in the steady state.
+  //
+  // Never allowed to cost the board: a history that cannot be written or read
+  // leaves `history: []` and `verdict_history_since: null`, and the chips refuse
+  // rather than drawing an empty answer.
+  await recordVerdictChanges(env, projectId, items.map((h: any) => ({
+    hypothesis_id: Number(h.id), verdict: h.verdict ?? null, lane: String(h.lane),
+  }))).catch(() => 0);
+  const history = await loadVerdictHistory(env, projectId)
+    .catch(() => ({ byClaim: new Map<number, VerdictObservation[]>(), since: null as string | null }));
+  for (const h of items as any[]) {
+    h.history = (history.byClaim.get(Number(h.id)) || []).map((o) => ({
+      verdict: o.verdict, lane: o.lane, observed_at: o.observed_at,
+    }));
+  }
+
   // Project-level honesty: how much of the evidence base is unusable, and why.
   const fitMissing = interviews.filter((i) => i.row.icp_fit == null).length;
   const consentMissing = interviews.filter((i) => i.row.quote_consent == null).length;
@@ -203,6 +229,13 @@ async function buildBoard(env: Env, projectId: number) {
     bar: VALIDATION_BAR,
     hypotheses: items,
     pain_groups: model.groups,
+    // WHEN THE RECORD STARTS, so the page can say it. Nothing is backfilled —
+    // the only timestamp available to invent a past verdict from is
+    // `hypotheses.updated_at`, which moves when the claim TEXT is edited — and a
+    // window with no observations in it must read as "not recorded yet" rather
+    // than as "nothing changed". `/build/this-week` returns `history_since` for
+    // exactly this reason and this is the same seam.
+    verdict_history_since: history.since,
     evidence_base: {
       interviews: interviews.length,
       icp: interviews.filter((i) => isIcp(i.row.icp_fit)).length,

@@ -245,6 +245,11 @@ const OnboardingPersonaPage = lazy(() => import('./pages/OnboardingPersonaPage')
 const AcademyLessonPage = lazy(() => import('./pages/AcademyLessonPage'));
 const OnboardingFounderPage = lazy(() => import('./pages/OnboardingFounderPage'));
 const ChooseLicencePage = lazy(() => import('./pages/ChooseLicencePage'));
+// Task #178 — rendered in place by RequireAuth rather than routed to, so it
+// blocks every path without an exemption list and so Decline can use the app's
+// own `onLogout`. Lazy like its sibling: it is a once-per-account screen and
+// does not belong in the entry chunk.
+const AcceptTermsPage = lazy(() => import('./pages/AcceptTermsPage'));
 // Template landing pages — audience-specific conversion surfaces.
 const FounderHomePage = lazy(() => import('./pages/templates/FounderHomePage'));
 const CustomerDiscoveryHomePage = lazy(() => import('./pages/templates/CustomerDiscoveryHomePage'));
@@ -326,7 +331,7 @@ const StepUpModal = lazy(() => import('./components/StepUpModal'));
 const InstallPrompt = lazy(() => import('./components/InstallPrompt'));
 const KeyboardShortcutsOverlay = lazy(() => import('./components/KeyboardShortcutsOverlay'));
 import useInactivityTimeout from './hooks/useInactivityTimeout';
-import { ONBOARDING_COMPLETE_EVENT } from './lib/onboarding';
+import { ONBOARDING_COMPLETE_EVENT, TERMS_ACCEPTED_EVENT } from './lib/onboarding';
 import { shellRoleFor, isSuperAdminUser, readHqView, writeHqView, clearHqView } from './lib/shellRole';
 
 // Phase B · Prompt 5 — sidebar groups now live in `frontend/src/sidebarConfig.js`.
@@ -1001,6 +1006,13 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   const [onboardingFlow, setOnboardingFlow] = useState(null);
   const [onboardingComplete, setOnboardingComplete] = useState(true);
   const [onboardingLoaded, setOnboardingLoaded] = useState(false);
+  // Task #178 — does this account still owe an acceptance of the terms?
+  // FALSE IS THE ONLY SAFE INITIAL VALUE, and it covers three cases at once: the
+  // moment before /me answers (so no interstitial flashes over a page that is
+  // loading), a /me that errored, and the dev FastAPI, whose response has no
+  // such key at all. Absent must read as "do not gate" in every one of them —
+  // the inverse would lock a Replit session out of its own product.
+  const [termsPending, setTermsPending] = useState(false);
 
   // Task #1 — invite/deep-link continuity. RegisterPage persisted a validated
   // `?next=` path (localStorage `gvpn:next`) before the email/OAuth
@@ -1030,6 +1042,10 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
         setAccessLevel(me.access_level || null);
         setServerRole(me.role || null);
         setSuggestedRole(me.suggested_role || null);
+        // `=== true`, not truthy. The key is absent on the dev FastAPI's /me and
+        // on any older worker, and `undefined` must land on "do not gate"
+        // rather than on whatever a loose check would make of it.
+        setTermsPending(me.terms_acceptance_pending === true);
         const stored = safeReadJSON('user', {});
         if (
           stored.kyc_status !== me.kyc_status ||
@@ -1084,6 +1100,16 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     const done = () => { setOnboardingComplete(true); setOnboardingLoaded(true); };
     window.addEventListener(ONBOARDING_COMPLETE_EVENT, done);
     return () => window.removeEventListener(ONBOARDING_COMPLETE_EVENT, done);
+  }, []);
+
+  // Task #178 — the same shape, one gate along, for the same reason. The effect
+  // that reads `terms_acceptance_pending` is keyed on `[user?.id]`, so accepting
+  // would not change this shell's belief and the interstitial would re-render
+  // itself over the page the reader was on their way to.
+  useEffect(() => {
+    const accepted = () => setTermsPending(false);
+    window.addEventListener(TERMS_ACCEPTED_EVENT, accepted);
+    return () => window.removeEventListener(TERMS_ACCEPTED_EVENT, accepted);
   }, []);
 
   // Post-OAuth bootstrap in flight. The Google callback set the session
@@ -1147,6 +1173,42 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     accessLevel !== 'limited'
   ) {
     return <Navigate to="/onboarding" replace />;
+  }
+
+  // Task #178 — terms re-acceptance, for every account the licence gate above
+  // will never reach.
+  //
+  // PR #549 made that consent real, but only fresh Auth-v2 signups pass through
+  // the gate that collects it. Admins, impersonated sessions, `limited`
+  // accounts, the legacy `flow='chat'` rows and EVERY account older than #549
+  // still have `tos_v1` and `privacy_v1` sitting `pending` — satisfiable since
+  // #549, satisfied by nothing.
+  //
+  // IT RENDERS IN PLACE RATHER THAN NAVIGATING, which is the one structural
+  // difference from the two gates above and is deliberate twice over. It blocks
+  // every path including `/onboarding/*` with no exemption list to keep in step
+  // with the KYC gate's below; and `onLogout` is in scope here, so Decline runs
+  // the app's own session teardown instead of a second copy of it. The reader
+  // keeps their URL, so accepting drops them exactly where they were going.
+  //
+  // `licenceGateOwnsConsent` IS WHY NOBODY IS ASKED TWICE. A fresh signup mid
+  // licence flow will accept at the licence screen — `onboardingChooseLicence`
+  // records it — so this stands down for them. Stated as a fact about the
+  // account rather than as a path test, because a path test would have to name
+  // every screen that flow can be on.
+  const licenceGateOwnsConsent = onboardingLoaded
+    && onboardingFlow === 'licence'
+    && !onboardingComplete;
+  if (
+    termsPending &&
+    !licenceGateOwnsConsent &&
+    !atPendingNext &&
+    chatGateRole !== 'admin' &&
+    realUser?.role !== 'admin' &&
+    !isImpersonating &&
+    accessLevel !== 'limited'
+  ) {
+    return <AcceptTermsPage email={user.email} onDecline={onLogout} />;
   }
 
   // Phase 0.2 / Task #23 — wizard resume gate.

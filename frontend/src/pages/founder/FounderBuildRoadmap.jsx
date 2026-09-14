@@ -124,7 +124,6 @@ export default function FounderBuildRoadmap() {
             <div className="fb-roadmap-crumb"><Link to="/execution" data-testid="link-roadmap-back"><ArrowLeft size={13} /> Execution</Link><span>/</span><strong>Roadmap</strong></div>
             <div className="fb-roadmap-title-row">
               <div><h1>Roadmap</h1><p className="fb-roadmap-subtitle">Timeline, dependency chain and saved scenarios for the selected startup.</p></div>
-              {projects.length > 1 && <label className="fb-roadmap-picker"><span>Startup</span><select data-testid="select-roadmap-project" value={selectedId || ''} onChange={(event) => { const id = Number(event.target.value); setSelectedId(id); setParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(id)); return next; }, { replace: true }); }}><option value="" disabled>Select a startup</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>}
             </div>
             <nav className="fb-roadmap-zone-nav" aria-label="Build sections">
               <Link to={`/build/this-week${selectedId ? `?project_id=${selectedId}` : ''}`}>This week</Link>

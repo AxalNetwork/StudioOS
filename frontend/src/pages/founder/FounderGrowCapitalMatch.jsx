@@ -26,7 +26,6 @@ const normalizedStage = (row) => String(row.stage || row.status || '').toLowerCa
 export default function FounderGrowCapitalMatch() {
   const [params, setParams] = useSearchParams();
   const requestedId = params.get('project_id');
-  const [projects, setProjects] = useState([]);
   const [project, setProject] = useState(null);
   const [prospects, setProspects] = useState([]);
   const [view, setView] = useState('all');
@@ -42,7 +41,6 @@ export default function FounderGrowCapitalMatch() {
         setError('The startup list is unavailable; capital prospects are still being checked.');
       }
       const selected = available.find((item) => String(item.id) === requestedId) || available[0] || (requestedId ? { id: Number(requestedId), name: 'Selected project' } : null);
-      setProjects(available.length ? available : selected ? [selected] : []);
       setProject(selected);
       if (!selected) { setProspects([]); return; }
       if (String(selected.id) !== requestedId) {
@@ -80,7 +78,7 @@ export default function FounderGrowCapitalMatch() {
   const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Capital match', `/grow/capital-match${query}`], ['Brand', `/grow/brand${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-capital-match" data-testid="founder-grow-capital-match"><div className="a5-grow-canvas"><div className="a5-grow-main">
-    <header className="a5-grow-hero"><div className="fg-capital-match-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Capital match</b></div><div><h1>Capital match</h1><p>Investor fit, warm paths and outreach state.</p></div>{projects.length > 1 && <label className="fg-capital-match-picker"><span>Startup</span><select data-testid="select-grow-capital-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-capital-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Capital match' ? 'is-active' : ''}>{label}</Link>)}</nav>
+    <header className="a5-grow-hero"><div className="fg-capital-match-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Capital match</b></div><div><h1>Capital match</h1><p>Investor fit, warm paths and outreach state.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-capital-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Capital match' ? 'is-active' : ''}>{label}</Link>)}</nav>
     <ZoneToolbar
               filters={founderZoneFilters('grow/capital-match', { value: view, onChange: setView, dynamic: { stages: stages.filter((stage) => stage !== 'passed').map((stage) => ({ key: stage, label: labelStage(stage) })) } })}
               actions={founderZoneActions('grow/capital-match', { query, view: { scope: project?.name, header: ['Fund or prospect', 'Firm', 'Email', 'Stage', 'Status', 'Updated'], rows: visible, cells: (r) => [r.name, r.firm, r.email, r.stage, r.status, r.updated_at] } })}

@@ -1034,8 +1034,81 @@ auth.get('/me', async (c) => {
         return !!row;
       } catch { return false; }
     })(),
+    // Task #178 — does this account still owe an affirmative acceptance of the
+    // terms and the privacy policy?
+    //
+    // PR #549 made that consent real, but only at the onboarding licence gate,
+    // and only fresh Auth-v2 signups pass through it. Admins, impersonated
+    // sessions, `access_level = 'limited'` accounts, legacy `flow='chat'` rows
+    // and EVERY account that predates #549 still have `tos_v1` and `privacy_v1`
+    // sitting `pending`. Since #549 they are satisfiable; nothing has satisfied
+    // them.
+    //
+    // IT RIDES /me BECAUSE EVERY OTHER CANDIDATE WRITES. Each read-shaped
+    // `/trust/*` GET calls `seedObligations`, which is one unconditional UPDATE
+    // plus one `INSERT … ON CONFLICT DO UPDATE` per obligation def — gating page
+    // load on one would put those writes on every navigation, and
+    // `/trust/score/:userId` does them to ANOTHER user's rows. This is a SELECT
+    // on a response the SPA already fetches on every route change.
+    //
+    // A PURE FACT, NOT A POLICY. An admin really does have these rows pending
+    // and this says so. Whether a session is INTERRUPTED over it is the gate's
+    // call, in `App.jsx`, beside the licence and KYC gates whose exclusions it
+    // copies — one place that decides who gets stopped, rather than two that
+    // can disagree.
+    //
+    // ABSENT READS AS FALSE, deliberately, in both directions: a DB error or a
+    // missing table gates nobody, and neither does an account with no obligation
+    // rows at all. That last case is not a hole — `seedObligations` runs on
+    // every login path (registration, magic-link verify, Google callback), so
+    // rows exist for anyone who has signed in. The dev FastAPI returns a
+    // different shape entirely and therefore also gates nobody, which is why the
+    // SPA must read a missing key as "do not gate".
+    terms_acceptance_pending: await (async () => {
+      try {
+        const row: any = await c.env.DB.prepare(
+          `SELECT 1 FROM legal_obligations
+            WHERE user_id = ?
+              AND obligation_key IN ('tos_v1', 'privacy_v1')
+              AND required = 1
+              AND status IN ('pending', 'in_review')
+            LIMIT 1`,
+        ).bind(user.id).first();
+        return !!row;
+      } catch { return false; }
+    })(),
   });
 });
+
+/**
+ * Task #178 — the affirmative act the interstitial collects.
+ *
+ * Thin on purpose: `recordTermsAcceptance` already holds the whole rule — the
+ * append-only `legal_acceptances` evidence first, the `legal_obligations` status
+ * second, in that order and for that reason. This route's only jobs are to
+ * establish WHO is accepting and to name WHERE the act happened.
+ *
+ * `source` and `surface` are both passed and they are not the same thing.
+ * `surface` is the audit trail's own field. `source` is what
+ * `obligationSource` renders on the Trust Center row, and leaving it at its
+ * default would have printed "Accepted at signup" over an act that happened
+ * years later, in a different screen, for a different reason.
+ *
+ * No admin variant, no `userId` parameter, no backfill: an acceptance recorded
+ * on somebody's behalf forges the record this whole change exists to make
+ * honest.
+ */
+auth.post('/accept-terms', safe('accept-terms', 'Could not record your acceptance. Please try again.', async (c) => {
+  const user = await requireAuth(c);
+  const { recordTermsAcceptance } = await import('../services/trust');
+  const result = await recordTermsAcceptance(c.env, user.id, {
+    surface: 'reacceptance_interstitial',
+    source: 'reacceptance_interstitial',
+    ip: c.req.header('cf-connecting-ip') || null,
+    ua: c.req.header('user-agent') || null,
+  });
+  return c.json({ ok: true, keys: result.keys, satisfied: result.satisfied });
+}));
 
 auth.post('/verify-totp', safe('verify-totp', 'Could not verify your code. Please try again.', async (c) => {
   const parsed = await readJson(c);

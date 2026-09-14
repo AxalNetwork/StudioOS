@@ -218,25 +218,6 @@ export default function FounderBuildCadence() {
                   freezes all 21 of them, this one included, until the product
                   question behind the deletion is answered — a founder with two
                   startups inside one company has no other way to switch here. */}
-              {projects.length > 1 && (
-                <label><span>Startup</span>
-                  <select
-                    data-testid="select-cadence-project"
-                    value={selectedId || ''}
-                    onChange={(event) => {
-                      const id = Number(event.target.value);
-                      setSelectedId(id);
-                      setParams((old) => {
-                        const next = new URLSearchParams(old);
-                        next.set('project_id', String(id));
-                        return next;
-                      }, { replace: true });
-                    }}
-                  >
-                    {projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                  </select>
-                </label>
-              )}
             </div>
             <nav aria-label="Build sections">
               <Link to={`/build/this-week${query}`}>This week</Link>
