@@ -12,6 +12,10 @@ import useAssistMode from '../../hooks/useAssistMode';
 import LogInterviewModal from '../../components/discovery/LogInterviewModal';
 import { NewHypothesisDialog, LinkPainDialog } from './ValidateDialogs';
 import { bucketForPath, bucketTitle, zoneForPath } from '../shellConfig';
+import {
+  RECENTLY_MOVED_DAYS, daysBefore, historyReaches, laneChangedSince,
+  startOfMonth, verdictAsOf, verdictChangedSince,
+} from '../../lib/verdictHistory';
 
 /**
  * Validate — the four evidence stages, as four routes.
@@ -770,6 +774,12 @@ function FitGap({ base }) {
 const HYPOTHESIS_VIEWS = {
   all: (h) => !h.retired_at,
   blocking: (h) => !h.retired_at && h.verdict === null,
+  // LANE, NOT VERDICT (#175). A claim leaves `none` for `testing` the moment its
+  // first supporting interview lands, and its verdict does not move at all — so
+  // a chip about the board's columns has to ask about columns. Claims whose
+  // record does not reach back that far are excluded rather than assumed
+  // unmoved; `movedNote` below is what says so on screen.
+  moved: (h, now) => !h.retired_at && laneChangedSince(h, daysBefore(now, RECENTLY_MOVED_DAYS)),
   retired: (h) => Boolean(h.retired_at),
 };
 
@@ -784,7 +794,17 @@ function HypothesisBoard({ projectId, ready, board, onNew, onRetire, retiring, z
   const items = data.hypotheses || [];
   const live = items.filter((h) => !h.retired_at);
   const base = data.evidence_base || {};
-  const shown = items.filter(HYPOTHESIS_VIEWS[view] || HYPOTHESIS_VIEWS.all);
+  const now = new Date();
+  const shown = items.filter((h) => (HYPOTHESIS_VIEWS[view] || HYPOTHESIS_VIEWS.all)(h, now));
+  // The seam, stated rather than left to look like an answer. Nothing is
+  // backfilled — the only timestamp a past lane could be invented from is
+  // `updated_at`, which moves when the CLAIM TEXT is edited — so a window that
+  // opens before the record starts says when the record starts.
+  const movedNote = view === 'moved' && !historyReaches(data.verdict_history_since, daysBefore(now, RECENTLY_MOVED_DAYS))
+    ? (data.verdict_history_since
+      ? `Lane history starts ${String(data.verdict_history_since).slice(0, 10)}, so moves before that are not on record.`
+      : 'No lane history is on record yet. It starts the first time this board is opened after the change that introduced it.')
+    : null;
   const byLane = (lane) => shown.filter((h) => h.lane === lane);
 
   return (
@@ -804,6 +824,10 @@ function HypothesisBoard({ projectId, ready, board, onNew, onRetire, retiring, z
 
       <FitGap base={base} />
 
+      {movedNote && shown.length > 0 && (
+        <p className="text-[11px] text-axal-faint" data-testid="text-hypotheses-moved-since">{movedNote}</p>
+      )}
+
       {items.length === 0 ? (
         <EmptyState
           title="No hypotheses yet"
@@ -821,7 +845,9 @@ function HypothesisBoard({ projectId, ready, board, onNew, onRetire, retiring, z
         <p className="text-[12px] text-axal-faint" data-testid="text-hypotheses-view-empty">
           {view === 'retired'
             ? 'No claim has been retired. A retired claim stays on the record — it is never deleted — so this view fills the first time you retire one.'
-            : 'No claim is waiting on an ICP fit. Every hypothesis on the board has the evidence it needs for a verdict.'}
+            : view === 'moved'
+              ? (movedNote || `No claim has changed lane in the last ${RECENTLY_MOVED_DAYS} days.`)
+              : 'No claim is waiting on an ICP fit. Every hypothesis on the board has the evidence it needs for a verdict.'}
         </p>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
@@ -894,9 +920,32 @@ function HypothesisBoard({ projectId, ready, board, onNew, onRetire, retiring, z
 // standing — and `Retired claims` is the record of the ones that are not, which
 // exists because a retired claim is never deleted. The canvas's other two labels
 // ask for the board as it stood at a past moment, and no such moment is stored.
+/**
+ * The four verdict views, and two of them are TIME TRAVEL rather than filters
+ * (#175, migration 255).
+ *
+ * `current` and `retired` show the live verdict. `lastweek` shows the verdict
+ * that was in force seven days ago and EXCLUDES any claim whose record does not
+ * reach that far back — showing today's verdict under "as of last week" would be
+ * a confident wrong answer, which is precisely what the `unbuilt` reason these
+ * chips carried was protecting against. `changed` asks whether the verdict now
+ * differs from the verdict at the start of this month.
+ *
+ * Each returns the verdict to DISPLAY as well as whether to show the row,
+ * because a time-travel view that filtered but relabelled nothing would just be
+ * a shorter copy of today's table.
+ */
 const SUMMARY_VIEWS = {
-  current: (h) => !h.retired_at,
-  retired: (h) => Boolean(h.retired_at),
+  current: (h) => (h.retired_at ? null : { verdict: h.verdict }),
+  retired: (h) => (h.retired_at ? { verdict: h.verdict } : null),
+  lastweek: (h, now) => {
+    if (h.retired_at) return null;
+    const then = verdictAsOf(h, daysBefore(now, 7));
+    return then.known ? { verdict: then.verdict, asOf: true } : null;
+  },
+  changed: (h, now) => (!h.retired_at && verdictChangedSince(h, startOfMonth(now))
+    ? { verdict: h.verdict }
+    : null),
 };
 
 function ValidationSummary({ projectId, ready, board, zoneFilters, zoneActions }) {
@@ -927,7 +976,21 @@ function ValidationSummary({ projectId, ready, board, zoneFilters, zoneActions }
   // The strip keeps reporting the standing claims whichever view is selected:
   // "Validated 3 of 4" is a statement about the venture, not about the table
   // below it, and it would be a different sentence over the retired set.
-  const shown = items.filter(SUMMARY_VIEWS[view] || SUMMARY_VIEWS.current);
+  const now = new Date();
+  const pick = SUMMARY_VIEWS[view] || SUMMARY_VIEWS.current;
+  const shown = items
+    .map((h) => { const v = pick(h, now); return v ? { ...h, verdict: v.verdict } : null; })
+    .filter(Boolean);
+  // The seam, said out loud. Nothing is backfilled, so a window that opens
+  // before the record starts cannot be answered — and an empty table under
+  // "Changed this month" must not read as "nothing changed".
+  const openedAt = view === 'lastweek' ? daysBefore(now, 7)
+    : view === 'changed' ? startOfMonth(now) : null;
+  const historyNote = openedAt && !historyReaches(data.verdict_history_since, openedAt)
+    ? (data.verdict_history_since
+      ? `Verdict history starts ${String(data.verdict_history_since).slice(0, 10)}. Claims with nothing on record that far back are left out rather than shown at today's verdict.`
+      : 'No verdict history is on record yet. It starts the first time this board is opened after the change that introduced it.')
+    : null;
 
   return (
     <div className="space-y-4">
@@ -947,6 +1010,10 @@ function ValidationSummary({ projectId, ready, board, zoneFilters, zoneActions }
 
       <FitGap base={base} />
 
+      {historyNote && (
+        <p className="text-[11px] text-axal-faint" data-testid="text-summary-history-since">{historyNote}</p>
+      )}
+
       {items.length === 0 ? (
         <EmptyState
           title="Nothing to reconcile yet"
@@ -955,16 +1022,27 @@ function ValidationSummary({ projectId, ready, board, zoneFilters, zoneActions }
         />
       ) : shown.length === 0 ? (
         <p className="text-[12px] text-axal-faint" data-testid="text-summary-view-empty">
-          No claim has been retired. Retiring one on the hypothesis board keeps it
-          here rather than deleting it, and this view is where it lands.
+          {view === 'lastweek'
+            ? (historyNote || 'No claim had a verdict on record a week ago.')
+            : view === 'changed'
+              ? (historyNote || 'No verdict has changed this month.')
+              : `No claim has been retired. Retiring one on the hypothesis board keeps it
+          here rather than deleting it, and this view is where it lands.`}
         </p>
       ) : (
         <Card className="p-4">
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <span className="text-sm font-extrabold tracking-tight">
-              {view === 'retired' ? 'Retired claims, with their receipts' : 'Every verdict, with its receipts'}
+              {view === 'retired' ? 'Retired claims, with their receipts'
+                : view === 'lastweek' ? 'Every verdict, as it stood a week ago'
+                  : view === 'changed' ? 'Verdicts that changed this month'
+                    : 'Every verdict, with its receipts'}
             </span>
-            <span className="text-[11px] text-axal-faint">Computed from the interview log</span>
+            <span className="text-[11px] text-axal-faint">
+              {view === 'lastweek' || view === 'changed'
+                ? 'Verdict from the recorded history · counts are current'
+                : 'Computed from the interview log'}
+            </span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-[12.5px]">

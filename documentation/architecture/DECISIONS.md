@@ -6999,3 +6999,114 @@ deleting the new label. Eight on the SPA: pre-ticking the checkbox, removing the
 decline control, removing the announcement, claiming a document version, dropping
 `!isImpersonating` from the gate, reading the flag loosely, initialising it to
 `true`, and unsubscribing the shell from the accepted event.
+
+## D100 — a verdict that was only ever derived gets a history, and it is written on the read
+
+**Date:** 2026-09-14 · **Task:** #175 · **Migration:** 255
+
+### Three chips that could not answer their own question
+
+`/validate/verdict`'s `As of last week` and `Changed this month`, and
+`/validate/hypotheses`' `Recently moved`, were registered `unbuilt` under a
+reason that was exactly right and said so in the file:
+
+> a claim's verdict is recomputed from its evidence on every request and never
+> stored, so no earlier state of the board exists to compare against …
+> snapshotting it is a change to the model, not a predicate this row can carry.
+
+Migration 255 is that model change. The derived values stay derived — storing
+the CURRENT verdict would be a second answer to a question the interviews
+already answer — and what is stored is the other thing entirely: an append-only
+record of what the derived pair HAS BEEN.
+
+**The lane is recorded beside the verdict, and that is what makes the third chip
+work.** `laneFor(verdict, evidence)` is derived too, and a claim moves from
+`none` to `testing` the moment its first supporting interview lands with no
+verdict change at all. A chip about the board's columns has to ask about
+columns.
+
+### CORRECTION TO THE PLAN: there were three chips, not six
+
+The approved plan named six, three of them on `/build/this-week`. **Those were
+already done.** `NO_WEEK_STAMP` is gone, migration 252's `okr_column_moves` logs
+every roadmap column change, and all four of that zone's chips are live. The
+plan was written off an audit finding rather than off the code.
+
+### CORRECTION TO THE PLAN: written on the read, not on the write path
+
+The plan said to instrument "the evidence-write path". **There is no such path,
+singular.** `verdictFor(evidenceFor(links, interviews))` depends on
+`hypothesis_pain_links`, on every interview's `icp_fit`, and on which pain
+groups each interview's `pains_json` resolves to through `pain_group_aliases` —
+so a verdict moves on a link insert, a link delete, an ICP-fit patch, a newly
+logged interview, an edited pains blob and a pain-tag re-grouping. Six writers
+across three route files today, and **the failure mode of missing one is
+silent**: that path produces no history, and a history with a hole in it looks
+exactly like one without.
+
+So it follows `trust_score_snapshots` instead, which solved the same problem the
+same way: pull-based, idempotent, written only by the read that needs it. The
+cost is stated rather than hidden — a board nobody opens records nothing, so the
+board returns `verdict_history_since` and both zones print it.
+
+**It is not `seedObligations`, and the difference is the whole reason this is
+acceptable on a read.** That one performs an unconditional UPDATE plus one upsert
+per obligation definition on every call. This performs ONE SELECT and writes only
+when a recomputed pair differs from the last row — **zero statements in the
+steady state**, which is almost every request. A test asserts exactly that: five
+consecutive reads of an unchanged board write nothing.
+
+### Nothing is backfilled, and the refusal is per claim
+
+The only timestamp a past verdict could be invented from is
+`hypotheses.updated_at`, which moves when the CLAIM TEXT is edited. A verdict
+dated from that would be a specific, confident, wrong answer.
+
+So `As of last week` **excludes** a claim with no observation that old rather
+than showing today's verdict under an earlier heading, and the zone says when the
+record starts. Same seam as `/build/this-week`'s un-backfilled log, handled the
+same way.
+
+`Recently moved` and `Changed this month` ask a different question and needed a
+different shape. "Differs from what it was at `since`" quietly refuses the most
+interesting case — a claim first observed three days ago that moved yesterday HAS
+moved this week. A change is an adjacent pair of observations that disagree, and
+the window is about **when** the change happened, not how far back the record
+reaches. A first observation is never a change: counting it would report every
+claim as recently moved for as long as the record is younger than the window.
+
+### The bug that would have made two chips answer everything
+
+SQLite's `datetime('now')` writes `2026-09-14 11:20:00` — a space, no zone. `'T'`
+sorts **after** `' '`, so `'2026-09-07 12:00:01' < '2026-09-07T12:00:00.000Z'` is
+TRUE: a stamp one second inside a window compares as outside it, and other pairs
+compare the other way. Every comparison goes through `parseObserved`, and the
+test carries the boundary fixture where the two answers differ — without it the
+string-comparison mutation escaped.
+
+### A claim I had to correct mid-build
+
+I wrote, four times, that an `unbuilt` entry "renders NOTHING". **That has not
+been true since #180**, which changed the builder to draw a `disabled` chip
+carrying its reason as a hover title — inert rather than invisible, which is
+better and is still not an answer. The mutation that put a chip back to `unbuilt`
+ESCAPED the first version of this test, because the test counted chips and a
+refusing chip is still in the array. What separates live from refusing is
+`disabled` and `onSelect`, and that is what it asserts now.
+
+`founderZoneFilters.js`'s own docblock still described the old rule, two hundred
+lines above the new entries. Corrected in place rather than left to disagree with
+itself.
+
+`NO_VERDICT_SNAPSHOT` is **deleted, not reworded** — the fourth constant in that
+file to go when its store arrived, after `NO_WEEK_STAMP`, `NO_CADENCE_STORE` and
+`NO_SESSION_RECORD`. A shared reason that survives its own fix does not sit
+harmlessly; it gets cited by the next chip.
+
+**11 mutations applied, 11 caught — two only after being closed.** Writing
+unconditionally, ignoring the lane in the comparison, caching readiness per
+isolate instead of per binding (the #204 shape), returning the history
+newest-first, dropping the project scope, comparing the stamp as a string,
+falling back to today's verdict when nothing is old enough, counting a first
+observation as a move, putting either chip back to `unbuilt`, and dropping
+`verdict_history_since` from the board.
