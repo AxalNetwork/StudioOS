@@ -23,6 +23,7 @@ represents a bug that reached production once:
 | `check-money-cents.mjs` | Money parsed as a float. |
 | `check-schema-readiness.mjs` | A lazy schema bootstrap remembering "already done" in a module-level `let ready = false` — which is once per ISOLATE, not once per DATABASE, so the second binding an isolate serves never gets its DDL and then reads a table nothing created (#203, then 115 more in #204). Bans that shape and the shared `Promise<void> \| null` in-flight latch, and fails a `WeakMap<object, …>` in a file that never names the binding. That third rule is what earned it: on its first run it found `cloudflare-worker/src/services/projectAccess.ts` keyed on `env` while its own comment claimed to mirror `cloudflare-worker/src/routes/projects.ts`, which keys on `env.DB`. Behaviour, as opposed to shape, is pinned by `cloudflare-worker/test/schema_readiness.test.ts`. |
 | `check-wrangler-binding-parity.mjs` | A binding added to one `wrangler.toml` table but not the other — the worker then boots without it in production only. |
+| `check-branch-config.mjs` | A branch registry entry that does not render a deployable Worker config: a route that is HQ's own host, storage ids that are HQ's, a missing Durable Object migration tag, a URL var still pointing at HQ, or a binding added to `[env.production]` that the rename rules do not cover. |
 | `check-docs-fresh.mjs` | A committed `docs/` older than `frontend/src`, i.e. a deploy that would ship a stale bundle. |
 | `check-workspace-frames.mjs` | A workspace route that crashes, renders nothing, or draws two headings or two AI rails. Renders the built `docs/` in Chromium with `/api/*` stubbed, so it sees what the source-reading suite cannot: it caught `/expertise/profile` throwing into the error boundary on every visit. Needs a browser, so it is **not** in `test:guards` — run it by hand after `npm run build`. |
 | `check-frontend-builds.mjs` | A frontend that does not build. Every other check here reads the source as TEXT, so a parse error passes the whole suite and surfaces one push later in CI. Runs the real bundler into a temp directory — never `docs/`. |
@@ -108,6 +109,12 @@ suite.
 | --- | --- |
 | `pr-preview-worker.mjs` | The script behind `wrangler.pr-preview.toml` (repo root): a Worker per pull request with no bindings, serving the PR's `docs/` build on workers.dev. Two jobs, mirroring what `cloudflare-worker/src/index.ts` does on production — a missing hashed `/assets/*` file is a plain 404, never the SPA shell, and `/api/*` is a JSON 404 because a preview has no API. Deployed and deleted by `.github/workflows/pr-preview.yml`; guarded by `frontend/test/pr_preview.test.mjs`. |
 
+## Deploying a branch
+
+| File | What it does |
+| --- | --- |
+| `gen-branch-wrangler.mjs` | Writes `wrangler.branch.<code>.toml` at the repo root from `infra/branches/<code>.json`. The config is **derived** from `wrangler.toml`'s `[env.production]` table rather than templated, so a binding added to HQ reaches every branch with no edit here; the rules live in `lib/branchConfig.mjs`. It is gitignored: `[assets] directory` resolves against the config's own location, so it has to sit beside `docs/`, and a committed copy would be a second place a binding could go stale. `node scripts/gen-branch-wrangler.mjs fr` (add `--stdout` to render without writing). |
+
 ## Reading a design artifact
 
 | File | What it does |
@@ -118,7 +125,7 @@ suite.
 
 | Folder | What lives there |
 | --- | --- |
-| `lib/` | Shared helpers (`migrationPlan.mjs`, `assetRetention.mjs`, `sourceTreeHash.mjs`) and their unit tests — `npm run test:retention` runs every `*.test.mjs` here. |
+| `lib/` | Shared helpers (`migrationPlan.mjs`, `assetRetention.mjs`, `sourceTreeHash.mjs`, `branchConfig.mjs`) and their unit tests — `npm run test:retention` runs every `*.test.mjs` here. |
 | `ci/` | CI-only entry points. |
 | `og-assets/` | Open Graph image sources. |
 | `__pycache__/` | Python bytecode. Not source. |

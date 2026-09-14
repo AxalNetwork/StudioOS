@@ -56,6 +56,8 @@ const DOCUMENTED = new Map([
   ['scripts',                         'build, deploy and the CI guards'],
   ['documentation',                   'every hand-written document'],
   ['design',                          'design sources, tokens, and the intake queue'],
+  ['infra',                           'what is provisioned outside the repo, and the registry that declares it'],
+  ['infra/branches',                  'one file per deployed branch — the only place a deployment is declared'],
   ['design/incoming',                 'Claude Design exports waiting to be integrated'],
   ['design/canvases',                 'the 107 canvases, sorted by whether a route exists'],
   ['documentation/architecture',      'the maintained architecture set'],

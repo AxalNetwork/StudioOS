@@ -7437,3 +7437,78 @@ and treat HQ's pair as no session at all; `expectedOrigins` on a branch is
 exactly its own origin; a malformed `BRANCH_CODE` throws rather than reading
 as HQ. `frontend/test/branch_host.test.mjs`: the hostname rule, and that
 `api.js` mirrors the derived name rather than the literal.
+
+## D105 — a branch's Worker config is derived from HQ's, and the registry file is the only place a deployment is declared
+
+**Date:** 2026-09-15 · **Task:** #212 (HQ and branches plan, PR 2) · **Migration:** none
+
+Two files per branch, and only one of them is written by a person.
+`infra/branches/<code>.json` records what Cloudflare assigned — the D1 and KV
+ids, the residency actually granted — and nothing else.
+`wrangler.branch.<code>.toml` is **generated** from it and from
+`wrangler.toml`'s `[env.production]` table by
+`scripts/gen-branch-wrangler.mjs`, is gitignored, and is regenerated on every
+deploy. `scripts/check-branch-config.mjs` runs in `npm run test:guards` and
+renders every registry entry on every build.
+
+### Why derived rather than templated
+
+The binding tables already drift between the two that exist: `wrangler.toml`
+carries a comment naming the 2026-05-05 login outage that came of a binding
+declared at the top level and not under `[env.production]`, and a guard now
+exists solely to compare those two. A hand-maintained branch template would be
+the third, fourth and fifth copy of that table, and would break the first time
+someone added a binding to HQ without knowing branches existed.
+
+So the renderer copies every `[env.production]` table it does not recognise
+verbatim, and transforms only what must change. A binding added to HQ reaches
+every branch with no edit here — and the test that pins this appends a table
+to a *copy* of `wrangler.toml` and asserts it appears in the output, so an
+allowlist-shaped rewrite fails even though it would pass every other test.
+Where a new table's identity key is unknown, the guard fails the build asking
+for the rename rule, rather than shipping a config whose id still points at
+HQ's resource.
+
+### The four things that are not copied, each for its own reason
+
+**The route table is replaced, never transformed.** A Workers custom domain
+belongs to exactly one Worker, so a branch config carrying `axal.vc` would
+move the apex off HQ on deploy — the most destructive thing a generator here
+could do, and not recoverable mid-deploy. The renderer emits one route; the
+guard refuses HQ's hosts by name; a test asserts neither string appears
+anywhere in the output, `OAUTH_CALLBACK_BASE_URL` included.
+
+**The Analytics Engine dataset is shared.** Every other resource is per
+branch, which is the isolation the whole design rests on, but the HQ
+statements and the anonymised median in the subsidiary Insights screen are
+computed *across* branches. One dataset indexed by `BRANCH_CODE` is what makes
+those two numbers possible without a cross-branch read; renaming it per branch
+would have quietly removed them.
+
+**Crons are trimmed to two.** HQ declares six cadences, four of which pull
+external market-intelligence sources and send platform digests. Copied
+verbatim, N branches would hit those sources N times for the same rows.
+
+**The output is flat.** No `[env.*]` table, so `--env` is never combined with
+`--name` and the non-inheritance trap cannot recur inside a branch config.
+
+### Why the registry is a file and not a table in D1
+
+A deployment must be readable before the database it describes exists — the
+provisioning workflow writes the entry while creating the resources, and the
+generator reads it to produce the config that binds them. It also has to be
+reviewable in a pull request: a branch is a new production host, and the diff
+that adds one should say so. `_example.json` ships with fake ids so the guard
+renders a real config on every build, including today, when no branch has been
+provisioned. A guard whose first execution is the day it matters is not a
+guard.
+
+### What is guarded
+
+`scripts/lib/branchConfig.test.mjs` (9 tests, in `npm run test:retention`):
+the derived names; the shared dataset; the absent apex; the flat output and
+the inherited tables a flat config must re-declare; the trimmed crons; the
+new-binding case above; every `validateBranch` refusal, including an entry
+that kept HQ's database id; and every `checkRendered` refusal, each against
+its own mutation of a rendered config. `scripts/check-branch-config.mjs` also
+fails if a generated `wrangler.branch.*.toml` is ever committed.
