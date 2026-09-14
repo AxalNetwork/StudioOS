@@ -1,4 +1,5 @@
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
 /**
  * Task #13 — Section 83(b) election tracker (worker / D1 parity).
@@ -12,7 +13,7 @@ import type { Env } from '../types';
  * `_tracker_dto` in the FastAPI backend (the frontend consumes both).
  */
 
-let _migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 
 /**
  * Self-healing schema for the trackers table. Mirrors the `ensure*Schema`
@@ -22,7 +23,7 @@ let _migrated = false;
  * layer (project_id + user_id + grant_date).
  */
 export async function ensureSection83bSchema(env: Env): Promise<void> {
-  if (_migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS section_83b_trackers (
       id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,7 +53,7 @@ export async function ensureSection83bSchema(env: Env): Promise<void> {
       if (!/duplicate column|already exists/i.test(msg)) throw e;
     }
   }
-  _migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 /** UTC midnight (ms) for an ISO `YYYY-MM-DD` date string. */

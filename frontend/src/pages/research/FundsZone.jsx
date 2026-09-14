@@ -39,8 +39,10 @@ const STAGE_LABEL = { right: 'Right stage', wrong: 'Wrong stage' };
 const PATH_LABEL = { warm: 'Warm path', cold: 'No route in' };
 
 // The compact inline enum editor `CompetitorAnalysis` already uses for the same
-// job. Tailwind's own greys: `axal-ink-2` and its family are declared in no
-// `@theme` block and emit no CSS at all.
+// job. Tailwind's own greys, kept after the sweep: `axal-ink-2` and its family
+// were declared in no `@theme` block and emitted no CSS at all, and have since
+// been consolidated onto the declared neutrals. Both vocabularies are skinned
+// for dark mode now, so these greys stay rather than churn.
 const READ_SELECT =
   'rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[11px] text-gray-600 '
   + 'dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300';

@@ -224,7 +224,7 @@ export const PARTNER_ZONE_FILTERS = {
     { canvas: 'By engagements', key: 'engagements' },
     {
       canvas: 'By leads',
-      unbuilt: 'nothing records which surface a founder arrived through, so the lead half of the ratio has no source and the zone reports it absent rather than partial',
+      unbuilt: 'nothing records which surface a founder arrived through, so the lead half of the ratio has no source and the zone reports it absent rather than partial', hover: 'Nothing records which surface a founder arrived through, so the lead half has no source.',
     },
     {
       canvas: 'By views',
@@ -393,7 +393,7 @@ export const PARTNER_ZONE_FILTERS = {
     { canvas: 'Stale', key: 'stale' },
     {
       canvas: 'Attached to proposals',
-      unbuilt: 'no row joins a signal to a proposal — the only foreign keys to a signal in the whole schema are its evidence and the companies it names',
+      unbuilt: 'no row joins a signal to a proposal — the only foreign keys to a signal in the whole schema are its evidence and the companies it names', hover: 'No row joins a signal to a proposal.',
     },
   ],
   // ALL FOUR LIVE, AND MIGRATION 221 IS WHY. Both of these entries used to
@@ -454,7 +454,7 @@ export const PARTNER_ZONE_FILTERS = {
     { canvas: 'Strong fit', key: 'strong' },
     {
       canvas: 'Warm intros',
-      unbuilt: 'every lead here is a marketplace need — nothing records a lead arriving through an investor or a referral, so there is no second provenance to select',
+      unbuilt: 'every lead here is a marketplace need — nothing records a lead arriving through an investor or a referral, so there is no second provenance to select', hover: 'Every lead here is a marketplace need; nothing records one arriving by referral or investor.',
     },
     { canvas: 'Passed', key: 'passed' },
     { canvas: 'All sources', key: 'all' },

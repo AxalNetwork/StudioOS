@@ -6,6 +6,7 @@ import { notifyPipelineRoom } from '../services/realtime';
 import { ensureWorkflowSchema } from '../services/workflowSchema';
 import { aiQuotaGate, recordSharedServiceAction } from '../services/aiQuota';
 import { activeCompanyFor } from '../middleware/activeCompany';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const pipeline = new Hono<{ Bindings: Env }>();
 
@@ -19,9 +20,9 @@ const STAGES = ['idea', 'mvp_dev', 'traction_review', 'decision_gate', 'spinout_
 const ADVANCE_ROLES = new Set(['admin', 'partner']);
 const REVIEW_RATE_LIMIT = 60; // per hour
 
-let migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env) {
-  if (migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS project_stages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -81,7 +82,7 @@ async function ensureSchema(env: Env) {
   // networkfx, legalcap and dashboard, so they are owned by one module
   // rather than by whichever router runs first. See migration 177.
   await ensureWorkflowSchema(env);
-  migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 function safeJson<T>(s: any, def: T): T { try { return s ? JSON.parse(s) : def; } catch { return def; } }

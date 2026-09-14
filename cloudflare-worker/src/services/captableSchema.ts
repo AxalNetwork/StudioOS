@@ -12,11 +12,12 @@
  * is_variant = 1 → a named draft variant shown only in the compare view.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 export async function ensureCapTableVariantColumn(env: Env): Promise<void> {
-  if (_ready) return;
+  if (READY.get(bindingKey(env))) return;
   try {
     await env.DB.prepare(
       'ALTER TABLE cap_table_scenarios ADD COLUMN is_variant INTEGER NOT NULL DEFAULT 0',
@@ -24,5 +25,5 @@ export async function ensureCapTableVariantColumn(env: Env): Promise<void> {
   } catch {
     /* column already exists, or the table isn't created yet — both safe to ignore */
   }
-  _ready = true;
+  READY.set(bindingKey(env), true);
 }

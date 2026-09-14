@@ -240,9 +240,29 @@ partnerPipeline.get('/leads', async (c) => {
         `SELECT kind, value, floor_cents, statement, referred_to, signal
            FROM partner_fit_rules WHERE partner_id = ? AND is_active = 1`,
       ).bind(partnerId).all<any>(),
+      // `service_offerings` IS THE ODD ONE OUT IN THIS HANDLER, and reading it
+      // like its three siblings is what took this page down. `partner_fit_rules`,
+      // `partner_lead_passes` and `quotes` all carry `partner_id REFERENCES
+      // partners(id)`, so `partnerId` binds straight in. Offerings do not: the
+      // table keys on `owner_user_id REFERENCES users(id)` and has never had a
+      // `partner_id` column — not in migration 034, not in 200's rebuild, not in
+      // the production baseline. `WHERE partner_id = ?` here answered
+      // `D1_ERROR: no such column: partner_id at offset 62` for every partner,
+      // and because all four reads share one `Promise.all` it took the whole
+      // payload with it, not just the score.
+      //
+      // THE HOP IS THROUGH `users.partner_id`, and it is not a guess: migration
+      // 200 backfilled this very column with `(SELECT MIN(u.id) FROM users u
+      // WHERE u.partner_id = o.partner_id)` (200_service_offerings_shape.sql:174).
+      // `MIN(u.id)` is why this is `IN (…)` rather than `= user.id`: 200 handed
+      // every one of a firm's offerings to its lowest-id member, so scoping to
+      // the acting user would show a colleague an empty catalogue and score
+      // their leads against nothing. The firm owns the offerings; the row just
+      // records which member holds them.
       c.env.DB.prepare(
         `SELECT title, category FROM service_offerings
-          WHERE partner_id = ? AND is_active = 1`,
+          WHERE owner_user_id IN (SELECT id FROM users WHERE partner_id = ?)
+            AND is_active = 1`,
       ).bind(partnerId).all<any>(),
       c.env.DB.prepare(
         `SELECT lp.id, lp.need_id, lp.reason, lp.note, lp.passed_at,

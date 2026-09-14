@@ -21,6 +21,7 @@
 
 import type { Env, User } from '../types';
 import { getSQL } from '../db';
+import { bindingKey } from '../util/schemaBootstrap';
 
 // New founders (Spin-Out Lab active, pre-incorporation) cannot manage
 // co-founders/advisors until they reach this lab week. Existing founders
@@ -31,10 +32,19 @@ export type MemberRole = 'owner' | 'cofounder' | 'advisor';
 
 // Lazy bootstrap — keyed per-DB via a WeakMap so a reload-during-dev re-runs
 // cleanly. Mirrors the ensureProject*Columns pattern in routes/projects.ts.
+//
+// CORRECTED IN #204, AND THE COMMENT ABOVE WAS THE TELL. It said "keyed per-DB"
+// and "mirrors routes/projects.ts", and it was keyed on `env` — the whole
+// environment object, which is neither the database nor what projects.ts uses
+// (`env.DB as unknown as object`, seven times over). The cache was therefore
+// about the wrong thing in both directions: two bindings arriving with one
+// `env` share an entry that describes only the first, and a fresh `env` per
+// request never hits, so the ten-statement bootstrap re-runs every time.
+// Found by `scripts/check-schema-readiness.mjs` on its first run.
 const _membershipReady = new WeakMap<object, true>();
 
 export async function ensureProjectMembershipSchema(env: Env): Promise<void> {
-  if (_membershipReady.has(env)) return;
+  if (_membershipReady.has(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS project_members (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -79,7 +89,7 @@ export async function ensureProjectMembershipSchema(env: Env): Promise<void> {
   for (const s of stmts) {
     try { await env.DB.exec(s.replace(/\s+/g, ' ').trim()); } catch (_e) { /* idempotent */ }
   }
-  _membershipReady.set(env, true);
+  _membershipReady.set(bindingKey(env), true);
 }
 
 /** SHA-256 hex of a raw token. Link/email invitations store only the hash. */

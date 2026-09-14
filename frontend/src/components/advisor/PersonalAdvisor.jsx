@@ -51,7 +51,8 @@ import {
   Loader2, CheckCircle2, ArrowRight, MessageSquare, SkipForward, BookOpen,
   Mic, MicOff, Ticket,
 } from 'lucide-react';
-import { api, spinoutLab as spinoutLabApi } from '../../lib/api';
+import { api, getActiveCompanyId, spinoutLab as spinoutLabApi } from '../../lib/api';
+import { orientationMessage, shouldOrient } from '../../lib/eadwynOrientation';
 import { safeReadJSON, safeWriteJSON } from '../../lib/storage';
 import { reportError } from '../../lib/log';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -235,6 +236,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
       setProgress(r.progress || { total: 0, answered: 0, skipped: 0, percent: 0, complete: !!r.complete });
       // Hydrate transcript so reloads show prior turns.
       const cid = r.conversation_id || r.conversation_uid;
+      let hydrated = 0;
       if (cid) {
         try {
           const hist = await api.advisor.conversation(cid);
@@ -245,7 +247,38 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
           }));
           setMessages(msgs);
           setAnsweredIds((hist?.answers || []).filter((a) => a.saved_status === 'saved').map((a) => a.question_id));
+          hydrated = msgs.length;
         } catch { /* non-fatal */ }
+      }
+      // ORIENTATION — Eadwyn says what it is before it asks anything.
+      //
+      // A newcomer arriving from onboarding met this panel empty, with the
+      // assessment's first question in it. Out of context that reads as one
+      // more form, on the single surface whose whole purpose is to save them
+      // from forms.
+      //
+      // ONLY WHEN THE TRANSCRIPT IS EMPTY, which is what makes it once-only
+      // without a flag: a reader with history is not a newcomer, and a reader
+      // who answers anything never sees it again. `hydrated` is counted from
+      // the history read rather than from `messages`, because this runs inside
+      // the same tick that set it and the state has not landed yet.
+      //
+      // IT SPENDS NOTHING. The text is assembled from the persona, the progress
+      // and whether a company is linked — all already in hand. A first touch is
+      // the worst place to spend a budget nobody has agreed to, which is the
+      // same call `ui/eadwynConfig.js` makes about the onboarding chat.
+      const orientProgress = r.progress || null;
+      if (shouldOrient({ ready: true, messageCount: hydrated })) {
+        setMessages([{
+          role: 'assistant',
+          orientation: true,
+          content: orientationMessage({
+            role: r.persona || user?.role || null,
+            progress: orientProgress,
+            hasCompany: !!getActiveCompanyId(),
+            name: user?.name || null,
+          }),
+        }]);
       }
       // Explorer completion incentive — the worker attaches `promo_notice`
       // for exploring users: an early "finish this and earn a 30-day
@@ -275,7 +308,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
       availabilityRef.current?.(true);
       setLoadError(e?.message || 'Could not load the assistant');
     }
-  }, []);
+  }, [user?.role, user?.name]);
 
   useEffect(() => { if (user) bootstrap(); }, [user, bootstrap]);
   // Server-driven progress + lab state.
@@ -680,12 +713,48 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
   // Task #9 — after a ticket is filed, confirm inline in the transcript
   // with a link back to the Help Center (and the GitHub issue if the
   // POST /tickets response carried one) and close the form.
+  /**
+   * WHAT THE TICKET ROUTE SAYS ABOUT THE GITHUB MIRROR, WHICH NOTHING READ.
+   *
+   * `POST /api/tickets` has always returned `github_sync_status` —
+   * `synced | failed | not_configured` — and, on a failure, a
+   * `github_sync_error` naming the cause. No file in `frontend/src` read either
+   * one. So a ticket whose mirror failed confirmed as "has been filed" with no
+   * GitHub link and no hint that anything went wrong, and the only visible
+   * difference from a successful file was the ABSENCE of a link — which reads
+   * as "this environment has no GitHub", not as "this one did not make it".
+   *
+   * Whoever triages by GitHub Issues never sees that ticket, and the person who
+   * filed it believes they have been heard. That is the failure worth naming.
+   *
+   * THREE STATUSES, TWO AUDIENCES.
+   *
+   *   synced          the link, as before.
+   *   failed          said to EVERYONE, with the reason. The ticket is saved —
+   *                   that part is true and is stated first — but a reader who
+   *                   expects it to appear on the board has to know it will not.
+   *   not_configured  said only to an admin. It is not a failure of this file
+   *                   and not something a founder can act on; it is a
+   *                   deployment secret that is missing, and an admin is the
+   *                   person who can set it. Telling a founder would be
+   *                   internal noise on their own support request.
+   */
   const handleTicketFiled = useCallback((t) => {
     setTicketOpen(false);
     const title = t?.title ? `"${t.title}"` : 'Your ticket';
+    const status = t?.github_sync_status || null;
+    const reason = String(t?.github_sync_error || '').trim();
+    let mirror = '';
+    if (status === 'failed') {
+      mirror = ` It did not reach the GitHub issue tracker, so it will not appear on the board there${reason ? `: ${reason}` : '.'}`;
+      if (reason && !/[.!?]$/.test(reason)) mirror += '.';
+    } else if (status === 'not_configured' && user?.role === 'admin') {
+      mirror = ' The GitHub mirror is not configured in this environment, so no issue was opened —'
+        + ' set GITHUB_ACCESS_TOKEN as a Worker secret to turn it on.';
+    }
     setMessages((m) => [...m, {
       role: 'assistant',
-      content: `${title} has been filed. You can track it and follow updates in the Help Center.`,
+      content: `${title} has been filed. You can track it and follow updates in the Help Center.${mirror}`,
       cta: {
         primary: { label: 'View in the Help Center', route: '/help' },
         ...(t?.github_issue_url
@@ -693,7 +762,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
           : {}),
       },
     }]);
-  }, []);
+  }, [user?.role]);
 
   // ---------- Render ------------------------------------------------------
   if (!user) return null; // anonymous: nothing to advise on yet

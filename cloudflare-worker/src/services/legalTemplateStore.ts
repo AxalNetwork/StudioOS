@@ -10,6 +10,7 @@
 // `ensureLegalTemplatesSchema` below mirrors the esign.ts pattern so reads
 // self-heal on a D1 that has not had the migration applied yet.
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
 export const LEGAL_TEMPLATE_CATEGORIES = ['gp', 'fund', 'portfolio', 'compliance'] as const;
 export type LegalTemplateCategory = (typeof LEGAL_TEMPLATE_CATEGORIES)[number];
@@ -57,9 +58,9 @@ interface RawRow {
   updated_by: number | null;
 }
 
-let schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 export async function ensureLegalTemplatesSchema(env: Env): Promise<void> {
-  if (schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS legal_templates (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -101,7 +102,7 @@ export async function ensureLegalTemplatesSchema(env: Env): Promise<void> {
       console.warn('[legalTemplateStore] ensureSchema stmt skipped:', (e as Error)?.message);
     }
   }
-  schemaReady = true;
+  SCHEMA_READY.set(bindingKey(env), true);
 }
 
 const MERGE_TOKEN = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;

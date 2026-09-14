@@ -16,6 +16,8 @@ const CohortsFoundersZone = lazy(() => import('../../pages/advisor/cohorts/Found
 const CohortsThisWeekZone = lazy(() => import('../../pages/advisor/cohorts/ThisWeekZone'));
 const CohortsOutcomesZone = lazy(() => import('../../pages/advisor/cohorts/OutcomesZone'));
 const PracticeOpportunitiesZone = lazy(() => import('../../pages/advisor/practice/OpportunitiesZone'));
+const PracticeEngagementsZone = lazy(() => import('../../pages/advisor/practice/EngagementsZone'));
+const PracticeDeliveryZone = lazy(() => import('../../pages/advisor/practice/DeliveryZone'));
 const PracticeSessionsZone = lazy(() => import('../../pages/advisor/practice/SessionsZone'));
 const PracticeEarningsZone = lazy(() => import('../../pages/advisor/practice/EarningsZone'));
 const ExpertiseProfileZone = lazy(() => import('../../pages/advisor/expertise/ProfileZone'));
@@ -33,16 +35,24 @@ const CohortsCalendarZone = lazy(() => import('../../pages/advisor/cohorts/Calen
  * one does not. Splitting that into three near-identical files would be three
  * places to keep in step.
  *
- * PRACTICE PARTLY EXISTS, AND THE OVERLAP IS PARTIAL IN BOTH DIRECTIONS.
- * `/advisor/advisory/*` ships five tabs: Opportunities, Clients, Engagements,
+ * PRACTICE IS WHOLE NOW, AND THIS PARAGRAPH USED TO SAY THE OPPOSITE. It read
+ * "Practice partly exists… Sessions and Earnings have no code anywhere. The
+ * three that overlap mount the live workspace" — true when written, and false
+ * in every clause by the time PR3 landed. Migration 205 gave Sessions and
+ * Earnings their stores; the canvas series gave the other three their own
+ * pages, one artboard at a time. Leaving the sentence standing would have told
+ * the next reader that two zones are empty and three are somebody else's.
+ *
+ * `/advisor/advisory/*` shipped five tabs: Opportunities, Clients, Engagements,
  * Delivery, Contracts. The canvas asks for five zones: Opportunities,
- * Engagements, Delivery, Sessions, Earnings. Three overlap. **Clients and
- * Contracts have no zone in the canvas, and Sessions and Earnings have no code
- * anywhere.** The three that overlap mount the live workspace; the two that do
- * not say what they would hold. Clients and Contracts keep their routes and
- * are linked from Opportunities rather than being dropped — the canvas having
- * no seat for a working tab is a gap in the canvas, not permission to delete
- * the tab.
+ * Engagements, Delivery, Sessions, Earnings. Three overlapped, and all three
+ * have moved to a page of their own because in each case the tab answered a
+ * different question than the artboard asked. **Clients and Contracts have no
+ * zone in the canvas**, so they keep their `/advisor/advisory/*` routes and are
+ * linked from Opportunities rather than being dropped — the canvas having no
+ * seat for a working tab is a gap in the canvas, not permission to delete the
+ * tab. What each tab could do that its artboard did not ask for moved with it:
+ * Delivery's post-session review loop is a section of the new Delivery page.
  *
  * COHORTS READS SPIN-OUT LAB DATA, read-only both ways: it owns no Lab route,
  * writes nothing back, and every founder-sourced object carries the seam mark.
@@ -78,7 +88,10 @@ function Loading() {
  * you have told the batch, and who has acted on it" over a page that reads
  * "Cohort guidance has no store"; Visibility as "what it converts" over
  * "Nothing counts profile views"; Earnings as "what the platform took" beside
- * a rail on the same screen saying Axal takes no cut; and Services as "how
+ * a rail on the same screen denying any cut at all (both wrong then, and both
+ * still wrong now for opposite reasons — 241 records a rate, and nothing has
+ * been charged under it, so neither the claim nor the denial is available);
+ * and Services as "how
  * often it is booked", which `units_sold` returns null for by design. Four
  * cards advertising a feature and one contradicting a recorded decision, on
  * the one surface an advisor reads before choosing where to click.
@@ -90,10 +103,23 @@ function Loading() {
 const ZONE_BLURB = {
   // Practice — all five zones read a real store.
   opportunities: 'Inbound requests and proposals — what is asking for your time.',
-  engagements: 'The engagements you have accepted, and where each one stands.',
-  delivery: 'What you have sent a client, and what is still outstanding.',
+  // THE ARTBOARD'S OWN BLURB, with one word changed. It reads "including the two
+  // that ended"; two is this canvas's fixture count and would be a claim about
+  // the reader's own book, so it becomes "the ones that ended". The clause after
+  // it is why the zone exists and stays verbatim.
+  engagements: 'Every client with their scope, contract state and renewal date — including the ones that ended, because a practice is judged on renewals.',
+  // THE ARTBOARD'S OWN BLURB, verbatim. What it replaced — "what you have sent
+  // a client, and what is still outstanding" — described the legacy tab, which
+  // sent nothing and tracked no document: its own disclaimer said deliverables
+  // "are not tracked yet". Migration 239 is what made the sentence true.
+  delivery: 'Every work product, every version, and whether anyone opened it.',
   sessions: 'Each booked session, the amount you recorded against it, and whether you have marked it billed.',
-  earnings: 'Billed, collected, written off and outstanding, totalled from the amounts you typed. Axal settles nothing and takes no cut.',
+  // The second clause used to read "Axal settles nothing and takes no cut",
+  // which migration 241 made false in one half and unknowable in the other: a
+  // rate IS recorded per priced line, and whether anything settles is
+  // `settlement` on the response, which a static blurb cannot read. It states
+  // the rate and leaves the settlement question to the page. D75.
+  earnings: 'Billed, collected, written off and outstanding, totalled from the amounts you typed, with the platform rate recorded against each priced session.',
   // Expertise — four zones read a store now. Only visibility does not, and it
   // is written from COPY.
   profile: 'What a founder sees before they book you.',
@@ -116,12 +142,39 @@ const ZONE_BLURB = {
 
 // Zones served by the legacy five-tab Advisory workspace, which carries its
 // own shell and must therefore be mounted `embedded`.
+//
+// THIS SET IS EMPTY NOW, AND THE MECHANISM STAYS ANYWAY. It is the generic
+// escape hatch for a bucket whose zone is served by a workspace of its own
+// making, and `/practice` is simply the first bucket to have finished emptying
+// it — all five zones have their own page. Keeping the key and the branch is
+// also what lets the three canvas PRs' guards keep reading this block for the
+// slugs that are NOT in it.
+//
+// NO ZONE SLUG APPEARS IN SINGLE QUOTES IN THESE COMMENTS, on purpose.
+// `advisor_expertise_zones.test.mjs` reads this whole slice as text and counts a
+// quoted slug as a zone the legacy workspace still serves, so a comment
+// explaining that a zone left would assert it had not. Backticks throughout.
 const LIVE = {
-  // `opportunities` LEFT THIS SET when PR1 landed. The Advisory tab it pointed
-  // at was an inbox — pending requests plus a slot editor — and the artboard
-  // asks for a decision LOG over every request that ever arrived. Both read
-  // `advisor_bookings`; only one of them answers the canvas.
-  '/practice': new Set(['engagements', 'delivery']),
+  // The zone named `opportunities` LEFT THIS SET when PR1 landed. The Advisory
+  // tab it pointed at was an inbox — pending requests plus a slot editor — and
+  // the artboard asks for a decision LOG over every request that ever arrived.
+  // Both read `advisor_bookings`; only one of them answers the canvas.
+  //
+  // `engagements` LEFT ON PR2, and the gap was wider than PR1's. That tab was a
+  // flat list of BOOKINGS with Upcoming/Past/All chips and three lifecycle
+  // buttons — a session list keyed on `advisor_bookings.status`. The artboard is
+  // a CONTRACT board with renewal cycles and written scope, which nothing in the
+  // schema could hold until migration 238.
+  //
+  // `delivery` LEFT ON PR3 AND EMPTIED THE SET. Its tab was a post-session
+  // REVIEW loop — sessions held, how many you had reviewed, your average rating
+  // — and the artboard is a collection of WORK PRODUCTS with a version trail and
+  // an open receipt. The tab's own disclaimer said document deliverables were
+  // not tracked, which was accurate: nothing in twenty `advisor_*` tables
+  // carried a version, a sent stamp or an opened stamp until migration 239. The
+  // review loop was not deleted with the tab — it is a section of the new page,
+  // because it is the one capability that lives nowhere else.
+  '/practice': new Set([]),
 };
 
 // One page per zone, each over the store its migration created. These render a
@@ -137,6 +190,8 @@ const ZONE = {
   },
   '/practice': {
     opportunities: PracticeOpportunitiesZone,
+    engagements: PracticeEngagementsZone,
+    delivery: PracticeDeliveryZone,
     sessions: PracticeSessionsZone,
     earnings: PracticeEarningsZone,
   },
@@ -189,12 +244,6 @@ export default function AdvisorBucketRoutes({ preview = false }) {
   const slug = zone?.slug;
 
   const body = useMemo(() => {
-    // An admin previewing the Advisor ROLE has selected no person, so Practice
-    // and Expertise have no practice to render. The notice replaces the BODY
-    // and keeps the shell — the crumb, zone row and rail still say where you
-    // are, which a redirect to /studio did not.
-    if (preview) return <AdvisorPreviewNotice />;
-
     // Bucket root: render the canvas overview — the zone grid that says what
     // this bucket holds and opens each zone from there. The sidebar row must
     // land here, not on the first zone.
@@ -295,7 +344,11 @@ export default function AdvisorBucketRoutes({ preview = false }) {
       stance: 'Manual practice record',
       note: 'Opportunities, engagements, delivery, sessions and earnings read and write the stored advisory record. Nothing here writes a proposal, sends a message, or decides what a session was worth.',
       unavailable: [
-        ['Money movement', 'A session amount is your own bookkeeping note. Axal issues no invoice, runs no checkout, holds nothing on your behalf and takes no cut. Nothing on this bucket settles anything.'],
+        // "takes no cut" and "nothing on this bucket settles anything" were
+        // both here, and 241 made the first false outright. The rail is
+        // static and cannot read `settlement`, so it names what is recorded
+        // and sends the settlement question to Earnings, which reads it. D75.
+        ['Money movement', 'A session amount is your own bookkeeping note, and a platform rate is recorded against each priced session. Axal issues no invoice, runs no checkout and holds nothing on your behalf. Whether anything has been charged is stated on Earnings, which reads that live.'],
         ['Pricing suggestions', 'No rate is proposed, benchmarked or inferred from your other sessions. Every amount here is one you typed.'],
       ],
     },
@@ -337,13 +390,31 @@ export default function AdvisorBucketRoutes({ preview = false }) {
         />
       )}
     >
+      {/* THE BOUNDARY IS A LINE ABOVE THE ZONE, NOT THE ZONE. This used to be
+          `if (preview) return <AdvisorPreviewNotice />` inside `body`, so an
+          admin previewing the Advisor role got one card instead of a page on
+          all eighteen of these routes — reported as unnecessary, and it was:
+          the boundary was stated eighteen times and the product never once.
+
+          What the card was defending is still defended. When Cohorts joined
+          this gate the argument was that an admin would otherwise see "no
+          batch assigned" and read a BOUNDARY as an ABSENCE. That argument is
+          about whether the boundary is STATED, not about whether it takes over
+          the page — and the strip states it, in words, directly above the zone
+          it applies to.
+
+          Access is unchanged: every `/api/advisors/me/*` read goes through
+          `requireMyAdvisor`, which throws for a caller with no advisor row. The
+          zone renders its own frame over no rows; no endpoint hands back a
+          practice that is not the caller's. */}
+      {preview && <AdvisorPreviewNotice />}
       {body}
       {!preview && prefix === '/practice' && slug === 'opportunities' && !isRoot && (
         <Card className="mt-4 p-4">
-          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             Still here, still working
           </div>
-          <p className="mt-2 text-[11.5px] leading-relaxed text-axal-ink-2">
+          <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">
             <Link to="/advisor/advisory/clients" className="text-emerald-700 underline">Clients</Link> and{' '}
             <Link to="/advisor/advisory/contracts" className="text-emerald-700 underline">Contracts</Link> are
             live tabs the canvas has no zone for. They keep their routes rather than being dropped — a working

@@ -10,11 +10,11 @@ material. The app never reads it at runtime.
 ## Where the existing canvases live
 
 The triaged canvases live in `design/canvases/`, sorted by whether a live route
-exists for each — not by how far each has been built. Counts as of 2026-09-07:
+exists for each — not by how far each has been built. Counts as of 2026-09-12:
 
 | Folder | Meaning |
 | --- | --- |
-| `canvases/integrated/` | 59 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
+| `canvases/integrated/` | 61 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
 | `canvases/backlog/` | 26 — graded `NEW` or `DEFERRED`: no route yet. |
 | `canvases/out-of-scope/` | 27 — deliberately not being built. |
 
@@ -22,8 +22,9 @@ exists for each — not by how far each has been built. Counts as of 2026-09-07:
 is not counted here. The table read 53 / 27 / 27 until 2026-09-04: one canvas
 had moved from `backlog/` to `integrated/` without the count following it, and
 two more moved out of this folder in the commit that corrected it. It read
-57 / 26 / 27 until 2026-09-07, when the two below left. **If you move a file,
-move the number.**)
+57 / 26 / 27 until 2026-09-07, when the two below left, and 59 / 26 / 27 until
+2026-09-12, when the Partner four were resolved — see the section on them below.
+**If you move a file, move the number.**)
 
 **A canvas whose bodies are built does not belong in this folder.** Move it to
 `canvases/integrated/`; this queue should only ever hold work that is still
@@ -87,31 +88,110 @@ routes are live and whose bodies have not yet been built up to the canvas —
 which is exactly what this queue is for. Partner · Pipeline was the one bucket
 of the four whose canvas was already committed — it is in
 `design/canvases/integrated/` and was not repeated here **until 2026-09-07**,
-when a newer export of it arrived; see the section above.
+when a newer export of it arrived; that duplicate is gone again as of
+2026-09-12, see "The Partner four" below.
 
-**Two of the eight have since left**, and what remains is the honest list:
+**Four of the eight have since left** — two on 2026-09-07 and the two Partner
+ones on 2026-09-12 — and what remains is the honest list:
 
 | Canvas | Governs | Grade | Still outstanding |
 | --- | --- | --- | --- |
 | `Pages · Advisor Expertise.dc.html` | `/expertise`, `/expertise/{profile,services,proof,thinking,visibility}` | UPGRADE | `thinking` has no store; `visibility` needs an impression pipeline, not a table. **The file is the 2026-09-07 export**, which replaced the 2026-09-03 one in place; both gaps still stand, and the newer one adds that every zone renders only the impersonation gate card. |
 | `Pages · Advisor Network.dc.html` | `/network/*` on the advisor licence | UPGRADE | `organizations` reads nothing for this licence |
 | `Pages · Advisor Research.dc.html` | `/research/*` on the advisor licence | UPGRADE | only `markets` and `companies` are live |
-| `Pages · Partner Network.dc.html` | `/network/*` on the partner licence | UPGRADE | `organizations` reads nothing for this licence |
-| `Pages · Partner Research.dc.html` | `/research/*` on the partner licence | UPGRADE | only `markets` and `companies` are live |
 
 ## Landed 2026-09-07 — four newer exports, reported as not matching
 
 The owner sent four artifacts, each saying the shipped subpages do not match
-the design. All four are decoded and committed here as `.dc.html`, so the
-comparison can be made against a file in the repository rather than against a
-link:
+the design. All four were decoded and committed here as `.dc.html`, so the
+comparison could be made against a file in the repository rather than against a
+link. **Two of them — Offers and Pipeline — turned out to be raw re-exports of
+canvases already processed in `integrated/`, identical in design data, and were
+deleted on 2026-09-12; see "The Partner four" above.** The rows stay because the
+comparison they record is what the reports were about:
 
 | Canvas | Governs | Supersedes | Why it is here |
 | --- | --- | --- | --- |
 | `Pages · Founder Research.dc.html` | `/research/{ask,markets,companies,funds,library}` | — | Five zones, `PAGES` shape (ids fs1–fs5): `filters`, `ops`, four `adds` stat tiles, `head`/`rows` with status pills, and an AI-rail offer per zone. |
-| `Pages · Partner Offers.dc.html` | `/offers/{catalog,perk-deals,visibility,proof,audience-fit}` | the `integrated/` copy | Same shape. Its `ops` match what `partnerZoneActions.js` already carries; its `filters` do **not** exist in `partnerZoneFilters.js` at all — that table has no `offers/*` key. |
-| `Pages · Partner Pipeline.dc.html` | `/pipeline/{leads,proposals,negotiations,retainers,analytics}` | the `integrated/` copy | **The one that changes a standing decision.** See below. |
+| `Pages · Partner Offers.dc.html` *(deleted 2026-09-12 — duplicate)* | `/offers/{catalog,perk-deals,visibility,proof,audience-fit}` | **nothing — it was the same canvas** as the `integrated/` copy | Same shape. Its `ops` match what `partnerZoneActions.js` already carries; its `filters` do **not** exist in `partnerZoneFilters.js` at all — that table has no `offers/*` key, and that gap is still open. |
+| `Pages · Partner Pipeline.dc.html` *(deleted 2026-09-12 — duplicate)* | `/pipeline/{leads,proposals,negotiations,retainers,analytics}` | **nothing — it was the same canvas** as the `integrated/` copy | **The one that changes a standing decision**, and that decision is still open. See below; the canvas it describes is now only in `integrated/`. |
 | `Pages · Advisor Expertise.dc.html` | `/expertise/{profile,services,proof,thinking,visibility}` | the 2026-09-03 export in this folder | Newer export of the same surface, 54K against 39K. Its `h1` per zone is not the zone name — `Practice profile`, `Service ledger`, `Evidence`, `Published thinking`, `Surfaces & funnel` — and each zone has its own blurb, where the shipped pages print Visibility's on all five. |
+
+### The Partner four — resolved 2026-09-12 (#155)
+
+`design/incoming/` held four Partner canvases. The task read as a four-file move;
+**it was two moves and two deletions**, because two of the four already existed
+in `integrated/` under the same name with different bytes.
+
+| Canvas | What it was | What happened |
+| --- | --- | --- |
+| `Pages · Partner Network.dc.html` | processed (its runtime is `src="./support.js"`), no `integrated/` twin | **moved** to `canvases/integrated/` |
+| `Pages · Partner Research.dc.html` | same | **moved** to `canvases/integrated/` |
+| `Pages · Partner Offers.dc.html` | **raw** export (runtime still an artifact asset uuid), twin already in `integrated/` | **deleted**; the processed twin stays |
+| `Pages · Partner Pipeline.dc.html` | same | **deleted**; the processed twin stays |
+
+**Why deletion was right rather than adopting the newer bytes.** The two
+`incoming/` copies looked newer and larger — 52K against 37K, 74K against 59K —
+and the obvious reading was that they carried a corrected design the shipped
+pages did not match. They did not. The whole of the difference is the intake
+normalisation `scripts/read-canvas.mjs` performs: the raw copies still name the
+artifact's asset uuid as their runtime (`<script src="a408a8e7-…">`) where the
+processed copies name `src="./support.js"`, and they carry the un-collapsed markup the
+decoder reflows. **The design data is identical** — one `text/x-dc` block each,
+23994 characters for Offers and 26183 for Pipeline, the same in both directories
+after whitespace normalising, and the same `route:` / `filters:` / `ops:`
+declarations. So the raw copies were duplicates that would have overwritten a
+working canvas with one whose runtime reference cannot resolve.
+
+**The duplicates were also causing a live inconsistency, which is the real reason
+this mattered.** Both guards merge canvases with `out[live(route)] = labels` —
+last write wins — and their `canvasDirs` are in **opposite order**
+(`filters` reads `incoming` then `integrated`; `actions` reads `integrated` then
+`incoming`). With a twin in each directory, the filters guard was deriving Offers
+and Pipeline from the *processed* copy and the actions guard from the *raw* one.
+Nothing failed, because the data matched — but two guards reading different files
+for the same canvas is a coincidence holding a contract together. One copy per
+canvas removes it by construction.
+
+**What did NOT change, and must not be read as settled by this.** The Pipeline
+`ops` question is exactly where it was: the canvas is shape B (`sc-` markup, no
+`route:`), the seven ops are still unbuilt, and integrating them still needs
+either the guard's parser to learn that shape or a re-export in the `PAGES` shape
+— see the section below, which stands unamended. Nothing here adopted an op,
+changed a filter table, or touched a rendered page.
+
+**What the two moved canvases still ask for**, stated here because the canvases
+left the queue and the asks did not — the same treatment Delivery and Offers got
+on 2026-09-04: Partner Network's `organizations` reads nothing for this licence
+(its artboard's empty state *is* the page, per #128), and Partner Research still
+has zones whose store is absent, tracked as `RESEARCH_STORE_GAPS` in
+`frontend/src/workspaces/noStoreCopy.js` rather than held open here.
+
+**Eight references were repointed**, all of them `const CANVAS = raw('…')` in
+tests that read these canvases as the source of truth for their expectations
+(`frontend/test/network_*.test.mjs`, `frontend/test/offers_*.test.mjs`), plus one
+comment in `profile_zone_filters.test.mjs`.
+
+**Three citations still name the old path, each left alone on purpose.**
+
+`cloudflare-worker/sql/migrations/221_research_ask_sessions.sql` names it in a
+comment, and `scripts/migrate-d1.mjs` records a **checksum** per migration file —
+editing an applied migration to chase a path rename risks the production ledger
+for a comment, which is the worse trade.
+
+The other two are the docblocks of `frontend/src/workspaces/canvasKit.jsx` and
+`partnerZoneFilters.js`, and the reason is a **gap in `check-docs-fresh`** worth
+recording. That guard is deliberately commit-based — `docsTs >= srcTs`, the
+newest commit touching `docs/` against the newest touching `frontend/src` — so
+ANY commit touching `frontend/src` without one touching `docs/` fails it under
+`--strict`, which CI uses. A comment-only edit produces a **byte-identical**
+bundle: the fix the guard itself prints (`npm run build && git add docs`) leaves
+`docs/` with nothing to commit, verified here — the root build ran clean and
+`git status docs/` came back empty. So the guard has no satisfiable fix for a
+comment change in `frontend/src`, and a correct one-line citation fix is
+unshippable on its own. Both edits were made, found to trip exactly that, and
+reverted. **Fixing the guard is its own task**; the two comments are wrong about
+a path and right about everything else, which is the cheaper of the two wrongs.
 
 ### Partner Pipeline: the exemption that expired, and the one that has not
 
@@ -177,8 +257,17 @@ file move.** `profile_zone_filters.test.mjs` and `profile_zone_actions.test.mjs`
 glob `integrated/` for `Pages · Founder *`, so a canvas arriving there with zone
 rows would change the founder profile's expected zone count. These two do not:
 the set stayed 26 zones and 108 labels across what is now six files. Any of the
-five canvases still listed above WOULD change it, and would also need
-`canvasDirs` updated in both guards.
+five canvases still listed above WOULD change it.
+
+**The rest of that sentence used to say such a move "would also need
+`canvasDirs` updated in both guards", and that is no longer true.** Both guards
+were widened since, and each names a `canvasDirs` list holding **both**
+directories — `profile_zone_filters.test.mjs:232` and `:300`,
+`profile_zone_actions.test.mjs:145` — so a canvas moving between `incoming/` and
+`integrated/` needs no guard edit at all. The actions guard says so in its own
+comment: *"Both are read, so a canvas that moves between them does not"* matter.
+Verified on 2026-09-12 by moving two and deleting two: both guards stayed green
+at 58 and 45 with no change to either `canvasDirs`.
 
 Two things those two canvases asked for were **not** built, and are stated on
 the pages themselves rather than held open here: nothing records a firm's
@@ -255,7 +344,7 @@ intent is to land a canvas.**
 | Pages · Advisor Cohorts | `canvases/backlog/` |
 | Pages · Partner Pipeline | `canvases/integrated/` |
 | Pages · Partner Delivery / Offers | `canvases/integrated/` (moved from `incoming/`, 2026-09-04) |
-| Pages · Partner Network / Research | `incoming/` |
+| Pages · Partner Network / Research | `canvases/integrated/` (moved from `incoming/`, 2026-09-12, #155) |
 | Founder Workspaces Canvas, Investor LP Canvas, AIRail | `incoming/` |
 | Advisor Canvas | `canvases/integrated/` |
 | Partner Operator Canvas, ForgeRail | `canvases/backlog/` |

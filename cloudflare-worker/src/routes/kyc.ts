@@ -4,6 +4,7 @@ import { getSQL } from '../db';
 import { requireAuth, requireAdmin, requireStepUp } from '../auth';
 import { putKycDocumentFromDataUri, getKycDocument, deleteKycDocument } from '../services/r2';
 import { hashEmail } from '../util/hashEmail';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const kyc = new Hono<{ Bindings: Env }>();
 
@@ -17,15 +18,15 @@ const KYC_COLUMNS: Array<[string, string]> = [
   ['kyc_rejection_reason', 'TEXT'],
 ];
 
-let migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureColumns(env: Env) {
-  if (migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const db = env.DB;
   for (const [col, type] of KYC_COLUMNS) {
     try { await db.prepare(`ALTER TABLE users ADD COLUMN ${col} ${type}`).run(); } catch {}
   }
   try { await db.prepare(`UPDATE users SET kyc_status = 'not_started' WHERE kyc_status IS NULL`).run(); } catch {}
-  migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 const ALLOWED_ID_TYPES = ['passport', 'driver_license', 'national_id', 'residence_permit'];

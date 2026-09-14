@@ -37,10 +37,22 @@ const GOOGLE_ERROR_COPY = {
 
 // BLOCK-AUTH-01 — copy for the codes raised by GET /api/auth/magic/verify when
 // a magic link can't sign the user in (mirrors routes/auth.ts::fail()).
+// The probe gets its OWN deadline, much shorter than the module default. It is
+// not fetching anything the user asked for: its whole job is to decide what this
+// page may claim, and a claim that stays pending is the bug — the card would go
+// on offering a shorter list of options with nothing saying why. Six seconds is
+// long enough for a cold isolate and short enough that a stall becomes a visible
+// absence while the person is still reading the card.
+const GOOGLE_PROBE_TIMEOUT_MS = 6_000;
+
 const MAGIC_ERROR_COPY = {
   invalid: 'That sign-in link is invalid. Request a new one below.',
   expired: 'That sign-in link has expired or was already used. Request a new one below.',
   rate: 'Too many attempts. Please wait a minute and try again.',
+  // Not the person's fault, so it must not read like it is: `limiter` is what
+  // /magic/verify returns when the rate-limit store could not be consulted at
+  // all. Telling them to wait would be advice that never comes true.
+  limiter: 'We could not check the request limit, so the link was refused. This is a problem on our side — please try the link again in a moment.',
   inactive: 'Your Axal VC account is inactive. Contact support.',
   error: 'Something went wrong completing your sign-in. Please try again.',
 };
@@ -64,7 +76,13 @@ export default function LoginPage() {
   const [turnstileToken, setTurnstileToken] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [googleAvailable, setGoogleAvailable] = useState(false);
+  // THREE STATES, NOT TWO. A boolean initialised `false` cannot tell "we have
+  // not asked yet" from "the server said no", and both rendered as a missing
+  // button under a sentence that still promised Google — which is how a
+  // 30-second outage on /api/auth/google/start reached the user as "the Google
+  // button disappeared" with nothing on screen admitting it. D56/D68 applies to
+  // a control exactly as it applies to a number: state the absence.
+  const [googleProbe, setGoogleProbe] = useState('probing'); // 'probing' | 'yes' | 'no'
   const [googleBusy, setGoogleBusy] = useState(false);
   // BLOCK-AUTH-02 — passkey state.
   const [passkeyBusy, setPasskeyBusy] = useState(false);
@@ -99,16 +117,18 @@ export default function LoginPage() {
     track('login_view');
   }, []);
 
-  // Discover whether the worker has Google OAuth configured; hide the
-  // button otherwise so we don't show users a control that returns 503.
+  // Discover whether the worker has Google OAuth configured. A failure here is
+  // NOT proof that Google is unconfigured — it is equally a worker that did not
+  // answer — so the outcome is recorded as 'no' and rendered as a stated
+  // absence below, never as a silently shorter list of options.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        await api.googleStartUrl({ action: 'signin' });
-        if (!cancelled) setGoogleAvailable(true);
+        await api.googleStartUrl({ action: 'signin', timeoutMs: GOOGLE_PROBE_TIMEOUT_MS });
+        if (!cancelled) setGoogleProbe('yes');
       } catch {
-        if (!cancelled) setGoogleAvailable(false);
+        if (!cancelled) setGoogleProbe('no');
       }
     })();
     return () => { cancelled = true; };
@@ -344,6 +364,30 @@ export default function LoginPage() {
     } finally { setMagicBusy(false); }
   };
 
+  // THE SENTENCE IS DERIVED FROM THE CONTROLS, so it cannot outlive them. It
+  // used to be a hard-coded "Google, passkey, and authenticator codes are also
+  // available" over three conditionally-rendered buttons, which meant the page
+  // promised Google whenever the probe failed and promised a passkey on every
+  // browser without WebAuthn. Anything named here is rendered below; anything
+  // rendered below is named here.
+  const alsoList = [
+    ...(googleProbe === 'yes' ? ['Google'] : []),
+    ...(passkeySupported ? ['passkey'] : []),
+    'authenticator codes',
+  ];
+  // The list always ends with 'authenticator codes', which is plural, so "are"
+  // is never wrong — no branch needed, and none left to rot. The serial comma
+  // belongs to three items and not to two ("passkey, and authenticator codes"
+  // is what a naive join produced), and the list opens a sentence, so its first
+  // letter is the sentence's.
+  const joined = alsoList.length > 2
+    ? `${alsoList.slice(0, -1).join(', ')}, and ${alsoList[alsoList.length - 1]}`
+    : alsoList.join(' and ');
+  const alsoAvailable = joined.charAt(0).toUpperCase() + joined.slice(1);
+  // The collapsed toggle is the same promise in miniature: it named a passkey on
+  // every browser, including the ones that cannot offer one.
+  const altFactorsLabel = passkeySupported ? 'Passkey or authenticator code' : 'Authenticator code';
+
   return (
     <AuthShell showApplyCard applyLabel="Apply to Axal VC →" backgroundSrc="/auth/login-background.webp">
       <AuthCard>
@@ -351,7 +395,8 @@ export default function LoginPage() {
           Sign in
         </h1>
         <p className="mt-2 text-[13.5px] leading-relaxed text-[#6b6577]">
-          Passwordless by default — we email you a one-time link. Google, passkey, and authenticator codes are also available.
+          Passwordless by default — we email you a one-time link.{' '}
+          {`${alsoAvailable} are also available.`}
         </p>
 
         {error && (
@@ -412,7 +457,20 @@ export default function LoginPage() {
             </button>
           )}
 
-          {googleAvailable && (
+          {googleProbe === 'no' && (
+            <div
+              className="text-xs text-[#6b6577] bg-[#f6f5fa] border rounded-lg px-3 py-2"
+              style={{ borderColor: authV2.hair }}
+              data-testid="login-google-unavailable"
+            >
+              <strong className="text-[#241f38]">Continue with Google is unavailable.</strong>{' '}
+              The server did not confirm it — either Google sign-in is not enabled on this
+              environment, or it did not answer. The email link, a passkey and authenticator
+              codes all still work.
+            </div>
+          )}
+
+          {googleProbe === 'yes' && (
             <>
               <div className="flex items-center gap-3">
                 <div className="flex-1 h-px" style={{ background: authV2.hair }} />
@@ -442,7 +500,7 @@ export default function LoginPage() {
             onClick={() => setShowAltFactors((v) => !v)}
             className="w-full text-[13px] font-semibold text-[#6b6577] flex items-center justify-center gap-1 py-1"
           >
-            {showAltFactors ? <>Hide other sign-in options <ChevronUp size={14} /></> : <>Passkey or authenticator code <ChevronDown size={14} /></>}
+            {showAltFactors ? <>Hide other sign-in options <ChevronUp size={14} /></> : <>{altFactorsLabel} <ChevronDown size={14} /></>}
           </button>
 
           {showAltFactors && (

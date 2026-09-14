@@ -12,11 +12,12 @@
  * days are purged by the nightly cron in index.ts.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 export async function ensureFunnelEventsSchema(env: Env): Promise<void> {
-  if (_ready) return;
+  if (READY.get(bindingKey(env))) return;
   await env.DB.exec(
     "CREATE TABLE IF NOT EXISTS funnel_events (id INTEGER PRIMARY KEY AUTOINCREMENT, event TEXT NOT NULL, anon_id TEXT, session_id TEXT, client_ts INTEGER, path TEXT, referrer TEXT, device TEXT, browser TEXT, utm_source TEXT, utm_medium TEXT, utm_campaign TEXT, ref_code TEXT, lane TEXT, invite_type TEXT, props TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))",
   );
@@ -26,5 +27,5 @@ export async function ensureFunnelEventsSchema(env: Env): Promise<void> {
   await env.DB.exec(
     "CREATE INDEX IF NOT EXISTS idx_funnel_events_anon ON funnel_events(anon_id, created_at)",
   );
-  _ready = true;
+  READY.set(bindingKey(env), true);
 }

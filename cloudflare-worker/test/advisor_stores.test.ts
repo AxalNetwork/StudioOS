@@ -139,6 +139,13 @@ function freshDb() {
   db.exec(migration('204_advisor_proof'));
   db.exec(migration('205_advisor_booking_amounts'));
   db.exec(migration('206_advisor_cohort_assignments'));
+  // 241 — `PATCH /me/bookings/:id/billing` now stamps `platform_cut_cents`
+  // and `take_rate_bps` beside the amount, and reads the rate out of
+  // `platform_settings`. A fixture that stopped at 205 made every price write
+  // in this file fail on a missing column, which is the fixture being stale
+  // rather than the route being wrong — the tests below assert 205's
+  // behaviour and still do.
+  db.exec(migration('241_advisor_money_model'));
 
   const u = db.prepare('INSERT INTO users (id, role, advisor_id, name, email) VALUES (?,?,?,?,?)');
   u.run(ADVISOR_USER, 'advisor', 1, 'Ada', 'ada@example.com');

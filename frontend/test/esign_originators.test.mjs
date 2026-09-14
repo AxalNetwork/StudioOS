@@ -11,9 +11,9 @@
  * puts them in TEMPLATES; forty-five more .md files sit unimported in
  * templates/legal/ and `getLegalTemplateBody` throws on every one. A doc type
  * may therefore appear in the registry only if `templateKeyForDocType` maps it
- * to one of the nine. These tests are that constraint, and they read all three
- * files as text — legalTemplates.ts cannot be imported outside the wrangler
- * bundler, which is why esignOriginators.ts imports nothing.
+ * to one of the nine. These tests are that constraint, and they read the files as
+ * text — legalTemplates.ts cannot be imported outside the wrangler bundler, which
+ * is why esignOriginators.ts imports nothing.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,6 +23,11 @@ import { resolve } from 'node:path';
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const registry = read('cloudflare-worker/src/services/esignOriginators.ts');
 const templates = read('cloudflare-worker/src/services/legalTemplates.ts');
+// The doc_type → key table moved out of legalTemplates.ts into its own module so
+// that code needing only the mapping is not dragged into nine `.md?raw` imports
+// a bundler alone can resolve. The bodies stayed behind, so this file now reads
+// two sources: `templates` for what has a body, `docTypes` for what maps.
+const docTypes = read('cloudflare-worker/src/services/legalDocTypes.ts');
 const route = read('cloudflare-worker/src/routes/esign.ts');
 const app = read('frontend/src/App.jsx');
 const page = read('frontend/src/pages/legal/SendForSignaturePage.jsx');
@@ -41,9 +46,9 @@ function wiredKeys() {
 
 /** doc_type → template key, as the worker resolves it. */
 function docTypeMap() {
-  const block = templates.slice(
-    templates.indexOf('const DOC_TYPE_TO_TEMPLATE_KEY'),
-    templates.indexOf('export function templateKeyForDocType'),
+  const block = docTypes.slice(
+    docTypes.indexOf('const DOC_TYPE_TO_TEMPLATE_KEY'),
+    docTypes.indexOf('export function templateKeyForDocType'),
   );
   return Object.fromEntries(
     [...block.matchAll(/^\s{2}([a-z0-9_]+):\s*'([a-z0-9_]+)',/gm)].map((m) => [m[1], m[2]]),

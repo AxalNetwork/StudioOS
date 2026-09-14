@@ -114,10 +114,10 @@ function CompanyScopeNote({ role }) {
   if (role !== 'advisor') return null;
   return (
     <Card variant="sunken" padding="md" className="mb-4">
-      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
         These analyses are yours, not a client&rsquo;s
       </div>
-      <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-axal-ink-2">
+      <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-axal-muted">
         An analysis is stored against the person who ran it and carries no company, so there is no
         client to switch between and no per-client history to open. Describe the market you are
         researching; if a startup picker below is empty, that is because company records are not

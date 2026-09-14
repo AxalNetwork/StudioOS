@@ -95,6 +95,18 @@ export default function FounderRaiseStatus() {
   const round = roundInfo.round || null;
   const prospects = asList(records.prospects, 'items');
   const documents = asList(records.legal, 'documents');
+  // `at` IS THE FIX FOR THE `Timeline` CHIP, and it is one line per source.
+  //
+  // That chip was refused with "the assembled rows carry a state but no date, so
+  // they cannot be put in order" — a true statement about THESE OBJECTS and a
+  // false one about the data behind them. `raise_prospects` and `legal_documents`
+  // both carry `created_at` and `updated_at`, and both routes `SELECT *`, so every
+  // date was already on this page; the mapper simply did not copy it across. The
+  // refusal described its own twenty lines and read as a fact about the API.
+  //
+  // `updated_at` LEADS, because the question the timeline answers is "what moved
+  // last", not "what was filed first". A row with neither is kept and sorts last
+  // rather than being dropped: a document with no timestamp is still a document.
   const rows = useMemo(() => [
     ...documents.map((document, index) => ({
       id: `document-${document.id || index}`,
@@ -102,6 +114,7 @@ export default function FounderRaiseStatus() {
       owner: display(document.owner_name || document.owner, 'Not recorded'),
       state: stateText(document.status),
       holds: display(document.holds_up || document.blocks || document.next_step, 'Not recorded'),
+      at: document.updated_at || document.created_at || null,
       source: 'Legal record',
     })),
     ...prospects.map((prospect, index) => ({
@@ -110,10 +123,22 @@ export default function FounderRaiseStatus() {
       owner: display(prospect.owner_name || prospect.owner, 'Not recorded'),
       state: stateText(prospect.stage || prospect.status),
       holds: display(prospect.next_step || prospect.notes || prospect.holds_up, 'Not recorded'),
+      at: prospect.updated_at || prospect.created_at || null,
       source: 'Investor prospect',
     })),
   ], [documents, prospects]);
-  const visibleRows = filter === 'blockers' ? rows.filter((row) => !['signed', 'filed', 'closed', 'done', 'passed', 'committed'].includes(row.state.toLowerCase())) : filter === 'investors' ? rows.filter((row) => row.source === 'Investor prospect') : rows;
+  // `Date.parse` on a stored `YYYY-MM-DD HH:MM:SS` is the one comparison this
+  // needs and the only place a bad string can appear as a confident order, so an
+  // unparseable stamp sorts LAST rather than as epoch zero — which would put it
+  // at the top under the heading "most recent".
+  const stampOf = (row) => {
+    const t = Date.parse(row.at || '');
+    return Number.isFinite(t) ? t : -Infinity;
+  };
+  const visibleRows = filter === 'blockers' ? rows.filter((row) => !['signed', 'filed', 'closed', 'done', 'passed', 'committed'].includes(row.state.toLowerCase()))
+    : filter === 'investors' ? rows.filter((row) => row.source === 'Investor prospect')
+      : filter === 'timeline' ? [...rows].sort((a, b) => stampOf(b) - stampOf(a))
+        : rows;
   const target = round?.target_amount;
   const raised = roundInfo.raised;
   const coverage = target != null && Number(target) > 0 && Number.isFinite(Number(raised)) ? Math.min(100, Math.round(Number(raised) / Number(target) * 100)) : null;
@@ -136,14 +161,14 @@ export default function FounderRaiseStatus() {
       <section className="fr-status-main">
         <header className="fr-status-header">
           <div className="fr-status-crumb"><Link to="/raise/pitch" data-testid="link-status-back"><ArrowLeft size={13} /> Raise</Link><span>/</span><strong>Status</strong></div>
-          <div className="fr-status-title-row"><div><h1>Raise war-room</h1><p className="fr-status-subtitle">Blockers, investor list, timeline and the pace that decides the close.</p></div>{projects.length > 1 && <label className="fr-status-picker"><span>Startup</span><select data-testid="select-status-project" value={projectId || ''} onChange={(event) => chooseProject(event.target.value)}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}</div>
+          <div className="fr-status-title-row"><div><h1>Raise war-room</h1><p className="fr-status-subtitle">Blockers, investor list, timeline and the pace that decides the close.</p></div></div>
           <nav className="fr-status-zone-nav" aria-label="Raise sections">
             <Link to={query ? `/raise/status${query}` : '/raise/status'} className="is-active" data-testid="link-status-zone">Status</Link>
             <Link to={`/raise/pitch${query}`}>Pitch</Link><Link to={`/raise/capital${query}`}>Capital</Link><Link to={`/raise/legal${query}`}>Legal</Link><Link to={`/raise/data-room${query}`}>Data room</Link><span className="fr-status-zone-disabled">Liquidity unavailable</span>
           </nav>
           <ZoneToolbar
               filters={founderZoneFilters('raise/status', { value: filter, onChange: setFilter })}
-              actions={founderZoneActions('raise/status', { query, view: { scope: project?.name, header: ['Record', 'Source', 'Owner', 'State', 'Holds up'], rows, cells: (r) => [r.label, r.source, r.owner, r.state, r.holds] } })}
+              actions={founderZoneActions('raise/status', { query, view: { scope: project?.name, header: ['Record', 'Source', 'Owner', 'State', 'Holds up', 'Last moved'], rows, cells: (r) => [r.label, r.source, r.owner, r.state, r.holds, r.at] } })}
             />
         </header>
         {(errors.projects || Object.keys(errors).length > 0) && <div className="fr-status-alert" role="alert" data-testid="status-raise-status-partial"><AlertCircle size={16} /><span>{errors.projects || 'Some selected-project raise records are unavailable.'}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
@@ -168,7 +193,7 @@ function StatusContent({ project, round, roundInfo, target, raised, coverage, ro
             {/* Its filter row is the zone header's now, where the canvas draws
           it. Overview, Blockers and Investors moved across unchanged;
           Timeline joined them as prose, having never been drawn at all. */}
-      {rows.length ? <div className="fr-status-table-wrap"><table><thead><tr><th>Blocker / record</th><th>Owner</th><th>State</th><th>Holds up</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id} data-testid={`row-raise-status-${row.id}`}><td><strong>{row.label}</strong><small>{row.source}</small></td><td>{row.owner}</td><td><span className={`fr-status-pill pill-${stateTone(row.state)}`}>{row.state}</span></td><td>{row.holds}</td></tr>)}</tbody></table></div> : <div className="fr-status-inline-empty"><CircleDot size={18} /><div><strong>{filter === 'overview' ? 'No raise records are stored.' : 'No records match this view.'}</strong><p>FR1 shows only records returned for the selected startup.</p></div></div>}
+      {rows.length ? <div className="fr-status-table-wrap"><table><thead><tr><th>Blocker / record</th><th>Owner</th><th>State</th><th>Holds up</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id} data-testid={`row-raise-status-${row.id}`}><td><strong>{row.label}</strong><small>{row.source}{filter === 'timeline' ? ` · ${row.at ? String(row.at).slice(0, 10) : 'no date recorded'}` : ''}</small></td><td>{row.owner}</td><td><span className={`fr-status-pill pill-${stateTone(row.state)}`}>{row.state}</span></td><td>{row.holds}</td></tr>)}</tbody></table></div> : <div className="fr-status-inline-empty"><CircleDot size={18} /><div><strong>{filter === 'overview' || filter === 'timeline' ? 'No raise records are stored.' : 'No records match this view.'}</strong><p>FR1 shows only records returned for the selected startup.</p></div></div>}
       <p className="fr-status-note">The table combines stored legal records and investor prospects. Owners, hold-up consequences, and blocker classifications are shown only when returned by their source; the page does not infer close risk from names or ordering.</p>
     </section>
     <div className="fr-status-lower-grid"><section className="fr-status-card"><div className="fr-status-card-head"><div><CheckCircle2 size={16} /><h2>Round coverage</h2></div><span>{errors.round ? 'Source unavailable' : (round ? 'Stored round fields' : 'No round')}</span></div><div className="fr-status-coverage-row"><span>Target</span><strong>{errors.round ? 'Unavailable' : money(target)}</strong></div><div className="fr-status-coverage-row"><span>Committed</span><strong>{errors.round ? 'Unavailable' : money(raised)}</strong></div><div className="fr-status-coverage-row"><span>Investor prospects</span><strong>{errors.prospects ? 'Unavailable' : prospects.length}</strong></div><p className="fr-status-note">Weighted conversion and pace-to-close are not computed without explicit probability and timeline fields.</p><Link className="fr-status-editor-link" to={`/raise/capital${query}`}>Open capital workspace <ChevronRight size={13} /></Link></section><section className="fr-status-card"><div className="fr-status-card-head"><div><FileText size={16} /><h2>Source coverage</h2></div><span>Read-only</span></div><div className="fr-status-coverage-row"><span>Legal records</span><strong>{errors.legal ? 'Unavailable' : documents.length}</strong></div><div className="fr-status-coverage-row"><span>Investor records</span><strong>{errors.prospects ? 'Unavailable' : prospects.length}</strong></div><div className="fr-status-coverage-row"><span>Timeline events</span><strong>Unavailable</strong></div><p className="fr-status-note">Use the detailed workspaces to update source records. This war-room does not create blockers or investor activity.</p></section></div>

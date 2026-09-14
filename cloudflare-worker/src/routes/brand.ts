@@ -22,16 +22,18 @@ import { ensureLandingPageBrandKitColumns } from '../services/landingPageSchema'
 import { renderLandingTemplate, TEMPLATE_REGISTRY, TEMPLATE_KEYS, TEMPLATE_SIGNATURE_PALETTES, sanitizeLandingContent, LANDING_CONTENT_SCHEMA, HONEYPOT_FIELD } from '../services/landingTemplates';
 import type { TemplateKey } from '../services/landingTemplates';
 import { requireAuth } from '../auth';
+import { recordCompositionFills } from '../services/fills/provenance';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { run as aiRouterRun } from '../services/aiRouter';
 import { ingestContact } from './contacts';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const brand = new Hono<{ Bindings: Env }>();
 
-let _migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
-  if (_migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const stmts = [
     // Multi-page sites: project_id is deliberately NOT unique (one project can
     // own many pages); (project_id, page_slug) uniqueness is enforced by
@@ -95,7 +97,7 @@ async function ensureSchema(env: Env): Promise<void> {
   }
   // Brand-kit columns on pre-existing tables (CREATE above only covers fresh DBs).
   await ensureLandingPageBrandKitColumns(env);
-  _migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 function slugify(name: string): string {
@@ -223,7 +225,18 @@ async function aiTemplateContent(
   name: string,
   sector: string | null,
   description: string,
-): Promise<{ name: string; cta_text: string; headline: string; subheadline: string; tagline: string; content: Record<string, any> } | null> {
+): Promise<{
+  name: string; cta_text: string; headline: string; subheadline: string;
+  tagline: string; content: Record<string, any>;
+  /**
+   * The model that ACTUALLY RAN, from the router's own `usage`, not the one this
+   * code asked for. `brand_autofill` degrades to SMALL_LLAMA on a failure, and a
+   * provenance row naming the primary after the fallback answered would be a
+   * false receipt — which is the whole class of thing `fill_provenance` exists to
+   * stop, pointed at itself.
+   */
+  model: string | null;
+} | null> {
   try {
     const fields = LANDING_CONTENT_SCHEMA[key] || [];
     const fieldSpec = fields.map((f) => {
@@ -264,6 +277,7 @@ async function aiTemplateContent(
       subheadline,
       tagline,
       content,
+      model: res.usage?.model ?? null,
     };
   } catch {
     return null;
@@ -1286,6 +1300,28 @@ brand.put('/landing/pages/:id', async (c) => {
     throw e;
   }
   const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE id = ?').bind(id).first<any>();
+
+  // WHAT EADWYN WROTE, KEPT RATHER THAN THROWN AWAY (task #199). The autofill
+  // route has always returned `ai_generated: true`, and the editor has always
+  // dropped it at the point of use — so a published headline Eadwyn drafted was
+  // indistinguishable from one the founder typed, on the same page that names the
+  // model in its rail. Nothing about the autofill mechanism changes: it still
+  // drafts into local state the founder edits freely, and Save is still the
+  // commit. This records, per field, what was proposed and what was saved.
+  //
+  // `row` is the authority on which columns exist, so a stale or invented column
+  // name from the client files nothing. Read AFTER the write, so `written` is what
+  // the page actually holds rather than what the request asked for.
+  await recordCompositionFills(c.env, {
+    table: 'landing_pages',
+    rowId: id,
+    proposals: (body?.ai_proposals && typeof body.ai_proposals === 'object') ? body.ai_proposals : {},
+    written: row || {},
+    model: body?.ai_model ? String(body.ai_model).slice(0, 120) : null,
+    task: 'brand_autofill',
+    decidedBy: Number(user.id),
+  });
+
   return c.json(rowToLanding(row));
 });
 

@@ -29,6 +29,7 @@ import { hashEmail } from '../util/hashEmail';
 import {
   computeRoundProgress, rollUpTranches, computeProRata, postRoundStake,
 } from '../services/roundMath';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -92,9 +93,9 @@ type ContactRow = {
   created_at: string; updated_at: string;
 };
 
-let _ensured = false;
+const ENSURED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
-  if (_ensured) return;
+  if (ENSURED.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS contacts (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -278,7 +279,7 @@ async function ensureSchema(env: Env): Promise<void> {
       }
     }
   } catch (e) { console.warn('[contacts] attribution bootstrap failed', e); }
-  _ensured = true;
+  ENSURED.set(bindingKey(env), true);
 }
 
 /**

@@ -28,6 +28,7 @@ import {
 } from '../services/calendar';
 export { preflightOAuthSecrets };
 import { encryptString } from '../services/cryptoBox';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const calendar = new Hono<{ Bindings: Env }>();
 
@@ -96,9 +97,9 @@ async function verifyState(env: Env, raw: string): Promise<string | null> {
 // throws and `safe()` returns the generic "Could not start Google OAuth"
 // string. Bootstrap the calendar shape once per isolate so the OAuth
 // start handler is self-healing.
-let _calendarOauthStateReady = false;
+const CALENDAR_OAUTH_STATE_READY = new WeakMap<object, boolean>();
 async function ensureCalendarOauthStateTable(env: Env): Promise<void> {
-  if (_calendarOauthStateReady) return;
+  if (CALENDAR_OAUTH_STATE_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       'CREATE TABLE IF NOT EXISTS oauth_state_tokens (' +
@@ -114,7 +115,7 @@ async function ensureCalendarOauthStateTable(env: Env): Promise<void> {
     try {
       await env.DB.exec("ALTER TABLE oauth_state_tokens ADD COLUMN expires_at TEXT NOT NULL DEFAULT ''");
     } catch { /* column already exists */ }
-    _calendarOauthStateReady = true;
+    CALENDAR_OAUTH_STATE_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[CAL:ensureOauthStateTable]', (e as Error).message);
   }

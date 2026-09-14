@@ -327,6 +327,14 @@ r.get('/commit-room', async (c) => {
         title: d.title,
         project_name: proj?.name ?? null,
         deal_id: d.deal_id ?? null,
+        // WHO MAY CLOSE THIS ONE, and the reason it travels with the summary.
+        // `PUT /:uid` admits the decision's author and an admin, and refuses a
+        // colleague with a 403 — a rule about authorship inside a firm, not a
+        // tenancy boundary. Without this field the Commit page would have to
+        // offer the close form to everyone who can SEE the decision and let the
+        // 403 be the explanation, which is a control teaching a reader it is
+        // dead by failing. Additive: no existing consumer reads it.
+        created_by: d.created_by ?? null,
         status: d.status,
         decision: d.decision ?? null,
         decided_at: d.decided_at ?? null,

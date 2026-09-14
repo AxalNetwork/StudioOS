@@ -30,8 +30,8 @@ const day = (v) => (v ? String(v).slice(0, 16).replace('T', ' ') : null);
 const JOB_TONE = {
   failed: 'border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/20',
   stale: 'border-amber-200 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20',
-  running: 'border-axal-line bg-axal-surface-2',
-  ok: 'border-axal-line bg-axal-surface-2',
+  running: 'border-axal-hairline bg-axal-ground',
+  ok: 'border-axal-hairline bg-axal-ground',
 };
 
 function Zone({ title, sub, children }) {
@@ -39,7 +39,7 @@ function Zone({ title, sub, children }) {
     <Card>
       <div className="mb-2 flex items-baseline justify-between gap-3">
         <h2 className="text-[14.5px] font-extrabold tracking-tight">{title}</h2>
-        {sub && <span className="text-[11.5px] text-axal-ink-3">{sub}</span>}
+        {sub && <span className="text-[11.5px] text-axal-faint">{sub}</span>}
       </div>
       {children}
     </Card>
@@ -48,7 +48,7 @@ function Zone({ title, sub, children }) {
 
 function Absent({ reason }) {
   return (
-    <p className="text-[12.5px] leading-relaxed text-axal-ink-2">
+    <p className="text-[12.5px] leading-relaxed text-axal-muted">
       <Unrecorded /> — {reason}
     </p>
   );
@@ -56,10 +56,10 @@ function Absent({ reason }) {
 
 function Stat({ label, value, note, tone = 'text-axal-ink dark:text-white' }) {
   return (
-    <div className="rounded-xl border border-axal-line bg-axal-surface-2 p-3">
-      <div className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{label}</div>
+    <div className="rounded-xl border border-axal-hairline bg-axal-ground p-3">
+      <div className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</div>
       <div className={`mt-1 text-lg font-extrabold tracking-tight tabular-nums ${tone}`}>{value ?? <Unrecorded />}</div>
-      {note && <div className="mt-0.5 text-[10px] text-axal-ink-3">{note}</div>}
+      {note && <div className="mt-0.5 text-[10px] text-axal-faint">{note}</div>}
     </div>
   );
 }
@@ -102,11 +102,11 @@ export default function PlatformPage() {
         </div>
 
         <header className="mt-4">
-          <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+          <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             <SlidersHorizontal size={13} /> HQ · Platform
           </div>
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">Platform</h1>
-          <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-ink-2">
+          <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
             Keys, flags and jobs. Two of the three have a store and are read from it; flags do not exist as a
             platform control and say so. No key material is fetched by this page.
           </p>
@@ -139,16 +139,16 @@ export default function PlatformPage() {
                 {integrations.providers.length > 0 && (
                   <ul className="mt-3 space-y-1.5" data-testid="hq-platform-providers">
                     {integrations.providers.map((p) => (
-                      <li key={p.provider} className="flex items-baseline justify-between gap-3 rounded-lg border border-axal-line bg-axal-surface-2 px-3 py-2 text-[11.5px]">
+                      <li key={p.provider} className="flex items-baseline justify-between gap-3 rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[11.5px]">
                         <span className="font-medium">{p.provider}</span>
-                        <span className="font-mono text-[10px] text-axal-ink-3">
+                        <span className="font-mono text-[10px] text-axal-faint">
                           {Object.entries(p.by_status).map(([s, n]) => `${n} ${s}`).join(' · ')}
                         </span>
                       </li>
                     ))}
                   </ul>
                 )}
-                <p className="mt-3 text-[12.5px] leading-relaxed text-axal-ink-2" data-testid="hq-platform-secrets">
+                <p className="mt-3 text-[12.5px] leading-relaxed text-axal-muted" data-testid="hq-platform-secrets">
                   {integrations.secrets_note} Revealing and revoking a key stay in the console that owns key
                   material, where revocation is recorded — it is instant and irreversible, which is not something
                   a read-only summary should be able to do.
@@ -163,7 +163,7 @@ export default function PlatformPage() {
             <Zone title="Scheduled jobs" sub="failed, silent and running are three things">
               {jobs?.available ? (
                 jobs.triggers.length === 0 ? (
-                  <p className="text-[12.5px] text-axal-ink-2">
+                  <p className="text-[12.5px] text-axal-muted">
                     No scheduled run has been recorded yet. The history is readable and empty, which is not the
                     same as a job that never ran.
                   </p>
@@ -173,9 +173,9 @@ export default function PlatformPage() {
                       <li key={j.trigger_name} className={`rounded-lg border px-3 py-2 text-[11.5px] ${JOB_TONE[j.state] || JOB_TONE.ok}`}>
                         <div className="flex items-baseline justify-between gap-3">
                           <span className="truncate font-medium">{j.trigger_name}</span>
-                          <span className="shrink-0 font-mono text-[10px] uppercase text-axal-ink-3">{j.state}</span>
+                          <span className="shrink-0 font-mono text-[10px] uppercase text-axal-faint">{j.state}</span>
                         </div>
-                        <div className="mt-0.5 font-mono text-[10px] text-axal-ink-3">
+                        <div className="mt-0.5 font-mono text-[10px] text-axal-faint">
                           {day(j.last_started_at) || 'never started'}
                           {j.last_finished_at ? ` → ${day(j.last_finished_at)}` : ' · not finished'}
                         </div>

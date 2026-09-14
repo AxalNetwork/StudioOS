@@ -60,8 +60,14 @@ const SETS = {
   build: [
     { to: '/execution', label: 'Execution', icon: Briefcase,
       roles: ['admin', 'founder'] },
+    // FOUNDER-ONLY, BECAUSE THE PAGE IS. `FounderBuildRoadmap` takes no `role`
+    // and draws the founder "Build sections" nav, so a partner or investor
+    // admitted here got the founder's body and the founder's navigation. The
+    // route narrowed to match the shell (`route_role_zone_contract.test.mjs`);
+    // this row narrows with it, because a tab whose route bounces the viewer is
+    // worse than an absent one.
     { to: '/build/roadmap', label: 'Roadmap', icon: Map,
-      roles: ['admin', 'founder', 'partner', 'investor'] },
+      roles: ['admin', 'founder'] },
     { to: '/build/metrics', label: 'Metrics', icon: TrendingUp,
       roles: ['admin', 'founder', 'partner', 'investor'] },
   ],

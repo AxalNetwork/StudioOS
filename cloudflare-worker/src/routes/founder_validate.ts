@@ -25,7 +25,10 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { loadPainGroupModel, normPhrase, getPainGroupsView } from '../services/painGroups';
+import {
+  loadPainGroupModel, normPhrase, getPainGroupsView,
+  isPainSeverity, PAIN_SEVERITIES,
+} from '../services/painGroups';
 import { csvResponse, stamp } from '../services/csv';
 import {
   serializeInterviewsCsv, serializePainMapCsv, serializeSummaryCsv,
@@ -33,16 +36,30 @@ import {
 } from './_founder_validate_exports';
 import { ensureDiscoveryEvidenceColumns, ensureDiscoveryRecordingColumns } from '../services/discoveryInterviewSchema';
 import {
+  recordVerdictChanges, loadVerdictHistory, type VerdictObservation,
+} from '../services/verdictHistory';
+import {
   canReadBoard, canReadDecision, canWrite,
   verdictFor, laneFor, barNoteFor, evidenceFor, isIcp, VALIDATION_BAR,
   type ProjectRef,
 } from './_founder_validate_helpers';
-import { insertHypothesis, upsertPainAlias } from './_founder_validate_writes';
+// `insertHypothesis` stays — `POST /hypotheses`, the MANUAL form, is in this
+// file. `upsertPainAlias` left with the accept path's dispatch: the pain tag's
+// registry entry calls it now, and this file's own alias write lives in
+// `progress.ts`. Both callers still go through the one writer, which is the
+// point; only the caller moved.
+import { insertHypothesis } from './_founder_validate_writes';
+import { FILL_KINDS, fillKind } from '../services/fills/registry';
+import { recordFill } from '../services/fills/provenance';
+// `PROPOSAL_KINDS`, `TASK_FOR_KIND`, `TAG_PROMPT`, `DRAFT_PROMPT` and the two
+// parsers are gone from this file: the registry owns them per kind now, and it is
+// the parsers themselves the registry calls. They stay exported from that module
+// because its own tests exercise them directly — the shortest path to asserting
+// what a parser refuses is to hand it a bad reply, not to run a route.
 import {
-  DRAFT_PROMPT, MAX_PROMPT_ITEMS, PROPOSAL_KINDS, TAG_PROMPT, TASK_FOR_KIND,
-  listPending, parseDraftProposals, parseTagProposals, priorPayloads,
-  type HypothesisPayload, type ProposalKind, type TagPayload,
+  MAX_PROPOSALS_PER_RUN, listPending, priorPayloads, type ProposalKind,
 } from './_founder_validate_proposals';
+import { refuseReason } from '../services/fills/types';
 import { run as aiRun, audioMinutesFromBytes } from '../services/aiRouter';
 
 const founderValidate = new Hono<{ Bindings: Env }>();
@@ -181,6 +198,29 @@ async function buildBoard(env: Env, projectId: number) {
     };
   });
 
+  // WHAT THE BOARD USED TO SAY (#175, migration 255). Everything above is
+  // derived and stored nowhere, which is correct and stays — but it left three
+  // chips with nothing to stand on: `As of last week` and `Changed this month`
+  // on /validate/verdict, and `Recently moved` on /validate/hypotheses. The
+  // history is recorded here, on the read, and the reasoning for that is in
+  // `services/verdictHistory.ts`: there is no single evidence-write path to hang
+  // it on, and the failure mode of missing one of the six is a hole nothing can
+  // see. Writes only on a change, so this is one SELECT in the steady state.
+  //
+  // Never allowed to cost the board: a history that cannot be written or read
+  // leaves `history: []` and `verdict_history_since: null`, and the chips refuse
+  // rather than drawing an empty answer.
+  await recordVerdictChanges(env, projectId, items.map((h: any) => ({
+    hypothesis_id: Number(h.id), verdict: h.verdict ?? null, lane: String(h.lane),
+  }))).catch(() => 0);
+  const history = await loadVerdictHistory(env, projectId)
+    .catch(() => ({ byClaim: new Map<number, VerdictObservation[]>(), since: null as string | null }));
+  for (const h of items as any[]) {
+    h.history = (history.byClaim.get(Number(h.id)) || []).map((o) => ({
+      verdict: o.verdict, lane: o.lane, observed_at: o.observed_at,
+    }));
+  }
+
   // Project-level honesty: how much of the evidence base is unusable, and why.
   const fitMissing = interviews.filter((i) => i.row.icp_fit == null).length;
   const consentMissing = interviews.filter((i) => i.row.quote_consent == null).length;
@@ -189,6 +229,13 @@ async function buildBoard(env: Env, projectId: number) {
     bar: VALIDATION_BAR,
     hypotheses: items,
     pain_groups: model.groups,
+    // WHEN THE RECORD STARTS, so the page can say it. Nothing is backfilled —
+    // the only timestamp available to invent a past verdict from is
+    // `hypotheses.updated_at`, which moves when the claim TEXT is edited — and a
+    // window with no observations in it must read as "not recorded yet" rather
+    // than as "nothing changed". `/build/this-week` returns `history_since` for
+    // exactly this reason and this is the same seam.
+    verdict_history_since: history.since,
     evidence_base: {
       interviews: interviews.length,
       icp: interviews.filter((i) => isIcp(i.row.icp_fit)).length,
@@ -459,6 +506,71 @@ founderValidate.patch('/interviews/:id/evidence', async (c) => {
   return json({ ok: true });
 });
 
+/**
+ * Record — or clear — how severe ONE pain was in ONE interview.
+ *
+ * `interview_pain_severities` (migration 211) shipped with the right shape, a
+ * unique index, and no reader and no writer anywhere in the worker. Migration
+ * 215's own header names it as the example of "a column that comes to exist
+ * that nothing reads". This is the writer; `getPainGroupsView` is the reader.
+ *
+ * The consequence on screen is the `Need-to-have` chip on `/validate/pain-map`,
+ * which was `unbuilt` with exactly this reason recorded against it: "no mention
+ * carries a severity, so nothing separates a need from a nice-to-have".
+ *
+ * KEYED ON THE PHRASE AS TYPED, NORMALISED HERE. The table's key is
+ * `(interview_id, phrase_norm)` and `normPhrase` is the same function the pain
+ * map groups by, so a severity follows its phrase through re-grouping and
+ * re-wording exactly as its mention does. A caller sending a display phrase and
+ * a caller sending a normalised one reach the same row.
+ *
+ * NO CHECK THAT THE PHRASE IS ONE THE INTERVIEW LOGGED, and that is deliberate
+ * rather than missed. `pains_json` is a free-text blob a founder edits; a
+ * severity written against a phrase they then reword would have to be deleted
+ * or orphaned, and orphaned is the honest state — the view joins on the phrase,
+ * so an orphan simply stops counting and comes back if the wording does.
+ * Rejecting the write instead would make the order of two edits matter.
+ */
+founderValidate.put('/interviews/:id/pain-severity', async (c) => {
+  const id = Number(c.req.param('id'));
+  const owner = await c.env.DB.prepare(
+    'SELECT project_id FROM discovery_interviews WHERE id = ?',
+  ).bind(id).first<{ project_id: number }>();
+  if (!owner) return notFound('Interview');
+  const s = await scope(c, Number(owner.project_id), canWrite);
+  if (s instanceof Response) return s;
+
+  const b = await c.req.json().catch(() => ({} as any));
+  const norm = normPhrase(String(b?.phrase ?? ''));
+  if (!norm) return json({ detail: 'phrase is required' }, 400);
+
+  // An explicit null CLEARS the record, which is a third state and not the same
+  // as `nice`: "this founder has not judged it" is what the pain map reports as
+  // no severity on file, and a page that could only ever add would have no way
+  // back to it.
+  if (b?.severity == null) {
+    await c.env.DB.prepare(
+      'DELETE FROM interview_pain_severities WHERE interview_id = ? AND phrase_norm = ?',
+    ).bind(id, norm).run();
+    return json({ ok: true, severity: null });
+  }
+
+  if (!isPainSeverity(b.severity)) {
+    return json({ detail: `severity must be ${PAIN_SEVERITIES.join(' or ')}, or null to clear` }, 400);
+  }
+
+  // UPSERT ON THE TABLE'S OWN UNIQUE INDEX. Two tabs judging the same pain must
+  // not leave two rows — the view would then count one interview twice, and the
+  // `need_count` it reports is a count of interviews.
+  await c.env.DB.prepare(
+    `INSERT INTO interview_pain_severities (interview_id, phrase_norm, severity)
+     VALUES (?, ?, ?)
+     ON CONFLICT(interview_id, phrase_norm)
+     DO UPDATE SET severity = excluded.severity, updated_at = datetime('now')`,
+  ).bind(id, norm, b.severity).run();
+  return json({ ok: true, severity: b.severity });
+});
+
 // ---------------------------------------------------------------------------
 // "AI fills the blanks" — proposals, and the two decisions a person makes
 // about each one.
@@ -468,62 +580,72 @@ founderValidate.patch('/interviews/:id/evidence', async (c) => {
 // written only when this route is called. The mode does not poll.
 // ---------------------------------------------------------------------------
 
-/** Rows a run may be built from, capped so a long project cannot run away. */
-const CAP = MAX_PROMPT_ITEMS;
-
+/**
+ * Run one fill kind, and store what it proposed.
+ *
+ * THE PATH SAYS "VALIDATE" AND SERVES EVERY SURFACE, which is the same trade
+ * migration 246 already made for the table: *"The name stays. `validate_proposals`
+ * will hold a brand-copy proposal and read oddly, and renaming a live table means
+ * updating the baseline and both index names while `check-baseline-drift.mjs`
+ * verifies production against it. The migration header records that the name is
+ * where the table started, not what it serves."* The same holds for the route —
+ * renaming it means moving four handlers, four `api.js` methods, the drift
+ * baseline and every call site, for a clearer URL. That is its own task if the
+ * name ever costs more than the risk; recording it is what stops it being a
+ * surprise.
+ *
+ * NO BRANCH ON KIND. This route used to have one `if (kind === 'pain_tag')` for
+ * the facts and the prompt, and its sibling had another for the writer. Both are
+ * `services/fills/registry.ts` now: `gather` assembles the facts, `parse` turns a
+ * reply into proposals, and the entry owns its own prompt. A third kind is a
+ * registry entry and nothing here.
+ *
+ * A REFUSED PROPOSAL IS COUNTED AND REPORTED. `refuseReason` drops a `sourced`
+ * fill with no citation, which is the guarantee the class exists for — and a run
+ * that silently returned two of five reads as a model with little to say, when
+ * what happened is that three were refused. The count is the difference.
+ */
 founderValidate.post('/propose/:projectId', async (c) => {
   const s = await scope(c, Number(c.req.param('projectId')), canWrite);
   if (s instanceof Response) return s;
 
   const b = await c.req.json().catch(() => ({} as any));
-  const kind = String(b.kind || '') as ProposalKind;
-  if (!PROPOSAL_KINDS.has(kind)) return json({ detail: 'kind must be pain_tag or hypothesis' }, 400);
+  const kind = String(b.kind || '');
+  const spec = fillKind(kind);
+  if (!spec) {
+    return json({ detail: `kind must be one of: ${Object.keys(FILL_KINDS).sort().join(', ')}` }, 400);
+  }
   // Passed through unvalidated: `run()` owns the allow-list, and a second copy
   // here is a second thing to keep true.
   const model = String(b.model || '').trim().slice(0, 120) || undefined;
 
-  const view = await getPainGroupsView(c.env, s.project.id);
-  const groups = view.groups.map((g) => ({ id: Number(g.id), title: String(g.title) }));
-  const already = await priorPayloads(c.env, s.project.id, kind);
+  const ctx = { env: c.env, user: s.user, projectId: s.project.id };
 
-  let systemPrompt: string;
-  let facts: string;
-  if (kind === 'pain_tag') {
-    // Only phrases that are not already in a theme, and only themes that
-    // exist. With neither there is nothing to sort, and saying so is better
-    // than spending a run to be told the same thing by a model.
-    const ungrouped = view.ungrouped.map((u) => String(u.display_phrase)).slice(0, CAP);
-    if (!groups.length) {
-      return json({ error: 'no_themes', message: 'There are no pain themes to sort into yet. Group one phrase by hand first.' }, 400);
-    }
-    if (!ungrouped.length) {
-      return json({ error: 'nothing_to_propose', message: 'Every logged phrase is already in a theme.' }, 400);
-    }
-    systemPrompt = TAG_PROMPT;
-    facts = [
-      'Themes:',
-      ...groups.map((g) => `  ${g.id}: ${g.title}`),
-      '',
-      'Ungrouped phrases:',
-      ...ungrouped.map((p) => `  - ${p}`),
-    ].join('\n');
-  } else {
-    if (!groups.length) {
-      return json({ error: 'nothing_to_propose', message: 'There are no pain themes to draft a claim from yet.' }, 400);
-    }
-    systemPrompt = DRAFT_PROMPT;
-    facts = [
-      'Pain themes, with how many interviews mentioned each:',
-      ...view.groups.slice(0, CAP).map((g) => `  - ${g.title} (${g.count} of ${view.interview_total} interviews)`),
-    ].join('\n');
+  // NOTHING IS SPENT TO BE TOLD THERE IS NOTHING TO WORK FROM. `gather` says so
+  // in the words the page shows, and the run never happens.
+  const gathered = await spec.gather(ctx);
+  if (gathered.empty) {
+    return json({
+      error: 'nothing_to_propose',
+      message: gathered.emptyReason || 'There is nothing to propose from yet.',
+    }, 400);
+  }
+
+  // Everything this project has ever been offered of this kind — pending,
+  // accepted or discarded — read through the kind's own `readable` so one
+  // conversion serves every kind. A suggestion a founder threw away is never
+  // offered back to them.
+  const priors: string[] = [];
+  for (const raw of await priorPayloads(c.env, s.project.id, kind as ProposalKind)) {
+    try { priors.push(spec.readable(JSON.parse(raw))); } catch { /* a malformed row is not a prior */ }
   }
 
   const r = await aiRun(c.env, {
-    task: TASK_FOR_KIND[kind] as any,
+    task: spec.task as any,
     userId: s.user.id,
     model,
-    systemPrompt,
-    messages: [{ role: 'user', content: facts }],
+    systemPrompt: spec.prompt,
+    messages: [{ role: 'user', content: gathered.facts }],
     maxTokens: 500,
     temperature: 0.3,
   });
@@ -543,37 +665,44 @@ founderValidate.post('/propose/:projectId', async (c) => {
     }, 503);
   }
 
-  // EVERY item is matched back against something that exists before it can
-  // become a row. See `_founder_validate_proposals.ts` for what each parser
-  // refuses and why.
-  const items: Array<TagPayload | HypothesisPayload> = kind === 'pain_tag'
-    ? parseTagProposals(r.output || '', view.ungrouped.map((u) => String(u.display_phrase)), groups)
-    : parseDraftProposals(r.output || '', [
-      ...(await c.env.DB.prepare('SELECT claim FROM hypotheses WHERE project_id = ?')
-        .bind(s.project.id).all<{ claim: string }>()).results.map((h) => String(h.claim)),
-      // Anything already offered, accepted or thrown away, counts as taken.
-      ...already.map((p) => { try { return String(JSON.parse(p)?.claim || ''); } catch { return ''; } }),
-    ]);
+  const proposed = await spec.parse(r.output || '', { ...gathered, priors }, ctx);
 
   const created: Array<{ id: number; kind: string; payload: unknown }> = [];
-  for (const payload of items) {
+  const refused: string[] = [];
+  for (const p of proposed.slice(0, MAX_PROPOSALS_PER_RUN)) {
+    // THE SECOND CHECK, AND NOT A REDUNDANT ONE. `parse` refuses what it can see
+    // — an unmatched phrase, a figure it could not source — and this refuses what
+    // the CLASS requires regardless of the parser: a `sourced` proposal with no
+    // citation, a citation with no quote, a restatement carrying one. The store
+    // must not be able to hold any of those, whatever a parser was written to do.
+    const why = refuseReason(spec, p);
+    if (why) { refused.push(why); continue; }
     const ins = await c.env.DB.prepare(
-      `INSERT INTO validate_proposals (project_id, kind, payload_json, model, task, created_by)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO validate_proposals
+         (project_id, kind, payload_json, model, task, created_by,
+          surface, fill_class, citation_json, target_ref)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
-      s.project.id, kind, JSON.stringify(payload),
+      s.project.id, kind, JSON.stringify(p.payload),
       // The model that ACTUALLY ran, from the router's usage metadata. Not the
       // one that was asked for: the router falls back to a smaller sibling
       // under load, and recording the request would put one model's name over
       // another model's sentence.
       r.usage.model, r.usage.task, s.user.id,
+      spec.surface, spec.fillClass,
+      p.citation ? JSON.stringify(p.citation) : null,
+      p.targetRef,
     ).run();
-    created.push({ id: Number(ins.meta?.last_row_id || 0), kind, payload });
+    created.push({ id: Number(ins.meta?.last_row_id || 0), kind, payload: p.payload });
   }
 
   return json({
     ok: true,
     proposals: created,
+    // How many were dropped and why, so a thin result reads as refusals rather
+    // than as a model that had little to say.
+    refused: refused.length,
+    refused_reasons: [...new Set(refused)],
     usage: {
       model: r.usage.model,
       est_cost_usd: r.usage.est_cost_usd,
@@ -594,19 +723,52 @@ founderValidate.get('/proposals/:projectId', async (c) => {
       kind: row.kind,
       model: row.model,
       created_at: row.created_at,
+      // Migration 246. Null on a row written before it; the band shows the
+      // citation only when there is one, which is also what tells a reader a
+      // `sourced` fill is sourced rather than merely labelled.
+      fill_class: row.fill_class ?? null,
+      citation: (() => {
+        try { return row.citation_json ? JSON.parse(row.citation_json) : null; } catch { return null; }
+      })(),
       payload: (() => { try { return JSON.parse(row.payload_json); } catch { return null; } })(),
     })).filter((p) => p.payload !== null),
+    // THE BAND'S COPY COMES FROM THE REGISTRY, with the list that needs it.
+    //
+    // `ValidateProposals.jsx` held its own `COPY` map, hardcoded to the two kinds,
+    // and a third kind meant editing it as well as the registry — two places for
+    // one fact, which is the thing the registry was built to stop. Travelling on
+    // the list response rather than through a new endpoint keeps it one request
+    // and keeps `eadwynConfig`'s rule intact: config follows a mount.
+    //
+    // `editable` is what the Edit control is drawn from. A kind that declares no
+    // editable field must not offer one — a `pain_tag`'s phrase is the project's
+    // own logged string, and the accept route refuses an edit to it with that as
+    // the reason, so drawing the control would be a button that always fails.
+    kinds: Object.fromEntries(Object.values(FILL_KINDS).map((k) => [k.kind, {
+      copy: k.copy,
+      fill_class: k.fillClass,
+      editable: k.editableField != null,
+    }])),
   });
 });
 
 type ProposalRow = {
   id: number; project_id: number; kind: string; payload_json: string; status: string;
+  // Migration 246. Null on a row written before it, and on a dev database that
+  // has not applied it — both read as "no citation, no explicit target".
+  target_ref: string | null; citation_json: string | null;
+  model: string | null; task: string | null;
 };
 
 /** The proposal plus the project that owns it, or null. */
 async function loadProposal(env: Env, id: number): Promise<ProposalRow | null> {
+  // `target_ref`, `citation_json`, `model` and `task` join the select because
+  // the accept path now writes a provenance row and all four travel onto it.
+  // Migration 246 added the first two; a database that has not run it returns
+  // them as null, which is what the coalescing reads below expect.
   return env.DB.prepare(
-    'SELECT id, project_id, kind, payload_json, status FROM validate_proposals WHERE id = ?',
+    `SELECT id, project_id, kind, payload_json, status, target_ref, citation_json, model, task
+       FROM validate_proposals WHERE id = ?`,
   ).bind(id).first<ProposalRow>();
 }
 
@@ -643,21 +805,81 @@ founderValidate.post('/proposals/:id/accept', async (c) => {
   try { payload = JSON.parse(row.payload_json); } catch { payload = null; }
   if (!payload) { await revert(); return json({ detail: 'That proposal could not be read' }, 422); }
 
-  try {
-    if (row.kind === 'pain_tag') {
-      const ok = await upsertPainAlias(c.env, row.project_id, Number(payload.pain_group_id), String(payload.phrase));
-      // The theme may have been renamed away or deleted since the proposal was
-      // written. That is not an error in the proposal and not a 500: it is a
-      // proposal that no longer applies, and it goes back to pending so the
-      // founder sees it rather than silently losing it.
-      if (!ok) { await revert(); return json({ detail: 'That theme no longer exists' }, 409); }
-      return json({ ok: true, kind: row.kind });
-    }
-    const written = await insertHypothesis(c.env, row.project_id, String(payload.claim || '').trim());
-    return json({ ok: true, kind: row.kind, hypothesis: written }, 201);
-  } catch (e) {
+  // THE DISPATCH IS THE REGISTRY'S NOW, and it was `if (row.kind ===
+  // 'pain_tag')` here until task #188. Two branches in a file about Validate is
+  // fine for two kinds and is the wrong place for a third: `services/fills/`
+  // holds one entry per kind, each naming its own `apply`, and the invariant
+  // that entry must keep is the one this route always kept — `apply` calls the
+  // function the manual form calls, so accepting and typing produce the same
+  // row. See that file's header for why `insertHypothesis` in particular cannot
+  // be reimplemented.
+  //
+  // AN UNKNOWN KIND REVERTS RATHER THAN THROWS. A proposal whose kind has left
+  // the registry is a row this build cannot apply, which is exactly the
+  // no-longer-applies case the theme check below already handles: back to
+  // pending, so a founder sees it rather than losing it to a 500.
+  const spec = fillKind(row.kind);
+  if (!spec) {
     await revert();
-    return json({ detail: 'That proposal could not be applied', error: (e as Error).message }, 500);
+    return json({ detail: 'That kind of proposal is no longer offered' }, 409);
+  }
+
+  // EDIT-ON-ACCEPT. The canvas has said accept / edit / discard since this band
+  // was drawn and only two of the three existed. A founder who corrects a
+  // proposed value before accepting it has produced something that is neither
+  // the model's answer nor an unaided human one, so `fill_provenance` keeps
+  // BOTH — `edited` is derived there from comparing them, never passed in.
+  const body = await c.req.json().catch(() => ({} as any));
+  const editedValue = body?.value != null ? String(body.value).slice(0, 4000).trim() : null;
+  if (editedValue && !spec.editableField) {
+    // Refused rather than ignored. Accepting the original under an edit the
+    // caller believes was applied is the worse of the two, and for a
+    // `restatement` the reason is real: the value has to stay the row it matched.
+    await revert();
+    return json({
+      detail: 'This proposal is not editable — its value has to stay the one it matched in your project.',
+    }, 422);
+  }
+  const applyPayload = editedValue && spec.editableField
+    ? { ...payload, [spec.editableField]: editedValue }
+    : payload;
+
+  try {
+    const applied = await spec.apply(
+      { env: c.env, user: s.user, projectId: row.project_id }, applyPayload, String(row.target_ref || ''),
+    );
+    // RECORDED AFTER THE WRITE AND NOT SWALLOWED. A value written with no
+    // provenance row is the state `fill_provenance` exists to prevent — on this
+    // page it would mean a figure nothing can attribute — so a failure here
+    // reverts the claim rather than leaving one behind.
+    await recordFill(c.env, {
+      // THE ADDRESS THE WRITE FOUND, when it found one. An INSERT allocates the
+      // row id and an upsert lands on one that depends on what was already there,
+      // so neither is knowable before `apply` runs; `target()` is the fallback for
+      // a kind whose address is fixed up front. Preferring the other way round
+      // would file a hypothesis's provenance against a row that is not it.
+      target: applied.target ?? spec.target(applyPayload, String(row.target_ref || ''), {
+        env: c.env, user: s.user, projectId: row.project_id,
+      }),
+      proposalId: row.id,
+      fillClass: spec.fillClass,
+      proposedValue: spec.readable(payload),
+      writtenValue: applied.written,
+      citation: row.citation_json ? JSON.parse(row.citation_json) : null,
+      model: row.model ?? null,
+      task: row.task ?? null,
+      decidedBy: s.user.id,
+    });
+    return json({ ok: true, kind: row.kind, ...(applied.result || {}) }, row.kind === 'hypothesis' ? 201 : 200);
+  } catch (e) {
+    // The theme may have been renamed away or deleted since the proposal was
+    // written. That is not an error in the proposal and not a 500: it is a
+    // proposal that no longer applies, and it goes back to pending so the
+    // founder sees it rather than silently losing it.
+    await revert();
+    const msg = (e as Error).message;
+    if (/no longer exists/i.test(msg)) return json({ detail: msg }, 409);
+    return json({ detail: 'That proposal could not be applied', error: msg }, 500);
   }
 });
 

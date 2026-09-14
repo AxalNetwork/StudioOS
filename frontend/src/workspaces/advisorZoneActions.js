@@ -5,14 +5,19 @@ import { makeZoneActions } from './zoneActionBuilder';
  * actions actually does. `zoneActionBuilder.js` states the three outcomes and
  * the rules they follow; this file is the advisor's answers.
  *
- * FOUR ZONES IS THE WHOLE ADVISOR SCOPE, AND THAT IS A FACT ABOUT THE CANVASES
- * RATHER THAN A SHORTFALL IN THIS PASS. Only one advisor artboard set carries
- * an `ops:` array at all — `design/incoming/Pages · Advisor Expertise.dc.html`.
- * `Advisor Detail · Practice`, `Advisor Canvas` and the backlog
- * `Pages · Advisor Cohorts` are rendered exports with no header actions on any
- * artboard, so Practice's five zones and Cohorts' five have nothing to copy;
- * inventing actions for them is the exact failure this pass exists to avoid.
- * `/network` and `/research` are the shared surfaces every profile defers.
+ * FOUR ZONES WAS THE WHOLE ADVISOR SCOPE WHEN THIS WAS WRITTEN, and the
+ * paragraph that stood here said Practice could never grow any — that
+ * `Advisor Detail · Practice` was "a rendered export with no header actions on
+ * any artboard". That was true of the `ops:` ARRAY the Expertise canvas
+ * carries and false of the artboards themselves: PR1 through PR4 each draw
+ * their operations as `<span class="bulk">` in the frame, which is the same
+ * instruction in different markup. Four of the five Practice zones have
+ * entries below because their artboards ask for them.
+ *
+ * `Advisor Canvas` and the backlog `Pages · Advisor Cohorts` still carry
+ * nothing to copy, and inventing actions for them is the failure this pass
+ * exists to avoid. `/network` and `/research` are the shared surfaces every
+ * profile defers.
  *
  * `expertise/visibility` IS THE FIFTH ARTBOARD AND IS DELIBERATELY ABSENT. That
  * zone is not a body at all — it is the one card left in
@@ -71,6 +76,94 @@ export const ADVISOR_ZONE_ACTIONS = {
     { label: 'Export decision log', kind: 'export' },
   ],
 
+  // `Bulk: send renewal notice` IS THE SPLIT'S THIRD USE, for the same reason
+  // as PR1's above and the one `founderZoneActions.js:56` established: the
+  // canvas string is 25 characters against a cap of 24
+  // (`zone_label_contract.test.mjs`), and shortening it in place is not
+  // available because the canvas-order guard deep-equals the canvas ops
+  // verbatim. The rendered label keeps both ideas the canvas carries — bulk,
+  // and a renewal notice.
+  //
+  // THE REASON IS THE ADDRESS, NOT THE CHANNEL — and the first draft of this
+  // entry said the opposite, which is exactly the failure this pass keeps
+  // catching. It claimed "nothing sends a message from you to a client".
+  // Something does: `routes/messages.ts` (migration 185) is a person-to-person
+  // inbox, `POST /api/messages` opens a thread with any existing account, and
+  // its `SUBJECT_TYPES` already includes `'engagement'`. Writing a gap that is
+  // not there is the same defect as hiding one that is.
+  //
+  // What actually blocks it is WHO to send to. That POST keys the recipient on
+  // `to_email` against an existing account, and migration 238 keeps the client
+  // as a NAME with `founder_user_id` nullable on purpose — the artboard's
+  // clients are companies, and a retainer may predate the client joining. So
+  // the engagement payload carries no address at all today, and for an unlinked
+  // client there is none to carry. A bulk send over a mixed set would deliver
+  // to some rows and silently skip the rest, which is worse than no button.
+  //
+  // Two small pieces close it and neither belongs in a page PR: the client's
+  // address on the read, and a rule for the rows that have none.
+  'practice/engagements': [
+    { canvas: 'Bulk: send renewal notice', label: 'Bulk: renewal notice', unbuilt: 'a notice needs an addressable client, and an engagement keeps its client as a name — only a linked account has an address, so a bulk send would reach some clients and silently skip the rest', hover: 'An engagement keeps its client as a name, and only a linked account has an address to send to.' },
+    { label: 'Export contract pack', kind: 'export' },
+  ],
+
+  // NEITHER OF THESE NEEDS THE `canvas:`/`label:` SPLIT, which is worth saying
+  // because the two artboards before it both did. `Bulk: nudge unopened` is 20
+  // characters and `Export as client pack` is 21, against a cap of 24
+  // (`zone_label_contract.test.mjs`), so both render the canvas's own string.
+  //
+  // `Bulk: nudge unopened` IS THE FIRST ADVISOR→CLIENT SEND IN THIS PRODUCT,
+  // and it is built rather than deferred because migration 239's send rule
+  // removes the blocker that stopped its sibling on Engagements. That one is
+  // `unbuilt` because a renewal notice may target a client with no account and
+  // a bulk send would silently skip them. Here it cannot: a deliverable version
+  // can only BE sent to a client who has an account, so every row that could
+  // possibly be unopened is addressable by construction. The channel already
+  // existed — `routes/messages.ts` (migration 185) opens a thread with any
+  // account and its `SUBJECT_TYPES` already carries `'engagement'`.
+  //
+  // `kind: 'handler'` RATHER THAN A DESTINATION, per D67: it acts on rows this
+  // page has already loaded, and the page confirms the recipients on screen
+  // before anything is sent. The one case the send rule cannot prevent — an
+  // engagement unlinked after a send — is reported as a count of rows the nudge
+  // will NOT reach, never skipped quietly.
+  'practice/delivery': [
+    { label: 'Bulk: nudge unopened', kind: 'handler', handler: 'nudgeUnopened' },
+    { label: 'Export as client pack', kind: 'export' },
+  ],
+
+  // BOTH BUILT, AND THE FIRST ONE IS THE CAREFUL ONE. `Block a date range`
+  // withdraws hours that were never taken, which is NOT what cancelling does:
+  // cancelling undoes a booking and tells whoever held it. Conflating them
+  // would send a cancellation notice for an hour nobody had, so migration 240
+  // gives a blocked slot its own column rather than reusing `is_cancelled`.
+  // The route refuses to block a slot someone already holds and reports those
+  // back by count, so the advisor learns the range was not wholly applied
+  // instead of assuming it was — the same shape as Delivery's nudge, which
+  // names the rows it will not reach.
+  //
+  // `Export to calendar` is a HANDLER and not `kind: 'export'`, which is the
+  // one thing worth pausing on. The builder's export kind emits the CSV every
+  // other zone wants, through `exportView` — and a calendar is an .ics file, a
+  // different format for a different consumer. Labelling it `export` would
+  // have produced "Export to calendar · this view" and handed the advisor a
+  // spreadsheet. It stays client-side either way: the file is built from rows
+  // already on screen, so there is no endpoint and nothing leaves the browser.
+  'practice/sessions': [
+    { label: 'Block a date range', kind: 'handler', handler: 'blockRange' },
+    { label: 'Export to calendar', kind: 'handler', handler: 'exportCalendar' },
+  ],
+  // D4's two ops. NEITHER is `kind: 'export'`: the builder's export kind emits
+  // the rows a table is showing through `exportView`, and both of these are
+  // shaped differently — the first writes a per-client ledger with a total
+  // row, and the second is a different span entirely (a tax YEAR, not the
+  // reader's chosen window) fetched from its own endpoint so it cannot be
+  // derived from what happens to be on screen.
+  'practice/earnings': [
+    { label: 'Export CSV', kind: 'handler', handler: 'exportCsv' },
+    { label: 'Download 1099 summary', kind: 'handler', handler: 'taxSummary' },
+  ],
+
   // ── Network ──────────────────────────────────────────────────────────────
   'network/relationships': [
     { label: 'Log interaction', unbuilt: 'no interaction log is stored' },
@@ -114,7 +207,7 @@ export const ADVISOR_ZONE_ACTIONS = {
     // already exists — the form on the page takes one — and that is a different
     // act from asking a founder to open their record. A control called `New
     // brief` that added a row would name the wrong thing.
-    { label: 'New brief', unbuilt: 'a brief exists because a founder opened their record to you, and nothing here can ask for one — what you can add is a row inside a brief you already hold, which the form below takes' },
+    { label: 'New brief', unbuilt: 'a brief exists because a founder opened their record to you, and nothing here can ask for one — what you can add is a row inside a brief you already hold, which the form below takes', hover: 'A brief exists because a founder opened their record to you; nothing here can ask for one.' },
     // NOT THE PARTNER'S `Attach to proposal`, and not the same edge. Partner's
     // is brief→`quotes`, which migration 222 built; an advisor holds no quotes,
     // and this artboard asks for brief→session, which nothing records.
