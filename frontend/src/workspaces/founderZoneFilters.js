@@ -297,8 +297,16 @@ export const FOUNDER_ZONE_FILTERS = {
   'build/roadmap': [
     { canvas: 'Timeline', key: 'timeline' },
     { canvas: 'Board', key: 'board' },
+    // `Dependencies` WAS THE WORST KIND OF LIVE CHIP and is the reason migration
+    // 254 exists. It drew, it selected, and it could never show a row: the page
+    // filtered on `item.dependency || item.dependencies || item.blocks`, and
+    // `roadmap_okrs` has none of those columns while `OKR_SELECT` returns none of
+    // them either. A founder choosing it saw an empty table under "items naming a
+    // dependency" and read that as "you have none". An `unbuilt` reason at least
+    // explains itself; this explained nothing, and no guard here could see it —
+    // they count refusals, and this was not one.
     { canvas: 'Dependencies', key: 'dependencies' },
-    { canvas: 'Scenarios', unbuilt: 'no roadmap scenario is stored' },
+    { canvas: 'Scenarios', key: 'scenarios' },
   ],
   // ALL FOUR ARE LIVE AS OF MIGRATION 250. Rituals, the runs that archive them
   // and their templates are stored per project (`routes/founder_cadence.ts`), so

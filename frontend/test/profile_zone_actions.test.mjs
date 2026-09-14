@@ -67,7 +67,13 @@ const PROFILES = {
     // follow. That is this count's real job: a control whose gap is closed
     // elsewhere in the same change must be turned into a link in the same
     // change, or the product ships a feature while a header still denies it.
-    links: 23,
+    // 23 → 22 with `build/roadmap`'s `New scenario`, which became a HANDLER rather
+    // than losing its destination. It pointed at `/execution/roadmap` under the note
+    // "objectives and key results are edited in Execution" — true of objectives and
+    // beside the point for a scenario, because that editor writes the LIVE quarter
+    // and a what-if must not. Migration 254 stores the alternative beside the
+    // roadmap, so the form is on this desk and the link is gone.
+    links: 22,
     // 20 → 21 with `build/cadence`'s `Export archive`. Migration 250 gave the
     // zone a review archive, so an export over the rows the page is showing is
     // the same `kind: 'export'` every other zone uses.
@@ -101,7 +107,10 @@ const PROFILES = {
     // and all six were `unbuilt`. The gap count therefore falls by SEVEN — those six
     // plus cadence's `Export archive`, which became an export. Every count in this
     // block moved in one run and each was read before it was changed.
-    handlers: 14,
+    // 14 → 15 with `build/roadmap`'s `New scenario` (migration 254). Seven ops
+    // across three Build subpages have moved to this kind in one pass, which is what
+    // pinning the count is for: each one was read before it was moved.
+    handlers: 15,
     // NOTHING IS EXCLUDED ANY MORE. `research/funds` sat here as "a card in
     // `ResearchWorkspace`'s ZONE_COPY, not a body" — true when it was written
     // and untrue since `ZONE_COPY` became `{}` and `LIVE_ZONES` gained `funds`.

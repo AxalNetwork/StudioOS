@@ -118,9 +118,21 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Configure lanes', kind: 'handler', handler: 'configureLanes' },
   ],
   'build/roadmap': [
-    { label: 'New scenario', to: '/execution/roadmap', linkNote: 'objectives and key results are edited in Execution' },
+    // `New scenario` STOPS BEING A LINK TO SOMEWHERE ELSE. It pointed at
+    // `/execution/roadmap` with the note "objectives and key results are edited in
+    // Execution", which was true of objectives and beside the point for scenarios:
+    // the Execution editor writes the LIVE quarter on an item, which is the one
+    // thing a what-if must not do. Migration 254 stores the alternative beside the
+    // roadmap instead, so the form belongs on this desk.
+    { label: 'New scenario', kind: 'handler', handler: 'newScenario' },
     { label: 'Export', kind: 'export' },
-    { label: 'Configure', unbuilt: 'no roadmap settings are stored' },
+    // `Configure` STAYS A GAP, on the same argument as `/build/board`'s
+    // `Automations`: the artboard names the control and specifies no setting for it
+    // to change — no default quarter, no horizon, no ordering rule, no example.
+    // Inventing a settings screen from a button label is the one thing #176 asks
+    // not to do, and a settings page nobody specified is worse than a disabled
+    // control that says why.
+    { label: 'Configure', unbuilt: 'the artboard names this control but specifies no roadmap setting for it to change, so there is nothing an editor could write', hover: 'No roadmap setting is specified yet — there is nothing here to change.' },
   ],
   // ALL THREE ARE LIVE AS OF MIGRATION 250, and all three were `unbuilt` for the
   // same reason: there was no cadence store. There is one now

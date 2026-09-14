@@ -6173,3 +6173,118 @@ and it counts the table's `label:` keys by a separate route so it can be compare
 against the entries it actually parsed — read fewer than the table has and the file
 says so instead of quietly asserting less. Reformatting the entry back onto one line
 would have made the suite green and left the next multi-line entry invisible.
+
+---
+
+## D92 — `/build/roadmap` gets a dependency graph, and a chip that was live over nothing
+
+**Date:** 2026-09-14 · **Task:** #176 (FB3) · **Migration:** 254
+
+Two of this zone's four chips were wrong in opposite directions, and the second is
+the one worth recording.
+
+`Scenarios` was honestly refused — "no roadmap scenario is stored", which was true.
+
+**`Dependencies` was LIVE and could never show a row.** `FounderBuildRoadmap.jsx`
+filtered on `item.dependency || item.dependencies || item.blocks`; `roadmap_okrs`
+has none of those columns and `progress.ts`'s `OKR_SELECT` returns none of them.
+Selecting the chip emptied the table under the caption "items naming a
+dependency", which a founder reads as *this venture has none* rather than
+*nothing here can have one*. The `Blocks` column said "Not recorded" on every row
+and the `At risk` stat said "Unavailable" — the same emptiness in three different
+words.
+
+### Why no guard caught it, and what now does
+
+The zone suites count **refusals**: an `unbuilt` entry has to justify itself, the
+links/exports/handlers/gaps sum has to balance, a reason may not name a path. This
+was not a refusal. It was a working control over a store that did not exist, which
+is the failure `zoneFilterBuilder.js` opens its own docblock with and the one thing
+those counts are structurally unable to see. Same class as #93.
+
+`frontend/test/roadmap_zone_contract.test.mjs` ties the page to the route by name:
+every `item.<field>` the page reads must be a key the handler writes, and every
+live `key` in the filter registry must be a branch the page implements. It is
+narrow — one zone, one shape — and narrow is what makes it checkable.
+
+### A dependency is an edge, not a column
+
+`depends_on TEXT` on `roadmap_okrs` would hold one unvalidated name and could not
+answer "what does this block", which is the column the artboard draws. So
+`okr_dependencies` is its own table, indexed both ways, and the edge points from
+the **blocker** to the **blocked** — the direction the cell reads.
+
+Four refusals on the write, each a state the graph cannot hold rather than a
+policy: no self-link; both ends on the same roadmap (without which naming another
+venture's objective id would confirm it exists); no duplicate edge; and **no
+cycle**, because two objectives blocking each other can never be cleared by
+anybody and would make the state walk meaningless. The unique index is on the
+*ordered* pair, so the table itself will happily store `A→B` and `B→A` — the route
+is the only thing standing between the founder and that trap, which is why the
+cycle check has its own tests at one, three and four hops.
+
+### `At risk` is not derivable, and a provably-empty state nearly shipped
+
+The artboard's `State` column draws Blocked, In flight, At risk and Provisional.
+The first draft of `services/okrGraph.ts` derived **At risk** as "downstream of
+something blocked, but not itself blocked" — and that set is **always empty**. If
+`B` is blocked then `B` is not done, so any `X` that `B` blocks has an unresolved
+direct upstream and is blocked by the direct rule. There is nothing the transitive
+rule can reach that the direct rule has not already claimed.
+
+Shipping it would have re-introduced the exact live-but-empty bug this change
+exists to fix, one file from its own fix. It was caught by reasoning the rule
+through before building on it, and `okr_graph.test.ts` now asserts that **every
+state in `STATE_LABELS` is reachable** — a state no input can produce is a chip
+that draws and never fills.
+
+Nor can the artboard's rows be reverse-engineered into a rule: `Handoff schema` is
+Blocked and blocks two items, one drawn **In flight** and the other **At risk**.
+Two items with the identical relationship to the identical blocker carry different
+states, so the copy is illustrative and there is no rule in it to recover.
+
+**So risk stays unanswered and the page says why.** `Blocked` is the honest version
+of that number, and a card beside it explains what would have to be stored for risk
+to mean anything — when an objective became stuck, which nothing records.
+
+### A scenario is saved and compared, never applied
+
+`Saved scenarios · 2 · "raise slips 6wk"` is the artboard's stat, so a scenario is
+a named what-if somebody wrote down. It stores **an alternative quarter per item**
+and nothing else: the quarter is the only field a what-if plausibly moves, and
+copying whole OKRs would make a scenario go stale the moment somebody fixed a typo
+on the live one.
+
+It does not write back, and the dialog says so. The artboard offers `New scenario`,
+`Export` and `Configure` and no "apply" anywhere; a bulk edit of every quarter on
+the board from a control nobody drew is inventing the feature. Saving replaces the
+item list rather than merging it, because a scenario is one coherent story — merging
+would leave an objective the founder removed still in it.
+
+`New scenario` stops being a link to `/execution/roadmap`. That note said
+"objectives and key results are edited in Execution", which was true of objectives
+and beside the point here: that editor writes the **live** quarter, which is the one
+thing a what-if must not do.
+
+### `Configure` stays a stated gap
+
+The same argument as `/build/board`'s `Automations` (D91): the artboard names the
+control and specifies no setting for it to change — no default quarter, no horizon,
+no ordering rule, no example. A settings screen invented from a button label is
+worse than a disabled control that says why.
+
+### Two test-harness traps this change walked into, both now shared
+
+`splitStatements` in `cloudflare-worker/test/_baseline.mjs` exists because the
+fixtures' `sql.split(';')` cut migration 254's own prose in half — "…`item.blocks`;
+`roadmap_okrs` has none of those columns" — and handed the second half to SQLite,
+which failed quoting the migration's comment. **51 migrations have a semicolon
+inside a `--` comment**, and at least five put one in a *trailing* comment after
+real SQL, which stripping whole-line comments does not fix. The shared splitter
+tracks string literals instead: `--` opens a comment and `;` ends a statement only
+outside a quoted string, with `''` as the escape.
+
+And the route test answered 500 where production answers 401, because `requireAuth`
+refuses by `throw` and only `index.ts`'s app-level `onError` maps it — the third
+time that has bitten in this pass (D89's `progress.ts` tests, and again here). The
+mapping is composed into the test app, and the refusal is asserted as 401 exactly.

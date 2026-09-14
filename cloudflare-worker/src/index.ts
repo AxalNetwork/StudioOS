@@ -209,6 +209,7 @@ import founderValidate from './routes/founder_validate';
 import founderCadence from './routes/founder_cadence';
 // Swimlanes and the WIP limit on the execution board (#176 FB2). Migration 253.
 import founderBoard from './routes/founder_board';
+import founderRoadmap from './routes/founder_roadmap';
 import insightsRoutes from './routes/insights';
 // Signals — founder decision-engine over public company data (not a trading UI).
 import signalsRoutes from './routes/signals';
@@ -1025,6 +1026,7 @@ app.route('/api/founder/cadence', founderCadence);
 // keys on `deal_id` — a `projects.id`, the same misnaming D86 recorded. This router
 // is the founder's own view of them, gated by the Validate predicates.
 app.route('/api/founder/board', founderBoard);
+app.route('/api/founder/roadmap', founderRoadmap);
 app.route('/api/insights', insightsRoutes);
 // Signals — founder-actionable opportunity engine over public-market evidence.
 app.route('/api/signals', signalsRoutes);

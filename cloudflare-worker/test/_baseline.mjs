@@ -147,6 +147,56 @@ export function tableFromBaseline(baseline, name) {
 }
 
 /**
+ * A migration split into the statements `db.exec` can take, one at a time.
+ *
+ * WHY NOT `sql.split(';')`, WHICH IS WHAT EVERY FIXTURE HERE USED TO DO. These
+ * migrations carry more prose than DDL, and **51 of them have a semicolon inside
+ * a `--` comment**. A naive split cuts such a comment in half and hands the
+ * second half to SQLite as a statement; it fails with a syntax error quoting the
+ * migration's own prose, which reads like a broken migration rather than a broken
+ * test. That is not hypothetical — it is how this function came to exist, on
+ * migration 254's own comment: "…`item.blocks`; `roadmap_okrs` has none of those
+ * columns".
+ *
+ * Stripping whole-line comments before splitting fixes that case and is what the
+ * fixtures that were passing already did. It is still not enough: at least five
+ * migrations (016, 099, 100, 109, 156) put a semicolon in a TRAILING comment
+ * after real SQL on the same line, so the next fixture to apply one of those
+ * would hit the identical failure with a different file.
+ *
+ * So this tracks string literals instead of pattern-matching around them: `--`
+ * starts a comment only outside a quoted string, and `;` ends a statement only
+ * outside one. `''` inside a string is an escaped quote, not a close — SQLite's
+ * own rule, and the one a regex cannot express.
+ */
+export function splitStatements(sql) {
+  const src = String(sql);
+  const out = [];
+  let buf = '';
+  let inString = false;
+  for (let i = 0; i < src.length; i += 1) {
+    const ch = src[i];
+    if (inString) {
+      buf += ch;
+      if (ch === "'") {
+        if (src[i + 1] === "'") { buf += src[i + 1]; i += 1; } else inString = false;
+      }
+      continue;
+    }
+    if (ch === "'") { inString = true; buf += ch; continue; }
+    if (ch === '-' && src[i + 1] === '-') {
+      const nl = src.indexOf('\n', i);
+      i = nl < 0 ? src.length : nl - 1;
+      continue;
+    }
+    if (ch === ';') { if (buf.trim()) out.push(buf.trim()); buf = ''; continue; }
+    buf += ch;
+  }
+  if (buf.trim()) out.push(buf.trim());
+  return out;
+}
+
+/**
  * The same DDL with its `REFERENCES` clauses removed.
  *
  * `node:sqlite` enforces foreign keys by default, so a `REFERENCES` to a table a
