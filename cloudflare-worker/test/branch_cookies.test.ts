@@ -129,8 +129,16 @@ test('csrfMiddleware on a branch: HQ\'s cookie pair satisfies nothing, the branc
 });
 
 test('passkey origins: HQ accepts both canonical hosts, a branch accepts only its own', () => {
-  const hq = expectedOrigins(HQ as any);
-  assert.ok(hq.includes('https://axal.vc') && hq.includes('https://app.axal.vc'), hq.join(','));
-  const fr = expectedOrigins(FR as any);
-  assert.deepEqual(fr, ['https://fr.axal.vc'], 'a branch Worker must not accept a ceremony that began on HQ\'s origin');
+  // BOTH SIDES ASSERT THE WHOLE SET, not two memberships. `expectedOrigins`
+  // returns the list a ceremony is checked against, so what matters is what
+  // is NOT in it as much as what is — a membership pair would pass just the
+  // same if a third origin crept in. (CodeQL also reads `arr.includes(url)`
+  // as substring matching and files it as incomplete URL sanitization; here
+  // it is exact element equality on a string[], and comparing the set
+  // removes the shape it misreads.)
+  assert.deepEqual([...expectedOrigins(HQ as any)].sort(),
+    ['https://app.axal.vc', 'https://axal.vc'],
+    'HQ must offer exactly the two canonical origins');
+  assert.deepEqual(expectedOrigins(FR as any), ['https://fr.axal.vc'],
+    'a branch Worker must not accept a ceremony that began on HQ\'s origin');
 });
