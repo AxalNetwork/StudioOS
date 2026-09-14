@@ -6395,3 +6395,98 @@ including `rofrSchemaReady` in this same liquidity route. 13 files use the
 after the decision. Stated at its real severity: a module flag is only wrong when
 one isolate serves two different bindings, so this is a latent hazard that
 reliably breaks tests — not a production outage.
+
+---
+
+## D94 — four more false refusals in Grow, and the two that were right for the same reason
+
+**Date:** 2026-09-14 · **Task:** #179 · **Migration:** none
+
+Grow carried **fourteen** `unbuilt` entries across seven subpages — the largest set
+of the three founder buckets. **Four were false.** As with #177, closing them needed
+no migration, no route and no table.
+
+| Refusal | Verdict |
+| --- | --- |
+| `talent` → `Post a role` | **false** — `job_postings` is the store; `/jobs/new` is mounted |
+| `talent` → `Bulk reject` | **false as written** — the records exist; the gap is the writer |
+| `customers` → `Stalled` | **false** — four activity stamps, all returned |
+| `capital-match` → `Warm path only` | **false** — the join has its own migration |
+| the other ten | true, and left alone |
+
+### The refusal that denied a whole feature somebody else had built
+
+`Post a role` said "no role posting is stored". **Task #68 built the job board.**
+`job_postings` exists and carries a `project_id` — the very column this desk's own
+role chips filter on — `jobs.create()` writes one, `routes/jobs.ts` serves it, and
+`/jobs/new` is a route `App.jsx` mounts for a founder. The posting surface existed
+the whole time; this desk had simply never pointed at it. It is a `to:` link now,
+the same correction #193 made four times over.
+
+### The refusal that was right about the gap and wrong about where it was
+
+`Bulk reject` said "no candidate records exist to act on". `job_applications`
+exists, `jobs.applications(id)` reads it — its own comment calls it "the sole PII
+surface" — and **this page already puts those candidates in a table**. What is
+genuinely missing is a **writer**: `routes/jobs.ts` has no endpoint that sets an
+application's status, so a reject has nothing to call.
+
+The distinction matters because of who reads the reason. "No records exist" sends
+the next engineer to build a store that is already there; "no endpoint sets a
+status" sends them to add eleven lines to a route. The refusal stays — correctly —
+and now says which.
+
+### A timeline that was there all along
+
+`Stalled` said "no activity timeline is stored, so no account can be called
+stalled". `waitlist_signups` carries `created_at`, `invited_at`, `followed_up_at`
+and `promoted_at`; `WAITLIST_SELECT` returns every one, and that route's own comment
+calls them "independent activity marks".
+
+**The newest stamp is the last touch**, not `created_at` — an account invited
+yesterday is not stalled because it signed up in March. And a row whose stamps are
+all unparseable is **not** called stalled: silence about a date is not evidence of
+neglect, and the false accusation sends a founder chasing a live account.
+
+### A join with its own migration
+
+`Warm path only` said "nothing joins a prospect to a relationship in the network
+book". **Migration 128 is named `contact_promotion.sql`**, it adds
+`raise_prospects.contact_id`, and it indexes it as `idx_raise_prospects_contact`.
+`contacts` is the network book. A prospect carrying a contact id was reached through
+somebody the founder already knows — which is the chip, exactly. Nothing is inferred
+from a shared domain or a similar firm name.
+
+### A stale guard inverted, not deleted — and its second half was never true
+
+`profile_zone_filters.test.mjs` **pinned `Stalled` as drawn-dead**, and its comment
+gave the reason: the chip had once shipped live with a predicate of `return []`, so
+clicking it answered "you have no stalled accounts" over a store that — the note
+said — "records no stalling at all".
+
+The first half was a real bug, rightly caught. **The second half was never true.**
+The guard now holds the opposite state and a stronger claim: the chip must be
+selectable *and* the page must compute the predicate from those four stamps. This is
+the third stale guard inverted rather than dropped (D88, D90); what is new is that
+this one encoded a *false belief* rather than a fact that later changed.
+
+### Getting it wrong in the other direction is also possible
+
+Two of the ten survivors are **dynamic-group** reasons — `talent`'s role chips and
+`capital-match`'s stage chips — and both were tempting to call false, because
+`job_postings.project_id` and `raise_prospects.stage` both exist. They are correct
+as they stand: each page **does** supply names from rows it has loaded
+(`dynamic: { roles: jobs… }`, `dynamic: { stages: stages… }`), and the reason covers
+only the empty case, which is what a dynamic group's reason is for.
+
+An earlier draft of this work recorded the Talent zone as fetching nothing at all.
+That was wrong — the page imports `jobs as jobsApi` and a grep for `api.` missed it.
+Deleting those two reasons as false would have been the same error as the four above,
+pointing the other way, so the guard now asserts the supply as well as the reason.
+
+### Where the four buckets stand
+
+Across #176, #177 and #179, **ten refusals turned out to be false** and every one
+was a belief about the source rather than a reading of it. None needed a new store.
+The guards that count refusals cannot see this class, which is why each bucket now
+has a contract test tying its claims to the thing that makes them true or false.

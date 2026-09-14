@@ -448,7 +448,12 @@ export const FOUNDER_ZONE_FILTERS = {
       label: 'One chip per segment',
       unbuilt: 'no market segment is stored on a customer record',
     },
-    { canvas: 'Stalled', unbuilt: 'no activity timeline is stored, so no account can be called stalled' },
+    // "NO ACTIVITY TIMELINE IS STORED" WAS FALSE. `waitlist_signups` carries four
+    // activity stamps — `created_at`, `invited_at`, `followed_up_at`,
+    // `promoted_at` — and `WAITLIST_SELECT` returns every one; the route's own
+    // comment calls them "independent activity marks". Stalled is the newest of
+    // them being old, which is arithmetic over data the page already receives.
+    { canvas: 'Stalled', key: 'stalled' },
   ],
   'grow/partnerships': [
     { canvas: 'All', key: 'all' },
@@ -460,7 +465,12 @@ export const FOUNDER_ZONE_FILTERS = {
   // are the Network relationship book's, and nothing joins the two records.
   'grow/capital-match': [
     { canvas: 'Best fit', key: 'all', label: 'All prospects' },
-    { canvas: 'Warm path only', unbuilt: 'nothing joins a prospect to a relationship in the network book' },
+    // "NOTHING JOINS A PROSPECT TO A RELATIONSHIP" WAS FALSE, and the join even has
+    // its own migration: 128_contact_promotion.sql adds `raise_prospects.contact_id`
+    // and indexes it as `idx_raise_prospects_contact`. `contacts` IS the network
+    // book. A prospect carrying a contact id is one reached through somebody the
+    // founder already knows — which is exactly what this chip asks for.
+    { canvas: 'Warm path only', key: 'warm' },
     { canvas: 'Right stage', dynamic: 'stages', label: 'One chip per stage', unbuilt: 'no prospect records a stage yet' },
     { canvas: 'Passed', key: 'passed' },
   ],

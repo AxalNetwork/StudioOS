@@ -73,7 +73,12 @@ const PROFILES = {
     // beside the point for a scenario, because that editor writes the LIVE quarter
     // and a what-if must not. Migration 254 stores the alternative beside the
     // roadmap, so the form is on this desk and the link is gone.
-    links: 22,
+    // 22 → 23 with `grow/talent`'s `Post a role`, which was refused as "no role
+    // posting is stored" while `job_postings` WAS the store — it even carries the
+    // `project_id` this desk's own role chips filter on — `jobs.create()` writes
+    // one, and `/jobs/new` is a route a founder may open. Task #68 built the
+    // posting surface; this desk had simply never pointed at it.
+    links: 23,
     // 20 → 21 with `build/cadence`'s `Export archive`. Migration 250 gave the
     // zone a review archive, so an export over the rows the page is showing is
     // the same `kind: 'export'` every other zone uses.

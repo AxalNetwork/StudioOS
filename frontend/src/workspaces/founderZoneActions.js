@@ -170,8 +170,20 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
   ],
   'grow/talent': [
-    { label: 'Post a role', unbuilt: 'no role posting is stored' },
-    { label: 'Bulk reject', unbuilt: 'no candidate records exist to act on' },
+    // "NO ROLE POSTING IS STORED" WAS PLAINLY FALSE. `job_postings` is the store —
+    // it even carries a `project_id`, which is how this page's role chips find the
+    // ones linked to this startup — `jobs.create()` writes one, and `/jobs/new` is
+    // a mounted route a founder may open. The posting surface existed the whole
+    // time; this desk just never pointed at it. Task #68 built it.
+    { label: 'Post a role', to: '/jobs/new', linkNote: 'A posting is written in the job editor and appears here once it names this startup.' },
+    // "NO CANDIDATE RECORDS EXIST TO ACT ON" WAS FALSE AND THE REAL GAP IS
+    // NARROWER. `job_applications` exists, `jobs.applications(id)` reads it, and
+    // this page already puts those candidates in a table. What is missing is a
+    // WRITER: `routes/jobs.ts` has no endpoint that sets an application's status,
+    // so there is nothing for a reject — bulk or single — to call. A refusal that
+    // denied the records sent the next reader to build a store that is already
+    // there.
+    { label: 'Bulk reject', unbuilt: 'the candidates are stored and read, but no endpoint sets an application status, so a reject has nothing to write', hover: 'Candidates are listed here, but nothing can change an application’s status yet.' },
     { label: 'Export', kind: 'export' },
   ],
   'grow/customers': [

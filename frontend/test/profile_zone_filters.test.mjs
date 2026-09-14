@@ -1313,19 +1313,29 @@ test('a dynamic group renders its stored names and nothing else', () => {
   // nothing supplied still contributes nothing: a placeholder chip labelled
   // with the canvas's sample name would state a segment this founder has not
   // got, which is the one thing a dynamic group may not do.
-  // `Stalled` sits beside the group as its own unbuilt entry — "no activity
-  // timeline is stored, so no account can be called stalled" — and is drawn
-  // dead, which is the whole of this change. It is also the chip this file's
-  // header opens on: it once shipped LIVE with a predicate of `return []`, so
-  // clicking it answered "you have no stalled accounts" over a store that
-  // records no stalling at all. Drawn and unselectable is the third state, and
-  // the assertion below pins that it cannot go back to the first.
+  // `Stalled` IS LIVE, AND THIS ASSERTION IS INVERTED RATHER THAN DELETED.
+  //
+  // It used to pin the chip as drawn-dead, and the paragraph here explained why:
+  // the chip had once shipped LIVE with a predicate of `return []`, so clicking it
+  // answered "you have no stalled accounts" over a store that — the note said —
+  // "records no stalling at all". The first half was a real bug and was rightly
+  // caught. THE SECOND HALF WAS NEVER TRUE. `waitlist_signups` carries
+  // `created_at`, `invited_at`, `followed_up_at` and `promoted_at`;
+  // `WAITLIST_SELECT` in `progress.ts` returns all four, and that route's own
+  // comment calls them "independent activity marks". The timeline was there the
+  // whole time and nobody had read it.
+  //
+  // So the guard now holds the OPPOSITE state, and it is a stronger claim than the
+  // one it replaces: the chip must be selectable AND the page must compute the
+  // predicate from those stamps. A guard that pins a refusal is only as good as the
+  // belief behind it, which is why this one is turned over with the evidence rather
+  // than dropped.
   assert.deepEqual(bySource.map((i) => i.label), ['All', 'Waitlist', 'Referral', 'Stalled']);
   assert.ok(bySource.find((i) => i.label === 'Referral').active, 'the supplied source cannot be selected');
   assert.ok(bySource.every((i) => !i.note), 'a sentence is back in the chip row');
   const stalled = bySource.find((i) => i.label === 'Stalled');
-  assert.equal(stalled.disabled, true, 'Stalled is live again over a store that records no stalling');
-  assert.equal(stalled.onSelect, undefined, 'Stalled can be clicked, and an empty set reads as an answer');
+  assert.ok(!stalled.disabled, 'Stalled went back to being drawn dead over a store that does record activity');
+  assert.equal(typeof stalled.onSelect, 'function', 'Stalled is live but cannot be clicked');
   for (const name of ['Waitlist', 'Referral']) {
     assert.ok(!bySource.find((i) => i.label === name).disabled,
       `${name} is a stored source name drawn as a dead chip`);
