@@ -22,6 +22,15 @@
  * deck shows its honest placeholder, never the bundled BASEPOINT sample.
  */
 import type { Env } from '../types';
+// ONE DEFINITION OF WHAT COUNTS AS ICP, imported rather than restated. `isIcp`
+// is `strong || partial`, with NULL a fourth state counted apart and an explicit
+// `none` a recorded non-customer — a rule whose whole value is that the pain map
+// and the hypothesis verdict move together when it changes. A service reaching
+// into a `routes/_*.ts` shared module is the pattern `_competitor_writes.ts` and
+// `_capital_call_writes.ts` already set; that file imports only `types` and
+// `auth`, so there is no cycle back to here.
+import { isIcp } from '../routes/_founder_validate_helpers';
+import { ensureDiscoveryIcpFitColumn } from './discoveryInterviewSchema';
 
 const SCHEMA_READY = new WeakMap<object, boolean>();
 
@@ -56,7 +65,21 @@ type PainAliasRow = {
   display_phrase: string;
 };
 
-type InterviewPains = { pains_json: string | null; id?: number };
+/**
+ * One interview, as much of it as the pain map needs.
+ *
+ * `id`, `icp_fit` and `interview_date` are all OPTIONAL because
+ * `computePainThemes` is called by the deck assembler with rows selected
+ * elsewhere, and the deck ranks by mention count alone. A caller that omits them
+ * gets counts and no attribution rather than a crash — which is why every read
+ * of the three below is guarded rather than assumed.
+ */
+type InterviewPains = {
+  pains_json: string | null;
+  id?: number;
+  icp_fit?: string | null;
+  interview_date?: string | null;
+};
 
 /**
  * A severity a founder recorded against ONE phrase in ONE interview.
@@ -94,16 +117,43 @@ export type PainGroupsView = {
     // supposed to be making from this page.
     need_count: number;
     nice_count: number;
+    // How many DISTINCT interviews mentioning this theme were recorded as ICP
+    // (`strong` or `partial`, the rule `isIcp` owns), and how many carry no
+    // recorded fit at all. The second is not a footnote: a page narrowing on
+    // the first without it would report "this pain is not your customers'"
+    // when the truth is "nobody filled the field in".
+    icp_count: number;
+    fit_unrecorded_count: number;
+    // The latest `interview_date` among them, or null when none carries one.
+    last_mention_at: string | null;
   }>;
   ungrouped: Array<{
     phrase_norm: string; display_phrase: string; count: number;
     need_count: number; nice_count: number;
+    icp_count: number; fit_unrecorded_count: number;
+    last_mention_at: string | null;
   }>;
   // Absent, not zero, when nothing has been recorded — so a page can tell "no
   // severity is on file" from "every mention is a nice-to-have". A chip
   // narrowing on severity over the first of those would answer a question the
   // store cannot answer.
   severity_recorded: boolean;
+  /**
+   * Whether ANY interview on this project carries a recorded `icp_fit`, and
+   * whether any carries an `interview_date`.
+   *
+   * The same guard as `severity_recorded` and for the same reason, one field per
+   * chip that needs it. `ICP only` over a project where the field was never
+   * filled in shows an empty map, and an empty map is read as a finding; these
+   * two let the page say "nothing is on file" instead, which is the true answer.
+   *
+   * FROM THE ROWS, NOT FROM THE COUNTS. A project whose only ICP interview
+   * mentions no pain leaves every theme at `icp_count: 0` while the field is
+   * demonstrably in use, and deriving this from the totals would then tell the
+   * page the opposite of what is true.
+   */
+  icp_recorded: boolean;
+  dates_recorded: boolean;
 };
 
 export type PainGroupModel = {
@@ -205,6 +255,33 @@ type ThemeAccum = {
   // theme a reader is looking at, not about one wording of it.
   needInterviews: Set<number>;
   niceInterviews: Set<number>;
+  /**
+   * Distinct interviews mentioning this theme whose `icp_fit` is ICP, and those
+   * whose fit was never recorded.
+   *
+   * TWO SETS AND NOT ONE RATIO, for the same reason `evidenceFor` keeps
+   * `fitUnrecorded` apart from `supporting`: `icp_fit` arrived in migration 161,
+   * so every interview logged before it — and every one logged after by someone
+   * who skipped the field — carries NULL. Folding those into "not ICP" would
+   * make `icp_count` read 0 for a whole project and an `ICP only` chip answer
+   * "none of your pains come from your customers", with total confidence, on no
+   * evidence at all.
+   */
+  icpInterviews: Set<number>;
+  fitUnknownInterviews: Set<number>;
+  /**
+   * The latest `interview_date` among the interviews mentioning this theme, or
+   * null when none of them carries one.
+   *
+   * THE INTERVIEW'S DATE, NOT THE THEME'S, and the distinction is the whole
+   * reason this field can exist at all. A theme has no date of its own — a
+   * founder renames one months after the conversations behind it — so "recent"
+   * here means "somebody said this to us recently", which is the question a
+   * founder ordering a pain map is actually asking. `created_at` is deliberately
+   * NOT the fallback: it is when the row was typed up, and a backfilled batch of
+   * old interviews would all read as today.
+   */
+  lastMentionAt: string | null;
 };
 
 function resolvePhrase(
@@ -238,7 +315,12 @@ function analyzePains(
   const ensureAcc = (key: string, title: string, groupId: number | null): ThemeAccum => {
     let a = acc.get(key);
     if (!a) {
-      a = { key, title, groupId, count: 0, phrases: new Map(), needInterviews: new Set(), niceInterviews: new Set() };
+      a = {
+        key, title, groupId, count: 0, phrases: new Map(),
+        needInterviews: new Set(), niceInterviews: new Set(),
+        icpInterviews: new Set(), fitUnknownInterviews: new Set(),
+        lastMentionAt: null,
+      };
       acc.set(key, a);
     }
     return a;
@@ -272,6 +354,20 @@ function analyzePains(
       if (!seenKeys.has(r.key)) {
         a.count += 1;
         seenKeys.add(r.key);
+        // ATTRIBUTION RIDES THE SAME FIRST-SIGHT BRANCH AS `count`, so the three
+        // numbers cannot disagree about how many interviews are behind a theme.
+        // One interviewee naming it three ways counts once for all of them.
+        if (it.id != null) {
+          if (isIcp(it.icp_fit)) a.icpInterviews.add(it.id);
+          else if (it.icp_fit == null) a.fitUnknownInterviews.add(it.id);
+        }
+        // A STRING COMPARE, DELIBERATELY. `interview_date` is stored as
+        // `YYYY-MM-DD` text, which sorts lexicographically in exactly date
+        // order, and `Date.parse` on a bare date string is the UTC-versus-local
+        // trap this repo has already been bitten by. A malformed value sorts
+        // somewhere harmless rather than becoming `NaN` and poisoning the max.
+        const d = typeof it.interview_date === 'string' ? it.interview_date.trim() : '';
+        if (d && (a.lastMentionAt == null || d > a.lastMentionAt)) a.lastMentionAt = d;
       }
       // A SEVERITY IS AGAINST THE PHRASE THE FOUNDER TYPED, and it lands on the
       // THEME that phrase resolves to — so re-grouping two wordings under one
@@ -303,6 +399,9 @@ function analyzePains(
       id: g.id, title: g.title, sort_order: g.sort_order, count: a ? a.count : 0, phrases,
       need_count: a ? a.needInterviews.size : 0,
       nice_count: a ? a.niceInterviews.size : 0,
+      icp_count: a ? a.icpInterviews.size : 0,
+      fit_unrecorded_count: a ? a.fitUnknownInterviews.size : 0,
+      last_mention_at: a ? a.lastMentionAt : null,
     };
   });
 
@@ -315,6 +414,9 @@ function analyzePains(
       count: a.count,
       need_count: a.needInterviews.size,
       nice_count: a.niceInterviews.size,
+      icp_count: a.icpInterviews.size,
+      fit_unrecorded_count: a.fitUnknownInterviews.size,
+      last_mention_at: a.lastMentionAt,
     }));
 
   return {
@@ -332,6 +434,15 @@ function analyzePains(
       // "nothing is recorded", and a chip that narrows on severity would answer
       // a question the store cannot answer.
       severity_recorded: severities.length > 0,
+      // FROM THE INTERVIEWS, NOT FROM THE THEMES, for the reason the type
+      // records: an ICP interview that mentions no pain leaves every theme at
+      // `icp_count: 0` while the field is plainly in use, and a page told
+      // "nothing is on file" would then explain an empty chip with the wrong
+      // reason. Same for dates.
+      icp_recorded: interviews.some((it) => it.icp_fit != null && String(it.icp_fit).trim() !== ''),
+      dates_recorded: interviews.some(
+        (it) => typeof it.interview_date === 'string' && it.interview_date.trim() !== '',
+      ),
     },
   };
 }
@@ -409,8 +520,35 @@ export async function getPainGroupsView(env: Env, projectId: number): Promise<Pa
   // `id` JOINED THE SELECT so severity can be attributed. It was `pains_json`
   // alone, which is the whole reason three of this zone's four chips could not
   // be built: with no interview behind a mention there is nothing to narrow by.
+  //
+  // `icp_fit` AND `interview_date` JOINED IT FOR THE OTHER THREE. Both have
+  // existed on `discovery_interviews` since migrations 161 and the baseline
+  // respectively, and neither reached this view — so `/validate/pain-map`'s
+  // `ICP only`, `All interviews` and `By recency` chips all carried the same
+  // reason, that a theme keeps its phrases and not the interviews behind them.
+  // The interviews were one column list away the whole time. No migration.
+  //
+  // BUT `icp_fit` IS NOT STRUCTURALLY GUARANTEED, and naming it unconditionally
+  // was a real regression rather than a hypothetical one.
+  // `ensureDiscoveryIcpFitColumn` exists because migration 161 ALTERs the column
+  // in, and its own header says a caller should "degrade to 'ICP fit
+  // unavailable' instead of emitting SQL that would fail with `no such column`".
+  // The SELECT below is wrapped in `.catch(() => [])`, so on an environment
+  // missing the column the failure would not be "attribution unavailable" — it
+  // would be NO INTERVIEWS, and the whole pain map would render empty with no
+  // error shown. The first fixture without the column proved exactly that.
+  //
+  // So the column list follows the bootstrap's answer. Without `icp_fit` every
+  // mention lands in `fitUnknownInterviews` and `icp_recorded` is false, which is
+  // the honest reading — nothing is attributed to a customer and the page says
+  // nothing is on file — while the map, the counts and the dates all still work.
+  // `interview_date` needs no such guard: it is in the baseline CREATE TABLE, not
+  // an ALTER.
+  const icpReady = await ensureDiscoveryIcpFitColumn(env);
   const res = await env.DB.prepare(
-    `SELECT id, pains_json FROM discovery_interviews WHERE project_id = ?`,
+    icpReady
+      ? `SELECT id, pains_json, icp_fit, interview_date FROM discovery_interviews WHERE project_id = ?`
+      : `SELECT id, pains_json, interview_date FROM discovery_interviews WHERE project_id = ?`,
   )
     .bind(projectId)
     .all<InterviewPains>()

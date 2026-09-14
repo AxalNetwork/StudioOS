@@ -37,6 +37,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 
+/**
+ * The founder table's own source, for the one thing importing it cannot show:
+ * whether a shared `unbuilt` reason CONSTANT still exists. A reason that outlives
+ * the store being built gets cited again by the next reader — `NO_SESSION_RECORD`
+ * and `NO_CADENCE_STORE` both went when their migrations landed, and something has
+ * to notice if the third one does not.
+ *
+ * `codeOnly` FIRST, and this is the whole reason that helper exists. Both
+ * departures left a NOTE behind naming the constant they removed — "`…` stood
+ * here … and removing it is the point" — which is precisely the comment worth
+ * keeping, and it would make a ban on the name fail against correct code.
+ */
+const FILTERS_SRC = codeOnly(read('frontend/src/workspaces/founderZoneFilters.js'));
+
 
 /**
  * Zone key → the file that renders that zone's toolbar, for the surfaces four
@@ -1330,39 +1344,66 @@ test('a dynamic group renders its stored names and nothing else', () => {
   assert.match(talentRow.unbuilt, /no job post is linked/, 'the fallback reason stopped being recorded');
 });
 
-test('filters sharing one reason are recorded once and drawn each', () => {
-  // /build/cadence has four filters and one reason. That reason was once
-  // collected into a sentence naming all four and printed under the chips;
-  // /build/this-week's two distinct reasons became two sentences. Neither is
-  // drawn as prose any more, and neither zone is empty either — the row is the
-  // artboard's row, with each dead chip carrying its own hover.
+test('two zones whose stores arrived draw live chips, and their shared reasons are gone', () => {
+  // THIS TEST HAS BEEN THREE THINGS AND THE THIRD IS THE POINT.
   //
-  // WAS `deepEqual(cadence, [])` under the title "rendered never". That is the
-  // assertion this change is about: a four-chip artboard row rendering as
-  // nothing at all is why /build/cadence was reported as missing its options.
-  const cadence = founderZoneFilters('build/cadence', { value: 'x' });
+  // It began as `deepEqual(cadence, [])` under the title "rendered never" — the
+  // four-chip artboard row rendering as NOTHING, which is why /build/cadence was
+  // reported three times as missing its options. Then it asserted four DISABLED
+  // chips, each carrying its own hover, when the builder started drawing gaps.
+  //
+  // Migration 250 stored rituals, runs and templates, so all four are live and the
+  // old assertion — "every chip is disabled and unselectable" — would now be
+  // false. It is not loosened; it is INVERTED, because the fact it was written
+  // about has changed. A refusal kept beside a working feature is exactly the
+  // failure #193 was filed for.
+  const cadence = founderZoneFilters('build/cadence', { value: 'plans' });
   assert.equal(cadence.length, FOUNDER_ZONE_FILTERS['build/cadence'].length,
-    'a zone whose filters all lack a store no longer draws its row');
-  assert.ok(cadence.every((i) => i.disabled && !i.onSelect && i.title),
-    'cadence draws a chip that can be selected over a store it has not got');
+    'the cadence row stopped drawing one chip per artboard filter');
+  assert.ok(cadence.every((i) => !i.disabled && typeof i.onSelect === 'function'),
+    'a cadence chip is still dead after migration 250 gave the zone its store');
+  assert.ok(cadence.every((i) => !i.title),
+    'a live cadence chip still carries a gap explanation on hover');
+  // The selected chip is the one the page asked for, and only that one.
+  assert.equal(cadence.filter((i) => i.active).length, 1, 'exactly one chip is active');
+  assert.equal(cadence.find((i) => i.active).label, 'Plans');
+  // And the reason that covered all four is GONE from the module, not reworded.
+  // `zoneFilterBuilder`'s history is that a reason outliving its fix gets cited
+  // again; `NO_SESSION_RECORD` went the same way when migration 221 landed.
 
-  const week = founderZoneFilters('build/this-week', { value: 'now' });
+  // AND `build/this-week` CROSSED THE SAME LINE IN THE SAME PASS. Its three dead
+  // chips — `Last 4`, `All weeks`, `Carried only` — shared one reason, "a key
+  // result carries no week", and migration 252 records the column moves those
+  // weeks are derived from. So the test's title stopped being true too: this-week
+  // does draw live chips now. Both halves are asserted the new way rather than one
+  // being loosened to match the other.
+  const week = founderZoneFilters('build/this-week', { value: 'recent', counts: { all: 14 } });
+  assert.equal(week.length, FOUNDER_ZONE_FILTERS['build/this-week'].length,
+    'the this-week row stopped drawing one chip per artboard filter');
   assert.ok(week.every((i) => !i.note), 'this-week renders prose in the chip row');
-  assert.ok(week.every((i) => (i.disabled ? !i.onSelect : Boolean(i.onSelect))),
-    'this-week draws a chip whose handler disagrees with its disabled state');
-  for (const label of ['Last 4', 'All weeks', 'Carried only']) {
-    const chip = week.find((i) => i.label === label);
-    assert.ok(chip, `${label} has no source and is not drawn at all`);
-    assert.equal(chip.disabled, true, `${label} has no source and is drawn live`);
-  }
+  assert.ok(week.every((i) => !i.disabled && typeof i.onSelect === 'function'),
+    'a this-week chip is still dead after migration 252 recorded the column moves');
+  assert.equal(week.filter((i) => i.active).length, 1, 'exactly one this-week chip is active');
+  assert.equal(week.find((i) => i.active).label, 'Last 4 weeks');
+  // `All {n} weeks` takes the page's own count. The canvas says "All 14"; printing
+  // 14 on an account with no history is the thing `withCount` exists to refuse, so
+  // the figure comes from the store and the clause drops when there is none.
+  assert.ok(week.some((i) => i.label === 'All 14 weeks'), 'the count clause is not filled from the page');
+  const noCount = founderZoneFilters('build/this-week', { value: 'now' });
+  assert.ok(noCount.some((i) => i.label === 'All weeks'),
+    'a zero count still printed a number into the chip');
 
-  // The reasons themselves stay in the table, distinct where they were distinct.
-  const reasons = new Set(FOUNDER_ZONE_FILTERS['build/this-week']
-    .filter((r) => r.unbuilt).map((r) => r.unbuilt));
-  assert.equal(reasons.size, 2, 'this-week\'s two distinct reasons were merged into one');
-  assert.equal(new Set(FOUNDER_ZONE_FILTERS['build/cadence']
-    .filter((r) => r.unbuilt).map((r) => r.unbuilt)).size, 1,
-    'cadence\'s one reason was split into several');
+  // Both shared reasons are gone from the module, not reworded.
+  for (const dead of ['NO_CADENCE_STORE', 'NO_WEEK_STAMP']) {
+    assert.ok(!FILTERS_SRC.includes(dead), `${dead} survived the store being built`);
+  }
+  assert.equal(FOUNDER_ZONE_FILTERS['build/this-week'].filter((r) => r.unbuilt).length, 0,
+    'a this-week chip is a gap again');
+
+  assert.equal(FOUNDER_ZONE_FILTERS['build/cadence'].filter((r) => r.unbuilt).length, 0,
+    'a cadence chip is a gap again');
+  assert.equal(FOUNDER_ZONE_FILTERS['build/cadence'].filter((r) => r.key).length, 4,
+    'cadence stopped declaring four live keys');
 });
 
 

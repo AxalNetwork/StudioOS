@@ -1291,6 +1291,24 @@ export const api = {
   linkHypothesisPain: (id, data) => request(`/founder/validate/hypotheses/${id}/links`, { method: 'POST', body: JSON.stringify(data) }),
   unlinkHypothesisPain: (linkId) => request(`/founder/validate/links/${linkId}`, { method: 'DELETE' }),
   getValidationDecision: (projectId) => request(`/founder/validate/decision/${projectId}`),
+
+  // Build · Cadence (#176 FB4). ONE READ FOR THE WHOLE ZONE, because all four
+  // of its stat cards are counts over rows the same response carries — a
+  // separate `/stats` call would be a second answer to a question the rows
+  // already answer, and the two would disagree the moment a run is edited.
+  // The write surface is per-record because that is what a form submits.
+  getCadence: (projectId) => request(`/founder/cadence/${projectId}`),
+  getCadenceStarters: () => request('/founder/cadence/starters'),
+  createRitual: (projectId, data) => request(`/founder/cadence/${projectId}/rituals`, { method: 'POST', body: JSON.stringify(data) }),
+  updateRitual: (id, data) => request(`/founder/cadence/rituals/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteRitual: (id) => request(`/founder/cadence/rituals/${id}`, { method: 'DELETE' }),
+  logRitualRun: (projectId, data) => request(`/founder/cadence/${projectId}/runs`, { method: 'POST', body: JSON.stringify(data) }),
+  updateRitualRun: (id, data) => request(`/founder/cadence/runs/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteRitualRun: (id) => request(`/founder/cadence/runs/${id}`, { method: 'DELETE' }),
+  createRitualTemplate: (projectId, data) => request(`/founder/cadence/${projectId}/templates`, { method: 'POST', body: JSON.stringify(data) }),
+  updateRitualTemplate: (id, data) => request(`/founder/cadence/templates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteRitualTemplate: (id) => request(`/founder/cadence/templates/${id}`, { method: 'DELETE' }),
+
   // Validate · the three exports.
   //
   // ONE DOWNLOAD HELPER, NOT THREE. The blob → Content-Disposition →
@@ -1401,6 +1419,28 @@ export const api = {
   renamePainGroup: (id, title) => request(`/progress/pain-groups/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
   deletePainGroup: (id) => request(`/progress/pain-groups/${id}`, { method: 'DELETE' }),
   listOkrs: (projectId) => request(`/progress/roadmap/${projectId}`),
+  // #176 FB1 — the three week windows `/build/this-week` draws chips for, as ID
+  // SETS rather than objectives. The page already has every OKR from `listOkrs`;
+  // returning them again under four keys would be the same rows four times and a
+  // second answer to what an objective is called. Migration 252 logs the column
+  // moves this is derived from; `history_since` says how far back the log goes,
+  // because it is not backfilled and an older commitment would otherwise look
+  // like a broken filter.
+  listOkrWeeks: (projectId) => request(`/progress/roadmap/${projectId}/weeks`),
+  // #176 FB2 — swimlanes on the execution board. Migration 253 puts a `lane` on the
+  // card and the LIST of lanes in `project_lanes`, which is what turns
+  // `Configure lanes` from "there is nothing for an editor to change" into an editor.
+  //
+  // THE CARDS COME BACK WITH THE LANES, not from `pipelineDealDetail`. Reading lanes
+  // from one call and cards from another shows a card in a lane it has been moved
+  // out of; and the detail endpoint's `SELECT *` predates the column.
+  getBoardLanes: (projectId) => request(`/founder/board/${projectId}`),
+  setBoardLane: (projectId, data) => request(`/founder/board/${projectId}/lanes`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteBoardLane: (id) => request(`/founder/board/lanes/${id}`, { method: 'DELETE' }),
+  // `Bulk move`. All-or-nothing: a move that would put a lane over its WIP limit
+  // writes nothing and answers 409 with the lane and the overage, because the
+  // artboard's own note says "the limit is a configuration, not a suggestion".
+  bulkMoveBoardCards: (projectId, data) => request(`/founder/board/${projectId}/cards/bulk`, { method: 'POST', body: JSON.stringify(data) }),
   createOkr: (projectId, data) => request(`/progress/roadmap/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
   updateOkr: (id, data) => request(`/progress/roadmap/okr/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   moveOkr: (id, kanban_status, sort_order = 0) => request(`/progress/roadmap/okr/${id}/move`, { method: 'POST', body: JSON.stringify({ kanban_status, sort_order }) }),
@@ -1421,6 +1461,19 @@ export const api = {
   // ("get churn to zero") so it cannot double as "no target".
   listMetricTargets: (projectId) => request(`/progress/metrics/${projectId}/targets`),
   setMetricTarget: (projectId, data) => request(`/progress/metrics/${projectId}/targets`, { method: 'PUT', body: JSON.stringify(data) }),
+  // #176 FB5 — metric DEFINITIONS, which are not targets. The canvas's own note
+  // says why the op exists: "definitions live on this page precisely so 'net
+  // burn' means the same thing in month 14 as in month 1". They could not ride on
+  // `metric_targets` because its `target_value` is NOT NULL, so defining a metric
+  // would have forced a plan number for it. Migration 251. `definition: null`
+  // clears, for the same reason `target_value: null` does above.
+  listMetricDefinitions: (projectId) => request(`/progress/metrics/${projectId}/definitions`),
+  setMetricDefinition: (projectId, data) => request(`/progress/metrics/${projectId}/definitions`, { method: 'PUT', body: JSON.stringify(data) }),
+  // #176 FB5 — the CSV importer. `{ csv, dry_run }` in; a verdict PER LINE out,
+  // because an importer that reports OK while eleven of fourteen months went
+  // missing is worse than one that fails. `dry_run: true` runs the same parse and
+  // writes nothing, so a founder sees what a file would do first.
+  importMetricsCsv: (projectId, data) => request(`/progress/metrics/${projectId}/import-csv`, { method: 'POST', body: JSON.stringify(data) }),
   // Build queue #121 — derived KPIs (growth, LTV:CAC, payback, retention)
   // computed server-side from the snapshot series, with `unavailable[]`
   // explaining any metric that could not be computed.

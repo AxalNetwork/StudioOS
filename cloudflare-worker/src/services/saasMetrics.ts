@@ -1,16 +1,30 @@
 /**
  * Build queue #121 — derived SaaS metrics from the snapshot series.
  *
- * Pure functions over `metrics_snapshots` rows. No I/O, no clock.
+ * Pure functions over `project_metrics` rows. No I/O, no clock.
  *
- * SCHEMA NOTE. `metrics_snapshots` has two incompatible definitions in
- * this repo — the production `sql/schema_baseline.sql` shape (project_id,
- * snapshot_date, mrr, active_users, …) and an unused
- * `scope`/`metric_name`/`value` shape from `sql/infrastructure.sql` +
- * migration 034. The LIVE one is the legacy lineage: it is what
- * `ensureMetricsSnapshotsSchema()` in routes/progress.ts creates and
- * self-heals (adding arr/cac/ltv/monthly_churn_pct/new_users), and what
- * every metrics handler reads. This module targets that shape only.
+ * SCHEMA NOTE, AND THE PREVIOUS ONE WAS WRONG IN THE WAY THAT MATTERED. It said
+ * `metrics_snapshots` had two definitions — "the production
+ * `sql/schema_baseline.sql` shape (project_id, snapshot_date, mrr, active_users,
+ * …)" and an unused generic series — and concluded "The LIVE one is the legacy
+ * lineage: it is what `ensureMetricsSnapshotsSchema()` in routes/progress.ts
+ * creates and self-heals, and what every metrics handler reads."
+ *
+ * Every clause of that was false about production. The baseline's
+ * `metrics_snapshots` is the DEAL shape (`deal_id NOT NULL`, `key_metrics`,
+ * `traction_score`, `ai_review`), created at runtime by `routes/pipeline.ts`. It
+ * has no `project_id` and no `mrr`. `ensureMetricsSnapshotsSchema` did not create
+ * that shape either: against an existing table it took its ALTER branch and added
+ * ten metric columns, and its required list never included `project_id`, `mrr`,
+ * `active_users`, `notes` or `source`. So "what every metrics handler reads" was
+ * a table those handlers could not read — every statement threw `no such column:
+ * project_id`, and this note is why nobody looked.
+ *
+ * Migration 249 gives the per-project series its own table, `project_metrics`,
+ * with exactly the shape the handlers already wrote. This module targets that.
+ * `metrics_snapshots` keeps its per-deal traction records and its own readers
+ * (`pipeline.ts`, `services/tractionSnapshots.ts`); the two no longer share a
+ * name. See D87.
  *
  * Every function returns null rather than a plausible number when the
  * inputs cannot support the calculation. That matters more here than

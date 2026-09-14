@@ -5312,3 +5312,864 @@ someone will reasonably want to delete it: it is the only cover for the
 `.ts`/`.tsx` gap above, and its message names the specific failure where ESLint
 says only `'useState' is not defined`. If the frontend `tsc --noEmit` above ever
 lands, the first reason disappears and only the second remains.
+
+## D85 — Three chips were a column list away, and the frequency beside them was wrong
+
+**Task #175.** `/validate/pain-map` drew V2's chip row — `ICP only · All
+interviews · Need-to-have · By recency` — with three of the four as prose. All
+three carried one reason, and it was a good reason when it was written:
+
+> *"a theme carries its phrases and not the interviews they came from, so no
+> mention can be traced to a conversation whose ICP fit is recorded"*
+
+That was true of the **payload** and never true of the database.
+`discovery_interviews` has carried `icp_fit` since migration 161 and
+`interview_date` since the baseline; `getPainGroupsView` selected neither. The
+whole of the missing link was two names in one column list. **No migration.**
+
+### The fold, and where the attribution had to happen
+
+`analyzePains` already kept per-theme sets of interview ids for `need_count` and
+`nice_count`, so the shape existed. The new counts ride the **same first-sight
+branch** that increments `count` — the one guarded by `seenKeys` — so one
+interviewee naming a theme three ways is one interview in every number on the
+row. A fold that attributed per phrase instead would report more customers than
+were spoken to, the asymmetry `evidenceFor` exists to hold.
+
+`isIcp` is **imported** from `routes/_founder_validate_helpers`, not restated.
+The rule is `strong || partial`, with NULL a fourth state and an explicit `none`
+a recorded non-customer, and the whole value of one definition is that the pain
+map and the hypothesis verdict cannot drift about who counts as a customer. A
+service importing a `routes/_*.ts` shared module follows `_competitor_writes.ts`
+and `_capital_call_writes.ts`; that file imports only `types` and `auth`, so
+there is no cycle.
+
+### `fit_unrecorded_count` is not a footnote
+
+Three buckets, not two: ICP, recorded non-ICP, and **never recorded**. Folding
+NULL into "not ICP" makes `icp_count` read 0 for every project logged before
+migration 161, and an `ICP only` chip then states *"none of your pains come from
+your customers"* with total confidence on no evidence. `verdictFor`'s header
+names this as the failure the absent-is-not-empty rule exists to prevent; it is
+the same rule, one screen over. So the row shows `2 icp · 4 fit ?` and the map
+carries `icp_recorded` — read **from the interview rows, not from the theme
+counts**, because a project whose only ICP interviewee named no pain leaves every
+theme at zero while the field is plainly in use.
+
+### `By recency` is a sort, and the date is the interview's
+
+The date is the latest `interview_date` among the interviews mentioning a theme —
+"somebody said this to us recently". Never a date of the theme's own: a founder
+renaming a group months later would move it without anyone saying anything new.
+`created_at` is deliberately not the fallback, because a batch of old interviews
+typed up this morning would all read as this morning. Themes with no date sort
+**last** rather than being dropped — a pain people named is not hidden because
+nobody recorded when they said it. The comparison is a **string** compare on
+`YYYY-MM-DD`, which sorts in date order; `Date.parse` on a bare date string is
+the local-versus-UTC trap this repo has already been bitten by.
+
+### The chip row needed three kinds, and the guard had to learn them
+
+This zone's three siblings only ever narrow, so one predicate map said everything
+about them. This row does not: `All interviews` is the **cleared state** and `By
+recency` **reorders**. `zone_actions.test.mjs` required every live chip to appear
+in the predicate map — a rule written after a real escape, where a missing
+predicate made "Retired" show the live claims — and satisfying it would have
+meant two `() => true` entries that pass the guard while lying about what the
+chip does.
+
+So the page declares `PAIN_VIEWS`, `PAIN_SORTS` and `PAIN_CLEARED`, and the guard
+now asserts the invariant rather than the shape: **every live chip is claimed by
+exactly one declared role, and every declared role belongs to a live chip** —
+with a second assertion that no chip is claimed twice, since a chip that both
+narrows and reorders has no defined behaviour. That is stricter than what it
+replaced, not looser: the sorts and the cleared state are now checked too.
+
+### THE BUG FOUND ON THE WAY, and it was the worse one
+
+The pain map's frequency was **wordings over interviews**. The page computed
+`g.phrases.length / view.interview_total`, ranked by the same, and quoted it in
+its own footnote — while `g.count`, the distinct-interview count the server
+computes, went unread.
+
+`analyzePains` seeds every curated alias as a phrase **whether or not any
+interview logged it**. So a founder who grouped three wordings under one theme
+saw that theme at *"3 phrases · 150%"*, bar pinned at 100%, on a two-interview
+project **where nobody had mentioned it at all**. Measured against the real
+service, not reasoned about: `count: 0`, `phrases.length: 3`, `interview_total:
+2`.
+
+It was not a disagreement nobody had noticed — it was one a comment had
+*vouched for*. `serializePainMapCsv`'s docblock said `count` is "the same number
+the pain map page shows", and went on to describe computing frequency from
+`phrases.length` as an "earlier reading of that page". That earlier reading was
+the live one. The export wrote `0` and `0%` for the theme the page drew at 150%:
+one record, two answers, one screen apart, with the prose asserting they agreed.
+
+The page reads `count` now and ranks by `count` desc then title — the order
+`analyzePains` gives `themes`, which is what the deck's Problem slide renders.
+That matters beyond tidiness: this zone's own `Send to Problem slide` op is a
+**link** to that slide, so ranking by wording variety let the page and the slide
+it points at name different leading pains. The wording count is still shown, as
+a separate label, because it is what a founder curating the map needs to see.
+
+### The silent-blank-page regression this nearly shipped
+
+Naming `icp_fit` in the SELECT unconditionally is **not safe**. Migration 161
+ALTERs it in, `ensureDiscoveryIcpFitColumn` exists because it may be absent, and
+its header says a caller should "degrade to 'ICP fit unavailable' instead of
+emitting SQL that would fail with `no such column`". The interview read is
+wrapped in `.catch(() => [])` — so on an environment where the column cannot be
+read, the result is not a missing chip. It is **no interviews**, and the entire
+pain map renders empty with no error shown. A feature that only adds a chip would
+have blanked the page it sits on.
+
+The column list follows the bootstrap's answer, and the degraded path is pinned
+by a test that makes the ALTER fail. Getting that test right took two attempts,
+and the first attempt is the lesson: it built the table without the column and let
+the bootstrap add it, so an unconditional SELECT passed just as well and the
+mutation walked straight through. A degradation test that lets the system heal
+itself first is testing the healthy path.
+
+### Still refused, and now for one honest reason
+
+`/validate/verdict`'s `As of last week` and `Changed this month`, and
+`/validate/hypotheses`' `Recently moved`, all want the same thing: a record of a
+claim **changing**. `hypotheses` carries no `updated_at` that reaches the board
+and nothing writes a lane transition, so there is no history to read. That is a
+store this product does not have, not a query it forgot to write — the opposite
+of the three above — and a product question (what is a verdict snapshot *of*?)
+rather than an engineering one.
+
+## D86 — Two shapes under one name, and both already had homes
+
+**Task #183.** `metrics_snapshots` was two different tables. Production's is a
+DEAL metrics table — `deal_id, snapshot_date, key_metrics, traction_score,
+ai_review, created_by` plus ten named metric columns — and `routes/pipeline.ts`
+creates exactly that at runtime, so it is the one that exists.
+`services/queueWorker.ts` read and wrote a GENERIC METRIC SERIES (`scope,
+scope_id, metric_name, value, captured_at, extra`), which only
+`sql/historical/infrastructure.sql` ever declared, and nothing has built from
+`historical/` since the migration ledger became the build path.
+
+The collision was invisible until `check-sqlite-columns.mjs` stopped unioning
+`historical/` into its harvest. Before that, the two shapes merged into one
+17-column set that satisfied both queries.
+
+### What it cost, and the worst of it was not in the task title
+
+Three queue jobs threw `no such column`:
+
+- **`traction_review`** died on its first SELECT, so the AI never ran and no
+  review was ever written. This is the one the task was filed about.
+- **`metrics_aggregation`** died on its INSERT, so a counter that has existed for
+  as long as the job has was never recorded once.
+- **`liquidity_valuation`** died reading a momentum nothing had written — and it
+  dies **before** `Listings.updateValuation`, with no catch between. So a founder
+  lists a subsidiary for sale, `secondary_listings.ai_valuation_cents` stays NULL,
+  and `LiquidityPage.jsx:562` renders **"— pending" for that listing forever**.
+  A broken metric series turned into a marketplace that never prices anything.
+
+### The decision: no new table, because both shapes already had homes
+
+The task suggested a `metric_series` table or dropping the job. Neither was
+needed once the question was asked per-use rather than per-name:
+
+- **The per-deal AI review goes in `metrics_snapshots.ai_review`** — a TEXT
+  column that has existed since the baseline with **no writer and no reader
+  anywhere**. It is named for exactly this, and the momentum rides inside its
+  JSON.
+- **The global counter goes in `system_metrics`** (`metric_name, value, labels`),
+  which IS the generic named series this repo already has: `meter()` in
+  `queueWorker.ts` writes to it on every job and `analyticsReports.ts` reads it in
+  five places. Safe to add a name there because every existing read filters
+  `metric_name = 'request'`.
+
+`services/tractionSnapshots.ts` is the one place that knows this, so the three
+jobs cannot drift about where a traction review lives.
+
+### `traction_score` is deliberately not touched, and this is the load-bearing part
+
+That column is a **0-100 rule-based** score computed by `pipeline.ts` from
+users/revenue/engagement/growth, and `POST /pipeline/decision-gate/review`
+branches on it at **70** and **40**. `aiTractionReview` returns momentum on
+**0-10**.
+
+Writing one into the other is the exact trap the `ai_scoring` job's own comment
+already refuses — *"correcting the names would have started mixing the two
+instruments instead"* — and the consequence here is worse than a wrong number on a
+dashboard: every AI-reviewed venture would read as "iterate" at the gate that
+decides whether it spins out. A mutation that makes `recordReview` also write
+`traction_score` fails the suite.
+
+### A review annotates a measurement, so it is an UPDATE
+
+A new row per review would be a snapshot with all ten metrics NULL. That pollutes
+the series the next review reads and drags `pipeline.ts`'s "latest snapshot" reads
+onto a row carrying no metrics. So the review UPDATEs the snapshot it reviewed,
+which also makes it **idempotent by construction** — and it needs to be, because
+`Jobs.markFailed` puts the same row back to `pending` and the CF Queue consumer
+deletes its idempotency claim in the failure branch on purpose. A retry overwrites
+one column on one row. There is nothing to double.
+
+Two guards fall out of that, both asserted: a `traction_review` for a project with
+no snapshot returns instead of throwing (throwing would retry forever on a venture
+nobody has measured), and a missing `project_id` throws instead of returning
+(reviewing nothing quietly is how the original bug stayed silent).
+
+### Absent is not empty, where it reaches a model
+
+`metricPointsFrom` skips NULL metrics rather than sending zero. `net_burn=0` in a
+prompt is a statement about the venture that nobody made, and a model cannot tell
+it from a real zero burn. The first draft got the `key_metrics` branch wrong —
+`Number(null)` is `0` and `Number('')` is `0`, both `Number.isFinite` — so a field
+the founder left blank reached the prompt as `growth=0`, in the same function whose
+docblock forbids exactly that. Its own test caught it. The same rule reaches a
+price: `aiValueAsset` renders an absent momentum as `n/a`, and an asserted test
+keeps it from becoming `0`.
+
+### What is still on record, and why
+
+`scripts/sqlite-columns-baseline.json`'s six `metrics_snapshots.*` lines are
+**deleted** — the guard fails on an entry that has since been created, so the
+ledger cannot go stale, and the matching assertion in `schema_guards.test.mjs`
+shrank with it.
+
+`sqlite-table-collisions-baseline.json`'s entry **stays**, with its text
+corrected. The DDL files still disagree: `sql/infrastructure.sql` declares a shape
+nothing builds from and now nothing writes. That is a documentation collision
+rather than a live one, and retiring the file is its own small task.
+
+## D87 — The per-project metric series gets its own table, and two live writers start working
+
+**Task #203**, found by closing #202. Excluding `sql/historical/` from
+`check-sqlite-table-collisions.mjs` left `metrics_snapshots` with five LIVE
+definitions, and two of them were writers nobody had counted.
+
+### The break, measured
+
+Production's `metrics_snapshots` is the DEAL shape `routes/pipeline.ts` creates at
+runtime — `deal_id NOT NULL, snapshot_date, key_metrics, traction_score,
+ai_review, created_by` — plus ten metric columns that `progress.ts`'s own
+`ensureMetricsSnapshotsSchema` ALTERed in. That ALTER trail is visible in the
+baseline as the comma after `created_by`, which is how we know the helper has run.
+
+Its `required` list never included `project_id`, `mrr`, `active_users`, `notes`
+or `source`. And:
+
+- **`routes/progress.ts:1784`** — the founder metrics-snapshot POST — INSERTs all
+  five.
+- **`integrations/providers/stripe.ts:337`** — the Stripe MRR sync — INSERTs four.
+
+So both threw `no such column: project_id`. A founder entering KPIs got a failure;
+a Stripe sync wrote nothing. `computeLifecycleSignals` wraps its read defensively,
+so `latest_mrr`, `active_users`, `monthly_churn_pct` and `new_users` returned NULL
+on every call — a founder's lifecycle signals were permanently blank and nothing
+said why.
+
+### Three things kept it invisible, and each is now asserted against
+
+1. **A helper believed to do what it could not.** The comment above
+   `computeLifecycleSignals` said *"pipeline.ts also writes a deal-keyed
+   metrics_snapshots, so we ensure the founder-metrics shape first."* An ALTER
+   cannot turn a `deal_id` table into a `project_id` one. A test now creates a
+   deal-shaped table, runs the bootstrap, and asserts `project_id` is still absent
+   — so nobody restores the belief.
+2. **A guard that cannot see it, by design.** `check-sqlite-columns` unions every
+   CREATE TABLE, so each writer's own `CREATE TABLE IF NOT EXISTS` contributed
+   `project_id` and `mrr` to the known set and its INSERT validated against them.
+   That guard's docblock states the limitation and names
+   `check-sqlite-table-collisions.mjs` as the complement — which is exactly how
+   this surfaced.
+3. **A docblock asserting the opposite of the truth.** `services/saasMetrics.ts`
+   said the `project_id` shape was *"the LIVE one … what every metrics handler
+   reads."* Every clause was false about production. It is corrected, and the
+   correction says what it used to say, because a doc that confidently states the
+   wrong schema is load-bearing in the wrong direction.
+
+A fourth kept it invisible in CI: **three test fixtures hand-wrote
+`metrics_snapshots` with `project_id`**, and one apologised for it in advance —
+*"in the shape `ensureMetricsSnapshotsSchema` creates (project_id, not the
+baseline dump's historical deal_id)."* Calling production's shape "historical" is
+how a fixture comes to certify a broken feature. All three are repointed.
+
+### The decision: a new table, not four more ALTERs
+
+Migration 249 creates `project_metrics`. The alternative — adding the five columns
+to `metrics_snapshots` — was rejected on two grounds:
+
+- **The reader families are disjoint.** `deal_id`: `pipeline.ts` (three reads) and
+  `services/tractionSnapshots.ts`. `project_id`: `progress.ts`'s whole CRUD
+  surface plus three rollups, `research.ts`, and `stripe.ts`. Merging them would
+  make the deal side's `SELECT *` reads return project rows with every traction
+  field NULL — the pollution D86 refused for the review annotation.
+- **`deal_id` is `NOT NULL`.** A project row would have to put something there.
+  `deal_id` IS a `projects.id` (D86), so it would be the same number in two
+  columns: a thing that works by coincidence and breaks the first time someone
+  changes what `deal_id` means.
+
+**No backfill, and that is provable rather than hopeful.** The old writes named a
+column that does not exist, so they always threw. There has never been a
+project-keyed row to move.
+
+### The uniqueness that replaces a read-modify-write
+
+`UNIQUE(project_id, snapshot_date, source)`, so `stripe.ts` upserts instead of
+`DELETE`-then-`INSERT`. The old pair had a window where the day carried no figure
+at all, and — worse — the DELETE was inside a `try/catch` while the INSERT was
+not: a failed delete left a duplicate, a failed insert took the whole sync down.
+
+`excluded.*` names only the four figures Stripe knows. A blanket replace would
+wipe a founder's headcount for the same day, because Stripe has no opinion about
+their headcount.
+
+**A NULL `source` does not collide** — SQLite treats NULLs as distinct in a UNIQUE
+index — and that is deliberate. A hand-entered figure is a statement someone made,
+not a projection to be silently replaced, so the route decides whether a second
+entry updates or adds. A founder's figure and Stripe's figure for the same day are
+two claims and are two rows.
+
+### Dollars, carried over rather than re-decided
+
+`check-money-cents` correctly flagged four new REAL money columns. They are
+recorded in the baseline with the reason rather than converted: `saasMetrics.ts`
+computes LTV:CAC, CAC payback, burn multiple, CMGR and runway over these as
+dollars, `financial_models.assumptions_json` carries `mrr` and `arr` as dollars
+beside them, and the SPA renders both. Converting the column without converting
+that chain would put two denominations one join apart, which is worse than either.
+Re-denominating the metric series is its own task.
+
+### One latent bug fixed on the way, found by a test
+
+`ensureProjectMetricsSchema`'s readiness flag was a module-level `let … = false`,
+so the first `env.DB` to bootstrap marked the helper done for **every** database in
+the isolate. In production there is one D1 and it never showed. It is a `WeakMap`
+keyed on `env.DB` now, matching `services/painGroups.ts` and
+`services/discoveryInterviewSchema.ts`, which key readiness that way for exactly
+this reason.
+
+---
+
+## D88 — `/build/cadence` gets a store: rituals, runs, templates — and the archive is what somebody wrote down
+
+**Date:** 2026-09-13 · **Task:** #176 (FB4) · **Migration:** 250
+
+`/build/cadence` was the emptiest zone in the product and the most talkative about
+it. The page loaded the project list and no second source, printed "Cadence store
+unavailable" in four places, showed four `Unavailable` stat cards and a
+three-row "Capability coverage" list — and its four filter chips and three ops
+were all registered `unbuilt`, which renders **nothing**. So the artboard's
+toolbar shipped empty while the body explained at length that it could not work.
+Reported three times; the user's words were "doesn't look at all like the one from
+the artifact".
+
+Migration 250 gives it three tables and `routes/founder_cadence.ts` reads them.
+
+### Three tables, because three different things are being stated
+
+A **ritual** is a standing intention ("we retro on Fridays"). A **run** is what
+happened on one date, including not happening. A **template** is the prompt a
+ritual is conducted from.
+
+Folding runs into rituals would make the archive a property of the schedule, so
+editing the schedule would rewrite history. Folding templates in would stop two
+rituals sharing one prompt, which is the first thing a founder with a Monday plan
+and a Friday retro wants.
+
+### Every figure above the archive is computed, and none is stored
+
+Reviews archived, adherence, the template count and the average retro length are
+counts over `ritual_runs` and `ritual_templates`. `founder_validate.ts` states the
+rule this follows: a stored count is a second answer to a question the rows
+already answer, and the two disagree the first time a row is edited.
+
+Three of the four had a wrong-but-plausible implementation waiting, and each is
+pinned by a test:
+
+- **Adherence over an empty archive is NULL**, not 0% (which says the founder
+  adheres to nothing) and not 100% (which congratulates them for it). The
+  denominator is returned beside the percentage, because adherence over three runs
+  and over three hundred are different claims.
+- **An untimed retro is excluded from the average, not counted as zero minutes.**
+  What protects this is `intOrNull` checking emptiness **before** `Number()` —
+  `Number(null)` and `Number('')` are both 0 and both finite, the trap #203
+  shipped once in the function whose docblock forbade it. Verified against
+  `node:sqlite` that SQL's own `AVG` also skips NULLs.
+- **`reviews archived` is its own aggregate, not `runs.length`.** The archive is
+  capped at 500 rows so a Worker's memory envelope stays predictable; a count
+  taken from the returned page would be right for every account under 500 reviews
+  and silently stuck at 500 for the ones that have most.
+
+### Adherence cannot see a skip nobody recorded, and that is not patched over
+
+`done / (done + missed)` needs the missed rows to exist, so a project that logs
+only its successes reads 100%. Inferring a miss from a scheduled date with no row
+would mean deciding a founder on holiday broke their cadence. The figure reports
+its denominator instead.
+
+### One run per ritual per date, which replaces nothing and prevents a lot
+
+`UNIQUE(ritual_id, run_date)`, and the writer upserts. Friday's retro happened
+once; without the index a double-submit files it twice and **every** count above
+the archive is then wrong in the direction that flatters. Keyed on `(ritual_id,
+run_date)` rather than `(project_id, run_date)` — the latter would make a Monday
+plan and a Monday standup mutually exclusive, which is most founders' Monday.
+Both columns are NOT NULL, so unlike migration 249's `source` there is no
+NULL-distinctness hole.
+
+### Retiring keeps the archive; deleting does not
+
+`active = 0` retires a ritual and its runs stay, because the archive is the zone's
+reason to exist. Deleting takes the runs with it: a run with no ritual has no name
+and no kind, so it would draw as a blank row and match no filter. The page offers
+retire first.
+
+### The filter row mixes two axes, and that is the canvas's choice
+
+`All rituals · Plans · Retros · Skipped` — the first three select the ritual's
+KIND, the fourth the run's STATE. A missed retro is under both, so the counts do
+not sum to the total. Asserted rather than tolerated, in
+`frontend/test/cadence_vocabulary.test.mjs`, because a reader who expects them to
+sum will conclude the numbers are broken.
+
+### `other` is a kind, and it is load-bearing
+
+Without it a founder's weekly investor sync has to claim to be a retro to be
+stored at all — and then it lands in the `Retros` filter and in the average retro
+length. A store that forces a wrong answer gets wrong answers. The worker coerces
+an unrecognised kind to `other`, which is why the form has to offer it: otherwise
+the coercion is invisible to the person filling it in.
+
+### "1 customised" is a timestamp, not a boolean
+
+`ritual_templates.edited_at` records that someone saved a change. A `customised`
+flag would be a stored derivation; a timestamp is a fact, and it answers the next
+question a reader has. The three built-in starting points are **not** seeded rows:
+a GET that writes cannot be retried safely, and a seeded row is indistinguishable
+from one the founder wrote, which would make the count a statement about the
+platform rather than the venture.
+
+### What the page stopped saying, and the one sentence that survives
+
+Every "unavailable" claim is deleted rather than softened — a refusal kept beside
+a working feature is the failure #193 was filed for, and `NO_CADENCE_STORE` is
+gone from `founderZoneFilters.js` for the same reason `NO_SESSION_RECORD` went
+when migration 221 landed. A stat card with nothing in it now reads **"Not yet"**
+rather than "Unavailable": the platform can answer, the account has not got there,
+and #180 is about exactly that distinction.
+
+What survives, because it is still true: **a calendar event is not an operating
+ritual and a roadmap change is not a review outcome.** Nothing here reads
+`calendar_events`. An archive assembled from side effects would report a cadence
+nobody ran.
+
+### Three things a mutation sweep changed, not just confirmed
+
+24 mutations applied, 24 caught, and two more proved **equivalent** rather than
+escaped — worth recording so nobody tries to close them:
+
+- Removing `decided > 0` computes `Math.round((0 / 0) * 100)` = NaN, and
+  `JSON.stringify({ a: NaN })` is `{"a":null}`. The response is byte-identical, so
+  no assertion at the HTTP boundary can distinguish it. The guard stays.
+- `AND r.duration_minutes IS NOT NULL` is redundant with SQL's `AVG`, verified
+  against `node:sqlite`. It stays as a statement of intent; `intOrNull` is what
+  actually protects the figure.
+
+And one real bug the sweep found rather than confirmed: the retro **target** was
+read from the average's row set, so a retro ritual whose runs were all untimed
+contributed no target either — a founder who had set "target 30" and never timed a
+retro read "No target set". It is its own query now. The target is a property of
+the ritual; the average is a property of its timed runs.
+
+### `/starters` had to be registered above `/:projectId`
+
+Hono matches in registration order, so the literal path resolved as
+`projectId = 'starters'`, `Number('starters')` was NaN, and the route answered 400
+"Invalid project id". A test found it. A static segment goes above the parameter
+that would otherwise eat it.
+
+### Three guards were corrected, not loosened
+
+- `profile_zone_actions.test.mjs`'s identifier scan read **comment words** as
+  variable names (`// Both ops need a venture.` → an undeclared global `Both`).
+  `codeOnly()` now runs on the call text — the same helper two tests above already
+  uses on the whole file. Narrowing a scan to code can only remove false alarms,
+  and the guard's own note says a false alarm is what gets a guard weakened.
+- `profile_zone_filters.test.mjs` asserted all four cadence chips were disabled
+  and unselectable. That fact changed, so the assertion is **inverted**, not
+  relaxed: four live chips, no hover text, exactly one active, and the shared
+  reason gone from the module.
+- `_deck-loader-hook.mjs` could not import any page that imports its stylesheet —
+  `ERR_UNKNOWN_FILE_EXTENSION` before the first assertion. A `.css` import is now
+  an empty module, which is what Vite does for the real build. Until this existed,
+  testing a page's exported predicates meant regexing its source, which proves the
+  file contains a string rather than that the module exports a working value.
+
+### `CADENCE_VIEWS` lives in the page, and a guard is why
+
+`zoneFilterBuilder`'s contract is that the table owns the labels and the **page**
+owns the predicate (`FounderValidateWorkspace`'s `PAIN_VIEWS` is the same shape),
+and `profile_zone_filters.test.mjs` proves a live filter key appears in the page
+that would have to serve it. With the four predicates in `lib/cadence.js` the keys
+were nowhere in the page and that guard failed — correctly. The worker exports its
+own `CADENCE_VIEWS` with the same four keys and
+`frontend/test/cadence_vocabulary.test.mjs` compares the two, values and meanings
+both, because `frontend/` and `cloudflare-worker/` cannot import each other.
+
+---
+
+## D89 — `/build/kpi` gets definitions and an importer, and stops denying the targets it already had
+
+**Date:** 2026-09-13 · **Task:** #176 (FB5) · **Migration:** 251
+
+Two of `/build/kpi`'s four ops were `unbuilt`, which renders nothing — so the
+artboard's row shipped with half its controls invisible. And the page carried
+**three claims that were already false**, which is the more interesting half.
+
+### What the page was denying
+
+- `Against target · Unavailable`, noted "Targets are not stored in this source."
+  `metric_targets` has been stored since migration 173 and given a reader and a
+  writer by #194. This page simply never read it.
+- `Definitions unavailable`, drawn as a disabled chip.
+- A closing note: "Targets, target variance, cash/burn fields, and metric
+  definitions are not returned by the current source." Wrong on all four —
+  variance is computed from the first two, and `net_burn` / `cash_balance` are
+  columns `project_metrics` has and `progress.ts`'s POST has always accepted.
+- The rail's `['Target comparison', 'No target source is connected.']`.
+
+Every one is deleted rather than softened. A refusal kept beside a working store
+is the failure #193 was filed for, and this is the second zone in one pass where
+the refusal outlived its fix.
+
+### The ledger was showing seven of twelve metrics
+
+`net_burn`, `cash_balance`, `headcount`, `nrr_pct` and `paying_accounts` were
+absent from the page's `FIELDS` — three of them rows the canvas's own table draws.
+A founder who had entered a burn figure could not see it, and "Missing cells"
+counted out of seven. All twelve are listed now, and their LABELS come from
+`lib/metricTargets`'s `METRIC_LABELS` rather than a second copy of the same twelve
+strings: two label tables that agree today is exactly when to merge them.
+
+### A definition is not a target, and `metric_targets` proves it
+
+`metric_targets.target_value` is `NOT NULL`. Hanging a `definition` column there
+would mean defining "net burn" required inventing a plan number for it — and then
+"4 of 6 against target" would count a metric nobody set a target for. So migration
+251 is its own table, `UNIQUE (project_id, metric_key)` on the same key shape so
+the two are joinable per metric. Same call as 249 and 250: ask what the row is
+FOR, not what it is near.
+
+`source_kind` there is **not** `project_metrics.source`. One records where the
+founder intends a metric to come from; the other where one row actually came from.
+The two disagreeing is a finding — a metric declared Stripe-synced whose rows all
+say `manual` means the integration is not running — so both are kept.
+
+"1 customised" is `edited_at`, a timestamp: a fact, not a stored derivation. And
+the three built-in starting points are **not** seeded rows — a GET that writes
+cannot be retried safely, and a seeded definition is indistinguishable from the
+founder's own, which would make the count a statement about the platform.
+
+### The importer's real feature is the rejection list
+
+`services/metricsCsv.ts` parses; the route writes. An importer that reports "OK"
+while eleven of fourteen months went missing is worse than one that fails, because
+the founder finds out six weeks later when a board pack is short. So:
+
+- a verdict **per line**, with the line number in the FILE (header included) so it
+  matches what their editor shows;
+- `dry_run: true` runs the same parse and writes nothing, so the committing press
+  is never the first thing that reads the file — one endpoint, one parser;
+- the row cap is reported line by line, never applied quietly;
+- a duplicated month is **refused, not last-wins**: both lines look deliberate and
+  a silent pick drops a figure the founder can see in their own file;
+- a row whose every metric is blank is refused rather than written as a month of
+  nulls, or "months on record" counts rows the import invented.
+
+It reads what a spreadsheet actually holds — `$104,800`, `1.2%`, `(61,200)` for
+negative, `—` and `n/a` for absent, `2026-08` / `08/2026` / `Aug 2026` for the
+month — and refuses `08/02/2026`, which is February in one country and August in
+another. A date the platform picked is a row filed against a month that may not
+have happened.
+
+**`source = 'csv'`, and that is load-bearing.** `project_metrics` is unique on
+`(project_id, snapshot_date, source)`, so an import can never overwrite a figure
+entered by hand, and re-importing a corrected file updates the import's own rows.
+`DO UPDATE` uses `COALESCE`, so a second file covering only MRR does not blank the
+burn the first one carried — the difference between a correction and a truncation.
+
+### Two more equivalent mutants, and one real find
+
+22 mutations applied, 22 caught. One proved equivalent: removing
+`month < 1 || month > 12` from the date validator changes nothing, because
+`lengths[12]` and `lengths[-1]` are both `undefined` and `1 <= undefined` is false.
+The check stays — a date validator should state its rule rather than rely on an
+out-of-bounds comparison happening to be falsy.
+
+The real find: the parser held a **literal, invisible U+FEFF** in a regex to strip
+Excel's byte-order mark — and `trim()` already strips it, since U+FEFF is
+`<ZWNBSP>` in the spec's WhiteSpace production (verified against node). So the
+replace was redundant AND was the kind of byte an editor or a reformat eats,
+leaving a regex that matches everything. It is gone; every BOM in the tests is now
+written as an escape. And the trim turns out to be load-bearing for exactly one
+header — `notes`, matched by an exact comparison with no alias entry — which is
+now the assertion that holds it.
+
+### The test had to mount the router the way production does
+
+`progress.ts` refuses by `throw new Error('Forbidden')` and nothing in that file
+maps it; `index.ts`'s app-level `onError` does, via a table whose own comment says
+"Without this, RBAC failures surface as 500s and the frontend can't distinguish
+'log in again' from 'the server crashed'." Driving the sub-router alone returns
+500 for what is a 403 in production. Rather than accept `403 || 500` — which would
+make a genuine crash read as a refusal — the test attaches the same three-line
+mapping and asserts 403 exactly.
+
+### One latent bug fixed on the way
+
+`ensureMetricTargetsSchema`'s readiness flag was a module-level `let`, the same bug
+#203 found in `ensureProjectMetricsSchema` twenty lines above it: the first
+`env.DB` to bootstrap marks the helper done for every database in the isolate.
+Production has one D1 and it never showed. Fixed to a `WeakMap` keyed on the
+binding rather than left sitting beside its own fix.
+
+---
+
+## D90 — `/build/this-week` gets a week history, and it is the transitions that are stored
+
+**Date:** 2026-09-13 · **Task:** #176 (FB1) · **Migration:** 252
+
+Three of `/build/this-week`'s four chips were `unbuilt` — `Last 4`, `All 14`,
+`Carried only` — under one reason that was true: "a key result carries no week, so
+there is no earlier week to open", and "nothing records a commitment moving from one
+week to the next". `roadmap_okrs` has a `kanban_status` and an `updated_at`, and
+`updated_at` moves when the **title** is edited, so it cannot say when an objective
+was committed. `unbuilt` renders nothing, so three quarters of the artboard's filter
+row was invisible.
+
+### The transition is the fact; the week is derived
+
+A `week_start` column on `roadmap_okrs` would hold one week — the current one — and
+answer none of the three questions. "Was it in Now four weeks ago" needs history,
+and history on a single column is a column that gets overwritten. So migration 252
+is an append-only log of column changes, `okr_column_moves`, and every window is
+derived:
+
+- **This week** — the OKR's current `kanban_status`, which needs no history and is
+  why that one chip alone kept working.
+- **Last 4** — has a move *to* `now` whose week is one of the last four.
+- **All weeks** — has ever had a move to `now`. The chip's count is WEEKS, not
+  objectives: the canvas says "All 14", meaning fourteen weeks.
+- **Carried only** — is in Now *now*, and its **earliest** move to Now was in an
+  earlier week. Reading the latest instead would make anything touched this week
+  look new, which is exactly how a three-week-old commitment escapes the chip that
+  exists to surface it.
+
+### A reorder is not a commitment, and that is the load-bearing condition
+
+A drag within one column arrives at the same endpoint with the same
+`kanban_status`. Logging it would put a "committed to Now" row in every week a
+founder tidied their board — so `Carried only` would find nothing carried, because
+every card would have a commitment in the current week. Live, selectable, always
+empty: the failure `zoneFilterBuilder.js` opens its docblock with. The log is
+written only when the column actually changed.
+
+### The log never fails the move
+
+A card that moved on the board and then reported an error is a card the founder
+will drag again. The write is wrapped, the failure is logged server-side, and the
+move returns 200.
+
+### No backfill, and the page says so instead
+
+An OKR already sitting in Now has no move row, so it appears under `This week` and
+not under `Last 4`. The only timestamp available to invent one from is `updated_at`,
+which may be when someone fixed a typo — a week derived from that would be a
+specific, confident, wrong answer. The route returns `history_since`, the earliest
+week on record, and the zone prints it: the empty state under a narrow chip says
+"the column history starts in the week of X" rather than repeating the
+nothing-in-Now sentence. The seam heals in four weeks of use and never lies.
+
+### `(day + 6) % 7`, and why that line has four tests
+
+`getUTCDay()` is 0 on **Sunday**. The offset back to Monday is therefore
+`(day + 6) % 7` — 0 on Monday, 6 on Sunday. `day - 1` is correct on six days in
+seven and sends every Sunday *forward* a day, which puts a Sunday commitment in
+next week, makes `Carried only` show this week's new work as carried, and raises no
+error anywhere. The arithmetic lives in `services/okrWeeks.ts` so it can be
+exercised by calling it; 15 mutations were applied to it and 15 caught.
+
+`Date.UTC(y, m - 1, d)` from the integers, never `Date.parse(iso)` — the trap
+`interview_date` and `lib/cadence.js` both already carry notes about. A malformed
+date returns null rather than falling back to the current week, and an unparseable
+"today" makes the carried set **empty** rather than everything: the chip's job is to
+single out a few rows, so failing open would make it useless and look like an
+answer.
+
+### Three refusals that outlived their fix, all in one pass
+
+`NO_WEEK_STAMP` joins `NO_CADENCE_STORE` (D88) and `NO_SESSION_RECORD` (migration
+221) as a shared `unbuilt` reason **deleted** rather than reworded once its store
+landed. Three in one file now. A reason that survives its own fix gets cited again,
+and the pattern of removing the constant — not just the entry — is what stops that.
+
+The page's stale claims go with them: a "Weekly history · Unavailable" stat card is
+now weeks on record; a card headed "Weekly history is unavailable" whose body said
+carry-overs "require a cadence history source that is not connected to this desk" is
+now the list of weeks; and the rail's `['Weekly history', 'No cadence archive is
+returned by the available founder read API.']` is replaced by what is genuinely
+absent — a plan the platform wrote.
+
+### A hand-written fixture was wrong on the first try, which is the argument
+
+`okr_move_log.test.ts` first spelled the column `key_results`; it is
+`key_results_json`, and every route call died on `no such column`. The fixture now
+takes `roadmap_okrs` from `schema_baseline.sql`. A hand-copied DDL that drifts makes
+every assertion above it true of a schema production does not have — the whole of
+#203 — and it happened here within minutes of the rule being restated.
+
+---
+
+## D91 — `/build/board` gets swimlanes, and the WIP limit refuses the move
+
+**Date:** 2026-09-14 · **Task:** #176 (FB2) · **Migration:** 253
+
+Two of this zone's five chips were not in the registry **at all**. `Engineering` and
+`GTM` were one entry reading "a card carries a stage, not a lane, and no lane is
+stored", and `unbuilt` renders nothing — so the artboard's five-chip row drew three.
+`Configure lanes` and `Bulk move` were `unbuilt` too, and the first of the two named
+its own fix: "the six lanes are written into the code twice and no per-project stage
+list is stored, so there is nothing for an editor to change."
+
+### A lane is not a status, and that is the whole reason this was buildable
+
+The status is **where** a card has got to in its life (todo → doing → done); the lane
+is **whose** work it is (Engineering, GTM, Ops). The canvas's own instrument carries
+both on every row — `Card | Lane | Age | Owner` — and its note depends on the
+difference: "Engineering is one card over its WIP limit of four, which is why the
+permissions card sits in backlog rather than starting." A WIP limit counts cards in
+flight *within* a lane, which cannot be expressed at all if the lane **is** the
+status.
+
+Read as a stage list this looked impossible, because the six pipeline stages are a
+literal written twice (`FounderBuildBoard.jsx` and `pages/PipelinePage.jsx`) and are
+genuinely not a founder's to change. Read as a lane it was a table and a nullable
+column: `project_lanes` per project, `mvp_tasks.lane` per card. The stages are still
+a literal, still written twice, and this change does not touch them.
+
+### The lane is stored as a name, not a `project_lanes.id`
+
+The alternative makes a rename either break every card in the lane or need a cascade.
+The name is what the founder typed and what the board draws, so a rename is one
+`UPDATE` on the cards and one on the lane — and `PUT /:projectId/lanes` with an `id`
+does exactly that pair, which is why renaming carries the cards rather than orphaning
+them.
+
+The cost is real and is paid in the open: a card can name a lane that no longer
+exists. `DELETE /lanes/:id` **unassigns** its cards rather than deleting them, the
+read returns those names as `orphan_lanes`, and the board draws them as their own
+group. A card nobody can see is worse than a lane nobody configured.
+
+### Nothing is seeded, and unassigned is a group rather than an absence
+
+A project that has never configured lanes has none, and all its cards are
+`lane IS NULL`. The board draws them as one "Unassigned" group; it does not invent
+Engineering, GTM and Ops on the board of a solo founder building a design tool. The
+dynamic chip group therefore keeps a reason — `zoneFilterBuilder` draws nothing for a
+group with no names, and "the page forgot to pass them" and "this venture has none"
+are different problems with the same appearance.
+
+### `wip_limit` NULL is not `wip_limit` 0
+
+Zero is a **real** limit: a lane closed to new work, which is how a founder pauses a
+workstream without deleting its cards. `Number('')` is 0 and finite, so a blank
+coerced before being tested would close a lane the founder meant to leave unlimited —
+the `Number(null) === 0` trap #203 was built out of, hit again three files later.
+Emptiness is checked before `Number()` in `intOrNull`, and the dialog sends `null`
+for a blank rather than `0`.
+
+### The limit refuses, all-or-nothing, and the refusal is rendered
+
+`POST /:projectId/cards/bulk` counts what the destination lane would hold and answers
+**409** with `{ lane, wip_limit, would_be, moved: 0 }` — nothing moves. A partial move
+that reported an error would leave the founder to work out which cards landed, which
+is worse than a refusal.
+
+`BulkMoveDialog` reads those **fields**, not the message: "Engineering would hold 6 in
+flight, over its limit of 4. Nothing was moved." A generic "something went wrong"
+there would hide the one number the founder needs to decide between raising the limit
+and moving fewer cards.
+
+### What counts as in flight, and why an unknown status counts
+
+`NOT_IN_FLIGHT` is `todo`, `backlog`, `done`, `cancelled`, `archived`. Backlog is
+excluded because the canvas's own note has a card sitting there *because* the lane is
+full — counting it would make the limit self-fulfilling.
+
+`mvp_tasks.status` is free text from the client, so the list cannot be exhaustive, and
+the conservative reading of a status nobody recognises is "somebody is doing this".
+An unknown status therefore **counts**: the limit holds a little too tightly rather
+than not at all. A WIP limit that can be walked past by inventing a status is not a
+limit.
+
+### `Mine` was a false refusal, not a gap — and the Owner cell was worse
+
+This is a #193-class finding rather than anything migration 253 built.
+`mvp_tasks.assigned_to` is an **INTEGER user id**, so "Mine" was always answerable
+from data the board already had; the chip was refused on a belief about the column.
+The page now filters on the reader's own id from `useAuth()`.
+
+The related defect was upstream of the chip: the table's Owner cell was printing the
+raw integer. A founder read "Owner: 41" on their own board. It now names the reader
+where the id is theirs and says "assigned" or "unassigned" otherwise, which is all
+this route can honestly say — `mvp_tasks` has no join to a user's name, and inventing
+one here would be a second table's work.
+
+### `Automations` stays a stated gap, deliberately
+
+The artboard reports "Automations · 3 · 1 paused" and gives nothing else: no trigger
+vocabulary, no action vocabulary, no example rule. A rules engine built from a count
+would be inventing the feature rather than integrating it — the one thing #176 asks
+not to do. The entry keeps its engineering reason and gains a founder-facing `hover:`
+under the tooltip cap, so the disabled control explains itself on the board instead of
+only in the source.
+
+### The one interpolated SQL statement in this route, and why it is safe
+
+A bulk update over N selected cards needs N placeholders:
+`const placeholders = ids.map(() => '?').join(',')`. The interpolated text is derived
+from the *length* of an array of numbers that have each been through `Number.isFinite`
+— no caller-supplied character reaches it — and every value is still bound. It is
+recorded in `scripts/sql-prepare-baseline.json`, the argument is in the docblock beside
+it, and a test asserts the statement's shape so a future edit that interpolated a
+value instead would fail rather than pass quietly.
+
+### Two things the tests found that review had not
+
+A typo'd bulk status fell through to "Nothing to change": an unrecognised status
+resolves to null, the body then looked empty, and the route answered 200 having done
+nothing. The unknown-status 400 now comes first, so a client sending `in-progress` for
+`in_progress` is told.
+
+And a lane with no limit was accepted as a destination without counting anything,
+which is correct — but nothing asserted it, so a mutation that made an unlimited lane
+*refuse* survived. The gap is closed with an assertion rather than left as a passing
+sweep: 22 mutations applied, 22 caught.
+
+### The guard that a reformat silently shrank
+
+Worth recording because it is general, and because it nearly hid this work's own
+regression. Five assertions in `frontend/test/profile_zone_actions.test.mjs` each
+extracted the zone-action table with their own line-anchored
+`/^ {4}\{ …label: '…'/gm`, which is correct only while every entry fits on one line.
+`Automations` gained its `hover:` string, went multi-line in the house style every
+other list in this repo uses, and vanished from all five at once: the canvas-order
+comparison saw a zone one op short, and the links + exports + handlers + gaps sum
+stayed balanced *because the entry had left both sides of it*. One test failed, and it
+failed pointing at the canvas.
+
+The fix is not a formatting convention. The reader now closes an entry at its own `}`,
+and it counts the table's `label:` keys by a separate route so it can be compared
+against the entries it actually parsed — read fewer than the table has and the file
+says so instead of quietly asserting less. Reformatting the entry back onto one line
+would have made the suite green and left the next multi-line entry invisible.

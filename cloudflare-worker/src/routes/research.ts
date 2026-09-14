@@ -52,7 +52,7 @@ import { perkLifecycle } from './perks';
 // migration (`progress.ts:1650`), so a reader that goes straight to SELECT can
 // hit a table that is one deploy behind the columns it names. Every consumer
 // calls this first; the KPI draft surface is a consumer.
-import { ensureMetricsSnapshotsSchema } from './progress';
+import { ensureProjectMetricsSchema } from './progress';
 import { todayIso } from './_t13t14t15_helpers';
 
 const research = new Hono<{ Bindings: Env }>();
@@ -2838,10 +2838,10 @@ const DRAFT_SURFACES: Record<string, {
     gather: async (c, userId, scope) => {
       const pid = await founderProject(c, userId, scope);
       if (pid == null) return [];
-      await ensureMetricsSnapshotsSchema(c.env);
+      await ensureProjectMetricsSchema(c.env);
       const rows = await c.env.DB.prepare(
         `SELECT snapshot_date, mrr, paying_accounts, net_burn, cash_balance
-           FROM metrics_snapshots WHERE project_id = ?
+           FROM project_metrics WHERE project_id = ?
           ORDER BY snapshot_date DESC, id DESC LIMIT 2`
       ).bind(pid).all<{
         snapshot_date: string | null; mrr: number | null; paying_accounts: number | null;
