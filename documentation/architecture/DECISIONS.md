@@ -7110,3 +7110,89 @@ newest-first, dropping the project scope, comparing the stamp as a string,
 falling back to today's verdict when nothing is old enough, counting a first
 observation as a move, putting either chip back to `unbuilt`, and dropping
 `verdict_history_since` from the board.
+
+---
+
+## D101 — a fork the picker never reached, and the test that was guarding the copy nobody could see
+
+**Date:** 2026-09-14 · **Task:** #206 · **Migration:** none
+
+`frontend/src/decks/templates/minimal_seed_app.tsx` is **deleted**. It was 1,643
+lines and 60 KB, and `templates/index.ts` has never been able to reach it.
+
+### The premise on the task had expired, and the expiry is the interesting part
+
+The task read "a deck variant nothing imports — adopt it or delete it", and D97's
+sibling note at `DECISIONS.md:6655` says the same. That was true when #201 was
+written and **stopped being true the same day**: `c9a134dc1` (#570) added
+`frontend/test/deck_templates_missing_data.test.mjs`, which imports the file at
+module scope. Deleting it without touching that import takes all 26 tests in the
+suite down before the first one runs, and with them `test:frontend`,
+`test:decks`, `test:drift` and CI.
+
+So the file was not unreferenced. It was referenced by **exactly one thing, and
+that thing existed only because nothing else referenced it** — the suite's own
+comment said so: *"the one `_app` variant no wrapper re-exports, so this suite is
+the only thing that looks at it."*
+
+### The test was pinning a real behaviour on the wrong file
+
+`minimal_seed_app.tsx`'s `TimelineDots` took two shapes from two callers —
+`milestones` is `{date,label}`, `achievements` is `{year,event}` — and admitted
+only the first, so the JOURNEY strip drew its dots over three empty columns.
+#201 found it with the compiler and pinned the fix with a render assertion.
+
+But `minimal_seed.tsx` — the template `templates/index.ts:75` actually ships —
+**already had that fix**, and the deleted file's own docblock said so: *"The fix
+is the one `minimal_seed.tsx` and `kawasaki_10_20_30.tsx` already made."* The
+live file widens the prop at `:523` and normalises `m.date || m.year` at `:534`.
+
+So the assertion was guarding the copy nobody could open, while the deck a
+founder actually opens carried the same behaviour with nothing watching it. The
+test is **moved, not deleted** — it now renders `Deck_minimal_seed` against
+`minimal_seed.tsx`'s own `SAMPLE_DATA`, and both mutations (dropping `|| m.year`,
+dropping `|| m.event`) fail it. The suite stays at 26 tests and covers more than
+it did.
+
+### Two arguments for adopting it instead, and why neither survived contact
+
+**"It is the only Minimal Seed with a live single-screen presenter."** It is not.
+`minimal_seed.tsx:1454` exports the same `MinimalSeedDeckApp` — Framer Motion
+shell, prev/next, `AnimatePresence`, `useReducedMotion`, keyboard nav — and says
+so in its own header at `:11-13`. This claim was in the plan for this task and
+was simply wrong; the file was read before the delete, not after.
+
+**"Someone shipped it on purpose."** They did, and then un-shipped it on purpose.
+`ab9e3b81c` (2026-05-23) removed it from the registry hours after `6898a2449`
+added it, on explicit user feedback — *"Minimal Seed must stay at slot 4 … not
+appear as separate `_app` entries"* — and in that same commit the sibling
+`series_a_growth_app.tsx` was rescued by rewriting `series_a_growth.tsx` into a
+one-line re-export. `minimal_seed_app.tsx` got no such rescue because
+`minimal_seed.tsx` was already a complete implementation. Every touch since is a
+sweep: a rebrand, a scanner pass, a security pass, a delivery audit, and #201.
+
+### What it would have cost to keep
+
+The two files are **83% byte-identical**, and the live one is a commit ahead:
+`d56f61491` gave every template brand-kit theming, so `minimal_seed.tsx:17`
+imports `BrandProvider` and `:1620-1626` wraps the deck in it, while the fork
+still hardcoded `const ACCENT = '#5E6AD2'` at `:70`. Adopting meant shipping a
+brand-theming regression or hand-merging 277 lines into a duplicate that should
+not exist. A stale fork is not free storage — it is a second place for the next
+fix to be applied to, and #201 applied one there.
+
+### Left in place deliberately
+
+The three `attached_assets/Pasted-Here-s-the-complete-Minimal-Seed-deck-…txt`
+transcripts this file was pasted from are **kept**. They are an archive of where
+the code came from, which is what that folder is for, and deleting the source
+makes that provenance the only remaining trace rather than a redundant one.
+
+One citation was re-pointed rather than left to rot: `series_a_growth_app.tsx`
+explained a TypeScript inference asymmetry by contrast with this file's
+array-literal fallback. `minimal_seed.tsx:992` has the identical pattern
+(`partner_logos`, same optional `initials`), so the comment now cites that.
+
+**2 mutations applied, 2 caught.** Dropping `|| m.year` and dropping `|| m.event`
+from the live `TimelineDots` each fail the moved test — which is the whole point
+of moving it, since neither would have failed anything before.

@@ -1098,10 +1098,13 @@ const Slide8RevenueGrowth: React.FC<DeckProps> = ({ data = {} }) => {
 
 const Slide9Adoption: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) => {
   // The annotation is what #201 added, and the asymmetry is worth knowing:
-  // `minimal_seed_app`'s identical pattern does NOT error because its fallback
-  // is an ARRAY LITERAL, which the conditional widens to the other branch's
-  // type. `Array.from`'s callback is inferred on its own, so the union kept a
-  // constituent with no `initials` and the read below failed to compile.
+  // `minimal_seed.tsx:992`'s identical pattern (`partner_logos`, same optional
+  // `initials`) does NOT error because its fallback is an ARRAY LITERAL, which
+  // the conditional widens to the other branch's type. `Array.from`'s callback
+  // is inferred on its own, so the union kept a constituent with no `initials`
+  // and the read below failed to compile. (#201 cited `minimal_seed_app.tsx`
+  // for this; #206 deleted that fork, and the live template makes the same
+  // point.)
   // Nothing rendered wrong — `l.initials || safeUpper(l.name)` already falls
   // back — so this is a type repair, not the output bug #201 predicted.
   const logos: NonNullable<SeriesAData['customer_logos']> = data.customer_logos?.length
