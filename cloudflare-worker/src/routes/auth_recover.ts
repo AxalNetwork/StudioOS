@@ -332,6 +332,7 @@ recover.post('/start', async (c) => {
     return c.json({ error: 'Too many requests' }, 429);
   }
 
+  const smsAvailable = await isGcipConfigured(c.env);
   const shape = {
     backup_code: false,
     passkey: false,
@@ -340,7 +341,7 @@ recover.post('/start', async (c) => {
     trusted_contact: false,
     kyc_reverify: false,         // exposed only when vendor wired
     admin_manual: true,          // always available
-    sms_available: isGcipConfigured(c.env),
+    sms_available: smsAvailable,
   };
 
   const user = await findUserByEmail(c.env, email);
@@ -365,7 +366,7 @@ recover.post('/start', async (c) => {
     ).bind(user.id).first();
     const trustedContact = Number(tc?.n || 0) >= 2;
     shape.backup_code = hasCodes && totp;
-    shape.sms = sms_ && isGcipConfigured(c.env);
+    shape.sms = sms_ && smsAvailable;
     shape.trusted_contact = trustedContact;
   } catch (e) { console.error('[recover] /start scan failed', e); }
   return c.json(shape);
@@ -445,7 +446,7 @@ recover.post('/backup-code', async (c) => {
 // ─────────────────────────────────────────────── Layer 2c — SMS
 
 recover.post('/sms/start', async (c) => {
-  if (!isGcipConfigured(c.env)) return c.json({ error: 'sms_unavailable' }, 503);
+  if (!(await isGcipConfigured(c.env))) return c.json({ error: 'sms_unavailable' }, 503);
   if (!(await rate(c.env, `recover-sms-ip:${clientIp(c)}`, 10, 60))) {
     return c.json({ error: 'Too many requests' }, 429);
   }
@@ -491,7 +492,7 @@ recover.post('/sms/start', async (c) => {
 });
 
 recover.post('/sms/verify', async (c) => {
-  if (!isGcipConfigured(c.env)) return c.json({ error: 'sms_unavailable' }, 503);
+  if (!(await isGcipConfigured(c.env))) return c.json({ error: 'sms_unavailable' }, 503);
   const body = await readJson(c);
   const email = String(body?.email || '').toLowerCase().trim();
   const sessionInfo = String(body?.session_info || '');
