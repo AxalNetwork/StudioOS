@@ -27,8 +27,12 @@ import { WorkerEntrypoint } from 'cloudflare:workers';
 import type { Env } from '../types';
 import {
   branchHealth, branchOverview, branchSearchAccounts, applyLicenceCopy,
+  branchRevenueSummary, applyPromoCeiling,
 } from './branchOps';
-import { recordEscalation, licenceForBranch, type EscalationInput } from './hqOps';
+import {
+  recordEscalation, licenceForBranch, reportUsage, promoCeilingForBranch,
+  type EscalationInput, type UsageFigure,
+} from './hqOps';
 
 /** Exported by a branch Worker; called by HQ over `BRANCH_<CODE>`. */
 export class HqEntrypoint extends WorkerEntrypoint<Env> {
@@ -39,6 +43,12 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
   searchAccounts(q: string, limit?: number) { return branchSearchAccounts(this.env, q, limit); }
 
   applyLicence(record: Record<string, unknown>) { return applyLicenceCopy(this.env, record); }
+
+  revenueSummary(period: string) { return branchRevenueSummary(this.env, period); }
+
+  applyPromoCeiling(c: { period: string; ceiling_cents: number; currency: string; pushed_at: string }) {
+    return applyPromoCeiling(this.env, c);
+  }
 }
 
 /** Exported by HQ; called by a branch over its `HQ` binding. */
@@ -48,4 +58,13 @@ export class BranchEntrypoint extends WorkerEntrypoint<Env> {
   }
 
   licence(callerCode: string) { return licenceForBranch(this.env, callerCode); }
+
+  // MONEY-ADJACENT, so it carries the branch's own secret as well as its
+  // code (D.7). See `authenticateBranch` in hqOps.ts for why a code alone is
+  // attribution and not authentication.
+  reportUsage(callerCode: string, secret: string, period: string, figures: UsageFigure[]) {
+    return reportUsage(this.env, callerCode, secret, period, figures);
+  }
+
+  promoCeiling(callerCode: string) { return promoCeilingForBranch(this.env, callerCode); }
 }

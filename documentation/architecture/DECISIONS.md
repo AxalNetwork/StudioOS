@@ -8022,3 +8022,152 @@ need the Cloudflare versions API rather than the registry.
 the library rather than from the request body, which is exactly the archived-
 version hole the route's comment claims to close, so the assertion was added
 rather than the comment softened.
+
+---
+
+## D111 — A statement is a claim somebody can be held to, and the honest half of it is what nobody could report (2026-09-15, #219)
+
+H5 drew five zones over two stores. The two with nothing behind them were
+**statements** — what each subsidiary owes HQ this quarter — and the **promo
+budget**, which the product had never had. Both said so on screen in the
+server's own words, which was the right answer while it was true. This is the
+work that makes it untrue, and most of the decisions below are about the
+figures that are *still* missing after it.
+
+**A statement is HQ's claim, not a reconciliation.** `subsidiary_statements`
+(**migration 260**) holds one row per licence per period: the gross a branch
+reported, the revenue share the licence carried when the statement was drawn,
+and the owed figure computed from the two. `paid_cents` and `disputed_cents` are
+**entered by an HQ operator** with a note and a user id, and nothing here talks
+to Stripe. Making *paid* automatic needs HQ to be a Stripe Connect platform with
+each branch a connected account (D.8), which is real work and is not this.
+
+**Owed is computed and stored, which is the opposite of the SLA band (D108) and
+for the opposite reason.** A band is a view of a date and must stay current; an
+owed figure is a **claim**, agreed against a share that can be re-termed next
+quarter. Recomputing it later from today's terms would silently restate a
+statement somebody has already paid against — the same failure D110's stored
+contract body exists to prevent. Both the inputs and the answer are kept: a row
+holding only the answer could not explain itself, and one holding only the
+inputs would restate itself.
+
+**Two tables, because they have different authors and different trust.**
+`subsidiary_usage_reports` is what a **branch said about itself**, arriving over
+the RPC surface with its own `reported_at`; `subsidiary_statements` is HQ's
+ledger row. Folding them together would make "the branch says it billed
+€40,000" and "HQ has decided it owes €14,000" the same fact with the same
+authority, and the whole point of a statement is that the second is a decision
+someone at HQ can be held to. A re-report **replaces** its (licence, period,
+stream) row, because a branch correcting itself is a correction and not a second
+quarter's trading.
+
+### The finding: a branch cannot total its own revenue, and that had to be read rather than assumed
+
+Before writing `revenueSummary` the branch-side stores were read. All three
+answers were "cannot measure", and each for a different reason:
+
+| stream | why |
+| --- | --- |
+| subscriptions | `account_subscriptions` carries a plan, a status, a period end and Stripe ids and **no amount**. The charges are in the Stripe API, read one customer at a time. There is no local charge ledger to total a quarter from — on a branch any more than at HQ, which is the same finding `admin_revenue.ts` already records for the platform. |
+| licence fees | A subsidiary charges no onward licence fee in the product. The annual fee flows the other way. |
+| token margin | `ai_usage_logs.est_cost_usd` is a **cost** and is real; what tokens were **billed** at is stored nowhere, so a margin cannot be derived. |
+
+`engagement_invoices` carries a `total_cents` and is deliberately **not** read:
+it is a partner billing a founder, not the branch billing anyone, and summing it
+would report other people's trade as the subsidiary's.
+
+So the shape of a statement follows from the data rather than from the canvas.
+The cost is reported as `token_margin`'s **`estimate_basis`** and never as its
+gross — that is the one shape that gives HQ the number it does have without
+letting a statement add a cost up as revenue. **A stream nobody could report is
+not zero**, it is counted: `unreported_streams` travels with the row, `complete`
+is derived from it, and every surface showing the owed figure shows that it is a
+**floor rather than a total**. A draw that treated those streams as 0 would not
+produce a smaller truth, it would produce a false one.
+
+**Money rules, held by the same guard the ledger uses.** Integer cents, integer
+basis points, rounded **once** at the end — 3500 bps of 1,234,567 is 432,098.45
+and a floor would under-bill every statement shaped like that, forever, in one
+direction. Nothing is summed across currencies: a stream reported in a currency
+the licence is not denominated in is **reported as unusable rather than
+converted**, and the ledger's totals are keyed by currency so a page cannot
+reduce them to one number without deleting the key.
+
+**A re-draw refuses past `draft`.** A drawn statement nobody has sent is a
+working figure; once `issued`, somebody has seen it, and re-running the draw
+under re-termed terms would restate what a subsidiary was told it owed. Void it
+and draw a new one. A licence with **no agreed share refuses outright** rather
+than drawing at 0% — that would file a statement for nothing as settled.
+
+### Money-adjacent RPC carries a secret, and a missing hash refuses
+
+A service binding cannot identify its caller (D.7), so a branch code is
+**attribution, not authentication**. For `escalate` (D108) the worst case is a
+mislabelled queue item. For `reportUsage` it is the figure a statement is drawn
+from, so the call carries a per-deployment secret verified against
+`licence_deployments.rpc_secret_hash`; HQ stores the **SHA-256**, so reading the
+table cannot impersonate a branch.
+
+**A deployment with no hash on file refuses**, and this default is the point: a
+NULL meaning "no check configured, allow" would remove the guard from exactly
+the deployments nobody has audited. That was not hypothetical — **a real gap
+this PR closed**: `branch-provision.yml` generated `RPC_SECRET_SHA256`, used it
+once to set the Worker secret, and never wrote it to HQ, so every branch would
+have had a NULL hash and every real `reportUsage` would have been refused. The
+workflow now records it, charset-checking both the digest and the branch code
+before either reaches a SQL string.
+
+One deliberate asymmetry, because it reads like an inconsistency and is not:
+`authenticateBranch` **lower-cases** the caller's code, while the D110 deploy
+route **refuses** a code that is not already lower-case. There the string is a
+name being chosen and accepting `FR` would create a branch whose code is not
+what the operator typed; here it is an identifier being presented, and `FR`
+resolves to `fr` and must still present `fr`'s own secret — so the normalisation
+reaches no branch the caller could not already reach.
+
+**A ceiling, not a budget.** `licence_promo_ceilings` is what HQ allocates per
+licence per period and pushes to the branch; `issued_cents` is what the **branch
+reports** having issued against it, and it is **nullable on purpose** — "the
+branch has issued nothing" and "the branch has not told us" are different
+statements, and a zero would report the whole ceiling as still available. HQ
+never computes it and never echoes it back on the pull, because HQ's copy is
+stale by construction. The push reports whether it **landed** as its own field
+rather than as the success of the write: the ceiling is stored either way, and a
+502 for an unreachable branch would make an operator re-enter a figure that is
+already saved.
+
+### Three defects the tests found in this PR's own code
+
+1. **`subsidiary_usage_reports.gross_cents` was `NOT NULL DEFAULT 0`** in the
+   first draft of migration 260 — in the same file whose header says an
+   unmeasurable stream must be null. The first report threw, and the only way to
+   make it succeed would have been to write the 0 the rest of the design exists
+   to prevent. The column is nullable.
+2. **`branchRevenueSummary` validated its period inside a `try`** whose `catch`
+   turns any throw into "the AI usage log could not be read". A nonsense period
+   therefore produced a plausible summary with a false reason attached, and HQ
+   would have drawn a statement over a window nobody meant. The bounds are
+   computed before the try.
+3. **The `PATCH` handler built its `SET` clause by joining an array of column
+   fragments**, and `check-sql-prepare` refused it. Every fragment was a literal
+   written above it, but "provably safe by reading the function" stops being
+   true the first time somebody pushes a request-derived field name in, and that
+   is a change nobody would think to re-review. It is three literal statements
+   now, fully bound, applied as one `batch` — and **nothing is prepared until
+   every field validates**, because three statements are three chances to write
+   half a change.
+
+**What is still absent on H5, and says so:** the token margin and the
+per-subsidiary token P&L (U1 — no account names its licence, and no price is
+recorded to subtract a cost from), subscription revenue as a platform figure,
+and a branch's issued promo spend until that branch reports it. The two zones
+that used to carry a stated refusal for a store that did not exist now carry
+figures; the rail's unavailable list lost both lines and gained the narrower one
+that is still true — a promo code names no subsidiary, so what a branch issued
+is a figure the branch reports.
+
+**Verification.** `npm run test:drift` exit 0. New: `hq_statements.test.ts` (23),
+`branch_usage_report.test.ts` (20); `hq_revenue_h5.test.mjs` re-pointed (11) and
+`admin_revenue.test.ts` updated, its retired-refusal assertions replaced rather
+than deleted. **34 mutations applied, 34 caught.** The first run of the new RPC
+suite failed four ways and three of them were real code defects, listed above.

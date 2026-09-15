@@ -145,12 +145,20 @@ r.get('/summary', async (c) => {
       available: true,
       active_codes: Number(row?.codes) || 0,
       redemptions: Number(row?.redemptions) || 0,
+      // A CEILING EXISTS NOW; A BUDGET COMPUTED FROM THIS TABLE STILL DOES
+      // NOT, and they are different claims. HQ sets a spend ceiling per
+      // licence per period (D111) and reads it from its own endpoint. What
+      // `promo_codes` cannot say is what any given branch has issued against
+      // one: a code carries a discount and an optional redemption cap and
+      // names no subsidiary, so the issued figure is one the BRANCH reports,
+      // never one this row derives.
       budget_available: false,
       budget_reason:
-        'There is no promotional budget in the product. `promo_codes` carries a discount and an '
-        + 'optional redemption cap per code; nothing allocates a spend ceiling, and nothing '
-        + 'attributes a code to a subsidiary, so neither "budget left" nor a per-subsidiary '
-        + 'split has a source.',
+        'A promotional ceiling is set per licence at HQ and read from /api/admin/promo-ceilings. '
+        + 'It is not derived here and could not be: `promo_codes` carries a discount and an '
+        + 'optional redemption cap per code and attributes none of them to a subsidiary, so what '
+        + 'a branch has issued against its ceiling is a figure the branch reports.',
+      ceilings_endpoint: '/api/admin/promo-ceilings',
     };
   } catch {
     promos = { available: false, reason: 'The promotion codes table could not be read.' };
@@ -171,11 +179,13 @@ r.get('/summary', async (c) => {
       + 'from the Stripe API one customer at a time. A quarter figure would mean walking every '
       + 'customer in Stripe on page load.',
 
-    // Statements between HQ and each subsidiary.
-    statements_available: false,
-    statements_reason:
-      'No subsidiary statement store exists. `engagement_invoices` bills an engagement, not a '
-      + 'licensee, so what each subsidiary owes HQ this quarter has never been recorded.',
+    // Statements between HQ and each subsidiary. THE STORE EXISTS NOW
+    // (migration 260, D111) and is deliberately NOT fetched here, for the
+    // reason disputes are not: this endpoint's whole contract is that it
+    // reads and stores nothing, and a ledger with writes does not belong
+    // inside it. It is also its own read so that a slow or failed statements
+    // query costs that zone and not the four that read D1 perfectly well.
+    statements_endpoint: '/api/admin/statements',
 
     // Open disputes are real, and deliberately not fetched here.
     disputes_endpoint: '/api/admin/billing/disputes',

@@ -279,6 +279,25 @@ jobs:
             done <<< "${BRANCH_SECRET_BUNDLE}"
           fi
 
+      # ── HQ's half of the RPC secret ──────────────────────────────────────
+      # THE HASH WAS COMPUTED AND NEVER STORED. Until D111 this workflow
+      # generated RPC_SECRET, put it on the branch, exported its SHA-256 to
+      # $GITHUB_ENV — and stopped. `licence_deployments.rpc_secret_hash` stayed
+      # NULL, so HQ had nothing to verify a money-adjacent call against and
+      # `reportUsage` would have refused every real branch.
+      #
+      # `--command` takes no bindings, so the two values are interpolated and
+      # both are charset-checked first: the code against the same regex every
+      # other step uses, the digest against 64 hex characters. Neither can
+      # carry a quote, which is what makes the literal safe rather than lucky.
+      - name: Record the RPC secret hash at HQ
+        run: |
+          set -o pipefail
+          [[ "$BRANCH" =~ ^[a-z][a-z0-9-]{1,15}$ ]] || { echo "::error::bad branch code"; exit 1; }
+          [[ "$RPC_SECRET_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::RPC_SECRET_SHA256 is not a sha256 digest"; exit 1; }
+          npx --yes wrangler@4.131.0 d1 execute studioos-db --config wrangler.toml --remote \
+            --command "UPDATE licence_deployments SET rpc_secret_hash = '${RPC_SECRET_SHA256}', updated_at = datetime('now') WHERE code = '${BRANCH}'"
+
       # ── the one account that exists on a new branch ──────────────────────
       # The API refuses to mint an admin ("the only way to grant admin is via
       # direct SQL", admin.ts), and no migration seeds a user, so the principal
