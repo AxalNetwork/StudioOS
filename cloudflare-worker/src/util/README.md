@@ -9,6 +9,7 @@ belongs in `../services/`.
 | `schemaBootstrap.ts` | `runSchemaBootstrap` — runs a self-healing schema bootstrap against a `users` table that is at D1's 100-column limit. Skips an `ADD COLUMN` whose column already exists (on a full table SQLite reports `too many columns` for those too, which is what 500'd `/api/introductions/*`), and **still throws, naming the side-table remedy, when a column is genuinely missing**. |
 | `pagination.ts` | Limit/offset clamping. |
 | `url.ts` | URL parsing and safety. |
+| `branch.ts` | `branchOf`, `authCookieName`, `csrfCookieName` — which subsidiary this Worker serves, read from `BRANCH_CODE`, and the per-branch cookie names that keep a branch session on its host (D104). A malformed code **throws** rather than reading as HQ. |
 | `zip.ts` | Zip assembly for exports. |
 | `hashEmail.ts` | Email hashing for privacy-preserving lookups. |
 | `stripeError.ts` | Parses Stripe errors into a status/code/type shape. |
@@ -20,4 +21,5 @@ belongs in `../services/`.
 | `reembedSweep.ts` | Re-embedding sweep for vector search. |
 | `usersRoleRebuild.ts` | Role recomputation. |
 | `webauthn.ts` | Passkey primitives. |
+| `deadline.ts` | `withDeadline` — an await that cannot hang for ever, for the remote calls that take no `AbortSignal` (KV, D1). Throws `DeadlineExceeded` so a `catch` that already implements the failure policy covers a stall too. A `fetch` should use `AbortSignal.timeout` directly instead. |
 | `thrownResponse.ts` | `withThrownResponses` — lets a gate that refuses by **throwing** a `Response` produce that Response. Hono re-throws non-`Error` values past `app.onError`, so without this the nine throwing gates (tier upsells, the fund 404) escaped to the runtime as worker exceptions. |

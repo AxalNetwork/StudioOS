@@ -13,12 +13,13 @@ import {
 } from '../services/matchingVectors';
 import { ensureTier, userMeetsTier } from '../middleware/requireTier';
 import { computeCounterpartyMatches } from '../services/bestFit';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const matches = new Hono<{ Bindings: Env }>();
 
-let migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env) {
-  if (migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS user_preferences (
       user_id INTEGER PRIMARY KEY,
@@ -48,7 +49,7 @@ async function ensureSchema(env: Env) {
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_match_scores_unique ON match_scores(user_id, score_type, COALESCE(deal_id, 0), COALESCE(target_user_id, 0))`,
   ];
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
-  migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 // --------- LLM helper (Cloudflare Workers AI; falls back to rule-based on failure) ---------

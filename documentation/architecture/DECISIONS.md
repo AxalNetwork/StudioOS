@@ -2225,6 +2225,13 @@ still has no exceptions to reason about.
 
 ### D46. "AI fills the blanks" ships with the branch D17 required, off by default, and names two things rather than the canvas's three
 
+> **Two rules below are superseded by D82.** "Two capabilities, not three" counted
+> capabilities on one surface, and there are three surfaces now; and match-back is
+> no longer the only honesty mechanism — a `sourced` fill keeps a citation instead,
+> because a market size has nothing in the project to match against. Everything
+> else here still holds, including the invariant that `apply` calls the function
+> the manual form calls, which D82 generalises rather than replaces.
+
 **D17 refused this toggle** because *"no page branches on an assist mode.
 Turning the switch off would change nothing any of the six surfaces does, so
 shipping it puts a control on screen that cannot affect the product"* — and
@@ -3834,3 +3841,3792 @@ instead: "no support at all" is an anti-join between the ledger and
 `portfolio_positions` — two stored sets compared — never the ledger's silence
 read as an answer, and never inferred from an update, an introduction row, or
 book membership.
+
+## D71 — The renewal rate decides the engagement store's shape: two verbs own the three columns it reads
+
+Migration 238 adds `advisor_engagements` for Practice · Engagements. Unlike the
+five-of-six false `unbuilt` reasons the investor series turned up (D70), **all
+four claims on this zone were true**, and the schema check is why:
+
+| Table read | Why it cannot answer |
+| --- | --- |
+| `engagements` | the **partner** licence, and unusable rather than merely wrong: `need_id` and `quote_id` are NOT NULL and `quote_id` is **UNIQUE**, so an advisory relationship needs a fabricated need *and* a fabricated quote that cannot even be reused twice; `price REAL NOT NULL` contradicts the artboard's own equity client; `partner_id`/`founder_id`/`project_id` are all NOT NULL and there is no advisor column. It is also defined twice, which drags in `check-migration-column-shapes.mjs`. |
+| `partner_retainers` (208) | the right **shape**, the wrong owner — keyed `engagement_id REFERENCES engagements(id)`, unreachable from an advisor. Its `shape`/`renews_at`/`ended_at` are copied rather than reinvented. |
+| `partner_engagement_health` (232) | `scope_state`/`scope_note`, also keyed on `engagements(id)`, and carrying no renewal decision or cycle count even for partners. |
+| `advisor_client_grants` (218) | has `status` and `expires_at` and looks reusable. It is **data-room access**. Reading `expires_at` as a contract term is exactly the mislabel D70's table warns about. |
+| `advisor_state` (048) | the name is a trap: `(user_id, question_id, last_asked_at, answer_count)`, the AI advisor's question cadence. |
+
+**A renewal decision and a cycle count exist nowhere in the product** — not even
+on the partner side. Those two are genuinely new rather than ported, and
+everything the artboard calls "Only here · the number that judges a practice"
+is computed from them.
+
+**That is why the write surface is four verbs and not one PATCH.** `lane`,
+`cycles` and `outcome` are the rate's whole input. A merge-PATCH over all three
+would let a caller assert `outcome = 'renewed'` with no cycle behind it, or
+clear a cycle with no decision, and the instrument would report whatever the
+last writer typed. So the descriptive columns merge freely through
+`PATCH /me/engagements/:id`, and those three move only through
+`POST …/advance` (a lane) and `POST …/renewal` (a decision).
+
+**Signed → ended is refused on `/advance`, with a 409 naming `/renewal`.**
+Ending a signed contract *is* the renewal decision that did not go the advisor's
+way; routing it through the lane verb would drop it out of the denominator —
+the failure the canvas names outright: *"a rate that excludes its failures is
+not a rate."* Ending an **unsigned** row is allowed there and records no
+outcome at all, because an abandoned draft never had a renewal to lose. That
+asymmetry is the store's central rule, and
+`cloudflare-worker/test/advisor_engagements_scope.test.ts` drives both halves
+against real SQLite.
+
+**Three consequences of reading the canvas fixture rather than the artboard
+markup**, each of which changed the schema after the first draft:
+
+- **`cycles` counts terms RUN, including the one in progress.** The fixture is
+  explicit — "Fifth cycle" at `cycles:5`, "First cycle ending" at `cycles:1` —
+  so signing sets 1 and each renewal adds one. The renewal history lists every
+  row with `cycles > 0`, which is every engagement ever signed; an unsent draft
+  is the only thing 0 leaves out. An earlier draft of the migration had this
+  backwards, counting renewals *behind* a row.
+- **`proposed_at` exists because a proposal card reads "Sent Aug 21".** Folding
+  that into `started_at` would file the day terms went out as the day the work
+  began. Three stamps, one per transition, plus `term_ends_at` — which serves
+  both "Renews" and "Ends", because which one it means is `lane`'s job.
+- **There is no `end_reason`.** The first draft had one, reasoning that "they
+  hired in-house" and "wrong fit" are different kinds of ending. The fixture
+  settles it the other way: both arrive as one sentence, the artboard draws
+  exactly one Note column, and a second field would have had no reader.
+
+**`outcome` is NULL until a row is signed, which diverges from the fixture on
+purpose.** That fixture stamps `outcome:'Active'` on an unsent draft and its own
+comment calls the field "the placeholder outcome field", routing the Active tile
+around it. A stored value the artboard has to work around is the wrong default;
+here an unsent draft cannot reach the rate's denominator at all. The Active
+tile therefore counts **lanes**, not outcomes — a renewed contract is the most
+active thing on the board and its outcome is `'renewed'`, so an outcome filter
+would report 2 of the canvas's 5.
+
+**`amount_cents` is nullable and has its reader on another artboard.** PR5 ·
+Earnings carries a per-client `retainer` figure beside a session count
+(Meridian: 13500 over 6 sessions), and that cannot come from
+`advisor_bookings.amount_cents`, which is the per-session column already
+occupying the other half of the same row. `shape` is load-bearing across the
+same seam: Earnings excludes the equity client **by design**, because a cash
+gross cannot span a client who bills no cash, and without a stored shape it
+would have to guess which to leave out. NULL means nobody recorded an amount,
+never zero (D56/D68) — and `renewal_rate` is NULL before the first decision,
+because a practice that has not reached a renewal has not failed to renew.
+
+**No lazy bootstrap, and that is the rule rather than an omission.**
+`GOTCHAS.md` ties `services/advisorStoresSchema.ts` to **ALTER** migrations:
+they are flagged non-idempotent and *recorded-without-running* by a `--baseline`
+adoption. 238 is pure `CREATE TABLE IF NOT EXISTS` + `CREATE INDEX IF NOT
+EXISTS`, so the runner applies it for real; mirroring it into the bootstrap
+would also break `advisor_stores_bootstrap.test.ts`, which holds the healed
+schema equal to migrations 201–206 exactly. Migration 237 is the precedent —
+same series, same shape, no bootstrap.
+
+**The board advances by control, not by drag.** The canvas labels it "By
+contract state · drag to advance". A per-card control is keyboard-reachable
+without a drag-and-drop implementation to make accessible, and the state change
+it writes is identical. Recorded here rather than passing silently.
+
+## D72 — A receipt the sender can set is not a receipt: the deliverables store is split across two licences on purpose
+
+Migration 239 adds `advisor_deliverables` and `advisor_deliverable_versions` for
+Practice · Delivery, whose blurb is the whole requirement — *"Every work
+product, every version, and whether anyone opened it."* Three of its four tiles
+are open receipts (Unopened, Median to open, Never opened), and that is what
+makes this store unusual: **the thing it most needs to record is not the
+advisor's to say.**
+
+**All four "no store exists" claims held**, unlike the six-zone investor audit
+where five were false (D70). Every candidate was read:
+
+| Table | Why it cannot answer |
+| --- | --- |
+| `advisor_client_document_shares` (218) | the right two nouns, the wrong direction. `shared_by_user_id` is the FOUNDER, and the row's document must satisfy `owner_user_id IN (…founder…)` — it can only record a founder offering their own file to a named advisor. |
+| `advisor_client_access_log` (218) | not merely pointed the wrong way — structurally incapable. `advisor_user_id` is its **only** actor column, and its own header calls it "the founder's own record of an advisor's reading". There is no slot in which a client open could be written. |
+| `research_documents` (213) | fourteen columns, never once ALTERed. Its `kind` labels subject matter rather than naming a client, and `indexed_at` is the Vectorize stamp. 213's header pre-declares the boundary. |
+| `engagement_deliverables` (208) | **exactly** the right columns and the wrong licence — single FK to `engagements(id)`, which D71 already documents as unreachable from an advisor. Its column design is copied; its ownership is not. |
+| `deliverable_snapshots` / `company_week_status` | the name is the trap. Keyed `(user_id, cohort_cycle_id, week_number, deliverable_key)` — the founder's cohort week homework, no advisor column. |
+
+All twenty `advisor_*` tables were then swept three ways — a column grep, an
+ALTER grep, and a whole-tree column inventory. **Not one** carries a version, a
+sent stamp, an opened stamp, or a work product the advisor owns.
+
+**THE SPLIT. Migration 208's header states the rule this store inherits:**
+*"`opened_at` and `signed_off_at` are the CLIENT's to set. Only the founder side
+can truthfully say a thing was read, so a partner-side write to either would be
+the firm reporting a metric about itself."* So no ADVISOR route writes either
+column; the founder side does. **This paragraph named the wrong file for it —
+`routes/advisor_grants.ts` — and D73 corrects that**: no grant is involved, the
+relationship carrying a deliverable is the engagement, so the client's two routes
+live beside the founder-facing half of `routes/advisors.ts`. The test asserts this
+**against the SQL** — every
+`UPDATE advisor_deliverable_versions SET …` clause and every `INSERT INTO
+advisor_deliverable_versions (…)` column list — rather than against behaviour,
+because the failure mode is someone adding a convenient `SET opened_at = ?`
+years from now, and because the module's own comments and DTO name the column
+constantly, so a blanket ban on the string would fail against correct code.
+
+**SENDING REQUIRES A CLIENT WITH AN ACCOUNT, and this is the rule that makes the
+receipts trustworthy rather than merely sincere.** It falls straight out of D71
+keeping `advisor_engagements.founder_user_id` nullable so a contract can name a
+company that has not joined. A version sent to a client who cannot sign in can
+never be opened by anyone, so it would sit in `unopened` forever, inflate
+`never_opened`, and quietly bias `median_to_open_hours` toward whichever clients
+happen to be linked. Creating and versioning stay open to any client — a draft
+needs no counterparty — and only the send demands one, with a 409 that names the
+consequence and not just the rule. `addressable` is reported beside `unopened`
+for the one case the send rule cannot prevent: an engagement unlinked *after* a
+send, which leaves a row that went out and can never be nudged.
+
+**Two tables, because a work product has many versions**, which the artboard
+proves twice: each list row carries a latest version *and* a count ("v4", "4
+versions"), and the trail card lists four versions of one deliverable with a
+different note against each. One table grouped by title would break on a rename.
+
+**`version` is an INTEGER here and `TEXT` in 208** — the one place this
+deliberately diverges from the shape it copies. A trail has to be ordered and
+`'v10'` sorts before `'v2'` as text. The artboard's own "v2 draft" is a label
+rather than an ordinal, so it gets its own column and the number keeps the order.
+`UNIQUE (deliverable_id, version)` turns a lost race into an error instead of two
+rows both calling themselves v3; the route reads `MAX(version) + 1`, so that
+constraint is the only place the protection actually lives, and the test asserts
+it directly against the migration-built schema rather than trying to stage a race.
+
+**Every stamp lives on the version, not the work product.** The artboard's trail
+marks only v4 "Aug 19 · sent", and its Verwood row reports "Not opened in 4 days"
+against one version. Sending and reading happen to a version; a work product is
+the thing they happen to.
+
+**There is no `state` column, and that absence is load-bearing.** Not started /
+Sent / Opened is entirely determined by which stamps exist, so storing it would
+be a second source of truth that drifts the first time a write half-fails —
+precisely the defect that disqualified `investor_introductions` from being read
+as a ledger (D70): a status column written once by its only INSERT and updated
+by nothing.
+
+**`Median to open` is a real measurement here**, unlike Opportunities' median
+(D68's case), where no `decided_at` existed and the tile correctly reported
+nothing. Both stamps are real, so the figure is computed — **on the FIRST open of
+each work product**, because a second version read a month later says nothing
+about how fast the work reached its reader and would drift the tile upward every
+time a client revisits something old. A reversed pair (`opened_at < sent_at`,
+which clock skew and a bad backfill both produce) contributes no duration at all:
+a tile reading "−3 h to open" is worse than one reading nothing. And null before
+the first open is never 0 — nothing opened yet is not "opened instantly".
+
+**`Never opened` takes no arbitrary threshold.** It counts sent versions whose
+work product has never been opened at all, and the note names the oldest — which
+is what the canvas's own note does ("Verwood board brief, Aug 22"). A day count
+would have been a rule nobody agreed to.
+
+**The AI band is not built, and its premise is false at the first clause.** The
+artboard draws a consent-gated batch summariser whose foot note says the gate
+working *is* the feature. Nothing in this product records that an advisory
+session was recorded, captures consent to record one, or holds a transcript of
+one: `advisor_bookings` has thirteen columns and one ALTER ever (205, money).
+The two stores with the full recording→transcript shape belong to other people —
+`reference_checks` is investor deal-diligence and has been hardcoded 501 since
+T13, and `discovery_interviews` is the founder's own customer-discovery work,
+walled off by `canWrite` (owner-or-admin), by the absence of any booking→project
+join, and by an R2 prefix check. `advisor_proof_consents` is attestation consent
+over a claim about past work, with no audio, no transcript and no booking link;
+reading it as recording consent would be inventing the recording. Building the
+band needs five pieces — columns, consent capture, an audio MIME allowlist and
+R2 prefix, a transcribe route, a summarise route — and the schema supplies zero.
+The zone says that rather than drawing a dead control.
+
+## D73 — The receipt is the client's to give, and the link that makes one possible is chosen rather than typed
+
+D72 built the deliverables store and refused every advisor-side write to
+`opened_at`. This is the other half: the two routes that let the founder record
+having read something, and the one finding that had to be fixed first.
+
+**THE CHAIN WAS DEAD, AND ONE GREP PROVED IT.** D72's send rule refuses a version
+whose engagement has no linked client account. Nothing in the product set that
+link:
+
+| Link in the chain | State before this decision |
+| --- | --- |
+| `POST /me/deliverables/:id/versions/:v/send` | 409 unless `advisor_engagements.founder_user_id` joins to a real account |
+| writers of `founder_user_id` | `POST /me/engagements` and `PATCH /me/engagements/:id`, both through `engagementClientUser` |
+| UI that sets it | **none** — one mention in the whole SPA, `DeliveryZone.jsx` rendering the read-only label "(no account — cannot be sent)" |
+
+So every engagement in production carried NULL, every send 409'd, nothing could
+ever be opened, and a founder surface shipped on its own would have been
+structurally empty for ever. **A rule with no way to satisfy it is not a rule, it
+is a wall** — and PR3a built one without noticing, which is why this series keeps
+re-checking its own claims and not only the schema's.
+
+**THE RELATIONSHIP IS THE PERMISSION.** `engagementClientUser` used to accept any
+existing `users.id`, which was wrong in both directions at once: an advisor has no
+way to learn another account's numeric id, so the column was unusable by a human;
+and an advisor who guessed one could attach a stranger to their own contract and
+then open a message thread with them through Delivery's nudge. It now requires one
+of two facts the product already records — the account has **booked** this advisor
+(`advisor_bookings`), or it holds an **active grant** to them (`advisor_client_grants`,
+migration 218). Neither can be manufactured by the advisor alone. An unrelated
+account resolves to `null`, exactly as a dangling id always did, so the engagement
+keeps its client NAME and simply stays unsendable: one rule, one outcome, and no
+new error path. The control on Engagements offers precisely that set, following
+`DocumentShares`' own reasoning — *"offering an address the API would refuse is
+how a control teaches the wrong model."*
+
+**THE TWO ROUTES ARE IN `routes/advisors.ts`, NOT `routes/advisor_grants.ts`, and
+D72's forward-looking sentence saying otherwise was wrong.** It read "the founder
+side does, through `routes/advisor_grants.ts`", written before the founder side
+existed. The schema settles it: **no grant is involved.** The relationship that
+carries a deliverable is the ENGAGEMENT, so a grant-scoped route would hide every
+work product from a founder who never opened a record — which is most of them.
+`advisors.ts` already holds the founder-facing half of this router (`/`, `/match`,
+`/:uid`, `/:uid/slots`, `/slots/:id/book`, `/bookings/:id/*`), so
+`GET /received/deliverables` and `POST /received/deliverables/:uid/open` join it
+there.
+
+**SENT VERSIONS ONLY, and that is a privacy rule rather than a filter.** A version
+with no `sent_at` is the advisor's work in progress; a client who could see it
+would be reading a draft that was never handed over, and a client who could *stamp*
+it would make `median_to_open_hours` measure an interval that never happened. A
+work product whose every version is unsent does not appear at all.
+
+**FIRST OPEN WINS, ENFORCED IN SQL.** The UPDATE carries `WHERE … AND opened_at IS
+NULL`, so the guarantee is a property of the statement rather than of the
+handler's control flow: a founder reloading cannot move the stamp and two
+concurrent opens cannot race. The second call is **not** a 409 — reading something
+twice is not an error — it returns the row with the original stamp. The receipt is
+therefore a first-read time, and the advisor's median measures the wait that
+actually happened.
+
+**404, NEVER 403**, for a version under someone else's engagement: the scope is a
+join, and comparing after the load is what makes another client's row
+indistinguishable from one that does not exist. The same join refuses the ADVISOR
+on this route, so the store has exactly one writer of `opened_at` and it is the
+person who read the thing.
+
+**The invariant test got stronger rather than looser.** It asserted "no route in
+`advisors.ts` writes `opened_at`"; it now splits the file at the client's handler
+and asserts that the advisor's half writes neither stamp, that the client's half
+has exactly one write, and that the write carries the `opened_at IS NULL` guard.
+
+**`signed_off_at` still has no writer, deliberately.** 208 names it alongside
+`opened_at` as the client's and 239 carries the column, but no artboard draws a
+sign-off and no page renders one — so a control would save a fact nothing reads.
+The founder's card says so rather than leaving the gap silent, and the test holds
+the column unwritten on both sides.
+
+## D74 — A remote call has three outcomes, not two: nothing in the auth path may await one without a deadline
+
+**2026-09-12. Sign-in stopped working, and the reason was that nothing had
+failed.** Two reports minutes apart: *"The server did not respond within 30s.
+Nothing was changed"* — the SPA's own message, from
+`frontend/src/lib/api.js::timeoutError`, because the worker never answered at all
+— and, separately, that **Continue with Google had disappeared from `/login`**
+while the card still read "Google, passkey, and authenticator codes are also
+available."
+
+Two reads of the production D1 bounded the problem before any code was touched:
+`magic_link_tokens` held four rows, newest **2026-08-03**, and the attempt wrote
+none — so the request never reached the INSERT that is the *first* thing
+`/magic/start` does after its gates. `users` was current to 2026-09-09, so D1 was
+reachable and writable. Every `cloudflare-worker-deploy` run was green. And
+`checkRateLimit` fails **closed**, which returns a 429 in milliseconds, not a
+thirty-second silence. What remained was the shape of the gates themselves.
+
+**A REMOTE CALL CAN SUCCEED, FAIL, OR NEVER ANSWER, and this codebase had
+carefully handled the first two everywhere.** `rateLimitMiddleware` catches a KV
+error and takes the bucket's declared policy — fail-open by default, 503 for the
+abuse-prone buckets. `checkRateLimit` catches and denies. `turnstile` returns
+`false`. `auth_google` falls back to the binding cookie. Every one of those
+branches was already written, already reviewed, already right — **and unreachable
+the entire time the call was pending**, because a stall throws nothing. The bug
+was not a missing error path. It was an unreachable one, and that is a category
+that no amount of care inside the `catch` can fix.
+
+**So every await on that path is now bounded**, and the bound is expressed in
+whichever way the call admits. `fetch` takes an `AbortSignal`, so it gets
+`AbortSignal.timeout(ms)` directly: fifteen of them, across `services/email.ts`
+(12), `services/email/gmail.ts` (2), `services/turnstile.ts`,
+`routes/auth_google.ts`'s token exchange and `middleware/cfAccess.ts`'s JWKS
+read. KV and D1 cannot be cancelled at all, so they get `util/deadline.ts` —
+`withDeadline(work, ms, label)`, a race that stops *waiting* without pretending
+to stop the work, swallowing the straggler's later rejection so it cannot surface
+as an unhandled rejection after the response has gone. It **throws**
+`DeadlineExceeded` rather than returning a sentinel, precisely so the `catch` that
+already implements the policy covers the stall too and there is no second branch
+to keep in step with the first.
+
+**A stall condemns the namespace for the whole request, not just one bucket.**
+Several buckets match a typical path — a specific one plus the global 1000/min
+burst — and a per-call deadline would otherwise be paid again for each, turning a
+2s stall into 6s on the one route where the budget is 30s and already shared with
+two more limiters and a schema bootstrap. So the matching buckets are resolved up
+front; on a `DeadlineExceeded` the request is decided from what the **remaining**
+matching buckets declare. Reading them all is what keeps the posture exact: a
+fail-open bucket early in the list cannot smuggle a request past a fail-closed one
+later in it.
+
+**`/magic/start` no longer makes sign-in wait on Gmail.** The token row is
+committed before the mail goes out, so the link is valid whether or not Google's
+API answers — and the 202 says only "a link is on its way", which is true the
+moment the row exists. Awaiting the send made *the availability of sign-in equal
+to the availability of Gmail*: two bounded fetches at ten seconds each, on top of
+the limiters and the bootstrap, is already past the thirty seconds the browser
+waits. The send moves to `c.executionCtx.waitUntil`, keeping its `catch`, because
+a failed send must still be logged.
+
+**`ensureAuthBlockersSchema` was a cheap bootstrap and an expensive stall.**
+Eleven sequential D1 statements sit in front of `/magic/start`; on a migrated
+database every one is a no-op that still costs a round trip, and the memo landed
+only on success — so a slow D1 made *every* request re-run all eleven and wait
+again. The failure compounded instead of degrading. It now shares one deadline and
+sets a 60s cooldown when it blows it. It is explicitly best-effort: a route that
+needs one of those tables still has its own `try`/`catch` around the statement
+that touches it, and that is what reports a genuinely missing table.
+
+**A KV OUTAGE IS NOT THE USER'S FAULT, AND MUST NOT BE REPORTED AS THOUGH IT
+WERE.** `checkRateLimit` returned a boolean, so a KV failure and a real limit hit
+were the same answer, and both reached the browser as *"Too many requests. Please
+wait a minute and try again."* — advice that would never come true, sending
+someone away to wait on a queue that was not the problem. It now returns
+`'allow' | 'deny' | 'unavailable'`; all nine call sites render the third as a
+**503** with `code: 'rate_limiter_unavailable'` saying the limiter is what failed,
+and `/magic/verify`, which answers with a redirect rather than JSON, bounces
+`?magic_error=limiter` with its own copy. The fail-closed posture from audit M1 is
+unchanged — the request is still refused — only the reason is now true.
+
+**The same rule holds on the client, and this is why the outage looked cosmetic.**
+`LoginPage` probes `/api/auth/google/start` on mount and rendered the button only
+if the probe resolved. The probe was hanging, so the button vanished — under a
+sentence that still promised Google. That is **D56/D68 in its user-facing form: a
+promise with no control under it**, and it is worse than a blank space, because a
+blank space makes someone look for another way in while a promise makes them look
+for a button that is not there. The same sentence also promised a passkey on every
+browser without WebAuthn, and the collapsed toggle named one too. Three changes:
+the probe is a **tri-state** (`'probing' | 'yes' | 'no'`), because a boolean
+initialised `false` cannot tell "not asked yet" from "the server said no" and both
+rendered as silence; the sentence is **derived** from the same conditions that
+render the controls, so anything named is offered and anything offered is named;
+and a refused probe leaves a **stated absence** where the button was, saying that
+the server did not confirm it, that it may be either unconfigured or unanswering,
+and which ways in still work.
+
+**The probe gets its own six-second deadline, and rendering is what found that.**
+Source assertions all passed while the browser showed, for the hanging case, a
+silently shorter list of options and no note at all — for the full thirty seconds
+of the module default. A probe whose only job is to decide what the page may
+*claim* must not be allowed to leave that claim pending, so `api.googleStartUrl`
+now forwards a `timeoutMs` and the probe passes a short one. The real click keeps
+the default: a person who chose Google should not inherit a probe's budget.
+
+**What this decision does NOT claim.** Converting a silence into a named error is
+not the same as proving the outage is gone. The stall was never reproduced against
+production — this sandbox has no egress — and the middleware remains the leading
+explanation rather than a confirmed one, on the strength of a falsifiable
+prediction: **`/api/auth/me` is exempt and kept answering; `/api/auth/magic/start`
+and `/api/auth/google/start` are not exempt and both failed.** Two curls and one
+`wrangler tail` settle it. Exempting those two paths would also have hidden the
+symptom, and that is the wrong fix — `/magic/start` carries its own stricter
+per-IP and per-email limiters and must keep them — so
+`cloudflare-worker/test/auth_path_bounded.test.mjs` pins them as **not** exempt,
+alongside its scan for a bare `fetch` or an unbounded KV await anywhere on the
+path, and live tests that run the middleware against a namespace whose promises
+never settle and require an answer inside the deadline, with the bucket's declared
+policy.
+
+## D75 — Money already moves through Axal; the advisory practice gets the model the wellbeing directory has had all along, recorded before it is charged
+
+**2026-09-12.** Practice PR5 asks for a page (D4, Earnings) that draws a
+platform cut, three payout-account states that gate charging, a payout history
+and a 1099 summary. The codebase appeared to forbid all four. Migration 205's
+header reads, in capitals, **"RECORD ONLY. NO MONEY MOVES THROUGH AXAL"**;
+`EarningsZone.jsx` shipped the sentence *"Axal … does not take a cut, and holds
+no money on your behalf"*; and `templates/legal/advisor_program_terms_v1.md` is
+marked **DORMANT** — *"the take-rate and payout sections below describe
+functionality the platform does not yet execute. Do not publish or send while
+payments remain off-platform."*
+
+**Reading the code rather than the comments changed the decision.** Money has
+moved through Axal since task #4. `services/wellbeing/bookings.ts` creates a
+Stripe **destination charge** with `application_fee_amount` and
+`transfer_data[destination]`, settling to an expert's connected account;
+`routes/wellbeing.ts` runs the full Connect **Express onboarding**
+(`/accounts`, `/account_links`) and an account-status refresh that writes
+`charges_enabled` / `payouts_enabled` back to `experts`; `expert_bookings`
+already stores `application_fee_cents` per line; and the platform's shipped
+default application fee is **15%** (`DEFAULT_APPLICATION_FEE_PCT`), overridable
+per expert and by `EXPERT_APPLICATION_FEE_PCT`.
+
+So 205's sentence was **true about its own column and false as a statement
+about the platform**, and it had been read as the latter. It stays true of
+`advisor_bookings.billing_state`, which nothing here turns into a transaction.
+
+### The decision
+
+1. **Build the money model as drawn**, over the advisory practice's own tables.
+   Migration 241 adds `platform_settings` (one typed platform number, seeded
+   `advisor_take_rate_bps = 1500`), `advisor_payout_accounts` (D4's three
+   states with the gate each implies), `advisor_payouts` (the audit trail), and
+   two columns on `advisor_bookings`: `platform_cut_cents` and `take_rate_bps`.
+2. **Beside `experts`, never inside it.** `experts` (052) is the WELLBEING
+   directory, matched by `services/wellbeing/match.ts`; writing an advisor
+   there would put an advisory practice in the wellbeing match pool. 240 built
+   beside it for the same reason. The *column design* is copied deliberately —
+   `provider_account_id`, `charges_enabled`, `payouts_enabled` do the same job
+   under near-identical names — because a second vocabulary for the same three
+   facts is how two halves of a product come to disagree.
+3. **15% is the platform's existing default, not a canvas fixture.** D4's
+   `CUT = 0.15` is a mock; that it matches `DEFAULT_APPLICATION_FEE_PCT` is
+   what makes it the right seed. It is **admin-configurable** —
+   `PUT /api/admin/platform/take-rate`, super-admin only, audited with the
+   previous value in the row, clamped to 0–50% for the same reason the
+   wellbeing fee is.
+4. **Basis points, integer cents, floor.** `cut = floor(gross × bps / 10000)`,
+   so `gross − cut = net` closes exactly per line and in every total. Floor
+   rather than round because a rounded cut can exceed the stated percentage by
+   a cent, and a fee the terms do not describe is a fee somebody can dispute;
+   rounding down can only favour the advisor.
+5. **The rate is stamped on the line, not only in the setting.** This is what
+   makes the setting safe to change: an operator moving 15% to 12% must not
+   restate a quarter an advisor has already reconciled. `totalLines` prefers
+   the line's own rate and falls back to the current one only for rows recorded
+   before 241.
+6. **The total is the sum of the line cuts**, never the rate applied to the
+   gross total — D4 says so itself (*"The cut is charged per line, not netted
+   at the bottom"*), and the two differ by up to a cent per line. A table whose
+   rows do not add to its total is the most corrosive thing a ledger can do.
+
+### What is recorded and what is charged are different, and the difference is rendered
+
+**Advisory charging is off.** `services/advisorMoney.ts::settlementMode()`
+answers `'none'` unless `ADVISOR_CHARGING_ENABLED` is set *and* a Stripe key is
+present, and it reads production through `util/paymentMode.ts` rather than a
+second, looser test. Every money response carries `settlement`, and no surface
+may render a cut as a charge while it says `'none'`. PR5b wires the advisory
+service leg to **test keys** with production charging behind that flag;
+`advisor_program_terms_v1.md` stays **DORMANT** until counsel clears it, and
+its `{{advisor_program.take_rate}}` placeholder now has exactly one source —
+the setting the ledger charges from — so the document and the ledger cannot
+disagree about the number.
+
+**The two contradictions are retired here rather than left standing.** 241's
+header supersedes the platform-wide reading of 205's (205's own text cannot be
+edited by a later migration, and rewriting history in place would hide that the
+position changed). `EarningsZone.jsx` no longer denies a cut it now records:
+it states the rate, states that nothing has been charged under it, and derives
+both from `settlement` so that flipping the flag changes the sentence rather
+than leaving a stale one behind.
+
+### What this does not decide
+
+Whether advisory charging *should* go live. That waits on counsel clearing the
+dormant terms, and the flag ships off. Nor does it reopen migration 175's
+payout ledger: 175's table paid platform credit under a rewards scheme, and
+`advisor_payouts` records money settling from a client's card to an advisor's
+connected account — same noun, different transaction, which is why every row
+here carries a `provider_payout_id` that can be reconciled against the
+processor.
+
+## D76 — Trust Center v2's month-over-month delta gets a real history, and its "needs action" split cannot be copied from the canvas
+
+**2026-09-12.** Task #148 asks for `/trust` to match
+`design/canvases/integrated/Trust Center v2.dc.html` (T2: v2 supersedes v1).
+Two of its score-panel elements cannot be built as drawn, for opposite
+reasons — one has no data behind it, the other has data that means something
+different here.
+
+### The delta had nothing behind it
+
+The canvas prints a month-over-month move under the ring, backed by
+`PREV_SCORE = { founder: 47, investor: 58, … }` — a literal keyed by role —
+and, when a role is missing from it, falls back to `prevScore = score` and
+renders **"Unchanged from last month."** No score history existed anywhere in
+the repo, so shipping that fallback would tell a brand-new account its score
+held steady across a month it did not exist for. D56/D68: an absence is
+stated, never rendered as a plausible zero.
+
+**Decision: migration 243 adds `trust_score_snapshots`, written by the worker
+on read.** `GET /trust/me` calls `recordAndCompareScore`, which does an
+`INSERT OR IGNORE` keyed on `(user_id, captured_month)` and then reads the
+most recent **earlier** month. No cron: the row is stamped by the first visit
+in a calendar month, which is also what makes the comparison meaningful — the
+snapshot is what the score WAS when the month was first observed, and a later
+visit that month must not move it.
+
+Three consequences worth stating:
+
+- **The worker computes the score, not the client.** A history a caller can
+  set is not a history. The rule therefore exists twice — `trustScoreOf` in
+  `services/trust.ts` and `computeTrustScore` in `lib/trustCenter.js` — because
+  production code never imports across the `frontend/src` ↔
+  `cloudflare-worker/src` line in this repo. `test/trust_score_parity.test.ts`
+  imports and RUNS both over shared fixtures; asserting the two files merely
+  look alike would pass the day someone edited one into agreement with itself.
+- **No history returns `null`, and the page says so** rather than drawing a
+  zero delta (`NO_HISTORY_NOTE`).
+- **The month is named** ("since May 2026"), because "last month" is false for
+  a reader who last opened the page five months ago. `captured_month` is a
+  calendar LABEL and is formatted by splitting on the hyphen — `new Date('2026-09')`
+  is midnight UTC and renders as August for every reader west of Greenwich.
+
+### "Needs action" is a different question from the pill's colour
+
+The canvas splits its obligation counts with its own `toneOf`: neutral + bad
+is "needs action", `prog` is "in progress". That works **in its vocabulary**,
+where the fixtures carry `'Pending'` and `'Not started'` as separate statuses.
+
+`legal_obligations` has no `not_started`. Its untouched state **is** `pending`,
+and `POST /obligation/:key/start` transitions `pending → in_review`. Copying
+the canvas's split — `STATUS_TONE.pending` is the amber `prog` tone, correctly,
+because amber means "wants attention" — made the page tell a reader with three
+untouched obligations *"3 in progress — nothing needs action from you."*
+
+**Decision: `waitingOn(status)` in `lib/trustCenter.js` answers the separate
+question** — `'you'`, `'us'` or `'settled'` — and `outstandingCounts` is the
+single derivation both Overview sentences are built from. An unrecognised
+status answers `'you'`: telling someone nothing is required of them when
+something is, is the harmful direction.
+
+The two sentences stay distinct (`scoreLine` totals the open work,
+`obligationSummary` splits it) because they sit inches apart in the v2
+two-column Overview, and the column previously repeated the panel's verdict
+verbatim.
+
+### The envelope timeline is real — and it ships less than it reads
+
+The canvas's third score-panel-adjacent element is a per-agreement accordion
+drawing `Sent → Viewed → Signed` with a dot per step. Unlike the delta, this
+one needed no new store: `routes/esign.ts` has appended `envelope_created`,
+`envelope_viewed` and `envelope_signed` to `esign_audit_events` since the
+append-only trail replaced the `audit_log` JSON blob. All three steps the
+canvas draws are events the signing flow really writes.
+
+`GET /trust/agreements/:envelope_uuid/history` serves it, fetched on expand
+rather than folded into `/agreements` — that endpoint already returns up to
+200 pairwise rows, 100 pending envelopes and 100 documents, and almost none
+of them are ever opened.
+
+Four decisions inside it:
+
+- **`ip`, `ua`, `signer_email` and `meta` never leave the worker.** They are
+  on every audit row. A counterparty's IP address is not part of what the
+  canvas draws and not something a status page has any reason to disclose;
+  the full trail stays with admins at `GET /api/legal/esign/:id`. The SELECT
+  asks for `action, ts` and nothing else, and the test reads the SQL rather
+  than the intent.
+- **404, not 403, for a non-recipient** — `/my_signing_url` already refuses
+  to confirm an envelope exists and this must not become the oracle that one
+  does. The service returns `null` (not a recipient) distinctly from `[]`
+  (yours, nothing recorded), and the route maps them to different answers.
+- **Consecutive repeats collapse with a count.** A three-party envelope logs
+  `envelope_viewed` once per party, and since `signer_email` is withheld the
+  rows cannot be told apart on the page. `Viewed ×3` hides nothing and reads;
+  three identical rows read as a rendering bug. Only CONSECUTIVE repeats
+  collapse — a view after a signature is its own event.
+- **Legacy envelopes fall back to the `audit_log` column.** It was the source
+  of truth before `esign_audit_events` and `routes/esign.ts` describes it as
+  "kept for backward compatibility but no longer written to". Without the
+  fallback every older envelope would expand to an empty timeline and look as
+  though nothing had ever happened to it.
+
+And the one thing the panel must never do: **a failed read is stated as a
+failed read.** "Nothing recorded for this envelope" and "we could not find
+out" are different claims about an audit trail, and collapsing the second
+into the first is the same defect as the canvas's "Unchanged from last
+month".
+
+## D77 — A renewal warning needs a memory of its own, and the inbox cannot be it
+
+**2026-09-12.** Task #163. `/trust` reports a lapsed obligation accurately —
+Trust Center v2 draws `Expired 74 days ago` — and **the first time anybody
+finds out is when they open the page.** `expireDueArtifacts` flips a past-due
+row at 04:35 UTC without telling anyone. The fix is a nightly sweep that
+warns beforehand, and the interesting part is not finding the rows.
+
+### The inbox is not a memory
+
+`notify()` (`services/notify.ts`) is the platform's one notification writer
+and it already does the hard parts: per-user channel preferences, quiet
+hours, and a digest buffer flushed on its own schedule. This task feeds it
+rather than building anything beside it.
+
+But **`notify()` has no idempotency of any kind.** A nightly caller that
+simply asked "what expires soon?" would write the same warning into the same
+inbox every night for thirty nights. So something has to remember what has
+already been said, and `notifications_inbox` cannot be that thing: a reader
+can mark rows read, the UI can clear them, and `payload` is opaque JSON with
+no index to match on. Memory that a reader can delete is not memory.
+
+**Migration 244 adds `renewal_notices`**, and the `INSERT OR IGNORE` *is* the
+decision to send — a row is claimed exactly once, so a second run the same
+night claims nothing and therefore sends nothing, and two overlapping runs
+cannot double-send. Same pattern as migration 243's score snapshot.
+
+Two columns in the unique key are easy to leave out and both were nearly
+missed:
+
+- **`user_id`**, because a pairwise NDA has TWO parties and both lose cover
+  when it lapses. Keyed on the subject alone, party A's claim silently
+  swallows party B's warning. Found by reading `expireDueArtifacts` rather
+  than by testing — one row, two people.
+- **`expires_at`**, because a renewed obligation has a new deadline and the
+  three warnings must arm again for the new term. Without it an item warned
+  once could never be warned again for the rest of its life, which is the
+  opposite of what a renewal notice is for.
+
+### The predicate is copied, not reinvented
+
+The sweep selects exactly the rows `expireDueArtifacts` flips — obligations
+that are `satisfied` with a deadline, NDAs that are `active` with one. If the
+warning and the expiry disagreed about what expires, somebody would be warned
+about an item that never lapses, or lapse with no warning. It also gives the
+"never warn about a settled row" rule for free: `waived`, `revoked` and
+already-`expired` rows are not `satisfied`/`active` and never match.
+
+### Three warnings, and the smallest crossed threshold
+
+30 / 14 / 7 days, each sent once, then silence — chosen with the user over a
+single 30-day notice (one miss and you hear nothing again) and over a weekly
+drumbeat (four or five per item is how a compliance notice teaches people to
+ignore compliance notices).
+
+The threshold for a given deadline is the **smallest one it has crossed**,
+not the nearest. A sweep that misses a night — a failed cron, a deploy, a D1
+blip — would otherwise skip that threshold forever, because the next run
+finds the item already past it. Taking the smallest crossed threshold means
+a missed 14-day run still warns at 13, once, under the 14-day claim.
+
+### One notice per person, and it must not be critical
+
+The digest is per recipient: someone with four lapsing agreements gets one
+message listing all four. Four separate messages is what makes people turn
+compliance mail off.
+
+The notice passes `category: 'compliance'`, and that category is deliberately
+**not** in `CRITICAL_CATEGORIES`. An omitted or critical category bypasses
+quiet hours *and* the digest buffer (`notify.ts`: `const isCritical =
+!args.category || CRITICAL_CATEGORIES.has(args.category)`) — so getting this
+wrong would wake someone at 3am about a deadline thirty days out, which is
+the exact opposite of what a batched renewal notice is for.
+
+### When a send fails, the claim stands
+
+The claim is written before the notice goes out, so a failed send costs that
+person that one warning rather than repeating it nightly. The next threshold
+still fires. Rolling the claim back on failure is the tempting alternative
+and it is worse: it turns a flaky notifier into a nightly spammer.
+
+---
+
+## D78 — The magic-link fix is verified by a round trip or it is not verified; and a probe that never ran is red, not green
+
+**2026-09-12. D74 shipped a fix for a sign-in outage and nothing had confirmed
+it against production.** That is not a gap in the fix; it is a gap in what this
+repo can observe. `/login`'s magic link timed out at 30s, D74 moved the email
+send off the response path with `waitUntil`, and for the whole time the task sat
+open the only live evidence anyone had was `post-deploy-smoke.yml` — which
+probes `/api/health` and **stayed green straight through the original outage**,
+because `/api/health` is `RATE_LIMIT_EXEMPT` and touches none of the auth path.
+A green board is not evidence. It was not evidence then and it would not have
+become evidence by waiting.
+
+### Why timing alone was rejected
+
+The obvious probe is the cheap one: POST `/api/auth/magic/start`, assert it
+answers in under a second, done — it measures the reported symptom directly.
+It was rejected because **the fix changed what a fast answer means.**
+
+```ts
+const deliver = sendEmail(c.env, 'auth_magic_link', email, { name, magic_url: magicUrl })
+  .catch((e) => { console.error('[AUTH:magic-start] email send failed', e); });
+const ctx = (() => { try { return c.executionCtx; } catch { return null; } })();
+if (ctx?.waitUntil) ctx.waitUntil(deliver);
+else await deliver;
+```
+
+The token row is committed first and the mail becomes a separate errand with a
+`.catch` that logs and swallows. That removes the latency — and it creates a
+failure mode the *old* code could not have: **the endpoint can answer `202` in
+200ms while the mail silently never arrives.** Gmail credentials expire, the
+OAuth refresh token gets revoked, `waitUntil` gets dropped on an eviction, and
+`/magic/start` keeps answering in 200ms through all of it. A latency probe would
+go green on every one of those. It would not merely miss the regression; it
+would actively certify it.
+
+So the probe reads a real inbox, follows the real link, and asserts a real
+sign-in. `/magic/start` answering `202` is **necessary and nowhere near
+sufficient**, and the three findings are reported separately — `start_latency`,
+`mail_delivered`, `sign_in_completed` — because they fail for different reasons
+and a single pass/fail hides which. A fast endpoint must not be allowed to cover
+for mail that never came; that is the specific lie this design refuses to tell.
+
+A mailbox is unavoidable, not a convenience: `magic_link_tokens` stores
+`token_hash`, so the raw token exists **only in the email**. There is no back
+door for a probe to take.
+
+### Only exit 0 is green — "we never ran" is red too
+
+The probe exits **0** verified, **1** ran and failed, **2** not configured. The
+workflow distinguishes 1 from 2 in its annotation and its step summary, and
+**fails the job on both**.
+
+That last part is the decision, and the tempting alternative is to let exit 2
+pass with a warning: the four secrets do not exist yet, so a scheduled job goes
+red every four hours until somebody acts, and a permanently-red check is how
+people learn to ignore red. It is still wrong. A green tick for *"we did not
+run"* is the same lie as `/api/health` in a different costume — and this
+workflow exists for exactly one reason, so a green tick on it reads, to anyone
+glancing at the Actions tab, as "the magic link works". Crying wolf is a check
+going red for reasons unrelated to the thing it guards. This goes red for
+precisely the thing it guards: the login flow is unverified. The red is
+actionable, its summary names the four secrets, and it clears the moment they
+land.
+
+### The cadence is set by a rate limiter, not by taste
+
+`magic-start-email` allows **3 per 900s per address** (`routes/auth.ts`). A
+probe that trips its own limiter reports a broken sign-in when sign-in is fine
+— a false alarm on the one check whose whole value is being believed. The cron
+is `30 */4 * * *`: four-hourly, and on the half hour so it does not collide with
+the 6-hourly SPA smoke at `:00`.
+
+`frontend/test/magic_link_probe.test.mjs` does not take that on trust. It reads
+the limit off `auth.ts`, expands the cron itself, and asserts that
+`floor(window / gap) + 1 <= limit` — so changing either the schedule or the
+limiter fails the build rather than the probe. The same test reads
+`MAGIC_LINK_TTL_MIN` off `auth.ts` and the default mail budget off the probe,
+and asserts the budget sits inside the token's lifetime; comparing two literals
+there (`120_000 < 15 * 60_000`) would have been an assertion that can never
+fail, which is a thing this repo has now written twice and caught twice.
+
+### Why not in `post-deploy-smoke.yml`, and why not in `test:drift`
+
+Not the smoke: that job's own header says *"No secrets required"*, and folding
+this in hands every scheduled SPA check a mailbox credential it has no use for.
+Its cadence is deploy-shaped; this one's is limiter-shaped.
+
+Not `test:drift`: it reaches production and signs in. A check that cannot run
+inside the suite must never sit in the suite reporting success. Its pure helpers
+— token extraction, Gmail part flattening, staleness, the three verdicts, the
+redirect reading — are unit-tested and those tests *are* in the suite.
+
+### The stale-message trap
+
+A matching email from a previous run satisfies a naive inbox search forever, so
+the probe would keep passing for months after delivery broke — the same shape of
+failure as the `/api/health` smoke, arrived at by a different route. Every
+candidate message must carry an `internalDate` strictly **after** the instant
+this run called `/magic/start`. A message at the exact request instant predates
+the send and does not count.
+
+### What this decision does NOT claim
+
+**Task #168 is not closed by this commit.** The probe is not the deliverable; a
+green run of it is. Until `MAGIC_PROBE_EMAIL`, `GMAIL_CLIENT_ID`,
+`GMAIL_CLIENT_SECRET` and `GMAIL_REFRESH_TOKEN` exist as repository secrets, the
+job fails with NOT CONFIGURED and **the `/login` magic link remains unverified
+against production.** Those secrets require a dedicated test account on
+production — never a real person's address, because the probe signs in as it —
+and read access to its mailbox; a `+alias` of the sending Gmail account delivers
+to that same inbox, which is the cheapest way to satisfy it. Neither can be
+created from inside this repo.
+
+---
+
+## D79 — A second probe rather than a subset of the first, because a green tick must keep meaning one thing
+
+**2026-09-12, hours after D78.** That decision built a magic-link probe that reads a
+mailbox, follows the link and asserts a sign-in — and established the rule that **only exit 0
+is green**, with "we never ran" failing the job precisely because a green tick for an unrun
+check is how `/api/health` stayed green through the original outage.
+
+The probe cannot run. It needs a Gmail OAuth app to read an inbox, and none exists. So #168
+sat unverified while a cheaper question went unasked: **did the request reach its INSERT?**
+
+That question needs no mailbox. `/magic/start` commits a `magic_link_tokens` row before it
+does anything else, and D74's diagnosis turned on exactly that — four rows, newest
+2026-08-03, and the failing attempt wrote none. A row appearing is direct evidence the
+thirty-second hang is gone.
+
+**And the cost had been overestimated.** `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`
+are already repository secrets with D1 scope, and `scripts/migrate-d1.mjs --remote` is the
+standing precedent for CI reading production D1. So the check needs **one** new secret rather
+than four, and no OAuth app at all.
+
+### Why not a flag on the existing probe
+
+The obvious shape is `--no-mailbox` on `check-magic-link-live.mjs`: one script, shared
+helpers, less code. It is the wrong shape, and D78 is the reason.
+
+A single script with two modes has to **go green on a subset**. Its green then means
+"everything I was configured to check passed", which is not a fact about the system — it is a
+fact about the configuration, and the reader cannot tell which from the tick. That is the
+"partially verified green" D78 exists to forbid, reintroduced through the back door. Two
+probes, each green only when everything it names passed, keep the tick meaning one thing.
+
+So `check-magic-link-insert.mjs` reports `start_latency` and `token_row_written`, and
+`magic-link-probe.yml` stays the only thing that can close #168.
+
+> **Amended the same day by D80.** The two paragraphs above originally went further and said
+> this probe "disclaims delivery in the script, in the annotation and in the step summary —
+> because the `waitUntil` failure mode leaves the row committed and the mail unsent, and this
+> probe is blind to precisely that." **That was wrong on the last point.** The `waitUntil` send
+> writes an `email_send_log` row, so the failure is legible in D1 and the probe now carries a
+> third verdict, `mail_send_recorded`. What stays true is the shape of the argument below — two
+> probes rather than two modes — and that only the mailbox probe can prove the mail *arrived*.
+> Read D80 before relying on any sentence here about what this probe cannot see.
+
+### The schedule offset is a correctness requirement
+
+Both probes request a link for the **same address**. The mailbox probe accepts any message
+whose `internalDate` post-dates its own request — so if the insert probe fires inside that
+polling window, the mailbox probe picks up the **insert probe's** email, follows a perfectly
+valid link, and passes **without ever proving its own mail arrived.** A false pass on the one
+check whose entire value is being believed, and nothing in either script would notice.
+
+Hence `0 */4 * * *` against the mailbox probe's `30 */4 * * *`: thirty minutes against a 120s
+mail budget. `frontend/test/magic_link_insert_probe.test.mjs` parses both crons and that
+budget out of source and asserts the gap exceeds it, so neither can drift alone. The same test
+checks the union of both schedules against `magic-start-email`'s 3-per-900s limit, because the
+limiter is per address and two workflows now share one.
+
+### A third exit code with a second meaning
+
+Exit 2 already meant "could not run". Here it also covers **the API token lacking D1 read** —
+which must never surface as `token_row_written: false`, because that reads as a broken sign-in
+when the truth is a missing permission, and sends someone hunting a production auth bug. The
+verdict rests on `MAX(id)` for the probe address before and after, never on a parsed
+`created_at`: that column is a SQLite `CURRENT_TIMESTAMP` in UTC, and
+`new Date('2026-08-03 12:20:43')` parses as local time in Node, so comparing it to a runner
+clock is a timezone bug and a skew bug at once. `AUTOINCREMENT` ids are monotonic and carry no
+clock. Scoping to the address also means a real person signing in mid-run cannot be mistaken
+for the probe's own row. No token material is read; the row id is all it needs.
+
+### What this does not claim
+
+Each run writes one row to production `magic_link_tokens` (15-minute expiry, never used) and
+sends one real email, so it was put to the user before being built. **It does not close #168.**
+Until a run passes, nothing is verified; once one does, #168 reads *original 30s symptom
+verified, delivery still unverified* — and only the mailbox probe can change the second half.
+
+## D80 — The `waitUntil` send does leave a trace, so the probe asserts the Gmail handoff
+
+**2026-09-12, hours after D79.** That decision shipped `check-magic-link-insert.mjs` with two
+verdicts and a disclaimer: *"NOT CHECKED HERE: delivery. Only check-magic-link-live.mjs can see
+that."* The disclaimer rested on an assumption nobody had checked — that D74's `waitUntil` send
+leaves nothing in D1. **It leaves a full record.**
+
+`routes/auth.ts:8` imports `send as sendEmail` from `services/email/send.ts`. That function
+inserts an `email_send_log` row (`status='queued'`, `to_addr`, `template_key='auth_magic_link'`)
+**before** it enqueues onto `JOB_QUEUE`; the queue consumer (`services/queueWorker.ts`, case
+`email_send`) calls `deliverNow`, which marks the row `sent` **only when the Gmail API accepted
+the message** and `failed` with a `last_error` otherwise.
+
+So the precise failure D74 introduced — token row committed, `/magic/start` answering 202 in
+200ms, mail never sent — is visible as a row stuck at `queued`, or a `failed`/`dlq` row naming
+its cause. **The probe as merged would have passed on exactly that**, reporting a healthy login
+that delivers nothing. That is the defect this decision closes, and it needed no new secret:
+`email_send_log` sits in the same D1 the probe already reads.
+
+### Why this is a verdict and not the mode D79 rejected
+
+It looks like the thing D79 forbade, and it is the opposite. D79's objection to `--no-mailbox`
+was that a script with modes **goes green on a subset**, so its tick reports the configuration
+rather than the system. `mail_send_recorded` adds no mode and no subset: it runs on every run,
+on the same single secret, and there is no configuration under which the probe passes without
+it. The tick still means one thing — it just means more of the right thing.
+
+### What is proved, and what is still not
+
+**Proved: acceptance.** Gmail took the message. **Not proved: arrival.** A bounce, a spam file
+or a wrong address all come after acceptance, and nothing here follows the link or asserts a
+session. So the mailbox probe keeps exclusive territory — inbox arrival plus a completed
+sign-in — and remains the check that closes #168. With this verdict, #168 reads *original 30s
+symptom verified, send handoff verified, arrival and sign-in still unverified.*
+
+### The budget is measured, not guessed
+
+Production `email_send_log` holds four real `auth_magic_link` rows. Their `enqueued_at` →
+`sent_at` gaps are **10s, 29s, 82s and 26s**, every one on the first attempt. `MAGIC_SEND_BUDGET_MS`
+therefore defaults to **180000** — the 60s first written here would have failed the 82s send,
+which succeeded. `frontend/test/magic_link_insert_probe.test.mjs` parses the budget out of
+source and asserts it clears 82s, asserts the schedule gap clears the sum of this probe's
+budgets, and asserts the budgets fit inside the job's `timeout-minutes` so raising one cannot
+silently trade a report for a killed job.
+
+Two further traps the tests pin. The poll is scoped `AND id > ?` against a baseline taken
+**before** the request: every existing row is `sent`, so without that scope the August rows
+would satisfy the verdict forever — the same trap the token baseline exists to avoid, one table
+over. And `last_error` is **redacted before printing**: `deliverNow` stores the thrown message,
+the payload it was thrown from carries the rendered `magic_url`, and a CI log is readable by
+anyone who can read the repo, so a URL or any 24-character token-shaped run is stripped while
+`gmail_creds_missing`, `gmail_send_failed` and `deliver_now_threw` survive intact.
+
+### One narrow correction to D74's rationale
+
+Reading the same table settled something else. `[[env.production.queues.producers]]` landed in
+`92bef59e4` (2026-05-05), before all four sends, so `JOB_QUEUE` was bound throughout: pre-D74,
+`await sendEmail(…)` awaited `ensureSendLog`, the log INSERT and `Jobs.enqueue`'s `queue_jobs`
+INSERT — **three D1 round trips, never the Gmail call**, which ran in the consumer. So the
+`waitUntil` move did not remove "two bounded fetches (token + send) that can legitimately take
+10s each", as its own comment in `auth.ts` claims. **#535 is not misdiagnosed** — its
+load-bearing half is the other one, `util/deadline.ts`'s `withDeadline` wrapped around every
+await on the auth path, which bounds a stall wherever it sits. Only that one sentence of the
+comment is wrong. Whether the hang is gone still needs a live measurement, which is
+`start_latency`, which needs a run.
+
+---
+
+## D81 — `chargeSession` gets its caller; the flag becomes a switch rather than a claim
+
+**2026-09-13.** PR5b (D75) shipped `services/advisorConnect.ts` with onboarding at one end and
+fulfilment at the other. Reviewing that leg turned up that **the middle had no writer**:
+`chargeSession` was an exported function referenced by nothing but its own test file — no route,
+no webhook, no dynamic import. `POST /api/advisors/bookings/:id/pay` is that caller.
+
+The state machine was already built from both ends. `PATCH /me/bookings/:id/billing` stamps
+`amount_cents`, `platform_cut_cents` and `take_rate_bps` server-side and moves the row to
+`billing_state = 'billed'`; `markSessionCharged` moves it to `'collected'` when Stripe's webhook
+says the money arrived. Only the transition between them — the client actually paying — had
+nothing that could perform it.
+
+### Why this is worth a decision rather than just a route
+
+`settlementMode()` answers `'none'` **only** because `ADVISOR_CHARGING_ENABLED` is unset, and
+that value is reported as `settlement:` by seven handlers in `routes/advisors.ts` and two in
+`admin_platform.ts`. So before this route existed, flipping the flag would have **told advisors
+settlement was live while no path could take a payment** — a surface asserting a capability that
+does not exist, which is the D56/D68 failure. This change does not turn charging on. It makes the
+flag *sufficient*, so that flipping it is a switch and not a claim.
+
+### The dead code this uncovered, which was worse than recorded
+
+Migration 240 created `advisor_office_hour_slots.payment_state` with `'held_unpaid'` meaning "a
+slot taken by a booking that could not be charged", and the working note for this task said that
+column simply had no writer. It was worse than that. `markSessionCharged` clears the hold with
+`SET payment_state = 'charged' WHERE ... AND payment_state IN ('held_unpaid', 'authorized')`, and
+**neither of those two states had a writer anywhere in the worker** — so that `UPDATE` could never
+match a row. The fulfilment leg's slot bookkeeping was unreachable in both directions, not merely
+unexercised. Step 4 of this route is `held_unpaid`'s first writer, which is also what makes that
+`UPDATE` reachable for the first time. (`'authorized'` still has none; it is for a manual-capture
+flow nobody has built, and it stays honestly empty rather than being written by this route to make
+a `CHECK` constraint look used.)
+
+The write is scoped `AND payment_state = 'not_applicable'` so a slot already `charged` or
+`refunded` by another booking on the same capacity is never walked backwards, and it is
+best-effort: the founder's answer does not depend on the bookkeeping succeeding.
+
+### Charging an already-priced booking, rather than a path that prices itself
+
+The obvious alternative was a route that resolves a price itself — `advisor_booking_links.
+session_type_id` → `advisor_session_types.price_cents`, a chain migration 240 created and no
+route reads. That was rejected for this change: it needs a booking path that does not exist (the
+`/b/<slug>` link flow is unbuilt) and it makes a pricing decision nobody has asked for. Charging
+a booking the advisor has already priced needs **no migration and no new booking path**, and it
+closes the actual gap. The price chain remains unresolved and unasked.
+
+### The guard ordering is load-bearing, and the tests treat it as behaviour
+
+`chargeSession` throws `SettlementDisabled` on its own, so the route refuses either way — but it
+throws *after* the handler would have called `ensurePaymentsCustomer`, which creates a Stripe
+customer and writes `users.stripe_customer_id`. Checking settlement first means a charge that
+cannot succeed leaves **no customer, no `held_unpaid`, and no D1 write of any kind**. The `catch`
+still maps `SettlementDisabled` anyway, because a guard that depends on the caller checking first
+is not a guard.
+
+### A rate-limit bucket, because the PR template's checklist was a real question
+
+*"Rate-limit bucket assigned for any new public endpoint"* turned out not to be a tick-box here.
+The route fell through to the generic `user` bucket: **60 PaymentIntent creations per minute per
+user, fail-OPEN**, so knocking out KV removed even that. `promo_validate` (20/min, failClosed) and
+`admin_catalog_writes` (20/min, failClosed) are both tighter for strictly less exposure, and the
+`Bucket` type's own comment reserves `failClosed` for *"abuse-prone / money-adjacent buckets so the
+limiter can't be bypassed by knocking out KV"*. `advisor_session_charge` is 10/min per user,
+failClosed. Ten is far above any real workflow — paying is one call, a declined card is a handful
+of retries — and `chargeSession`'s idempotency key means repeat calls for the same booking return
+the same intent, so what this caps is a script walking many bookings.
+
+**The pattern names both mounts, and that is load-bearing.** `index.ts` routes the advisors router
+at `/api/advisors` **and** `/api/mentors`. A bucket naming only the first would leave
+`/api/mentors/bookings/1/pay` on the generic fail-open bucket — a limiter that is present, green,
+and bypassable by spelling the prefix the other way. That is the `ai` bucket's recorded bug
+verbatim (`/api/advisor` vs `/api/advisory`, where the one route that spends Workers AI per request
+matched no AI bucket at all), except both prefixes here are live today rather than hypothetical.
+
+`rateLimit_advisor_charge.test.ts` executes the pattern rather than substring-matching it, for the
+reason its sibling gives: a regex reads correct and matches the wrong set. 13 mutations, 0 escapes
+— including dropping `mentors`, widening the id to `.+`, losing either anchor, adding a `/g` flag,
+and moving the bucket below the catch-all.
+
+**One of those mutations escaped first, and the cause is worth recording**: the sibling guards
+locate a bucket with `src.slice(at, at + 400)`, and this bucket sits immediately above the generic
+`user` one, so 400 characters run past its closing brace into a neighbour that also carries
+`scope: 'user'`. Flipping *this* bucket to `scope: 'ip'` left the assertion satisfied by the next
+bucket's line. The fix slices to the literal's own `},`. The existing guards are not wrong today,
+but only because their windows happen to land in comment prose — reordering the list would give
+them the same hole.
+
+### No frontend, and therefore no `docs/` rebuild
+
+The route returns 503 in every environment today. A payment UI that can only 503 would be exactly
+the surface-implying-a-capability failure above, so there is none — and no `api.js` method either,
+since nothing calls it (`check-api-drift` has nothing to reconcile). The route is written, tested
+and unreachable, which is the posture `advisorConnect.ts` already takes for the same reason.
+
+### One deliberate omission, stated rather than skipped
+
+Wellbeing persists `stripe_payment_intent_id` on its booking row; `advisor_bookings` has no such
+column and adding one is a migration this change was scoped to avoid. It is not needed:
+`markSessionCharged` finds the booking by `metadata.booking_uid`, and `chargeSession`'s idempotency
+key `pi:advisory:${bookingUid}` is deterministic from that same uid, so the intent is recoverable
+from Stripe without a second copy. A follow-up if a reconciliation report ever wants it locally.
+
+### What the green here means
+
+`cloudflare-worker/test/advisor_charge_route.test.ts` is 20 tests, every assertion
+mutation-checked in both directions (24 mutations, 0 escapes). **It is unit-test green, not a live
+charge** — `settlementMode()` is `'none'` in every environment, including the test harness unless
+a test forces it on, so no money has moved and none can until the flag flips. Three findings from
+that pass are recorded next to the code they apply to, because they generalise:
+
+- An assertion is worthless if its fixture makes the bug invisible. `amountCents: gross` mutated
+  to `amountCents: 30000` **passed**, because the fixture price was `30_000`. Fixed with an odd
+  price (`41_737`) and by asserting against the stored row rather than a constant.
+- A source-text assertion cannot see dead code. `if (false && e instanceof SettlementDisabled)`
+  still contains the text the assertion reads, so it escaped; the honest mutation for a source
+  assertion is deletion, and the residual gap is written down in the test rather than patched with
+  a rule that only fits the mutation that found it.
+- **A guard that scans a file as text reads its comments too.** PR5a's existing guard — *"no
+  advisory surface renders a charge as accomplished fact"* — forbids hard-coding the settlement
+  mode anywhere in `routes/advisors.ts`, and it failed this branch **twice**: first on a real
+  literal in the `SettlementDisabled` catch, then on the comment written to explain why that
+  literal had been removed. Both were the guard working. The first fix was the interesting one:
+  the right value was neither a constant nor a second `settlementMode()` read but `e.mode` off the
+  thrown error, symmetrical with the `e.state` the 409 below it already used — so a refusal now
+  reports what the service decided rather than what the environment says a moment later. The
+  second was a reminder that prose inside a scanned file is part of what gets scanned.
+
+---
+
+## D82 — A fill that is not a restatement needs a different promise, and TAM needs a table before it needs a model
+
+D46 settled how "AI fills the blanks" works on one surface and made two rules that
+this change alters. Both were right for what existed then, and neither generalises.
+
+### The rule that had to change: match-back is not the only honesty mechanism
+
+D46's mechanism is MATCH-BACK — *"every item is matched back against something
+that exists in the project before it can become a row"*. `parseTagProposals`
+refuses a phrase not in this project's own ungrouped set; `parseDraftProposals`
+refuses a claim that restates one on file. Both of Validate's fills are
+RESTATEMENTS of evidence the founder logged, so the rule fits them exactly.
+
+It cannot fit a market size. The whole point of asking Eadwyn for TAM is that the
+project does not contain it, so there is nothing to match back against — and with
+no replacement guarantee, filling it means writing an unsourced number into a
+column a founder-derived figure occupies. So each kind now declares which promise
+it keeps, and `services/fills/types.ts` holds the three:
+
+| Class | The promise | What happens when it cannot be kept |
+| --- | --- | --- |
+| `restatement` | it restates a row already in the project | the proposal is dropped — D46's rule, unchanged |
+| `sourced` | it carries a citation naming where it came from, with the quote | **the proposal is dropped**, never written with a hedge |
+| `composition` | it makes no factual claim (a tagline, positioning copy) | it may never target a column holding a MEASURED value |
+
+`refuseReason` enforces this on the WRITE path rather than in review, because a
+`sourced` value with no citation is not a lower-quality fill — it is an assertion
+with nothing behind it, and the store must not be able to hold one.
+
+### The other rule that changed: "two capabilities, not three" is now three surfaces
+
+D46 counted capabilities on one surface. The dispatch was `if (row.kind ===
+'pain_tag')` in a file about Validate — fine for two kinds, the wrong place for a
+third. `services/fills/registry.ts` holds one entry per kind now, and its own
+header states the invariant the move had to preserve: **`apply` must be the
+function the manual form already calls.** That is D46's "accepting and typing
+produce the same row", generalised, and the reason is concrete rather than tidy —
+`insertHypothesis` allocates `H1, H2 …` from the highest code EVER used so a
+retired `H2` is never reissued, and a second writer with its own idea of that rule
+is how duplicate codes start being handed out to a founder who finds out when two
+claims share a name in a board pack.
+
+**The test for that invariant first passed with the rule reimplemented.** An empty
+`hypotheses` table cannot tell `MAX(CAST(substr(code,2)))` from `COUNT(*) + 1`,
+because with no history both say 1. The fixture now seeds a project whose codes
+are not a dense sequence — H1 live, H6 retired, H2 live, X9 hand-edited — where
+the next code is H7 and each of the four plausible wrong rules gives a different
+answer. It is the clearest example this repo has of a test that was green and
+worthless, and the lesson is the fixture, not the assertion.
+
+### Provenance is a side table, because a column cannot hold two facts
+
+`projects.tam` is one bare `REAL`. `SpinoutLabMarketPage` derives TAM from an
+addressable population × an ACV with the founder's own assumptions, and says so
+three times: a code comment recording that the design's "AI-assisted estimates"
+was dropped *"rather than lie about provenance"*, on-screen copy reading *"nothing
+on this page is auto-invented — empty means not researched yet"*, and a per-card
+"Founder research" / "Founder model" stamp. The moment a model can write to that
+column all three become false, because nothing beside the number says who produced
+it.
+
+So `fill_provenance` (migration 246) records one row per accepted fill: the
+address as a `(table, row, column)` triple, the class, **both values** — what was
+proposed and what was written — `edited` derived from comparing them, the citation,
+and the model that ran. `filledColumns` compares a provenance row against what the
+row holds NOW, so a founder who typed over a filled figure by hand owns it and the
+card stops claiming otherwise: the same lie pointed the other way is still a lie.
+
+`edited` is derived and never passed in, because a caller that has to remember to
+set it will eventually forget, and the one thing that row must never do is claim a
+value is untouched when it is not.
+
+### The market surface needed a table before it needed a model
+
+The honest fill for market sizing proposes the INPUTS, not the size — a TAM
+proposal would write over the founder's arithmetic. But until migration 247 there
+was nowhere to put an addressable population: the drawer's twelve fields were
+`useState` and went when the tab closed, and the page's own comment had been asking
+for `project_market_assumptions` since it was written. **What it kept was the
+conclusion with none of the reasoning**, which is a stranger thing for a page about
+derived figures to do than anything its copy warns about. 247 is that table; the
+store patches rather than replaces, which is what lets one cited figure land
+without blanking the eleven the founder typed.
+
+The drawer's note — *"only TAM/SAM/SOM are saved to your startup record yet"* —
+was true and is now false, and it was corrected in the same change. A stale honest
+note is worse than none: it teaches a founder to expect their work to be dropped,
+so they stop typing it.
+
+### Brand already worked; its provenance was the only thing missing
+
+`POST /brand/landing/autofill` has returned `ai_generated: true` since it shipped
+and its mechanism is correct — it drafts into local state, the founder edits
+freely, Save is the commit. **Nothing about it was rebuilt.** The flag was read at
+the point of use and discarded, so a published headline Eadwyn wrote was
+indistinguishable from one the founder typed, on the same page whose rail names the
+model. The editor keeps the proposal through the draft as a MAP and not a set,
+which is the whole design: a keystroke does not clear it, because a drafted line
+half-rewritten is exactly the case `edited` exists to describe.
+
+Its save-time write is deliberately NOT the accept path's. Validate reverts when
+provenance cannot be written, because there a value with no provenance is the state
+the table exists to prevent. Brand copy is the founder's own words on their own
+page, saved by an explicit click, so a failed audit row is logged and the save
+stands — refusing it would be the worse outcome.
+
+### Two smaller findings, recorded where they generalise
+
+**A citation that names a document and not the passage is a label.** `SearchHit.chunk`
+has been declared "for a citation" since the research library shipped and
+`upsertEntity` has always written `metadata.chunk` — and `searchSemantic`'s mapping
+dropped it, so `routes/research.ts` recorded `chunk: null` on every Ask citation it
+ever wrote. Found while building the citation path, fixed there, and the band shows
+the quote for the same reason: the only check a reader has is reading the sentence.
+
+**A dead guard that reads as a safeguard is worse than none.** The brand recorder
+tested `hasOwnProperty(written, column)` before its emptiness check, and the
+mutation run showed deleting it changed nothing any test could see. It cannot: a
+column absent from `written` reads as `undefined` and then as the empty string, so
+no input distinguishes the two. It was removed rather than kept, because the next
+reader would have trusted it.
+
+### Also: the second surface to declare a `mode`, and the first outside Validate
+
+D17 named a brand page as the plausible second one. It is the market page, because
+that is where a branch became true — off, no figure is proposed and nothing is
+spent; on, Eadwyn looks for the inputs the page multiplies. `FillKind.assistSurface`
+names the rail whose `mode` gates a kind, so D17's rule is now checked
+mechanically: a fill whose rail declares no mode is a capability with no switch,
+which is the mirror image of the dead config `ui_assist_rail_and_sidebar` already
+refuses.
+
+**And "Edit the claim" was built.** The canvas has drawn accept / edit / discard
+since this band was designed; the middle control lived only in a comment
+describing the artboard. Accepting a value a founder would have corrected teaches
+them to discard and retype — the same work with the proposal's provenance thrown
+away. An unchanged edit is sent as a plain accept, because a table where every row
+is marked corrected says nothing about any of them.
+
+### The fourth surface is a refusal, and the plan's premise for it was wrong
+
+The plan named four surfaces. Three are live — Validate's two restatements, market
+sizing and competitors as `sourced`, brand copy's provenance as `composition`. The
+fourth, company and account settings, gets **no fill**, and the reasoning is worth
+more than the feature would have been.
+
+The plan's guardrail was right: *"Never fill an identity field the platform cannot
+verify — it is the one place a wrong fill carries legal weight."* Its premise was
+not. It listed *"Legal name, jurisdiction, sector, description, links"*, and
+`company_profiles` **has no legal name, no jurisdiction and no incorporation date**.
+Those live on `entities` and `compliance_events` — a legal-filing surface, and a
+different piece of work. So the guardrail had nothing to guard on this page.
+
+What Company Settings actually edits is eleven columns, and applying the same
+tests every other kind passes refuses all eleven:
+
+| Fields | Why no class can keep its promise |
+| --- | --- |
+| `company_name` | Identity. The legal-weight case, and the only one the plan anticipated correctly. |
+| `website`, `linkedin_url`, `logo_url` | **A URL is a model's likeliest fabrication.** The competitor fill's own prompt forbids inventing one; a fill whose entire output *is* a URL cannot make that promise. |
+| `stage`, `revenue_range`, `employee_count`, `international_presence` | Facts only the company holds. Nothing in the project to match back against and nothing outside it to cite, so neither `restatement` nor `sourced` applies — and `composition` may not occupy a column holding a measured value. |
+| `expansion_goals` | Intent, which only the founder has. |
+| `description`, `current_products` | Prose, and **already served**. The brand builder's autofill drafts exactly this from `project.description` and `.problem_statement`, and that path now keeps its provenance. A second mechanism drafting the same sentences from the same source into a different column is a second answer to one question. |
+
+And the page has no AI rail. Adding one to reach a single field would put a spend
+meter and a model card on an administrative form — `eadwynConfig`'s rule is that
+config follows a mount, and the mount would exist only to justify the config.
+
+**The refusal is written as a test, not just as prose.** Deciding not to build
+something leaves no code behind, which means it leaves nothing to disagree with
+later: the next person reads the plan, finds a surface listed as planned, and finds
+no trace of why it is absent. `settings_no_fill.test.ts` fails when a fill starts
+targeting `company_profiles`, when the page mounts a rail, when `eadwynConfig`
+declares a settings surface, and — the assertion that matters most — when Company
+Settings grows a twelfth editable column, because a new field is a new question
+that this reasoning has not answered.
+
+## D83 — A capital call becomes a receivable, and "deployed" goes back to meaning deployed
+
+**Task #197.** `POST /api/funds/:id/capital-call` enqueued a
+`capital_call_notice` job that did two things: wrote one `activity_logs` line per
+LP, and added the call amount to `vc_funds.deployed_capital`. It wrote **no
+`capital_calls` row**, which is the table the LP's own portal reads
+(`routes/funds.ts` `GET /lp-portal`, and the per-LP statement at
+`GET /:id/lp-report/:lpId`), the table `PartnerPortal.jsx` and `CapitalPage.jsx`
+render through `api.listCapitalCalls()`, and the table
+`quarterlyReportViewModel.js` folds into an LP's quarterly report.
+
+**The sharpest statement of the bug is that both of those pages carry a working
+Pay button.** `api.payCapitalCall()` is wired on both, and
+`POST /capital/calls/:id/pay` really does set `status = 'paid'` and stamp
+`paid_date`. It had nothing to act on. A GP issued a call, an LP saw a log line
+and a moved dashboard number, and the question "who owes what, by when" had no
+answer anywhere in the database.
+
+### The key is the call, not the job — and the job id would have been worse
+
+The handler is **re-run**. On the D1 path `Jobs.markFailed` puts the same
+`queue_jobs` row back to `pending`; on the CF Queue path the consumer deletes its
+own idempotency claim in the failure branch on purpose, so that "a CF retry
+actually re-runs the handler". `claimDelivery` dedupes concurrent redeliveries of
+one message and nothing else — its comment names the race it closed as the one
+where "both run the job and we double-charge LPs". A ledger row added naively here
+turns a missing receivable into a doubled one.
+
+So each row carries an explicit `uid` and the insert is `INSERT OR IGNORE`, which
+is the mechanism `GOTCHAS.md` already describes as this repo's answer to
+re-delivery: "the per-effect UNIQUE constraints are the dedup… there is no
+separate event-dedup table by design". No migration was needed —
+`capital_calls.uid` has been `TEXT UNIQUE NOT NULL` since the baseline.
+
+The uid is `cc:<call_uid>:<lp_id>`, where `call_uid` is minted **by the enqueueing
+route** and travels in the payload. It deliberately does not come from `job.id`:
+the CF Queue consumer calls `handleJob` with a hardcoded `id: 0`, so a job-keyed
+uid would be identical for every call ever issued and the *second* fund's real
+call would be silently swallowed — a worse bug than the one being fixed. The DLQ
+retry path mints a *fresh* delivery key on purpose, so that is no good either. A
+payload with no `call_uid` (in flight across the deploy, or hand-enqueued through
+`/api/infra/enqueue`) falls back to fund + amount, which dedupes per amount rather
+than per press: a lost duplicate rather than a doubled receivable.
+
+Notices are then sent only for rows that were actually new, so a retry that fills
+in what it missed does not tell everyone twice. The "was it new" flag reads
+`meta.changes` and never the `RETURNING` row, because the repo's own D1 test
+adapter models `batch` as a sequence of `run()` calls with no `results` — code
+keyed on the returned row reports "nothing inserted" under test while inserting
+fine in production, which is the worst direction for a money path to be wrong in.
+
+### And the issuance bump had to go, because writing the row is what made it wrong
+
+`POST /capital/calls/:id/pay` already adds a paid call's amount to
+`deployed_capital`, and `test/capital.test.ts` pins it: a 500 call marked paid
+leaves the figure at 500. Before this change the job could bump the same figure at
+issuance harmlessly, because it wrote no row and so nothing could ever be paid.
+**Writing the row makes issuing-then-paying count the same money twice on an
+investor's dashboard.**
+
+Of the three ways out, one is sound. Suppressing the pay-path bump per row needs a
+marker and leaves the figure meaning neither called nor deployed; dropping the
+*pay* bump instead would contradict an existing money invariant to fit a new
+feature. So the issuance bump goes — which is also the only option the readers
+agree with. `FundPerformancePage.jsx` labels this figure **"Invested into
+portfolio"**; `InvestorFundLanding.jsx` shows **Deployed** beside **Called**,
+expecting `called ≥ deployed`; and `services/fundRollup.ts` records that a capital
+call is not a dated cash receipt at all, which is why it refuses to compute IRR.
+
+**This is a visible behaviour change.** A fund dashboard no longer advances the
+moment a call is issued, only when an LP pays. The figure becomes true rather than
+becoming different, but somebody watching the number will notice, so it is stated
+here and in the PR rather than buried in a diff.
+
+### One writer, and what the extraction is NOT justified by
+
+`routes/capital.ts` had two inline inserts that already disagreed — one bound
+`due_date`, the other did not — so the job would have been a third set of
+defaults. They now share `routes/_capital_call_writes.ts`.
+
+The usual argument for this shape is D46's: *an automated path must call the
+function the manual form already calls.* **It does not apply here, and pretending
+it did would be the more comfortable lie.** `api.createCapitalCallV2()` has no
+caller anywhere in the SPA; there is no reachable manual form to match. The weaker
+reason is sufficient — one writer cannot drift from itself — and the unreachable
+create route is recorded as its own finding rather than dressed up as a
+justification.
+
+`due_date` is accepted and never invented. `legalcap.ts` defaults its
+auto-generated call to `+30 days`; that is its choice and is not copied, because a
+capital call's due date is a deadline an LP acts on. A row without one reads as
+"no due date recorded", which is true, and every reader already tolerates NULL.
+
+### What this does not touch
+
+`capital_calls` is **two different tables under one name**, the same failure as
+#183's `metrics_snapshots`. `routes/legalcap.ts` writes `(deal_id, syndicate_id,
+amount_cents, …)` against its own `ensureSchema`; no migration ever added those
+columns, so the baseline's LP shape is what production has and legalcap's path is
+the dead one — already on record in `scripts/sqlite-table-collisions-baseline.json`.
+It is worse than a dead write: `api.capitalCalls()` selects `cc.syndicate_id`, the
+client method swallows its own failure into `[]`, and three investor screens render
+a permanently empty capital-call list with no error shown. Deciding which shape
+wins is a product question about whether syndicate capital calls are a real
+feature, so it is its own task rather than folded in here.
+
+## D84 — A linter enters the repo, for exactly one rule
+
+**Task #200.** `FounderGrowFocus.jsx` declared `metCount`, `measured` and
+`readTargets` in the host component and read all three inside `FocusContent`, a
+sibling defined in the same file. `/grow/focus` rendered a blank body with
+`ReferenceError: metCount is not defined`. Vite bundled it without a word,
+because an undefined identifier is a **runtime** error and not a build one. Two
+of the three were caught by CodeQL after the fact and the third by a browser.
+
+The repo already carried two bespoke guards aimed at this neighbourhood, and one
+of them states in its own header why they are not enough:
+`scripts/check-react-hook-imports.mjs` says *"A general undefined-identifier
+check is a linter's job and would need real scope analysis to avoid false
+positives; hooks are worth special-casing because they are the names most often
+added to a component body long after the import line."* That is exactly right,
+and it is why the hook check could not have found these three: they are not
+hooks, and telling "declared in a sibling scope" apart from "declared here"
+requires resolving scopes rather than matching text.
+
+### The decision: ESLint, with everything off except `no-undef`
+
+Writing scope analysis by hand is writing a linter, so the alternative was never
+"linter or script" — it was "a linter, or a third script that reimplements the
+part of a linter that is hard". `eslint.config.mjs` at the repo root configures
+`frontend/src/**/*.{js,jsx}` with `no-undef: 'error'` and **no other rule**;
+`npm run lint:undef` runs it and `test:drift` calls it.
+
+**No style rules, no `react-hooks`, no `import/*`, no formatting.** Each of those
+is a judgement about house style that nobody in this repo has made, and turning
+any of them on here would put hundreds of findings between this rule and the next
+person who runs it. That restraint is the decision, not an omission: the rule
+earns its place by being the one the codebase has already been bitten by twice.
+
+The worker is deliberately out of scope, and for a good reason: `tsc --noEmit`
+over `cloudflare-worker/src` already refuses an undefined name — the same
+guarantee by a better route — and it is already in `test:drift` as `test:types`.
+
+### The gap this leaves open, measured rather than waved at
+
+`frontend/src` holds **27 `.ts`/`.tsx` files** (the deck templates, `DeckBase`,
+`brand/gvpn.ts`), and the glob above is `{js,jsx}` because espree cannot parse
+TypeScript. The worker's justification does not transfer to them: `test:types`
+compiles `cloudflare-worker` **only**, the SPA has no tsconfig at all, and Vite
+strips those types without checking them. So against this bug class those 27
+files are covered by nothing but the 14 hook names in
+`check-react-hook-imports.mjs`.
+
+The gap is real and currently **empty**. A probe tsconfig over exactly those
+files reports 15 errors and **zero TS2304** ("cannot find name"), so nothing in
+them is undefined today. Closing it properly means a frontend `tsc --noEmit`,
+which means first resolving those 15 — and they are not lint noise. Two look
+like live wrong output: `templates/index.ts` gives two templates the category
+`"event"`, which `TemplateCategory` does not admit, and
+`minimal_seed_app.tsx:1160` hands a timeline `{year, event}` objects where it
+expects `{date, label}`. A third reads `.initials` off an object typed `{name}`.
+Each is a judgement about what a deck should render, so they are their own task
+rather than bolted onto this one — recorded here so the next person does not
+read `lint:undef` as covering the whole SPA.
+
+### The two bugs the first run found
+
+Both were live, both were in the class the rule was added for, and neither was
+reachable by any existing check:
+
+- **`components/StartupList.jsx`** — the empty state's "New startup" button fell
+  back to `setShowForm(true)`, a setter that left with the create form when the
+  page became a component. `onNewStartup` defaults to `null` and the sole caller
+  (`ExecutionPage`) passes nothing, so the throwing branch was the **only** branch
+  that ever ran: every new account with no startups clicked that button and got a
+  `ReferenceError`. Fixed by rendering no button when there is no handler — an
+  absent control is honest, a control that throws is not.
+- **`pages/SpinoutLabPage.jsx`** — read `LAB_APPLY_HREF` without importing it
+  from `../lib/spinoutLab`. Fixed by adding it to the existing import.
+
+### The 119 findings that were not findings
+
+The first run reported 122 errors, of which 119 were `eslint-disable` comments
+**already in the source** naming rules from plugins this config does not install:
+`react-hooks/exhaustive-deps` (77), `jsx-a11y/*` (2), and 40 "unused disable
+directive". ESLint errors on a disable comment for a rule it cannot resolve, so
+those directives turned a three-finding run into a wall.
+
+Installing both plugins to make the names resolve would pull in two dependencies
+for spelling alone, and deleting 119 comments from files this task is not about
+would bury two real bugs in an unreviewable diff — those comments are notes from
+whoever wrote the code, and they still say something about a deps array even with
+no linter to enforce them. So the names resolve to **no-op rules** and
+`reportUnusedDisableDirectives` is off, because against a no-op every one of them
+is trivially unused. If a later pass turns these plugins on for real, that block
+in `eslint.config.mjs` is what it deletes.
+
+### The one declared blind spot
+
+`frontend/src/decks/buildDeck.js` ends `abToBase64` with `(typeof btoa ===
+'function') ? btoa(bin) : Buffer.from(bin, 'binary')…` — correct in the browser
+and under `node --test`, and `no-undef` cannot see that the `Buffer` branch is
+unreachable in a bundle. Node globals are therefore declared for
+`frontend/src/decks/**` alone, and **not** repo-wide: a blanket declaration would
+hide a real `process.env` or `require` reaching a browser bundle. Rewriting
+working code to satisfy a linter that cannot read a `typeof` guard would be the
+wrong way round.
+
+### What this does not replace
+
+`check-unused-imports.mjs` guards the opposite direction — a name imported and
+never used — which `no-undef` cannot see at all, and it reaches five trees this
+config does not (`cloudflare-worker/src`, `scripts/`, and both test trees).
+
+`check-react-hook-imports.mjs` is the interesting one, and the honest statement
+is narrower than "it still has its own territory": it is scoped to `frontend/src`
+exactly like this config, so across `.js`/`.jsx` it is now **coverage-redundant**.
+That was verified rather than assumed — deleting `useState` from
+`StartupList.jsx`'s import line makes `lint:undef` exit 1 naming `useState` at all
+four call sites, which is precisely the `PublicNav.jsx` failure the script was
+written for. It is kept for two reasons that are worth stating plainly because
+someone will reasonably want to delete it: it is the only cover for the
+`.ts`/`.tsx` gap above, and its message names the specific failure where ESLint
+says only `'useState' is not defined`. If the frontend `tsc --noEmit` above ever
+lands, the first reason disappears and only the second remains.
+
+## D85 — Three chips were a column list away, and the frequency beside them was wrong
+
+**Task #175.** `/validate/pain-map` drew V2's chip row — `ICP only · All
+interviews · Need-to-have · By recency` — with three of the four as prose. All
+three carried one reason, and it was a good reason when it was written:
+
+> *"a theme carries its phrases and not the interviews they came from, so no
+> mention can be traced to a conversation whose ICP fit is recorded"*
+
+That was true of the **payload** and never true of the database.
+`discovery_interviews` has carried `icp_fit` since migration 161 and
+`interview_date` since the baseline; `getPainGroupsView` selected neither. The
+whole of the missing link was two names in one column list. **No migration.**
+
+### The fold, and where the attribution had to happen
+
+`analyzePains` already kept per-theme sets of interview ids for `need_count` and
+`nice_count`, so the shape existed. The new counts ride the **same first-sight
+branch** that increments `count` — the one guarded by `seenKeys` — so one
+interviewee naming a theme three ways is one interview in every number on the
+row. A fold that attributed per phrase instead would report more customers than
+were spoken to, the asymmetry `evidenceFor` exists to hold.
+
+`isIcp` is **imported** from `routes/_founder_validate_helpers`, not restated.
+The rule is `strong || partial`, with NULL a fourth state and an explicit `none`
+a recorded non-customer, and the whole value of one definition is that the pain
+map and the hypothesis verdict cannot drift about who counts as a customer. A
+service importing a `routes/_*.ts` shared module follows `_competitor_writes.ts`
+and `_capital_call_writes.ts`; that file imports only `types` and `auth`, so
+there is no cycle.
+
+### `fit_unrecorded_count` is not a footnote
+
+Three buckets, not two: ICP, recorded non-ICP, and **never recorded**. Folding
+NULL into "not ICP" makes `icp_count` read 0 for every project logged before
+migration 161, and an `ICP only` chip then states *"none of your pains come from
+your customers"* with total confidence on no evidence. `verdictFor`'s header
+names this as the failure the absent-is-not-empty rule exists to prevent; it is
+the same rule, one screen over. So the row shows `2 icp · 4 fit ?` and the map
+carries `icp_recorded` — read **from the interview rows, not from the theme
+counts**, because a project whose only ICP interviewee named no pain leaves every
+theme at zero while the field is plainly in use.
+
+### `By recency` is a sort, and the date is the interview's
+
+The date is the latest `interview_date` among the interviews mentioning a theme —
+"somebody said this to us recently". Never a date of the theme's own: a founder
+renaming a group months later would move it without anyone saying anything new.
+`created_at` is deliberately not the fallback, because a batch of old interviews
+typed up this morning would all read as this morning. Themes with no date sort
+**last** rather than being dropped — a pain people named is not hidden because
+nobody recorded when they said it. The comparison is a **string** compare on
+`YYYY-MM-DD`, which sorts in date order; `Date.parse` on a bare date string is
+the local-versus-UTC trap this repo has already been bitten by.
+
+### The chip row needed three kinds, and the guard had to learn them
+
+This zone's three siblings only ever narrow, so one predicate map said everything
+about them. This row does not: `All interviews` is the **cleared state** and `By
+recency` **reorders**. `zone_actions.test.mjs` required every live chip to appear
+in the predicate map — a rule written after a real escape, where a missing
+predicate made "Retired" show the live claims — and satisfying it would have
+meant two `() => true` entries that pass the guard while lying about what the
+chip does.
+
+So the page declares `PAIN_VIEWS`, `PAIN_SORTS` and `PAIN_CLEARED`, and the guard
+now asserts the invariant rather than the shape: **every live chip is claimed by
+exactly one declared role, and every declared role belongs to a live chip** —
+with a second assertion that no chip is claimed twice, since a chip that both
+narrows and reorders has no defined behaviour. That is stricter than what it
+replaced, not looser: the sorts and the cleared state are now checked too.
+
+### THE BUG FOUND ON THE WAY, and it was the worse one
+
+The pain map's frequency was **wordings over interviews**. The page computed
+`g.phrases.length / view.interview_total`, ranked by the same, and quoted it in
+its own footnote — while `g.count`, the distinct-interview count the server
+computes, went unread.
+
+`analyzePains` seeds every curated alias as a phrase **whether or not any
+interview logged it**. So a founder who grouped three wordings under one theme
+saw that theme at *"3 phrases · 150%"*, bar pinned at 100%, on a two-interview
+project **where nobody had mentioned it at all**. Measured against the real
+service, not reasoned about: `count: 0`, `phrases.length: 3`, `interview_total:
+2`.
+
+It was not a disagreement nobody had noticed — it was one a comment had
+*vouched for*. `serializePainMapCsv`'s docblock said `count` is "the same number
+the pain map page shows", and went on to describe computing frequency from
+`phrases.length` as an "earlier reading of that page". That earlier reading was
+the live one. The export wrote `0` and `0%` for the theme the page drew at 150%:
+one record, two answers, one screen apart, with the prose asserting they agreed.
+
+The page reads `count` now and ranks by `count` desc then title — the order
+`analyzePains` gives `themes`, which is what the deck's Problem slide renders.
+That matters beyond tidiness: this zone's own `Send to Problem slide` op is a
+**link** to that slide, so ranking by wording variety let the page and the slide
+it points at name different leading pains. The wording count is still shown, as
+a separate label, because it is what a founder curating the map needs to see.
+
+### The silent-blank-page regression this nearly shipped
+
+Naming `icp_fit` in the SELECT unconditionally is **not safe**. Migration 161
+ALTERs it in, `ensureDiscoveryIcpFitColumn` exists because it may be absent, and
+its header says a caller should "degrade to 'ICP fit unavailable' instead of
+emitting SQL that would fail with `no such column`". The interview read is
+wrapped in `.catch(() => [])` — so on an environment where the column cannot be
+read, the result is not a missing chip. It is **no interviews**, and the entire
+pain map renders empty with no error shown. A feature that only adds a chip would
+have blanked the page it sits on.
+
+The column list follows the bootstrap's answer, and the degraded path is pinned
+by a test that makes the ALTER fail. Getting that test right took two attempts,
+and the first attempt is the lesson: it built the table without the column and let
+the bootstrap add it, so an unconditional SELECT passed just as well and the
+mutation walked straight through. A degradation test that lets the system heal
+itself first is testing the healthy path.
+
+### Still refused, and now for one honest reason
+
+`/validate/verdict`'s `As of last week` and `Changed this month`, and
+`/validate/hypotheses`' `Recently moved`, all want the same thing: a record of a
+claim **changing**. `hypotheses` carries no `updated_at` that reaches the board
+and nothing writes a lane transition, so there is no history to read. That is a
+store this product does not have, not a query it forgot to write — the opposite
+of the three above — and a product question (what is a verdict snapshot *of*?)
+rather than an engineering one.
+
+## D86 — Two shapes under one name, and both already had homes
+
+**Task #183.** `metrics_snapshots` was two different tables. Production's is a
+DEAL metrics table — `deal_id, snapshot_date, key_metrics, traction_score,
+ai_review, created_by` plus ten named metric columns — and `routes/pipeline.ts`
+creates exactly that at runtime, so it is the one that exists.
+`services/queueWorker.ts` read and wrote a GENERIC METRIC SERIES (`scope,
+scope_id, metric_name, value, captured_at, extra`), which only
+`sql/historical/infrastructure.sql` ever declared, and nothing has built from
+`historical/` since the migration ledger became the build path.
+
+The collision was invisible until `check-sqlite-columns.mjs` stopped unioning
+`historical/` into its harvest. Before that, the two shapes merged into one
+17-column set that satisfied both queries.
+
+### What it cost, and the worst of it was not in the task title
+
+Three queue jobs threw `no such column`:
+
+- **`traction_review`** died on its first SELECT, so the AI never ran and no
+  review was ever written. This is the one the task was filed about.
+- **`metrics_aggregation`** died on its INSERT, so a counter that has existed for
+  as long as the job has was never recorded once.
+- **`liquidity_valuation`** died reading a momentum nothing had written — and it
+  dies **before** `Listings.updateValuation`, with no catch between. So a founder
+  lists a subsidiary for sale, `secondary_listings.ai_valuation_cents` stays NULL,
+  and `LiquidityPage.jsx:562` renders **"— pending" for that listing forever**.
+  A broken metric series turned into a marketplace that never prices anything.
+
+### The decision: no new table, because both shapes already had homes
+
+The task suggested a `metric_series` table or dropping the job. Neither was
+needed once the question was asked per-use rather than per-name:
+
+- **The per-deal AI review goes in `metrics_snapshots.ai_review`** — a TEXT
+  column that has existed since the baseline with **no writer and no reader
+  anywhere**. It is named for exactly this, and the momentum rides inside its
+  JSON.
+- **The global counter goes in `system_metrics`** (`metric_name, value, labels`),
+  which IS the generic named series this repo already has: `meter()` in
+  `queueWorker.ts` writes to it on every job and `analyticsReports.ts` reads it in
+  five places. Safe to add a name there because every existing read filters
+  `metric_name = 'request'`.
+
+`services/tractionSnapshots.ts` is the one place that knows this, so the three
+jobs cannot drift about where a traction review lives.
+
+### `traction_score` is deliberately not touched, and this is the load-bearing part
+
+That column is a **0-100 rule-based** score computed by `pipeline.ts` from
+users/revenue/engagement/growth, and `POST /pipeline/decision-gate/review`
+branches on it at **70** and **40**. `aiTractionReview` returns momentum on
+**0-10**.
+
+Writing one into the other is the exact trap the `ai_scoring` job's own comment
+already refuses — *"correcting the names would have started mixing the two
+instruments instead"* — and the consequence here is worse than a wrong number on a
+dashboard: every AI-reviewed venture would read as "iterate" at the gate that
+decides whether it spins out. A mutation that makes `recordReview` also write
+`traction_score` fails the suite.
+
+### A review annotates a measurement, so it is an UPDATE
+
+A new row per review would be a snapshot with all ten metrics NULL. That pollutes
+the series the next review reads and drags `pipeline.ts`'s "latest snapshot" reads
+onto a row carrying no metrics. So the review UPDATEs the snapshot it reviewed,
+which also makes it **idempotent by construction** — and it needs to be, because
+`Jobs.markFailed` puts the same row back to `pending` and the CF Queue consumer
+deletes its idempotency claim in the failure branch on purpose. A retry overwrites
+one column on one row. There is nothing to double.
+
+Two guards fall out of that, both asserted: a `traction_review` for a project with
+no snapshot returns instead of throwing (throwing would retry forever on a venture
+nobody has measured), and a missing `project_id` throws instead of returning
+(reviewing nothing quietly is how the original bug stayed silent).
+
+### Absent is not empty, where it reaches a model
+
+`metricPointsFrom` skips NULL metrics rather than sending zero. `net_burn=0` in a
+prompt is a statement about the venture that nobody made, and a model cannot tell
+it from a real zero burn. The first draft got the `key_metrics` branch wrong —
+`Number(null)` is `0` and `Number('')` is `0`, both `Number.isFinite` — so a field
+the founder left blank reached the prompt as `growth=0`, in the same function whose
+docblock forbids exactly that. Its own test caught it. The same rule reaches a
+price: `aiValueAsset` renders an absent momentum as `n/a`, and an asserted test
+keeps it from becoming `0`.
+
+### What is still on record, and why
+
+`scripts/sqlite-columns-baseline.json`'s six `metrics_snapshots.*` lines are
+**deleted** — the guard fails on an entry that has since been created, so the
+ledger cannot go stale, and the matching assertion in `schema_guards.test.mjs`
+shrank with it.
+
+`sqlite-table-collisions-baseline.json`'s entry **stays**, with its text
+corrected. The DDL files still disagree: `sql/infrastructure.sql` declares a shape
+nothing builds from and now nothing writes. That is a documentation collision
+rather than a live one, and retiring the file is its own small task.
+
+## D87 — The per-project metric series gets its own table, and two live writers start working
+
+**Task #203**, found by closing #202. Excluding `sql/historical/` from
+`check-sqlite-table-collisions.mjs` left `metrics_snapshots` with five LIVE
+definitions, and two of them were writers nobody had counted.
+
+### The break, measured
+
+Production's `metrics_snapshots` is the DEAL shape `routes/pipeline.ts` creates at
+runtime — `deal_id NOT NULL, snapshot_date, key_metrics, traction_score,
+ai_review, created_by` — plus ten metric columns that `progress.ts`'s own
+`ensureMetricsSnapshotsSchema` ALTERed in. That ALTER trail is visible in the
+baseline as the comma after `created_by`, which is how we know the helper has run.
+
+Its `required` list never included `project_id`, `mrr`, `active_users`, `notes`
+or `source`. And:
+
+- **`routes/progress.ts:1784`** — the founder metrics-snapshot POST — INSERTs all
+  five.
+- **`integrations/providers/stripe.ts:337`** — the Stripe MRR sync — INSERTs four.
+
+So both threw `no such column: project_id`. A founder entering KPIs got a failure;
+a Stripe sync wrote nothing. `computeLifecycleSignals` wraps its read defensively,
+so `latest_mrr`, `active_users`, `monthly_churn_pct` and `new_users` returned NULL
+on every call — a founder's lifecycle signals were permanently blank and nothing
+said why.
+
+### Three things kept it invisible, and each is now asserted against
+
+1. **A helper believed to do what it could not.** The comment above
+   `computeLifecycleSignals` said *"pipeline.ts also writes a deal-keyed
+   metrics_snapshots, so we ensure the founder-metrics shape first."* An ALTER
+   cannot turn a `deal_id` table into a `project_id` one. A test now creates a
+   deal-shaped table, runs the bootstrap, and asserts `project_id` is still absent
+   — so nobody restores the belief.
+2. **A guard that cannot see it, by design.** `check-sqlite-columns` unions every
+   CREATE TABLE, so each writer's own `CREATE TABLE IF NOT EXISTS` contributed
+   `project_id` and `mrr` to the known set and its INSERT validated against them.
+   That guard's docblock states the limitation and names
+   `check-sqlite-table-collisions.mjs` as the complement — which is exactly how
+   this surfaced.
+3. **A docblock asserting the opposite of the truth.** `services/saasMetrics.ts`
+   said the `project_id` shape was *"the LIVE one … what every metrics handler
+   reads."* Every clause was false about production. It is corrected, and the
+   correction says what it used to say, because a doc that confidently states the
+   wrong schema is load-bearing in the wrong direction.
+
+A fourth kept it invisible in CI: **three test fixtures hand-wrote
+`metrics_snapshots` with `project_id`**, and one apologised for it in advance —
+*"in the shape `ensureMetricsSnapshotsSchema` creates (project_id, not the
+baseline dump's historical deal_id)."* Calling production's shape "historical" is
+how a fixture comes to certify a broken feature. All three are repointed.
+
+### The decision: a new table, not four more ALTERs
+
+Migration 249 creates `project_metrics`. The alternative — adding the five columns
+to `metrics_snapshots` — was rejected on two grounds:
+
+- **The reader families are disjoint.** `deal_id`: `pipeline.ts` (three reads) and
+  `services/tractionSnapshots.ts`. `project_id`: `progress.ts`'s whole CRUD
+  surface plus three rollups, `research.ts`, and `stripe.ts`. Merging them would
+  make the deal side's `SELECT *` reads return project rows with every traction
+  field NULL — the pollution D86 refused for the review annotation.
+- **`deal_id` is `NOT NULL`.** A project row would have to put something there.
+  `deal_id` IS a `projects.id` (D86), so it would be the same number in two
+  columns: a thing that works by coincidence and breaks the first time someone
+  changes what `deal_id` means.
+
+**No backfill, and that is provable rather than hopeful.** The old writes named a
+column that does not exist, so they always threw. There has never been a
+project-keyed row to move.
+
+### The uniqueness that replaces a read-modify-write
+
+`UNIQUE(project_id, snapshot_date, source)`, so `stripe.ts` upserts instead of
+`DELETE`-then-`INSERT`. The old pair had a window where the day carried no figure
+at all, and — worse — the DELETE was inside a `try/catch` while the INSERT was
+not: a failed delete left a duplicate, a failed insert took the whole sync down.
+
+`excluded.*` names only the four figures Stripe knows. A blanket replace would
+wipe a founder's headcount for the same day, because Stripe has no opinion about
+their headcount.
+
+**A NULL `source` does not collide** — SQLite treats NULLs as distinct in a UNIQUE
+index — and that is deliberate. A hand-entered figure is a statement someone made,
+not a projection to be silently replaced, so the route decides whether a second
+entry updates or adds. A founder's figure and Stripe's figure for the same day are
+two claims and are two rows.
+
+### Dollars, carried over rather than re-decided
+
+`check-money-cents` correctly flagged four new REAL money columns. They are
+recorded in the baseline with the reason rather than converted: `saasMetrics.ts`
+computes LTV:CAC, CAC payback, burn multiple, CMGR and runway over these as
+dollars, `financial_models.assumptions_json` carries `mrr` and `arr` as dollars
+beside them, and the SPA renders both. Converting the column without converting
+that chain would put two denominations one join apart, which is worse than either.
+Re-denominating the metric series is its own task.
+
+### One latent bug fixed on the way, found by a test
+
+`ensureProjectMetricsSchema`'s readiness flag was a module-level `let … = false`,
+so the first `env.DB` to bootstrap marked the helper done for **every** database in
+the isolate. In production there is one D1 and it never showed. It is a `WeakMap`
+keyed on `env.DB` now, matching `services/painGroups.ts` and
+`services/discoveryInterviewSchema.ts`, which key readiness that way for exactly
+this reason.
+
+---
+
+## D88 — `/build/cadence` gets a store: rituals, runs, templates — and the archive is what somebody wrote down
+
+**Date:** 2026-09-13 · **Task:** #176 (FB4) · **Migration:** 250
+
+`/build/cadence` was the emptiest zone in the product and the most talkative about
+it. The page loaded the project list and no second source, printed "Cadence store
+unavailable" in four places, showed four `Unavailable` stat cards and a
+three-row "Capability coverage" list — and its four filter chips and three ops
+were all registered `unbuilt`, which renders **nothing**. So the artboard's
+toolbar shipped empty while the body explained at length that it could not work.
+Reported three times; the user's words were "doesn't look at all like the one from
+the artifact".
+
+Migration 250 gives it three tables and `routes/founder_cadence.ts` reads them.
+
+### Three tables, because three different things are being stated
+
+A **ritual** is a standing intention ("we retro on Fridays"). A **run** is what
+happened on one date, including not happening. A **template** is the prompt a
+ritual is conducted from.
+
+Folding runs into rituals would make the archive a property of the schedule, so
+editing the schedule would rewrite history. Folding templates in would stop two
+rituals sharing one prompt, which is the first thing a founder with a Monday plan
+and a Friday retro wants.
+
+### Every figure above the archive is computed, and none is stored
+
+Reviews archived, adherence, the template count and the average retro length are
+counts over `ritual_runs` and `ritual_templates`. `founder_validate.ts` states the
+rule this follows: a stored count is a second answer to a question the rows
+already answer, and the two disagree the first time a row is edited.
+
+Three of the four had a wrong-but-plausible implementation waiting, and each is
+pinned by a test:
+
+- **Adherence over an empty archive is NULL**, not 0% (which says the founder
+  adheres to nothing) and not 100% (which congratulates them for it). The
+  denominator is returned beside the percentage, because adherence over three runs
+  and over three hundred are different claims.
+- **An untimed retro is excluded from the average, not counted as zero minutes.**
+  What protects this is `intOrNull` checking emptiness **before** `Number()` —
+  `Number(null)` and `Number('')` are both 0 and both finite, the trap #203
+  shipped once in the function whose docblock forbade it. Verified against
+  `node:sqlite` that SQL's own `AVG` also skips NULLs.
+- **`reviews archived` is its own aggregate, not `runs.length`.** The archive is
+  capped at 500 rows so a Worker's memory envelope stays predictable; a count
+  taken from the returned page would be right for every account under 500 reviews
+  and silently stuck at 500 for the ones that have most.
+
+### Adherence cannot see a skip nobody recorded, and that is not patched over
+
+`done / (done + missed)` needs the missed rows to exist, so a project that logs
+only its successes reads 100%. Inferring a miss from a scheduled date with no row
+would mean deciding a founder on holiday broke their cadence. The figure reports
+its denominator instead.
+
+### One run per ritual per date, which replaces nothing and prevents a lot
+
+`UNIQUE(ritual_id, run_date)`, and the writer upserts. Friday's retro happened
+once; without the index a double-submit files it twice and **every** count above
+the archive is then wrong in the direction that flatters. Keyed on `(ritual_id,
+run_date)` rather than `(project_id, run_date)` — the latter would make a Monday
+plan and a Monday standup mutually exclusive, which is most founders' Monday.
+Both columns are NOT NULL, so unlike migration 249's `source` there is no
+NULL-distinctness hole.
+
+### Retiring keeps the archive; deleting does not
+
+`active = 0` retires a ritual and its runs stay, because the archive is the zone's
+reason to exist. Deleting takes the runs with it: a run with no ritual has no name
+and no kind, so it would draw as a blank row and match no filter. The page offers
+retire first.
+
+### The filter row mixes two axes, and that is the canvas's choice
+
+`All rituals · Plans · Retros · Skipped` — the first three select the ritual's
+KIND, the fourth the run's STATE. A missed retro is under both, so the counts do
+not sum to the total. Asserted rather than tolerated, in
+`frontend/test/cadence_vocabulary.test.mjs`, because a reader who expects them to
+sum will conclude the numbers are broken.
+
+### `other` is a kind, and it is load-bearing
+
+Without it a founder's weekly investor sync has to claim to be a retro to be
+stored at all — and then it lands in the `Retros` filter and in the average retro
+length. A store that forces a wrong answer gets wrong answers. The worker coerces
+an unrecognised kind to `other`, which is why the form has to offer it: otherwise
+the coercion is invisible to the person filling it in.
+
+### "1 customised" is a timestamp, not a boolean
+
+`ritual_templates.edited_at` records that someone saved a change. A `customised`
+flag would be a stored derivation; a timestamp is a fact, and it answers the next
+question a reader has. The three built-in starting points are **not** seeded rows:
+a GET that writes cannot be retried safely, and a seeded row is indistinguishable
+from one the founder wrote, which would make the count a statement about the
+platform rather than the venture.
+
+### What the page stopped saying, and the one sentence that survives
+
+Every "unavailable" claim is deleted rather than softened — a refusal kept beside
+a working feature is the failure #193 was filed for, and `NO_CADENCE_STORE` is
+gone from `founderZoneFilters.js` for the same reason `NO_SESSION_RECORD` went
+when migration 221 landed. A stat card with nothing in it now reads **"Not yet"**
+rather than "Unavailable": the platform can answer, the account has not got there,
+and #180 is about exactly that distinction.
+
+What survives, because it is still true: **a calendar event is not an operating
+ritual and a roadmap change is not a review outcome.** Nothing here reads
+`calendar_events`. An archive assembled from side effects would report a cadence
+nobody ran.
+
+### Three things a mutation sweep changed, not just confirmed
+
+24 mutations applied, 24 caught, and two more proved **equivalent** rather than
+escaped — worth recording so nobody tries to close them:
+
+- Removing `decided > 0` computes `Math.round((0 / 0) * 100)` = NaN, and
+  `JSON.stringify({ a: NaN })` is `{"a":null}`. The response is byte-identical, so
+  no assertion at the HTTP boundary can distinguish it. The guard stays.
+- `AND r.duration_minutes IS NOT NULL` is redundant with SQL's `AVG`, verified
+  against `node:sqlite`. It stays as a statement of intent; `intOrNull` is what
+  actually protects the figure.
+
+And one real bug the sweep found rather than confirmed: the retro **target** was
+read from the average's row set, so a retro ritual whose runs were all untimed
+contributed no target either — a founder who had set "target 30" and never timed a
+retro read "No target set". It is its own query now. The target is a property of
+the ritual; the average is a property of its timed runs.
+
+### `/starters` had to be registered above `/:projectId`
+
+Hono matches in registration order, so the literal path resolved as
+`projectId = 'starters'`, `Number('starters')` was NaN, and the route answered 400
+"Invalid project id". A test found it. A static segment goes above the parameter
+that would otherwise eat it.
+
+### Three guards were corrected, not loosened
+
+- `profile_zone_actions.test.mjs`'s identifier scan read **comment words** as
+  variable names (`// Both ops need a venture.` → an undeclared global `Both`).
+  `codeOnly()` now runs on the call text — the same helper two tests above already
+  uses on the whole file. Narrowing a scan to code can only remove false alarms,
+  and the guard's own note says a false alarm is what gets a guard weakened.
+- `profile_zone_filters.test.mjs` asserted all four cadence chips were disabled
+  and unselectable. That fact changed, so the assertion is **inverted**, not
+  relaxed: four live chips, no hover text, exactly one active, and the shared
+  reason gone from the module.
+- `_deck-loader-hook.mjs` could not import any page that imports its stylesheet —
+  `ERR_UNKNOWN_FILE_EXTENSION` before the first assertion. A `.css` import is now
+  an empty module, which is what Vite does for the real build. Until this existed,
+  testing a page's exported predicates meant regexing its source, which proves the
+  file contains a string rather than that the module exports a working value.
+
+### `CADENCE_VIEWS` lives in the page, and a guard is why
+
+`zoneFilterBuilder`'s contract is that the table owns the labels and the **page**
+owns the predicate (`FounderValidateWorkspace`'s `PAIN_VIEWS` is the same shape),
+and `profile_zone_filters.test.mjs` proves a live filter key appears in the page
+that would have to serve it. With the four predicates in `lib/cadence.js` the keys
+were nowhere in the page and that guard failed — correctly. The worker exports its
+own `CADENCE_VIEWS` with the same four keys and
+`frontend/test/cadence_vocabulary.test.mjs` compares the two, values and meanings
+both, because `frontend/` and `cloudflare-worker/` cannot import each other.
+
+---
+
+## D89 — `/build/kpi` gets definitions and an importer, and stops denying the targets it already had
+
+**Date:** 2026-09-13 · **Task:** #176 (FB5) · **Migration:** 251
+
+Two of `/build/kpi`'s four ops were `unbuilt`, which renders nothing — so the
+artboard's row shipped with half its controls invisible. And the page carried
+**three claims that were already false**, which is the more interesting half.
+
+### What the page was denying
+
+- `Against target · Unavailable`, noted "Targets are not stored in this source."
+  `metric_targets` has been stored since migration 173 and given a reader and a
+  writer by #194. This page simply never read it.
+- `Definitions unavailable`, drawn as a disabled chip.
+- A closing note: "Targets, target variance, cash/burn fields, and metric
+  definitions are not returned by the current source." Wrong on all four —
+  variance is computed from the first two, and `net_burn` / `cash_balance` are
+  columns `project_metrics` has and `progress.ts`'s POST has always accepted.
+- The rail's `['Target comparison', 'No target source is connected.']`.
+
+Every one is deleted rather than softened. A refusal kept beside a working store
+is the failure #193 was filed for, and this is the second zone in one pass where
+the refusal outlived its fix.
+
+### The ledger was showing seven of twelve metrics
+
+`net_burn`, `cash_balance`, `headcount`, `nrr_pct` and `paying_accounts` were
+absent from the page's `FIELDS` — three of them rows the canvas's own table draws.
+A founder who had entered a burn figure could not see it, and "Missing cells"
+counted out of seven. All twelve are listed now, and their LABELS come from
+`lib/metricTargets`'s `METRIC_LABELS` rather than a second copy of the same twelve
+strings: two label tables that agree today is exactly when to merge them.
+
+### A definition is not a target, and `metric_targets` proves it
+
+`metric_targets.target_value` is `NOT NULL`. Hanging a `definition` column there
+would mean defining "net burn" required inventing a plan number for it — and then
+"4 of 6 against target" would count a metric nobody set a target for. So migration
+251 is its own table, `UNIQUE (project_id, metric_key)` on the same key shape so
+the two are joinable per metric. Same call as 249 and 250: ask what the row is
+FOR, not what it is near.
+
+`source_kind` there is **not** `project_metrics.source`. One records where the
+founder intends a metric to come from; the other where one row actually came from.
+The two disagreeing is a finding — a metric declared Stripe-synced whose rows all
+say `manual` means the integration is not running — so both are kept.
+
+"1 customised" is `edited_at`, a timestamp: a fact, not a stored derivation. And
+the three built-in starting points are **not** seeded rows — a GET that writes
+cannot be retried safely, and a seeded definition is indistinguishable from the
+founder's own, which would make the count a statement about the platform.
+
+### The importer's real feature is the rejection list
+
+`services/metricsCsv.ts` parses; the route writes. An importer that reports "OK"
+while eleven of fourteen months went missing is worse than one that fails, because
+the founder finds out six weeks later when a board pack is short. So:
+
+- a verdict **per line**, with the line number in the FILE (header included) so it
+  matches what their editor shows;
+- `dry_run: true` runs the same parse and writes nothing, so the committing press
+  is never the first thing that reads the file — one endpoint, one parser;
+- the row cap is reported line by line, never applied quietly;
+- a duplicated month is **refused, not last-wins**: both lines look deliberate and
+  a silent pick drops a figure the founder can see in their own file;
+- a row whose every metric is blank is refused rather than written as a month of
+  nulls, or "months on record" counts rows the import invented.
+
+It reads what a spreadsheet actually holds — `$104,800`, `1.2%`, `(61,200)` for
+negative, `—` and `n/a` for absent, `2026-08` / `08/2026` / `Aug 2026` for the
+month — and refuses `08/02/2026`, which is February in one country and August in
+another. A date the platform picked is a row filed against a month that may not
+have happened.
+
+**`source = 'csv'`, and that is load-bearing.** `project_metrics` is unique on
+`(project_id, snapshot_date, source)`, so an import can never overwrite a figure
+entered by hand, and re-importing a corrected file updates the import's own rows.
+`DO UPDATE` uses `COALESCE`, so a second file covering only MRR does not blank the
+burn the first one carried — the difference between a correction and a truncation.
+
+### Two more equivalent mutants, and one real find
+
+22 mutations applied, 22 caught. One proved equivalent: removing
+`month < 1 || month > 12` from the date validator changes nothing, because
+`lengths[12]` and `lengths[-1]` are both `undefined` and `1 <= undefined` is false.
+The check stays — a date validator should state its rule rather than rely on an
+out-of-bounds comparison happening to be falsy.
+
+The real find: the parser held a **literal, invisible U+FEFF** in a regex to strip
+Excel's byte-order mark — and `trim()` already strips it, since U+FEFF is
+`<ZWNBSP>` in the spec's WhiteSpace production (verified against node). So the
+replace was redundant AND was the kind of byte an editor or a reformat eats,
+leaving a regex that matches everything. It is gone; every BOM in the tests is now
+written as an escape. And the trim turns out to be load-bearing for exactly one
+header — `notes`, matched by an exact comparison with no alias entry — which is
+now the assertion that holds it.
+
+### The test had to mount the router the way production does
+
+`progress.ts` refuses by `throw new Error('Forbidden')` and nothing in that file
+maps it; `index.ts`'s app-level `onError` does, via a table whose own comment says
+"Without this, RBAC failures surface as 500s and the frontend can't distinguish
+'log in again' from 'the server crashed'." Driving the sub-router alone returns
+500 for what is a 403 in production. Rather than accept `403 || 500` — which would
+make a genuine crash read as a refusal — the test attaches the same three-line
+mapping and asserts 403 exactly.
+
+### One latent bug fixed on the way
+
+`ensureMetricTargetsSchema`'s readiness flag was a module-level `let`, the same bug
+#203 found in `ensureProjectMetricsSchema` twenty lines above it: the first
+`env.DB` to bootstrap marks the helper done for every database in the isolate.
+Production has one D1 and it never showed. Fixed to a `WeakMap` keyed on the
+binding rather than left sitting beside its own fix.
+
+---
+
+## D90 — `/build/this-week` gets a week history, and it is the transitions that are stored
+
+**Date:** 2026-09-13 · **Task:** #176 (FB1) · **Migration:** 252
+
+Three of `/build/this-week`'s four chips were `unbuilt` — `Last 4`, `All 14`,
+`Carried only` — under one reason that was true: "a key result carries no week, so
+there is no earlier week to open", and "nothing records a commitment moving from one
+week to the next". `roadmap_okrs` has a `kanban_status` and an `updated_at`, and
+`updated_at` moves when the **title** is edited, so it cannot say when an objective
+was committed. `unbuilt` renders nothing, so three quarters of the artboard's filter
+row was invisible.
+
+### The transition is the fact; the week is derived
+
+A `week_start` column on `roadmap_okrs` would hold one week — the current one — and
+answer none of the three questions. "Was it in Now four weeks ago" needs history,
+and history on a single column is a column that gets overwritten. So migration 252
+is an append-only log of column changes, `okr_column_moves`, and every window is
+derived:
+
+- **This week** — the OKR's current `kanban_status`, which needs no history and is
+  why that one chip alone kept working.
+- **Last 4** — has a move *to* `now` whose week is one of the last four.
+- **All weeks** — has ever had a move to `now`. The chip's count is WEEKS, not
+  objectives: the canvas says "All 14", meaning fourteen weeks.
+- **Carried only** — is in Now *now*, and its **earliest** move to Now was in an
+  earlier week. Reading the latest instead would make anything touched this week
+  look new, which is exactly how a three-week-old commitment escapes the chip that
+  exists to surface it.
+
+### A reorder is not a commitment, and that is the load-bearing condition
+
+A drag within one column arrives at the same endpoint with the same
+`kanban_status`. Logging it would put a "committed to Now" row in every week a
+founder tidied their board — so `Carried only` would find nothing carried, because
+every card would have a commitment in the current week. Live, selectable, always
+empty: the failure `zoneFilterBuilder.js` opens its docblock with. The log is
+written only when the column actually changed.
+
+### The log never fails the move
+
+A card that moved on the board and then reported an error is a card the founder
+will drag again. The write is wrapped, the failure is logged server-side, and the
+move returns 200.
+
+### No backfill, and the page says so instead
+
+An OKR already sitting in Now has no move row, so it appears under `This week` and
+not under `Last 4`. The only timestamp available to invent one from is `updated_at`,
+which may be when someone fixed a typo — a week derived from that would be a
+specific, confident, wrong answer. The route returns `history_since`, the earliest
+week on record, and the zone prints it: the empty state under a narrow chip says
+"the column history starts in the week of X" rather than repeating the
+nothing-in-Now sentence. The seam heals in four weeks of use and never lies.
+
+### `(day + 6) % 7`, and why that line has four tests
+
+`getUTCDay()` is 0 on **Sunday**. The offset back to Monday is therefore
+`(day + 6) % 7` — 0 on Monday, 6 on Sunday. `day - 1` is correct on six days in
+seven and sends every Sunday *forward* a day, which puts a Sunday commitment in
+next week, makes `Carried only` show this week's new work as carried, and raises no
+error anywhere. The arithmetic lives in `services/okrWeeks.ts` so it can be
+exercised by calling it; 15 mutations were applied to it and 15 caught.
+
+`Date.UTC(y, m - 1, d)` from the integers, never `Date.parse(iso)` — the trap
+`interview_date` and `lib/cadence.js` both already carry notes about. A malformed
+date returns null rather than falling back to the current week, and an unparseable
+"today" makes the carried set **empty** rather than everything: the chip's job is to
+single out a few rows, so failing open would make it useless and look like an
+answer.
+
+### Three refusals that outlived their fix, all in one pass
+
+`NO_WEEK_STAMP` joins `NO_CADENCE_STORE` (D88) and `NO_SESSION_RECORD` (migration
+221) as a shared `unbuilt` reason **deleted** rather than reworded once its store
+landed. Three in one file now. A reason that survives its own fix gets cited again,
+and the pattern of removing the constant — not just the entry — is what stops that.
+
+The page's stale claims go with them: a "Weekly history · Unavailable" stat card is
+now weeks on record; a card headed "Weekly history is unavailable" whose body said
+carry-overs "require a cadence history source that is not connected to this desk" is
+now the list of weeks; and the rail's `['Weekly history', 'No cadence archive is
+returned by the available founder read API.']` is replaced by what is genuinely
+absent — a plan the platform wrote.
+
+### A hand-written fixture was wrong on the first try, which is the argument
+
+`okr_move_log.test.ts` first spelled the column `key_results`; it is
+`key_results_json`, and every route call died on `no such column`. The fixture now
+takes `roadmap_okrs` from `schema_baseline.sql`. A hand-copied DDL that drifts makes
+every assertion above it true of a schema production does not have — the whole of
+#203 — and it happened here within minutes of the rule being restated.
+
+---
+
+## D91 — `/build/board` gets swimlanes, and the WIP limit refuses the move
+
+**Date:** 2026-09-14 · **Task:** #176 (FB2) · **Migration:** 253
+
+Two of this zone's five chips were not in the registry **at all**. `Engineering` and
+`GTM` were one entry reading "a card carries a stage, not a lane, and no lane is
+stored", and `unbuilt` renders nothing — so the artboard's five-chip row drew three.
+`Configure lanes` and `Bulk move` were `unbuilt` too, and the first of the two named
+its own fix: "the six lanes are written into the code twice and no per-project stage
+list is stored, so there is nothing for an editor to change."
+
+### A lane is not a status, and that is the whole reason this was buildable
+
+The status is **where** a card has got to in its life (todo → doing → done); the lane
+is **whose** work it is (Engineering, GTM, Ops). The canvas's own instrument carries
+both on every row — `Card | Lane | Age | Owner` — and its note depends on the
+difference: "Engineering is one card over its WIP limit of four, which is why the
+permissions card sits in backlog rather than starting." A WIP limit counts cards in
+flight *within* a lane, which cannot be expressed at all if the lane **is** the
+status.
+
+Read as a stage list this looked impossible, because the six pipeline stages are a
+literal written twice (`FounderBuildBoard.jsx` and `pages/PipelinePage.jsx`) and are
+genuinely not a founder's to change. Read as a lane it was a table and a nullable
+column: `project_lanes` per project, `mvp_tasks.lane` per card. The stages are still
+a literal, still written twice, and this change does not touch them.
+
+### The lane is stored as a name, not a `project_lanes.id`
+
+The alternative makes a rename either break every card in the lane or need a cascade.
+The name is what the founder typed and what the board draws, so a rename is one
+`UPDATE` on the cards and one on the lane — and `PUT /:projectId/lanes` with an `id`
+does exactly that pair, which is why renaming carries the cards rather than orphaning
+them.
+
+The cost is real and is paid in the open: a card can name a lane that no longer
+exists. `DELETE /lanes/:id` **unassigns** its cards rather than deleting them, the
+read returns those names as `orphan_lanes`, and the board draws them as their own
+group. A card nobody can see is worse than a lane nobody configured.
+
+### Nothing is seeded, and unassigned is a group rather than an absence
+
+A project that has never configured lanes has none, and all its cards are
+`lane IS NULL`. The board draws them as one "Unassigned" group; it does not invent
+Engineering, GTM and Ops on the board of a solo founder building a design tool. The
+dynamic chip group therefore keeps a reason — `zoneFilterBuilder` draws nothing for a
+group with no names, and "the page forgot to pass them" and "this venture has none"
+are different problems with the same appearance.
+
+### `wip_limit` NULL is not `wip_limit` 0
+
+Zero is a **real** limit: a lane closed to new work, which is how a founder pauses a
+workstream without deleting its cards. `Number('')` is 0 and finite, so a blank
+coerced before being tested would close a lane the founder meant to leave unlimited —
+the `Number(null) === 0` trap #203 was built out of, hit again three files later.
+Emptiness is checked before `Number()` in `intOrNull`, and the dialog sends `null`
+for a blank rather than `0`.
+
+### The limit refuses, all-or-nothing, and the refusal is rendered
+
+`POST /:projectId/cards/bulk` counts what the destination lane would hold and answers
+**409** with `{ lane, wip_limit, would_be, moved: 0 }` — nothing moves. A partial move
+that reported an error would leave the founder to work out which cards landed, which
+is worse than a refusal.
+
+`BulkMoveDialog` reads those **fields**, not the message: "Engineering would hold 6 in
+flight, over its limit of 4. Nothing was moved." A generic "something went wrong"
+there would hide the one number the founder needs to decide between raising the limit
+and moving fewer cards.
+
+### What counts as in flight, and why an unknown status counts
+
+`NOT_IN_FLIGHT` is `todo`, `backlog`, `done`, `cancelled`, `archived`. Backlog is
+excluded because the canvas's own note has a card sitting there *because* the lane is
+full — counting it would make the limit self-fulfilling.
+
+`mvp_tasks.status` is free text from the client, so the list cannot be exhaustive, and
+the conservative reading of a status nobody recognises is "somebody is doing this".
+An unknown status therefore **counts**: the limit holds a little too tightly rather
+than not at all. A WIP limit that can be walked past by inventing a status is not a
+limit.
+
+### `Mine` was a false refusal, not a gap — and the Owner cell was worse
+
+This is a #193-class finding rather than anything migration 253 built.
+`mvp_tasks.assigned_to` is an **INTEGER user id**, so "Mine" was always answerable
+from data the board already had; the chip was refused on a belief about the column.
+The page now filters on the reader's own id from `useAuth()`.
+
+The related defect was upstream of the chip: the table's Owner cell was printing the
+raw integer. A founder read "Owner: 41" on their own board. It now names the reader
+where the id is theirs and says "assigned" or "unassigned" otherwise, which is all
+this route can honestly say — `mvp_tasks` has no join to a user's name, and inventing
+one here would be a second table's work.
+
+### `Automations` stays a stated gap, deliberately
+
+The artboard reports "Automations · 3 · 1 paused" and gives nothing else: no trigger
+vocabulary, no action vocabulary, no example rule. A rules engine built from a count
+would be inventing the feature rather than integrating it — the one thing #176 asks
+not to do. The entry keeps its engineering reason and gains a founder-facing `hover:`
+under the tooltip cap, so the disabled control explains itself on the board instead of
+only in the source.
+
+### The one interpolated SQL statement in this route, and why it is safe
+
+A bulk update over N selected cards needs N placeholders:
+`const placeholders = ids.map(() => '?').join(',')`. The interpolated text is derived
+from the *length* of an array of numbers that have each been through `Number.isFinite`
+— no caller-supplied character reaches it — and every value is still bound. It is
+recorded in `scripts/sql-prepare-baseline.json`, the argument is in the docblock beside
+it, and a test asserts the statement's shape so a future edit that interpolated a
+value instead would fail rather than pass quietly.
+
+### Two things the tests found that review had not
+
+A typo'd bulk status fell through to "Nothing to change": an unrecognised status
+resolves to null, the body then looked empty, and the route answered 200 having done
+nothing. The unknown-status 400 now comes first, so a client sending `in-progress` for
+`in_progress` is told.
+
+And a lane with no limit was accepted as a destination without counting anything,
+which is correct — but nothing asserted it, so a mutation that made an unlimited lane
+*refuse* survived. The gap is closed with an assertion rather than left as a passing
+sweep: 22 mutations applied, 22 caught.
+
+### The guard that a reformat silently shrank
+
+Worth recording because it is general, and because it nearly hid this work's own
+regression. Five assertions in `frontend/test/profile_zone_actions.test.mjs` each
+extracted the zone-action table with their own line-anchored
+`/^ {4}\{ …label: '…'/gm`, which is correct only while every entry fits on one line.
+`Automations` gained its `hover:` string, went multi-line in the house style every
+other list in this repo uses, and vanished from all five at once: the canvas-order
+comparison saw a zone one op short, and the links + exports + handlers + gaps sum
+stayed balanced *because the entry had left both sides of it*. One test failed, and it
+failed pointing at the canvas.
+
+The fix is not a formatting convention. The reader now closes an entry at its own `}`,
+and it counts the table's `label:` keys by a separate route so it can be compared
+against the entries it actually parsed — read fewer than the table has and the file
+says so instead of quietly asserting less. Reformatting the entry back onto one line
+would have made the suite green and left the next multi-line entry invisible.
+
+---
+
+## D92 — `/build/roadmap` gets a dependency graph, and a chip that was live over nothing
+
+**Date:** 2026-09-14 · **Task:** #176 (FB3) · **Migration:** 254
+
+Two of this zone's four chips were wrong in opposite directions, and the second is
+the one worth recording.
+
+`Scenarios` was honestly refused — "no roadmap scenario is stored", which was true.
+
+**`Dependencies` was LIVE and could never show a row.** `FounderBuildRoadmap.jsx`
+filtered on `item.dependency || item.dependencies || item.blocks`; `roadmap_okrs`
+has none of those columns and `progress.ts`'s `OKR_SELECT` returns none of them.
+Selecting the chip emptied the table under the caption "items naming a
+dependency", which a founder reads as *this venture has none* rather than
+*nothing here can have one*. The `Blocks` column said "Not recorded" on every row
+and the `At risk` stat said "Unavailable" — the same emptiness in three different
+words.
+
+### Why no guard caught it, and what now does
+
+The zone suites count **refusals**: an `unbuilt` entry has to justify itself, the
+links/exports/handlers/gaps sum has to balance, a reason may not name a path. This
+was not a refusal. It was a working control over a store that did not exist, which
+is the failure `zoneFilterBuilder.js` opens its own docblock with and the one thing
+those counts are structurally unable to see. Same class as #93.
+
+`frontend/test/roadmap_zone_contract.test.mjs` ties the page to the route by name:
+every `item.<field>` the page reads must be a key the handler writes, and every
+live `key` in the filter registry must be a branch the page implements. It is
+narrow — one zone, one shape — and narrow is what makes it checkable.
+
+### A dependency is an edge, not a column
+
+`depends_on TEXT` on `roadmap_okrs` would hold one unvalidated name and could not
+answer "what does this block", which is the column the artboard draws. So
+`okr_dependencies` is its own table, indexed both ways, and the edge points from
+the **blocker** to the **blocked** — the direction the cell reads.
+
+Four refusals on the write, each a state the graph cannot hold rather than a
+policy: no self-link; both ends on the same roadmap (without which naming another
+venture's objective id would confirm it exists); no duplicate edge; and **no
+cycle**, because two objectives blocking each other can never be cleared by
+anybody and would make the state walk meaningless. The unique index is on the
+*ordered* pair, so the table itself will happily store `A→B` and `B→A` — the route
+is the only thing standing between the founder and that trap, which is why the
+cycle check has its own tests at one, three and four hops.
+
+### `At risk` is not derivable, and a provably-empty state nearly shipped
+
+The artboard's `State` column draws Blocked, In flight, At risk and Provisional.
+The first draft of `services/okrGraph.ts` derived **At risk** as "downstream of
+something blocked, but not itself blocked" — and that set is **always empty**. If
+`B` is blocked then `B` is not done, so any `X` that `B` blocks has an unresolved
+direct upstream and is blocked by the direct rule. There is nothing the transitive
+rule can reach that the direct rule has not already claimed.
+
+Shipping it would have re-introduced the exact live-but-empty bug this change
+exists to fix, one file from its own fix. It was caught by reasoning the rule
+through before building on it, and `okr_graph.test.ts` now asserts that **every
+state in `STATE_LABELS` is reachable** — a state no input can produce is a chip
+that draws and never fills.
+
+Nor can the artboard's rows be reverse-engineered into a rule: `Handoff schema` is
+Blocked and blocks two items, one drawn **In flight** and the other **At risk**.
+Two items with the identical relationship to the identical blocker carry different
+states, so the copy is illustrative and there is no rule in it to recover.
+
+**So risk stays unanswered and the page says why.** `Blocked` is the honest version
+of that number, and a card beside it explains what would have to be stored for risk
+to mean anything — when an objective became stuck, which nothing records.
+
+### A scenario is saved and compared, never applied
+
+`Saved scenarios · 2 · "raise slips 6wk"` is the artboard's stat, so a scenario is
+a named what-if somebody wrote down. It stores **an alternative quarter per item**
+and nothing else: the quarter is the only field a what-if plausibly moves, and
+copying whole OKRs would make a scenario go stale the moment somebody fixed a typo
+on the live one.
+
+It does not write back, and the dialog says so. The artboard offers `New scenario`,
+`Export` and `Configure` and no "apply" anywhere; a bulk edit of every quarter on
+the board from a control nobody drew is inventing the feature. Saving replaces the
+item list rather than merging it, because a scenario is one coherent story — merging
+would leave an objective the founder removed still in it.
+
+`New scenario` stops being a link to `/execution/roadmap`. That note said
+"objectives and key results are edited in Execution", which was true of objectives
+and beside the point here: that editor writes the **live** quarter, which is the one
+thing a what-if must not do.
+
+### `Configure` stays a stated gap
+
+The same argument as `/build/board`'s `Automations` (D91): the artboard names the
+control and specifies no setting for it to change — no default quarter, no horizon,
+no ordering rule, no example. A settings screen invented from a button label is
+worse than a disabled control that says why.
+
+### Two test-harness traps this change walked into, both now shared
+
+`splitStatements` in `cloudflare-worker/test/_baseline.mjs` exists because the
+fixtures' `sql.split(';')` cut migration 254's own prose in half — "…`item.blocks`;
+`roadmap_okrs` has none of those columns" — and handed the second half to SQLite,
+which failed quoting the migration's comment. **51 migrations have a semicolon
+inside a `--` comment**, and at least five put one in a *trailing* comment after
+real SQL, which stripping whole-line comments does not fix. The shared splitter
+tracks string literals instead: `--` opens a comment and `;` ends a statement only
+outside a quoted string, with `''` as the escape.
+
+And the route test answered 500 where production answers 401, because `requireAuth`
+refuses by `throw` and only `index.ts`'s app-level `onError` maps it — the third
+time that has bitten in this pass (D89's `progress.ts` tests, and again here). The
+mapping is composed into the test app, and the refusal is asserted as 401 exactly.
+
+---
+
+## D93 — four of Raise's seven refusals were false, and one constant was hiding three of them
+
+**Date:** 2026-09-14 · **Task:** #177 · **Migration:** none
+
+`/raise/*` carried seven `unbuilt` entries. **Four were not true.** No migration,
+no route and no table was needed to close them: every one was already served by an
+endpoint the founder could already call.
+
+| Refusal | Verdict |
+| --- | --- |
+| `raise/status` → `Timeline` | **false** — both sources carry dates |
+| `raise/pitch` → `Shares` | **false** — the page was already holding the array |
+| `raise/liquidity` → `Restrictions` | **false** — the ledger is mounted and founder-reachable |
+| `raise/liquidity` → `History` | **false** — same endpoint, same array |
+| `raise/liquidity` → `Tender` | true, and it needed its own sentence |
+| `raise/pitch` → `Variants` | true — `pitch_decks` has no variant column |
+| `raise/status` → `Share war-room` | true — no share mechanism exists for this view |
+
+### The refusal that described its own mapper
+
+`Timeline` said "the assembled rows carry a state but no date, so they cannot be
+put in order". That is a true statement about the twenty lines above it and a
+false one about the data: `raise_prospects` and `legal_documents` both carry
+`created_at` and `updated_at`, and **both routes `SELECT *`**, so every date was
+already on the page. The mapper simply did not copy it into the row.
+
+This is the sharpest version of the pattern D91 recorded for `/build/board`'s
+`Mine` and D92 for `/build/roadmap`'s `Dependencies`: a refusal written from a
+belief about the source rather than from the source. The fix is two lines —
+`at: x.updated_at || x.created_at || null` on each — plus a sort.
+
+`updated_at` leads because the question is "what moved last", not "what was filed
+first". A row with neither is kept and sorts last, and an unparseable stamp sorts
+last rather than as epoch zero — which would put it **first** under a heading that
+says most recent.
+
+### The refusal to data that was already on screen
+
+`Shares` said "share links are held by the deck builder and are not returned to
+this page". `GET /decks/:id/engagement` returns a `shares` array — id, created,
+expires, view_limit, view_count, exhausted and, since #196, `revoked_at` — and
+`FounderRaisePitch.jsx` was **already calling that endpoint and already reading
+that array** to build the Analytics table. The links were never absent; they were
+on screen in the shape of their *readers*. `Shares` asks the other question: which
+links exist and which still open.
+
+### One constant covering three absences, two of which were not absences
+
+`NO_LIQUIDITY_LEDGER` — "no restriction, tender or liquidity-event ledger is
+connected" — sat on `Restrictions`, `Tender` and `History`. But
+`liquidity_events`, `secondary_listings` and `secondary_rofr_notices` all exist,
+`routes/liquidity.ts` is mounted at `/api/liquidity`, and nine `api.liquidity*`
+methods reach it.
+
+**The gate is the fact that mattered.** `GET /liquidity/events` is restricted to
+admin, partner and investor — a founder is refused there, which is probably how
+the belief formed. `GET /liquidity/my-portfolio` is `requireAuth` **only**, and it
+returns `my_listings` and `exit_history`: exactly the two arrays those two chips
+needed. The ledger was connected the whole time, through a different door.
+
+The constant is **deleted**, not reworded — the D88/D90 pattern, and this file's
+own note about `NO_SESSION_RECORD` had already recorded why: one sentence covering
+several absences stops being true one absence at a time and nothing notices. Three
+in one file now, and this is the first where the shared reason was false when
+written rather than falsified later.
+
+`Tender` keeps a refusal and gains its own words. A tender is the **company**
+offering to buy shares back; `secondary_listings` is one holder offering to sell.
+Nothing records the first, and calling a seller's listing a tender would misname
+the party doing the buying.
+
+### Two live controls that did nothing, found on the way
+
+- **`/raise/liquidity` drew its filter row twice** — the zone header's chips and an
+  in-body copy with four hardcoded labels. The copy rendered `Tender` as
+  selectable while the registry refused it, and would have kept drawing the old
+  four after this change. Removed; one filter row, owned by the registry. Same
+  doubled chrome #37 and #40 removed elsewhere.
+- **The `Restriction coverage` card had four hardcoded "Not recorded" rows** under
+  one sentence saying no source was connected. Two of the four are answerable from
+  the ROFR notice (`company_elected`, `investors_elected`); the other two — board
+  approval, lockup — are clauses in the Bylaws or the SAFE that nothing parses.
+  They are now marked **"No source"** rather than "Not recorded", because those
+  are different claims: one says nobody filled it in, the other says nobody could.
+
+### What the page refuses to round
+
+The ROFR window is a **contract term stored per notice** — `secondary_rofr_notices`
+says in its own comment that 30 days is common but "a term of the specific
+agreement". So the stat reports a single window only when every notice agrees, a
+range when they do not, and never an average, which would be a number nobody
+signed. And a listing with **no notice served is not clear to transfer** — the
+table's comment says a NULL `notice_date` "reads as 'not_started' and therefore
+NOT clear" — so the absence is shown as an unanswered question, not a green light.
+
+### Raised, not fixed here
+
+**80 schema bootstraps cache readiness in a module-level boolean** (task #204),
+including `rofrSchemaReady` in this same liquidity route. 13 files use the
+`WeakMap` keyed on `env.DB` that #203 settled on; there is no guard, and
+`GOTCHAS.md` does not record the rule, which is why the pattern kept spreading
+after the decision. Stated at its real severity: a module flag is only wrong when
+one isolate serves two different bindings, so this is a latent hazard that
+reliably breaks tests — not a production outage.
+
+---
+
+## D94 — four more false refusals in Grow, and the two that were right for the same reason
+
+**Date:** 2026-09-14 · **Task:** #179 · **Migration:** none
+
+Grow carried **fourteen** `unbuilt` entries across seven subpages — the largest set
+of the three founder buckets. **Four were false.** As with #177, closing them needed
+no migration, no route and no table.
+
+| Refusal | Verdict |
+| --- | --- |
+| `talent` → `Post a role` | **false** — `job_postings` is the store; `/jobs/new` is mounted |
+| `talent` → `Bulk reject` | **false as written** — the records exist; the gap is the writer |
+| `customers` → `Stalled` | **false** — four activity stamps, all returned |
+| `capital-match` → `Warm path only` | **false** — the join has its own migration |
+| the other ten | true, and left alone |
+
+### The refusal that denied a whole feature somebody else had built
+
+`Post a role` said "no role posting is stored". **Task #68 built the job board.**
+`job_postings` exists and carries a `project_id` — the very column this desk's own
+role chips filter on — `jobs.create()` writes one, `routes/jobs.ts` serves it, and
+`/jobs/new` is a route `App.jsx` mounts for a founder. The posting surface existed
+the whole time; this desk had simply never pointed at it. It is a `to:` link now,
+the same correction #193 made four times over.
+
+### The refusal that was right about the gap and wrong about where it was
+
+`Bulk reject` said "no candidate records exist to act on". `job_applications`
+exists, `jobs.applications(id)` reads it — its own comment calls it "the sole PII
+surface" — and **this page already puts those candidates in a table**. What is
+genuinely missing is a **writer**: `routes/jobs.ts` has no endpoint that sets an
+application's status, so a reject has nothing to call.
+
+The distinction matters because of who reads the reason. "No records exist" sends
+the next engineer to build a store that is already there; "no endpoint sets a
+status" sends them to add eleven lines to a route. The refusal stays — correctly —
+and now says which.
+
+### A timeline that was there all along
+
+`Stalled` said "no activity timeline is stored, so no account can be called
+stalled". `waitlist_signups` carries `created_at`, `invited_at`, `followed_up_at`
+and `promoted_at`; `WAITLIST_SELECT` returns every one, and that route's own comment
+calls them "independent activity marks".
+
+**The newest stamp is the last touch**, not `created_at` — an account invited
+yesterday is not stalled because it signed up in March. And a row whose stamps are
+all unparseable is **not** called stalled: silence about a date is not evidence of
+neglect, and the false accusation sends a founder chasing a live account.
+
+### A join with its own migration
+
+`Warm path only` said "nothing joins a prospect to a relationship in the network
+book". **Migration 128 is named `contact_promotion.sql`**, it adds
+`raise_prospects.contact_id`, and it indexes it as `idx_raise_prospects_contact`.
+`contacts` is the network book. A prospect carrying a contact id was reached through
+somebody the founder already knows — which is the chip, exactly. Nothing is inferred
+from a shared domain or a similar firm name.
+
+### A stale guard inverted, not deleted — and its second half was never true
+
+`profile_zone_filters.test.mjs` **pinned `Stalled` as drawn-dead**, and its comment
+gave the reason: the chip had once shipped live with a predicate of `return []`, so
+clicking it answered "you have no stalled accounts" over a store that — the note
+said — "records no stalling at all".
+
+The first half was a real bug, rightly caught. **The second half was never true.**
+The guard now holds the opposite state and a stronger claim: the chip must be
+selectable *and* the page must compute the predicate from those four stamps. This is
+the third stale guard inverted rather than dropped (D88, D90); what is new is that
+this one encoded a *false belief* rather than a fact that later changed.
+
+### Getting it wrong in the other direction is also possible
+
+Two of the ten survivors are **dynamic-group** reasons — `talent`'s role chips and
+`capital-match`'s stage chips — and both were tempting to call false, because
+`job_postings.project_id` and `raise_prospects.stage` both exist. They are correct
+as they stand: each page **does** supply names from rows it has loaded
+(`dynamic: { roles: jobs… }`, `dynamic: { stages: stages… }`), and the reason covers
+only the empty case, which is what a dynamic group's reason is for.
+
+An earlier draft of this work recorded the Talent zone as fetching nothing at all.
+That was wrong — the page imports `jobs as jobsApi` and a grep for `api.` missed it.
+Deleting those two reasons as false would have been the same error as the four above,
+pointing the other way, so the guard now asserts the supply as well as the reason.
+
+### Where the four buckets stand
+
+Across #176, #177 and #179, **ten refusals turned out to be false** and every one
+was a belief about the source rather than a reading of it. None needed a new store.
+The guards that count refusals cannot see this class, which is why each bucket now
+has a contract test tying its claims to the thing that makes them true or false.
+
+---
+
+## D95 — schema readiness is a property of the database, not of the module
+
+**Date:** 2026-09-14 · **Task:** #204 · **Migration:** none
+
+### The bug, stated precisely
+
+115 lazy schema bootstraps remembered "already done" in a module-level
+`let _ready = false`. A module is instantiated **once per isolate**; the flag
+therefore means *some database this isolate has served is bootstrapped*, while
+every `if (_ready) return` reads it as *this database is bootstrapped*. When one
+isolate serves two bindings, the second is told the work is done and its DDL never
+runs — and what follows is not an exception. It is a `SELECT` against a table that
+does not exist, or a read that succeeds against an older shape.
+
+This is #203 with the scope widened: that task found the bug once, in a live
+break, and settled on a `WeakMap` keyed on `env.DB`. 16 files adopted it. The
+other 115 were never swept, and nothing stopped a new one being written.
+
+### Severity, stated honestly
+
+**This reliably breaks tests and does not reliably break production.** One
+production isolate serves one binding, so the flag is usually right by accident.
+The realistic failure paths are a test running two fixtures through one module
+instance, a preview Worker beside production, and a scheduled handler against a
+second database. Filing it at that severity is the point: a latent hazard is
+worth a guard, not an incident report, and overstating it would have bought a
+rushed fix instead of a swept one.
+
+### The conversion
+
+Every flag becomes `const READY = new WeakMap<object, boolean>()`, read and
+written through `bindingKey(env)` — a new one-line export in
+`util/schemaBootstrap.ts`, which already owned per-binding schema state. The cast
+`env.DB as unknown as object` now exists in exactly **one** place, because a cache
+keyed on the wrong thing does not throw; it simply never hits, or hits for a
+stranger.
+
+**The identifier was renamed on purpose.** `_ready` → `READY` means a half-converted
+file fails to compile, so `tsc --noEmit` — not a reviewer's eye — is what proves
+every read and write moved. A same-name conversion would have left
+`if (READY)` reading a WeakMap as always-truthy: green build, dead cache.
+
+**Three in-flight promise latches moved with the booleans** and are the more
+dangerous half. `ensureInvestorSchema`, `ensureAdvisorSchema` and
+`ensureExploringSchema` each coalesced concurrent callers on a module-level
+`Promise<void> | null`. Shared across bindings that hands database B the promise
+of a users-table CHECK rebuild that ran against database A — B is told the rebuild
+happened when nothing touched it. They are `WeakMap<object, Promise<void>>` now,
+so two bindings get one rebuild **each** rather than one between them.
+
+### One file is exempt, and says so
+
+`services/aiRouter.ts` keeps its own inline cast and imports nothing. Its test
+loads the file by reading the bytes, stripping the single `import type` line and
+evaluating the rest inside `new Function`; a value import would survive that strip
+and throw `Cannot use import statement outside a module`. Having no value import
+is a property that test depends on, so the file carries the cast and a comment
+saying why. A documented exception beats a helper nobody may use.
+
+### The guard found a real bug on its first run
+
+`scripts/check-schema-readiness.mjs` bans the boolean and the promise latch, and
+additionally fails any `WeakMap<object, …>` in a file that never names the binding.
+That third rule caught `services/projectAccess.ts`, whose comment said "keyed
+per-DB … mirrors the ensureProject*Columns pattern in routes/projects.ts" — and
+which keyed on `env`, the whole environment object, while `projects.ts` keys on
+`env.DB` seven times over. Wrong in both directions: two bindings arriving with one
+`env` share an entry describing only the first, and a fresh `env` per request never
+hits, so a ten-statement bootstrap re-ran every time. The false comment is what
+made it invisible to reading.
+
+### What the guard does not check, and why
+
+Whether the latch is set before or after the work, and whether a failure latches.
+Those differ legitimately — `ensureExploringSchema` latches only if the role-CHECK
+rebuild succeeded, `ensureXSchema` latches inside its `try` — and a check that
+forced one shape would push the next author into the wrong one. Source shape is all
+`check-schema-readiness` can see, so behaviour is pinned separately by
+`cloudflare-worker/test/schema_readiness.test.ts`: two bindings each get their DDL,
+one binding gets it once, a failed bootstrap does not latch, and `projectAccess`
+keys on the binding. Reverting `xSchema` to a boolean fails three of those five;
+reverting `projectAccess` to `env` fails exactly the one written for it.
+
+### A dead test seam is deleted rather than kept
+
+`__resetWorkflowSchemaCache()` existed for one stated reason — "the module-level
+cache would otherwise leak across cases" — which is no longer true, and it had no
+caller anywhere. `aiRouter`'s `__resetForTest()` has twenty, so it stays, now
+reassigning the map and with a docblock saying it is belt-and-braces rather than
+load-bearing. A seam whose reason has evaporated is a false claim the next reader
+will trust.
+
+### Two existing guard tests were updated, not loosened
+
+`apex_cutover_bootstrap.test.mjs` pinned the single-flight property by the old
+identifier names. It now pins the same property on the new latches **and** asserts
+each is a `WeakMap` — an assertion that would have failed before this change. Its
+production-short-circuit test likewise requires the `.set(bindingKey(env), true)`
+form, so a file that drops back to a boolean fails there as well as in the guard.
+
+---
+
+## D96 — the SPA gets a type-check, and strict turned out to be the cheap option
+
+**Date:** 2026-09-14 · **Task:** #201 · **Migration:** none
+
+### What was unchecked
+
+`frontend/src` holds 27 `.ts`/`.tsx` files — the deck templates, `DeckBase`,
+`Thumbnail`, `brand/gvpn` — and **nothing looked at their types**. `test:types`
+compiles the worker; the SPA had no `tsconfig.json` and no `typescript`
+dependency at all; Vite 8 hands TypeScript to oxc, which strips types and never
+checks them. `lint:undef` is globbed `{js,jsx}` because espree cannot parse
+TypeScript, so against a missing import — a runtime `ReferenceError` the bundler
+emits without complaint, which is the entire reason `lint:undef` exists — those
+27 files were covered by fourteen hard-coded hook names and nothing else.
+
+D84 recorded this gap and left it open on purpose: closing it meant landing a
+`tsc --noEmit` behind pre-existing errors, and several of those were judgements
+about what a deck should render rather than type pedantry.
+
+### Strict is the SMALLER error set, which is not the obvious way round
+
+#201's own guidance was *"keep `strict` off at first if that is what it takes to
+land the gate"*. Measured with the repo's pinned compiler (TypeScript 7.0.2) over
+exactly those files:
+
+| config | errors |
+| --- | --- |
+| fully loose (`strict:false, noImplicitAny:false, strictNullChecks:false`) | **15** |
+| `noImplicitAny` only | **18** |
+| `noImplicitAny` + `strictNullChecks` | **10** |
+| `strict: true` (TS 7's default) | **10** — identical to the row above |
+| **`strict: true` + `allowJs: true`** | **9** |
+
+The mechanism is worth keeping because it decides the fix and not just the flag.
+`demo_day_app.tsx` reads `const raw = data.features[idx] ?? {}` and then six
+`raw.x ?? <default>` lines, under a comment saying autofill may write `{name}`
+only. Loose mode cannot narrow through `??`, reduces the union to `{}`, and files
+**seven** complaints against a defensive fallback that is already correct;
+`strictNullChecks` knows the left side is non-nullish, drops the `{}`, and all
+seven vanish. Following #201's item 4 — *"needs the real slot type, not a cast"* —
+would have meant tightening a guard that exists precisely to tolerate a partial
+payload. `allowJs` takes the last one: `decks/spinout/deckData.js` is the only
+`.js` any of these files import, and admitting it (one extra file, `checkJs` off)
+lets TS infer instead of refusing. The whole check runs in about 1.4 s.
+
+### The nine, and what each turned out to be
+
+| site | verdict |
+| --- | --- |
+| `templates/index.ts:57,58` — `category: 'event'` | **the type was wrong, not the data.** `PitchDeckPage.jsx` hard-codes an `'event'` filter tab, so both decks were always visible; the worker's own union is `fundraising \| commercial \| event \| narrative`. Widened to match, `'narrative'` included. Not widened to `string` — `ShareDeckCTA` branches on it. |
+| `minimal_seed_app.tsx:1160` — timeline shape | **a real rendering bug.** `TimelineDots` reads `date`/`label`; `achievements` carries `year`/`event`, so the JOURNEY strip drew its dots over three empty columns. Fixed the way `minimal_seed.tsx` and `kawasaki_10_20_30.tsx` already had — widen the component and normalise — rather than renaming the data the autofill produces. |
+| `series_a_growth_app.tsx:1164` — `.initials` | **type-only, and #201 was wrong about it.** The task predicted it "renders `undefined`"; the line is `l.initials \|\| safeUpper(l.name).slice(0, 6)`, so it never did. The union simply lost the declared `initials?` because the fallback is `Array.from` (whose callback is inferred alone) rather than an array literal (which the conditional widens) — which is why `minimal_seed_app`'s identical pattern does not error. |
+| `yc_seed.tsx:381` | type-only: the one `Editable` in the file reading a raw optional instead of going through `v(data, …)`. The component already rendered `{value \|\| placeholder \|\| ''}`. |
+| four × `keyof JSX.IntrinsicElements` | **not the "probe-config artifact" #201 guessed.** React 19's `@types/react` removed the global `JSX` namespace; the spelling is `React.JSX`. Those four template-local `Editable`s diverged from `DeckBase`, which sidesteps it with a literal union. |
+
+### Scope the timeline bug honestly
+
+`minimal_seed_app.tsx` is the one `_app` variant **no wrapper re-exports** — the
+other seven reach the registry through one-line re-export files (`demo_day.tsx`,
+`series_a_growth.tsx`, …), while `minimal_seed.tsx` is its own full
+implementation. So nothing imported the file and no user saw those empty columns.
+It is real code with a real bug that was not shipping, and saying otherwise would
+be the same overstatement this decision exists to correct. Whether that variant
+should be adopted or deleted is a separate question and is not answered here.
+
+### The gate, and the two dependency facts under it
+
+`frontend/tsconfig.json` (strict, `allowJs`, `checkJs: false`, `noEmit`) plus
+`npm run test:types:frontend`, chained into `test:drift` beside `test:types`.
+Two things had to become explicit first:
+
+- **No TypeScript was reachable.** `npx tsc` from `frontend/` resolved a *global*
+  6.0.2 that CI does not have. The root now pins `typescript` at the worker's
+  `^7.0.2`, and `repo_layout.test.mjs` fails if the two pins drift — the same
+  answer the repo already gave the duplicated `image-size` override.
+- **`@types/react` was transitive.** A gate reading JSX through a type package no
+  one declared is a gate an unrelated dependency bump can silently change.
+  `@types/react` and `@types/react-dom` are `frontend` devDependencies now.
+
+### `docs/` digests cannot test a build change
+
+Adding a project-root `tsconfig.json` is build-affecting in principle — Vite reads
+one for `jsx`/`target` — so it had to be checked. Hashing all of `docs/` before
+and after said the build moved; **the instrument was wrong**. `build-frontend.mjs`
+keeps a rolling asset-retention window, so a third build with no input change
+moved the digest again. Two `vite build --outDir <tmp>` runs, with and without the
+file, came out **byte-identical**. Compare bundler output, never `docs/`.
+
+### `check-react-hook-imports.mjs` keeps its place, on a narrower claim
+
+D84 kept it for two reasons: the TS/TSX the linter cannot parse, and a message
+that names the failure. This removes the first — a deleted `useState` import in
+`demo_day_app.tsx` is caught by both, established by mutation rather than
+assumed. It stays for the second alone: one line naming the hook and the file,
+where `tsc` gives a TS2304 per call site. That is a real difference and a small
+one, and the record now says so instead of claiming coverage it no longer has.
+
+**6 mutations applied, 6 caught**: a deleted named import and a deleted hook
+import each fail the gate by file and line; reverting the timeline normalisation
+and breaking the initials fallback each fail a render assertion, not just the
+compiler; drifting and deleting the root TypeScript pin each fail
+`repo_layout.test.mjs`.
+
+---
+
+## D97 — a share link may not promise what its own next step cannot deliver
+
+**Date:** 2026-09-14 · **Task:** #205 · **Migration:** none
+
+### The bug, and why neither file could see it
+
+`ShareDeckCTA` decided its copy with `category === 'commercial'` and let
+everything else inherit the fundraising card: *"the SAFE, term sheet, and side
+letters are ready for your review."* `ShareViewerSignupModal` gated both the
+deal-pack fetch and the post-NDA branch on `category === 'fundraising'`.
+
+For `'event'` — the category `demo_day` and `axal_spinout_demoday` both carry —
+those two disagreed. A Demo Day viewer read the promise, **signed the NDA on the
+strength of it**, and arrived at a post-NDA step with no branch at all. Not an
+error, not an empty state: nothing rendered. The signature was already recorded.
+
+The reason it survived is the shape, not the oversight: **two files each held
+their own idea of what a category meant, and neither could see the other's.**
+Every individual line was defensible on its own.
+
+### The rule now lives in one place
+
+`frontend/src/lib/shareDeckAudience.js` maps a category to one of `FEEDBACK`,
+`DEAL_PACK`, or `null`, and both files ask it. `'event'` is `DEAL_PACK` **by
+decision** rather than by fall-through: a Demo Day viewer is there to evaluate
+the company, which is what the deal pack is for.
+
+### `'narrative'` renders nothing, and the reason is a finding
+
+The repo does not agree with itself about what a narrative deck is. The worker
+files two methods under `'narrative'` (`services/decks/methods.ts`:
+`sequoia_classic` and `narrative_brand`) while the frontend registry calls the
+first **`fundraising`** and the second **`commercial`** — and the two sources
+reach different screens: `PitchDeckPage.jsx:1570` prefers the methods value
+(`m.category || tpl.category`), `PitchDeckPrintPage.jsx:714`, which renders this
+CTA, reads the registry's.
+
+So a CTA that mapped `'narrative'` would be guessing which half of that
+disagreement is right, and guessing wrong is exactly the bug above. It renders
+nothing until the repo settles it. Raised separately; not decided here.
+
+An unrecognised value renders nothing for the same reason. **Defaulting to the
+deal pack is how a Demo Day deck came to offer documents in the first place.**
+
+### The assertion that outlives the others
+
+`share_deck_cta_audience.test.mjs` pins the rendered copy per category — but the
+durable one is the last test: **neither file may compare `category` to a literal
+again.** The render tests pin what the code does today; that one pins the thing
+that let it be wrong. Its value showed in the mutation sweep: restoring the bare
+`category === 'fundraising'` in the modal's prefetch — the precise line that left
+the panel blank — was caught by **that test alone**, because every rendered
+output still looked right.
+
+**3 mutations applied, 3 caught**, each by a different assertion class: dropping
+`'event'` from the map fails the unit test, the cross-file invariant and the
+render test; the bare literal in the modal fails only the coupling guard; letting
+the CTA default an unknown category to the deal pack fails the render tests.
+
+## D98 — one company, one startup: the 25 in-body pickers go, and the ledger that counted them was four short
+
+**Date:** 2026-09-14 · **Task:** #181 (with #177, #179) · **Migration:** none
+
+### The question that blocked this for two rounds
+
+A startup is not a company. The sidebar's `CompanySwitcher` selects a **company**
+— sent as `X-Company-Id`, verified against `user_company_links`, and the worker
+narrows a founder's projects by `company_id` (migrations 189, 193-198). Each
+in-body picker selected a **project**, and every one sat behind
+`projects.length > 1`: *more than one startup inside the already-selected
+company.* That made it a second axis rather than a duplicate, and deleting it
+looked like removing the only way such a founder could move between startups.
+
+So the question was never "is this chrome redundant" but "can a company hold two
+startups". It is answered, and it was **measured, not assumed**: production D1
+holds **5 projects across 5 founders, one project each**, `company_id` NULL on
+all five (legacy rows predating migration 189). `projects.length > 1` was false
+for every live account, so **not one of these pickers rendered for anybody**.
+The deletion removes no capability any account was using.
+
+`projects.company_id` handling is untouched. It is written on creation
+(`routes/projects.ts:437,515`, `imports.ts:117`) and read with a deliberate
+`OR p.company_id IS NULL` for those five legacy rows. The schema still permits
+more than one project per company; the UI simply no longer offers to switch.
+
+### The ledger was counting the wrong thing
+
+Task #84 removed these once, per route, and they came back, because nothing
+counted them. #181 then added `scripts/check-inline-project-pickers.mjs`, which
+swept for `data-testid="select-<something>-project"`. That sweep found **21** and
+corrected the task, which had named eleven by hand.
+
+It was still wrong. **Four more pickers carried no test attribute at all** —
+`FounderRaiseLiquidity`, `MarketIntelPage`, `RaisePipelinePage`,
+`raise/DataRoomPage` — so a ledger reporting "21 in-body startup pickers, all on
+record" was reporting a number it had no way to complete. The real count was
+**25**. A guard keyed on a *test attribute* can be defeated by leaving the
+attribute off, which is not a hypothetical: four authors already had.
+
+The sweep now also keys on `projects.length > 1` used as a render guard, which is
+the property that *defines* the control — a scope switcher that appears only when
+a second startup exists. The mutation sweep pins the difference: a picker written
+without a testid fails the new gate and **passes the old one**.
+
+A `<select>` over projects that is *not* behind that guard is deliberately out of
+scope. On `/cap-table`, `/discovery`, `/build/brand` and twenty other legacy tool
+pages the picker is the tool's own input, shown whether you have one startup or
+ten. Those ask "which startup is this tool about"; these asked "which startup is
+this page about", on a page the sidebar had already scoped.
+
+### Deleting a control means checking what reached through it
+
+Twenty-two of the 25 pages read `?project_id=` and still do.
+`MarketIntelPage` and `RaisePipelinePage` never did — they resolve the first
+project their own fetch returns, which is exactly what they did on every account
+where the picker was hidden. `inline_project_pickers_retired.test.mjs` holds that
+as a per-file table, so a page that later loses its URL read fails there instead
+of quietly showing project #1 forever.
+
+Nine pages were left holding a `projects` array that nothing read once the picker
+was gone, and one (`DataRoomPage`) a `projectUid` with no setter. Both are
+deleted rather than left as a fetch feeding nothing — `check-unused-imports` sees
+neither shape, so this was a manual sweep.
+
+### The "New Startup" button, and the thing it was hiding
+
+`CreateStartupForm` rendered its own button to toggle its own form, in the Build
+desk's header. That is the same class of control: a body-level handle on
+something the URL already addresses — thirteen places across the SPA link to
+`/build?new=1` (the Command Palette's "Create startup", ten empty states, two Lab
+pages). The button is gone; a closed `CreateStartupForm` now renders **nothing**.
+
+Removing it exposed a bug the button had been covering. `creating` was seeded by
+a `useState` **initializer** reading `?new=1`, which runs once. Twelve of the
+thirteen links arrive from another route and remount the desk, so they worked.
+The Command Palette is the thirteenth and can be opened **from /build itself**,
+where `nav('/build?new=1')` changes the search string without remounting: the
+initializer never re-ran and the entry did nothing at all. The desk now follows
+the param when it changes. Had the button simply been deleted, the palette entry
+would have gone from silently-broken to visibly-broken.
+
+### Two "Open workspace" links went with them
+
+#179 recorded the user's words about Grow · Brand — *"Open workspace has nothing
+to do there"* — and #177 flagged the identical link on Raise · Liquidity. Both
+are body-level controls whose whole function is to send the reader somewhere
+else, and both destinations remain reachable: Brand's from the zone header's own
+`New page` action (same URL), Liquidity's from the sidebar ("Liquidity & Exits")
+and the Raise workspace tab row.
+
+Liquidity's copy had to move with its link. The page said *"Use the workspace for
+supported actions"* — a sentence pointing at a control the page no longer has. It
+now names where modelling an exit actually is, the zone header's `Model an exit`.
+**A dangling instruction is worse than the duplicate link was**, and it is the
+failure mode a deletion-only change would have shipped.
+
+### What the tests pin that the count cannot
+
+`check-inline-project-pickers.mjs` counts; that is the right tool for counting,
+and the ledger stays at zero so a twenty-sixth has to argue for itself in a diff.
+`inline_project_pickers_retired.test.mjs` asserts the three things a text sweep
+cannot see: that every page can still be aimed at a startup, that a closed
+`CreateStartupForm` renders the empty string while an open one still renders the
+form, and that `?new=1` is followed on change rather than only at mount.
+
+`frontend/test/_codeOnly.mjs` gained `codeOnlyJsx`, because three of those
+assertions failed against correct code: each deletion left a `{/* … */}` in the
+markup naming what went, and those comments contain the exact strings the
+assertions ban. Same lesson as `codeOnly`'s own docblock, one layer in — **the
+comment you want to keep is the one that names the thing.**
+
+**7 mutations applied, 7 caught.** Re-adding a picker with a testid, re-adding
+one without (the new capability — the old gate passed it), restoring a baseline
+entry with no picker behind it, dropping a page's `?project_id=` read, restoring
+the "New Startup" button, deleting the `?new=1` effect, and restoring Liquidity's
+dangling sentence.
+
+## D99 — the terms nobody ever accepted, asked for once, and the provenance line that would have lied about it
+
+**Date:** 2026-09-14 · **Task:** #178 · **Migration:** none
+
+### What #549 left behind
+
+PR #549 made the terms consent real: an explicit, unticked checkbox on the
+onboarding licence gate, and `recordTermsAcceptance` to make the act permanent.
+But that gate is passed only by fresh Auth-v2 signups. Admins, impersonated
+sessions, `access_level = 'limited'` accounts, the legacy `flow='chat'` rows and
+**every account older than #549** still had `tos_v1` and `privacy_v1` sitting
+`pending` — satisfiable since #549, satisfied by nothing. What those people had
+been shown was "By continuing you agree" in 10px under a submit button, which is
+a notice and not an act.
+
+Marking the obligations satisfied would have been a one-line change and a false
+record. So they get asked, once, and the answer is theirs to give.
+
+### The signal rides `GET /auth/me`, and every other candidate writes
+
+`recovery_pending` in the same response literal is the shape: an inline IIFE
+doing its own `SELECT`, swallowing errors to a safe default. The new
+`terms_acceptance_pending` sits beside it.
+
+The alternative was an obligation endpoint, and it is disqualified on mechanics
+rather than taste. Every read-shaped `/trust/*` GET calls `seedObligations`,
+which is one unconditional `UPDATE` plus **one `INSERT … ON CONFLICT DO UPDATE`
+per obligation def, in a loop** — and `GET /trust/score/:userId` does that to
+*another user's* rows. Gating page load on one would put those writes on every
+navigation.
+
+**The flag is a fact, not a policy.** An admin really does have these rows
+pending and `/me` says so; whether a session is interrupted over it is decided in
+one place, `App.jsx`, beside the licence and KYC gates whose exclusions it
+copies. Two places deciding is how they come to disagree.
+
+**Absent reads as "do not gate", in all four of its forms**: a DB error, a
+missing table, an account with no obligation rows, and the dev FastAPI, whose
+`/me` has no such key. The SPA therefore tests `=== true` and initialises to
+`false`. The inverse of any one of those would put an unskippable consent screen
+in front of every session — including one whose own accept call is failing.
+
+### The gate renders in place rather than navigating
+
+This is the one structural difference from the two gates above it, and it buys
+two things. It blocks every path including `/onboarding/*`, so there is no
+exemption list to keep in step with the KYC gate's; and `onLogout` is already in
+scope in `RequireAuth`, so **Decline runs the app's own session teardown** rather
+than a second copy that drifts from it. The reader keeps their URL, so accepting
+drops them exactly where they were going.
+
+`licenceGateOwnsConsent` is what stops anyone being asked twice: a fresh signup
+mid licence flow will accept at the licence screen, so the interstitial stands
+down for them. Stated as a fact about the account rather than a path test,
+because a path test would have to name every screen that flow can be on.
+
+**A consent screen with no exit is not consent.** Clickwrap was chosen over
+implied acceptance because it is the stronger record, and a record collected from
+someone with nowhere else to go is weaker than the notice it replaces. Decline
+signs out, changes nothing, and the question is asked again next time.
+
+**No version is claimed.** Migration 245 deliberately stores no document hash —
+`/terms` and `/privacy` are JSX while the `tos_v1`/`privacy_v1` templates are
+different documents, so nothing knows which bytes a reader saw. Saying "version
+3" would invent the one fact the schema refused to guess.
+
+### The defect this would otherwise have shipped
+
+The task's own research said to "add a matching `obligationSource` label or
+provenance falls through to the verbatim branch". **Neither would have
+happened.** `obligationSource` keys off `evidence_meta.source`, not `surface` —
+and `recordTermsAcceptance` **hardcoded** `'source','signup_clickwrap'` for every
+surface, because there had only ever been one caller. So the Trust Center would
+have told an account that predates the signup checkbox entirely that it had
+**"Accepted at signup"**. The label lookup would never have seen the new surface
+at all.
+
+`source` is now a parameter defaulting to `'signup_clickwrap'` — additive, the
+existing caller unchanged — and `reacceptance_interstitial` has its own entry:
+*"Re-accepted in the app."* The durable assertion is neither of those: it is that
+the SQL may not contain a source literal again, so a third caller that forgets
+its own gets the honest default rather than a borrowed sentence.
+
+`evidence_meta` stays under `COALESCE`, which keeps the *first* acceptance's
+provenance. That is right for a field that says where an obligation came to be
+satisfied; a second act belongs in `legal_acceptances`, which is append-only and
+is where it goes.
+
+### No new `status='satisfied'` write site, and no backfill
+
+The accept route calls the existing `recordTermsAcceptance`, so
+`obligation_satisfiable.test.ts`'s `sites === 5` pin is untouched — if it ever
+moves, a new satisfier was added and that is a different change.
+
+Migration 245 **does not** reserve an `'admin backfill'` surface, contrary to what
+the task recorded: `surface` is plain `TEXT NOT NULL` with no CHECK and no enum,
+and the phrase appears once, in the migration's prose. The rule needs no schema
+to enforce it — **an acceptance recorded on somebody's behalf forges the record
+this change exists to make honest** — so the refusal lives where it could
+otherwise happen: the route takes no user id, the client sends no body, and a
+test asserts both.
+
+### The score jump, decided rather than left open
+
+Satisfying two required rows moves partner/admin 0→100, founder 0→67, advisor
+0→50, crossing the band threshold at 60. Two facts bound it: `trust_score_snapshots`
+is pull-based (`INSERT OR IGNORE` per user-month, written only by `GET /trust/me`),
+so there is no mass write; and the 60/90 thresholds are frontend-only.
+
+**Decision: no bespoke score-delta annotation.** The provenance fix is what makes
+the jump explainable — the obligation's own line now says it was re-accepted in
+the app rather than at signup — and a second, parallel explanation of the same
+event is how two surfaces start disagreeing. Recorded here so the choice is
+visible rather than silent.
+
+**15 mutations applied, 15 caught.** Seven on the worker: dropping `required = 1`,
+dropping the obligation-key filter, counting `satisfied` as owing, failing closed
+on a DB error, taking a user id from the request, re-hardcoding the source, and
+deleting the new label. Eight on the SPA: pre-ticking the checkbox, removing the
+decline control, removing the announcement, claiming a document version, dropping
+`!isImpersonating` from the gate, reading the flag loosely, initialising it to
+`true`, and unsubscribing the shell from the accepted event.
+
+## D100 — a verdict that was only ever derived gets a history, and it is written on the read
+
+**Date:** 2026-09-14 · **Task:** #175 · **Migration:** 255
+
+### Three chips that could not answer their own question
+
+`/validate/verdict`'s `As of last week` and `Changed this month`, and
+`/validate/hypotheses`' `Recently moved`, were registered `unbuilt` under a
+reason that was exactly right and said so in the file:
+
+> a claim's verdict is recomputed from its evidence on every request and never
+> stored, so no earlier state of the board exists to compare against …
+> snapshotting it is a change to the model, not a predicate this row can carry.
+
+Migration 255 is that model change. The derived values stay derived — storing
+the CURRENT verdict would be a second answer to a question the interviews
+already answer — and what is stored is the other thing entirely: an append-only
+record of what the derived pair HAS BEEN.
+
+**The lane is recorded beside the verdict, and that is what makes the third chip
+work.** `laneFor(verdict, evidence)` is derived too, and a claim moves from
+`none` to `testing` the moment its first supporting interview lands with no
+verdict change at all. A chip about the board's columns has to ask about
+columns.
+
+### CORRECTION TO THE PLAN: there were three chips, not six
+
+The approved plan named six, three of them on `/build/this-week`. **Those were
+already done.** `NO_WEEK_STAMP` is gone, migration 252's `okr_column_moves` logs
+every roadmap column change, and all four of that zone's chips are live. The
+plan was written off an audit finding rather than off the code.
+
+### CORRECTION TO THE PLAN: written on the read, not on the write path
+
+The plan said to instrument "the evidence-write path". **There is no such path,
+singular.** `verdictFor(evidenceFor(links, interviews))` depends on
+`hypothesis_pain_links`, on every interview's `icp_fit`, and on which pain
+groups each interview's `pains_json` resolves to through `pain_group_aliases` —
+so a verdict moves on a link insert, a link delete, an ICP-fit patch, a newly
+logged interview, an edited pains blob and a pain-tag re-grouping. Six writers
+across three route files today, and **the failure mode of missing one is
+silent**: that path produces no history, and a history with a hole in it looks
+exactly like one without.
+
+So it follows `trust_score_snapshots` instead, which solved the same problem the
+same way: pull-based, idempotent, written only by the read that needs it. The
+cost is stated rather than hidden — a board nobody opens records nothing, so the
+board returns `verdict_history_since` and both zones print it.
+
+**It is not `seedObligations`, and the difference is the whole reason this is
+acceptable on a read.** That one performs an unconditional UPDATE plus one upsert
+per obligation definition on every call. This performs ONE SELECT and writes only
+when a recomputed pair differs from the last row — **zero statements in the
+steady state**, which is almost every request. A test asserts exactly that: five
+consecutive reads of an unchanged board write nothing.
+
+### Nothing is backfilled, and the refusal is per claim
+
+The only timestamp a past verdict could be invented from is
+`hypotheses.updated_at`, which moves when the CLAIM TEXT is edited. A verdict
+dated from that would be a specific, confident, wrong answer.
+
+So `As of last week` **excludes** a claim with no observation that old rather
+than showing today's verdict under an earlier heading, and the zone says when the
+record starts. Same seam as `/build/this-week`'s un-backfilled log, handled the
+same way.
+
+`Recently moved` and `Changed this month` ask a different question and needed a
+different shape. "Differs from what it was at `since`" quietly refuses the most
+interesting case — a claim first observed three days ago that moved yesterday HAS
+moved this week. A change is an adjacent pair of observations that disagree, and
+the window is about **when** the change happened, not how far back the record
+reaches. A first observation is never a change: counting it would report every
+claim as recently moved for as long as the record is younger than the window.
+
+### The bug that would have made two chips answer everything
+
+SQLite's `datetime('now')` writes `2026-09-14 11:20:00` — a space, no zone. `'T'`
+sorts **after** `' '`, so `'2026-09-07 12:00:01' < '2026-09-07T12:00:00.000Z'` is
+TRUE: a stamp one second inside a window compares as outside it, and other pairs
+compare the other way. Every comparison goes through `parseObserved`, and the
+test carries the boundary fixture where the two answers differ — without it the
+string-comparison mutation escaped.
+
+### A claim I had to correct mid-build
+
+I wrote, four times, that an `unbuilt` entry "renders NOTHING". **That has not
+been true since #180**, which changed the builder to draw a `disabled` chip
+carrying its reason as a hover title — inert rather than invisible, which is
+better and is still not an answer. The mutation that put a chip back to `unbuilt`
+ESCAPED the first version of this test, because the test counted chips and a
+refusing chip is still in the array. What separates live from refusing is
+`disabled` and `onSelect`, and that is what it asserts now.
+
+`founderZoneFilters.js`'s own docblock still described the old rule, two hundred
+lines above the new entries. Corrected in place rather than left to disagree with
+itself.
+
+`NO_VERDICT_SNAPSHOT` is **deleted, not reworded** — the fourth constant in that
+file to go when its store arrived, after `NO_WEEK_STAMP`, `NO_CADENCE_STORE` and
+`NO_SESSION_RECORD`. A shared reason that survives its own fix does not sit
+harmlessly; it gets cited by the next chip.
+
+**11 mutations applied, 11 caught — two only after being closed.** Writing
+unconditionally, ignoring the lane in the comparison, caching readiness per
+isolate instead of per binding (the #204 shape), returning the history
+newest-first, dropping the project scope, comparing the stamp as a string,
+falling back to today's verdict when nothing is old enough, counting a first
+observation as a move, putting either chip back to `unbuilt`, and dropping
+`verdict_history_since` from the board.
+
+---
+
+## D101 — a fork the picker never reached, and the test that was guarding the copy nobody could see
+
+**Date:** 2026-09-14 · **Task:** #206 · **Migration:** none
+
+`frontend/src/decks/templates/minimal_seed_app.tsx` is **deleted**. It was 1,643
+lines and 60 KB, and `templates/index.ts` has never been able to reach it.
+
+### The premise on the task had expired, and the expiry is the interesting part
+
+The task read "a deck variant nothing imports — adopt it or delete it", and D97's
+sibling note at `DECISIONS.md:6655` says the same. That was true when #201 was
+written and **stopped being true the same day**: `c9a134dc1` (#570) added
+`frontend/test/deck_templates_missing_data.test.mjs`, which imports the file at
+module scope. Deleting it without touching that import takes all 26 tests in the
+suite down before the first one runs, and with them `test:frontend`,
+`test:decks`, `test:drift` and CI.
+
+So the file was not unreferenced. It was referenced by **exactly one thing, and
+that thing existed only because nothing else referenced it** — the suite's own
+comment said so: *"the one `_app` variant no wrapper re-exports, so this suite is
+the only thing that looks at it."*
+
+### The test was pinning a real behaviour on the wrong file
+
+`minimal_seed_app.tsx`'s `TimelineDots` took two shapes from two callers —
+`milestones` is `{date,label}`, `achievements` is `{year,event}` — and admitted
+only the first, so the JOURNEY strip drew its dots over three empty columns.
+#201 found it with the compiler and pinned the fix with a render assertion.
+
+But `minimal_seed.tsx` — the template `templates/index.ts:75` actually ships —
+**already had that fix**, and the deleted file's own docblock said so: *"The fix
+is the one `minimal_seed.tsx` and `kawasaki_10_20_30.tsx` already made."* The
+live file widens the prop at `:523` and normalises `m.date || m.year` at `:534`.
+
+So the assertion was guarding the copy nobody could open, while the deck a
+founder actually opens carried the same behaviour with nothing watching it. The
+test is **moved, not deleted** — it now renders `Deck_minimal_seed` against
+`minimal_seed.tsx`'s own `SAMPLE_DATA`, and both mutations (dropping `|| m.year`,
+dropping `|| m.event`) fail it. The suite stays at 26 tests and covers more than
+it did.
+
+### Two arguments for adopting it instead, and why neither survived contact
+
+**"It is the only Minimal Seed with a live single-screen presenter."** It is not.
+`minimal_seed.tsx:1454` exports the same `MinimalSeedDeckApp` — Framer Motion
+shell, prev/next, `AnimatePresence`, `useReducedMotion`, keyboard nav — and says
+so in its own header at `:11-13`. This claim was in the plan for this task and
+was simply wrong; the file was read before the delete, not after.
+
+**"Someone shipped it on purpose."** They did, and then un-shipped it on purpose.
+`ab9e3b81c` (2026-05-23) removed it from the registry hours after `6898a2449`
+added it, on explicit user feedback — *"Minimal Seed must stay at slot 4 … not
+appear as separate `_app` entries"* — and in that same commit the sibling
+`series_a_growth_app.tsx` was rescued by rewriting `series_a_growth.tsx` into a
+one-line re-export. `minimal_seed_app.tsx` got no such rescue because
+`minimal_seed.tsx` was already a complete implementation. Every touch since is a
+sweep: a rebrand, a scanner pass, a security pass, a delivery audit, and #201.
+
+### What it would have cost to keep
+
+The two files are **83% byte-identical**, and the live one is a commit ahead:
+`d56f61491` gave every template brand-kit theming, so `minimal_seed.tsx:17`
+imports `BrandProvider` and `:1620-1626` wraps the deck in it, while the fork
+still hardcoded `const ACCENT = '#5E6AD2'` at `:70`. Adopting meant shipping a
+brand-theming regression or hand-merging 277 lines into a duplicate that should
+not exist. A stale fork is not free storage — it is a second place for the next
+fix to be applied to, and #201 applied one there.
+
+### Left in place deliberately
+
+The three `attached_assets/Pasted-Here-s-the-complete-Minimal-Seed-deck-…txt`
+transcripts this file was pasted from are **kept**. They are an archive of where
+the code came from, which is what that folder is for, and deleting the source
+makes that provenance the only remaining trace rather than a redundant one.
+
+One citation was re-pointed rather than left to rot: `series_a_growth_app.tsx`
+explained a TypeScript inference asymmetry by contrast with this file's
+array-literal fallback. `minimal_seed.tsx:992` has the identical pattern
+(`partner_logos`, same optional `initials`), so the comment now cites that.
+
+**2 mutations applied, 2 caught.** Dropping `|| m.year` and dropping `|| m.event`
+from the live `TimelineDots` each fail the moved test — which is the whole point
+of moving it, since neither would have failed anything before.
+
+---
+
+## D102 — a deck's category says who it is for, so `narrative` was never one
+
+**Date:** 2026-09-14 · **Task:** #207 · **Migration:** none
+
+D97 found that the repo did not agree with itself about what a narrative deck
+is, declined to guess, and said so: *"Raised separately; not decided here."*
+This is that decision.
+
+### What the disagreement actually was
+
+The same thirteen decks are described in three places, each with its own
+`id → category` table: the worker's `services/decks/methods.ts` (production,
+served by `GET /api/decks/methods`), the SPA's `decks/templates/index.ts`, and
+the FastAPI dev mirror `_DECK_METHODS_DEV` in `backend/app/api/routes/decks.py`.
+Eleven decks agreed. Two did not:
+
+| deck | worker | registry |
+| --- | --- | --- |
+| `sequoia_classic` | `narrative` | `fundraising` |
+| `narrative_brand` | `narrative` | `commercial` |
+
+### `narrative` is a STYLE in a vocabulary of AUDIENCES
+
+That is the whole finding, and `lib/shareDeckAudience.js` is the proof: every
+entry in it answers *who is looking and what do they want next* — `commercial`
+asks for feedback, `fundraising` and `event` open the deal pack. A writing style
+has no answer to that question, which is exactly why the value could not be
+mapped and why D97 was right to refuse. The field's own declaration said
+"Suggested category badge in the picker", but the picker was never its only
+reader.
+
+So `narrative` is retired at its source rather than taught to more code. The
+registry's values were correct all along: Sequoia Classic is the template
+founders raise money with, and a brand deck goes to customers and partners.
+
+### It was a live defect, not a tidiness problem
+
+`PitchDeckPage.jsx:1570` merges the two sources as
+`m.category || tpl.category || 'general'` — **the worker wins** — and the filter
+row at `:1604` is the hard-coded list `all | fundraising | commercial | event`.
+So both decks displayed "NARRATIVE" on their picker cards and fell out of every
+chip but "All". A founder filtering by Fundraising could not find the Sequoia
+template. It read as two missing templates rather than as a filter row one entry
+short.
+
+### Deciding it upstream is what left the NDA path untouched
+
+The share CTA reads the registry (`PitchDeckPrintPage.jsx:714`) and the share
+endpoint (`routes/decks.ts:893-900`) ships `method_id` and deliberately no
+category, so **no share link's promise changes**. The alternatives — the
+registry adopting `narrative`, or collapsing to one table and piping the
+worker's value into the share payload — would both have forced
+`shareDeckAudience.js` to answer D97's question on the path where answering it
+wrong *was* #205. That asymmetry, not a preference between two spellings, is
+what picked this direction.
+
+`ShareDeckCTA`'s `return null` for an unrecognised category **stays**. It is not
+vestigial now that the undecided case is gone: it is what stops the next new
+category from silently inheriting the deal pack, which is how a Demo Day deck
+came to offer documents in the first place.
+
+### The deliverable is the guard, not the two values
+
+`frontend/test/deck_category_sources_agree.test.mjs` parses all three tables out
+of source — TypeScript, TSX and Python — and holds them to one answer. It exists
+because **nothing was watching**: `scripts/check-deck-templates.mjs` guards the
+registry but its `REQUIRED_FIELDS` deliberately omits `category`,
+`decks.autofill.test.ts` reads `methods.ts` for slide counts only, and
+`_DECK_METHODS_DEV` was covered by nothing at all. Three tables were free to
+drift independently and two of them did, visibly, for months, without failing
+anything. Fixing the two values would have left that freedom in place.
+
+Four things it asserts, and each caught its own mutation:
+
+- every source parses to **thirteen** decks — a regex that matches nothing
+  agrees with everything, so the evidence is checked before the verdict;
+- all three tables give every deck the same category;
+- every category any of them emits is one `shareDeckFlow` can route — **three
+  tables agreeing on an unroutable value still fails**, because agreement is not
+  correctness;
+- `narrative` may not come back, in any table or in the worker's union type.
+
+A fifth assertion guards the same defect from the other side: the picker must
+offer a chip for every category a deck can hold. Agreeing tables would not have
+saved a new category from being reachable only under "All".
+
+`share_deck_cta_audience.test.mjs`'s `WORKER_UNION` was a hand-written list and
+is now **parsed from `methods.ts`** — it named `narrative` for exactly as long as
+the worker did, so the loop over it could only ever check what someone had
+remembered to type. A fifth category added to the worker without a flow now
+fails on the spot.
+
+**7 mutations applied, 7 caught.** Flipping `sequoia_classic` in each of the
+three tables in turn; flipping all three to `narrative` together (agreement
+holds, routability and retirement both fail); removing a deck from the dev
+mirror only; re-admitting `narrative` to the worker's union; and dropping the
+`event` chip from the picker row.
+
+---
+
+## D103 — `docs/` records the source it was built from, because "which commit is newer" was never the question
+
+**Date:** 2026-09-14 · **Task:** #207 · **Migration:** none
+
+`scripts/build-frontend.mjs` now writes `docs/.build-source`: a SHA-256 over the
+sorted (path, content) pairs of `frontend/src`, stamped last so it only ever
+describes a build that finished. `scripts/check-docs-fresh.mjs` reads it and
+asks the real question — *is the committed `docs/` the build of this source?* —
+falling back to the old commit-timestamp comparison only when the stamp is
+absent.
+
+### The gate had a state it could not leave
+
+`check-docs-fresh --strict` compared the newest commit touching `frontend/src`
+against the newest touching `docs/`. #207's own PR broke that, and the way it
+broke is the interesting part: every source change in it was a **comment or a
+type**. The minifier strips comments and `tsc` erases types, so a full rebuild
+emitted a **byte-identical** bundle — verified, not assumed: `npm run build` at
+that head left `git status -- docs` completely empty.
+
+So there was nothing to `git add`, and the gate's own printed fix —
+`npm run build && git add docs && git commit` — **cannot be carried out**, because
+`git commit` on an empty change refuses. The PR was red with no way to go green
+that did not involve either fabricating output churn or weakening the check.
+
+### The proxy was wrong in the other direction too
+
+A timestamp says *someone committed `docs/` after `frontend/src`*, which is
+evidence that they probably rebuilt, not that they did. Commit `docs/` without
+rebuilding and the gate reads fresh **forever** — a stale-bytes failure it was
+written to catch and structurally could not see. The stamp catches it, so this
+is a strengthening, not a workaround for one PR.
+
+It also answers in a tarball, where the proxy could only `skip()` — and under
+`--strict` a skip is a failure.
+
+### Not a key in the retention ledger, which is the obvious wrong home
+
+`docs/.asset-retention.json` is already rewritten by every build, so it looks
+like the place for this. It is **gitignored on purpose** (45 KB that churns
+wholesale — `.gitignore` says so and explains the trade), so CI never sees it
+and a stamp inside it would answer nobody. Caught by checking `git check-ignore`
+before pushing, not after. `.build-source` is one line and moves only when the
+source does.
+
+### Two tests that could not fail, and why that is the lesson
+
+`sourceTreeHash`'s guarantees were mutation-checked, and **two mutations
+escaped** — both because the test was wrong, not the code.
+
+- **Dropping the path from the digest survived a rename test.** Renaming `a.js`
+  to `renamed.js` in a tree containing `b.js` moves the file past `b.js` in sort
+  order, so the CONTENT sequence changes from `[1,2]` to `[2,1]` and the hash
+  differs whether or not the path is hashed. It was testing ordering while
+  claiming to test paths. The fixture is now `a.js` → `b.js` beside `z.js`,
+  which holds the sorted content sequence fixed, plus a sibling test that moves
+  a file between directories.
+- **Deleting `.sort()` survived an order test, and a second one written to
+  replace it.** ext4 enumerates a directory by filename hash rather than
+  creation order, so building the same tree twice in different orders returns
+  the same sequence either way — and asserting `sourceFiles(dir)` comes back
+  sorted fails for the same reason, since the raw walk is already sorted here.
+  The sort is real defence on filesystems that return creation order, and on
+  this one it is unobservable. `sourceFiles` and `sourceTreeHash` now take an
+  injectable `readdir`; the test hands them one that reverses, which is the only
+  way the assertion can fail.
+
+The second is the durable lesson: **an assertion that cannot fail on the
+machines that run it is not a guard**, however reasonable it reads. Two
+successive attempts at it looked correct and proved nothing.
+
+**9 mutations applied, 9 caught** — two only after the test was rewritten.
+On the helper: drop the path, drop the sort, skip empty files, swallow a missing
+directory. On the gate: edit `frontend/src` without rebuilding (strict fails,
+local still warns), and remove the stamp (falls back to timestamps as designed).
+`npm run test:retention` now globs `scripts/lib/*.test.mjs` rather than naming
+one file, so the suite went 7 → 15 tests and a future helper's tests run without
+a package.json edit.
+
+## D104 — a branch session never leaves its host: host-only, branch-named cookies on a branch Worker, and why HQ keeps `.axal.vc` for now
+
+**Date:** 2026-09-14 · **Task:** #211 (HQ and branches plan, PR 1) · **Migration:** none
+
+A Worker deployed for a branch — `studioos-<code>` at `<code>.axal.vc`, with
+`BRANCH_CODE=<code>` in its generated config — now sets **host-only** cookies
+whose **names carry the code**: `studioos_auth_<code>` and
+`studioos_csrf_<code>`. It reads only those names, and its passkey ceremonies
+accept only its own origin. HQ (`BRANCH_CODE` unset) is unchanged: it still
+sets `studioos_auth` and `studioos_csrf` for `.axal.vc`. `util/branch.ts` is
+the one place the Worker decides which it is; `frontend/src/lib/branchHost.js`
+makes the same decision from the page's hostname, so the SPA mirrors the
+right CSRF cookie without asking.
+
+### The plan said host-only everywhere, and the code said no
+
+The build plan (D.4) called for dropping the `Domain=.axal.vc` attribute on
+every host. Reading the sign-in path before doing it found the reason it
+exists: the Google callback still lands on `app.axal.vc`
+(`OAUTH_CALLBACK_BASE_URL`, `routes/auth_google.ts:119`), sets the session
+there (`:687`), and then redirects to the apex (`:701`), where the SPA reads
+it. That handoff works **only because** the cookie is scoped to the
+registrable domain — `wrangler.toml:145-151` records exactly this, and names
+the step that would end it: register the redirect URI on `axal.vc` at the
+provider and drop the override. That step is a person's, at Google's console,
+not a code change; until it is taken, host-only cookies on HQ would break
+Google sign-in on the first attempt. So HQ keeps the domain cookie, and
+`authCookieDomainAttr` says so at the line that decides it.
+
+### Why a different name, not just a different scope
+
+Host-only on the branch is necessary and not sufficient. HQ's `.axal.vc`
+cookies are sent by the browser to every subdomain regardless, so a branch
+host carries HQ's `studioos_auth` beside the branch's own. Two cookies with
+one name on one host are delivered in an order the user agent chooses — RFC
+6265 §5.4 sorts by path length, then creation time — and the Worker's cookie
+parser takes the first match. A branch reading the plain name would therefore
+accept its own user only when HQ's cookie happened to come second: a login
+that works in one browser and not another, with nothing in the logs but 401s.
+Naming the cookie after the branch removes the race instead of arguing about
+its odds, and `branch_cookies.test.ts` pins it by presenting both cookies in
+both orders.
+
+### What changes when the redirect URI moves
+
+One line: `authCookieDomainAttr` returns `''` unconditionally, and the dual
+form in `clearAuthCookies` — which already exists from the last cookie-domain
+migration — purges the legacy `.axal.vc` cookie on logout for one release.
+Nothing else in this decision depends on that day.
+
+### What is guarded
+
+`cloudflare-worker/test/branch_cookies.test.ts`: a branch never emits a
+`Domain` attribute and never clears HQ's cookie names; `extractJwtCandidates`
+and the CSRF middleware read the branch's cookie in either order beside HQ's
+and treat HQ's pair as no session at all; `expectedOrigins` on a branch is
+exactly its own origin; a malformed `BRANCH_CODE` throws rather than reading
+as HQ. `frontend/test/branch_host.test.mjs`: the hostname rule, and that
+`api.js` mirrors the derived name rather than the literal.
+
+## D105 — a branch's Worker config is derived from HQ's, and the registry file is the only place a deployment is declared
+
+**Date:** 2026-09-15 · **Task:** #212 (HQ and branches plan, PR 2) · **Migration:** none
+
+Two files per branch, and only one of them is written by a person.
+`infra/branches/<code>.json` records what Cloudflare assigned — the D1 and KV
+ids, the residency actually granted — and nothing else.
+`wrangler.branch.<code>.toml` is **generated** from it and from
+`wrangler.toml`'s `[env.production]` table by
+`scripts/gen-branch-wrangler.mjs`, is gitignored, and is regenerated on every
+deploy. `scripts/check-branch-config.mjs` runs in `npm run test:guards` and
+renders every registry entry on every build.
+
+### Why derived rather than templated
+
+The binding tables already drift between the two that exist: `wrangler.toml`
+carries a comment naming the 2026-05-05 login outage that came of a binding
+declared at the top level and not under `[env.production]`, and a guard now
+exists solely to compare those two. A hand-maintained branch template would be
+the third, fourth and fifth copy of that table, and would break the first time
+someone added a binding to HQ without knowing branches existed.
+
+So the renderer copies every `[env.production]` table it does not recognise
+verbatim, and transforms only what must change. A binding added to HQ reaches
+every branch with no edit here — and the test that pins this appends a table
+to a *copy* of `wrangler.toml` and asserts it appears in the output, so an
+allowlist-shaped rewrite fails even though it would pass every other test.
+Where a new table's identity key is unknown, the guard fails the build asking
+for the rename rule, rather than shipping a config whose id still points at
+HQ's resource.
+
+### The four things that are not copied, each for its own reason
+
+**The route table is replaced, never transformed.** A Workers custom domain
+belongs to exactly one Worker, so a branch config carrying `axal.vc` would
+move the apex off HQ on deploy — the most destructive thing a generator here
+could do, and not recoverable mid-deploy. The renderer emits one route; the
+guard refuses HQ's hosts by name; a test asserts neither string appears
+anywhere in the output, `OAUTH_CALLBACK_BASE_URL` included.
+
+**The Analytics Engine dataset is shared.** Every other resource is per
+branch, which is the isolation the whole design rests on, but the HQ
+statements and the anonymised median in the subsidiary Insights screen are
+computed *across* branches. One dataset indexed by `BRANCH_CODE` is what makes
+those two numbers possible without a cross-branch read; renaming it per branch
+would have quietly removed them.
+
+**Crons are trimmed to two.** HQ declares six cadences, four of which pull
+external market-intelligence sources and send platform digests. Copied
+verbatim, N branches would hit those sources N times for the same rows.
+
+**The output is flat.** No `[env.*]` table, so `--env` is never combined with
+`--name` and the non-inheritance trap cannot recur inside a branch config.
+
+### Why the registry is a file and not a table in D1
+
+A deployment must be readable before the database it describes exists — the
+provisioning workflow writes the entry while creating the resources, and the
+generator reads it to produce the config that binds them. It also has to be
+reviewable in a pull request: a branch is a new production host, and the diff
+that adds one should say so. `_example.json` ships with fake ids so the guard
+renders a real config on every build, including today, when no branch has been
+provisioned. A guard whose first execution is the day it matters is not a
+guard.
+
+### What is guarded
+
+`scripts/lib/branchConfig.test.mjs` (9 tests, in `npm run test:retention`):
+the derived names; the shared dataset; the absent apex; the flat output and
+the inherited tables a flat config must re-declare; the trimmed crons; the
+new-binding case above; every `validateBranch` refusal, including an entry
+that kept HQ's database id; and every `checkRendered` refusal, each against
+its own mutation of a rendered config. `scripts/check-branch-config.mjs` also
+fails if a generated `wrangler.branch.*.toml` is ever committed.
+
+## D106 — on a branch the elevation does not exist, the platform content is not gathered, and the licence is a dated copy
+
+**Date:** 2026-09-15 · **Task:** #214 (HQ and branches plan, PR 4) · **Migration:** 256
+
+`BRANCH_CODE` now changes what the Worker will do, not only which cookie it
+reads. HQ is unchanged in every respect — the var is unset there and every
+gate below is a no-op.
+
+### The elevation is a property of the deployment, not a row
+
+`hydrateSuperAdmin` answers `0` whenever `branchOf(env)`, and does not query
+`super_admins` at all. That one line closes all 24 super-admin routes and the
+`/me` echo together, because every one of them reaches the flag through
+`requireSuperAdmin` → `isSuperAdmin`.
+
+**What was already true, and why it was not a gate.** A branch database is
+bootstrapped from the baseline with `BASELINE_CUTOFF = 219`, so migration 207
+— the single super-admin holder — is marked and never executed, and
+`super_admins` starts empty. The routes therefore already answered 403. But
+an empty table is a *data state*: one `INSERT INTO super_admins` on a branch
+database, by anyone who could reach it, would have reopened HQ's entire
+console over branch data with every route still behaving normally. So
+`cloudflare-worker/test/branch_mode_gates.test.ts` seeds that row before every
+deny assertion. A test that only ever asked an empty table would pass against
+the old code and prove nothing about the new one.
+
+`requireSuperAdmin` refuses on a branch with **"HQ only"** rather than
+falling through to "Super admin required". The second sentence reads as "ask
+HQ to elevate you", which is untrue: there is no elevation to grant on that
+deployment, and the ledger it guards is in another database. Both new
+sentences are exported constants (`util/branch.ts`) and `AUTH_ERROR_STATUSES`
+keys off the constants, because the failure that entry's own comment records
+is a message and a map key drifting apart — which turns a working refusal
+into a 500.
+
+### HQ authors, a branch reads (D.9)
+
+`requireHqAuthoring` is `requireAdmin` plus that refusal, applied to the three
+template-store writes in `admin_contracts.ts` and the seventeen authoring
+writes in `admin_assessment.ts`. It is **not** an elevation check: an
+unelevated HQ admin authors exactly as before. Reads are untouched — a branch
+must list, fetch, version and preview templates, because that is the S5
+picker — and assessment `preview` and `sessions/:id/rescore` keep the plain
+admin guard, because the results are the branch's (S4).
+
+### The cron trim did not do what it looked like it did
+
+`wrangler.branch.<code>.toml` ships two cron expressions instead of HQ's six
+(D105), and it would be easy to read that as the fix for "N branches each
+hitting the same external APIs". It is not. A branch keeps `* * * * *`, and
+every block in the scheduled handler gates on the **wall clock** rather than
+on which expression fired — so dropping the other four removes some duplicate
+invocations within a minute and stops not one cadence. The gate had to be in
+`index.ts`, and it is: `hqCadences` guards the Founder Signals refresh, the
+whole market-intel connector block, the Platform Personas digest and the
+market-intel watchlist digest. Everything else — the queue drain, job
+cleanup, trust and partner-deal expiry, the trash sweep, TOTP remediation,
+notification flushes, the score audits — stays per branch, and the test
+asserts that too: a gate that swallowed a branch's own housekeeping would be
+as wrong as no gate.
+
+### Three more leaks closed, one of which writes
+
+- `cloudflareSecrets.ts` loses its `|| 'studioos'` fallback **on a branch**.
+  This is the only one on the list whose consequence is a write: a branch
+  admin saving an integration key with `CF_WORKER_SCRIPT_NAME` unset would
+  have PUT that secret onto HQ's script, overwriting production's credential
+  from a screen that reported success. HQ keeps the fallback, because HQ is
+  the script it names.
+- A branch answers `X-Robots-Tag: noindex, nofollow`. Every branch serves
+  HQ's `docs/` bundle, whose canonical links, sitemap and OG URLs name
+  `axal.vc`; indexed, a branch host would be a full duplicate of the
+  marketing site with canonicals pointing away from itself.
+- Seven SPA links built from the literal `https://axal.vc` now come from
+  `appOrigin()`. The referral link is the sharp case: a branch member sharing
+  `https://axal.vc/register?ref=…` sends the referee to **HQ's database**,
+  where the reward is attributed against a member who is not there.
+  `ogRegistry.js`'s `SITE_URL` deliberately stays the apex — canonical tags
+  are statements about where the canonical document lives — and a test
+  asserts that too, so a later sweep cannot "fix" it and recreate the
+  duplicate `noindex` exists to avoid.
+
+### A boot assertion for the URL vars
+
+On a branch, `assertBranchAppUrl` refuses to serve `/api/*` unless `APP_URL`,
+`PUBLIC_BASE_URL`, `OAUTH_CALLBACK_BASE_URL` and `PUBLIC_MARKETING_URL` all
+name `<code>.axal.vc`. A branch deployed with HQ's values does not fail — it
+succeeds, and sends its users to HQ's host, where their branch-named cookie
+does not exist and their account is not in the database. The comparison is
+against `BRANCH_CODE`, not against one var trusting another.
+
+### Migration 256 — the licence is a copy, and it says how old it is
+
+`branch_licence`, `branch_promo_ceiling` and `branch_benchmarks` are
+singletons (the first two) and a small keyed table, each carrying `pushed_at`
+— HQ's assertion time, carried across in the push, not this database's write
+time. They are empty on HQ by construction; nothing writes them there, and
+reading a copy of your own ledger is a way to disagree with yourself.
+
+`GET /api/licence/mine` reads the copy on a branch and stamps the response
+`source: 'hq_copy'` with `as_of`. Without the branch path it would answer its
+existing 404 — "You do not administer a territory licence" — to the one
+person on the deployment who does, because `licence_admins` and
+`territory_licences` exist there and are empty. A row in another database and
+a row that does not exist must not read alike, so the two carry different
+codes (`licence_not_pushed` vs `no_licence`). `events` is `[]` with
+`events_available: false` and a reason: the trail is HQ's, and an empty array
+alone would claim nothing has happened to the licence.
+
+### What is guarded
+
+`branch_mode_gates.test.ts` (9) and `branch_licence_copy.test.ts` (5) in the
+worker suite; `frontend/test/branch_host.test.mjs` grows two (5 total).
+23 mutations applied, 23 caught — one only after the `appOrigin` fixture
+gained `{ location: {} }`, the single shape where dropping the optional chain
+changes the answer. An assertion that cannot fail on the machines that run it
+is not a guard.

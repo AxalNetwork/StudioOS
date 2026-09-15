@@ -14,6 +14,7 @@
  */
 import type { Env } from '../types';
 import { encryptColumn, decryptColumn, last4 } from './columnCipher';
+import { bindingKey } from '../util/schemaBootstrap';
 
 // --- Reference data ---------------------------------------------------------
 
@@ -785,13 +786,13 @@ export function computeCompletionPct(personal: PersonalProfileRead, corporate: C
 
 // --- Schema bootstrap (idempotent runtime migration) ------------------------
 
-let migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 export async function ensureProfileExpansionSchema(env: Env): Promise<void> {
-  if (migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   // Production migrations own this users-adjacent schema. Do not run a series
   // of ALTER/CREATE statements while serving a public profile on a cold edge.
   if (env.ENVIRONMENT === 'production') {
-    migrated = true;
+    MIGRATED.set(bindingKey(env), true);
     return;
   }
   const cols: Array<[string, string]> = [
@@ -879,5 +880,5 @@ export async function ensureProfileExpansionSchema(env: Env): Promise<void> {
   } catch (e) {
     console.error('[profile_expansion] migration failed', e);
   }
-  migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }

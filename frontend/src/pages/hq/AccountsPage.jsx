@@ -21,11 +21,11 @@ export default function HqAccountsPage({ onImpersonate }) {
   return (
     <div className="space-y-5" data-testid="hq-accounts-page">
       <header>
-        <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+        <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
           <Users size={13} /> HQ · Team
         </div>
         <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink">Accounts</h1>
-        <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-ink-2">
+        <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
           Every account on the platform, in the same table the Admin Console keeps.
           Tenant per account: <Unrecorded /> — no account names the licence it belongs to
           yet, so a tenant column would be invented rather than read.

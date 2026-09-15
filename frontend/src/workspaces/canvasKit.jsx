@@ -17,14 +17,14 @@ import { Card, Pill } from '../ui';
  * every heading, note and label is the artboard's own and belongs on the page
  * that draws it, where a reader comparing the two can see them side by side.
  *
- * THE UNDECLARED-TOKEN TRAP, AVOIDED DELIBERATELY. `axal-ink-2`, `axal-ink-3`,
- * `axal-surface-2` and `axal-border-soft` are used 399 times across
- * `frontend/src` and are declared in NO `@theme` block — `index.css` declares
+ * THE UNDECLARED-TOKEN TRAP, NOW CLOSED. `axal-ink-2`, `axal-ink-3`,
+ * `axal-surface-2` and `axal-border-soft` were used 399 times across
+ * `frontend/src` and declared in NO `@theme` block — `index.css` declares
  * `axal-ink`, `-ground`, `-hairline`, `-faint`, `-muted`, the violets, the
- * lavender and the ambers, and nothing else. Tailwind v4 emits nothing for the
- * rest, so those elements render at inherited colour and always have.
- * `NoStoreYet` records the same finding for its own three. Nothing new here
- * reaches for one; the greys below are the ones that actually paint.
+ * lavender and the ambers, and nothing else — so those elements rendered at
+ * inherited colour for as long as they existed. All 575 have been consolidated
+ * onto the five declared neutrals and the old names are gone from the tree. The
+ * greys below stay; they paint, and the skin darkens them.
  */
 
 /** The uppercase micro-label the artboards put above a figure. */

@@ -26,3 +26,29 @@ export function codeOnly(src) {
     .replace(/^\s*\/\/[^\n]*$/gm, '')
     .replace(/^\s*\*[^\n]*$/gm, '');
 }
+
+/**
+ * `codeOnlyJsx(src)` — the same, plus the `{/* … *\/}` comments that live INSIDE
+ * markup.
+ *
+ * WHY THIS IS A SECOND FUNCTION AND NOT A WIDENING OF THE FIRST. Everything the
+ * docblock above says about inline `/*` still holds; what makes this shape safe
+ * is that the delimiters are `{/*` and `*\/}` together, and no className, string
+ * or template literal in this tree produces either. The pair is specific enough
+ * to match only a real JSX comment.
+ *
+ * It exists because explaining a REMOVAL inside markup is exactly where this
+ * prose has to go. `#181` deleted twenty-five startup pickers and two "Open
+ * workspace" links, and each deletion left a `{/* … *\/}` saying what went and
+ * why — comments that contain `projects.length > 1` and the words "Open
+ * workspace". Under `codeOnly` those read as the very things the tests ban, and
+ * three assertions failed against correct code. Same lesson as above, one layer
+ * in: the comment you want to keep is the one that names the thing.
+ *
+ * `scripts/check-inline-project-pickers.mjs` carries its own copy of this, for
+ * the same reason `check-regulated-wording.mjs` does — a guard that `test:guards`
+ * runs should not import out of the test tree. Keep the two in step.
+ */
+export function codeOnlyJsx(src) {
+  return codeOnly(String(src).replace(/\{\/\*[\s\S]*?\*\/\}/g, ''));
+}

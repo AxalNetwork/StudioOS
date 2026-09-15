@@ -38,6 +38,7 @@ const PAGE = read('frontend/src/pages/TrustCenterPage.jsx');
 const CODE = codeOnly(PAGE);
 const API = read('frontend/src/lib/api.js');
 const WORKER = read('cloudflare-worker/src/routes/trust.ts');
+const WORKER_SVC = read('cloudflare-worker/src/services/trust.ts');
 const BASELINE = JSON.parse(read('scripts/api-drift-baseline.json'));
 
 /** Every path routes/trust.ts actually declares. */
@@ -207,8 +208,11 @@ test('the three statuses that used to render grey now read correctly', () => {
 test('waived reads the same way the score counts it', () => {
   // computeTrustScore counts waived alongside satisfied. A neutral pill beside
   // a green score said two things about one row.
-  const badge = read('frontend/src/components/TrustScoreBadge.jsx');
-  assert.match(badge, /o\.status === 'satisfied' \|\| o\.status === 'waived'/,
+  // The rule moved out of TrustScoreBadge.jsx into the pure lib module so the
+  // worker's copy could be run against it (migration 243's snapshot needs the
+  // score server-side). The badge re-exports it; the rule itself reads here.
+  const rule = read('frontend/src/lib/trustCenter.js');
+  assert.match(rule, /o\.status === 'satisfied' \|\| o\.status === 'waived'/,
     'the score no longer counts waived — recheck its tone');
   const block = PAGE.slice(
     PAGE.indexOf('const STATUS_TONE = {'),
@@ -221,9 +225,18 @@ test('the client score formula still mirrors the WORKER, and the PAGE does not i
   // The canvas proposed partial credit for in-review plus a per-gate penalty.
   // Shipping it would have put /trust at odds with GET /trust/score/:userId
   // AND with the same badge on /account.
-  assert.match(WORKER, /Math\.round\(\(satisfied \/ required\.length\) \* 100\)/);
-  const badge = read('frontend/src/components/TrustScoreBadge.jsx');
-  assert.match(badge, /Math\.round\(\(satisfied \/ required\.length\) \* 100\)/);
+  assert.match(WORKER_SVC, /Math\.round\(\(satisfied \/ required\.length\) \* 100\)/);
+  const rule = read('frontend/src/lib/trustCenter.js');
+  assert.match(rule, /Math\.round\(\(satisfied \/ required\.length\) \* 100\)/);
+  // Looking alike is not enough and never was: the two are now imported and
+  // RUN side by side over shared fixtures in
+  // `cloudflare-worker/test/trust_score_parity.test.ts`. This stays as the
+  // cheap structural tripwire for someone editing one of them in place.
+  assert.match(
+    read('frontend/src/components/TrustScoreBadge.jsx'),
+    /export \{ computeTrustScore \} from '\.\.\/lib\/trustCenter'/,
+    'the badge must re-export the shared rule, not grow a private copy',
+  );
   // The PAGE consumes the shared helper and defines no rival.
   assert.match(PAGE, /computeTrustScore\(obligations\)/);
   assert.doesNotMatch(CODE, /reqGates|weightOf|PREV_SCORE|scoreDelta/,
@@ -243,11 +256,33 @@ test('expiry is rendered as a state, not a bare date', () => {
 });
 
 test('the counts describe the list, they do not re-score it', () => {
-  const fn = PAGE.slice(PAGE.indexOf('function ToneCounts'), PAGE.indexOf('function ObligationList'));
+  // Sliced to ToneCounts' OWN closing brace, not to the next named function.
+  // It used to run to `function ObligationList`, and two components have since
+  // been declared in that gap — the second of which fetches, so the `api.`
+  // ban below started failing against a function it was never about.
+  const start = PAGE.indexOf('function ToneCounts');
+  assert.ok(start > 0, 'could not find ToneCounts');
+  const end = PAGE.indexOf('\n}\n', start);
+  const fn = PAGE.slice(start, end > start ? end : PAGE.indexOf('function ObligationList'));
   assert.ok(fn.length > 200, 'could not read ToneCounts');
+  assert.doesNotMatch(fn, /^function (?!ToneCounts)/m,
+    'the ToneCounts slice has swallowed another function');
   // Counted from the same array the rows render — no second fetch, no second source.
-  assert.match(fn, /for \(const o of obligations\) n\[toneOf\(o\.status\)\] \+= 1;/);
+  assert.match(fn, /outstandingCounts\(obligations\)/);
   assert.doesNotMatch(fn, /api\./, 'ToneCounts must not fetch');
+
+  // AND FROM THE SAME SPLIT THE TWO SENTENCES USE. It counted by `toneOf`
+  // until the page was rendered: `pending` is the amber `prog` tone, so three
+  // untouched obligations plus one in review drew "4 in progress" inches from
+  // a sentence reading "1 in progress", in one frame, about the same rows.
+  // Neither number was wrong on its own terms; together they were nonsense.
+  assert.doesNotMatch(fn, /toneOf\(o\.status\)/,
+    'the tally is back on the pill tone — it will contradict the sentences above it');
+  assert.match(fn, /waitingOn\(o\.status\) === 'settled'/,
+    'the settled count is derived some other way than the two beside it');
+  // The label must not be the sentence's word for the OTHER bucket.
+  assert.match(fn, /\['bad', needs, 'need action'\]/);
+  assert.match(fn, /\['prog', inProgress, 'in progress'\]/);
   // A zero is omitted, not drawn: "0 blocked" reads as an achievement.
   assert.match(fn, /\.filter\(\(\[, c\]\) => c > 0\)/);
 });
@@ -383,4 +418,202 @@ test('both frames get the provenance line, exactly once', () => {
   assert.match(head, /chromeless/, 'the header slice does not contain the guard it is supposed to bracket');
   assert.doesNotMatch(head, /this page reports status only/,
     'the provenance line is back inside the chromeless guard — an investor would never see it');
+});
+
+// ===========================================================================
+// Trust Center v2 — the score panel, the provenance line, and the two exits.
+//
+// The derivations behind these are unit-tested in
+// `frontend/test/trust_center_panel.test.mjs`, where every branch is reachable
+// without React. What is left to guard is that the PAGE actually renders them,
+// and renders them from the shared rule rather than a local re-derivation —
+// which is the specific way this panel went wrong once already.
+
+/** The ScorePanel body, sliced to its own function. */
+const scorePanel = () => {
+  const s = CODE.indexOf('function ScorePanel(');
+  const e = CODE.indexOf('function ObligationList(', s);
+  assert.ok(s > 0 && e > s, 'could not read ScorePanel');
+  return CODE.slice(s, e);
+};
+
+test('the Overview draws the v2 score panel, not just the badge', () => {
+  const panel = scorePanel();
+  // The ring, and the number inside it.
+  assert.match(panel, /<svg viewBox="0 0 160 160"/, 'the ring is gone');
+  assert.match(panel, /strokeDasharray=\{`\$\{dash\.toFixed\(1\)\} \$\{CIRC\.toFixed\(1\)\}`\}/,
+    'the arc no longer tracks the score');
+  assert.match(panel, /of 100/, 'the denominator is gone — a bare 72 has no scale');
+  // Verdict, line, bands — each from the shared module, none re-derived here.
+  assert.match(panel, /\{verdict\}/);
+  assert.match(panel, /\{scoreLine\(\{ needs, inProgress \}\)\}/);
+  assert.match(panel, /SCORE_BANDS\.map/);
+  // And it is mounted in the Overview with the server's history.
+  assert.match(CODE, /<ScorePanel\b/, 'the panel is defined but never rendered');
+  assert.match(CODE, /previousScore=\{matrix\?\.previous_score \?\? null\}/);
+  assert.match(CODE, /previousMonth=\{matrix\?\.previous_month \?\? null\}/);
+});
+
+test('the panel counts by who the row waits on, never by the pill colour', () => {
+  // THE REGRESSION THIS EXISTS FOR. Splitting on `toneOf` puts `pending` —
+  // the untouched state — under "in progress", and the page then tells a
+  // reader with three untouched obligations "nothing needs action from you".
+  const panel = scorePanel();
+  assert.match(panel, /const \{ needs, inProgress \} = outstandingCounts\(obligations\)/,
+    'the panel is deriving its counts itself instead of using the shared rule');
+  assert.doesNotMatch(panel, /toneOf\(/,
+    'the panel is splitting on the pill tone again — `pending` is amber but it waits on the reader');
+});
+
+test('the two Overview columns say different things, from one pair of counts', () => {
+  const s = CODE.indexOf('const overview = (');
+  const e = CODE.indexOf('</Section>', s);
+  assert.ok(s > 0 && e > s, 'could not read the Overview');
+  const ov = CODE.slice(s, e);
+  assert.match(ov, /obligationSummary\(outstandingCounts\(obligations\)\)/,
+    'the obligations column no longer carries the canvas\'s own summary sentence');
+  // The sentence it used to carry duplicated the panel's verdict word for
+  // word, and pointed at a badge this layout moved out of that column.
+  assert.doesNotMatch(ov, /Fully compliant — every required obligation is satisfied/,
+    'the right column repeats the panel\'s verdict verbatim again');
+  assert.doesNotMatch(ov, /Hover the score for details/,
+    'the column points at a badge that is no longer in it');
+  // Two columns on a desktop, one on a phone — the ring is 158px wide.
+  assert.match(ov, /grid grid-cols-1 gap-4 md:grid-cols-\[300px_1fr\]/);
+});
+
+test('the band tone classes are literal, not built by string surgery', () => {
+  // A class name assembled at the call site (`bar.replace('border-l-','border-')`)
+  // is invisible to Tailwind's scanner and ships with no rule behind it, which
+  // is how the first draft of this panel drew a colourless ring.
+  const s = CODE.indexOf('const TONE = {');
+  const e = CODE.indexOf('function toneOf', s);
+  assert.ok(s > 0 && e > s, 'could not read TONE');
+  const tone = CODE.slice(s, e);
+  for (const [band, ring, edge] of [
+    ['ok', 'stroke-emerald-500', 'border-emerald-200'],
+    ['prog', 'stroke-amber-500', 'border-amber-200'],
+    ['bad', 'stroke-red-500', 'border-red-200'],
+  ]) {
+    assert.match(tone, new RegExp(`ring: '${ring}'`), `TONE.${band}.ring is not a literal class`);
+    assert.match(tone, new RegExp(`edge: '${edge}`), `TONE.${band}.edge is not a literal class`);
+  }
+  assert.doesNotMatch(scorePanel(), /\.replace\(/,
+    'the panel is assembling a class name — Tailwind cannot see one that is built at runtime');
+});
+
+test('an obligation row shows where its status came from, and invents nothing', () => {
+  const s = CODE.indexOf('function ObligationList(');
+  const e = CODE.indexOf('function ', CODE.indexOf('return (', s));
+  const list = CODE.slice(s, e > s ? e : s + 4000);
+  assert.match(list, /\{o\.source && \(/,
+    'the provenance line renders unconditionally — a row nothing satisfied would claim an origin');
+  assert.match(list, /\{o\.source\}/);
+  // The premise: the worker derives it and /me returns it.
+  assert.match(WORKER, /source: obligationSource\(o\)/,
+    'GET /trust/me no longer returns `source` — the line would render for nobody');
+  assert.match(WORKER_SVC, /export function obligationSource/);
+  // And it is null, not a filler string, when there is no evidence.
+  assert.match(WORKER_SVC, /if \(!raw\) return null;/,
+    'obligationSource invents a provenance for a row with no evidence');
+});
+
+test('the entity list marks which company the rest of the app is acting on', () => {
+  const s = CODE.indexOf('function CompanyKybCard(');
+  const e = CODE.indexOf('const accreditation =', s);
+  assert.ok(s > 0 && e > s, 'could not read CompanyKybCard');
+  const card = CODE.slice(s, e);
+  assert.match(card, /const activeCompanyId = getActiveCompanyId\(\)/,
+    'the badge has no idea which workspace is active');
+  // Compared as strings on purpose: the id arrives from localStorage as text
+  // and from the API as a number, and `1 === '1'` is false.
+  assert.match(card, /String\(row\.company_id\) === String\(activeCompanyId\)/,
+    'the comparison is type-sensitive again — the badge would never light up');
+  assert.match(card, /Active workspace/);
+  assert.match(read('frontend/src/lib/api.js'), /export function getActiveCompanyId/,
+    'the page imports a helper api.js no longer exports');
+});
+
+test('an agreement expands into the timeline the canvas draws', () => {
+  const s = CODE.indexOf('function EnvelopeHistory(');
+  const e = CODE.indexOf('function ObligationList(', s);
+  assert.ok(s > 0 && e > s, 'the envelope-history panel is gone');
+  const panel = CODE.slice(s, e);
+
+  assert.match(panel, /Envelope history/, 'the canvas\'s own heading for the panel');
+  assert.match(panel, /api\.trustAgreementHistory\(envelopeUuid\)/,
+    'the panel no longer fetches the trail');
+  assert.match(panel, /collapseEnvelopeHistory\(res\?\.history \|\| \[\]\)/);
+  assert.match(panel, /envelopeEventLabel\(e\.action\)/);
+  // The three states an async panel owes its reader, each distinct.
+  assert.match(panel, /state\.phase === 'loading'/);
+  assert.match(panel, /state\.phase === 'error'/);
+  assert.match(panel, /NO_ENVELOPE_HISTORY_NOTE/);
+  // A FAILED READ MUST NOT RENDER AS AN EMPTY TIMELINE. "Nothing recorded"
+  // and "we could not find out" are different claims about an audit trail.
+  assert.match(panel, /phase: 'error'/);
+  assert.doesNotMatch(panel, /catch[\s\S]{0,120}phase: 'ready'/,
+    'a failed fetch resolves to a ready, empty timeline — it must say it failed');
+  // Fetched per envelope and re-fetched when the uuid changes.
+  assert.match(panel, /\}, \[envelopeUuid\]\);/,
+    'the effect does not key on the envelope — expanding a second row would show the first one\'s history');
+});
+
+test('the expander exists only where there is an envelope to expand', () => {
+  const s = CODE.indexOf('function AgreementsTab(');
+  const e = CODE.indexOf('function SanctionsTab(', s);
+  assert.ok(s > 0 && e > s, 'could not read AgreementsTab');
+  const tab = CODE.slice(s, e);
+  assert.match(tab, /\{a\.nda_envelope_uuid && \(/,
+    'the expander is offered on rows with no envelope, where it can only ever say "nothing recorded"');
+  assert.match(tab, /setExpandedEnvelope\(open \? null : a\.nda_envelope_uuid\)/,
+    'the toggle does not close the row it opened');
+  assert.match(tab, /\{open && <EnvelopeHistory envelopeUuid=\{a\.nda_envelope_uuid\} \/>\}/);
+  // One row at a time, keyed by uuid rather than by pair id.
+  assert.match(tab, /const \[expandedEnvelope, setExpandedEnvelope\] = useState\(null\)/);
+  assert.match(tab, /const open = expandedEnvelope === a\.nda_envelope_uuid/);
+  // The control announces itself to a screen reader as well as to a mouse.
+  assert.match(tab, /aria-expanded=\{open\}/);
+  assert.match(tab, /className="sr-only">\{open \? 'Hide' : 'Show'\} envelope history/);
+});
+
+test('the client method the panel calls has the worker route behind it', () => {
+  // The rule in CLAUDE.md, checked here as well as by `npm run test:drift`,
+  // because this pair was added in one commit and is easy to half-revert.
+  assert.match(read('frontend/src/lib/api.js'),
+    /trustAgreementHistory: \(envelope_uuid\) =>\s*\n\s*request\(`\/trust\/agreements\/\$\{encodeURIComponent\(envelope_uuid\)\}\/history`\)/);
+  assert.match(WORKER, /trust\.get\('\/agreements\/:envelope_uuid\/history'/);
+  // 404, not 403 — /my_signing_url already refuses to confirm an envelope
+  // exists and this must not become the oracle that one does.
+  const route = WORKER.slice(
+    WORKER.indexOf("trust.get('/agreements/:envelope_uuid/history'"),
+    WORKER.indexOf("trust.post('/intro/request'"),
+  );
+  assert.ok(route.length > 200, 'could not read the history route');
+  assert.match(route, /if \(history === null\) return c\.json\(\{ error: 'not_a_recipient' \}, 404\)/);
+  // An empty trail is a 200 with an empty array — a real answer, not a 404.
+  assert.match(route, /return c\.json\(\{ history \}\)/);
+});
+
+test('both "managed elsewhere" exits lead somewhere that exists', () => {
+  // The page reports and does not edit, so every statement of that fact owes
+  // the reader a route to where the editing happens. A dead link here is
+  // worse than no link: it confirms the page cannot help and then fails.
+  //
+  // ANCHORED ON THE RENDER, not on the words. `codeOnly` strips block comments
+  // that start at column 0 and whole-line `//` comments — not an indented JSX
+  // `{/* … */}`, and the page has one that quotes BOTH labels to explain why
+  // they use different verbs. A bare /Edit in Account Settings/ matched that
+  // comment, so replacing the real link text with "Contact support" left the
+  // test green. Third time this suite has been bitten by an assertion its own
+  // explanation satisfies (see #144's LEGAL_LINKS import line).
+  assert.match(CODE, /Edit in Account Settings &rarr;\s*<\/a>/,
+    'the Entity list offers no way out');
+  assert.match(CODE, /<ManagedElsewhere cta="Manage in Account Settings →"/,
+    'the Accreditation card offers no way out');
+  const app = read('frontend/src/App.jsx');
+  assert.match(app, /path="\/account"/, '/account is not routed — both exits are dead ends');
+  // And the role that sees the accreditation card can reach it.
+  const route = app.slice(app.indexOf('path="/account"'), app.indexOf('path="/account"') + 220);
+  assert.match(route, /'investor'/, 'an investor cannot open /account, so its exit 403s');
 });

@@ -12,6 +12,7 @@
  * platform.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
 export const CATEGORIES = ['startup', 'customer', 'strategic'] as const;
 export type Category = (typeof CATEGORIES)[number];
@@ -107,7 +108,7 @@ export function isStatus(v: unknown): v is Status {
 // Schema
 // ---------------------------------------------------------------------------
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 /**
  * Dev/preview only. Production D1 owns this schema via migration 175 — running
@@ -115,8 +116,8 @@ let _ready = false;
  * to the apex 504s, so production short-circuits and trusts the migration.
  */
 export async function ensureReferralSubmissionsSchema(env: Env): Promise<void> {
-  if (_ready) return;
-  if (env.ENVIRONMENT === 'production') { _ready = true; return; }
+  if (READY.get(bindingKey(env))) return;
+  if (env.ENVIRONMENT === 'production') { READY.set(bindingKey(env), true); return; }
   const stmts = [
     `CREATE TABLE IF NOT EXISTS referral_submissions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -163,7 +164,7 @@ export async function ensureReferralSubmissionsSchema(env: Env): Promise<void> {
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); } catch { /* idempotent */ }
   }
-  _ready = true;
+  READY.set(bindingKey(env), true);
 }
 
 // ---------------------------------------------------------------------------

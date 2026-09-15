@@ -86,7 +86,7 @@ function Zone({ title, sub, children, tone = '' }) {
     <Card className={tone}>
       <div className="mb-2 flex items-baseline justify-between gap-3">
         <h2 className="text-[14.5px] font-extrabold tracking-tight">{title}</h2>
-        {sub && <span className="text-[11.5px] text-axal-ink-3">{sub}</span>}
+        {sub && <span className="text-[11.5px] text-axal-faint">{sub}</span>}
       </div>
       {children}
     </Card>
@@ -95,7 +95,7 @@ function Zone({ title, sub, children, tone = '' }) {
 
 function Absent({ block, fallback }) {
   return (
-    <p className="text-[12.5px] leading-relaxed text-axal-ink-2">
+    <p className="text-[12.5px] leading-relaxed text-axal-muted">
       <Unrecorded /> — {block?.reason || fallback}
     </p>
   );
@@ -103,10 +103,10 @@ function Absent({ block, fallback }) {
 
 function Stat({ label, value, note, tone = 'text-axal-ink dark:text-white' }) {
   return (
-    <div className="rounded-xl border border-axal-line bg-axal-surface-2 p-3">
-      <div className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{label}</div>
+    <div className="rounded-xl border border-axal-hairline bg-axal-ground p-3">
+      <div className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</div>
       <div className={`mt-1 text-lg font-extrabold tracking-tight tabular-nums ${tone}`}>{value ?? <Unrecorded />}</div>
-      {note && <div className="mt-0.5 text-[10px] text-axal-ink-3">{note}</div>}
+      {note && <div className="mt-0.5 text-[10px] text-axal-faint">{note}</div>}
     </div>
   );
 }
@@ -144,16 +144,16 @@ function ForceReauth({ onDone }) {
   }
   return (
     <form onSubmit={submit} className="mt-3 space-y-2" data-testid="hq-force-reauth">
-      <label className="block text-[11px] font-semibold text-axal-ink-2">
+      <label className="block text-[11px] font-semibold text-axal-muted">
         Reason · required, stored with the action
         <input
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="e.g. credential stuffing observed against three admin accounts"
-          className="mt-1 w-full rounded-md border border-axal-line bg-white px-2.5 py-1.5 text-[12.5px] font-normal text-axal-ink dark:bg-gray-900"
+          className="mt-1 w-full rounded-md border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] font-normal text-axal-ink dark:bg-gray-900"
         />
       </label>
-      <label className="flex items-start gap-2 text-[11.5px] text-axal-ink-2">
+      <label className="flex items-start gap-2 text-[11.5px] text-axal-muted">
         <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5" />
         <span>I understand this signs out every active account on every tenant, including my own session.</span>
       </label>
@@ -241,11 +241,11 @@ export default function HqSecurityPage() {
         </div>
 
         <header className="mt-4">
-          <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+          <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             <ShieldCheck size={13} /> HQ · Security
           </div>
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">Security</h1>
-          <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-ink-2">
+          <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
             Was Governance, which described the audit log and nothing else. That log is here as one zone of
             eight, reading the four stores a privileged action actually lands in rather than the one. Four
             zones read their stores; four say what is not recorded and why. Only a licence event names a
@@ -271,16 +271,16 @@ export default function HqSecurityPage() {
               {imp?.available && imp.recent.length > 0 && (
                 <ul className="mt-3 space-y-1.5" data-testid="hq-impersonations">
                   {imp.recent.slice(0, 5).map((s) => (
-                    <li key={s.id} className={`rounded-lg border px-3 py-2 text-[11.5px] ${s.ended_at ? 'border-axal-line bg-axal-surface-2' : 'border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/20'}`}>
+                    <li key={s.id} className={`rounded-lg border px-3 py-2 text-[11.5px] ${s.ended_at ? 'border-axal-hairline bg-axal-ground' : 'border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/20'}`}>
                       <b>{s.admin_name || s.admin_email}</b> as <b>{s.target_name || s.target_email}</b>
-                      <span className="ml-2 font-mono text-[10px] text-axal-ink-3">{day(s.started_at)}{s.ended_at ? ` → ${day(s.ended_at)}` : ' · live'}</span>
-                      {s.context && <span className="ml-2 text-axal-ink-3">· {s.context}</span>}
+                      <span className="ml-2 font-mono text-[10px] text-axal-faint">{day(s.started_at)}{s.ended_at ? ` → ${day(s.ended_at)}` : ' · live'}</span>
+                      {s.context && <span className="ml-2 text-axal-faint">· {s.context}</span>}
                     </li>
                   ))}
                 </ul>
               )}
               <ForceReauth onDone={load} />
-              <p className="mt-2 text-[11px] leading-relaxed text-axal-ink-3">
+              <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
                 An impersonation is a session like any other, which is why it sits here. Per-device revocation stays
                 with each account under Settings; the platform-wide action above bumps every account&apos;s token floor.
               </p>
@@ -293,21 +293,21 @@ export default function HqSecurityPage() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <Zone title="Data subject requests" sub={`${ready ? data.dsr?.clock_days : 30}-day clock from receipt`} tone="border-amber-200 bg-amber-50/30 dark:border-amber-900 dark:bg-amber-950/20">
-              {ready && dsr.length === 0 && <p className="text-[12px] text-axal-ink-3">No deletion request is open.</p>}
+              {ready && dsr.length === 0 && <p className="text-[12px] text-axal-faint">No deletion request is open.</p>}
               {ready && dsr.length > 0 && (
                 <ul className="space-y-1.5" data-testid="hq-dsr">
                   {dsr.map((d) => (
                     <li key={d.id} className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-white px-3 py-2 text-[12px] dark:border-amber-900 dark:bg-gray-900">
-                      <span className="min-w-0 truncate"><b>{d.name || d.email}</b> <span className="text-axal-ink-3">· {titleCase(d.role)} · erasure</span></span>
-                      <span className={`shrink-0 font-bold tabular-nums ${d.days_left === null ? 'text-axal-ink-3' : d.days_left < 0 ? 'text-red-700 dark:text-red-300' : d.days_left <= 14 ? 'text-amber-800 dark:text-amber-300' : 'text-axal-ink dark:text-white'}`}>
+                      <span className="min-w-0 truncate"><b>{d.name || d.email}</b> <span className="text-axal-faint">· {titleCase(d.role)} · erasure</span></span>
+                      <span className={`shrink-0 font-bold tabular-nums ${d.days_left === null ? 'text-axal-faint' : d.days_left < 0 ? 'text-red-700 dark:text-red-300' : d.days_left <= 14 ? 'text-amber-800 dark:text-amber-300' : 'text-axal-ink dark:text-white'}`}>
                         {d.days_left === null ? <Unrecorded>clock unknown</Unrecorded> : d.days_left < 0 ? `${num(-d.days_left)}d overdue` : `${num(d.days_left)}d left`}
                       </span>
                     </li>
                   ))}
                 </ul>
               )}
-              {!ready && data !== UNAVAILABLE && <p className="text-[12px] text-axal-ink-3">Loading…</p>}
-              <p className="mt-2 text-[11px] leading-relaxed text-axal-ink-3">
+              {!ready && data !== UNAVAILABLE && <p className="text-[12px] text-axal-faint">Loading…</p>}
+              <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
                 The clock is statutory — one month from receipt, not from triage. Requests come from each account&apos;s own
                 Settings; erasure itself is still a manual act.
               </p>
@@ -349,7 +349,7 @@ export default function HqSecurityPage() {
                   className={`rounded-lg border px-3 py-1.5 text-[11.5px] font-semibold ${
                     filter === f.key
                       ? 'border-rose-200 bg-rose-50 text-[#881337] dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200'
-                      : 'border-axal-line bg-white text-axal-ink-2 hover:bg-axal-surface-2 dark:bg-gray-900'
+                      : 'border-axal-hairline bg-white text-axal-muted hover:bg-axal-ground dark:bg-gray-900'
                   }`}
                 >
                   {f.label}
@@ -366,10 +366,10 @@ export default function HqSecurityPage() {
                 />
               </div>
             )}
-            {feed === null && <p className="mt-3 text-[12px] text-axal-ink-3">Loading…</p>}
+            {feed === null && <p className="mt-3 text-[12px] text-axal-faint">Loading…</p>}
 
             {feedReady && feed.rows.length === 0 && (
-              <p className="mt-3 text-[12px] text-axal-ink-3" data-testid="hq-gov-empty">
+              <p className="mt-3 text-[12px] text-axal-faint" data-testid="hq-gov-empty">
                 No privileged action matches this filter. Every store below was read and none held a row —
                 which is a different fact from a store that could not be read.
               </p>
@@ -379,7 +379,7 @@ export default function HqSecurityPage() {
               <div className="mt-3 overflow-x-auto">
                 <table className="w-full text-[11.5px]" data-testid="hq-gov-feed">
                   <thead>
-                    <tr className="text-left text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-ink-3">
+                    <tr className="text-left text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">
                       <th className="py-1 pr-3">Time</th>
                       <th className="py-1 pr-3">Actor</th>
                       <th className="py-1 pr-3">Tenant</th>
@@ -389,14 +389,14 @@ export default function HqSecurityPage() {
                   </thead>
                   <tbody>
                     {feed.rows.map((r) => (
-                      <tr key={r.key} className={`border-t border-axal-line align-top ${ROW_TINT[r.tone] || ''}`}>
-                        <td className="py-1.5 pr-3 font-mono text-[10.5px] text-axal-ink-3">
+                      <tr key={r.key} className={`border-t border-axal-hairline align-top ${ROW_TINT[r.tone] || ''}`}>
+                        <td className="py-1.5 pr-3 font-mono text-[10.5px] text-axal-faint">
                           {day(r.at) || <Unrecorded>no timestamp</Unrecorded>}
                         </td>
                         <td className="py-1.5 pr-3 font-semibold">{r.actor || <Unrecorded>unnamed</Unrecorded>}</td>
-                        <td className="py-1.5 pr-3 text-axal-ink-2">{r.tenant || <Unrecorded />}</td>
+                        <td className="py-1.5 pr-3 text-axal-muted">{r.tenant || <Unrecorded />}</td>
                         <td className={`py-1.5 pr-3 font-bold ${ACTION_INK[r.tone] || ACTION_INK.note}`}>{r.action}</td>
-                        <td className="py-1.5 text-axal-ink-2">{r.target || <Unrecorded>no detail</Unrecorded>}</td>
+                        <td className="py-1.5 text-axal-muted">{r.target || <Unrecorded>no detail</Unrecorded>}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -406,10 +406,10 @@ export default function HqSecurityPage() {
 
             {feedReady && (
               <>
-                <p className="mt-3 text-[11px] leading-relaxed text-axal-ink-3" data-testid="hq-gov-tenant-reason">
+                <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-gov-tenant-reason">
                   <b>Tenant.</b> {feed.tenant_reason}
                 </p>
-                <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10.5px] text-axal-ink-3" data-testid="hq-gov-sources">
+                <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10.5px] text-axal-faint" data-testid="hq-gov-sources">
                   {feed.sources.map((src) => (
                     <li key={src.table} className={src.available ? 'font-mono' : 'font-mono text-red-700 dark:text-red-300'}>
                       {src.table} ·{' '}
@@ -417,13 +417,13 @@ export default function HqSecurityPage() {
                     </li>
                   ))}
                 </ul>
-                <p className="mt-2 text-[11px] leading-relaxed text-axal-ink-3">
+                <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
                   Newest first, no pagination above the fold, and no summary tile over it: the first question of
                   an audit log is what just happened, never page four, and a count of suspensions is a dashboard
                   where the suspensions themselves are the record. Impersonations and suspensions carry a tint —
                   the only decoration here, and it is there to be scanned for.
                 </p>
-                <p className="mt-2 text-[11px] leading-relaxed text-axal-ink-3" data-testid="hq-gov-tenant-view">
+                <p className="mt-2 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-gov-tenant-view">
                   <b>No &ldquo;Return to HQ view&rdquo;.</b> {feed.tenant_view_reason}
                 </p>
               </>
@@ -435,20 +435,20 @@ export default function HqSecurityPage() {
               cannot make the other half look like the whole answer. */}
           <Zone title="Data access" sub="impersonations and exports">
             {feed === UNAVAILABLE && (
-              <p className="text-[12.5px] text-axal-ink-2">
+              <p className="text-[12.5px] text-axal-muted">
                 <Unrecorded /> — the privileged action log could not be read, so neither half of this zone can be shown.
               </p>
             )}
-            {feed === null && <p className="text-[12px] text-axal-ink-3">Loading…</p>}
+            {feed === null && <p className="text-[12px] text-axal-faint">Loading…</p>}
             {access && (
               <div className="grid gap-3 md:grid-cols-2" data-testid="hq-data-access">
                 <div>
-                  <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-ink-3">
+                  <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">
                     Impersonations · {access.expiry_minutes}-minute limit
                   </div>
                   {access.impersonations.available ? (
                     access.impersonations.items.length === 0
-                      ? <p className="mt-1.5 text-[12px] text-axal-ink-3">No support session is on record.</p>
+                      ? <p className="mt-1.5 text-[12px] text-axal-faint">No support session is on record.</p>
                       : (
                         <ul className="mt-1.5 space-y-1.5">
                           {access.impersonations.items.map((d) => (
@@ -457,49 +457,49 @@ export default function HqSecurityPage() {
                               className={`rounded-lg border px-3 py-2 text-[11.5px] ${
                                 d.live
                                   ? 'border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/20'
-                                  : 'border-axal-line bg-axal-surface-2'
+                                  : 'border-axal-hairline bg-axal-ground'
                               }`}
                             >
                               <div className="flex items-baseline justify-between gap-3">
                                 <span className="min-w-0 truncate font-semibold">{d.what}</span>
-                                <span className={`shrink-0 font-mono text-[10px] ${d.overdue ? 'text-red-700 dark:text-red-300' : 'text-axal-ink-3'}`}>
+                                <span className={`shrink-0 font-mono text-[10px] ${d.overdue ? 'text-red-700 dark:text-red-300' : 'text-axal-faint'}`}>
                                   {d.dur || <Unrecorded>clock unknown</Unrecorded>}
                                 </span>
                               </div>
-                              <div className="mt-0.5 font-mono text-[10px] text-axal-ink-3">{d.meta}</div>
+                              <div className="mt-0.5 font-mono text-[10px] text-axal-faint">{d.meta}</div>
                             </li>
                           ))}
                         </ul>
                       )
                   ) : (
-                    <p className="mt-1.5 text-[12.5px] text-axal-ink-2"><Unrecorded /> — {access.impersonations.reason}</p>
+                    <p className="mt-1.5 text-[12.5px] text-axal-muted"><Unrecorded /> — {access.impersonations.reason}</p>
                   )}
                 </div>
                 <div>
-                  <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-ink-3">Exports</div>
+                  <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">Exports</div>
                   {access.exports.available ? (
                     access.exports.items.length === 0
-                      ? <p className="mt-1.5 text-[12px] text-axal-ink-3">No export is on record.</p>
+                      ? <p className="mt-1.5 text-[12px] text-axal-faint">No export is on record.</p>
                       : (
                         <ul className="mt-1.5 space-y-1.5">
                           {access.exports.items.map((d) => (
-                            <li key={d.what + d.meta} className="rounded-lg border border-axal-line bg-axal-surface-2 px-3 py-2 text-[11.5px]">
+                            <li key={d.what + d.meta} className="rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[11.5px]">
                               <div className="flex items-baseline justify-between gap-3">
                                 <span className="min-w-0 truncate font-semibold">{d.what}</span>
-                                <span className="shrink-0 font-mono text-[10px] text-axal-ink-3">{d.dur}</span>
+                                <span className="shrink-0 font-mono text-[10px] text-axal-faint">{d.dur}</span>
                               </div>
-                              <div className="mt-0.5 font-mono text-[10px] text-axal-ink-3">{d.meta}</div>
+                              <div className="mt-0.5 font-mono text-[10px] text-axal-faint">{d.meta}</div>
                             </li>
                           ))}
                         </ul>
                       )
                   ) : (
-                    <p className="mt-1.5 text-[12.5px] text-axal-ink-2"><Unrecorded /> — {access.exports.reason}</p>
+                    <p className="mt-1.5 text-[12.5px] text-axal-muted"><Unrecorded /> — {access.exports.reason}</p>
                   )}
                 </div>
               </div>
             )}
-            <p className="mt-3 text-[11px] leading-relaxed text-axal-ink-3">
+            <p className="mt-3 text-[11px] leading-relaxed text-axal-faint">
               A session that ran to its limit is recorded exactly like one ended early — the log does not
               distinguish diligence from the clock running out, and it should not. A row still open past the
               limit reads <b>not closed</b>: the token expired on time, the closing write is best-effort, and

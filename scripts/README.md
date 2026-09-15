@@ -17,22 +17,104 @@ represents a bug that reached production once:
 | `check-api-drift.mjs` | The SPA calling an endpoint the worker does not serve — resolved against the real mount table, not a regex. |
 | `check-sqlite-columns.mjs` | SQL naming a column that does not exist. D1 rejects the whole statement, so this renders as an empty screen rather than an error. |
 | `check-sqlite-tables.mjs` | SQL against a table nothing creates. |
+| `check-sqlite-table-collisions.mjs` | A table with two definitions that cannot describe one table — each demanding a NOT NULL column the other has no place for, so whichever `IF NOT EXISTS` runs first wins and the code written against the loser cannot insert. The complement to `check-sqlite-columns`, which unions definitions rather than comparing them. Like that guard it excludes `sql/historical/`: harvesting an archive produced findings nobody could answer — the first to return without the filter is `advisor_bookings`, reported between two archived files disagreeing with **each other**, while its one live definition conflicts with nothing. Exceptions live in `sqlite-table-collisions-baseline.json` and the gate fails on an entry that no longer collides. |
 | `check-migration-column-shapes.mjs` | A migration reading a column that only SOME definitions of a multiply-defined table have — D1 keeps one table per name, so it cannot apply unless that shape happened to win. Exceptions live in `migration-column-shapes-baseline.json`. |
 | `check-sql-prepare.mjs` | A `${}` inside `DB.prepare()`. Exceptions live in `sql-prepare-baseline.json` and are argued one at a time. |
 | `check-money-cents.mjs` | Money parsed as a float. |
+| `check-schema-readiness.mjs` | A lazy schema bootstrap remembering "already done" in a module-level `let ready = false` — which is once per ISOLATE, not once per DATABASE, so the second binding an isolate serves never gets its DDL and then reads a table nothing created (#203, then 115 more in #204). Bans that shape and the shared `Promise<void> \| null` in-flight latch, and fails a `WeakMap<object, …>` in a file that never names the binding. That third rule is what earned it: on its first run it found `cloudflare-worker/src/services/projectAccess.ts` keyed on `env` while its own comment claimed to mirror `cloudflare-worker/src/routes/projects.ts`, which keys on `env.DB`. Behaviour, as opposed to shape, is pinned by `cloudflare-worker/test/schema_readiness.test.ts`. |
 | `check-wrangler-binding-parity.mjs` | A binding added to one `wrangler.toml` table but not the other — the worker then boots without it in production only. |
+| `check-branch-config.mjs` | A branch registry entry that does not render a deployable Worker config: a route that is HQ's own host, storage ids that are HQ's, a missing Durable Object migration tag, a URL var still pointing at HQ, or a binding added to `[env.production]` that the rename rules do not cover. |
 | `check-docs-fresh.mjs` | A committed `docs/` older than `frontend/src`, i.e. a deploy that would ship a stale bundle. |
 | `check-workspace-frames.mjs` | A workspace route that crashes, renders nothing, or draws two headings or two AI rails. Renders the built `docs/` in Chromium with `/api/*` stubbed, so it sees what the source-reading suite cannot: it caught `/expertise/profile` throwing into the error boundary on every visit. Needs a browser, so it is **not** in `test:guards` — run it by hand after `npm run build`. |
 | `check-frontend-builds.mjs` | A frontend that does not build. Every other check here reads the source as TEXT, so a parse error passes the whole suite and surfaces one push later in CI. Runs the real bundler into a temp directory — never `docs/`. |
+| `check-inline-project-pickers.mjs` | An in-body startup picker, of which there are now none. #181's product question is answered — one company, one startup, measured against production D1 (5 projects, 5 founders, one project each), so every picker's `projects.length > 1` guard was false for every live account — and all 25 are gone. `inline-project-pickers-baseline.json` stays, empty: the gate fails on a new picker AND on an entry with nothing behind it, and task #84 removed these once already and they came back because nothing counted them. TWO sweeps, because one was blind: the original keyed on `data-testid="select-*-project"` and found 21, while FOUR pickers carried no test attribute at all, so a ledger claiming "all on record" was short by four. It now also sweeps the `projects.length > 1` render guard — the property that defines the control rather than an attribute an author can omit. |
 | `check-folder-docs.mjs` | A folder that carries weight without explaining itself, or a README naming a file that does not exist. |
+| `check-unused-imports.mjs` | A name a module binds and never uses — both `import { a } from '…'` and a destructured `const { a } = obj`. CodeQL reports these as alerts, so the choice is here or in a CI round trip; it raised three in one session before this existed. Deliberately narrow in both halves, because a false positive demands a change that breaks working code: named imports only (never default or namespace), and for destructuring `const` only — never a parameter list, and never a pattern with a rest element, since `const { password, ...safe } = user` names the field precisely to exclude it. Its own tests are the evidence it can fail, because **zero** destructured bindings in the repo are currently dead: `frontend/test/unused_imports_guard.test.mjs`. |
+| `check-react-hook-imports.mjs` | The other half of that rule — a name USED but never imported. `useState` shipped undefined to the apex once and took the public site down on first paint; a missing binding is a runtime error, so the bundle was clean and no test rendered the component. Since `lint:undef` below, this is coverage-redundant across `frontend/src`'s JS and JSX (verified by mutation); since `test:types:frontend` (#201, D96) it is redundant across the TS and TSX files too — a deleted `useState` import in `demo_day_app.tsx` was caught by BOTH, which is how that was established rather than assumed. **It now earns its place on its message alone**, which names the hook and the file in one line where `tsc` gives a TS2304 per call site. Kept for that; not for coverage. |
 | `npm-audit-gate.mjs` | A critical advisory in a production dependency — and, separately, a registry that did not answer. `npm audit` exits 1 for both, so a 503 from the advisory endpoint went red exactly like a real CVE. The gate retries a transport failure, names the advisories on a real finding, and still fails when the database is unreachable rather than passing on a question it could not ask. |
 | `check-dark-mode.mjs` | A surface with no dark variant. |
+
+## The one rule that needed a linter
+
+`npm run lint:undef` — ESLint over `frontend/src/**/*.{js,jsx}` with everything
+off except **`no-undef`**. It is not a `check-*.mjs` and so is not in
+`test:guards`; `test:drift` runs it directly.
+
+It exists because `check-react-hook-imports.mjs` says in its own header why it
+cannot be the whole answer: *"A general undefined-identifier check is a linter's
+job and would need real scope analysis to avoid false positives."* The case it
+misses is **a name declared in one component and read in a sibling** —
+`FounderGrowFocus.jsx` had three (`metCount`, `measured`, `readTargets`)
+declared in the host and read in `FocusContent`, which blanked `/grow/focus`
+with a `ReferenceError` at render. An undefined identifier is a runtime error,
+not a build one, so Vite bundled it without complaint: two were found by CodeQL
+and the third by a browser. Writing the scope analysis that separates those
+cases by hand is writing a linter, so this is a linter with one rule.
+
+Its first run found two live bugs — `StartupList.jsx`'s empty-state button
+called a `setShowForm` the refactor had removed (the only branch that ever ran,
+so every new account with no startups got the `ReferenceError`), and
+`SpinoutLabPage.jsx` read an unimported `LAB_APPLY_HREF`. Config and the
+reasoning behind what it deliberately leaves off are in `eslint.config.mjs`.
+
+**The SPA's other 27 files are covered by `npm run test:types:frontend`, not by
+this.** The glob is `{js,jsx}` because espree cannot parse TypeScript, so
+`frontend/src`'s 27 TS and TSX files needed a compiler rather than a linter.
+They have one since #201 (D96): `frontend/tsconfig.json` + `tsc --noEmit`,
+chained into `test:drift` beside the worker's `test:types`. It catches the same
+bug class with the same force — a deleted `import { Editable }` fails it by file
+and line — which means `check-react-hook-imports.mjs` no longer has any unique
+cover, and is kept for its message alone. D84 recorded that gap as open; D96
+closes it and says what changed.
+
+## The compiler that covers what the linter cannot parse
+
+`npm run test:types:frontend` — `tsc --noEmit -p frontend/tsconfig.json`. Like
+`lint:undef` it is not a `check-*.mjs`; `test:drift` runs it directly, next to
+the worker's `test:types`.
+
+Added by #201, and the thing worth carrying forward is that **strict was the
+cheap option**. Measured over exactly those 27 files: fully loose reports 15
+errors, `noImplicitAny` alone 18, strict 10, strict + `allowJs` **9**. Loose mode
+reads `data.features[idx] ?? {}` in `demo_day_app.tsx` as narrowing to the empty
+type and files seven complaints against a defensive fallback that is already
+correct; `strictNullChecks` makes all seven vanish. The nine were fixed rather
+than tolerated — see D96 for what each one was.
+
+**`docs/` digests are not a valid before/after test for a build change.**
+`build-frontend.mjs` keeps a rolling asset-retention window, so hashing all of
+`docs/` moves on every run even with identical input — it says a build "changed"
+when nothing did. Adding `frontend/tsconfig.json` had to be checked for exactly
+that (Vite reads a project-root tsconfig for `jsx`/`target`), and the way to do
+it is two `vite build --outDir <tmp>` runs, with and without the file, compared
+file by file. They came out byte-identical.
+
+## The live probes
+
+These three reach **production over the network**, so none of them is in
+`test:guards` or `test:drift`: a check that cannot run inside the suite must
+never sit in the suite reporting success. Each has its own scheduled
+workflow, and each has unit tests over its pure helpers that *are* in the
+suite.
+
+| File | What it proves |
+| --- | --- |
+| `check-spa-live.mjs` | Every SPA shell route on both hosts returns the rendered shell (200 + `<div id="root">` + a hashed `/assets/*.js`) with the static security headers `docs/_headers` sets. Run as `npm run deploy`'s `postdeploy` hook and 6-hourly by `.github/workflows/post-deploy-smoke.yml`. It probes `/api/health` and nothing more of the API — which is why it stayed green straight through the magic-link outage below. |
+| `check-magic-link-insert.mjs` | The same question without a mailbox, in three verdicts: `start_latency`, `token_row_written` and `mail_send_recorded`. The token row is exactly where the outage died — D74 found `magic_link_tokens` newest at 2026-08-03 and the failing attempt wrote nothing, so the request never reached the INSERT that is the endpoint's first act. The third verdict reads **`email_send_log`**, which `cloudflare-worker/src/services/email/send.ts` writes before enqueueing and the queue consumer marks `sent` only when the Gmail API accepted the message: without it the probe would pass on a login that answers 202 and delivers nothing, which is precisely the failure mode `waitUntil` created. A row stuck at `queued`, or `failed`/`dlq` with a (redacted) `last_error`, is that failure made legible. Needs **one** new secret (`MAGIC_PROBE_EMAIL`); `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` already exist, and it reads D1 through the Cloudflare query API — no `wrangler`, no install. **It still cannot prove the mail ARRIVED** — acceptance is not an inbox, and it never follows the link — and says so in every report. Exit 2 also covers "the token cannot read D1", which must never be reported as "no row was written" or "no mail was sent". `.github/workflows/magic-link-insert-probe.yml`, guarded by `frontend/test/magic_link_insert_probe.test.mjs`; see `documentation/architecture/DECISIONS.md` D79 and D80. |
+| `check-magic-link-live.mjs` | A **real magic-link sign-in**, end to end: POST `/api/auth/magic/start`, read the link out of a real inbox, follow it, assert a session. Three verdicts reported separately, because D74 moved the email send to `waitUntil` and so `/magic/start` can answer `202` in 200ms while the mail never arrives — a fast endpoint is necessary and nowhere near sufficient. Needs a dedicated production test account and read access to its mailbox (`MAGIC_PROBE_EMAIL`, `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`); **exits 2 and verifies nothing without them, never 0**. Cannot run from an agent sandbox — that proxy answers `403 CONNECT` for `axal.vc` — so its home is `.github/workflows/magic-link-probe.yml`. Guarded by `frontend/test/magic_link_probe.test.mjs`; see `documentation/architecture/DECISIONS.md` D78. |
 
 ## The pull-request preview
 
 | File | What it does |
 | --- | --- |
 | `pr-preview-worker.mjs` | The script behind `wrangler.pr-preview.toml` (repo root): a Worker per pull request with no bindings, serving the PR's `docs/` build on workers.dev. Two jobs, mirroring what `cloudflare-worker/src/index.ts` does on production — a missing hashed `/assets/*` file is a plain 404, never the SPA shell, and `/api/*` is a JSON 404 because a preview has no API. Deployed and deleted by `.github/workflows/pr-preview.yml`; guarded by `frontend/test/pr_preview.test.mjs`. |
+
+## Deploying a branch
+
+| File | What it does |
+| --- | --- |
+| `migrate-d1.mjs --branch <code>` | Migrates one subsidiary's database (`studioos-<code>`) instead of production, through the generated config that declares it. `--bootstrap` is allowed here and refused for production: a freshly created branch database is empty, which is what `branch-provision.yml` builds from the baseline. Target selection is `lib/migrationTargets.mjs`. |
+| `gen-branch-wrangler.mjs` | Writes `wrangler.branch.<code>.toml` at the repo root from `infra/branches/<code>.json`. The config is **derived** from `wrangler.toml`'s `[env.production]` table rather than templated, so a binding added to HQ reaches every branch with no edit here; the rules live in `lib/branchConfig.mjs`. It is gitignored: `[assets] directory` resolves against the config's own location, so it has to sit beside `docs/`, and a committed copy would be a second place a binding could go stale. `node scripts/gen-branch-wrangler.mjs fr` (add `--stdout` to render without writing). |
 
 ## Reading a design artifact
 
@@ -44,7 +126,7 @@ represents a bug that reached production once:
 
 | Folder | What lives there |
 | --- | --- |
-| `lib/` | Shared helpers (`migrationPlan.mjs`, `assetRetention.mjs`) and their unit tests. |
+| `lib/` | Shared helpers (`migrationPlan.mjs`, `assetRetention.mjs`, `sourceTreeHash.mjs`, `branchConfig.mjs`) and their unit tests — `npm run test:retention` runs every `*.test.mjs` here. |
 | `ci/` | CI-only entry points. |
 | `og-assets/` | Open Graph image sources. |
 | `__pycache__/` | Python bytecode. Not source. |

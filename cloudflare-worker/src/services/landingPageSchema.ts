@@ -9,11 +9,12 @@
  * table) throws and is swallowed.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 export async function ensureLandingPageBrandKitColumns(env: Env): Promise<void> {
-  if (_ready) return;
+  if (READY.get(bindingKey(env))) return;
   const alters = [
     `ALTER TABLE landing_pages ADD COLUMN palette_bg TEXT`,
     `ALTER TABLE landing_pages ADD COLUMN palette_ink TEXT`,
@@ -74,5 +75,5 @@ export async function ensureLandingPageBrandKitColumns(env: Env): Promise<void> 
   ]) {
     try { await env.DB.prepare(idx).run(); } catch { /* already exists */ }
   }
-  _ready = true;
+  READY.set(bindingKey(env), true);
 }

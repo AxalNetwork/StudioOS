@@ -120,8 +120,18 @@ test('investors keep the global Company Settings footer', () => {
  * ──────────────────────────────────────────────────────────────────────────── */
 
 // label → [root, the component the root must render for an investor]
+//
+// Deals names `InvestorDealsRoutes` rather than `InvestorDealsWorkspace`, and
+// the change is the fix rather than a loosening. `/deals` used to reach its
+// overview through `InvestorWorkspacePage`'s `ownsDealsRoute` short-circuit,
+// which rendered `InvestorDealsWorkspace` — the page that stacked all four
+// decision panels as the bucket overview. ID1–ID4 then moved each panel onto
+// its own zone route and the file's own comment records the end state: "All
+// four decision panels are gone." The root kept rendering it and rendered
+// nothing. `InvestorDealsRoutes` is the bucket router the four zone routes
+// already use, and its root is the bucket board.
 const WORKSPACES = {
-  Deals: ['/deals', 'InvestorDealsWorkspace'],
+  Deals: ['/deals', 'InvestorDealsRoutes'],
   Portfolio: ['/portfolio', 'InvestorPortfolioCanvas'],
   Fund: ['/funds', 'InvestorFundLanding'],
   Network: ['/network', 'InvestorNetworkWorkspace'],
@@ -158,10 +168,20 @@ test('every investor row lands on its own workspace overview', () => {
       || block.includes('<PortfolioWorkspace'),
       `${root} does not render ${component} for an investor — it redirects past its own overview`);
   }
-  // Deals reaches its overview through InvestorWorkspacePage's short-circuit
-  // rather than directly, so pin that link in the chain too.
-  assert.match(read(`${investorDir}/InvestorWorkspacePage.jsx`), /pathname === '\/deals'/,
-    'the /deals short-circuit that renders the overview is gone');
+  // AND THE OVERVIEW IT RENDERS MUST NOT BE EMPTY. The line above proves the
+  // row lands on the root; this proves the root draws something. `/deals` was
+  // reported as a blank page under a live heading, and every assertion in this
+  // file passed while it was — because each one checked the chain and none
+  // checked the destination.
+  const dealsShell = codeOnly(read('frontend/src/workspaces/investor/InvestorDealsRoutes.jsx'));
+  assert.match(dealsShell, /function DealsRoot\(/, 'the /deals root has no overview component');
+  assert.match(dealsShell, /<BucketBoard bucket=\{bucket\} role="investor" board=\{board\} \/>/,
+    'the /deals root no longer renders its bucket board');
+  // `BucketBoard` answers a null board with `return null`, so the card-grid
+  // fall-through the registry documents only happens if the caller performs it.
+  // A caller that did not is how this route came to render nothing.
+  assert.match(dealsShell, /<BucketOverview bucket=\{bucket\} role="investor"/,
+    'an unregistered board would blank the root again rather than fall back to the cards');
 });
 
 test('an investor pill navigates — it is not an anchor onto the page', () => {
@@ -255,7 +275,14 @@ test('an investor never gets two headings, two pill rows or two rails on one pag
   // and differed only in what a `useEffect` scrolled to — a poll every 100 ms,
   // up to twenty tries, because the section is not mounted on first paint.
   const dealsShell = codeOnly(read('frontend/src/workspaces/investor/InvestorDealsRoutes.jsx'));
-  assert.match(dealsShell, /<InvestorDealsWorkspace embedded zone=\{isRoot \? null : zone\?\.slug\} \/>/,
+  // WAS `zone={isRoot ? null : zone?.slug}`. `null` meant "the root — stack all
+  // four sections", and the root does not come here any more: ID1–ID4 moved
+  // every one of those sections onto its own page, leaving this file drawing
+  // nothing but the invitation queue, and `/deals` rendering a heading over an
+  // empty column. The root is the bucket board now; this expression is reached
+  // only on a zone route, so the slug is never null and the ternary is gone.
+  // The invariant the message names is unchanged: embedded, and the zone.
+  assert.match(dealsShell, /<InvestorDealsWorkspace embedded zone=\{zone\?\.slug\} \/>/,
     'the Deals shell must pass embedded and the zone slug');
   assert.doesNotMatch(dealsShell, /scrollIntoView/,
     'the Deals shell scrolls to a section again instead of rendering only that section');

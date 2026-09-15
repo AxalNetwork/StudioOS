@@ -55,13 +55,19 @@ export const FOUNDER_ZONE_ACTIONS = {
     // the canvas's word would promise a column the download has not got.
     { canvas: 'Export transcripts', label: 'Export interviews', kind: 'handler', handler: 'exportInterviews' },
   ],
-  // "Send to Problem slide" is drawn on two artboards and performs nothing on
-  // either — not because the pipe is missing, but because it already runs
-  // without a button: `pain_groups` is curated for the deck's slide 2 (see
-  // progress.ts), so a control that "sends" would be theatre over a connection
-  // that is already live. What it should become is a link that says so.
+  // "Send to Problem slide" IS NOW THE LINK THIS COMMENT ASKED FOR, and the
+  // label is not the canvas's because the canvas's would be a lie. It is drawn
+  // on two artboards and performs nothing on either — not because the pipe is
+  // missing, but because it already runs without a button: `pain_groups` is
+  // curated for the deck's slide 2 (`services/spinoutDeckData.ts` reads it,
+  // `axalSpinoutDemoDay.ts` renders it), so a control that "sends" would be
+  // theatre over a connection that is already live. A reader who presses it
+  // wants to SEE the slide, and that is a route they may open — so the op is a
+  // link to the deck and says what is already true on hover. Same reasoning as
+  // `Export transcripts` above: keep the artboard's word in `canvas`, put the
+  // honest one in `label`.
   'validate/pain-map': [
-    { label: 'Send to Problem slide', unbuilt: 'the curated pain themes already feed the deck’s Problem slide; there is nothing to send, and a button implying otherwise would claim credit for a pipe that runs on its own' },
+    { canvas: 'Send to Problem slide', label: 'Open the Problem slide', to: '/raise/pitch?mode=workspace', linkNote: 'These themes already feed the deck’s Problem slide — open the deck to read it.' },
     { label: 'Export map', kind: 'handler', handler: 'exportPainMap' },
   ],
   'validate/hypotheses': [
@@ -70,33 +76,91 @@ export const FOUNDER_ZONE_ACTIONS = {
   ],
   'validate/verdict': [
     { label: 'Export summary', kind: 'handler', handler: 'exportSummary' },
-    { label: 'Send to Problem slide', unbuilt: 'the curated pain themes already feed the deck’s Problem slide; there is nothing to send, and a button implying otherwise would claim credit for a pipe that runs on its own' },
+    { canvas: 'Send to Problem slide', label: 'Open the Problem slide', to: '/raise/pitch?mode=workspace', linkNote: 'These themes already feed the deck’s Problem slide — open the deck to read it.' },
   ],
   // ── Build ────────────────────────────────────────────────────────────────
   'build/this-week': [
     { label: 'Export CSV', kind: 'export' },
-    { label: 'Configure zone', unbuilt: 'nothing here is configurable — this desk reads the roadmap’s Now column' },
+    // WHAT WOULD CONFIGURE THIS DESK IS THE ROADMAP, so the op is a link to
+    // where the roadmap is edited. `/build/roadmap` is the READ-ONLY view of
+    // the same data — sending a reader there to change something is the
+    // round trip this note is meant to save them. The editor is
+    // `/execution/roadmap` (`RoadmapPage` calls `api.moveOkr`), which is the
+    // destination `New scenario` below already uses for the same reason.
+    { label: 'Configure zone', to: '/execution/roadmap', linkNote: 'This desk reads the roadmap’s Now column; the roadmap is edited in Execution.' },
   ],
+  // TWO OF THESE THREE ARE LIVE AS OF MIGRATION 253. `Bulk move` is a multi-select
+  // plus one all-or-nothing UPDATE that the lane's WIP limit can refuse;
+  // `Configure lanes` is the editor its own old reason asked for.
+  //
+  // `Automations` STAYS A GAP, and deliberately. The canvas reports "Automations · 3
+  // · 1 paused" and gives no other content: no trigger vocabulary, no action
+  // vocabulary, no example rule. Building a rules engine from a count would be
+  // inventing the feature rather than integrating it, which is the one thing #176
+  // asks not to do — "if a store genuinely cannot be built, say so to the user
+  // rather than shipping a chip that lies."
   'build/board': [
-    { label: 'Bulk move', unbuilt: 'no bulk stage change is stored; a deal moves from its own row' },
-    { label: 'Automations', unbuilt: 'no automation rules are stored' },
-    { label: 'Configure lanes', unbuilt: 'the lanes are the pipeline’s stored stages and are not editable here' },
+    { label: 'Bulk move', kind: 'handler', handler: 'bulkMove' },
+    // The `unbuilt:` string stays the engineering reason; `hover:` is what a founder
+    // reads on the disabled control, under the 120-char tooltip cap.
+    {
+      label: 'Automations',
+      unbuilt: 'no automation rules are stored, and the artboard specifies a count without a trigger or action vocabulary to build one from',
+      hover: 'No automation rule is stored yet — nothing here can fire on a card moving.',
+    },
+    // THE REASON HERE ONCE CLAIMED MORE THAN THE CODE HAD — it said the lanes were
+    // "the pipeline’s stored stages", implying a table an editor could write to —
+    // and was then corrected to say a stage table was needed first. Migration 253
+    // built one, and it is a LANE table rather than a stage table, which is the
+    // distinction that made it possible: the six pipeline stages are still a literal
+    // written twice (`FounderBuildBoard.jsx` and `pages/PipelinePage.jsx`) and still
+    // not a founder's to change, but a lane is the founder's own axis and always was.
+    { label: 'Configure lanes', kind: 'handler', handler: 'configureLanes' },
   ],
   'build/roadmap': [
-    { label: 'New scenario', to: '/execution/roadmap', linkNote: 'objectives and key results are edited in Execution' },
+    // `New scenario` STOPS BEING A LINK TO SOMEWHERE ELSE. It pointed at
+    // `/execution/roadmap` with the note "objectives and key results are edited in
+    // Execution", which was true of objectives and beside the point for scenarios:
+    // the Execution editor writes the LIVE quarter on an item, which is the one
+    // thing a what-if must not do. Migration 254 stores the alternative beside the
+    // roadmap instead, so the form belongs on this desk.
+    { label: 'New scenario', kind: 'handler', handler: 'newScenario' },
     { label: 'Export', kind: 'export' },
-    { label: 'Configure', unbuilt: 'no roadmap settings are stored' },
+    // `Configure` STAYS A GAP, on the same argument as `/build/board`'s
+    // `Automations`: the artboard names the control and specifies no setting for it
+    // to change — no default quarter, no horizon, no ordering rule, no example.
+    // Inventing a settings screen from a button label is the one thing #176 asks
+    // not to do, and a settings page nobody specified is worse than a disabled
+    // control that says why.
+    { label: 'Configure', unbuilt: 'the artboard names this control but specifies no roadmap setting for it to change, so there is nothing an editor could write', hover: 'No roadmap setting is specified yet — there is nothing here to change.' },
   ],
+  // ALL THREE ARE LIVE AS OF MIGRATION 250, and all three were `unbuilt` for the
+  // same reason: there was no cadence store. There is one now
+  // (`routes/founder_cadence.ts`), so the reasons are deleted rather than
+  // softened — a refusal kept beside a working feature is the failure #193 was
+  // filed for.
+  //
+  // TWO HANDLERS AND ONE EXPORT, WHICH IS THE SPLIT THE OPS ACTUALLY HAVE.
+  // `New ritual` and `Edit templates` open forms the page owns (D67 — a table
+  // cannot hold a modal's state), and `Export archive` writes the rows the page
+  // has loaded under the chip the reader has selected, which is what
+  // `kind: 'export'` already does everywhere else.
   'build/cadence': [
-    { label: 'New ritual', unbuilt: 'rituals are not a stored record yet' },
-    { label: 'Edit templates', unbuilt: 'no cadence templates are stored' },
-    { label: 'Export archive', unbuilt: 'no cadence history is stored, so there is no archive to export' },
+    { label: 'New ritual', kind: 'handler', handler: 'newRitual' },
+    { label: 'Edit templates', kind: 'handler', handler: 'editTemplates' },
+    { label: 'Export archive', kind: 'export' },
   ],
+  // TWO OF THESE FOUR WERE GAPS AND ARE NOT ANY MORE. `Import CSV` is
+  // `services/metricsCsv.ts` behind `POST /progress/metrics/:id/import-csv`;
+  // `Definitions` is migration 251. Both open a form the page owns (D67 — a table
+  // cannot hold a modal's state), which is why they are handlers rather than
+  // links: the import needs a dry run and a rejection list, and the definition
+  // editor needs the metric picker the route's own `keys` supplies.
   'build/kpi': [
     { label: 'Bulk entry', to: '/build/metrics' },
-    { label: 'Import CSV', unbuilt: 'no importer is built; snapshots are entered one at a time' },
+    { label: 'Import CSV', kind: 'handler', handler: 'importCsv' },
     { label: 'Stripe sync', to: '/build/metrics' },
-    { label: 'Definitions', unbuilt: 'metric definitions are not stored' },
+    { label: 'Definitions', kind: 'handler', handler: 'definitions' },
   ],
 
   // ── Grow ─────────────────────────────────────────────────────────────────
@@ -106,8 +170,20 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
   ],
   'grow/talent': [
-    { label: 'Post a role', unbuilt: 'no role posting is stored' },
-    { label: 'Bulk reject', unbuilt: 'no candidate records exist to act on' },
+    // "NO ROLE POSTING IS STORED" WAS PLAINLY FALSE. `job_postings` is the store —
+    // it even carries a `project_id`, which is how this page's role chips find the
+    // ones linked to this startup — `jobs.create()` writes one, and `/jobs/new` is
+    // a mounted route a founder may open. The posting surface existed the whole
+    // time; this desk just never pointed at it. Task #68 built it.
+    { label: 'Post a role', to: '/jobs/new', linkNote: 'A posting is written in the job editor and appears here once it names this startup.' },
+    // "NO CANDIDATE RECORDS EXIST TO ACT ON" WAS FALSE AND THE REAL GAP IS
+    // NARROWER. `job_applications` exists, `jobs.applications(id)` reads it, and
+    // this page already puts those candidates in a table. What is missing is a
+    // WRITER: `routes/jobs.ts` has no endpoint that sets an application's status,
+    // so there is nothing for a reject — bulk or single — to call. A refusal that
+    // denied the records sent the next reader to build a store that is already
+    // there.
+    { label: 'Bulk reject', unbuilt: 'the candidates are stored and read, but no endpoint sets an application status, so a reject has nothing to write', hover: 'Candidates are listed here, but nothing can change an application’s status yet.' },
     { label: 'Export', kind: 'export' },
   ],
   'grow/customers': [
@@ -126,7 +202,14 @@ export const FOUNDER_ZONE_ACTIONS = {
   'grow/brand': [
     { label: 'New page', to: '/spinout-lab/brand' },
     { label: 'Export leads', kind: 'export' },
-    { label: 'Edit templates', unbuilt: 'landing templates are chosen in the brand builder, not edited' },
+    // THE REASON WAS FALSE ABOUT THE BUILDER IT NAMED. It said templates are
+    // "chosen in the brand builder, not edited"; `/build/brand` mounts
+    // `BrandBuilderPage`, whose step 2 chooses a template and whose step 3
+    // renders `TemplateContentEditor` over `TEMPLATE_CONTENT_SCHEMA` — which
+    // is editing the template's content, field by field. A reason that names
+    // a surface the reader may open and then denies the capability that
+    // surface has is worse than no reason: it sends them away from the answer.
+    { label: 'Edit templates', to: '/build/brand', linkNote: 'Templates are chosen and their content edited in the brand builder.' },
   ],
   'grow/launch': [
     { label: 'New item', to: '/calendar' },
@@ -151,7 +234,7 @@ export const FOUNDER_ZONE_ACTIONS = {
   // so the roll-up above is empty on every account and there is nothing to
   // have duplicated. The two halves of this row now say the same thing.
   'network/organizations': [
-    { label: 'Add org', unbuilt: 'a contact records a person, an email and an audience, and no field on it names an organisation, so there is no org for a form to add' },
+    { label: 'Add org', unbuilt: 'a contact records a person, an email and an audience, and no field on it names an organisation, so there is no org for a form to add', hover: 'A contact records a person, an email and an audience — no field on it names an organisation.' },
     { label: 'Merge duplicates', unbuilt: 'nothing groups people into organisations here, so there are no rows to be duplicates of each other' },
     { label: 'Export', kind: 'export' },
   ],
@@ -164,7 +247,22 @@ export const FOUNDER_ZONE_ACTIONS = {
   'raise/pitch': [
     { label: 'New version', to: '/raise/pitch?mode=workspace' },
     { label: 'Export PDF', to: '/raise/pitch?mode=workspace' },
-    { label: 'Revoke a link', unbuilt: 'share links are revoked where they are issued, in the deck builder' },
+    // THIS WAS A REFUSAL AND IS NOW A LINK — task #196 built the thing it said
+    // did not exist, so the refusal became the false statement it was written to
+    // avoid. What it used to say was accurate when written: `api.deckShare`
+    // issued a link and NOTHING revoked one, anywhere, and the only limit on a
+    // leaked link was its own expiry. It also named the shape to copy —
+    // `DELETE /api/captable/shares/:id`, which revokes by expiring so the view
+    // history stays attributable — and the `revoked_at` column
+    // `pitch_deck_share_tokens` had not got. Migration 248 adds that column,
+    // `DELETE /api/decks/:id/shares/:shareId` sets it, and the Engagement panel
+    // in the deck builder carries the Withdraw control, next to the view counts
+    // that made the gap worth closing.
+    //
+    // The link goes to the workspace rather than to a zone of its own because
+    // the control lives beside the list of links it acts on; `linkNote` says
+    // which panel, so the reader is not sent to hunt for it.
+    { label: 'Revoke a link', to: '/raise/pitch?mode=workspace', linkNote: 'Withdraw sits in the deck builder’s Engagement panel, beside the link’s view count' },
   ],
   'raise/capital': [
     { label: 'Model a round', to: '/raise/capital/model' },
@@ -172,7 +270,12 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Add instrument', to: '/raise/capital/cap-table' },
   ],
   'raise/legal': [
-    { label: 'Send for signature', unbuilt: 'no e-signature provider is connected' },
+    // THE REASON WAS STALE, NOT WRONG WHEN WRITTEN. "No e-signature provider
+    // is connected" reads as DocuSign being unconfigured, and DocuSign is the
+    // OPTIONAL second provider: `routes/esign.ts` declares `provider TEXT NOT
+    // NULL DEFAULT 'native'` and the native path signs without any third
+    // party. `/legal/send` is mounted for every licence, a founder included.
+    { label: 'Send for signature', to: '/legal/send' },
     { label: 'Add document', to: '/legal' },
     { label: 'Calendar', to: '/raise/legal-engine/compliance' },
   ],
@@ -204,7 +307,7 @@ export const FOUNDER_ZONE_ACTIONS = {
   'research/ask': [
     { label: 'New brief', kind: 'handler', handler: 'newSession' },
     { label: 'Export session', kind: 'export' },
-    { label: 'Clear history', unbuilt: 'the history is stored now and nothing deletes from it — an answer is kept or not kept, and erasing a reader’s own questions is the one irreversible act this page declines to offer' },
+    { label: 'Clear history', unbuilt: 'the history is stored now and nothing deletes from it — an answer is kept or not kept, and erasing a reader’s own questions is the one irreversible act this page declines to offer', hover: 'Nothing deletes from the history; an answer is kept or it is not.' },
   ],
   'research/markets': [
     { label: 'New deep-dive', unbuilt: 'signals are gathered on a schedule, not started here' },
