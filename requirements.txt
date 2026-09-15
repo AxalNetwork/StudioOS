@@ -6,13 +6,13 @@ aiohttp==3.14.3
     # via pywebpush
 aiosignal==1.4.0
     # via aiohttp
-alembic==1.19.1
+alembic==1.19.2
     # via repl-nix-workspace
 annotated-doc==0.0.5
     # via fastapi
 annotated-types==0.8.0
     # via pydantic
-anyio==4.14.2
+anyio==4.15.1
     # via
     #   httpx
     #   starlette
@@ -45,11 +45,11 @@ frozenlist==1.8.0
     # via
     #   aiohttp
     #   aiosignal
-google-api-core==2.34.0
+google-api-core==2.36.0
     # via google-api-python-client
-google-api-python-client==2.199.0
+google-api-python-client==2.200.0
     # via repl-nix-workspace
-google-auth==2.57.0
+google-auth==2.57.1
     # via
     #   google-api-core
     #   google-api-python-client
@@ -60,7 +60,7 @@ google-auth-httplib2==0.4.2
     # via google-api-python-client
 google-auth-oauthlib==1.4.1
     # via repl-nix-workspace
-googleapis-common-protos==1.75.2
+googleapis-common-protos==1.75.3
     # via google-api-core
 greenlet==3.5.5 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
     # via sqlalchemy
@@ -100,7 +100,7 @@ propcache==0.5.2
     #   yarl
 proto-plus==1.28.4
     # via google-api-core
-protobuf==7.36.0
+protobuf==7.36.1
     # via
     #   google-api-core
     #   googleapis-common-protos

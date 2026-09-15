@@ -399,7 +399,7 @@ def generate(payload: GeneratePayload, user: User = Depends(get_current_user), s
 # ---------------------------------------------------------------------
 # Dev mirror of the Worker's `/api/decks/methods` endpoint.
 #
-# The Cloudflare Worker (production) returns the 12 deck-method specs
+# The Cloudflare Worker (production) returns the 13 deck-method specs
 # from `cloudflare-worker/src/services/decks/methods.ts`. The Pitch Deck
 # Builder's "Pick a deck template" modal calls /api/decks/methods to
 # populate the template grid. Without this route, the dev FastAPI backend
@@ -419,7 +419,7 @@ _DECK_METHODS_DEV: List[Dict[str, Any]] = [
     {"id": "sequoia_classic", "key": "sequoia_classic", "label": "Sequoia Classic (12)",
      "prompt_hint": "The Sequoia 12-slide template. Story arc + market deep dive.",
      "best_for": "Seed / Series A with a clear narrative + sizable market.",
-     "slide_count": 12, "premium": False, "category": "narrative"},
+     "slide_count": 12, "premium": False, "category": "fundraising"},
     {"id": "kawasaki_10_20_30", "key": "kawasaki_10_20_30", "label": "Kawasaki 10/20/30 (10)",
      "prompt_hint": "10 slides, 20 minutes, 30-point font. Maximum clarity.",
      "best_for": "Investor meetings where you need to be ruthlessly concise.",
@@ -459,7 +459,7 @@ _DECK_METHODS_DEV: List[Dict[str, Any]] = [
     {"id": "narrative_brand", "key": "narrative_brand", "label": "Narrative / Brand (15)",
      "prompt_hint": "Story-led brand deck. Heavy on imagery + tone.",
      "best_for": "Mission-driven companies; brand-first founders.",
-     "slide_count": 15, "premium": True, "category": "narrative"},
+     "slide_count": 15, "premium": True, "category": "commercial"},
     {"id": "axal_spinout_demoday", "key": "axal_spinout_demoday",
      "label": "Axal VC Spin-Out",
      "prompt_hint": "11 slides · editorial · binds to Lab data.",

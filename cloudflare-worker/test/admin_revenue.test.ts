@@ -181,7 +181,7 @@ test('token cost is real; token MARGIN is refused', async () => {
   assert.equal(t.margin_usd, undefined, 'a margin was derived from a price that does not exist');
 });
 
-test('the four figures with no source are absent, each with its own reason', async () => {
+test('the figures with no source are absent, each with its own reason', async () => {
   // Not one blanket "some data unavailable": a reader needs to know WHICH
   // fact is missing and why, or the page is just apologising.
   const db = freshDb();
@@ -191,18 +191,36 @@ test('the four figures with no source are absent, each with its own reason', asy
   assert.match(String(r.body.subscriptions_reason), /no amount|not totalled/i);
   assert.equal(r.body.subscriptions_cents, undefined, 'a subscriptions figure appeared');
 
-  assert.equal(r.body.statements_available, false);
-  assert.match(String(r.body.statements_reason), /statement store/i);
-  assert.equal(r.body.statements, undefined, 'a statements list appeared');
-
+  // A CEILING EXISTS NOW (D111) AND A DERIVED BUDGET STILL DOES NOT, which is
+  // the distinction this assertion holds. The reason may no longer say "no
+  // promotional budget" — it must still say why THIS endpoint cannot produce
+  // a spend figure, which is that a code names no subsidiary.
   assert.equal(r.body.promos.budget_available, false);
-  assert.match(String(r.body.promos.budget_reason), /no promotional budget/i);
+  assert.match(String(r.body.promos.budget_reason), /attributes none|names no subsidiary|branch reports/i);
   assert.equal(r.body.promos.budget_left_cents, undefined, 'a promo budget figure appeared');
 
   // U1 — every per-subsidiary figure, the token P&L split included.
   assert.equal(r.body.derived_metrics_available, false);
   assert.match(String(r.body.derived_metrics_reason), /licence it belongs to/);
   assert.equal(r.body.token_pl_by_subsidiary, undefined, 'a per-subsidiary token split appeared');
+});
+
+test('statements are pointed at, never inlined — the summary stays a pure read', async () => {
+  // D111 gave statements a store, and the wrong way to spend it would have
+  // been to fold the ledger into this payload: the endpoint's whole contract
+  // is that it reads and stores nothing, and a slow or failed ledger query
+  // here would blank the four zones that read D1 perfectly well.
+  const db = freshDb();
+  const r = await call(db, SUPER);
+
+  assert.equal(r.body.statements_endpoint, '/api/admin/statements');
+  assert.equal(r.body.statements, undefined, 'the ledger was inlined into the summary');
+  assert.equal(r.body.statements_available, undefined,
+    'the summary still claims to answer for statements it does not read');
+  // And the retired refusal must not linger: a reason saying no store exists
+  // is now false, and a false reason is worse than none.
+  assert.equal(r.body.statements_reason, undefined, 'the retired "no statement store" refusal is still shipping');
+  assert.equal(r.body.promos.ceilings_endpoint, '/api/admin/promo-ceilings');
 });
 
 test('promotions report what promo_codes holds, not what the canvas wanted', async () => {

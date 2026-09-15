@@ -383,7 +383,7 @@ export async function recordFieldSource(
 // upserts (discovery interviews + roadmap OKRs). Scoped via
 // `WHERE col LIKE 'advisor:%'` so they never collide with
 // user-typed values in the same column. Created once per isolate.
-let _slotIndexesReady = false;
+const SLOT_INDEXES_READY = new WeakMap<object, boolean>();
 // ---------------------------------------------------------------------------
 // Spin-Out milestone helper (Task #2 AR).
 //
@@ -406,6 +406,7 @@ let _slotIndexesReady = false;
 // file doesn't drag Hono / auth / db into non-route consumers (e.g.
 // the advisor scenario test under --experimental-strip-types).
 import { MILESTONES, weekMet as canonicalWeekMet } from '../spinoutLabCatalog.ts';
+import { bindingKey } from '../../util/schemaBootstrap';
 
 function weekForMilestoneKey(key: string): number | null {
   for (const w of MILESTONES) {
@@ -448,7 +449,7 @@ async function recordSpinoutMilestoneAndAdvance(
 }
 
 async function ensureAdvisorSlotIndexes(env: Env): Promise<void> {
-  if (_slotIndexesReady) return;
+  if (SLOT_INDEXES_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       "CREATE UNIQUE INDEX IF NOT EXISTS uniq_discovery_advisor_slot ON discovery_interviews(project_id, interviewee_role) WHERE interviewee_role LIKE 'advisor:%'",
@@ -456,7 +457,7 @@ async function ensureAdvisorSlotIndexes(env: Env): Promise<void> {
     await env.DB.exec(
       "CREATE UNIQUE INDEX IF NOT EXISTS uniq_roadmap_okrs_advisor_slot ON roadmap_okrs(project_id, quarter) WHERE quarter LIKE 'advisor:%'",
     );
-    _slotIndexesReady = true;
+    SLOT_INDEXES_READY.set(bindingKey(env), true);
   } catch (e) {
     console.error('[advisor] slot indexes:', (e as Error).message);
   }

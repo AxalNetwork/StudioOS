@@ -16,8 +16,9 @@
  */
 import type { Env } from '../types';
 import { SEED_COVERS } from './articleCoverData';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 function bytesFromBase64(b64: string): Uint8Array {
   const bin = atob(b64);
@@ -35,7 +36,7 @@ function bytesFromBase64(b64: string): Uint8Array {
  * unbound, or on error.
  */
 export async function ensureArticleCovers(env: Env): Promise<boolean> {
-  if (_ready) return false;
+  if (READY.get(bindingKey(env))) return false;
   // Without an R2 binding we can't seed — leave `_ready` false so a later
   // request (once FILES is bound) retries instead of permanently skipping.
   if (!env.FILES) return false;
@@ -60,7 +61,7 @@ export async function ensureArticleCovers(env: Env): Promise<boolean> {
       ).bind(key, seed.mime, new Date().toISOString(), row.id).run();
       if ((upd.meta?.changes ?? 0) > 0) wroteAny = true;
     }
-    _ready = true;
+    READY.set(bindingKey(env), true);
     return wroteAny;
   } catch (e) {
     console.warn('[articleCovers] ensure failed:', (e as Error).message);

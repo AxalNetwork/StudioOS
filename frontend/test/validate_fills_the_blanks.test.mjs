@@ -29,7 +29,7 @@ import { codeOnly } from './_codeOnly.mjs';
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const RAIL = 'frontend/src/ui/WorkerRail.jsx';
 const HOOK = 'frontend/src/hooks/useAssistMode.js';
-const BAND = 'frontend/src/workspaces/founder/ValidateProposals.jsx';
+const BAND = 'frontend/src/workspaces/FillProposals.jsx';
 const PAGE = 'frontend/src/workspaces/founder/FounderValidateWorkspace.jsx';
 const CFG = 'frontend/src/ui/eadwynConfig.js';
 
@@ -68,11 +68,71 @@ test('the rail draws the switch only where flipping it does something', () => {
 
 test('a proposal band renders nothing while the mode is off', () => {
   const band = codeOnly(read(BAND));
-  assert.match(band, /if \(!enabled \|\| !copy\) return null;/,
+  // `!spec` where this used to read `!copy`: the band's words now come from the
+  // server's registry on the list response rather than from a local map, so the
+  // same early return also covers a kind the server does not offer — a heading
+  // for a capability that may not exist is the rail's own failure mode, one
+  // surface over.
+  assert.match(band, /if \(!enabled \|\| !spec\) return null;/,
     'the band must render nothing when the mode is off');
   // And it must not have fetched on the way to rendering nothing.
   assert.match(band, /if \(!projectId \|\| !enabled\) \{ setItems\(\[\]\); return; \}/,
     'the band reads proposals even with the mode off');
+  // The local COPY map is gone, not shadowed. Two places for one fact is what
+  // `services/fills/registry.ts` was built to stop, and a leftover map here would
+  // be the half that drifts.
+  assert.doesNotMatch(band, /const COPY = \{/,
+    'the band kept its own copy map, so a new kind has to be added twice');
+});
+
+test('Edit the claim exists, and only where the value may be rewritten', () => {
+  // The canvas has drawn accept / edit / discard since this band was designed and
+  // only two of the three were ever built; the third lived in a header comment
+  // describing an artboard. Accepting a value a founder would have corrected
+  // teaches them to discard and retype, which is the same work with the
+  // proposal's provenance thrown away.
+  const band = codeOnly(read(BAND));
+  assert.match(band, /data-testid=\{`action-edit-\$\{p\.id\}`\}/,
+    'the Edit control is missing again');
+  assert.match(band, /data-testid=\{`edit-field-\$\{p\.id\}`\}/, 'there is nothing to type into');
+
+  // GATED ON THE SERVER'S ANSWER, not on the kind. A `pain_tag`'s phrase is the
+  // project's own logged string and the accept route refuses an edit to it, so an
+  // ungated control would be a button that always fails.
+  assert.match(band, /\{spec\.editable && \(/,
+    'the Edit control is drawn for kinds whose value cannot be edited');
+
+  // AN UNCHANGED EDIT IS A PLAIN ACCEPT. `fill_provenance` derives `edited` by
+  // comparing the two values, so sending the untouched original would mark every
+  // accept corrected and the column would stop meaning anything.
+  assert.match(band, /next === readable\(p\.kind, p\.payload\)\.trim\(\) \? undefined : next/,
+    'an unchanged edit is sent as an edit');
+  const api = read('frontend/src/lib/api.js');
+  assert.match(api, /acceptValidateProposal: \(id, body\) =>/);
+  assert.match(api, /\.\.\.\(body \? \{ body: JSON\.stringify\(body\) \} : \{\}\)/,
+    'the accept call always sends a body, so an unedited accept looks edited');
+});
+
+test('a sourced proposal shows its source, quote included', () => {
+  // A citation that names a document and nothing else asks a reader to trust the
+  // label. The quote is what lets them judge whether the source says what the fill
+  // claims it says — which is the only check available to them.
+  const band = codeOnly(read(BAND));
+  assert.match(band, /function Citation\(\{ citation \}\)/);
+  assert.match(band, /if \(!citation\) return null;/,
+    'a restatement, which has no citation by design, renders an empty source line');
+  assert.match(band, /citation\.quote \?/, 'the quote is not shown');
+  assert.match(band, /<Citation citation=\{p\.citation\} \/>/, 'nothing renders the citation');
+  // And the server sends it.
+  const route = read('cloudflare-worker/src/routes/founder_validate.ts');
+  const at = route.indexOf("founderValidate.get('/proposals/:projectId'");
+  assert.ok(at > 0, 'the proposals list route is gone');
+  const body = route.slice(at, route.indexOf('\n});', at));
+  assert.match(body, /citation: \(\(\) => \{/, 'the list no longer returns the citation');
+  assert.match(body, /kinds: Object\.fromEntries\(Object\.values\(FILL_KINDS\)/,
+    'the band has no source for its own copy');
+  assert.match(body, /editable: k\.editableField != null/,
+    'the list does not say which kinds may be edited');
 });
 
 test('nothing proposes on mount — a visit must not spend anything', () => {

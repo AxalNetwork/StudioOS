@@ -18,12 +18,13 @@ import { getSQL } from '../db';
 import { requireAuth, requireAdmin } from '../auth';
 import { PERSONAS, PERSONA_BY_ID, isAllowedPersonaOverlap, type PersonaId } from '../personas';
 import { classifyPersona } from '../../ai-workers/persona-router';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const personas = new Hono<{ Bindings: Env }>();
 
-let migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensurePersonaSchema(env: Env): Promise<void> {
-  if (migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const db = env.DB;
   // Each statement is run independently and any failure leaves `migrated`
   // false so the next request retries. We surface the error to the caller
@@ -58,7 +59,7 @@ async function ensurePersonaSchema(env: Env): Promise<void> {
   `).run();
   await db.prepare(`CREATE INDEX IF NOT EXISTS idx_user_profile_extras_user ON user_profile_extras(user_id)`).run();
   await db.prepare(`CREATE INDEX IF NOT EXISTS idx_user_profile_extras_persona ON user_profile_extras(user_id, persona_id)`).run();
-  migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 function isPersonaId(v: unknown): v is PersonaId {

@@ -193,11 +193,22 @@ test('the template library is pointed at, not rebuilt', async () => {
     'the summary does not say which page owns the library');
 });
 
-test('localisation is refused, with its own reason', async () => {
+test('localisation is refused for the ONE reason D112 left standing', async () => {
+  // NARROWED IN D112, NOT LIFTED. The refusal used to cover three absences —
+  // no localisation link, no brand-approval state, no per-subsidiary
+  // attribution. Two of them acquired a store (a content escalation carries
+  // its branch code and takes a decision), so this assertion moved with the
+  // sentence rather than being deleted: what must still be refused is the
+  // LINK, and what must now be POINTED AT is the lane that closed the others.
   const db = freshDb();
   const r = await call(content, db, SUPER);
   assert.equal(r.body.localisation_available, false);
-  assert.match(String(r.body.localisation_reason), /no localisation link/);
+  assert.match(String(r.body.localisation_reason), /localisation of another/,
+    'the reason stopped naming the link nothing records');
+  assert.doesNotMatch(String(r.body.localisation_reason), /no brand-approval state/,
+    'the reason still claims there is no brand-approval state, which D112 made false');
+  assert.equal(r.body.localisation_lane_endpoint, '/api/admin/escalations?kind=content',
+    'the summary does not point at the lane that closed the other two absences');
   assert.equal(r.body.localised, undefined, 'a localisation count appeared');
   assert.equal(r.body.derived_metrics_available, false, 'per-subsidiary content is not U1-gated');
 });

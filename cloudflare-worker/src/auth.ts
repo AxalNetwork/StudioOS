@@ -2,6 +2,7 @@ import type { Context } from 'hono';
 import { SignJWT, jwtVerify } from 'jose';
 import type { Env, User, JWTPayload } from './types';
 import { getSQL } from './db';
+import { branchOf, authCookieName, csrfCookieName, HQ_ONLY, HQ_AUTHORING_ONLY, BRANCH_SUSPENDED } from './util/branch';
 
 const JWT_ALGORITHM = 'HS256';
 const JWT_EXPIRY_HOURS = 24;
@@ -150,13 +151,17 @@ export function extractJwtCandidates(c: Context<{ Bindings: Env }>): { bearer: s
   const bearer = (authHeader && authHeader.startsWith('Bearer ')) ? (authHeader.slice(7) || null) : null;
   let cookie: string | null = null;
   const cookieHeader = c.req.header('Cookie') || '';
+  // On a branch the session cookie is `studioos_auth_<code>`. HQ's
+  // `studioos_auth`, which the browser also sends to every subdomain, is
+  // not ours there and is skipped by name (D104, util/branch.ts).
+  const cookieName = authCookieName(c.env);
   if (cookieHeader) {
     for (const part of cookieHeader.split(';')) {
       const trimmed = part.trim();
       if (!trimmed) continue;
       const eq = trimmed.indexOf('=');
       if (eq === -1) continue;
-      if (trimmed.slice(0, eq) === 'studioos_auth') {
+      if (trimmed.slice(0, eq) === cookieName) {
         cookie = trimmed.slice(eq + 1) || null;
         break;
       }
@@ -469,12 +474,31 @@ export async function loadSuperAdminFlag(env: Env, userId: number): Promise<0 | 
   }
 }
 
-/** Set `user.is_super_admin` from the side table, unconditionally. */
+/**
+ * Set `user.is_super_admin` from the side table, unconditionally.
+ *
+ * ON A BRANCH THE ANSWER IS ALWAYS 0, AND THE TABLE IS NEVER ASKED (D106).
+ * This one line is what closes HQ's whole console on a subsidiary Worker, and
+ * it is here rather than in a path list in `index.ts` because the 24
+ * super-admin routes are reached through `requireSuperAdmin` → `isSuperAdmin`
+ * → this flag, and a list of paths is a thing that goes stale the next time a
+ * route is added.
+ *
+ * WHY THE EMPTY TABLE WAS NOT ALREADY THE GATE. A branch database is
+ * bootstrapped from the baseline with `BASELINE_CUTOFF = 219`, so migration
+ * 207 — the single super-admin holder — is MARKED, never executed, and
+ * `super_admins` starts empty. That is correct but it is not a gate: it is a
+ * data state, and one `INSERT INTO super_admins` on a branch database, by
+ * anyone who can reach it, would reopen every HQ route over branch data. The
+ * refusal has to be a property of the deployment, not of a row count, so the
+ * test for this asserts the deny with a `super_admins` row PRESENT.
+ */
 export async function hydrateSuperAdmin<T extends { id: number; role?: string | null }>(
   env: Env, user: T,
 ): Promise<T & { is_super_admin: 0 | 1 }> {
   const isAdminRole = String(user.role ?? '').toLowerCase() === 'admin';
-  const flag: 0 | 1 = isAdminRole ? await loadSuperAdminFlag(env, Number(user.id)) : 0;
+  const onBranch = branchOf(env) !== null;
+  const flag: 0 | 1 = isAdminRole && !onBranch ? await loadSuperAdminFlag(env, Number(user.id)) : 0;
   (user as T & { is_super_admin: 0 | 1 }).is_super_admin = flag;
   return user as T & { is_super_admin: 0 | 1 };
 }
@@ -503,15 +527,80 @@ export function isSuperAdmin(user: Pick<User, 'role'> & { is_super_admin?: unkno
  * terminating a territory licence, and naming who administers one.
  *
  * Deliberately layered on `requireAdmin` rather than replacing it, so the
- * error a non-admin sees is unchanged and only the last step is new. A
- * subsidiary admin gets "Super admin required" — a different sentence from
- * "Admin required", because it is a different fact about them and the support
- * queue should not have to guess which one happened.
+ * error a non-admin sees is unchanged and only the last step is new. An admin
+ * on HQ who holds no elevation gets "Super admin required" — a different
+ * sentence from "Admin required", because it is a different fact about them
+ * and the support queue should not have to guess which one happened.
+ *
+ * ON A BRANCH THE REFUSAL IS EARLIER AND SAYS SOMETHING ELSE (D106).
+ * `hydrateSuperAdmin` already answers 0 on a branch, so the `isSuperAdmin`
+ * line below would refuse anyway — but it would refuse with "Super admin
+ * required", which reads as "ask HQ to elevate you" and is untrue: there is
+ * no elevation to grant on this deployment, and the franchising ledger it
+ * guards is not in this database. The explicit check names the real fact and
+ * does not depend on the hydrate having run.
  */
 export async function requireSuperAdmin(c: Context<{ Bindings: Env }>): Promise<User> {
   const user = await requireAdmin(c);
+  if (branchOf(c.env)) throw new Error(HQ_ONLY);
   if (!isSuperAdmin(user as any)) throw new Error('Super admin required');
   return user;
+}
+
+/**
+ * The gate for authoring what HQ owns and every branch reads: the master
+ * contract templates and the assessment questions (D.9, D106).
+ *
+ * WHAT IT IS NOT. It is not an elevation check — a plain HQ admin authors
+ * these today and still does. It is a check on the DEPLOYMENT: the library a
+ * branch renders is a copy HQ pushed, so a write accepted on a branch would
+ * edit that copy, diverge it from HQ's, and be silently overwritten by the
+ * next push. Refusing is the honest answer and it names the route back.
+ *
+ * READS ARE NOT GATED, on purpose. A branch must be able to list templates,
+ * fetch one, see its versions and preview it — that is the S5 template
+ * picker. Only authoring stops, and assessment `rescore` stops with it
+ * nowhere: results belong to the branch (S4).
+ */
+export async function requireHqAuthoring(c: Context<{ Bindings: Env }>): Promise<User> {
+  const user = await requireAdmin(c);
+  if (branchOf(c.env)) throw new Error(HQ_AUTHORING_ONLY);
+  return user;
+}
+
+/**
+ * Refuse a decision write while HQ has this branch's licence suspended
+ * (D107). A no-op on HQ, where there is no `branch_licence` row and no
+ * licence above this deployment to suspend it.
+ *
+ * WHY THIS IS NOT `requireAdmin` PLUS A FLAG. The caller has already
+ * established who may act; this establishes whether the DEPLOYMENT may act
+ * at all, which is a different question with a different answer shape — hence
+ * a separate call rather than a fifth clause inside an admin gate, and hence
+ * 423 rather than 403.
+ *
+ * IT DOES NOT AUTHENTICATE. Every call site puts it AFTER its own admin gate,
+ * so an anonymous caller still gets 401 rather than learning the branch's
+ * licence state. The order matters and the tests pin it.
+ *
+ * AN UNREADABLE COPY DOES NOT FREEZE THE BRANCH. A branch whose migration 256
+ * has not been applied, or whose licence HQ has not pushed yet, reads as NOT
+ * suspended: suspension is a claim HQ makes, and inferring it from a missing
+ * row would freeze every branch during the window between bootstrap and the
+ * first push — exactly when its principal is trying to work.
+ */
+export async function requireBranchNotSuspended(c: Context<{ Bindings: Env }>): Promise<void> {
+  if (!branchOf(c.env)) return;
+  let status = '';
+  try {
+    const row = await c.env.DB.prepare('SELECT status FROM branch_licence WHERE id = 1')
+      .first<{ status: string }>();
+    status = String(row?.status ?? '').toLowerCase();
+  } catch (e) {
+    console.warn('[branch] branch_licence unreadable on a write gate', (e as Error).message);
+    return;
+  }
+  if (status === 'suspended') throw new Error(BRANCH_SUSPENDED);
 }
 
 /**
@@ -760,6 +849,15 @@ export function generateCsrfToken(): string {
 // host-only cookies still work.
 function authCookieDomainAttr(c: Context<{ Bindings: Env }>): string {
   const host = (c.req.header('host') || '').toLowerCase();
+  // A branch Worker's cookies are host-only, and their NAMES carry the branch
+  // code (util/branch.ts): a session minted on fr.axal.vc is never presented
+  // to dach.axal.vc or to HQ, and HQ's own `.axal.vc` cookies — which the
+  // browser keeps sending to every subdomain — are never read as the
+  // branch's. HQ itself keeps the registrable-domain cookie below because the
+  // Google callback still lands on app.axal.vc (OAUTH_CALLBACK_BASE_URL) and
+  // sets the cookie the SPA then reads on the apex; it can go host-only the
+  // day that redirect URI is registered on axal.vc. D104.
+  if (branchOf(c.env)) return '';
   // Localhost / preview workers — host-only cookies (no cross-host issue)
   if (host === 'localhost' || host === '127.0.0.1' || host.endsWith('.workers.dev')) {
     return '';
@@ -775,8 +873,8 @@ function authCookieDomainAttr(c: Context<{ Bindings: Env }>): string {
 export function setAuthCookies(c: Context<{ Bindings: Env }>, jwt: string, csrf: string): void {
   const dom = authCookieDomainAttr(c);
   const common = `Secure; SameSite=Lax; Path=/${dom}; Max-Age=${AUTH_COOKIE_TTL}`;
-  c.header('Set-Cookie', `studioos_auth=${jwt}; HttpOnly; ${common}`, { append: true });
-  c.header('Set-Cookie', `studioos_csrf=${csrf}; ${common}`, { append: true });
+  c.header('Set-Cookie', `${authCookieName(c.env)}=${jwt}; HttpOnly; ${common}`, { append: true });
+  c.header('Set-Cookie', `${csrfCookieName(c.env)}=${csrf}; ${common}`, { append: true });
 }
 
 export function clearAuthCookies(c: Context<{ Bindings: Env }>): void {
@@ -785,11 +883,13 @@ export function clearAuthCookies(c: Context<{ Bindings: Env }>): void {
   // AND without it, so any legacy host-only cookie issued before this
   // change still gets cleaned up on logout. Two Set-Cookie headers per
   // cookie is the standard pattern for cookie-domain migrations.
-  c.header('Set-Cookie', `studioos_auth=; HttpOnly; Secure; SameSite=Lax; Path=/${dom}; Max-Age=0`, { append: true });
-  c.header('Set-Cookie', `studioos_csrf=; Secure; SameSite=Lax; Path=/${dom}; Max-Age=0`, { append: true });
+  const authName = authCookieName(c.env);
+  const csrfName = csrfCookieName(c.env);
+  c.header('Set-Cookie', `${authName}=; HttpOnly; Secure; SameSite=Lax; Path=/${dom}; Max-Age=0`, { append: true });
+  c.header('Set-Cookie', `${csrfName}=; Secure; SameSite=Lax; Path=/${dom}; Max-Age=0`, { append: true });
   if (dom) {
-    c.header('Set-Cookie', 'studioos_auth=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0', { append: true });
-    c.header('Set-Cookie', 'studioos_csrf=; Secure; SameSite=Lax; Path=/; Max-Age=0', { append: true });
+    c.header('Set-Cookie', `${authName}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`, { append: true });
+    c.header('Set-Cookie', `${csrfName}=; Secure; SameSite=Lax; Path=/; Max-Age=0`, { append: true });
   }
 }
 

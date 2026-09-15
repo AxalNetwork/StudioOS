@@ -294,6 +294,38 @@ async function testTelegram(_id: string, secret: string): Promise<ProviderTestRe
     detail: `Telegram rejected the bot token (${j?.description || res.status}).` };
 }
 
+async function testGcip(_id: string, secret: string): Promise<ProviderTestResult> {
+  // Identity Toolkit: POST sendVerificationCode with a known-invalid
+  // number. API_KEY_INVALID means the web key is wrong; INVALID_PHONE
+  // (or similar 400) means the key was accepted — we never send a real SMS.
+  const res = await safeFetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:sendVerificationCode?key=${encodeURIComponent(secret)}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ phoneNumber: '+10000000000' }),
+    },
+  );
+  if (!res) return { ok: false, reachable: false, detail: 'Network/timeout reaching identitytoolkit.googleapis.com' };
+  const j = await parseJsonSafe(res);
+  const msg = String(j?.error?.message || '');
+  if (/API_KEY_INVALID|API_KEY_NOT_VALID|INVALID_API_KEY/i.test(msg) || (res.status === 400 && /API_KEY/i.test(msg))) {
+    return { ok: false, reachable: true, http_status: res.status, provider_error: msg || null,
+      detail: 'Identity Platform rejected the API key.' };
+  }
+  if (/INVALID_PHONE|INVALID_PHONE_NUMBER/i.test(msg) || res.status === 200) {
+    return { ok: true, reachable: true, http_status: res.status, provider_error: null,
+      detail: 'Identity Platform accepted the API key.' };
+  }
+  // 403 CAPTCHA / quota still prove the key reached a live project.
+  if (res.status === 403 || /CAPTCHA|QUOTA|TOO_MANY/i.test(msg)) {
+    return { ok: true, reachable: true, http_status: res.status, provider_error: msg || null,
+      detail: 'Identity Platform recognised the API key.' };
+  }
+  return { ok: false, reachable: true, http_status: res.status, provider_error: msg || null,
+    detail: `Identity Platform probe failed (${msg || res.status}).` };
+}
+
 export async function testOauthCreds(
   env: Env,
   providerKey: ManagedProviderKey,
@@ -314,5 +346,6 @@ export async function testOauthCreds(
     case 'crunchbase': return testCrunchbase(cred.id, cred.secret);
     case 'affinity':   return testAffinity(cred.id, cred.secret);
     case 'telegram':   return testTelegram(cred.id, cred.secret);
+    case 'gcip':       return testGcip(cred.id, cred.secret);
   }
 }

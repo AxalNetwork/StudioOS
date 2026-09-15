@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAdmin, requireFactor, requireStepUp } from '../auth';
+import { requireAdmin, requireFactor, requireStepUp, requireHqAuthoring } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { mintDownloadToken } from '../services/signedDownload';
 import { sendAgreementAssignedEmail } from '../services/email';
@@ -1330,8 +1330,12 @@ adminContracts.get('/templates/store', async (c) => {
 });
 
 // POST /templates/store — create a new template (slug must be unique).
+//
+// D106 — HQ authors the master library; a branch reads the copy HQ pushed
+// (D.9). `requireHqAuthoring` is `requireAdmin` plus that refusal, so nothing
+// changes for an HQ admin.
 adminContracts.post('/templates/store', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireHqAuthoring(c);
   const body = await c.req.json<{ slug?: string; title?: string; category?: string; body_md?: string }>();
   try {
     const tpl = await storeCreateTemplate(
@@ -1369,7 +1373,7 @@ adminContracts.get('/templates/store/:slug/versions', async (c) => {
 // PUT /templates/store/:slug — edit a template. The server snapshots the
 // prior row into history and bumps the version atomically.
 adminContracts.put('/templates/store/:slug', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireHqAuthoring(c);
   const slug = c.req.param('slug');
   const body = await c.req.json<{ title?: string; category?: string; body_md?: string }>();
   try {
@@ -1389,7 +1393,7 @@ adminContracts.put('/templates/store/:slug', async (c) => {
 // DELETE /templates/store/:slug — soft-delete (is_active = 0). Requires a
 // recent step-up factor, mirroring the other destructive contract actions.
 adminContracts.delete('/templates/store/:slug', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireHqAuthoring(c);
   await requireStepUp(c);
   const slug = c.req.param('slug');
   const ok = await storeSoftDeleteTemplate(c.env, slug, admin.id);

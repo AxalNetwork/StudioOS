@@ -444,18 +444,52 @@ test('admin contracts route requires admin (requireAdmin gate)', async () => {
     resolve(__dirname, '../src/routes/admin_contracts.ts'),
     'utf8',
   );
-  // Count handler definitions vs requireAdmin usages: every handler
-  // body must call requireAdmin(c).
+  // Count handler definitions vs admin-gate usages: every handler body must
+  // call one.
+  //
+  // TWO GATES COUNT, and the second does not widen what this test allows.
+  // D106 moved the three template-store WRITES onto `requireHqAuthoring`,
+  // which is literally `requireAdmin` plus a refusal on a branch Worker — so
+  // a handler using it is admin-gated and then some. The assertion below
+  // pins that relationship in `auth.ts` rather than taking it on trust,
+  // because otherwise "count this other name too" would be a way to smuggle
+  // an ungated handler past a test that exists to find one.
   const handlers = src.match(/adminContracts\.(get|post|put|delete|patch)\(/g) || [];
-  const requireAdminCalls = src.match(/await\s+requireAdmin\(c\)/g) || [];
+  const adminGates = src.match(/await\s+require(Admin|HqAuthoring)\(c\)/g) || [];
   assert.ok(handlers.length >= 6, `expected >=6 handlers, got ${handlers.length}`);
-  // Most handlers gate inline; a small number share a helper
-  // (`mintContractDownload`) where requireAdmin runs once per call.
-  // Either way the ratio of admin-gates to handlers must be near 1.
-  assert.ok(
-    requireAdminCalls.length >= handlers.length - 2,
-    `expected ~one requireAdmin per handler (handlers=${handlers.length}, requireAdmin=${requireAdminCalls.length})`,
+
+  const authSrc = await readFile(resolve(__dirname, '../src/auth.ts'), 'utf8');
+  assert.match(
+    authSrc,
+    /export async function requireHqAuthoring[\s\S]{0,400}?const user = await requireAdmin\(c\);/,
+    'requireHqAuthoring must layer on requireAdmin, or counting it here would weaken this gate',
   );
+
+  // EVERY HANDLER, BY NAME, not a count within a tolerance.
+  //
+  // The count version allowed `gates >= handlers - 2`, on the reasoning that
+  // two handlers share `mintContractDownload` and gate inside it. That is
+  // true, and the slack was the problem: with exactly two delegators, a
+  // handler that lost its gate outright still satisfied the inequality — an
+  // ungated admin route reads as a pass. Mutation-checked: removing the gate
+  // from `PUT /templates/store/:slug` escaped the old assertion and fails
+  // this one.
+  //
+  // So each handler body is checked on its own, and the only handlers allowed
+  // to carry no inline gate are the two that delegate, named here rather than
+  // counted.
+  const DELEGATES_TO_HELPER = new Set(['/:uid/download', '/:uid/download-url']);
+  const bodies = src.split(/(?=adminContracts\.(?:get|post|put|delete|patch)\()/).slice(1);
+  assert.equal(bodies.length, handlers.length, 'every handler definition is one body');
+  const ungated = [];
+  for (const body of bodies) {
+    const path = (body.match(/adminContracts\.\w+\(\s*'([^']*)'/) || [])[1] ?? '?';
+    if (/await\s+require(Admin|HqAuthoring)\(c\)/.test(body)) continue;
+    if (DELEGATES_TO_HELPER.has(path) && /await\s+mintContractDownload\(c\)/.test(body)) continue;
+    ungated.push(path);
+  }
+  assert.deepEqual(ungated, [], 'every handler gates inline or delegates to the admin-gated helper');
+  assert.ok(adminGates.length >= 6, `expected several inline gates, got ${adminGates.length}`);
   // And the shared download helper must itself be admin-gated.
   assert.ok(
     /async function mintContractDownload[\s\S]{0,400}await\s+requireAdmin\(c\)/.test(src),

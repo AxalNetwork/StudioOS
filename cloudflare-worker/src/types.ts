@@ -51,6 +51,13 @@ export interface Env {
   // must stay on the host registered in Google Cloud Console
   // (app.axal.vc). Override here when registering a new host.
   OAUTH_CALLBACK_BASE_URL?: string;
+  // Branch mode (D104). Set only in a branch Worker's generated config
+  // (`studioos-<code>` at `<code>.axal.vc`); unset on HQ. `BRANCH_CODE` is
+  // the hostname's first label and suffixes the branch's cookie names — see
+  // util/branch.ts. `BRANCH_TERRITORY` is comma-separated ISO 3166-1 alpha-2.
+  BRANCH_CODE?: string;
+  BRANCH_NAME?: string;
+  BRANCH_TERRITORY?: string;
   GMAIL_CLIENT_ID?: string;
   GMAIL_CLIENT_SECRET?: string;
   GMAIL_REFRESH_TOKEN?: string;

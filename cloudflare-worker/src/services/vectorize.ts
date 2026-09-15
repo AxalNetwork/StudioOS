@@ -242,6 +242,22 @@ export async function searchSemantic(env: Env, query: string, opts: SearchOpts =
         snippet: String(m.metadata?.snippet || ''),
         score: Number(m.score ?? 0),
         owner_user_id: m.metadata?.owner_user_id == null ? null : Number(m.metadata.owner_user_id),
+        // WRITTEN SINCE THE LIBRARY SHIPPED AND NEVER READ BACK UNTIL NOW.
+        // `upsertEntity` stores `metadata.chunk` for every chunked document and
+        // `SearchHit.chunk` has always been declared "for a citation", but this
+        // mapping dropped it — so `routes/research.ts` recorded `chunk: null` on
+        // every Ask citation, in both the answered and the model-unavailable
+        // path. A citation that names a document and not the passage asks a
+        // reader to take the label on trust, which is the one thing a citation
+        // must not do. Falls back to the id's third segment so a vector written
+        // before metadata carried it still cites its chunk.
+        chunk: (() => {
+          const meta = m.metadata?.chunk;
+          if (meta != null && Number.isFinite(Number(meta))) return Number(meta);
+          const fromId = String(m.id || '').split(':')[2];
+          return fromId != null && fromId !== '' && Number.isFinite(Number(fromId))
+            ? Number(fromId) : undefined;
+        })(),
       }))
       .filter((h: SearchHit) => {
         // Layer 1 — the default is exclusion.

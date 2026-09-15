@@ -10,11 +10,12 @@
  */
 import type { Env } from '../types';
 import { getSQL } from '../db';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 export async function ensureSkillProfileSchema(env: Env): Promise<void> {
-  if (_ready) return;
+  if (READY.get(bindingKey(env))) return;
   try {
     await env.DB.batch([
       env.DB.prepare(`CREATE TABLE IF NOT EXISTS user_skills (
@@ -53,7 +54,7 @@ export async function ensureSkillProfileSchema(env: Env): Promise<void> {
       env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_skill_endorsements_skill
         ON skill_endorsements (skill_id)`),
     ]);
-    _ready = true;
+    READY.set(bindingKey(env), true);
   } catch (err) {
     console.warn('[skillProfileSchema] ensure failed', err);
   }

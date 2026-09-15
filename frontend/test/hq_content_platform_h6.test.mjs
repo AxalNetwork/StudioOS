@@ -120,9 +120,14 @@ test('no absent figure is defaulted to a number, on either page', () => {
     assert.doesNotMatch(src, /\|\|\s*0\b/, `${name}: an absent figure falls back to 0`);
     assert.doesNotMatch(src, /\?\?\s*0\b/, `${name}: an absent figure falls back to 0`);
   }
-  // The four stats that must stay permanently blank.
-  for (const [src, label] of [[C, 'Localised'], [C, 'Awaiting brand approval'],
-                              [P, 'Flags'], [P, 'Overrides']]) {
+  // THREE STATS THAT MUST STAY PERMANENTLY BLANK, down from four in D112 —
+  // and "Awaiting brand approval" left this list because it acquired a store,
+  // not because the assertion was inconvenient. A content escalation carries
+  // the branch that submitted it and takes an approve / request-changes
+  // decision, so the count is real and is asserted in its own test below.
+  // "Localised" STAYS, for the one part of H6's refusal that did not change:
+  // nothing records that one piece is a localisation of another.
+  for (const [src, label] of [[C, 'Localised'], [P, 'Flags'], [P, 'Overrides']]) {
     const at = src.indexOf(`label="${label}"`);
     assert.ok(at >= 0, `the ${label} stat is gone`);
     // BOUNDED TO THE ELEMENT, not to a character count. `at + 160` ran past
@@ -180,4 +185,35 @@ test('an unreadable summary is distinguished from an empty one, on both pages', 
   // And an empty job history is stated as empty rather than left blank —
   // "readable and empty" is a different fact from "could not be read".
   assert.match(P, /readable and empty/, 'an empty job history renders as nothing at all');
+});
+
+test('the localisation lane is real, and the one absence it does NOT close is named', () => {
+  // D112 — WHERE THE "Awaiting brand approval" ASSERTION WENT. It moved rather
+  // than disappeared: the figure it pinned as permanently blank now has a
+  // store, so what must be asserted is that the store is read and that the
+  // remaining absence is still stated. A deleted assertion would have left
+  // both halves unguarded.
+  assert.match(C, /api\.escalations\(\{ kind: 'content' \}\)/,
+    'the lane does not read content escalations');
+  assert.match(C, /label="Submitted for approval"/, 'the submitted count is gone');
+  assert.match(C, /onRetry=\{loadLane\}/, 'an unreadable lane cannot be retried on its own');
+
+  // The count comes from the lane's own length — never a `|| 0`, and never a
+  // figure invented when the lane could not be read.
+  const at = C.indexOf('label="Submitted for approval"');
+  const end = C.indexOf('/>', at);
+  assert.match(C.slice(at, end), /laneItems \? String\(laneItems\.length\) : null/,
+    'the submitted count is defaulted rather than left absent when the lane is unreadable');
+
+  // AND THE REFUSAL SURVIVES, NARROWED. The route's sentence is rendered, and
+  // it still names the link nothing records — deleting it would make the lane
+  // read as a count of translations.
+  assert.match(C, /data\.localisation_reason/, 'the narrowed refusal is no longer rendered');
+  // CROUTE, NOT `raw` — the narrowed sentence wraps mid-phrase ("a localisation
+  // of " + "another"), so the raw text does not contain the phrase a reader
+  // sees. That is the whole reason `joined` exists at the top of this file, and
+  // an assertion that reads the unjoined text fails on the correct code.
+  assert.match(CROUTE, /localisation of another/, 'the route stopped naming the missing link');
+  assert.doesNotMatch(CROUTE, /no brand-approval state/,
+    'the route still claims no brand-approval state exists, which D112 made false');
 });

@@ -103,7 +103,6 @@ export default function InvestorWorkspacePage({ page = 'deals', children, fundUn
       <div className="investor-frame">
         <header className="investor-head">
           <div>
-            <div className="investor-kicker">Investor &amp; LP / {key.replaceAll('-', ' ')}</div>
             <h1 className="investor-title" data-testid={`heading-investor-${key}`}>{meta.title}</h1>
             <p className="investor-subtitle">{meta.description}</p>
           </div>

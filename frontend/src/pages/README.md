@@ -31,6 +31,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `legal/` | Non-admin document origination (Send for signature). |
 | `subsidiary/` | A territory licence holder's read of their own licence. |
 | `hq/` | The Super Admin's HQ-only surfaces: the holder console, the HQ framings of Accounts and Contracts, and the notice a plain admin sees instead. |
+| `branch/` | The subsidiary shell's own pages. Today it holds only `BranchZonePending`, the stated notice a branch row renders while its artboard is unbuilt — see D107 for why every row ships with a route rather than only the built ones. S1–S6 land here in PRs 12–14. |
 | `insights/` | Insight reader and its public variant. |
 | `docs/` | The Help Center layout and its content sections. |
 | `templates/` | Persona home-page templates. |

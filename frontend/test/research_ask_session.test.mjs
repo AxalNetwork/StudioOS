@@ -251,7 +251,7 @@ test('the metered rate is read from the pricing endpoint, never typed', () => {
 
 test('the AI band never runs on mount, and its surfaces are allow-listed', () => {
   // A component that drafted on render would spend a reader's budget for
-  // visiting a page — `ValidateProposals` states the same rule for the
+  // visiting a page — `FillProposals` states the same rule for the
   // founder's copy of this band.
   assert.match(DRAFT, /useEffect\(\(\) => \{ load\(\); \}, \[load\]\);/,
     'the band no longer loads exactly once');

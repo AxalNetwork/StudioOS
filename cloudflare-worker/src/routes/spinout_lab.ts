@@ -47,6 +47,7 @@ import {
   weekClearsFor,
   unlockedFeaturesThrough,
 } from '../services/spinoutLabCatalog';
+import { bindingKey } from '../util/schemaBootstrap';
 // Re-export so existing external imports of these names from this
 // module keep working unchanged.
 export { MILESTONES, VALID_MILESTONE_KEYS, weekMet, unlockedFeaturesThrough };
@@ -254,9 +255,9 @@ export async function exitLab(sql: Sql, userId: number): Promise<LabState> {
 
 // Cohort applications — lazy table ensure (mirrors migration 155) so
 // databases that haven't run the migration yet still answer.
-let applicationsSchemaEnsured = false;
+const APPLICATIONS_SCHEMA_ENSURED = new WeakMap<object, boolean>();
 async function ensureApplicationsTable(env: Env): Promise<void> {
-  if (applicationsSchemaEnsured) return;
+  if (APPLICATIONS_SCHEMA_ENSURED.get(bindingKey(env))) return;
   try {
     await env.DB.prepare(
       `CREATE TABLE IF NOT EXISTS spinout_applications (
@@ -274,7 +275,7 @@ async function ensureApplicationsTable(env: Env): Promise<void> {
       )`,
     ).run();
   } catch { /* ignore */ }
-  applicationsSchemaEnsured = true;
+  APPLICATIONS_SCHEMA_ENSURED.set(bindingKey(env), true);
 }
 
 type ApplicationRow = {
@@ -1036,9 +1037,9 @@ spinoutLab.get('/fund-metrics', async (c) => {
 const LP_FUND_SLUG = 'spinout-fund-i';
 
 /** Self-heal on a cold isolate (migration 165 is the canonical DDL). */
-let _lpAppSchemaReady = false;
+const LP_APP_SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensureLpApplicationsSchema(env: Env): Promise<void> {
-  if (_lpAppSchemaReady) return;
+  if (LP_APP_SCHEMA_READY.get(bindingKey(env))) return;
   await env.DB.exec(
     'CREATE TABLE IF NOT EXISTS lp_applications ('
     + 'id INTEGER PRIMARY KEY AUTOINCREMENT, '
@@ -1061,7 +1062,7 @@ async function ensureLpApplicationsSchema(env: Env): Promise<void> {
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_lp_applications_user_fund '
     + 'ON lp_applications(user_id, fund_slug)',
   );
-  _lpAppSchemaReady = true;
+  LP_APP_SCHEMA_READY.set(bindingKey(env), true);
 }
 
 // GET /lp-application — the caller's own application, or null.

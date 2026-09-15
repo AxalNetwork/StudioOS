@@ -8,10 +8,10 @@
     "test:frontend": "node --import ./frontend/test/_deck-loader.mjs --test 'frontend/test/*.test.mjs'",
     "test:worker": "node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test 'cloudflare-worker/test/*.test.ts' 'cloudflare-worker/test/*.test.mjs'",
     "test:decks": "node --import ./frontend/test/_deck-loader.mjs --test frontend/test/spinout_demoday_deck.test.mjs frontend/test/deck_templates_missing_data.test.mjs frontend/test/spinout_pptx_build.test.mjs frontend/test/deck_readiness.test.mjs frontend/test/spinout_preview_sync.test.mjs frontend/test/brand_templates.test.mjs",
-    "test:guards": "node scripts/check-api-drift.mjs && node scripts/check-sql-unsafe.mjs && node scripts/check-sql-prepare.mjs && node scripts/check-sql-migrations.mjs && node scripts/check-sqlite-dialect.mjs && node scripts/check-sqlite-tables.mjs && node scripts/check-sqlite-columns.mjs && node scripts/check-write-router-columns.mjs && node scripts/check-sqlite-table-collisions.mjs && node scripts/check-migration-column-shapes.mjs && node scripts/check-money-cents.mjs && node scripts/check-regulated-wording.mjs && node scripts/check-row-generics.mjs && node scripts/check-wrangler-binding-parity.mjs && node scripts/check-scanner-ignore-parity.mjs && node scripts/check-folder-docs.mjs && node scripts/check-decision-ids.mjs && node scripts/check-unused-imports.mjs && node scripts/check-react-hook-imports.mjs && node scripts/check-tail-consumer.mjs && node scripts/check-advisor-bank-drift.mjs && node scripts/check-statemachine-coverage.mjs && node scripts/check-deck-templates.mjs && node scripts/check-deck-payload-wiring.mjs && node scripts/check-docs-fresh.mjs && node scripts/check-frontend-builds.mjs",
+    "test:guards": "node scripts/check-api-drift.mjs && node scripts/check-sql-unsafe.mjs && node scripts/check-sql-prepare.mjs && node scripts/check-sql-migrations.mjs && node scripts/check-sqlite-dialect.mjs && node scripts/check-sqlite-tables.mjs && node scripts/check-sqlite-columns.mjs && node scripts/check-write-router-columns.mjs && node scripts/check-sqlite-table-collisions.mjs && node scripts/check-migration-column-shapes.mjs && node scripts/check-money-cents.mjs && node scripts/check-regulated-wording.mjs && node scripts/check-row-generics.mjs && node scripts/check-schema-readiness.mjs && node scripts/check-wrangler-binding-parity.mjs && node scripts/check-scanner-ignore-parity.mjs && node scripts/check-inline-project-pickers.mjs && node scripts/check-folder-docs.mjs && node scripts/check-decision-ids.mjs && node scripts/check-unused-imports.mjs && node scripts/check-react-hook-imports.mjs && node scripts/check-zone-handlers.mjs && node scripts/check-zone-hover-copy.mjs && node scripts/check-tail-consumer.mjs && node scripts/check-advisor-bank-drift.mjs && node scripts/check-statemachine-coverage.mjs && node scripts/check-deck-templates.mjs && node scripts/check-deck-payload-wiring.mjs && node scripts/check-branch-config.mjs && node scripts/check-docs-fresh.mjs && node scripts/check-frontend-builds.mjs",
     "test:types": "cd cloudflare-worker && npx --no-install tsc --noEmit",
-    "test:retention": "node --test scripts/lib/assetRetention.test.mjs",
-    "test:drift": "npm run test:frontend && npm run test:worker && npm run test:retention && npm run test:guards && npm run test:types && node scripts/check-dark-mode.mjs",
+    "test:retention": "node --test 'scripts/lib/*.test.mjs'",
+    "test:drift": "npm run test:frontend && npm run test:worker && npm run test:retention && npm run test:guards && npm run test:types && npm run test:types:frontend && npm run lint:undef && node scripts/check-dark-mode.mjs",
     "test:e2e": "playwright test",
     "build": "node scripts/build-frontend.mjs",
     "predeploy": "node scripts/migrate-d1.mjs --remote",
@@ -32,7 +32,9 @@
     "claude:check": "bash scripts/check-anthropic-key.sh",
     "lfs:check": "node scripts/lfs-size-gate.mjs",
     "lfs:check-all": "node scripts/lfs-size-gate.mjs --all",
-    "lfs:install-hook": "node scripts/lfs-size-gate.mjs --install"
+    "lfs:install-hook": "node scripts/lfs-size-gate.mjs --install",
+    "lint:undef": "eslint --no-warn-ignored 'frontend/src/**/*.{js,jsx}'",
+    "test:types:frontend": "npx --no-install tsc --noEmit -p frontend/tsconfig.json"
   },
   "keywords": [],
   "author": "",
@@ -40,13 +42,13 @@
   "dependencies": {
     "@react-pdf/renderer": "^4.9.0",
     "@replit/connectors-sdk": "^0.4.3",
-    "@simplewebauthn/browser": "^13.3.0",
-    "@simplewebauthn/server": "^13.3.3",
+    "@simplewebauthn/browser": "^14.0.0",
+    "@simplewebauthn/server": "^14.0.1",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^6.1.1",
-    "autoprefixer": "^10.5.4",
+    "autoprefixer": "^10.5.5",
     "fuse.js": "^7.5.0",
-    "lucide-react": "^1.37.0",
+    "lucide-react": "^1.41.0",
     "pptxgenjs": "^4.0.1",
     "qrcode": "^1.5.4",
     "react": "^19.2.8",
@@ -54,15 +56,18 @@
     "react-is": "^19.2.8",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.18.3",
-    "react-window": "^2.3.0",
+    "react-window": "^2.3.1",
     "recharts": "^3.10.1",
     "remark-gfm": "^4.0.1",
     "tailwindcss": "^4.3.0",
     "vite": "^8.2.2"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
-    "wrangler": "^4.127.1"
+    "@playwright/test": "^1.63.0",
+    "eslint": "^10.10.0",
+    "globals": "^17.12.0",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.131.0"
   },
   "overrides": {
     "image-size": "npm:image-size-next@1.2.2"

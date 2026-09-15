@@ -14,7 +14,7 @@ import { formatCost } from '../ui/assistCost';
  *
  * NOTHING RUNS ON MOUNT. It reads whatever draft already exists and stops
  * there; the model is called when someone presses the run button.
- * `ValidateProposals` states the reason for the founder's copy of this rule and
+ * `FillProposals` states the reason for the founder's copy of this rule and
  * it is the same one: a component that drafted on render would spend a reader's
  * budget for visiting a page. Which is also why the cost is shown BEFORE the
  * run and not only after it.
@@ -40,13 +40,13 @@ const GHOST = 'inline-flex items-center gap-1.5 whitespace-nowrap rounded-[7px] 
   + 'dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-gray-600';
 // The ONE filled control on the artboard. Every zone-header action is a ghost
 // and the accent appears exactly once per page, always on the button that
-// commits an AI draft — which is the convention `ValidateProposals` follows and
+// commits an AI draft — which is the convention `FillProposals` follows and
 // the canvases are consistent about.
 //
 // TWO PALETTES, ONE COMPONENT. The Partner canvases draw this band in amber and
 // the Founder canvases in violet — `Founder Workspaces Canvas.dc.html` uses
 // `#6d28d9` for every `prop` band on A2–A5, which is the accent
-// `ValidateProposals` already ships. Amber stays the default so that none of
+// `FillProposals` already ships. Amber stays the default so that none of
 // the 23 existing mounts changes, and the whole palette moves together: a band
 // whose eyebrow was violet and whose button stayed amber would read as two
 // different things on one card. Tailwind needs the class names whole, so these

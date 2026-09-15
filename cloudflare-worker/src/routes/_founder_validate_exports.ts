@@ -86,9 +86,22 @@ export const PAIN_MAP_CSV_HEADER = [
  * The pain map, themes first and ungrouped phrases after.
  *
  * `count` is DISTINCT INTERVIEWS, not mentions — the same number the pain map
- * page shows. An earlier reading of that page computed frequency from
- * `phrases.length`, which counts wordings rather than people, and the two
- * disagree the moment two interviewees phrase one pain differently.
+ * page shows.
+ *
+ * THAT SENTENCE WAS AN ASSERTION, NOT AN OBSERVATION, and it was wrong for as
+ * long as it stood. It went on to say an "earlier reading of that page computed
+ * frequency from `phrases.length`, which counts wordings rather than people" —
+ * and that reading was still the live one: `FounderValidateWorkspace`'s pain map
+ * divided `g.phrases.length` by the interview total, ranked by it, and quoted it
+ * in its own footnote. So this file and that page rendered one record two
+ * different ways one screen apart, with this comment vouching for the agreement.
+ *
+ * Worse than a disagreement about wording: `analyzePains` seeds every curated
+ * alias as a phrase whether or not an interview logged it, so a theme with three
+ * curated wordings and no mentions at all drew "3 phrases · 150%" with its bar
+ * pinned at 100% while this export wrote `0` and `0%` for the same theme. The
+ * page reads `count` now, `zone_actions.test.mjs` fails if the numerator ever
+ * goes back to a length, and the sentence above is true.
  *
  * Ungrouped phrases are exported too, marked as such. They are the reason a
  * theme's share does not sum to 100%, and omitting them would make the file

@@ -36,20 +36,20 @@ import { Card } from '../../../ui';
 export default function OrganizationsZone() {
   return (
     <Card variant="dashed" padding="lg">
-      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
         No store behind this yet
       </div>
       <h2 className="mt-2 text-lg font-extrabold tracking-tight">
         Nothing links a person you know to the organisation they are in
       </h2>
-      <p className="mt-2 max-w-2xl text-[12.5px] leading-relaxed text-axal-ink-2">
+      <p className="mt-2 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
         This zone would roll your book up by company, fund and studio, and attribute referral credit
         at that level so a studio that sent you four clients reads as one channel. It needs an edge
         from a person to an organisation, and for an advisor there is none: relationships are stored
         as pairs of account ids with no organisation on them, and a referral records the
         organisation as text you typed rather than a link to anything.
       </p>
-      <p className="mt-2 max-w-2xl text-[12.5px] leading-relaxed text-axal-ink-2">
+      <p className="mt-2 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
         The founder version of this page looks for that edge in the contacts book and does not find
         one either; what is different here is that the book itself is closed to advisors at the API
         — not merely unlisted, but outside what that endpoint&rsquo;s guard can

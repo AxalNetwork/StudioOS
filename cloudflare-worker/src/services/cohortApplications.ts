@@ -29,6 +29,7 @@ import {
   COHORT_TZ, wallClockToUtcMs, delawareYearMonth, materializeCycle,
   claimOrResumeJob, completeJobRun,
 } from './cohortTiming';
+import { bindingKey } from '../util/schemaBootstrap';
 
 export const APP_REMINDER_THRESHOLDS_HOURS = [72, 24] as const;
 export const DEFAULT_MIN_COHORT_SIZE = 1;
@@ -120,9 +121,9 @@ const msOf = (ts: string): number => Date.parse(ts.replace(' ', 'T') + 'Z');
 // Schema ensure (mirrors migration 157 for dev/preview D1)
 // ---------------------------------------------------------------------------
 
-let schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 export async function ensureCohortAppSchema(env: Env): Promise<void> {
-  if (schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   const alters = [
     `ALTER TABLE cohort_cycles ADD COLUMN applications_open_at TEXT`,
     `ALTER TABLE cohort_cycles ADD COLUMN applications_close_at TEXT`,
@@ -140,7 +141,7 @@ export async function ensureCohortAppSchema(env: Env): Promise<void> {
       try { await env.DB.prepare(s).run(); } catch { /* column exists */ }
     }
     for (const s of ddl) await env.DB.prepare(s).run();
-    schemaReady = true;
+    SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.error('[cohort-apps] schema ensure failed', e);
   }

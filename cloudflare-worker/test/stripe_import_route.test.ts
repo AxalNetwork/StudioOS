@@ -103,7 +103,7 @@ function freshDb() {
       last_error TEXT,
       updated_at TEXT
     );
-    CREATE TABLE metrics_snapshots (
+    CREATE TABLE project_metrics (
       id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL,
       snapshot_date TEXT NOT NULL, mrr REAL, arr REAL, cac REAL, ltv REAL,
       monthly_churn_pct REAL, active_users INTEGER, new_users INTEGER,
@@ -203,7 +203,7 @@ function activeSub(id: string, customer: string, unitAmountCents: number) {
 }
 
 function stripeSnapshotCount(db: InstanceType<typeof DatabaseSync>): number {
-  const r = db.prepare("SELECT COUNT(*) AS c FROM metrics_snapshots WHERE source = 'stripe'").get() as { c: number };
+  const r = db.prepare("SELECT COUNT(*) AS c FROM project_metrics WHERE source = 'stripe'").get() as { c: number };
   return Number(r.c);
 }
 
@@ -294,7 +294,7 @@ test('success (mrr or customers > 0) → 200 source:stripe + snapshot written', 
     assert.equal(body.imported, 1);
     // The happy path persists exactly one stripe snapshot.
     assert.equal(stripeSnapshotCount(db), 1);
-    const row = db.prepare("SELECT mrr, project_id, source FROM metrics_snapshots WHERE source = 'stripe'").get() as any;
+    const row = db.prepare("SELECT mrr, project_id, source FROM project_metrics WHERE source = 'stripe'").get() as any;
     assert.equal(row.mrr, 10);
     assert.equal(row.project_id, PROJECT_ID);
   },

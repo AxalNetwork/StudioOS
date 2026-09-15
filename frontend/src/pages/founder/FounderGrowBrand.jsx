@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, ChevronRight, ExternalLink, RefreshCw, Sparkles } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ChevronRight, RefreshCw, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderGrowDesk.css';
@@ -27,7 +27,6 @@ const slug = (page) => page.page_slug || page.slug || page.name || 'page';
 export default function FounderGrowBrand() {
   const [params, setParams] = useSearchParams();
   const requestedId = params.get('project_id');
-  const [projects, setProjects] = useState([]);
   const [project, setProject] = useState(null);
   const [pages, setPages] = useState([]);
   const [signups, setSignups] = useState([]);
@@ -44,7 +43,6 @@ export default function FounderGrowBrand() {
         setError('The startup list is unavailable; brand records are still being checked.');
       }
       const selected = available.find((item) => String(item.id) === requestedId) || available[0] || (requestedId ? { id: Number(requestedId), name: 'Selected project' } : null);
-      setProjects(available.length ? available : selected ? [selected] : []);
       setProject(selected);
       if (!selected) { setPages([]); setSignups([]); return; }
       if (String(selected.id) !== requestedId) {
@@ -78,7 +76,7 @@ export default function FounderGrowBrand() {
   const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Capital match', `/grow/capital-match${query}`], ['Brand', `/grow/brand${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-brand" data-testid="founder-grow-brand"><div className="a5-grow-canvas"><div className="a5-grow-main">
-    <header className="a5-grow-hero"><div className="fg-brand-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Brand</b></div><span>Founder / Grow</span><div><h1>Brand &amp; landing</h1><p>Landing pages, templates and captured leads.</p></div>{projects.length > 1 && <label className="fg-brand-picker"><span>Startup</span><select data-testid="select-grow-brand-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-brand-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Brand' ? 'is-active' : ''}>{label}</Link>)}</nav>
+    <header className="a5-grow-hero"><div className="fg-brand-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Brand</b></div><div><h1>Brand &amp; landing</h1><p>Landing pages, templates and captured leads.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-brand-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Brand' ? 'is-active' : ''}>{label}</Link>)}</nav>
     <ZoneToolbar
               filters={founderZoneFilters('grow/brand', { value: view, onChange: setView })}
               actions={founderZoneActions('grow/brand', { query, view: { scope: project?.name, header: ['Lead', 'Email', 'Source', 'Audience', 'Captured'], rows: signups, cells: (r) => [r.name, r.email, r.source, r.audience, r.created_at] } })}
@@ -91,8 +89,16 @@ export default function FounderGrowBrand() {
 function BrandContent({ project, pages, signups, visible, view, setView, query, error, liveCount, bestPage, pageAttributionAvailable }) {
   return <div className="a5-sections"><div className="fg-brand-context"><div><span>Selected startup</span><strong data-testid="text-grow-brand-project">{text(project.name)}</strong></div><div><span>Brand source</span><strong>{error ? 'Unavailable' : pages.length ? 'Stored landing pages' : 'No pages recorded'}</strong></div></div>
         {/* Its four tabs are the zone header's now. Each is a predicate over a
-        stored field: `published`, and whether any signup names the page. */}
-    <div className="fg-brand-tabs"><div className="fg-brand-actions"><Link to={`/spinout-lab/brand${query}`} data-testid="link-open-grow-brand-workspace"><ExternalLink size={13} /> Open workspace</Link></div></div>
+        stored field: `published`, and whether any signup names the page.
+        AND SO IS ITS ONE BUTTON. What was left in this row after the tabs moved
+        was a single "Open workspace" link to `/spinout-lab/brand` — the exact
+        destination the zone header's own `New page` action already carries
+        (`founderZoneActions.js`, 'grow/brand'). The user's words were "Open
+        workspace has nothing to do there" (#179): a zone body is a reading
+        surface, and a control in it that only deflects to another one is the
+        same duplication as the in-body startup picker #181 has just removed.
+        The closing `a5-link` below stays — it is the shared shape of every
+        Grow zone's read section, not a second toolbar. */}
     <div className="fg-brand-stats"><Stat label="Pages" value={error ? 'Unavailable' : pages.length} note={error ? 'Brand source unavailable' : `${liveCount} live`} muted={Boolean(error)} /><Stat label="Leads captured" value={error ? 'Unavailable' : signups.length} note={error ? 'Brand source unavailable' : 'Stored waitlist records'} muted={Boolean(error)} /><Stat label="Best converting" value={error || !bestPage ? 'Unavailable' : `/${slug(bestPage.page).replace(/^\//, '')}`} note={error || !bestPage ? 'Page views or page attribution unavailable' : `${(bestPage.rate * 100).toFixed(1)}% of stored views`} muted={!bestPage || Boolean(error)} /><Stat label="Dead page" value="Unavailable" note="No page activity timeline connected" muted /></div>
     <section className="a5-card fg-brand-table"><Head title="Pages and what they produced" meta={view === 'all' ? 'Stored views · captured leads when page-linked' : `${visible.length} matching page${visible.length === 1 ? '' : 's'}`} />{error ? <EmptyTable error /> : <BrandTable rows={visible} signups={signups} pageAttributionAvailable={pageAttributionAvailable} />}</section>
     <section className="a5-focus fg-brand-read"><div className="a5-head"><div><Sparkles size={15} /><h2>Read the brand honestly</h2></div><span>Source-derived</span></div><p>{error ? 'The selected-project brand source is unavailable, so FG6 cannot determine which pages or leads are recorded. Page conversion, dead-page status, and template outcomes remain unavailable.' : pages.length ? `FG6 shows ${pages.length} stored page${pages.length === 1 ? '' : 's'} and ${signups.length} captured lead${signups.length === 1 ? '' : 's'}. ${pageAttributionAvailable ? 'Page-linked lead rates use only stored page IDs and view counts.' : 'Leads cannot be attributed to individual pages because the returned records do not include a page ID.'}` : 'No project-scoped landing pages are stored for this startup, so page performance and dead-page findings remain unavailable.'}</p><Link className="a5-link" to={`/spinout-lab/brand${query}`}>Open brand workspace <ChevronRight size={14} /></Link></section>

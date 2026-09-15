@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, CheckCircle2, Loader2, ArrowRight, FileSignature, MessageSquare } from 'lucide-react';
 import { useEscapeClose } from './useEscapeClose';
 import { api } from '../lib/api';
+import { asksForFeedback, offersDealPack } from '../lib/shareDeckAudience';
 
 const STEPS = { SIGNUP: 'signup', NDA: 'nda', POST_NDA: 'post_nda', DONE: 'done' };
 
@@ -16,7 +17,7 @@ export default function ShareViewerSignupModal({
   const [error, setError] = useState(null);
   const [requiresLogin, setRequiresLogin] = useState(false);
   const [form, setForm] = useState({
-    email: '', name: '', role: category === 'commercial' ? 'partner' : 'investor',
+    email: '', name: '', role: asksForFeedback(category) ? 'partner' : 'investor',
   });
   const [user, setUser] = useState(null);
   const [, setNdaDoc] = useState(null);
@@ -78,10 +79,15 @@ export default function ShareViewerSignupModal({
       });
       setNdaDoc(res);
       setStep(STEPS.POST_NDA);
-      // Pre-load deal pack if fundraising. Surface failures so the user
-      // sees an actionable error instead of the modal hanging at the
-      // "Generating documents…" placeholder.
-      if (category === 'fundraising') {
+      // Pre-load the deal pack for every category whose CTA offered one.
+      // Surface failures so the user sees an actionable error instead of the
+      // modal hanging at the "Generating documents…" placeholder.
+      //
+      // THIS LINE IS WHY #205 EXISTED. It read `=== 'fundraising'` while the
+      // CTA promised the deal pack to anything that was not `'commercial'`, so
+      // an `'event'` deck fetched nothing, rendered no branch below, and left
+      // the viewer on a blank panel AFTER they had signed the NDA.
+      if (offersDealPack(category)) {
         try {
           const pack = await api.deckShareDealPack(shareToken, {
             view_id: viewId, ...dealForm,
@@ -135,8 +141,8 @@ export default function ShareViewerSignupModal({
             <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
               {step === STEPS.SIGNUP && 'Join the Axal VC network'}
               {step === STEPS.NDA && 'Review and sign the NDA'}
-              {step === STEPS.POST_NDA && category === 'commercial' && 'Share your feedback'}
-              {step === STEPS.POST_NDA && category === 'fundraising' && 'Review the deal pack'}
+              {step === STEPS.POST_NDA && asksForFeedback(category) && 'Share your feedback'}
+              {step === STEPS.POST_NDA && offersDealPack(category) && 'Review the deal pack'}
               {step === STEPS.DONE && 'All set'}
             </h2>
             {projectName && (
@@ -230,7 +236,7 @@ export default function ShareViewerSignupModal({
             </div>
           )}
 
-          {step === STEPS.POST_NDA && category === 'commercial' && (
+          {step === STEPS.POST_NDA && asksForFeedback(category) && (
             <div className="space-y-3">
               <p className="text-sm text-gray-600 dark:text-slate-400">
                 <MessageSquare className="inline w-4 h-4 mr-1" />
@@ -310,7 +316,7 @@ export default function ShareViewerSignupModal({
             </div>
           )}
 
-          {step === STEPS.POST_NDA && category === 'fundraising' && (
+          {step === STEPS.POST_NDA && offersDealPack(category) && (
             <div className="space-y-3">
               <p className="text-sm text-gray-600 dark:text-slate-400">
                 Generated deal pack for {projectName || 'this startup'}. Review each document, then sign all to record your commitment.
@@ -339,7 +345,7 @@ export default function ShareViewerSignupModal({
               <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
               <p className="text-base font-semibold text-gray-900 dark:text-slate-100">Thank you</p>
               <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
-                {category === 'commercial'
+                {asksForFeedback(category)
                   ? 'Your feedback has been delivered to the founders.'
                   : 'The founder has been notified — you can track progress from your Axal VC dashboard.'}
               </p>
