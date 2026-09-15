@@ -50,7 +50,13 @@ class ThumbnailBoundary extends React.Component<
       // exactly the code that breaks for one project's data and nobody else's,
       // which is the case the beacon exists to catch.
       reportError(`Thumbnail:render:${this.props.templateKey}`, error);
-      console.error(`[Thumbnail] Failed to render ${this.props.templateKey}:`, error);
+      // The template key is an ARGUMENT, never part of the format string.
+      // `console.error`'s first argument is a format string — a `%s` in it
+      // consumes the next argument — so interpolating a variable there lets
+      // that variable eat `error` and forge the line. The same reason
+      // `log.js` writes `console.error('[%s]', entry.scope, err)` with a
+      // constant. (Semgrep `unsafe-formatstring`, alert 6106.)
+      console.error('[Thumbnail] Failed to render', this.props.templateKey, error);
     } catch { /* never let the boundary itself throw */ }
   }
 
