@@ -170,6 +170,11 @@ export default function SpinoutLabCapitalPage() {
   const [composeError, setComposeError] = useState('');
   const [stageFilter, setStageFilter] = useState('all');
   const [stageBusy, setStageBusy] = useState(null);
+  // Keyed by prospect id, the way `stageBusy` is: a failed stage change belongs
+  // beside the row it failed on, not in a page-level banner. Until this existed
+  // the select simply snapped back to the server's value with nothing said, so
+  // a rejected move was indistinguishable from a mis-click.
+  const [stageError, setStageError] = useState({ id: null, message: '' });
 
   const canEdit = !!(user && project && Number(user.founder_id) === Number(project.founder_id));
 
@@ -462,11 +467,16 @@ export default function SpinoutLabCapitalPage() {
   const setStage = async (p, stage) => {
     if (stageBusy) return;
     setStageBusy(p.id);
+    setStageError({ id: null, message: '' });
     try {
       await api.raiseProspectUpdate(p.id, { stage });
       await loadRaise(project.id);
     } catch (e) {
       reportError('spinout-capital:stage', e);
+      setStageError({
+        id: p.id,
+        message: e?.message || 'That stage change did not save. The prospect is still where it was.',
+      });
     } finally {
       setStageBusy(null);
     }
@@ -916,6 +926,16 @@ export default function SpinoutLabCapitalPage() {
                         >
                           {stages.map((s) => <option key={s} value={s}>{STAGE_LABELS[s] || s}</option>)}
                         </select>
+                      )}
+                      {stageError.id === p.id && (
+                        // `basis-full` so it wraps onto its own line inside the
+                        // row's flex-wrap container rather than squeezing it.
+                        <div
+                          className="basis-full text-[11px] text-rose-600 dark:text-rose-400"
+                          data-testid={`stage-error-${p.id}`}
+                        >
+                          {String(stageError.message)}
+                        </div>
                       )}
                     </div>
                   ))}

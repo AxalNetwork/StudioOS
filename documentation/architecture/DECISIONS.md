@@ -8543,3 +8543,47 @@ reported but remains invisible to the user: a failed snapshot delete
 `revenue_summary_generated` milestone. Giving them error UI is a user-visible
 change to shipped pages, so it is its own change rather than a rider on a
 mechanical one.
+
+## D116 — Three Spin-Out Lab actions that failed without telling anyone
+
+**2026-09-15.** D115 gave every catch in these pages a report. Three of them
+still set **no UI state at all**, so the failure reached us and not the person
+it happened to. All three were the same shape:
+
+```
+if (busy) return  →  setBusy(id)  →  try  →  catch reports  →  finally setBusy(null)
+```
+
+**`finally` clearing the busy flag is teardown, not an outcome**, and that is
+what made a failure look exactly like a success — the spinner stopped either
+way. It is also why these needed finding rather than noticing: a reader scanning
+for a bug sees a catch with a `reportError` in it and moves on.
+
+| where | what the user saw |
+| --- | --- |
+| `SpinoutLabRevenuePage` · delete snapshot | the spinner stopped, the row stayed, nothing said why |
+| `SpinoutLabCapitalPage` · prospect stage | the select snapped back to the server's value, silently |
+| `SpinoutLabRevenuePage` · copy investor summary | the button still read "Copy investor summary", so the click looked unregistered |
+
+Each now has state of the shape its page already uses: `deleteError` renders
+through the same rose line as `formError`; `stageError` is **keyed by prospect
+id** the way `stageBusy` already is, so the message sits beside the row it
+failed on rather than becoming a page-level banner; and `summaryCopied` widens
+from a boolean to `'' | 'ok' | 'fail'`, which is the tri-state
+`SpinoutLabScoringPage` already uses for its own copy button. Each message says
+what did **not** happen — "still in your log", "still where it was" — because a
+failure notice that leaves the outcome ambiguous is barely better than silence.
+
+### The one judgement call, made explicit
+
+`markMilestone(user, 'revenue_summary_generated')` **stays inside the `try`**.
+The summary text is built before the clipboard call either way, so an argument
+exists that generation succeeded and the milestone is owed. It is not: a founder
+whose clipboard refused does not have the summary, and a deliverable nobody can
+paste is not delivered. The test pins the call's position between `try {` and
+`} catch` so this stays a decision rather than an accident of line order.
+
+### What this does not change
+
+Nothing about which failures are *reported* — that was D115, and all three were
+already reporting before this. This is only what the screen says.

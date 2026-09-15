@@ -75,7 +75,11 @@ export default function SpinoutLabRevenuePage() {
   const [status, setStatus] = useState('loading');
   const [state, setState] = useState(null);
   const [user, setUser] = useState(null);
-  const [summaryCopied, setSummaryCopied] = useState(false);
+  // '' | 'ok' | 'fail'. Tri-state, matching SpinoutLabScoringPage's own copy
+  // flag: a clipboard write that throws used to leave this false, so the button
+  // still read "Copy investor summary" and the click looked like it had not
+  // registered at all.
+  const [summaryCopied, setSummaryCopied] = useState('');
   const [project, setProject] = useState(null);
   const [snapshots, setSnapshots] = useState(null); // [] | {failed}
   const [filter, setFilter] = useState('all');
@@ -84,6 +88,10 @@ export default function SpinoutLabRevenuePage() {
   const [formError, setFormError] = useState('');
   const [stripeState, setStripeState] = useState({ busy: false, unavailable: false, error: '', done: null });
   const [deleteBusy, setDeleteBusy] = useState(null);
+  // A failed delete used to be indistinguishable from a successful one: the
+  // spinner stopped, the row stayed, and nothing said why. `finally` clearing
+  // the busy flag is teardown, not an outcome.
+  const [deleteError, setDeleteError] = useState('');
   // Snapshot form
   const [sf, setSf] = useState({ snapshot_date: new Date().toISOString().slice(0, 10), mrr: '', active_users: '', new_users: '', notes: '' });
   // Proof form
@@ -246,11 +254,13 @@ export default function SpinoutLabRevenuePage() {
   const deleteSnapshot = async (id) => {
     if (deleteBusy) return;
     setDeleteBusy(id);
+    setDeleteError('');
     try {
       await api.deleteMetricsSnapshot(id);
       await loadSnapshots(project.id);
     } catch (e) {
       reportError('spinout-revenue:delete', e);
+      setDeleteError(e?.message || 'That snapshot could not be deleted. It is still in your log.');
     } finally {
       setDeleteBusy(null);
     }
@@ -349,16 +359,24 @@ export default function SpinoutLabRevenuePage() {
               ].filter(Boolean).join('\n');
               try {
                 await navigator.clipboard.writeText(text);
-                setSummaryCopied(true);
-                setTimeout(() => setSummaryCopied(false), 2000);
+                setSummaryCopied('ok');
+                setTimeout(() => setSummaryCopied(''), 2000);
                 // W3 deliverable — an investor-ready summary was generated
-                // from the real numbers on record.
+                // from the real numbers on record. It stays inside the try on
+                // purpose: the text is built either way, but if the clipboard
+                // refused then the founder does not have the summary, and a
+                // deliverable they cannot paste is not delivered.
                 markMilestone(user, 'revenue_summary_generated');
-              } catch (e) { reportError('spinout-revenue:summary', e); }
+              } catch (e) {
+                reportError('spinout-revenue:summary', e);
+                setSummaryCopied('fail');
+                setTimeout(() => setSummaryCopied(''), 4000);
+              }
             }}
             className={labBtn('accent')}
           >
-            <FileText size={LAB_ICON_SIZE} /> {summaryCopied ? 'Copied' : 'Copy investor summary'}
+            <FileText size={LAB_ICON_SIZE} />
+            {summaryCopied === 'ok' ? 'Copied' : summaryCopied === 'fail' ? 'Copy failed — try again' : 'Copy investor summary'}
           </button>
         )}
       />
@@ -462,6 +480,11 @@ export default function SpinoutLabRevenuePage() {
                 ))}
               </div>
             </div>
+            {deleteError && (
+              <div className="text-[11.5px] text-rose-600 dark:text-rose-400 mb-2" data-testid="delete-error">
+                {String(deleteError)}
+              </div>
+            )}
             {snapshots?.failed ? (
               <div className="text-[12.5px] text-amber-600 dark:text-amber-400 py-6 text-center" data-testid="log-error">
                 Couldn't load your revenue log right now.
