@@ -9,6 +9,7 @@ belongs in `../services/`.
 | `schemaBootstrap.ts` | `runSchemaBootstrap` — runs a self-healing schema bootstrap against a `users` table that is at D1's 100-column limit. Skips an `ADD COLUMN` whose column already exists (on a full table SQLite reports `too many columns` for those too, which is what 500'd `/api/introductions/*`), and **still throws, naming the side-table remedy, when a column is genuinely missing**. |
 | `pagination.ts` | Limit/offset clamping. |
 | `url.ts` | URL parsing and safety. |
+| `branch.ts` | `branchOf`, `authCookieName`, `csrfCookieName` — which subsidiary this Worker serves, read from `BRANCH_CODE`, and the per-branch cookie names that keep a branch session on its host (D104). A malformed code **throws** rather than reading as HQ. |
 | `zip.ts` | Zip assembly for exports. |
 | `hashEmail.ts` | Email hashing for privacy-preserving lookups. |
 | `stripeError.ts` | Parses Stripe errors into a status/code/type shape. |
