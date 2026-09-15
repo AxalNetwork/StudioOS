@@ -1,0 +1,1 @@
+var e=`Not recorded`;function t(t,n=e){return String(t??``).trim()||n}function n(e){return String(e??``).trim().replace(/[_-]/g,` `).replace(/\b\w/g,e=>e.toUpperCase())}export{t as n,n as r,e as t};

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, ChevronRight, Handshake, RefreshCw, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
+import { text, titleCase } from '../../lib/absence';
 import { WorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowPartnerships.css';
@@ -14,13 +15,12 @@ const list = (value, ...keys) => {
   for (const key of keys) if (Array.isArray(value?.[key])) return value[key];
   return [];
 };
-const text = (value, fallback = 'Not recorded') => String(value ?? '').trim() || fallback;
 const dateLabel = (value) => {
   if (!value) return 'Date not recorded';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
 };
-const statusLabel = (value) => text(value, 'State not recorded').replace(/[_-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+const statusLabel = (value) => titleCase(value) || 'State not recorded';
 const linked = (row, project) => {
   if (!project || !row) return false;
   const numeric = [row.project_id, row.projectId].some((value) => value != null && String(value) === String(project.id));

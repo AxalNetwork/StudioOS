@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, Clock3, Filter, Layers3, RefreshCw, ShieldCheck } from 'lucide-react';
 import { api } from '../../lib/api';
+import { NOT_RECORDED, text, titleCase } from '../../lib/absence';
 import { WorkerRail } from '../../ui';
 import './founderBuildBoard.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
@@ -61,11 +62,7 @@ const TASK_STATUS = [
   ['done', 'Done'],
 ];
 
-const text = (value, fallback = 'Not recorded') => {
-  if (value === null || value === undefined || String(value).trim() === '') return fallback;
-  return String(value);
-};
-const pretty = (value) => text(value).replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+const pretty = (value) => titleCase(value) || NOT_RECORDED;
 const date = (value, fallback = 'Not recorded') => {
   if (!value) return fallback;
   const parsed = new Date(value);

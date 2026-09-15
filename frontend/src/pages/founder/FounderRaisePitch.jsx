@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, BarChart3, ChevronRight, FileText, Link2, RefreshCw, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
+import { text } from '../../lib/absence';
 import { deckShareState } from '../../lib/deckShares';
 import { WorkerRail } from '../../ui';
 import './founderRaisePitch.css';
@@ -14,7 +15,6 @@ const asList = (value, ...keys) => {
   for (const key of keys) if (Array.isArray(value?.[key])) return value[key];
   return [];
 };
-const text = (value, fallback = 'Not recorded') => String(value ?? '').trim() || fallback;
 const formatDate = (value) => {
   if (!value) return 'Date not recorded';
   const parsed = new Date(value);

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, ChevronRight, RefreshCw, UsersRound } from 'lucide-react';
 import { api } from '../../lib/api';
+import { NOT_RECORDED, text, titleCase } from '../../lib/absence';
 import { WorkerRail } from '../../ui';
 import './founderNetworkRelationships.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
@@ -12,8 +13,7 @@ const list = (value, ...keys) => {
   for (const key of keys) if (Array.isArray(value?.[key])) return value[key];
   return [];
 };
-const text = (value, fallback = 'Not recorded') => String(value ?? '').trim() || fallback;
-const title = (value) => text(value).replace(/[_-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+const title = (value) => titleCase(value) || NOT_RECORDED;
 const daysSince = (value) => {
   if (!value) return null;
   const stamp = new Date(value).getTime();

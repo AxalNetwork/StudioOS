@@ -2,16 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, ClipboardCheck, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
+import { text } from '../../lib/absence';
 import { WorkerRail } from '../../ui';
 import './founderBuildThisWeek.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 
-const text = (value, fallback = 'Not recorded') => {
-  if (value === null || value === undefined || String(value).trim() === '') return fallback;
-  return String(value);
-};
 
 const formatProgress = (item) => {
   if (item.target !== null && item.target !== undefined && item.target !== '') {

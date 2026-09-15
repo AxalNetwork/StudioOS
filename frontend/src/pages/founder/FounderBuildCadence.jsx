@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CalendarClock, CircleDot, Plus, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
+import { text } from '../../lib/absence';
 import { WorkerRail } from '../../ui';
 import './founderBuildCadence.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
@@ -40,9 +41,6 @@ import { RitualDialog, RunDialog, TemplatesDialog } from './CadenceDialogs';
  * data and a feature that does not exist read identically if you let them.
  */
 
-const text = (value, fallback = 'Not recorded') => (
-  value === null || value === undefined || String(value).trim() === '' ? fallback : String(value)
-);
 
 /**
  * Which runs each chip keeps. The keys are `founderZoneFilters`' four keys.

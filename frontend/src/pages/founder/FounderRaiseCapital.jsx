@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, BarChart3, ChevronRight, FileText, Landmark, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
+import { NOT_RECORDED, text, titleCase } from '../../lib/absence';
 import { WorkerRail } from '../../ui';
 import './founderRaiseCapital.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
@@ -13,7 +14,6 @@ const asList = (value, ...keys) => {
   for (const key of keys) if (Array.isArray(value?.[key])) return value[key];
   return [];
 };
-const text = (value, fallback = 'Not recorded') => String(value ?? '').trim() || fallback;
 const money = (value) => value === null || value === undefined || value === '' || !Number.isFinite(Number(value))
   ? 'Not recorded'
   : new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(value));
@@ -40,7 +40,7 @@ const date = (value) => {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? String(value) : new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(parsed);
 };
-const prettyType = (value) => text(value).replace(/[_-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+const prettyType = (value) => titleCase(value) || NOT_RECORDED;
 
 export default function FounderRaiseCapital() {
   const [params, setParams] = useSearchParams();

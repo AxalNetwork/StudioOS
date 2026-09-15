@@ -84,7 +84,17 @@ test('no fiduciary figure is hardcoded into a fund or portfolio page', () => {
 
 test('a metric with no source is named, never blanked or zeroed', () => {
   const lib = scan(read('frontend/src/lib/fundAnalytics.js'));
-  assert.match(lib, /Not recorded/, 'the absence has to be said out loud');
+  // The literal used to be declared here and, identically, in `lib/dealFlow.js`.
+  // D117 gave it one home, so this follows the reference one hop instead of
+  // matching a string that has moved — and asserts the thing the old version
+  // could not: that `fmtCents` actually ANSWERS with it. A file can mention
+  // "Not recorded" in a comment and still return a zero.
+  assert.match(lib, /import \{ NOT_RECORDED \} from '\.\/absence'/,
+    'fundAnalytics must reach for the shared constant, not re-declare it');
+  assert.match(scan(read('frontend/src/lib/absence.js')), /NOT_RECORDED = 'Not recorded'/,
+    'the absence has to be said out loud');
+  assert.match(lib.slice(lib.indexOf('export function fmtCents')), /return NOT_RECORDED/,
+    'fmtCents must answer a null with the absence, never a zero');
   // An em-dash or a 0 in place of a null reads as a measured result.
   for (const fn of ['fmtMultiple', 'fmtRate']) {
     const body = lib.slice(lib.indexOf(`export function ${fn}`));

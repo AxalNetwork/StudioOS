@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, GitBranch, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
+import { text } from '../../lib/absence';
 import { WorkerRail } from '../../ui';
 import './founderBuildRoadmap.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
@@ -27,10 +28,6 @@ import { DependenciesDialog, ScenarioDialog, RiskUnavailable } from './RoadmapDi
  * rather than showing a number that would have to be invented.
  */
 
-const text = (value, fallback = 'Not recorded') => {
-  if (value === null || value === undefined || String(value).trim() === '') return fallback;
-  return String(value);
-};
 
 const TONE = { blocked: 'blocked', in_flight: 'active', done: 'done', provisional: 'neutral' };
 
