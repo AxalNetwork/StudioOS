@@ -93,7 +93,6 @@ export default function InvestorPortfolioCanvas() {
     <main className="i4-portfolio" data-testid="investor-portfolio-canvas">
       <header className="i4-heading">
         <div>
-          <div className="i4-eyebrow">Investor &amp; LP / Portfolio</div>
           <h1>Know how my investments are doing</h1>
           <p>Your direct book — positions, founder-maintained records, and the work around each investment.</p>
         </div>

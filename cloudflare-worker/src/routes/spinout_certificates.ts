@@ -22,16 +22,17 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const app = new Hono<{ Bindings: Env }>();
 
-let _migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureTables(env: Env) {
-  if (_migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   // Certificate persistence is applied by migration in production. Public
   // verification must never create its registry and indexes on a cold request.
   if (env.ENVIRONMENT === 'production') {
-    _migrated = true;
+    MIGRATED.set(bindingKey(env), true);
     return;
   }
   const stmts = [
@@ -65,7 +66,7 @@ async function ensureTables(env: Env) {
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); } catch { /* already applied */ }
   }
-  _migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 /** Owner/admin view: everything except other people's rows. */

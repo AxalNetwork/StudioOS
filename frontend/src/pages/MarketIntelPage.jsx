@@ -2128,7 +2128,6 @@ function FounderInvestorFitTab({ user }) {
   const isFounder = persona === 'founder';
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
-  const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState(null);
 
   // Founders need a project to query against.
@@ -2139,7 +2138,6 @@ function FounderInvestorFitTab({ user }) {
       if (cancelled) return;
       const owned = (Array.isArray(rows) ? rows : []).filter((p) => p.founder_id === user?.founder_id || p.user_id === user?.id);
       const list = owned.length ? owned : (Array.isArray(rows) ? rows : []);
-      setProjects(list);
       if (list[0]) setProjectId(list[0].id);
     }).catch(() => {});
     return () => { cancelled = true; };
@@ -2170,14 +2168,11 @@ function FounderInvestorFitTab({ user }) {
       <TabExplainer text={isInvestor
         ? "Top founder matches for your investor thesis. Counter-party identifiers stay hashed until a pairwise NDA is active between you and the founder."
         : "Top investor matches for this startup's discovery answers. Counter-party identifiers stay hashed until a pairwise NDA is active between you and the investor."} />
-      {isFounder && projects.length > 1 && (
-        <div className="flex items-center gap-2 flex-wrap">
-          <label className="text-xs text-gray-600 dark:text-gray-400">Startup:</label>
-          <select value={projectId || ''} onChange={(e) => setProjectId(Number(e.target.value))} className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900">
-            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-        </div>
-      )}
+      {/* The in-body startup picker is gone (#181). It stood behind
+          `projects.length > 1` — a SECOND startup inside the already-selected
+          company — and the decision is one company, one startup, so it rendered
+          for nobody. `projectId` still resolves from the fetched list's first
+          entry above, which is what it did whenever the picker was hidden. */}
       {isFounder && !projectId && <MILoading label="Resolving your project…" />}
       <MIErr err={err} />
       {!err && (isInvestor || projectId) && !data && <MILoading label="Loading fit matches…" />}

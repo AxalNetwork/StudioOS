@@ -52,8 +52,37 @@ const PROFILES = {
     canvas: /^Pages · Founder /,
     buckets: /^(validate|build|grow|network|raise|research)\//,
     zones: 30,
-    links: 17,
-    exports: 20,
+    // 17 → 22 → 23. Five ops that were `unbuilt` became links because their
+    // destination already existed and the reader may open it: `Send to Problem
+    // slide` on two zones, `Configure zone`, `Edit templates` and `Send for
+    // signature`. Three of those five reasons were not merely gaps — they named
+    // a surface and were wrong about it. See the table's own comments.
+    //
+    // THE SIXTH IS A DIFFERENT CASE AND WORTH DISTINGUISHING. `Revoke a link`
+    // was accurate when written: nothing in the product revoked a deck share
+    // link, and its reason said so and named the shape a revoke would copy.
+    // Task #196 built it — migration 248's `revoked_at`, `DELETE
+    // /api/decks/:id/shares/:shareId`, and the Withdraw control in the deck
+    // builder's Engagement panel — so the refusal became false and had to
+    // follow. That is this count's real job: a control whose gap is closed
+    // elsewhere in the same change must be turned into a link in the same
+    // change, or the product ships a feature while a header still denies it.
+    // 23 → 22 with `build/roadmap`'s `New scenario`, which became a HANDLER rather
+    // than losing its destination. It pointed at `/execution/roadmap` under the note
+    // "objectives and key results are edited in Execution" — true of objectives and
+    // beside the point for a scenario, because that editor writes the LIVE quarter
+    // and a what-if must not. Migration 254 stores the alternative beside the
+    // roadmap, so the form is on this desk and the link is gone.
+    // 22 → 23 with `grow/talent`'s `Post a role`, which was refused as "no role
+    // posting is stored" while `job_postings` WAS the store — it even carries the
+    // `project_id` this desk's own role chips filter on — `jobs.create()` writes
+    // one, and `/jobs/new` is a route a founder may open. Task #68 built the
+    // posting surface; this desk had simply never pointed at it.
+    links: 23,
+    // 20 → 21 with `build/cadence`'s `Export archive`. Migration 250 gave the
+    // zone a review archive, so an export over the rows the page is showing is
+    // the same `kind: 'export'` every other zone uses.
+    exports: 21,
     // Seven ops the PAGE performs: six of Validate's — three open a dialog the
     // workspace owns and three are server-side CSV downloads with a busy state —
     // plus `research/ask`'s `New brief` and `research/library`'s `Upload` —
@@ -65,7 +94,28 @@ const PROFILES = {
     // "pinning it at 0 elsewhere is what makes a second one show up as a change
     // rather than as a silent spread", and that is exactly how this landed —
     // three counts went red in one run and each was read before it was moved.
-    handlers: 8,
+    //
+    // 8 → 12 across two changes in one pass, and the arithmetic is the point:
+    //
+    //   · `build/cadence`'s `New ritual` and `Edit templates` (migration 250);
+    //   · `build/kpi`'s `Import CSV` (`services/metricsCsv.ts`) and `Definitions`
+    //     (migration 251).
+    //
+    // 8 → 14 across three changes in one pass, and the arithmetic is the point:
+    //
+    //   · `build/cadence`'s `New ritual` and `Edit templates` (migration 250);
+    //   · `build/kpi`'s `Import CSV` (`services/metricsCsv.ts`) and `Definitions`
+    //     (migration 251);
+    //   · `build/board`'s `Bulk move` and `Configure lanes` (migration 253).
+    //
+    // All six open a form the page owns, which is the shape D67 named this kind for,
+    // and all six were `unbuilt`. The gap count therefore falls by SEVEN — those six
+    // plus cadence's `Export archive`, which became an export. Every count in this
+    // block moved in one run and each was read before it was changed.
+    // 14 → 15 with `build/roadmap`'s `New scenario` (migration 254). Seven ops
+    // across three Build subpages have moved to this kind in one pass, which is what
+    // pinning the count is for: each one was read before it was moved.
+    handlers: 15,
     // NOTHING IS EXCLUDED ANY MORE. `research/funds` sat here as "a card in
     // `ResearchWorkspace`'s ZONE_COPY, not a body" — true when it was written
     // and untrue since `ZONE_COPY` became `{}` and `LIVE_ZONES` gained `funds`.
@@ -73,6 +123,8 @@ const PROFILES = {
     // canvas's `Add fund · Brief me · Export` drew nothing at all. The identical
     // staleness `research/client-prep` carried on advisor and partner, found the
     // same way: by the filters half needing an action table for the same zone.
+    // Reviewed elsewhere-claims, by label — see the assertion below.
+    elsewhere: ['New deep-dive', 'Brief me'],
     excluded: [],
     embeddedGuards: 3,
     // Founder canvas routes are the live routes.
@@ -109,7 +161,23 @@ const PROFILES = {
     // store the reason correctly said was missing. A gap closed by building is
     // a different event from a gap that was never real, and this file should
     // not blur them.
-    handlers: 5,
+    //
+    // SIXTH AND SEVENTH: `deals/commit`'s `Close vote` and `funds/lps`'s
+    // `Add LP`, and both are the first kind again — a gap that was never real.
+    // Each reason said, correctly, that the API already served the op and only a
+    // screen was missing; task #195 added the screens. `PUT /api/ic/:uid` with a
+    // decision forces `decided` and stamps the time, and `POST
+    // /api/funds/:id/lps` inserts a `limited_partners` row the register on the
+    // same page reads straight back.
+    //
+    // THE THIRD OF THAT TRIO DID NOT MOVE, and that is the finding worth
+    // keeping. `funds/calls`'s `New call` carried the same idiom and turned out
+    // to be neither a missing form nor a missing store: its GP-reachable route
+    // enqueues a notice and never writes a call row, so a form would have
+    // returned 200 over a ledger that stayed empty. Same sentence, three
+    // different underlying facts — which is why each was read rather than
+    // batch-wired.
+    handlers: 7,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -118,6 +186,8 @@ const PROFILES = {
     // so with no key in the table they rendered an empty action row on an
     // artboard that specifies three ops each. The exclusion was hiding a
     // shipped gap rather than deferring one.
+    // Reviewed elsewhere-claims, by label — see the assertion below.
+    elsewhere: ['Edit rubric', 'Merge duplicates', 'New deep-dive'],
     excluded: [],
     embeddedGuards: 1,
     // `Pages · Investor Fund` names /fund/*; the router and shellConfig.js both
@@ -224,6 +294,8 @@ const PROFILES = {
     // is a body — `ClientPrepZone.jsx` takes `zoneActions` and renders a row
     // from it — so the exclusion was hiding three specified ops that drew
     // nothing, exactly as the investor Research pair did.
+    // Reviewed elsewhere-claims, by label — see the assertion below.
+    elsewhere: ['Attribution rules', 'Edit fit rules', 'Re-run stale'],
     excluded: [],
     embeddedGuards: 0,
     // The nine partner bodies that take the "no firm attached" branch —
@@ -239,20 +311,62 @@ const PROFILES = {
     table: 'frontend/src/workspaces/advisorZoneActions.js',
     pages: ['frontend/src/pages/advisor', 'frontend/src/workspaces'],
     call: 'advisorZoneActions',
-    // The only advisor artboard set that carries an `ops:` array. `Advisor
-    // Detail · Practice`, `Advisor Canvas` and the backlog Cohorts export are
-    // rendered HTML with no header actions on any artboard, and this reader
-    // does not open `design/incoming/` for the other two profiles either — so
-    // it must for this one, since Expertise ships from there.
-    canvasDirs: ['design/incoming'],
-    canvas: /^Pages · Advisor /,
-    buckets: /^(expertise|network|research)\//,
-    zones: 11,
+    // TWO SHAPES AND TWO DIRECTORIES. `Pages · Advisor {Expertise,Network,
+    // Research}` ship from `design/incoming/` and carry an `ops:` array;
+    // `Advisor Detail · Practice` ships from the integrated set and is shape B
+    // markup. This reader does not open `design/incoming/` for the other two
+    // profiles, so it must for this one.
+    //
+    // THIS COMMENT USED TO SAY THE PRACTICE CANVAS HAD NO HEADER ACTIONS ON
+    // ANY ARTBOARD. It has eight, and has had since it was committed — the
+    // reader could not see them because they are `class="bulk"` rather than
+    // `class="vm"`, which is fixed above. The claim was written from the
+    // reader's blind spot rather than from the canvas, which is precisely the
+    // mistake `canvasOps`' own docblock records for `Pages · Partner
+    // Pipeline`. It cost the same thing both times: five zones with no header
+    // row and a sentence explaining why they did not need one.
+    canvasDirs: ['design/incoming', 'design/canvases/integrated'],
+    canvas: /^(Pages · Advisor |Advisor Detail · Practice)/,
+    // PR5 is a POINTER in the Practice canvas — "drawn in full as D4" — so its
+    // ops come from the backlog file, by route rather than by directory. See
+    // the `alsoZones` block in `canvasOps` for why the whole file is not swept.
+    alsoZones: [['practice/earnings', 'design/canvases/backlog/Detail Layer Canvas II.dc.html']],
+    buckets: /^(expertise|network|research|practice)\//,
+    // 15 zones and 14 exports as of canvas PR4, and THIS IS THE FIRST TIME THE
+    // TWO HAVE MOVED APART. PR1, PR2 and PR3 each drew exactly two ops, one of
+    // them an export, so the counts rose together. PR4 draws two ops and
+    // NEITHER is an export: `Export to calendar` is an .ics file, which the
+    // builder's export kind cannot produce — that kind emits the CSV every
+    // other zone wants, through `exportView`. Labelling it `export` would have
+    // handed the advisor a spreadsheet under a calendar's name, so it is a
+    // page-supplied handler and the export count stays where it was.
+    // 16 zones and 14 exports as of canvas D4. PR5's Earnings adds the
+    // sixteenth and NEITHER of its two ops is an export, for the same reason
+    // PR4's were not: `Export CSV` writes a per-client ledger with a total
+    // row, and `Download 1099 summary` is a different SPAN entirely — a tax
+    // year, fetched from its own endpoint — so neither is the rows-on-screen
+    // dump `exportView` produces. Was 15/14 at PR4.
+    zones: 16,
     links: 1,
-    exports: 11,
-    // Four page-supplied ops — the same set partner has, because `AskZone` and
-    // `LibraryZone` are each one file serving both. Was 0.
-    handlers: 4,
+    exports: 14,
+    // FIVE PAGE-SUPPLIED OPS, AND THE FIFTH IS THE FIRST ONE THIS PROFILE DID
+    // NOT SHARE WITH PARTNER. Four of them are `AskZone` and `LibraryZone`,
+    // which are each one file serving both licences. The fifth is Delivery's
+    // `Bulk: nudge unopened` — an advisor→client send, which exists here and
+    // nowhere else because migration 239 refuses to send a work product to a
+    // client with no account, so every row that could be unopened is
+    // addressable. Was 0, then 4.
+    //
+    // SEVEN NOW, because PR4's Sessions brings two at once — `Block a date
+    // range`, which withdraws hours nobody has taken and reports back the
+    // booked ones it refused to touch, and `Export to calendar`, which builds
+    // an .ics in the browser from rows already on screen. Was 0, then 4,
+    // then 5.
+    // NINE NOW, because D4's Earnings brings two more — `Export CSV`, built
+    // in the browser from the table already on screen, and `Download 1099
+    // summary`, which fetches its own year rather than deriving one from the
+    // reader's chosen window. Was 0, then 4, then 5, then 7.
+    handlers: 9,
     embeddedGuards: 0,
     // Both remaining exclusions are cards whose whole page IS the gap
     // statement, so there is nothing for a row to sit over. `expertise/
@@ -266,7 +380,35 @@ const PROFILES = {
     // was the one case where it had stopped being true: the zone got a real
     // body with the advisor grant, and the exclusion kept three specified ops
     // off a page that was already asking for them.
-    excluded: ['expertise/visibility', 'network/organizations'],
+    //
+    //
+    // THE REMAINING PRACTICE ZONES are deferrals rather than refusals: the
+    // canvas specifies ops for each, and each leaves this list as its artboard
+    // lands (task #151, one PR per artboard). They are listed so the gap is
+    // counted rather than invisible — which is the whole point of this key,
+    // and what the unreadable canvas was denying it.
+    //
+    // `practice/opportunities` LEFT ON PR1, the first to do so, which is the
+    // list working as intended: four became three because an artboard landed,
+    // not because anyone edited the count. `practice/engagements` LEFT ON PR2
+    // the same way, and three became two. `practice/delivery` LEFT ON PR3, and
+    // two became one — the last Practice deferral is Sessions.
+    //
+    // `practice/earnings` IS NOT AMONG THEM, and the canvas says why in its own
+    // words: PR5 "is drawn at full fidelity on the system canvas as D4 … listed
+    // here so the Practice set reads as complete rather than as four of five".
+    // It carries no crumb and no ops, so this profile's canvas set does not
+    // specify it, and listing it here would claim a deferral against an
+    // artboard that is not there. The first draft of this list did exactly
+    // that and this guard caught it.
+    // `practice/sessions` LEFT ON PR4, and one became none: every Practice
+    // zone the canvas specifies ops for now has them. What remains excluded is
+    // the two whose whole page IS the gap statement.
+    // Reviewed elsewhere-claims, by label — see the assertion below.
+    elsewhere: ['Ask for consent', 'Re-run stale'],
+    excluded: [
+      'expertise/visibility', 'network/organizations',
+    ],
     live: (route) => route.replace(/^\//, ''),
   },
 };
@@ -284,17 +426,70 @@ const PROFILES = {
  * dropped, and dropping it would tell this guard the canvas never drew it.
  */
 function tableLabels(src) {
-  const start = src.search(/export const [A-Z_]+_ZONE_ACTIONS/);
-  const body = src.slice(start, src.indexOf('\n};', start));
   const out = {};
-  let zone = null;
-  for (const line of body.split('\n')) {
-    const z = line.match(/^ {2}'([a-z-]+\/[a-z-]+)':/);
-    if (z) { zone = z[1]; out[zone] = []; continue; }
-    const l = line.match(/^ {4}\{ (?:canvas: '([^']+)', )?label: '([^']+)'/);
-    if (l && zone) out[zone].push(l[1] ?? l[2]);
+  for (const [zone, entries] of tableEntries(src).zones) {
+    out[zone] = entries.map((e) => e.canvas ?? e.label);
   }
   return out;
+}
+
+/**
+ * The same table read ENTRY BY ENTRY rather than line by line, which is the
+ * only way to read it that a reformat cannot shrink.
+ *
+ * WHAT WENT WRONG, because it is the argument for the extra thirty lines. Five
+ * assertions in this file — this map, the four-kinds sum, the unchecked-path
+ * scan, the elsewhere-claim review and the destination-and-excuse check — each
+ * extracted entries with their own copy of `/^ {4}\{ …label: '…'/gm`. That is
+ * correct only while every entry fits on one line. `build/board`'s
+ * `Automations` gained a `hover:` string, went multi-line in the house style
+ * every other list here uses, and became INVISIBLE to all five at once: the
+ * canvas-order comparison saw a zone one op short, and the
+ * links+exports+handlers+gaps sum stayed balanced because the entry had left
+ * both sides of it. Only the order check failed, and it failed pointing at the
+ * canvas rather than at the reader.
+ *
+ * A guard a formatting change can silently shrink is worse than no guard, so an
+ * entry now closes at its own `}` and `labelKeys` counts the table's `label:`
+ * keys by a different route entirely. The test below compares the two: read
+ * fewer entries than there are keys and this file says so instead of quietly
+ * asserting less.
+ */
+function tableEntries(src) {
+  const start = src.search(/export const [A-Z_]+_ZONE_ACTIONS/);
+  // Standalone comment lines go first. These tables carry more prose than code
+  // and a paragraph about an entry must not read as one.
+  const body = codeOnly(src.slice(start, src.indexOf('\n};', start)));
+  const zones = new Map();
+  const entries = [];
+  let zone = null;
+  let open = null;
+  const close = (text) => {
+    // `[{,] *key:` rather than a bare `key:`: a joined multi-line entry puts the
+    // keys after commas, and requiring the delimiter keeps a `hover:` sentence
+    // that happens to contain "label: " from being read as one.
+    const canvas = text.match(/[{,] *canvas: '((?:[^'\\]|\\.)*)'/);
+    const label = text.match(/[{,] *label: '((?:[^'\\]|\\.)*)'/);
+    const at = label ? text.indexOf(label[0]) + label[0].length : 0;
+    const entry = { zone, text, canvas: canvas?.[1], label: label?.[1], rest: text.slice(at) };
+    entries.push(entry);
+    zones.get(zone)?.push(entry);
+  };
+  for (const line of body.split('\n')) {
+    if (open) {
+      open.push(line.trim());
+      if (/^\},?$/.test(line.trim())) { close(open.join(' ')); open = null; }
+      continue;
+    }
+    const z = line.match(/^ {2}'([a-z-]+\/[a-z-]+)':/);
+    if (z) { zone = z[1]; zones.set(zone, []); continue; }
+    if (!/^ {4}\{/.test(line)) continue;
+    if (/\},?$/.test(line.trim())) close(line.trim());
+    else open = [line.trim()];
+  }
+  // Counted off the line starts as well as the delimiters, so a `label:` the
+  // walker above never reached still registers here.
+  return { zones, entries, labelKeys: [...body.matchAll(/(?:^|[{,])\s*label: '/gm)].length };
 }
 
 /**
@@ -377,8 +572,17 @@ function artboardOps(src) {
     const from = crumbs[i].index;
     const to = i + 1 < crumbs.length ? crumbs[i + 1].index : src.length;
     const segment = src.slice(from, to);
+    // TWO CLASSES, AND THE SECOND ONE COST FIVE ZONES. `Pages · Partner
+    // Pipeline` marks its ops `class="vm"`; `Advisor Detail · Practice` marks
+    // all eight of its own `class="bulk"`. This selector knew only the first,
+    // so it read the Practice canvas as eight artboards with no header
+    // actions — and the advisor profile below carried a comment asserting
+    // exactly that, in the same words this file's own shape-B docblock uses to
+    // describe the Partner Pipeline mistake. Same failure, same file, a
+    // different canvas: a guard that cannot read a canvas reports it empty,
+    // and the reader believes the guard.
     out[`/${slug(crumbs[i][1])}/${slug(crumbs[i][2])}`] =
-      [...segment.matchAll(/class="vm"[^>]*>([^<]+)</g)].map((m) => m[1].trim());
+      [...segment.matchAll(/class="(?:vm|bulk)"[^>]*>([^<]+)</g)].map((m) => m[1].trim());
   }
   return literal(out);
 }
@@ -405,6 +609,57 @@ function literal(out) {
 }
 
 /** Every matching artboard's `route` and its `ops` array, from the canvases. */
+/**
+ * One artboard's HEADER OPS, read from the row that holds its view chips.
+ *
+ * A FOURTH MARKER, AND DELIBERATELY NOT ADDED TO SHAPE B. The shape-B reader
+ * above knows `class="vm"` and `class="bulk"`, and its own docblock records
+ * what each cost when it did not. `Detail Layer Canvas II` marks its ops with
+ * neither: they are inline-styled spans carrying `cursor:pointer`.
+ *
+ * That marker is NOT safe to add to shape B. `cursor:pointer` appears on
+ * ROW-level actions too — "Accept", "Pass", "Open thread" in that same file,
+ * and across a dozen integrated canvases — so a global widening would read a
+ * per-row button as a header op on zones that are currently correct. It would
+ * be the same mistake as the three before it, made in the other direction.
+ *
+ * So the marker is scoped twice over: to a named zone (`alsoZones`), and
+ * within that artboard to the one row that also holds the view chips, which
+ * is where every canvas in this repo puts its header ops. A `sc-for` over a
+ * `…Views` list is what identifies that row, and the ops are the clickable
+ * spans beside it.
+ */
+function headerOps(src, zone) {
+  const slug = (s) => s.trim().toLowerCase().replace(/\s+/g, '-');
+  const crumbs = [...src.matchAll(
+    /<div class="crumb">\s*<span[^>]*>([^<]+)<\/span>\s*<span[^>]*>[^<]*<\/span>\s*<span[^>]*>([^<]+)<\/span>/g,
+  )];
+  // EVERY MATCHING CRUMB, NOT THE FIRST. This file names `practice/earnings`
+  // TWICE — once in the compressed-versus-full comparison strip at the top of
+  // the artboard, and once in the artboard's own frame. Taking the first hit
+  // read the comparison strip, which has no ops row, and reported the zone as
+  // drawing none. Scanning them all and keeping the first that actually
+  // yields ops is what makes the reader indifferent to that ordering.
+  for (let i = 0; i < crumbs.length; i += 1) {
+    if (`${slug(crumbs[i][1])}/${slug(crumbs[i][2])}` !== zone) continue;
+    const from = crumbs[i].index;
+    const to = i + 1 < crumbs.length ? crumbs[i + 1].index : src.length;
+    const segment = src.slice(from, to);
+    // The ops row is the one the view chips are in. Bounded to that single
+    // `<div>` so a clickable span further down the artboard — a row action, a
+    // link in a card — cannot be read as a header op.
+    const chips = segment.search(/<sc-for list="\{\{ \w+ \}\}" as="v"/);
+    if (chips < 0) continue;
+    const rowEnd = segment.indexOf('</div>', chips);
+    const row = segment.slice(chips, rowEnd < 0 ? segment.length : rowEnd);
+    const ops = [...row.matchAll(/cursor:pointer[^>]*>([^<]+)</g)]
+      .map((m) => m[1].trim())
+      .filter((t) => t && !t.includes('{{'));
+    if (ops.length) return ops;
+  }
+  return [];
+}
+
 function canvasOps(profile) {
   const out = {};
   let routes = 0;
@@ -426,10 +681,48 @@ function canvasOps(profile) {
       assert.ok(Object.keys(found).length,
         `${dir}/${f} matched ${profile.canvas} and yielded no artboard — ` +
         'it is in none of the three known shapes, or one of them has changed');
+      // THE THIRD WAY A CANVAS FAILS TO BE READ, and the one that actually
+      // happened. A shape-B canvas whose op class this reader does not know
+      // parses into real routes carrying EMPTY op arrays: not empty, not full
+      // of bindings, so neither assert above nor `literal()` says a word. That
+      // is how `Advisor Detail · Practice` read as four artboards with no
+      // header actions for as long as it has existed, and how the profile
+      // below came to assert in a comment that it had none.
+      //
+      // A whole file yielding zero ops across every one of its artboards means
+      // the selector missed, not that eight designed controls are absent. A
+      // canvas that genuinely specifies none can have this revisited — with
+      // the canvas quoted, which is what was missing last time.
+      assert.ok(Object.values(found).some((ops) => ops.length),
+        `${dir}/${f} parsed into ${Object.keys(found).length} artboard(s) and not one op — ` +
+        'the shape was recognised but its ops were not; check the op class this canvas marks');
       for (const [route, ops] of Object.entries(found)) out[profile.live(route)] = ops;
       routes += Object.keys(found).length;
     }
   }
+
+  // ONE ARTBOARD FROM A FILE THIS SCAN DOES NOT OPEN, NAMED ROUTE BY ROUTE.
+  //
+  // `/practice/earnings` is the case, and it is not an oversight in the
+  // Practice canvas: that canvas draws PR5 as a POINTER — "drawn in full as
+  // D4" — and D4 lives in `design/canvases/backlog/Detail Layer Canvas II`.
+  // So the zone has an artboard, it is simply in a file the directory scan
+  // above is right not to sweep: that file also holds D5–D8 for cohorts,
+  // partner delivery and partner pipeline, and pulling the whole thing in
+  // would hand this profile artboards it does not own and give
+  // `expertise/proof` two competing sources.
+  //
+  // Hence route-by-route rather than by directory. The backlog canvas stays
+  // in `backlog/` — reading it for intent is not promoting it — and an entry
+  // here is a claim that THIS zone's ops come from THAT artboard, checkable
+  // because a route the file does not contain fails immediately.
+  for (const [zone, file] of profile.alsoZones || []) {
+    const ops = headerOps(read(file), zone);
+    assert.ok(ops.length, `${file}'s ${zone} artboard parsed with no ops`);
+    out[zone] = ops;
+    routes += 1;
+  }
+
   assert.ok(routes, `no canvases matched ${profile.canvas}`);
   return out;
 }
@@ -525,6 +818,15 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     for (const skip of excluded) {
       assert.ok(canvas[skip], `${skip} is excluded but no artboard specifies it`);
       assert.ok(!table[skip], `${skip} is both excluded and declared`);
+      // AND IT MUST BE A ZONE THIS PROFILE ACTUALLY COVERS. `specified` is
+      // filtered by `buckets` before the exact-set comparison, so an exclusion
+      // outside them is checked against nothing: narrowing `buckets` would
+      // silently retire every deferral it drops, and the exact-set assertion
+      // would still pass. Mutation-checking found this by removing `practice`
+      // from the advisor profile's buckets — four recorded deferrals became
+      // unenforced and no assertion moved.
+      assert.ok(profile.buckets.test(skip),
+        `${skip} is excluded but sits outside this profile's buckets, so nothing enforces it`);
     }
   });
 
@@ -569,14 +871,25 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     // NOWHERE — the builder drops the entry — which makes an unchecked path in
     // it worse, not better: a reader of this file would act on a route that may
     // not exist, and no rendering would ever contradict them.
-    const notes = [...SRC.matchAll(/^ {4}\{ (?:canvas: '[^']+', )?label: '[^']+', unbuilt: '([^']*)'/gm)].map((m) => m[1]);
+    const table = tableEntries(SRC);
+    const notes = table.entries
+      .map((e) => e.rest.match(/[{,] *unbuilt: '((?:[^'\\]|\\.)*)'/))
+      .filter(Boolean).map((m) => m[1]);
     // Exact rather than a floor: every action is a link, an export, a
     // page-supplied handler or a gap, and nothing is untyped. An entry that is
     // none of the four would render as a dead button — which is the one thing
     // this whole pass forbids. `handlers` joined this sum when Validate's ops
     // came into the table; before that, a fourth kind could have been added and
     // every count here would still have balanced by coincidence.
-    const actions = [...SRC.matchAll(/^ {4}\{ (?:canvas: '[^']+', )?label: '/gm)].length;
+    const actions = table.entries.length;
+    // THE READER'S OWN CHECK, and it belongs on this assertion rather than on a
+    // test of its own: the sum below is the one that stayed green while an entry
+    // vanished, because a dropped entry leaves both sides of it at once. Reading
+    // fewer entries than the table has `label:` keys is therefore not a detail —
+    // it is this assertion asserting less than it says it does.
+    assert.equal(actions, table.labelKeys,
+      `${name}'s table has ${table.labelKeys} labelled entries but the reader saw `
+      + `${actions}. An entry it cannot parse is an entry nothing below checks.`);
     assert.equal(profile.links + profile.exports + profile.handlers + notes.length, actions,
       `${name} has ${actions} actions but ${profile.links} links, ${profile.exports} exports, `
       + `${profile.handlers} page-supplied and ${notes.length} gaps`);
@@ -585,11 +898,73 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     }
   });
 
+  test(`${name}: an unbuilt reason that says the op happens elsewhere is a reviewed one`, () => {
+    // THE SECOND HALF OF THE TEST ABOVE, AND THE HALF THAT ACTUALLY BIT.
+    //
+    // That one refuses a reason carrying a literal `/path`. The three reasons
+    // that had to be corrected on 2026-09-13 carried none — they named a
+    // surface in PROSE and were wrong about it:
+    //
+    //   "share links are revoked where they are issued, in the deck builder"
+    //       — nothing revoked a deck link anywhere. A reader sent to the deck
+    //         builder found no such control, and never learned why.
+    //       — AND IT IS TRUE NOW, which is worth stating rather than leaving as
+    //         a comment that reads as a live fact about the product. Task #196
+    //         built the control the sentence described, in the surface the
+    //         sentence named: migration 248's `revoked_at`, `DELETE
+    //         /api/decks/:id/shares/:shareId`, and Withdraw in the deck
+    //         builder's Engagement panel. The lesson survives the fix — the
+    //         claim was unverified when written and happened to be wrong — but
+    //         a test file that exists to catch false statements must not keep
+    //         one of its own.
+    //   "landing templates are chosen in the brand builder, not edited"
+    //       — `/build/brand` step 3 IS a content editor for the chosen
+    //         template, so the clause after the comma denied the one thing the
+    //         named surface does.
+    //   "no e-signature provider is connected"
+    //       — `routes/esign.ts` defaults `provider` to `'native'` and signs
+    //         without a third party; `/legal/send` is mounted for a founder.
+    //
+    // All three are links now. What this assertion adds is that the NEXT one
+    // cannot be written quietly: a reason asserting the op is performed
+    // somewhere ("is/are …ed in/on/where/from …") must be on this reviewed
+    // list, and a new one fails until a person has read it and either turned
+    // the control into a `to:` link or written the label down here.
+    //
+    // WHAT IT DOES NOT CATCH, stated so the next reader does not over-trust
+    // it. It is a construction match, not comprehension: a false claim phrased
+    // any other way passes, and a listed label may have its reason re-worded
+    // without re-review. It narrows the opening; it does not close it.
+    //
+    // The listed reasons were each read when this landed, and three of them —
+    // investor's `Close vote`, `Add LP` and `New call` — say something worth
+    // acting on rather than pinning: the API already serves the op and only a
+    // screen is missing. That is a form, not a store.
+    const ELSEWHERE = /\b(?:are|is)\s+[a-z]+(?:ed|n)\s+(?:where|in|on|by|from|at)\b/;
+    const claims = tableEntries(SRC).entries
+      .map((e) => [e.label, e.rest.match(/[{,] *unbuilt: '((?:[^'\\]|\\.)*)'/)?.[1]])
+      .filter(([, note]) => note && ELSEWHERE.test(note)).map(([label]) => label);
+    const reviewed = new Set(profile.elsewhere);
+    for (const label of claims) {
+      assert.ok(reviewed.has(label),
+        `"${label}" says the op is performed somewhere else. If it is, make it a `
+        + `to: link; if it is not, say so. Either way it does not belong in an `
+        + `unbuilt reason unreviewed — add it to this profile's \`elsewhere\` once read.`);
+    }
+    // Exact, not a subset: a label that stops making the claim must leave the
+    // list, or the list becomes a place stale names accumulate — which is how
+    // the collision baseline that hid the `service_offerings` read bug worked.
+    for (const label of reviewed) {
+      assert.ok(claims.includes(label),
+        `"${label}" is listed as a reviewed elsewhere-claim but no longer makes one`);
+    }
+  });
+
   test(`${name}: no action is given both a destination and an excuse`, () => {
     // The builder prefers `to`, so an `unbuilt` reason beside it would never be
     // read, and the entry would claim to be both built and not. `linkNote` is
     // the deliberate way to qualify a link, and it renders as the title.
-    const entries = [...SRC.matchAll(/^ {4}\{ (?:canvas: '[^']+', )?label: '[^']+',([^\n]*)$/gm)].map((m) => m[1]);
+    const entries = tableEntries(SRC).entries.map((e) => e.rest);
     assert.ok(entries.length >= profile.zones * 2, `expected every action, found ${entries.length}`);
     for (const rest of entries) {
       assert.ok(!(/\bto: /.test(rest) && /\bunbuilt: /.test(rest)),
@@ -616,7 +991,17 @@ for (const [name, profile] of Object.entries(PROFILES)) {
       const src = read(f);
       let at = src.indexOf(`${profile.call}('`);
       while (at >= 0) {
-        const call = callText(src, at);
+        // COMMENTS INSIDE THE CALL ARE PROSE, NOT IDENTIFIERS, and this read
+        // them as names. `FounderBuildCadence` explains its two page-supplied
+        // ops with `// Both ops need a venture.` inside the builder call, and
+        // the scan below reported `Both` as an undeclared global on a page that
+        // is correct. `codeOnly` is the repo's existing answer to exactly this —
+        // two tests above it stops a docblock's `kind: 'handler'` from being
+        // counted as a declaration. Stripping prose narrows the scan to what it
+        // was always about, so it can only remove false alarms; the guard's own
+        // note says a false alarm here is worse than a gap, because it is what
+        // gets a guard weakened instead of fixed.
+        const call = codeOnly(callText(src, at));
         const bare = call
           // A template literal is text plus real expressions: keep the `${…}`
           // bodies, drop the rest, or `?project_id=${id}` contributes a bare `$`.
@@ -731,15 +1116,28 @@ for (const [name, profile] of Object.entries(PROFILES)) {
      * account cannot read is the "an empty set reads as an answer" failure
      * `zoneFilterBuilder.js` exists to prevent, reached from a new direction.
      */
+    // THE SECOND HALF OF THE SAME ARGUMENT, and the reason `UnlinkedZone` is
+    // gone. Keeping the header row over the gate card was right and was one
+    // step out of two: the card still stood INSTEAD of the zone, on twelve of
+    // them, so the reader this test is about — the admin checking whether a
+    // design was built — got twelve copies of one card and never a page. Three
+    // of those zones were then reported as not matching their artboards, which
+    // was correctly observed and wrongly diagnosed.
+    //
+    // `ZoneBody` takes the line as a `notice` above its states now, and each
+    // zone forces `isEmpty` rather than inferring it from rows that never
+    // arrived, so the zone renders in its own empty state — which is also the
+    // state that explains what the zone HOLDS. `error` is cleared in the same
+    // breath, because the shared "This did not load" card is the exact
+    // confusion `isNoPartnerProfile` exists to prevent.
+    //
+    // Nothing about access changed: `requirePartnerProfile` is untouched and
+    // every read still 400s for an unattached account.
     const kit = codeOnly(read('frontend/src/pages/partner/kit.jsx'));
-    if (!kit.includes('export function UnlinkedZone')) {
-      assert.fail('partner/kit.jsx no longer exports UnlinkedZone');
-    }
-    const helper = kit.slice(kit.indexOf('export function UnlinkedZone'));
-    assert.match(helper, /<ZoneActions[^>]*items=\{actions\}/,
-      'UnlinkedZone stopped drawing the zone\'s actions above the gap card');
-    assert.doesNotMatch(helper, /ZoneToolbar|filters=/,
-      'UnlinkedZone draws a filter over rows this account cannot read');
+    assert.doesNotMatch(kit, /export function UnlinkedZone/,
+      'the card that stood instead of the zone is back');
+    assert.match(kit, /export function NoPartnerProfile/,
+      'the line that states the boundary is gone, so the gate is silent');
 
     let checked = 0;
     for (const f of pageFiles(profile)) {
@@ -748,10 +1146,20 @@ for (const [name, profile] of Object.entries(PROFILES)) {
       // that take this branch.
       if (!src.includes('isNoPartnerProfile(state.error)')) continue;
       checked += 1;
-      assert.match(src, /<UnlinkedZone[\s\S]{0,120}?actions=\{/,
+      assert.match(src, /const unlinked = isNoPartnerProfile\(state\.error\);/,
+        `${f} no longer derives the no-firm state as a flag`);
+      assert.match(src, /notice=\{unlinked \? <NoPartnerProfile \/> : null\}/,
+        `${f} takes the no-firm branch without saying why the zone is empty`);
+      assert.match(src, /isEmpty=\{unlinked \|\|/,
+        `${f} would infer emptiness from rows that never arrived`);
+      assert.match(src, /error=\{unlinked \? null : state\.error\}/,
+        `${f} lets the gate render as "This did not load", which is a fault it is not`);
+      // ACTIONS YES, FILTERS NO — the half of this test that predates the
+      // change and is unchanged by it. The row must survive; a chip must not.
+      assert.match(src, /actions=\{rowActions\}/,
         `${f} takes the no-firm branch without handing over its header row`);
-      assert.doesNotMatch(src, /<NoPartnerProfile\s*\/>/,
-        `${f} renders the gap card directly again, which drops the row above it`);
+      assert.match(src, /filters=\{unlinked \? \[\] :/,
+        `${f} draws a filter chip over rows this account cannot read`);
     }
     // A floor rather than an exact count: the per-file assertion above is the
     // real one and runs on a tenth zone the day it appears. This only stops a
@@ -891,16 +1299,46 @@ test('a gap note describes the screen, never a capability the API already has', 
   // What is missing on those two zones is a form, not a store, and a reader
   // deciding what to build next is exactly the person the wrong version misled.
   //
-  // The tie runs both ways. If either method is removed, its note stops being
-  // true in the OTHER direction and this fails; if either note goes back to
-  // denying the capability, this fails too.
+  // `funds/lps` LEFT THIS LOOP BECAUSE THE FORM LANDED. Its row is
+  // `kind: 'handler'` now, which is what "if it was wired, delete this row"
+  // below always meant. `investor_deals_id3.test.mjs` asserts the wiring.
+  //
+  // `funds/calls` WAS A THIRD THING AND HAS SINCE BECOME THE FIRST AGAIN, which
+  // is the whole reason this assertion is worth its length.
+  //
+  // It used to be that both of its routes were real and neither gave this page a
+  // row to show: `POST /api/capital/calls` writes a `capital_calls` row but is
+  // admin-only, so an investor is refused; `POST /api/funds/:id/capital-call` is
+  // open to the fund's own GP and only enqueued a notice job, which wrote an
+  // activity line per LP and bumped `vc_funds.deployed_capital` without creating
+  // a call row at all. "Served by the API, no screen yet" was true of the route
+  // and false about the outcome — a form there would have returned 200 over an
+  // empty ledger, so this test DEMANDED the reason name the ledger and FORBADE
+  // the missing-screen phrasing.
+  //
+  // TASK #197 BUILT THE LEDGER, so both of those demands inverted. The job writes
+  // one `capital_calls` row per committed or active LP, pro-rata and idempotent
+  // (`cloudflare-worker/test/capital_call_ledger.test.ts`), and it no longer
+  // touches `deployed_capital` — that figure moves when an LP pays, which is the
+  // only reading its own labels support. A form here would now land rows this
+  // page can show, so the missing screen is once again the true gap and the
+  // ledger claim is the false one. The assertions below are flipped to match,
+  // and this paragraph is why: the demand was right when written and is wrong
+  // now, which is a property of the product changing rather than of the test.
+  //
+  // The tie runs both ways. If the method is removed, the note stops being true
+  // in the OTHER direction and this fails; if the note goes back to denying the
+  // capability, this fails too.
   const api = read('frontend/src/lib/api.js');
   const worker = read('cloudflare-worker/src/routes/funds.ts');
   const table = read('frontend/src/workspaces/investorZoneActions.js');
   const DENIALS = /nothing writes|never issued|no such|is not stored|cannot be/i;
 
+  // Wired, so it is asserted as a handler rather than as a well-worded gap.
+  assert.match(table, /\{ label: 'Add LP', kind: 'handler', handler: 'addLp' \}/,
+    'Add LP is neither a handler nor in the gap loop below — it is unaccounted for');
+
   for (const [zone, label, method, route] of [
-    ['funds/lps', 'Add LP', 'fundAddLP', "post('/:id/lps'"],
     ['funds/calls', 'New call', 'fundCapitalCall', "post('/:id/capital-call'"],
   ]) {
     assert.match(api, new RegExp(`\\n  ${method}:`), `api.js no longer declares ${method}`);
@@ -912,8 +1350,26 @@ test('a gap note describes the screen, never a capability the API already has', 
     assert.ok(note, `${zone}'s "${label}" is no longer a stated gap — if it was wired, delete this row`);
     assert.doesNotMatch(note[1], DENIALS,
       `${zone} "${label}" denies a capability ${method} provides: "${note[1]}"`);
+    // WHERE THE GAP IS — AND FOR THIS ZONE IT IS THE SCREEN AGAIN, since #197.
+    // The reason must say a screen is what is missing, because that is now true
+    // and because it is what tells the next reader the form is worth building.
     assert.match(note[1], /no screen offers the form yet/,
-      `${zone} "${label}" must say where the gap actually is`);
+      `${zone} "${label}" must say the screen is what is missing — the route and ledger are live`);
+    // AND IT MUST NOT GO BACK TO BLAMING THE LEDGER. That claim was true for one
+    // release and is now the stale one: a reason saying nothing reaches the
+    // ledger would talk a reader out of building the one thing left to build.
+    assert.doesNotMatch(note[1], /nothing reaches the ledger|rather than a call row/,
+      `${zone} "${label}" still says the ledger is empty, which #197 fixed`);
+    // The tie to the store, so this cannot drift back silently: the job writes
+    // the rows, and it does not move the figure that means money paid out.
+    const job = read('cloudflare-worker/src/services/queueWorker.ts');
+    const at2 = job.indexOf("case 'capital_call_notice'");
+    assert.ok(at2 > 0, 'the capital call job is gone');
+    const handler = job.slice(at2, job.indexOf('\n    case ', at2 + 10));
+    assert.match(handler, /insertCapitalCalls\(env, billable\.map\(/,
+      'the call job no longer writes a capital_calls row, so this reason is wrong again');
+    assert.doesNotMatch(handler, /SET deployed_capital = deployed_capital \+/,
+      'the call job bumps deployed_capital again, which double-counts against the pay path');
   }
 });
 
@@ -972,18 +1428,35 @@ test('the shared zone body actually renders the row it is handed', () => {
     'a ZoneBody return path stopped carrying the actions row');
 });
 
-test('an action that performs nothing is not rendered at all', () => {
-  // THIS ASSERTION REVERSED, DELIBERATELY. It used to require that an
-  // unperformable action rendered as a `<span>` of prose stating why. That
-  // shipped the reason to the customer inside the control's own label — the
-  // design's `Comparables` chip arrived as a two-line sentence about how
-  // comparables are filed — so the entry now renders NOTHING and the reason
-  // stays in the action table. Refusing to draw a dead button has not changed;
-  // only where the refusal is explained has.
+test('an action that performs nothing is drawn disabled, and never clickable', () => {
+  // THIS ASSERTION HAS NOW REVERSED TWICE, AND THE PATH IS THE POINT.
+  //
+  // It first required an unperformable action to render as a `<span>` of prose
+  // stating why — which shipped the reason to the customer inside the control's
+  // own label, and the design's `Comparables` chip arrived as a two-line
+  // sentence about how comparables are filed.
+  //
+  // It then required the entry to render NOTHING, with the reason kept in the
+  // table. That fixed the prose and hid 166 canvas controls across eight
+  // tables; every one was read as a missing feature, and five separate reports
+  // in one week said "elements are missing" about zones that had dropped
+  // nothing the artboard drew.
+  //
+  // It now requires the entry to be DRAWN, DISABLED, with the reason on hover.
+  // What has never changed, through all three, is the property this test is
+  // really about: THE CONTROL MUST NOT BE CLICKABLE. A dead button that
+  // responds to a click teaches the reader it is dead by wasting the click.
   const builder = read('frontend/src/workspaces/zoneActionBuilder.js');
   const bind = builder.slice(builder.indexOf('export function makeZoneActions'));
-  assert.match(bind, /return null;\n\s*\}\)\.filter\(Boolean\);/,
-    'the builder no longer drops the entries it cannot perform');
+  // Through `codeOnly`, because the branch's own comment explains that it
+  // carries no `onClick` — a raw-source check fails on the explanation.
+  const code = codeOnly(builder);
+  const codeBind = code.slice(code.indexOf('export function makeZoneActions'));
+  const unbuiltBranch = codeBind.slice(codeBind.indexOf('if (item.unbuilt)'),
+    codeBind.indexOf('if (item.unbuilt)') + 300);
+  assert.match(unbuiltBranch, /disabled: true, title: item\.hover \|\| item\.unbuilt/,
+    'the builder no longer draws the entries it cannot perform');
+  assert.doesNotMatch(unbuiltBranch, /onClick/, 'an unbuilt op was given a click handler');
 
   const zone = read('frontend/src/workspaces/ZoneActions.jsx');
   const render = zone.slice(zone.indexOf('export default function ZoneActions'));
@@ -999,8 +1472,14 @@ test('an action that performs nothing is not rendered at all', () => {
   // Through `codeOnly`: the docblock NAMES `noteAlways` to explain why it was
   // removed, so a raw-source check would fail on the explanation itself.
   const filters = codeOnly(read('frontend/src/workspaces/zoneFilterBuilder.js'));
-  assert.match(filters, /if \(item\.unbuilt\) return \[\];/,
-    'the filter builder no longer drops an unbuilt chip');
+  assert.match(filters, /if \(item\.unbuilt\) \{[\s\S]{0,400}?disabled: true,[\s\S]{0,200}?title: item\.hover \|\| item\.unbuilt/,
+    'the filter builder no longer draws an unbuilt chip');
+  // The filter half needs the stronger version of the same rule: a dead BUTTON
+  // wastes a click, and a dead CHIP returns an empty set that reads as an
+  // answer. So no `onSelect` and no `active` on the unbuilt branch at all.
+  const unbuiltChip = filters.slice(filters.indexOf('if (item.unbuilt)'), filters.indexOf('if (item.unbuilt)') + 400);
+  assert.doesNotMatch(unbuiltChip, /onSelect/, 'an unbuilt chip was made selectable');
+  assert.doesNotMatch(unbuiltChip, /active/, 'an unbuilt chip can be drawn as the current view');
   assert.doesNotMatch(filters, /noteAlways/,
     'the noteAlways mode is back — a standing sentence beside working chips');
 });
@@ -1034,10 +1513,30 @@ test('the label says the export is of this view, because it is', () => {
   assert.match(read('frontend/src/lib/csvExport.js'), /\$\{list\.length\}-rows/,
     'the filename no longer carries the row count');
   // An export over rows that have not LOADED is the one control that stays and
-  // goes quiet: the store and the writer both exist, so it keeps the canvas's
-  // label and renders disabled rather than vanishing like an unbuilt op.
-  assert.match(builder, /disabled: true, title: 'nothing loaded to export yet'/,
-    'an export with no rows is offered as a live button');
+  // goes quiet: the store and the writer both exist, so it renders disabled
+  // rather than vanishing like an unbuilt op.
+  //
+  // BUT IT NO LONGER GOES SILENT. It kept the plain canvas label and explained
+  // itself only through a `title`, so on an account with no rows — the steady
+  // state for a new firm, not a transient one — a working export was a grey
+  // button with no reason on screen. Eight of them were reported as missing
+  // features across four buckets in one afternoon. The state now rides the
+  // label, in the same `·` suffix the live branch uses, so the control reads as
+  // one thing in two states instead of two different controls.
+  assert.match(builder, /label: `\$\{item\.label\} · nothing yet`/,
+    'a disabled export no longer says on screen why it is disabled — it is back '
+    + 'to a grey button explained only by a hover title, which is how eight '
+    + 'working exports were reported as missing');
+  // SCOPED TO THE EXPORT BRANCH. This used to read the whole file for
+  // `label: item.label, testid, disabled: true` — the old bare-label shape —
+  // and that string is now also the opening of the UNBUILT branch, which is a
+  // different control making a different claim and is correct as written. A
+  // whole-file needle cannot tell them apart, so the slice does.
+  const exportBranch = builder.slice(builder.indexOf("if (item.kind === 'export')"),
+    builder.indexOf('if (item.to)'));
+  assert.match(exportBranch, /disabled: true/, 'an export with no rows is no longer disabled');
+  assert.doesNotMatch(exportBranch, /label: item\.label, testid, disabled: true/,
+    'the disabled export is back to the bare canvas label with no state on it');
 });
 
 /*

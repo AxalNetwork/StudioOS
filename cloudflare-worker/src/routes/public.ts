@@ -15,6 +15,7 @@ import { requireAuth } from '../auth';
 import { ensureProfileExpansionSchema } from '../services/profileExpansion';
 import { ensureFollowsSchema } from './follows';
 import { kvGetJSON, kvPutJSON, createL1 } from '../kv';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const publicRoutes = new Hono<{ Bindings: Env }>();
 
@@ -75,13 +76,13 @@ publicRoutes.get('/stats', async (c) => {
 // makes this idempotent on prod too. Cached per isolate to avoid
 // re-executing on every request.
 // ------------------------------------------------------------------
-let _marketingSchemaReady = false;
+const MARKETING_SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensureMarketingSchema(env: Env): Promise<void> {
-  if (_marketingSchemaReady) return;
+  if (MARKETING_SCHEMA_READY.get(bindingKey(env))) return;
   // Production migrations own these tables. A cold status read must not run a
   // five-statement DDL batch before returning its public health information.
   if (env.ENVIRONMENT === 'production') {
-    _marketingSchemaReady = true;
+    MARKETING_SCHEMA_READY.set(bindingKey(env), true);
     return;
   }
   try {
@@ -127,7 +128,7 @@ async function ensureMarketingSchema(env: Env): Promise<void> {
         PRIMARY KEY (day, path)
       )`),
     ]);
-    _marketingSchemaReady = true;
+    MARKETING_SCHEMA_READY.set(bindingKey(env), true);
   } catch {
     // Best-effort — main endpoints handle missing-table errors gracefully.
   }

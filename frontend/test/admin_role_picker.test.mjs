@@ -20,6 +20,16 @@
  *
  * So this file holds two things: the gate is still shut, and the way through
  * is now on the screen.
+ *
+ * TASK #174 REPORTED THE SAME SYMPTOM AGAIN — "as a Super Admin I cannot change
+ * the Role of users" — and the answer taken was one explicit door rather than an
+ * open gate: a super admin may step over the binding agreement by typing a
+ * reason, which is written into the role's audit line. That door, and the proof
+ * that only a super admin has it, live in
+ * `frontend/test/admin_role_override.test.mjs` and
+ * `cloudflare-worker/test/admin_role_override.test.ts`. What this file keeps
+ * asserting is the other half: with nobody overriding, the gate is exactly as
+ * shut as #152 left it.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -41,15 +51,30 @@ function dropdown() {
   return src.slice(a, b);
 }
 
-test('the signed-agreement gate is still shut', () => {
-  // If this ever passes by the options becoming enabled, the fix went the
-  // wrong way: an admin could then skip the binding agreement from the Users
-  // table, which is the exact bypass the 409 exists to refuse.
+test('the signed-agreement gate is shut by default, and only `canOverride` opens it', () => {
+  // THE GATE STILL CLOSES FIRST. Task #174 reported the same symptom as #152 —
+  // "as a Super Admin I cannot change the Role of users" — and the answer taken
+  // was to add ONE explicit door, not to open the gate: a super admin may step
+  // over the binding agreement by typing a reason that goes into the audit
+  // (`frontend/test/admin_role_override.test.mjs`,
+  // `cloudflare-worker/test/admin_role_override.test.ts`). For everybody else
+  // this is unchanged, and the server refuses a reasonless request either way.
   const d = dropdown();
   assert.match(d, /const isExploring = user\.role === 'exploring';/,
     'the exploring branch is gone');
-  assert.match(d, /const disabled = isExploring && opt\.value !== 'exploring';/,
-    'the four real roles are no longer disabled for an exploring user');
+  // Written out whole, because each half is a different regression. Lose
+  // `isExploring && opt.value !== 'exploring'` and every option is live for
+  // every admin — the bypass the 409 exists to refuse. Lose `&& !canOverride`
+  // and the menu is dead again for the one role that is allowed through it,
+  // which is how this was reported twice.
+  assert.match(d, /const disabled = isExploring && opt\.value !== 'exploring' && !canOverride;/,
+    'the exploring gate is no longer `isExploring && not-exploring && not-overriding` — '
+    + 'one of the two halves has gone, and either loss is a defect');
+  // The parameter DEFAULTS TO CLOSED. Every other caller of RoleDropdown, and
+  // any future one that forgets the prop, must get the gate rather than the
+  // bypass; `canOverride` arriving as `undefined` has to read as "no".
+  assert.match(src, /function RoleDropdown\(\{ user, onRoleChange, canOverride = false \}\)/,
+    'canOverride does not default to false — a caller that omits it would open the gate');
   assert.match(src, /if \(newRole === user\.role\) return;/,
     'the no-op guard on the handler is gone');
 });
@@ -63,7 +88,16 @@ test('the reason is on the screen, not in a tooltip', () => {
   // in a 5,000-line file.
   const a = d.indexOf('{isExploring && (');
   assert.ok(a >= 0, 'the exploring branch renders nothing');
-  const branch = d.slice(a, d.indexOf('</li>', a));
+  // BOUNDED ON `</div>`, NOT `</li>`. The note used to be the last <li> of the
+  // options list; it is a <div> now because it had to leave the scrolling
+  // region (next test). The old bound was `indexOf('</li>', a)`, which after
+  // that move returned -1 — and `slice(a, -1)` silently reads to the end of the
+  // component, so the assertions below would have passed against copy found
+  // anywhere in RoleDropdown. An end marker that cannot be found must fail,
+  // not widen.
+  const end = d.indexOf('</div>', a);
+  assert.ok(end > a, "the exploring branch's end marker is gone — this slice would run past it");
+  const branch = d.slice(a, end);
   // Attribute values stripped before the copy is checked. Without this, moving
   // the sentence into `title="…"` still satisfies a plain `match` on the
   // branch — a mutation doing exactly that escaped, which is the whole defect
@@ -77,6 +111,36 @@ test('the reason is on the screen, not in a tooltip', () => {
   // The destination IS an attribute, so it is read off the unstripped slice.
   assert.match(branch, /to="\/admin\/exploring"/,
     'the menu offers no way through to the queue that can actually do this');
+});
+
+test('the note and the queue link cannot be scrolled out of the menu', () => {
+  // WHY #152'S EXPLANATION MAY NEVER HAVE BEEN READ. The note and the queue link
+  // were the LAST children of the scrolling `<ul>`, under a `maxHeight` that
+  // floors at 96px (`Math.max(96, …)`) while the five options alone run to
+  // roughly 135px. For any row without room below or above, the menu opened at
+  // its floor, the options filled it, and the one thing saying why they were
+  // grey — and where to go instead — sat below the fold of a 96px box. #174 is
+  // the same complaint reported a second time.
+  //
+  // The fix is structural: the cap is on a flex column, the options scroll
+  // inside it, and the footer is a sibling of that list with `shrink-0`. So it
+  // is pinned at every height the placement can produce.
+  const d = dropdown();
+  const list = d.indexOf('<ul role="listbox"');
+  const listEnd = d.indexOf('</ul>', list);
+  assert.ok(list >= 0 && listEnd > list, 'the options list is gone');
+  assert.ok(d.indexOf('{isExploring && (') > listEnd,
+    'the note is back INSIDE the scrolling options list, where a short menu hides it');
+  // `shrink-0` is what stops flex taking the space back from it: without it the
+  // footer is compressible and the options win the negotiation, which reproduces
+  // the same invisibility one layer up from where it was fixed.
+  const footer = d.slice(d.indexOf('{isExploring && ('));
+  assert.match(footer, /className="shrink-0 /,
+    'the footer can be shrunk by flex, so a tight menu squeezes it away again');
+  // And the menu itself must be the column that clips, or the footer is outside
+  // the rounded border rather than pinned inside it.
+  assert.match(d, /className="z-50 flex min-w-\[190px\] flex-col overflow-hidden/,
+    'the menu is no longer a clipping flex column, so the pinned footer has nothing to be pinned in');
 });
 
 test('the route out is a client-side link, not a page reload', () => {
@@ -118,8 +182,20 @@ test('the menu opens toward the room it has, and never past the window edge', ()
   assert.match(d, /const above = r\.top;/, 'the space above is not measured');
   assert.match(d, /below >= above/, 'the menu no longer picks the side with more room');
   assert.match(d, /bottom: window\.innerHeight - r\.top \+ GAP/, 'the upward branch is gone');
-  assert.match(d, /maxHeight: at\.maxHeight, overflowY: 'auto'/,
+  assert.match(d, /maxHeight: at\.maxHeight,/,
     'the menu is not capped to the space it was given, so it can still overflow the window');
+  // The cap stayed; the SCROLL moved off it onto the options list, so the note
+  // below them can sit outside the scrolling region (next test). Capping the
+  // wrapper without giving the list its own scroll would clip the overflowing
+  // options with no way to reach them — strictly worse than before.
+  assert.match(d, /<ul role="listbox"[^>]*className="[^"]*overflow-y-auto[^"]*"/,
+    'the options list does not scroll, so a capped menu now clips options instead of '
+    + 'letting them be scrolled to');
+  // `min-h-0` is load-bearing, not decoration: a flex child's default
+  // `min-height: auto` refuses to shrink below its content, so `overflow-y-auto`
+  // on it does nothing and the list pushes the menu past its own maxHeight.
+  assert.match(d, /<ul role="listbox"[^>]*className="[^"]*min-h-0[^"]*"/,
+    'the scrolling list can refuse to shrink (flex min-height: auto), which defeats the cap');
   assert.match(d, /\.\.\.\(at\.top === undefined \? \{ bottom: at\.bottom \} : \{ top: at\.top \}\)/,
     'the style no longer switches between the two anchors');
 });

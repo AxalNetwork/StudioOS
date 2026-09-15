@@ -13,6 +13,7 @@
  * positive + negative cases without touching KV / D1 / network.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
 // ---------------------------------------------------------------------------
 // Schema bootstrap (defensive — same lazy pattern as services/trust.ts)
@@ -23,21 +24,21 @@ import type { Env } from '../types';
 // that never touch the sanctions service. Exporting it as a standalone
 // helper lets the routes call it directly. D1's ALTER ADD COLUMN has no
 // IF NOT EXISTS, so we swallow duplicate-column errors.
-let pairwiseColumnsReady = false;
+const PAIRWISE_COLUMNS_READY = new WeakMap<object, boolean>();
 export async function ensurePairwiseNdaColumns(env: Env): Promise<void> {
-  if (pairwiseColumnsReady) return;
+  if (PAIRWISE_COLUMNS_READY.get(bindingKey(env))) return;
   const stmts = [
     `ALTER TABLE pairwise_ndas ADD COLUMN signers_json TEXT NOT NULL DEFAULT '[]'`,
     `ALTER TABLE pairwise_ndas ADD COLUMN voided_at TIMESTAMP`,
     `ALTER TABLE pairwise_ndas ADD COLUMN voided_reason TEXT`,
   ];
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
-  pairwiseColumnsReady = true;
+  PAIRWISE_COLUMNS_READY.set(bindingKey(env), true);
 }
 
-let sanctionsSchemaReady = false;
+const SANCTIONS_SCHEMA_READY = new WeakMap<object, boolean>();
 export async function ensureSanctionsSchema(env: Env): Promise<void> {
-  if (sanctionsSchemaReady) return;
+  if (SANCTIONS_SCHEMA_READY.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS sanctions_screenings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,7 +61,7 @@ export async function ensureSanctionsSchema(env: Env): Promise<void> {
   // Sanctions screening flows also benefit from the pairwise columns being
   // present (admin sees both views in one session), so chain the helper.
   await ensurePairwiseNdaColumns(env);
-  sanctionsSchemaReady = true;
+  SANCTIONS_SCHEMA_READY.set(bindingKey(env), true);
 }
 
 // ---------------------------------------------------------------------------

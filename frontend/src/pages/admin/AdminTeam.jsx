@@ -18,6 +18,7 @@ const Twitter = ({ className, size }) => (
 import { adminTeam as api } from '../../lib/api';
 import { useToast } from '../../components/useToast';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { appOrigin } from '../../lib/branchHost';
 
 const EMPTY = {
   slug: '',
@@ -373,7 +374,7 @@ export default function AdminTeam() {
           </h1>
           <p className="text-sm text-gray-500 mt-1">
             Manage the leadership + venture partners shown on{' '}
-            <a href="https://axal.vc/team" target="_blank" rel="noreferrer" className="text-violet-600 hover:underline">axal.vc/team</a>.
+            <a href={`${appOrigin()}/team`} target="_blank" rel="noreferrer" className="text-violet-600 hover:underline">{appOrigin().replace(/^https?:\/\//, '')}/team</a>.
             Drag rows to reorder.
           </p>
         </div>

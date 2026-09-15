@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading,
-  Section, Field, SaveNote, UnlinkedZone, isNoPartnerProfile,
+  Section, Field, SaveNote, NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, moneyDollars, formatDay,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
@@ -123,23 +123,39 @@ export default function PartnerProposalsZone() {
 
   const rowActions = partnerZoneActions('pipeline/proposals', { view: { header: ['Client', 'Shape', 'Value', 'Version', 'State', 'Loss reason', 'Days since sent'], rows: visible, cells: (r) => [r.client, r.shape, r.price_dollars, r.version, r.state, r.loss_reason, r.days_since_sent] } });
 
-  if (isNoPartnerProfile(state.error)) {
-    return <UnlinkedZone title="Proposals" actions={rowActions} />;
-  }
+  // NOT AN EARLY RETURN ANY MORE. This was
+  //   `if (isNoPartnerProfile(state.error)) return <UnlinkedZone … />;`
+  // which drew a card INSTEAD of the zone — on twelve zones, so an admin
+  // reading this workspace saw twelve copies of one card and never a page.
+  // `ZoneBody` takes the line as a `notice` above its states, and the zone
+  // renders underneath in its own empty state, which is also the state that
+  // says what this zone holds. The gate itself is untouched: the read still
+  // 400s, so `isEmpty` is forced rather than inferred from rows that never
+  // arrived, and `error` is cleared so the shared "This did not load" card —
+  // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
+  const unlinked = isNoPartnerProfile(state.error);
 
   return (
     <>
+      {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
+          An action states what the zone DOES and an export over nothing
+          loaded renders disabled and says so; a filter chip is a claim about
+          ROWS, and a selectable `Published` over a store this account cannot
+          read is the "an empty set reads as an answer" failure
+          `zoneFilterBuilder.js` exists to prevent, reached from a new
+          direction. `profile_zone_actions.test.mjs` asserts both halves. */}
       <ZoneToolbar
         className="mb-3"
         role="partner"
-        filters={partnerZoneFilters('pipeline/proposals', { value: view, onChange: setView })}
+        filters={unlinked ? [] : partnerZoneFilters('pipeline/proposals', { value: view, onChange: setView })}
         actions={rowActions}
       />
       <ZoneBody
         loading={state.loading}
-        error={state.error}
+        error={unlinked ? null : state.error}
         onRetry={load}
-        isEmpty={items.length === 0}
+        notice={unlinked ? <NoPartnerProfile /> : null}
+        isEmpty={unlinked || (items.length === 0)}
         empty={(
           <NothingYet
             title="No proposal sent yet"
@@ -196,7 +212,7 @@ export default function PartnerProposalsZone() {
           </div>
 
           {d?.read_receipts_note && (
-            <p className="text-[12.5px] leading-relaxed text-axal-ink-2">{d.read_receipts_note}</p>
+            <p className="text-[12.5px] leading-relaxed text-axal-muted">{d.read_receipts_note}</p>
           )}
 
           <Instrument
@@ -235,7 +251,7 @@ export default function PartnerProposalsZone() {
           />
 
           {items.length > 0 && visible.length === 0 && (
-            <p className="text-[12px] text-axal-ink-2">
+            <p className="text-[12px] text-axal-muted">
               No proposal is in this state. {items.length} in total.
             </p>
           )}
@@ -362,7 +378,7 @@ export default function PartnerProposalsZone() {
 
             {items.some((r) => r.state === 'Lost') && (
               <div className="mt-5 border-t border-axal-hairline pt-4 dark:border-gray-700">
-                <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+                <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
                   Why a proposal was lost
                 </div>
                 <div className="mt-2 space-y-2">

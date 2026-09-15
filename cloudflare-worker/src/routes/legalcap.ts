@@ -5,6 +5,7 @@ import { requireAuth, requireApprovedKyc } from '../auth';
 import { logActivity } from './partnernet';
 import { ensureWorkflowSchema } from '../services/workflowSchema';
 import { aiQuotaGate, recordSharedServiceAction } from '../services/aiQuota';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const legalcap = new Hono<{ Bindings: Env }>();
 
@@ -14,9 +15,9 @@ const CHECKLIST_TYPES = new Set(['legal', 'financial', 'tech', 'compliance']);
 const ADVANCE_ROLES = new Set(['admin', 'partner', 'investor']);
 const AI_RATE_LIMIT = 60; // shared
 
-let migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env) {
-  if (migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   // Idempotent ALTERs to extend subsidiaries with spin-out columns
   const alters = [
     `ALTER TABLE subsidiaries ADD COLUMN spinout_status TEXT DEFAULT 'pending'`,
@@ -168,7 +169,7 @@ async function ensureSchema(env: Env) {
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch (e: any) { console.error('legalcap schema:', e?.message); } }
   // Shared with pipeline, networkfx and dashboard — see migration 177.
   await ensureWorkflowSchema(env);
-  migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 function safeJson<T>(s: any, def: T): T { try { return s ? JSON.parse(s) : def; } catch { return def; } }

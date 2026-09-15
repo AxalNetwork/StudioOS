@@ -31,7 +31,6 @@ const linked = (row, project) => {
 export default function FounderGrowPartnerships() {
   const [params, setParams] = useSearchParams();
   const requestedId = params.get('project_id');
-  const [projects, setProjects] = useState([]);
   const [project, setProject] = useState(null);
   const [pitches, setPitches] = useState([]);
   const [attributions, setAttributions] = useState([]);
@@ -48,7 +47,6 @@ export default function FounderGrowPartnerships() {
         setError('The startup list is unavailable; partnership records are still being checked.');
       }
       const selected = available.find((item) => String(item.id) === requestedId) || available[0] || (requestedId ? { id: Number(requestedId), name: 'Selected project' } : null);
-      setProjects(available.length ? available : selected ? [selected] : []);
       setProject(selected);
       if (!selected) { setPitches([]); setAttributions([]); return; }
       if (String(selected.id) !== requestedId) {
@@ -85,7 +83,7 @@ export default function FounderGrowPartnerships() {
   const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Capital match', `/grow/capital-match${query}`], ['Brand', `/grow/brand${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-partnerships" data-testid="founder-grow-partnerships"><div className="a5-grow-canvas"><div className="a5-grow-main">
-    <header className="a5-grow-hero"><div className="fg-partnerships-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Partnerships</b></div><span>Founder / Grow</span><div><h1>Partnerships</h1><p>Partner pipeline, proposals and retainers.</p></div>{projects.length > 1 && <label className="fg-partnerships-picker"><span>Startup</span><select data-testid="select-grow-partnerships-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-partnerships-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Partnerships' ? 'is-active' : ''}>{label}</Link>)}</nav>
+    <header className="a5-grow-hero"><div className="fg-partnerships-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Partnerships</b></div><div><h1>Partnerships</h1><p>Partner pipeline, proposals and retainers.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-partnerships-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Partnerships' ? 'is-active' : ''}>{label}</Link>)}</nav>
     <ZoneToolbar
               filters={founderZoneFilters('grow/partnerships', { value: view, onChange: setView })}
               actions={founderZoneActions('grow/partnerships', { query, view: { scope: project?.name, header: ['Partner', 'Type', 'Status', 'State', 'Created'], rows: visible, cells: (r) => [r.title, r.type, r.status, r.state, r.created_at] } })}

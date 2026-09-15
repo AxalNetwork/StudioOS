@@ -262,14 +262,14 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'This close', key: 'close' },
     { canvas: 'Blocking', unbuilt: 'a blocking item is a Commit condition, and no condition is stored on either side of that hand-off' },
     { canvas: 'Documents', key: 'documents' },
-    { canvas: 'Wires', unbuilt: 'no transfer out to a company is recorded — capital_calls is an LP paying into the fund' },
+    { canvas: 'Wires', unbuilt: 'no transfer out to a company is recorded — capital_calls is an LP paying into the fund', hover: 'No transfer out to a company is recorded; what the fund records is capital coming in from an LP.' },
   ],
 
   'deals/commit': [
     { canvas: 'This deal', key: 'current' },
     { canvas: 'All decisions', key: 'decisions' },
-    { canvas: 'Conditions', unbuilt: 'a condition is not a stored record; ic_decisions carries a memo and a free-text terms blob, and neither is something a later stage could block on' },
-    { canvas: 'Minutes', unbuilt: 'no minutes are stored — ic_meetings carries an agenda, which is written before the room rather than after it' },
+    { canvas: 'Conditions', unbuilt: 'a condition is not a stored record; ic_decisions carries a memo and a free-text terms blob, and neither is something a later stage could block on', hover: 'A condition is not a stored record, so no later stage can block on one.' },
+    { canvas: 'Minutes', unbuilt: 'no minutes are stored — ic_meetings carries an agenda, which is written before the room rather than after it', hover: 'No minutes are stored — the meeting record is its agenda, written before the room, not after it.' },
   ],
 
   'deals/pipeline': [
@@ -377,7 +377,7 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Requested', key: 'partial', label: 'Partly staged' },
     {
       canvas: 'Not staged',
-      unbuilt: 'a company that never opened a room is not on this list at all, because the grant is what puts a room here and an unstaged one leaves no row to find',
+      unbuilt: 'a company that never opened a room is not on this list at all, because the grant is what puts a room here and an unstaged one leaves no row to find', hover: 'A company that never opened a room leaves no row here to find.',
     },
   ],
   // `Peer set` IS RELABELLED BECAUSE THE OPS HALF WOULD CONTRADICT IT. That
@@ -395,7 +395,7 @@ export const INVESTOR_ZONE_FILTERS = {
     },
     {
       canvas: 'Export',
-      unbuilt: 'an export is an action rather than a view; the ops half of this row is where it belongs, and it says there why no chart is drawn',
+      unbuilt: 'an export is an action rather than a view; the ops half of this row is where it belongs, and it says there why no chart is drawn', hover: 'Export is an action, not a view — it sits in the other half of this row.',
     },
   ],
   'research/markets': [

@@ -8,6 +8,7 @@ import { PERSONAS as PERSONA_TAXONOMY } from '../lib/personas';
 import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
 import { useWebSocket } from '../hooks/useWebSocket';
+import { useAuth } from '../hooks/useAuthSync';
 import TrustScoreBadge from '../components/TrustScoreBadge';
 // Task #1 — embedded as a tab inside Admin Console so admins land on
 // the network roster via /admin?tab=network-profiles. The standalone
@@ -48,7 +49,7 @@ const ROLE_BADGES = {
   exploring: 'bg-sky-100 text-sky-700',
 };
 
-function RoleDropdown({ user, onRoleChange }) {
+function RoleDropdown({ user, onRoleChange, canOverride = false }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const menuRef = useRef(null);
@@ -135,22 +136,35 @@ function RoleDropdown({ user, onRoleChange }) {
         cost the card its corners or the table its horizontal scroll.
       */}
       {open && at && createPortal((
-        <ul
+        <div
           ref={menuRef}
-          role="listbox"
-          aria-label="Select role"
           style={{
             position: 'fixed', left: at.left, transform: 'translateX(-50%)',
             ...(at.top === undefined ? { bottom: at.bottom } : { top: at.top }),
-            maxHeight: at.maxHeight, overflowY: 'auto',
+            maxHeight: at.maxHeight,
           }}
-          className="z-50 min-w-[150px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg py-1"
+          className="z-50 flex min-w-[190px] flex-col overflow-hidden bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg"
         >
+          {/*
+            THE FOOTER IS OUTSIDE THE SCROLLING REGION, and that is the fix
+            rather than a nicety. `maxHeight` floors at 96px (see the sizing
+            above) while five options alone run to roughly 135px, so for a row
+            with little space the note below — the only thing that says why the
+            options are dead and where to go instead — scrolled out of sight.
+            #152 added that explanation and a short menu could hide it entirely.
+            Splitting the menu into a scrolling list and a pinned footer keeps
+            it visible at every height.
+          */}
+          <ul role="listbox" aria-label="Select role" className="min-h-0 flex-1 overflow-y-auto py-1">
           {OPTIONS.map(opt => {
             // Moving OUT of exploring requires a signed binding agreement
             // and must go through the Exploring Users queue — disable those
             // options here rather than let the user hit a 409 on click.
-            const disabled = isExploring && opt.value !== 'exploring';
+            // Leaving `exploring` needs a signed binding agreement. A super
+            // admin may override that with a reason; everyone else is blocked
+            // here rather than being allowed to click into a 409.
+            const disabled = isExploring && opt.value !== 'exploring' && !canOverride;
+            const isOverride = isExploring && opt.value !== 'exploring' && canOverride;
             return (
               <li
                 key={opt.value}
@@ -175,6 +189,11 @@ function RoleDropdown({ user, onRoleChange }) {
                   {user.role === opt.value && <Check size={11} />}
                 </span>
                 {opt.label}
+                {isOverride && (
+                  <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                    Override
+                  </span>
+                )}
               </li>
             );
           })}
@@ -191,10 +210,13 @@ function RoleDropdown({ user, onRoleChange }) {
             (admin_exploring.ts:259). What changes is that the reason and the
             way through are now on the screen.
           */}
+          </ul>
           {isExploring && (
-            <li role="presentation" className="mt-1 border-t border-gray-100 px-3 py-2 dark:border-gray-800">
+            <div className="shrink-0 border-t border-gray-100 px-3 py-2 dark:border-gray-800">
               <p className="text-[11px] leading-relaxed text-gray-600 dark:text-gray-400">
-                Leaving Exploring needs a signed binding agreement.
+                {canOverride
+                  ? 'Leaving Exploring normally needs a signed binding agreement. Choosing a role here overrides that — you will be asked why, and it is recorded.'
+                  : 'Leaving Exploring needs a signed binding agreement.'}
               </p>
               <Link
                 to="/admin/exploring"
@@ -203,9 +225,9 @@ function RoleDropdown({ user, onRoleChange }) {
               >
                 Assign from the Exploring queue →
               </Link>
-            </li>
+            </div>
           )}
-        </ul>
+        </div>
       ), document.body)}
     </div>
   );
@@ -226,6 +248,79 @@ function RoleDropdown({ user, onRoleChange }) {
  * IMPERSONATION_EXPIRY_MINUTES, enforced in the token rather than here.
  * Drawing them as pickers would invent options that do not exist.
  */
+/**
+ * The reason a super admin is skipping the binding agreement.
+ *
+ * Leaving `exploring` normally requires a signed binding agreement, checked in
+ * the UI and twice on the server. A super admin may override that, and this is
+ * where the override stops being silent: the reason typed here is written into
+ * the `role_changed` audit line, so the override is legible afterwards instead
+ * of indistinguishable from a routine assignment.
+ *
+ * Ten characters is the same bar the support-session dialog uses, for the same
+ * reason — "ok" is not an explanation anybody can act on later.
+ */
+function RoleOverrideDialog({ target, nextRole, busy, onCancel, onConfirm }) {
+  const [reason, setReason] = useState('');
+  useEscapeClose(onCancel);
+  const tooShort = reason.trim().length < 10;
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-5 shadow-xl dark:border-gray-800 dark:bg-gray-900">
+        <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">Assign without a signed agreement</h3>
+        <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+          Override · recorded in Governance
+        </p>
+        <p className="mt-2 text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400">
+          <strong className="text-gray-800 dark:text-gray-200">{target.name || target.email}</strong> is in the
+          Exploring holding state. Normally their role is assigned from the Exploring queue, after they
+          sign the binding agreement. This skips that.
+        </p>
+
+        <dl className="mt-4 space-y-2 rounded-lg border border-gray-200 p-3 text-[12px] dark:border-gray-700">
+          <div className="flex justify-between gap-3">
+            <dt className="text-gray-500 dark:text-gray-400">New role</dt>
+            <dd className="font-medium text-gray-800 dark:text-gray-200">{nextRole}</dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt className="text-gray-500 dark:text-gray-400">Binding agreement</dt>
+            <dd className="font-medium text-amber-700 dark:text-amber-300">Not required for this change</dd>
+          </div>
+        </dl>
+
+        <label htmlFor="role-override-reason" className="mt-4 block text-[12px] font-medium text-gray-700 dark:text-gray-300">
+          Reason · required
+        </label>
+        <textarea
+          id="role-override-reason"
+          rows={3}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Why is the agreement being skipped? e.g. Signed on paper, countersigned copy in Drive"
+          className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+        />
+        <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+          {tooShort
+            ? 'At least ten characters — this is the line someone reads in the audit later.'
+            : 'Stored on the role change and shown in Governance.'}
+        </p>
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" onClick={onCancel} disabled={busy}
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200">
+            Cancel
+          </button>
+          <button type="button" onClick={() => onConfirm(reason.trim())} disabled={busy || tooShort}
+            className="rounded-lg bg-amber-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50">
+            Override and assign
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SupportSessionDialog({ target, busy, onCancel, onBegin }) {
   const [reason, setReason] = useState('');
   useEscapeClose(onCancel);
@@ -604,15 +699,46 @@ export default function AdminPage({ onImpersonate, section = null }) {
       loadAll();
     } catch (e) { alert(e.message || 'Failed to admit'); }
   };
+  // The pending binding-agreement override: {user, nextRole} while the reason
+  // dialog is open, null otherwise. Only a super admin can get here — the
+  // dropdown does not offer the options to anyone else, and the server refuses
+  // them regardless.
+  const [roleOverride, setRoleOverride] = useState(null);
+  const [roleOverrideBusy, setRoleOverrideBusy] = useState(false);
+  const { user: viewer } = useAuth();
+  const canOverrideRole = Number(viewer?.is_super_admin ?? 0) === 1;
+
+  const ROLE_LABELS = { admin: 'Admin', founder: 'Founder', partner: 'Partner', investor: 'Investor', advisor: 'Advisor', exploring: 'Exploring' };
+
   const handleRoleChange = async (user, newRole) => {
     if (newRole === user.role) return;
-    const labels = { admin: 'Admin', founder: 'Founder', partner: 'Partner', investor: 'Investor', advisor: 'Advisor', exploring: 'Exploring' };
+    // Leaving `exploring` skips a signed binding agreement, so it is not a
+    // yes/no confirm — it needs a reason that goes into the audit. Everything
+    // else keeps the plain confirm it has always had.
+    if (String(user.role).toLowerCase() === 'exploring' && newRole !== 'exploring') {
+      setRoleOverride({ user, nextRole: newRole });
+      return;
+    }
     const ok = window.confirm(
-      `Change ${user.name || user.email}'s role from ${labels[user.role] || user.role} ` +
-      `to ${labels[newRole] || newRole}?\n\nThis takes effect immediately and is logged in their activity history.`
+      `Change ${user.name || user.email}'s role from ${ROLE_LABELS[user.role] || user.role} ` +
+      `to ${ROLE_LABELS[newRole] || newRole}?\n\nThis takes effect immediately and is logged in their activity history.`
     );
     if (!ok) return;
     try { await api.adminUpdateRole(user.id, newRole); loadAll(); } catch (e) { alert(e.message); }
+  };
+
+  const confirmRoleOverride = async (reason) => {
+    if (!roleOverride) return;
+    setRoleOverrideBusy(true);
+    try {
+      await api.adminUpdateRole(roleOverride.user.id, roleOverride.nextRole, reason);
+      setRoleOverride(null);
+      loadAll();
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setRoleOverrideBusy(false);
+    }
   };
 
   const filtered = filter === 'all' ? users : users.filter(u => u.role === filter);
@@ -720,7 +846,7 @@ export default function AdminPage({ onImpersonate, section = null }) {
                             </span>
                           ) : (
                             // Admin promotion intentionally not offered — see span branch above.
-                            <RoleDropdown user={u} onRoleChange={handleRoleChange} />
+                            <RoleDropdown user={u} onRoleChange={handleRoleChange} canOverride={canOverrideRole} />
                           )}
                         </td>
                         <td className="px-4 py-3 text-center">
@@ -1007,7 +1133,7 @@ export default function AdminPage({ onImpersonate, section = null }) {
                             alert(`Failed to load document: ${e?.message || e}`);
                           }
                         }}
-                        className="inline-flex items-center gap-2 text-xs font-semibold text-axal-blue hover:text-axal-blue/80 underline"
+                        className="inline-flex items-center gap-2 text-xs font-semibold text-axal-violet hover:text-axal-violet/80 underline"
                       >
                         View ID Document &rarr;
                       </button>
@@ -1066,6 +1192,15 @@ export default function AdminPage({ onImpersonate, section = null }) {
           busy={supportBusy}
           onCancel={() => setSupportTarget(null)}
           onBegin={beginSupportSession}
+        />
+      )}
+      {roleOverride && (
+        <RoleOverrideDialog
+          target={roleOverride.user}
+          nextRole={ROLE_LABELS[roleOverride.nextRole] || roleOverride.nextRole}
+          busy={roleOverrideBusy}
+          onCancel={() => setRoleOverride(null)}
+          onConfirm={confirmRoleOverride}
         />
       )}
       {openUser && (
@@ -3291,6 +3426,7 @@ const PROVIDER_LABELS = {
   crunchbase: 'Crunchbase',
   affinity: 'Affinity',
   telegram: 'Telegram',
+  gcip: 'Google Identity (SMS)',
 };
 const PROVIDER_HINTS = {
   slack: 'Get Client ID + Client Secret from api.slack.com → your app → Basic Information.',
@@ -3304,6 +3440,7 @@ const PROVIDER_HINTS = {
   crunchbase: 'API key — paste a label (e.g. "default") into Client ID and the user_key into Secret. Provision the key at data.crunchbase.com.',
   affinity: 'API key — put your team subdomain (e.g. "acme") into Client ID and the Affinity API key into Secret. Generate at affinity.co → Settings → API.',
   telegram: 'Bot token — put the bot username (e.g. "axalvc_bot") into Client ID and the BotFather token into Secret. Get the token from @BotFather on Telegram.',
+  gcip: 'SMS backup 2FA — put the GCP project id into Client ID and the Identity Platform / Firebase Web API key into Secret. Enable Phone authentication on the project first. Google Cloud Console → APIs & Services → Credentials.',
 };
 const PROVIDER_ENV_NAMES = {
   slack: ['SLACK_CLIENT_ID', 'SLACK_CLIENT_SECRET'],
@@ -3317,6 +3454,7 @@ const PROVIDER_ENV_NAMES = {
   crunchbase: ['CRUNCHBASE_USER_KEY_ID', 'CRUNCHBASE_API_KEY'],
   affinity: ['AFFINITY_TEAM_DOMAIN', 'AFFINITY_API_KEY'],
   telegram: ['TELEGRAM_BOT_USERNAME', 'TELEGRAM_BOT_TOKEN'],
+  gcip: ['GCIP_PROJECT_ID', 'GCIP_API_KEY'],
 };
 
 // Admin-managed Service Provider Directory approval (Task #53).
