@@ -46,6 +46,7 @@ import { archetypeMeta, SKILL_AXES } from '../lib/assessmentMeta';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import { buildDimensions } from '../lib/scoringViewModel';
 import { AssistLayout } from '../ui';
+import { reportError, reportWarn } from '../lib/log';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -318,12 +319,12 @@ export default function SpinoutLabAdvisorsPage() {
             const fresh = await spinoutLab.state().catch(() => null);
             if (!dead && fresh) setState(fresh);
           } catch (err) {
-            console.warn('[spinout-advisors:milestone]', err);
+            reportWarn('spinout-advisors:milestone', err);
           }
         }
         setStatus('ready');
       } catch (e) {
-        console.error('[spinout-advisors]', e);
+        reportError('spinout-advisors:load', e);
         if (!dead) setStatus('error');
       }
     })();
@@ -408,7 +409,7 @@ export default function SpinoutLabAdvisorsPage() {
       const res = await api.listAdvisorSlots(uid, true);
       setSlots({ items: Array.isArray(res?.items) ? res.items : [] });
     } catch (e) {
-      console.error('[spinout-advisors:slots]', e);
+      reportError('spinout-advisors:slots', e);
       setSlots({ failed: true });
     }
   };
@@ -430,13 +431,13 @@ export default function SpinoutLabAdvisorsPage() {
           const st = await spinoutLab.state().catch(() => null);
           if (st) setState(st);
         } catch (err) {
-          console.warn('[spinout-advisors:milestone]', err);
+          reportWarn('spinout-advisors:milestone', err);
         }
       }
       setSlotsFor(null);
       setSlots(null);
     } catch (e) {
-      console.error('[spinout-advisors:book]', e);
+      reportError('spinout-advisors:book', e);
       setBookError(e?.data?.detail || e?.message || 'Booking failed.');
     } finally {
       setBookingBusy(false);

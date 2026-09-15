@@ -9,6 +9,7 @@ import SignalKPIStrip from '../components/signals/SignalKPIStrip';
 import SignalEvidencePanel from '../components/signals/SignalEvidencePanel';
 import { AdvisorWorkspaceShell } from './advisor/AdvisorWorkspaceShell';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
+import { reportError } from '../lib/log';
 
 /**
  * SignalsPage — "Public-market evidence for what to build next".
@@ -96,8 +97,7 @@ export default function SignalsPage({ user, embedded = false, mode: modeProp = n
       setData(list);
       setKpis(k);
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('[SignalsPage] load failed:', e);
+      reportError('SignalsPage:load', e);
       setError(e.message || 'Failed to load signals.');
     } finally {
       setLoading(false);

@@ -60,6 +60,7 @@ import IpRider from '../components/cofounder/IpRider';
 import DisputeCard from '../components/cofounder/DisputeCard';
 import ExecutionConsole from '../components/cofounder/ExecutionConsole';
 import SoloDeclaration from '../components/cofounder/SoloDeclaration';
+import { reportError } from '../lib/log';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
 
@@ -174,7 +175,7 @@ export default function SpinoutLabCofounderAgreementPage() {
         }
         if (!dead) setStatus('ready');
       } catch (e) {
-        console.error('[spinout-cofounder]', e);
+        reportError('spinout-cofounder:load', e);
         if (!dead) setStatus('error');
       }
     })();
@@ -326,7 +327,7 @@ export default function SpinoutLabCofounderAgreementPage() {
         setDocs((Array.isArray(all) ? all : []).filter((d) => d.template_name === 'cofounder_agreement'));
       } catch { /* list refresh is best-effort */ }
     } catch (e) {
-      console.error('[spinout-cofounder:generate]', e);
+      reportError('spinout-cofounder:generate', e);
       if (e?.status === 404 || e?.status === 405) setEnvUnavailable(true);
       else setError(e?.data?.detail || e?.message || 'Could not generate the agreement.');
     } finally {

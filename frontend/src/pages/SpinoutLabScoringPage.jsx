@@ -60,6 +60,7 @@ import RadarChart from '../components/scoring/RadarChart';
 import TrajectoryChart from '../components/scoring/TrajectoryChart';
 import DimensionRow from '../components/scoring/DimensionRow';
 import WeakPointList from '../components/scoring/WeakPointList';
+import { reportError, reportWarn } from '../lib/log';
 import BenchmarkBars from '../components/scoring/BenchmarkBars';
 import DimensionDrawer from '../components/scoring/DimensionDrawer';
 import ExportReportModal from '../components/scoring/ExportReportModal';
@@ -178,7 +179,7 @@ export default function SpinoutLabScoringPage() {
         }
         setStatus('ready');
       } catch (e) {
-        console.error('[spinout-scoring]', e);
+        reportError('spinout-scoring:load', e);
         if (!dead) setStatus('error');
       }
     })();
@@ -222,7 +223,7 @@ export default function SpinoutLabScoringPage() {
       await navigator.clipboard.writeText(window.location.href);
       setCopied('ok');
     } catch (err) {
-      console.warn('[spinout-scoring:copy]', err);
+      reportWarn('spinout-scoring:copy', err);
       setCopied('fail');
     }
     window.setTimeout(() => setCopied(''), 2000);
@@ -249,7 +250,7 @@ export default function SpinoutLabScoringPage() {
       await exportScoringReportPdf(vm.exportMeta);
       setExportOpen(false);
     } catch (err) {
-      console.error('[spinout-scoring:pdf]', err);
+      reportError('spinout-scoring:pdf', err);
       setExportError('PDF generation failed — try again.');
     } finally {
       setGenerating(false);
@@ -317,7 +318,7 @@ export default function SpinoutLabScoringPage() {
       }
       setFormOpen(false);
     } catch (err) {
-      console.error('[spinout-scoring:run]', err);
+      reportError('spinout-scoring:run', err);
       setRunError(err?.data?.detail || err?.message || 'Scoring run failed.');
     } finally {
       setRunning(false);

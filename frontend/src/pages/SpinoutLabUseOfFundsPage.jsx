@@ -35,6 +35,7 @@ import { pickLabProject } from './SpinoutLabStartupPage';
 import { FUND_SECTIONS } from '../components/FundAllocator';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
+import { reportError } from '../lib/log';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -307,7 +308,7 @@ export default function SpinoutLabUseOfFundsPage() {
         }
         setStatus('ready');
       } catch (e) {
-        console.error('[spinout-uof]', e);
+        reportError('spinout-uof:load', e);
         if (!dead) setStatus('error');
       }
     })();
@@ -340,7 +341,7 @@ export default function SpinoutLabUseOfFundsPage() {
           markMilestone(userRef.current, 'use_of_funds_filled');
         } catch (e) {
           if (seq !== saveSeqRef.current) return;
-          console.error('[spinout-uof:save]', e);
+          reportError('spinout-uof:save', e);
           const detail = e?.data?.detail?.error || e?.data?.error || e?.message || 'Could not save.';
           setSaveState('error');
           setSaveError(typeof detail === 'string' ? detail : 'Could not save.');

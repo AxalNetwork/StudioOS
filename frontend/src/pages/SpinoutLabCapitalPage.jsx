@@ -38,6 +38,7 @@ import { pickLabProject } from './SpinoutLabStartupPage';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
 import IncomingLeadsStrip from '../components/IncomingLeadsStrip';
+import { reportError, reportWarn } from '../lib/log';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -184,7 +185,7 @@ export default function SpinoutLabCapitalPage() {
       if (Array.isArray(pros?.stages) && pros.stages.length) setStages(pros.stages);
       setUpdates(Array.isArray(ups?.items) ? ups.items : []);
     } catch (e) {
-      console.error('[spinout-capital:raise]', e);
+      reportError('spinout-capital:raise', e);
       // ONLY 404 = capability not present in this environment (dev FastAPI
       // has no raise routes — the pipeline lives on the Worker).
       setRaise(e?.status === 404 ? 'unavailable' : { failed: true });
@@ -271,7 +272,10 @@ export default function SpinoutLabCapitalPage() {
         if (dead) return;
         const st = stResult.ok ? stResult.v : null;
         if (!stResult.ok) {
-          console.warn('[spinout-capital] state unavailable (will degrade gracefully):', stResult.e?.status, stResult.e?.message);
+          // Warn rather than error: the page degrades on purpose when state is
+          // unreadable. Passing the rejection itself rather than two of its
+          // fields is what gets the message and stack into the ring buffer.
+          reportWarn('spinout-capital:state-unavailable', stResult.e);
         }
         setState(st);
         setUser(me);
@@ -282,7 +286,7 @@ export default function SpinoutLabCapitalPage() {
         }
         if (!dead) setStatus('ready');
       } catch (e) {
-        console.error('[spinout-capital]', e);
+        reportError('spinout-capital:load', e);
         if (!dead) setStatus('error');
       }
     })();
@@ -426,7 +430,7 @@ export default function SpinoutLabCapitalPage() {
       await loadRaise(project.id);
       setRoundForm(null);
     } catch (e) {
-      console.error('[spinout-capital:round]', e);
+      reportError('spinout-capital:round', e);
       setRoundError(e?.data?.detail || e?.message || 'Could not save the round.');
     } finally {
       setRoundBusy(false);
@@ -448,7 +452,7 @@ export default function SpinoutLabCapitalPage() {
       await loadRaise(project.id);
       setAddForm(null);
     } catch (e) {
-      console.error('[spinout-capital:add]', e);
+      reportError('spinout-capital:add', e);
       setAddError(e?.data?.detail || e?.message || 'Could not add the prospect.');
     } finally {
       setAddBusy(false);
@@ -462,7 +466,7 @@ export default function SpinoutLabCapitalPage() {
       await api.raiseProspectUpdate(p.id, { stage });
       await loadRaise(project.id);
     } catch (e) {
-      console.error('[spinout-capital:stage]', e);
+      reportError('spinout-capital:stage', e);
     } finally {
       setStageBusy(null);
     }
@@ -477,7 +481,7 @@ export default function SpinoutLabCapitalPage() {
       await loadRaise(project.id);
       setComposeForm(null);
     } catch (e) {
-      console.error('[spinout-capital:update]', e);
+      reportError('spinout-capital:update', e);
       setComposeError(e?.data?.detail || e?.message || 'Could not record the update.');
     } finally {
       setComposeBusy(false);

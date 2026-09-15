@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import PageExplainer from '../components/PageExplainer';
-import { reportError } from '../lib/log';
+import { reportError, reportWarn } from '../lib/log';
 import {
   Sparkles, Loader2, Plus, Trash2, Share2, Download,
   History, RotateCcw, ChevronLeft, ChevronRight, Lock, Wand2,
@@ -186,7 +186,7 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
     } catch (err) {
       // Don't silently swallow — log so a corrupted slides blob is visible
       // in the console rather than appearing as an empty deck.
-      console.error('PitchDeckPage: failed to parse deck.slides', err);
+      reportError('PitchDeckPage:parseSlides', err);
       return [];
     }
   }, [deck]);
@@ -1283,8 +1283,10 @@ function loadTemplates() {
           const tplType = typeof ns?.TEMPLATES;
           const tplKeyCount = ns?.TEMPLATES && typeof ns.TEMPLATES === 'object' ? Object.keys(ns.TEMPLATES).length : 0;
           const diag = `ns_keys=[${namespaceKeys.join(',') || '∅'}] inner=[${innerKeys.join(',') || '—'}] TEMPLATE_LIST(type=${tlType},isArray=${tlIsArr},len=${tlLen}) TEMPLATES(type=${tplType},keys=${tplKeyCount})`;
-          // eslint-disable-next-line no-console
-          console.warn('[decks/templates] dynamic import resolved with no templates', { namespaceKeys, innerKeys, tlType, tlIsArr, tlLen, tplType, tplKeyCount });
+          // `diag` above is the same facts as the object this used to log,
+          // already flattened to one line — and unlike the object it survives
+          // `toEntry`, which has no field for free-form context.
+          reportWarn('decks/templates:empty-registry', diag);
           const err = new Error(`templates_module_empty (${diag})`);
           err.diag = diag;
           const recovering = recoverFromStaleTemplatesChunk();
