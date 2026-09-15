@@ -30,7 +30,7 @@ const typeLabel = (value) => String(value || 'relationship').replaceAll('_', ' '
 const personName = (relationship) => relationship?.other?.name || relationship?.other?.email || 'Unidentified relationship';
 const age = (value) => {
   if (!value) return 'Not recorded';
-  const date = new Date(String(value || '').replace(' ', 'T'));
+  const date = new Date(String(value).replace(' ', 'T'));
   const days = Math.max(0, Math.floor((Date.now() - date.getTime()) / 86400000));
   if (!Number.isFinite(days)) return 'Not recorded';
   return days === 0 ? 'Today' : `${days}d ago`;
