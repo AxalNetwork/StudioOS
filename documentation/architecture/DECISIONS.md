@@ -8171,3 +8171,105 @@ is a figure the branch reports.
 `admin_revenue.test.ts` updated, its retired-refusal assertions replaced rather
 than deleted. **34 mutations applied, 34 caught.** The first run of the new RPC
 suite failed four ways and three of them were real code defects, listed above.
+
+---
+
+## D112 — A branch can ask, HQ can answer, and the answer arriving is a different fact from the answer existing (2026-09-15, #220)
+
+D108 gave a branch a way to push an item up: `hq_escalations` (migration 259),
+`recordEscalation`, and H1's list. What it did not give anybody was a way to
+**answer** one. `answer`, `answered_by_user_id` and `answered_at` have been
+columns nothing writes since the day they shipped, so H1 was a queue that could
+only grow: a branch pushed an item up, HQ read it, and it stayed there forever.
+This closes the loop, and the decisions below are mostly about the ways a loop
+like this lies quietly.
+
+**A decision is one answer with an author and a time — not a thread, and every
+surface says so.** The canvas draws "the answer coming back as a thread with
+HQ's decision and who made it". What the schema holds is the *decision* half.
+So a second answer **replaces** the first rather than appending (two decisions
+in one column is not a thread, it is a lost decision), and the branch's lane
+renders the answer with **no reply box**. A textarea there would be the most
+expensive thing on the screen: the person using it would believe they had
+replied, and nobody would ever read it. The payload says `answer_shape:
+'single_decision'` so no future surface has to rediscover this.
+
+**An answer requires its reason, even when the decision is no.** A status change
+with nothing written arrives at the branch as a refusal it cannot act on, on the
+screen of the person least able to find out why.
+
+### The delivery is its own fact, and that is the shape this whole tier keeps
+
+`answerEscalation` records HQ's decision and **does not push**. The route pushes
+and reports the result in its own `pushed` field — the D111 promo-ceiling
+precedent, for the same reason: HQ deciding and the branch receiving are
+different events, and a route that reported them as one would make an
+unreachable branch look like a decision that never happened, so an operator
+would enter it twice.
+
+**The mirror of that, on the branch side: a raise that cannot reach HQ is kept,
+not dropped.** The local row is written either way (**migration 261**,
+`branch_escalations`), because a raise is still a thing a person did and losing
+it because a binding was down would teach people to distrust the button. It is
+stored `undelivered` with the reason and is retryable — and it is emphatically
+**not counted as an escalation HQ has**: `hq_uid` is null, and every surface
+keys off that rather than off the row existing.
+
+**Why a second table at all.** `hq_escalations` lives at HQ deliberately: the
+point is that HQ sees every branch's queue on one screen. But a branch cannot
+read HQ's database (D.2), and S3's To-HQ lane is a list of the branch's own
+escalations on the branch's own screen. `branch_escalations` is that list, keyed
+on **HQ's uid** rather than a local id — a push matched on a local row number
+would land on whatever escalation happens to hold that number, silently and on
+the wrong one. A push for a uid this branch has no row for is **reported, never
+inserted**: a branch inventing a row from a push would show an escalation nobody
+there raised.
+
+`answered_by_name` is a **name, not an id**, because HQ's user ids and a branch's
+collide by construction (D104) and an HQ id stored locally could be joined to a
+local `users` row and name the wrong person with complete confidence.
+
+### The trap: the appeal path must not be the thing that freezes
+
+D107 gates every branch write behind `requireBranchNotSuspended` → 423. PR 5
+shipped the frozen-branch banner whose **stated appeal path is an escalation**.
+Gating this route would have left the banner telling a branch admin to appeal
+and the appeal button answering 423 — a locked door with a sign pointing at it,
+and the kind of consistency a later refactor "tidies" into place without
+noticing. **The escalation route is deliberately ungated**, the route records
+why, the form says so on screen, and a test asserts it on `codeOnly` so the
+explanation cannot satisfy the assertion.
+
+### H6's localisation refusal is narrowed, not deleted
+
+It had three parts: no localisation link, no brand-approval state, no
+per-subsidiary attribution. This closes **two** — a content escalation carries
+`branch_code` and now takes a decision. The third is untouched and is why the
+artboard's "4 localised" still has no source: **nothing records that one piece
+is a localisation of another**, so a count would be counting submissions and
+calling them translations. The sentence survives in a smaller and still-true
+form, the same way D111 kept `budget_reason`.
+
+### The defect the tests found
+
+`mapError` answered **400** for the branch-tier refusal, because the route threw
+its own wording and `AUTH_ERROR_STATUSES` did not know it — the exact failure
+D110 found across 31 route files, reappearing the first time somebody wrote a
+new refusal. The sentence is a shared constant now (`BRANCH_ONLY` in
+`util/branch.ts`, the mirror of `HQ_ONLY`), and the test asserts **both** the
+route's status and the table entry, because a route throwing the right sentence
+is only half of it: deleting the map entry would put it back at 400 with the
+route unchanged.
+
+**One deliberate collapse.** HQ's status vocabulary is wider than the branch's —
+`declined` and `withdrawn` are both *decided* as far as a branch lane is
+concerned — so the push maps them to `answered` rather than adding two more
+CHECK values and a second vocabulary to keep in step.
+
+**Verification.** `npm run test:drift` exit 0. New: `escalation_answer.test.ts`
+(19) and `subsidiary_approvals_s3.test.mjs` (9). Every new assertion
+mutation-checked both ways. **Two of the test's own assertions were wrong first
+and were fixed rather than the code**: one scanned raw source and matched the
+comment explaining the very thing it checked, the other grepped for the word
+"reply" and matched the sentence telling the reader there is no reply box. An
+assertion that fails on the correct implementation is worse than none.

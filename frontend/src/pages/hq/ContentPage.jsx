@@ -66,16 +66,29 @@ function Stat({ label, value, note }) {
 
 export default function ContentPage() {
   const [data, setData] = useState(null);
+  // D112 — the localisation lane reads the escalation board, not this summary.
+  // Its own state and its own retry: the summary is a pure read and the lane
+  // has writes behind it, so folding them together would mean a slow escalation
+  // board blanked the editorial pipeline too.
+  const [lane, setLane] = useState(null);
   const load = useCallback(() => {
     setData(null);
     api.hqContent().then(setData, (e) => { reportError('hq-content', e); setData(UNAVAILABLE); });
   }, []);
-  useEffect(() => { load(); }, [load]);
+  const loadLane = useCallback(() => {
+    setLane(null);
+    api.escalations({ kind: 'content' }).then(setLane, (e) => {
+      reportError('hq-content-lane', e);
+      setLane(UNAVAILABLE);
+    });
+  }, []);
+  useEffect(() => { load(); loadLane(); }, [load, loadLane]);
 
   const ready = data && data !== UNAVAILABLE;
   const pipeline = ready ? data.pipeline : null;
   const pubs = ready ? data.publications : null;
   const templates = ready ? data.templates : null;
+  const laneItems = lane && lane !== UNAVAILABLE && lane.available ? (lane.items || []) : null;
 
   const rail = (
     <WorkerRail
@@ -83,9 +96,12 @@ export default function ContentPage() {
       title="Content"
       unavailable={[
         ['One unified pipeline', 'Articles and publications are still two stores with two meanings of "published".'],
-        ['Localisation', 'Nothing records that a piece localises another, or which subsidiary made it.'],
-        ['Brand approval', 'No approval state exists for a localised piece.'],
-        ['Per-subsidiary attribution', 'No account names its licence yet (U1).'],
+        // D112 — "Brand approval" and "Per-subsidiary attribution" came OFF
+        // this list: a content escalation carries the branch code and takes a
+        // decision. "Localisation" stays and is NARROWER: what is missing is
+        // the link between a piece and the one it localises, not the lane.
+        ['Localisation link', 'Nothing records that one piece is a localisation of another, so a count of localised items would be a count of submissions.'],
+        ['Per-article attribution', 'An escalation names the branch that submitted it; an ARTICLE still names no licence (U1).'],
       ]}
       data-testid="hq-content-rail"
     />
@@ -210,12 +226,74 @@ export default function ContentPage() {
               )}
             </Zone>
 
-            <Zone title="Localisation" sub="what the header would have counted">
-              <Absent reason={ready ? data.localisation_reason : 'The content summary could not be read.'} />
+            <Zone title="Localisation" sub="submissions from branches, and the brand decision">
+              {/* D112 — TWO OF THE THREE ABSENCES CLOSED, AND THE THIRD NAMED.
+                  A content escalation carries the branch code (attribution) and
+                  takes a decision (brand approval). What still does not exist
+                  is a LINK saying which piece a submission localises — so this
+                  lane counts submissions, and the refusal below says that
+                  rather than being deleted. */}
+              {lane === UNAVAILABLE && (
+                <Unreadable
+                  what="Content submissions"
+                  claim="This is not a claim that no branch has submitted anything."
+                  onRetry={loadLane}
+                />
+              )}
+              {lane && lane !== UNAVAILABLE && !lane.available && (
+                <Absent reason={lane.reason} />
+              )}
+              {laneItems && laneItems.length === 0 && (
+                <p className="text-[12.5px] leading-relaxed text-axal-muted" data-testid="hq-localisation-empty">
+                  No branch has submitted content for brand approval. The lane reads escalations of
+                  kind <code>content</code>; an empty one means nothing was pushed up, not that
+                  nothing can be.
+                </p>
+              )}
+              {laneItems && laneItems.length > 0 && (
+                <ul className="space-y-2" data-testid="hq-localisation-lane">
+                  {laneItems.map((it) => (
+                    <li key={it.uid} className="rounded-xl border border-axal-hairline bg-axal-ground p-2.5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-[12px] font-bold">{it.subject}</div>
+                          <div className="mt-0.5 text-[10.5px] text-axal-faint">
+                            {it.branch_code} · raised {it.created_at}
+                            {it.sla === 'past' ? ' · past SLA' : it.sla === 'due_soon' ? ' · due soon' : ''}
+                          </div>
+                        </div>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9.5px] font-extrabold uppercase tracking-[.08em] ${
+                          it.answer
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'
+                            : 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
+                        }`}>
+                          {it.answer ? 'decided' : 'awaiting'}
+                        </span>
+                      </div>
+                      {it.answer && (
+                        <p className="mt-1.5 text-[11.5px] leading-relaxed text-axal-muted">
+                          {it.answer}
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
               <div className="mt-3 grid grid-cols-2 gap-2">
+                <Stat
+                  label="Submitted for approval"
+                  value={laneItems ? String(laneItems.length) : null}
+                  note={laneItems ? 'escalations of kind content' : 'the lane could not be read'}
+                />
+                {/* STILL PERMANENTLY BLANK, and for the one reason that did not
+                    change: counting localisations needs a link between two
+                    pieces, and nothing records one. */}
                 <Stat label="Localised" value={null} note="no localisation link exists" />
-                <Stat label="Awaiting brand approval" value={null} note="no approval state exists" />
               </div>
+              <p className="mt-3 text-[12px] leading-relaxed text-axal-muted" data-testid="hq-localisation-reason">
+                {ready ? data.localisation_reason : 'The content summary could not be read.'}
+              </p>
             </Zone>
           </div>
         </div>

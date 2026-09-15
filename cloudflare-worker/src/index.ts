@@ -166,6 +166,8 @@ import perksRoutes from './routes/perks';
 import adminLicences from './routes/admin_licences';
 import adminDeployments from './routes/admin_deployments';
 import adminStatements from './routes/admin_statements';
+import adminEscalations from './routes/admin_escalations';
+import branchEscalationRoutes from './routes/branch_escalations';
 import adminSuperAdmins from './routes/admin_super_admins';
 import adminHq from './routes/admin_hq';
 import adminRevenue from './routes/admin_revenue';
@@ -776,6 +778,11 @@ app.route('/api/admin', adminDeployments);
 // D111 — statements and promo ceilings. Mounted with the deployments router,
 // before the /api/admin catch-all, for the same reason.
 app.route('/api/admin', adminStatements);
+app.route('/api/admin', adminEscalations);
+// The branch tier's own surface. Its own prefix rather than `/api/admin`,
+// because it is not an HQ console route and must not inherit the elevation
+// checks or the cool-off prefixes that apply there (D112).
+app.route('/api/branch', branchEscalationRoutes);
 app.route('/api/admin/licences', adminLicences);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
 // catch-all for the same reason as the licence ledger above.

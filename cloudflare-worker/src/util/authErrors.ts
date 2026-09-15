@@ -19,7 +19,7 @@
  * message is a bug or a validation failure, and neither should be dressed as
  * an authorisation decision.
  */
-import { BRANCH_SUSPENDED, HQ_AUTHORING_ONLY, HQ_ONLY } from './branch';
+import { BRANCH_ONLY, BRANCH_SUSPENDED, HQ_AUTHORING_ONLY, HQ_ONLY } from './branch';
 
 export const AUTH_ERROR_STATUSES: Record<string, 401 | 403 | 423> = {
   Unauthorized: 401,
@@ -34,6 +34,11 @@ export const AUTH_ERROR_STATUSES: Record<string, 401 | 403 | 423> = {
   // drifting apart; a shared constant is the shape where they cannot.
   [HQ_ONLY]: 403,
   [HQ_AUTHORING_ONLY]: 403,
+  // D112 — the mirror of HQ_ONLY, for a surface that is a branch's own. Added
+  // because the escalation lane's first version threw its own wording and
+  // `mapError` answered 400: the test caught it, which is the whole reason
+  // this table has one home.
+  [BRANCH_ONLY]: 403,
   // D107 — 423 Locked, and the only entry in this map that is not 401/403.
   // A frozen queue is not a permission failure: the branch admin may take
   // this decision, and HQ has stopped them from taking it today. The shell

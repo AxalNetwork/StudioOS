@@ -411,3 +411,157 @@ export async function promoCeilingForBranch(
     pushed_at: new Date().toISOString(),
   };
 }
+
+/* ------------------------------------------------------------------ *
+ * HQ answers an escalation (D112)                                     *
+ * ------------------------------------------------------------------ */
+
+/** What a branch's own lane needs back, beyond what `recordEscalation` returned. */
+export type EscalationAnswer = {
+  hq_uid: string;
+  answer: string;
+  answered_by_name: string;
+  answered_at: string;
+  status: string;
+  pushed_at: string;
+};
+
+/** The states HQ can move an escalation to. `open` is the write-time default. */
+export const ESCALATION_STATUSES = ['open', 'answered', 'declined', 'withdrawn'] as const;
+export type EscalationStatus = (typeof ESCALATION_STATUSES)[number];
+
+/**
+ * Record HQ's decision on one escalation.
+ *
+ * WHY A DECISION AND NOT A MESSAGE. `hq_escalations` carries one `answer` with
+ * one author and one time (migration 259). That is the decision half of what
+ * the canvas draws and not the conversation half, and this function does not
+ * pretend otherwise: a second answer REPLACES the first rather than appending,
+ * because two decisions in one column is not a thread, it is a lost decision.
+ * A real thread is a messages table and is its own feature.
+ *
+ * AN ANSWER REQUIRES TEXT even when the decision is "declined". The subsidiary
+ * canvas draws the answer as something a branch admin reads and acts on; a
+ * status change with nothing written is a refusal with no reason, arriving on
+ * the screen of the person least able to find out why.
+ *
+ * DOES NOT PUSH. The push is the caller's, because whether the branch received
+ * the decision is a different fact from whether HQ made it, and the route
+ * reports them separately (the D111 promo-ceiling precedent).
+ */
+export async function answerEscalation(
+  env: Env,
+  uid: string,
+  input: { answer: string; status?: string; answered_by_user_id: number; answered_by_name: string },
+): Promise<{ row: EscalationRow; answer: Omit<EscalationAnswer, 'pushed_at'> }> {
+  requireHq(env);
+
+  const id = String(uid ?? '').trim().slice(0, 80);
+  if (!id) throw new Error('answerEscalation: an escalation uid is required');
+
+  const answer = String(input?.answer ?? '').trim().slice(0, 4000);
+  if (!answer) {
+    throw new Error(
+      'answerEscalation: a decision needs its reason. A status change with nothing written '
+      + 'reaches the branch as a refusal it cannot act on.',
+    );
+  }
+
+  const status = String(input?.status ?? 'answered').trim().toLowerCase();
+  if (!(ESCALATION_STATUSES as readonly string[]).includes(status)) {
+    throw new Error(`answerEscalation: status must be one of ${ESCALATION_STATUSES.join(', ')}`);
+  }
+  // An answer that left the row 'open' would show as decided at HQ and
+  // undecided on the branch, which is the one inconsistency this pair of
+  // tables can produce.
+  if (status === 'open') {
+    throw new Error('answerEscalation: an answered escalation cannot stay open');
+  }
+
+  const name = String(input?.answered_by_name ?? '').trim().slice(0, 200);
+  const now = new Date().toISOString();
+
+  const existing = await env.DB.prepare('SELECT uid FROM hq_escalations WHERE uid = ?')
+    .bind(id).first<{ uid: string }>();
+  if (!existing) throw new Error(`answerEscalation: ${id} is not an escalation`);
+
+  await env.DB.prepare(
+    `UPDATE hq_escalations
+        SET answer = ?, answered_by_user_id = ?, answered_at = ?, status = ?, updated_at = ?
+      WHERE uid = ?`,
+  ).bind(answer, Number(input.answered_by_user_id) || null, now, status, now, id).run();
+
+  const row = await env.DB.prepare(
+    `SELECT uid, branch_code, kind, subject, subject_ref, detail, raised_by_name,
+            status, due_at, created_at, answer, answered_at
+       FROM hq_escalations WHERE uid = ?`,
+  ).bind(id).first<EscalationRow>();
+
+  return {
+    row: row!,
+    answer: { hq_uid: id, answer, answered_by_name: name, answered_at: now, status },
+  };
+}
+
+/**
+ * The escalation board, filtered — H1 lists what is open, H6 lists content.
+ *
+ * `openEscalations` above stays as it is: H1's zone asks a narrower question
+ * ("what is awaiting HQ") and a caller that had to pass `status: 'open'` to get
+ * the same list would be one forgotten argument away from showing answered
+ * items as a backlog.
+ */
+export async function listEscalations(
+  env: Env,
+  filter: { status?: string; kind?: string; branch_code?: string; limit?: number } = {},
+): Promise<Array<EscalationRow & { sla: 'ok' | 'due_soon' | 'past' }>> {
+  requireHq(env);
+  const cap = Math.max(1, Math.min(200, Number(filter.limit) || 50));
+
+  // FOUR LITERAL STATEMENTS RATHER THAN AN ASSEMBLED `WHERE`. The same rule
+  // D111's PATCH handler follows and for the same reason: a `${…}` inside
+  // `DB.prepare` lands in the query TEXT, where no binding protects it. The
+  // filter space here is small enough to enumerate, so it is enumerated.
+  const status = filter.status ? String(filter.status).trim().toLowerCase() : '';
+  const kind = filter.kind ? String(filter.kind).trim().toLowerCase() : '';
+
+  // AND THE COLUMN LIST IS REPEATED RATHER THAN HOISTED. A first draft put it
+  // in a `COLS` const and interpolated it, which `check-sql-prepare` refused —
+  // correctly, because the guard's rule is that NO `${…}` reaches the query
+  // text, not that the value happens to be safe today. A hoisted fragment is
+  // one refactor away from carrying a caller's string, so the four statements
+  // are four statements.
+  let rows: { results?: EscalationRow[] };
+  if (status && kind) {
+    rows = await env.DB.prepare(
+      `SELECT uid, branch_code, kind, subject, subject_ref, detail, raised_by_name,
+              status, due_at, created_at, answer, answered_at
+         FROM hq_escalations WHERE status = ? AND kind = ?
+        ORDER BY created_at ASC LIMIT ?`,
+    ).bind(status, kind, cap).all<EscalationRow>();
+  } else if (kind) {
+    rows = await env.DB.prepare(
+      `SELECT uid, branch_code, kind, subject, subject_ref, detail, raised_by_name,
+              status, due_at, created_at, answer, answered_at
+         FROM hq_escalations WHERE kind = ?
+        ORDER BY created_at ASC LIMIT ?`,
+    ).bind(kind, cap).all<EscalationRow>();
+  } else if (status) {
+    rows = await env.DB.prepare(
+      `SELECT uid, branch_code, kind, subject, subject_ref, detail, raised_by_name,
+              status, due_at, created_at, answer, answered_at
+         FROM hq_escalations WHERE status = ?
+        ORDER BY created_at ASC LIMIT ?`,
+    ).bind(status, cap).all<EscalationRow>();
+  } else {
+    rows = await env.DB.prepare(
+      `SELECT uid, branch_code, kind, subject, subject_ref, detail, raised_by_name,
+              status, due_at, created_at, answer, answered_at
+         FROM hq_escalations
+        ORDER BY created_at ASC LIMIT ?`,
+    ).bind(cap).all<EscalationRow>();
+  }
+
+  const now = Date.now();
+  return (rows.results || []).map((r) => ({ ...r, sla: slaBand(r.due_at, now) }));
+}

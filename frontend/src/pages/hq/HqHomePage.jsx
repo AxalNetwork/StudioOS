@@ -292,6 +292,22 @@ export default function HqHomePage() {
                 ))}
               </ul>
             )}
+            {/* D112 — THE LIST IS NOT THE LOOP. Until an escalation could be
+                answered, this zone was a queue nobody could clear: a branch
+                pushed an item up and HQ could read it and nothing else, so
+                every item stayed here forever. Answering happens on its own
+                surface rather than inline, because a decision needs its reason
+                typed and a one-line list is the wrong place for that. */}
+            {ready && data.escalations_available !== false && (
+              <p className="mt-2 text-[11.5px] leading-relaxed text-axal-faint">
+                Answering one records HQ&rsquo;s decision and pushes it to the branch;
+                whether the branch received it is reported separately from whether
+                the decision was made.{' '}
+                <Link to="/admin/content" className="underline" data-testid="hq-escalations-answer-link">
+                  Content submissions &rarr;
+                </Link>
+              </p>
+            )}
           </Card>
 
           <Card className="border-amber-200 bg-amber-50/30 dark:border-amber-900 dark:bg-amber-950/20">

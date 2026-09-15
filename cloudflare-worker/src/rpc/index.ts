@@ -27,11 +27,11 @@ import { WorkerEntrypoint } from 'cloudflare:workers';
 import type { Env } from '../types';
 import {
   branchHealth, branchOverview, branchSearchAccounts, applyLicenceCopy,
-  branchRevenueSummary, applyPromoCeiling,
+  branchRevenueSummary, applyPromoCeiling, applyEscalationAnswer,
 } from './branchOps';
 import {
   recordEscalation, licenceForBranch, reportUsage, promoCeilingForBranch,
-  type EscalationInput, type UsageFigure,
+  type EscalationInput, type UsageFigure, type EscalationAnswer,
 } from './hqOps';
 
 /** Exported by a branch Worker; called by HQ over `BRANCH_<CODE>`. */
@@ -49,6 +49,8 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
   applyPromoCeiling(c: { period: string; ceiling_cents: number; currency: string; pushed_at: string }) {
     return applyPromoCeiling(this.env, c);
   }
+
+  applyEscalationAnswer(a: EscalationAnswer) { return applyEscalationAnswer(this.env, a); }
 }
 
 /** Exported by HQ; called by a branch over its `HQ` binding. */

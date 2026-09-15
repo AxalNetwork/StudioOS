@@ -166,6 +166,7 @@ const SendForSignaturePage = lazy(() => import('./pages/legal/SendForSignaturePa
 // Migration 190 made "which licence is this admin's?" answerable at all.
 const MyLicencePage = lazy(() => import('./pages/subsidiary/MyLicencePage'));
 const BranchZonePending = lazy(() => import('./pages/branch/BranchZonePending'));
+const BranchApprovals = lazy(() => import('./pages/branch/BranchApprovals'));
 // The Super Admin's HQ-only surfaces (migrations 199/207). `hqOnly` below
 // renders the notice for an admin without the elevation.
 const SuperAdminOnlyNotice = lazy(() => import('./pages/hq/SuperAdminOnlyNotice'));
@@ -2075,7 +2076,11 @@ function AppInner() {
           like the guarantee without being it. */}
       <Route path="/branch" element={guard(['admin'], <BranchZonePending artboard="S1 Home" title="The territory's operating digest" will="The local clock and greeting, the AI digest proposal with its cost, queue pressure ordered by the oldest item rather than by count, today's programme deadlines, revenue share month-to-date for this territory, and what the rail flagged inside it." pr="PR 12" />)} />
       <Route path="/branch/accounts" element={guard(['admin'], <BranchZonePending artboard="S2 Accounts" title="Seats licensed, seats used, and who holds them" will="Seats per licence type against the seats HQ licensed, ambering at 88% with the request-more-seats escalation; the members table with seat id and state; and the Exploring board. Seats USED needs the seat assignment store, which is why this is not a number that can be shown today." pr="PR 12" />)} />
-      <Route path="/branch/approvals" element={guard(['admin'], <BranchZonePending artboard="S3 Approvals" title="Five queues on one board" will="LP applications, referrals, cohort applications, spinout moderation and content outbound to HQ in one work board with SLA bands, assignment, a history drawer and an AI-drafted decision note that never records the decision. The five queues exist today as five separate consoles under the Admin Console." pr="PR 13" />)} />
+      {/* D112 — the outbound HALF of S3 is live: the To-HQ lane and HQ's
+          answers. The four local queues keep their stated notice inside the
+          page, so the row is honest about which half is built rather than
+          waiting for all five. */}
+      <Route path="/branch/approvals" element={guard(['admin'], <BranchApprovals />)} />
       <Route path="/branch/programs" element={guard(['admin'], <BranchZonePending artboard="S4 Programs" title="Timing is yours, authoring is HQ's" will="The cohort calendar with dates you adjust, and assessment runs whose results are yours. Changing a question is a Content submission, which the Worker already refuses here and says so." pr="PR 14" />)} />
       <Route path="/branch/community" element={guard(['admin'], <BranchZonePending artboard="S4 Community" title="Events, jobs, circles and profiles — entirely local" will="The community zones re-homed under this shell. Nothing in them is shared with another territory, and nothing in them is pushed from HQ." pr="PR 14" />)} />
       <Route path="/branch/contracts" element={guard(['admin'], <BranchZonePending artboard="S5 Contracts" title="Instantiate, never author" will="Active contracts with the template version travelling on the row, HQ's master library read-only with its as-of stamp and archived versions visible but unusable, and pending signatures." pr="PR 14" />)} />
