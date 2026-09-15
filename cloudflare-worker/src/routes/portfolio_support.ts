@@ -211,11 +211,23 @@ r.post('/', async (c) => {
     if (!summary) return c.json({ detail: 'summary required' }, 400);
 
     const kind = SUPPORT_KINDS.has(String(body.kind)) ? String(body.kind) : 'other';
-    const requestedState = body.state == null ? null : String(body.state);
-    if (requestedState != null && requestedState !== 'promised') {
-      return c.json({ detail: 'new entries must start in promised state' }, 400);
+    // AN UNKNOWN STATE IS REFUSED, NOT COERCED. This read
+    // `SUPPORT_STATES.has(String(body.state)) ? String(body.state) : 'promised'`,
+    // so a typo — 'delivred' — was silently recorded as a promise and answered
+    // 201, while PATCH one handler down refuses the same typo with a 400. Two
+    // answers to one question about one vocabulary. Delivered stays a legal
+    // state to open in: the log form offers it, and work is often recorded
+    // after it is done rather than before.
+    const asked = body.state === undefined || body.state === null ? null : String(body.state);
+    if (asked !== null && !SUPPORT_STATES.has(asked)) {
+      return c.json({ detail: 'state must be promised or delivered' }, 400);
     }
-    const state = 'promised';
+    const state = asked ?? 'promised';
+    // Withdrawn is a state an entry REACHES, never one it opens in — a promise
+    // that was never made cannot be withdrawn. PATCH owns that transition.
+    if (state === 'withdrawn') {
+      return c.json({ detail: 'an entry cannot be logged as already withdrawn' }, 400);
+    }
 
     const proj = await c.env.DB.prepare(
       'SELECT id FROM projects WHERE uid = ? AND deleted_at IS NULL',
