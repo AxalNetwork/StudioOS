@@ -21,7 +21,7 @@ import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
  * scope UNRESOLVED_ITEMS U1 warns about, so it says so beside the control.
  *
  * ABSENT IS NOT ZERO. Accounts, revenue and queue depth PER SUBSIDIARY, seat
- * utilisation and escalations all render `<Unrecorded />` with the reason
+ * utilisation render `<Unrecorded />` with the reason
  * the payload gives. A figure the payload lacks renders the same way — `num`
  * returns null for a missing value rather than defaulting it, which is the
  * difference between "0 accounts" and "not recorded". A failed request
@@ -117,10 +117,14 @@ export default function HqHomePage() {
       unavailable={[
         // [title, detail] pairs: WorkerRail destructures each entry, so a bare
         // string would render as its first two characters.
-        ['Per-subsidiary accounts, revenue and queue depth', 'No account names its licence yet (U1).'],
-        ['Seat utilisation', 'Needs the same tenancy scope.'],
-        ['Token P&L per subsidiary', 'Needs the same tenancy scope.'],
-        ['Escalations', 'No subsidiary-to-HQ escalation exists on the platform.'],
+        // D108 — three of these four moved. Per-branch accounts and queue
+        // depth now come from the fan-out, and escalations have a store, so
+        // both lines are GONE rather than reworded: a stale "not connected"
+        // note that still reads plausibly is what the next surface cites.
+        // What remains is what genuinely has no source.
+        ['Revenue per subsidiary', 'A branch reports its own billing to HQ; that call is not built, so no branch sends a figure.'],
+        ['Seat utilisation', 'Needs seat_assignments — who holds which seat id. No such store exists on either tier.'],
+        ['Token P&L per subsidiary', 'Needs per-branch metadata on every model call; nothing meters AI spend per tenant yet.'],
       ]}
       data-testid="hq-home-rail"
     />
@@ -243,10 +247,51 @@ export default function HqHomePage() {
               <h2 className="text-[14.5px] font-extrabold tracking-tight">Escalations awaiting HQ</h2>
               <span className="text-[11.5px] text-axal-faint">Pushed up by subsidiaries</span>
             </div>
-            <p className="text-[12.5px] leading-relaxed text-axal-muted">
-              <Unrecorded /> — {ready ? data.escalations_reason : 'no escalation concept exists on the platform.'}{' '}
-              The <Link to="/help" className="underline">ticket queue</Link> is platform-wide and is not one.
-            </p>
+            {/* D108 — escalations have a store now (migration 259), so this
+                zone stops saying the concept does not exist. Three states, and
+                an empty list is NOT the same as an unreadable table: one means
+                no branch has pushed anything up, the other means HQ cannot
+                tell. */}
+            {!ready || data.escalations_available === false ? (
+              <p className="text-[12.5px] leading-relaxed text-axal-muted">
+                <Unreadable
+                  what="Escalations"
+                  claim={ready ? data.escalations_reason : 'The overview has not loaded yet.'}
+                />{' '}
+                The <Link to="/help" className="underline">ticket queue</Link> is platform-wide and is not one.
+              </p>
+            ) : (data.escalations || []).length === 0 ? (
+              <p className="text-[12.5px] leading-relaxed text-axal-muted">
+                Nothing is waiting on HQ. A branch pushes an item up from its Approvals board —
+                moderation, content for brand approval, or a seat increase — and it lands here with
+                its clock running. The <Link to="/help" className="underline">ticket queue</Link> is
+                platform-wide and is not one.
+              </p>
+            ) : (
+              <ul className="space-y-1.5" data-testid="hq-escalations">
+                {(data.escalations || []).map((e) => (
+                  <li key={e.uid} className="flex items-baseline justify-between gap-3 text-[12.5px]">
+                    <span className="min-w-0 truncate">
+                      <span className="font-medium">{e.branch_code}</span>
+                      {' · '}{String(e.kind || '').replace(/_/g, ' ')}
+                      {' — '}{e.subject}
+                    </span>
+                    {/* The band is the server's, derived from the due date on
+                        read. A band computed here from `created_at` would be a
+                        second answer to the same question. */}
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                      e.sla === 'past'
+                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                        : e.sla === 'due_soon'
+                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                          : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+                    }`}>
+                      {e.sla === 'past' ? 'past SLA' : e.sla === 'due_soon' ? 'due soon' : 'on time'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
 
           <Card className="border-amber-200 bg-amber-50/30 dark:border-amber-900 dark:bg-amber-950/20">

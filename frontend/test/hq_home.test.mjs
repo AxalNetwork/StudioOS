@@ -83,7 +83,20 @@ test('the overview endpoint is super-admin only and carries the shared honesty b
   assert.match(ROUTE, /await requireSuperAdmin\(c\)/);
   assert.match(ROUTE, /\.\.\.DERIVED_UNAVAILABLE/, 'the same wording GET /licence/mine sends, not a second phrasing');
   assert.match(read('cloudflare-worker/src/routes/licence.ts'), /export const DERIVED_UNAVAILABLE/);
-  assert.match(ROUTE, /escalations_available: false/);
+  // D108 — escalations HAVE a store now (migration 259), so the old
+  // `escalations_available: false` pin is re-pointed rather than deleted: the
+  // property worth guarding was never "escalations are absent", it was "the
+  // payload says which of the two it is". The refusal string must be gone,
+  // and the flag must be able to answer true.
+  assert.doesNotMatch(
+    ROUTE, /No escalation exists on the platform/,
+    'the retired refusal must be deleted, not reworded — a stale reason gets cited by the next surface',
+  );
+  assert.match(ROUTE, /escalations_available: escalations\.available/);
+  assert.match(ROUTE, /openEscalations\(env, ESCALATION_LIMIT\)/);
+  // An unreadable hq_escalations table is reported as unreadable, never as an
+  // empty queue — the same rule the ticket queue below follows.
+  assert.match(ROUTE, /available: false,\s*\n\s*reason: 'The hq_escalations table could not be read/);
   // The queue is platform-wide; an unreadable table is reported, not zeroed.
   assert.match(ROUTE, /queue = \{ available: false, reason:/);
 });
@@ -97,8 +110,17 @@ test('the overview is mounted before the /api/admin catch-all', () => {
 
 test('the rail names what is not connected instead of implying it is', () => {
   assert.match(PAGE, /role="super_admin"/);
-  assert.match(PAGE, /\['Per-subsidiary accounts, revenue and queue depth', 'No account names its licence yet \(U1\)\.'\]/);
-  assert.match(PAGE, /\['Escalations', 'No subsidiary-to-HQ escalation exists on the platform\.'\]/);
+  // D108 — both of these lines are retired. Per-branch accounts and queue
+  // depth come from the fan-out now, and escalations have a store, so the
+  // rail must no longer name either as unconnected. Asserted as an ABSENCE
+  // because that is the regression: a note that still reads plausibly.
+  assert.doesNotMatch(PAGE, /No account names its licence yet/);
+  assert.doesNotMatch(PAGE, /No subsidiary-to-HQ escalation exists on the platform/);
+  // What is still genuinely unsourced stays named, so the rail does not
+  // quietly become empty.
+  assert.match(PAGE, /\['Revenue per subsidiary', '[^']+'\]/);
+  assert.match(PAGE, /\['Seat utilisation', '[^']+'\]/);
+  assert.match(PAGE, /\['Token P&L per subsidiary', '[^']+'\]/);
 });
 
 /* ────────────────────────────────────────────────────────────────────────────
