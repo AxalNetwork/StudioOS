@@ -58,6 +58,22 @@ export const HQ_AUTHORING_ONLY = 'Changing a template is a Content submission';
  */
 export const BRANCH_SUSPENDED = 'Branch suspended by HQ';
 
+/**
+ * The mirror of `HQ_ONLY`: a surface that only exists on a BRANCH (D112).
+ *
+ * `HQ_ONLY` refuses a branch reaching for HQ's console. This refuses HQ
+ * reaching for a branch's own tier — the To-HQ escalation lane being the first
+ * of them, because HQ has no HQ to escalate to. Both are 403 for the same
+ * reason: it is not a malformed request, it is a surface that is not this
+ * tier's.
+ *
+ * DECLARED HERE RATHER THAN IN THE ROUTE, because `AUTH_ERROR_STATUSES` keys
+ * on the sentence. A route that threw its own wording would fall through
+ * `mapError` to 400, and the SPA cannot tell a refusal from a bad request at
+ * 400 — which is exactly the defect D110 found across 31 route files.
+ */
+export const BRANCH_ONLY = 'Branch only';
+
 /** The branch code this Worker is deployed for, lower-cased, or `null` on HQ. */
 export function branchOf(env: Pick<Env, 'BRANCH_CODE'> | undefined | null): string | null {
   const raw = String(env?.BRANCH_CODE ?? '').trim();

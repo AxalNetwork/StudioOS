@@ -2985,6 +2985,27 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(data || {}),
     }),
+  // D112 — escalations, both directions. H1 lists what is open, H6 filters to
+  // kind=content for the localisation lane, and the PATCH is HQ's decision.
+  // `pushed` on the response says whether the branch RECEIVED it, which is a
+  // different fact from whether HQ made it.
+  escalations: (filter) => {
+    const q = new URLSearchParams();
+    if (filter?.status) q.set('status', filter.status);
+    if (filter?.kind) q.set('kind', filter.kind);
+    const s = q.toString();
+    return request(`/admin/escalations${s ? `?${s}` : ''}`);
+  },
+  escalationAnswer: (uid, data) =>
+    request(`/admin/escalations/${encodeURIComponent(uid)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data || {}),
+    }),
+  // The BRANCH side, under its own prefix. Live only on a branch Worker; on HQ
+  // these answer 403 because HQ has no HQ to escalate to.
+  branchEscalations: () => request('/branch/escalations'),
+  branchEscalate: (data) =>
+    request('/branch/escalations', { method: 'POST', body: JSON.stringify(data || {}) }),
   licenceCreate: (data) => request('/admin/licences', { method: 'POST', body: JSON.stringify(data || {}) }),
   licenceSetTerritories: (uid, countries) =>
     request(`/admin/licences/${encodeURIComponent(uid)}/territories`, { method: 'PUT', body: JSON.stringify({ countries }) }),

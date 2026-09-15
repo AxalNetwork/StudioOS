@@ -24,6 +24,11 @@
 import type { Env } from '../types';
 import { branchOf } from '../util/branch';
 import { PRE_VERDICT_STATUSES } from '../services/referralSubmissions';
+// ONE DEFINITION OF "PAST SLA", shared across the tier boundary. It is a pure
+// function of a date, so importing it costs nothing and restating it would let
+// HQ's board and the branch's lane disagree about which items are late — with
+// both screens confident.
+import { slaBand } from './hqOps';
 
 /** Every branch answer carries the code, because a binding does not (D.7). */
 export type BranchAnswer<T> = T & { branch: string; as_of: string };
@@ -447,4 +452,101 @@ export async function applyPromoCeiling(
     String(c.pushed_at), new Date().toISOString(),
   ).run();
   return { ok: true };
+}
+
+/* ------------------------------------------------------------------ *
+ * The branch's own escalation lane (D112)                             *
+ * ------------------------------------------------------------------ */
+
+export type BranchEscalationRow = {
+  id: number;
+  hq_uid: string | null;
+  kind: string;
+  subject: string;
+  subject_ref: string | null;
+  detail: string | null;
+  raised_by_name: string | null;
+  status: string;
+  delivery_error: string | null;
+  due_at: string | null;
+  answer: string | null;
+  answered_by_name: string | null;
+  answered_at: string | null;
+  pushed_at: string | null;
+  created_at: string;
+};
+
+/**
+ * Store HQ's decision on an escalation this branch raised (migration 261).
+ *
+ * MATCHED ON `hq_uid`, WHICH IS HQ'S OWN. The branch's row id means nothing at
+ * HQ, so a push keyed on it would be a push into a row number that happens to
+ * exist here — on the wrong escalation, silently. A push for a uid this branch
+ * has no row for is reported rather than inserted: a branch inventing a local
+ * row from a push would show an escalation nobody here raised.
+ *
+ * `pushed_at` IS HQ'S STAMP, not this database's write time, so "as of" never
+ * gets younger than the decision it reports (migration 256's rule).
+ */
+export async function applyEscalationAnswer(
+  env: Env,
+  a: {
+    hq_uid: string; answer: string; answered_by_name: string;
+    answered_at: string; status: string; pushed_at: string;
+  },
+): Promise<{ ok: boolean; reason?: string }> {
+  if (!branchOf(env)) throw new Error('applyEscalationAnswer is only live on a branch');
+
+  const uid = String(a?.hq_uid ?? '').trim();
+  if (!uid) throw new Error('applyEscalationAnswer: hq_uid is required');
+
+  const res = await env.DB.prepare(
+    `UPDATE branch_escalations
+        SET answer = ?, answered_by_name = ?, answered_at = ?, status = ?,
+            pushed_at = ?, updated_at = ?
+      WHERE hq_uid = ?`,
+  ).bind(
+    String(a.answer ?? '').slice(0, 4000),
+    String(a.answered_by_name ?? '').slice(0, 200) || null,
+    String(a.answered_at ?? ''),
+    // HQ's vocabulary is wider than the branch's — 'declined' and 'withdrawn'
+    // are both decided as far as this lane is concerned, and inventing two more
+    // local states would mean the CHECK constraint and HQ's list drifting.
+    String(a.status ?? '') === 'open' ? 'open' : 'answered',
+    String(a.pushed_at ?? ''), nowIso(), uid,
+  ).run();
+
+  const changed = Number((res as { meta?: { changes?: number } })?.meta?.changes ?? 0);
+  if (!changed) {
+    return {
+      ok: false,
+      reason: `This branch has no escalation with HQ uid ${uid}, so there is nothing to answer. `
+        + 'The row is not created from the push: a local row invented here would show an '
+        + 'escalation nobody at this branch raised.',
+    };
+  }
+  return { ok: true };
+}
+
+/** S3's To-HQ lane: what this branch raised, newest first, with the SLA band. */
+export async function branchEscalations(
+  env: Env, limit = 50,
+): Promise<BranchAnswer<{ items: Array<BranchEscalationRow & { sla: 'ok' | 'due_soon' | 'past' }> }>> {
+  const code = requireBranch(env);
+  const cap = Math.max(1, Math.min(200, Number(limit) || 50));
+  const rows = await env.DB.prepare(
+    `SELECT id, hq_uid, kind, subject, subject_ref, detail, raised_by_name, status,
+            delivery_error, due_at, answer, answered_by_name, answered_at, pushed_at, created_at
+       FROM branch_escalations ORDER BY created_at DESC LIMIT ?`,
+  ).bind(cap).all<BranchEscalationRow>();
+
+  const now = Date.now();
+  return {
+    branch: code,
+    as_of: nowIso(),
+    // THE SAME BAND FUNCTION HQ USES, imported rather than restated — two
+    // definitions of "past SLA" is how the two tiers come to disagree about
+    // which items are late.
+    items: (rows.results || []).map((r) => ({ ...r, sla: slaBand(r.due_at, now) })),
+  };
 }

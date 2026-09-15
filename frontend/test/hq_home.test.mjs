@@ -142,6 +142,40 @@ test('the rail names what is not connected instead of implying it is', () => {
   assert.match(PAGE, /\['Token P&L per subsidiary', '[^']+'\]/);
 });
 
+test('D112 — the escalations list is no longer a queue nobody can clear', () => {
+  // WHAT CHANGED IS THE LOOP, NOT THE LIST. Before D112 a branch could push an
+  // item up and HQ could read it and do nothing else, so every item stayed in
+  // this zone forever. The note is what tells a reader the loop closes, and
+  // where — so all three of its properties are pinned, because each can be
+  // lost on its own.
+  const at = PAGE.indexOf('data-testid="hq-escalations-answer-link"');
+  assert.ok(at > 0, 'the escalations zone lost the route to answering one');
+
+  // 1. The destination is a REGISTERED route, not a plausible-looking string.
+  //    A note pointing at a 404 is worse than no note: it reads as shipped.
+  const link = PAGE.slice(PAGE.lastIndexOf('<Link', at), at);
+  const to = /to="([^"]+)"/.exec(link);
+  assert.ok(to, 'the answer link has no destination');
+  assert.ok(APP.includes(`path="${to[1]}"`), `${to[1]} is not a registered route`);
+
+  // 2. The two facts stay two. D111's promo-ceiling precedent, restated on the
+  //    page that invites the action: a decision that was recorded but did not
+  //    reach the branch must not read as a decision that never happened, or an
+  //    operator enters it twice.
+  const note = PAGE.slice(PAGE.lastIndexOf('<p', at), at);
+  assert.match(note, /records HQ&rsquo;s decision/, 'the note does not say the decision is recorded');
+  assert.match(note, /reported separately/,
+    'the note collapses "decided" and "delivered" into one outcome');
+
+  // 3. It is gated on the queue being READABLE. Inviting someone to answer a
+  //    list that could not be read points them at nothing.
+  assert.match(
+    PAGE.slice(Math.max(0, at - 700), at),
+    /data\.escalations_available !== false &&/,
+    'the answer note renders even when the escalations queue is unreadable',
+  );
+});
+
 /* ────────────────────────────────────────────────────────────────────────────
  * Two shapes an apex audit caught on 2026-09-03, pinned for every HQ page.
  * ──────────────────────────────────────────────────────────────────────────── */
