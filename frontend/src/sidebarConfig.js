@@ -120,6 +120,33 @@ export const SIDEBAR_GROUPS = {
     ]},
   ],
 
+  // The subsidiary tier (D107). Eight rows, in the Admin · Subsidiary
+  // canvas's own nav order, one group — the canvas draws no second group and
+  // the territory badge sits above them all, in App.jsx.
+  //
+  // WHY EVERY ROW SHIPS AT ONCE, WHICH READS AS A REVERSAL OF THE COMMENT ON
+  // THE GROUP ABOVE AND IS NOT ONE. That comment forbids a row pointing at a
+  // route that does not exist, because such a row "looks shipped and 404s".
+  // Every row here HAS a route, registered in App.jsx and covered by the same
+  // guard; the ones whose artboards are not built render `BranchZonePending`,
+  // which names the artboard, what will be on it and which PR builds it. A
+  // stated notice is not a 404, and a one-row sidebar — which is what the
+  // rule applied literally would ship, since only Settings has a page today —
+  // is not the subsidiary canvas and does not answer the question the frame
+  // exists to answer.
+  branch_admin: [
+    { key: 'branch', label: 'Branch', items: [
+      { to: '/branch', icon: LayoutDashboard, label: 'Home' },
+      { to: '/branch/accounts', icon: Users, label: 'Accounts' },
+      { to: '/branch/approvals', icon: Inbox, label: 'Approvals' },
+      { to: '/branch/programs', icon: Calendar, label: 'Programs' },
+      { to: '/branch/community', icon: Network, label: 'Community' },
+      { to: '/branch/contracts', icon: FileText, label: 'Contracts' },
+      { to: '/branch/insights', icon: TrendingUp, label: 'Insights' },
+      { to: '/branch/settings', icon: UserCog, label: 'Settings' },
+    ]},
+  ],
+
   admin: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },

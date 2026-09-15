@@ -64,6 +64,13 @@ export const ACCENT = {
   // and the accent has to sit apart from founder violet and investor indigo
   // for the same reason those two sit apart from each other.
   super_admin: { ink: '#881337', deep: '#9f1239', tint: '#fff5f7', border: '#f9c8d2', deepDark: '#fb7185', tintDark: '#2c1018' },
+  // The subsidiary tier (D107). Steel `#334155`, per the Admin · Subsidiary
+  // canvas. `deepDark` is slate-400 — the 400 weight of steel's OWN hue, the
+  // way every entry above takes its dark-ground pair, and not a lightness
+  // flip of the ink: a branch admin on a dark ground should still read
+  // "steel", which is the one thing that tells their chrome apart from HQ's
+  // oxblood at a glance.
+  branch_admin: { ink: '#334155', deep: '#1e293b', tint: '#f8fafc', border: '#cbd5e1', deepDark: '#94a3b8', tintDark: '#151a22' },
 };
 
 /**

@@ -160,6 +160,7 @@ const SendForSignaturePage = lazy(() => import('./pages/legal/SendForSignaturePa
 // The subsidiary administrator's read of their own territory licence.
 // Migration 190 made "which licence is this admin's?" answerable at all.
 const MyLicencePage = lazy(() => import('./pages/subsidiary/MyLicencePage'));
+const BranchZonePending = lazy(() => import('./pages/branch/BranchZonePending'));
 // The Super Admin's HQ-only surfaces (migrations 199/207). `hqOnly` below
 // renders the notice for an admin without the elevation.
 const SuperAdminOnlyNotice = lazy(() => import('./pages/hq/SuperAdminOnlyNotice'));
@@ -332,7 +333,7 @@ const InstallPrompt = lazy(() => import('./components/InstallPrompt'));
 const KeyboardShortcutsOverlay = lazy(() => import('./components/KeyboardShortcutsOverlay'));
 import useInactivityTimeout from './hooks/useInactivityTimeout';
 import { ONBOARDING_COMPLETE_EVENT, TERMS_ACCEPTED_EVENT } from './lib/onboarding';
-import { shellRoleFor, isSuperAdminUser, readHqView, writeHqView, clearHqView } from './lib/shellRole';
+import { shellRoleFor, branchOfUser, isSuperAdminUser, readHqView, writeHqView, clearHqView } from './lib/shellRole';
 
 // Phase B · Prompt 5 — sidebar groups now live in `frontend/src/sidebarConfig.js`.
 
@@ -812,6 +813,11 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // and a holder is the only one allowed to impersonate a holder).
   const superAdmin = isSuperAdminUser(realUser || user);
   const shellRole = shellRoleFor(activeRole, user, hqView);
+  // D107. `user`, not `realUser`: the branch is a property of the deployment
+  // this SPA is served from, so it is the same fact for every session on it —
+  // and during an HQ support session the badge must keep naming the branch the
+  // support session is being run ON, which is the one the copy comes from.
+  const branchFact = branchOfUser(user) ? user.branch : null;
   // ONE RULE, FOUR LICENCES. This read two lists and named two roles, so the
   // other two got whatever the fallback happened to be: advisor routes were
   // full width but padded, and partner routes were padded AND centred at
@@ -913,6 +919,26 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               shellRole === 'super_admin'
                 ? <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-900 dark:bg-rose-950/50 dark:text-rose-200">HQ</span>
                 : <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${ROLE_COLORS.admin}`}>Admin View</span>
+            )}
+            {/* D107 — the territory badge, in the slot the HQ chip occupies and
+                at the same weight, because both answer the same question: whose
+                data am I looking at. On HQ that question has a switcher behind
+                it; on a branch it has one answer and no control, which is the
+                tenancy wall stated in the chrome rather than on each page.
+
+                It renders from `/me.branch` only. A branch is a property of the
+                DEPLOYMENT (D106), so there is nothing here for a user to be
+                wrong about and nothing to fall back to when the key is absent:
+                HQ and the dev FastAPI both show no badge, which is correct. */}
+            {branchFact && (
+              <span
+                data-testid="territory-badge"
+                className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200"
+              >
+                {branchFact.name || branchFact.code}
+                {(branchFact.territories || []).length > 0 && ` · ${(branchFact.territories || []).join(' · ')}`}
+                {' · SUBSIDIARY'}
+              </span>
             )}
             {(activeRole === 'founder' || activeRole === 'admin') && (
               <Suspense fallback={<span className="inline-block h-8 w-8" />}>
@@ -2031,6 +2057,25 @@ function AppInner() {
       <Route path="/admin/licences" element={guard(['admin'], hqOnly(<AdminLicences />))} />
       {/* A subsidiary admin reads their OWN licence; /admin/licences is HQ's ledger of every one. */}
       <Route path="/admin/my-licence" element={guard(['admin'], <MyLicencePage />)} />
+      {/* D107 — the eight subsidiary rows (Admin · Subsidiary S0–S6). Each one
+          has a route so no sidebar row can 404; the ones whose artboards are
+          not built state what they will show and which PR builds them.
+
+          `guard(['admin'])` and NOT a branch check. The shell arm is a
+          sidebar, never a permission (lib/shellRole.js), and the tenancy wall
+          is not a client-side route test: on a branch these pages read the
+          branch's own database because that is the only database bound to the
+          Worker serving them, and on HQ they carry no data at all. A second,
+          weaker copy of the wall in the router would be the thing that looks
+          like the guarantee without being it. */}
+      <Route path="/branch" element={guard(['admin'], <BranchZonePending artboard="S1 Home" title="The territory's operating digest" will="The local clock and greeting, the AI digest proposal with its cost, queue pressure ordered by the oldest item rather than by count, today's programme deadlines, revenue share month-to-date for this territory, and what the rail flagged inside it." pr="PR 12" />)} />
+      <Route path="/branch/accounts" element={guard(['admin'], <BranchZonePending artboard="S2 Accounts" title="Seats licensed, seats used, and who holds them" will="Seats per licence type against the seats HQ licensed, ambering at 88% with the request-more-seats escalation; the members table with seat id and state; and the Exploring board. Seats USED needs the seat assignment store, which is why this is not a number that can be shown today." pr="PR 12" />)} />
+      <Route path="/branch/approvals" element={guard(['admin'], <BranchZonePending artboard="S3 Approvals" title="Five queues on one board" will="LP applications, referrals, cohort applications, spinout moderation and content outbound to HQ in one work board with SLA bands, assignment, a history drawer and an AI-drafted decision note that never records the decision. The five queues exist today as five separate consoles under the Admin Console." pr="PR 13" />)} />
+      <Route path="/branch/programs" element={guard(['admin'], <BranchZonePending artboard="S4 Programs" title="Timing is yours, authoring is HQ's" will="The cohort calendar with dates you adjust, and assessment runs whose results are yours. Changing a question is a Content submission, which the Worker already refuses here and says so." pr="PR 14" />)} />
+      <Route path="/branch/community" element={guard(['admin'], <BranchZonePending artboard="S4 Community" title="Events, jobs, circles and profiles — entirely local" will="The community zones re-homed under this shell. Nothing in them is shared with another territory, and nothing in them is pushed from HQ." pr="PR 14" />)} />
+      <Route path="/branch/contracts" element={guard(['admin'], <BranchZonePending artboard="S5 Contracts" title="Instantiate, never author" will="Active contracts with the template version travelling on the row, HQ's master library read-only with its as-of stamp and archived versions visible but unusable, and pending signatures." pr="PR 14" />)} />
+      <Route path="/branch/insights" element={guard(['admin'], <BranchZonePending artboard="S6 Insights" title="Four stats and one tick against the median" will="Accounts, activation, programme throughput and revenue share for the quarter, plus a benchmark shown as a single tick against the anonymised platform median — never a ranked list of territories." pr="PR 14" />)} />
+      <Route path="/branch/settings" element={guard(['admin'], <BranchZonePending artboard="S6 Settings" title="Who owns each row" will="Subsidiary name and staff are yours; territory, brand kit and the licence summary are HQ's, each with an owner chip and, on HQ-owned rows, the request path. Your licence summary is already readable today under Your licence below." pr="PR 14" />)} />
       {/* The HQ shell's Contracts and Team rows. Both frame panels the Admin
           Console already has (Legal templates; the Users table) for the
           franchisor, with the holder console above the accounts. */}

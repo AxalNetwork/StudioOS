@@ -7630,3 +7630,89 @@ worker suite; `frontend/test/branch_host.test.mjs` grows two (5 total).
 gained `{ location: {} }`, the single shape where dropping the optional chain
 changes the answer. An assertion that cannot fail on the machines that run it
 is not a guard.
+
+---
+
+## D107 — A branch gets the canvas's eight rows, notices and all; and suspension finally does something (2026-09-15, #215)
+
+**The decision that needed recording, because it reads as a reversal of a rule
+this repo states and is not one.** `sidebarConfig.js` says plainly that rows
+are added as their pages land, because "a row pointing at a route that does not
+exist is worse than a missing row: it looks shipped and 404s". Applied
+literally to the subsidiary tier that would have shipped a **one-row** sidebar:
+of the Admin · Subsidiary canvas's eight rows, only Settings has a page today,
+Contracts now answers "HQ only" on a branch (D106), and S1–S6 do not exist.
+
+A one-row sidebar is not that canvas, and it does not answer the question the
+frame exists to answer — *whose data am I looking at*. So all eight rows ship,
+**every one with a registered route**, and the rows whose artboards are unbuilt
+render `BranchZonePending`: a card naming the artboard, what will be on it, and
+**which numbered PR builds it**. The rule's actual property — no row 404s — is
+untouched and is what `subsidiary_shell_s0.test.mjs` asserts. The notice names
+a PR rather than saying "coming soon" on purpose: "soon" is unfalsifiable and
+survives forever, whereas a named build makes the notice wrong the day it lands,
+which is what gets it deleted.
+
+**The shell is chosen on the deployment, not the account.** `shellRoleFor`
+returns `branch_admin` when `/me.branch` carries a code — a fact about which
+Worker served the page, which no browser can be wrong about. The file's own
+rule is unchanged and restated for the new arm: **it names a sidebar, never a
+permission.** Nothing that decides access reads it; the gates are D106's, in
+the Worker, keyed off `BRANCH_CODE`. The branch arm is checked before the HQ
+arm, which is not a precedence call between two live claims — D106 makes
+`is_super_admin` 0 on every branch — but this file declining to depend on that
+invariant holding somewhere else.
+
+**Suspension is now a behaviour, not a column.** `requireBranchNotSuspended`
+reads `branch_licence.status` and throws on the decision write in each of
+`admin_lp_applications.ts`, `refer_earn.ts`, `admin_cohort.ts` and
+`spinout_moderation.ts` — four files, four routers, no shared write helper,
+which is why it is four call sites and not one. Three properties are load-bearing
+and each is pinned in both directions:
+
+- **423 Locked, not 403.** They are different claims. 403 is "this is not
+  yours"; 423 is "this is yours, and HQ has frozen it" — a state with a date, a
+  reason and an appeal path, which the shell renders differently. This is the
+  only entry in `AUTH_ERROR_STATUSES` that is not 401/403, and it widened the
+  map's type to admit one.
+- **After the admin gate, always.** A freeze check that ran first would answer
+  423 to an anonymous caller and leak the branch's licence state to anyone who
+  could reach the URL. The guard slices the *handler* out to assert the order,
+  because these files register several routes and a whole-file offset
+  comparison passes even when the pair is reversed — found by mutation, not by
+  reading.
+- **Reads never freeze, and an unreadable copy never freezes.** A frozen branch
+  can still see its queue; that is what the banner is about. And a branch whose
+  licence HQ has not pushed yet reads as NOT suspended — inferring suspension
+  from a missing row would freeze every branch in the window between bootstrap
+  and the first push, which is exactly when its principal is trying to work.
+
+**Two defects in PR 4's licence copy, found by wiring a page to it rather than
+by reading it.** D106 shipped `branch_licence` and the payload that reads it,
+and nothing rendered either until now. The copy emitted its own column name
+`legal_entity` where `MyLicencePage` reads HQ's `legal_entity_name`, and carried
+no `licence_ref` at all — so the single screen the copy exists for would have
+shown a blank entity and a licence with no reference on it, on the one tier
+nobody had run. **Migration 257** adds the column (additive, never an edit to
+applied 256), and the payload now speaks HQ's field names, asserted against the
+keys the page actually reads rather than a list retyped in the test.
+
+The same wiring surfaced a third: the History panel rendered the branch's
+empty `events` array as "Nothing recorded yet", which is a claim about HQ's
+append-only trail that this deployment cannot make. The server was already
+sending `events_available: false` with a reason; the page now renders it. An
+empty array and an unavailable trail are different facts and must not share a
+sentence — the same rule `licence_not_pushed` follows against "you administer
+no licence".
+
+**What this does not do.** S1–S6 have no bodies; PRs 12–14 build them. There is
+no shell-level frozen banner yet — the 423 is server-side and the branch Home
+that would carry the banner does not exist. The canvas moves `backlog/` →
+`integrated/`, 61 → 62 and 26 → 25, because it now has routes.
+
+**Verification.** `npm run test:drift` exit 0. `subsidiary_shell_s0.test.mjs`
+(7) and `branch_suspended_freeze.test.ts` (7) are new; `branch_licence_copy`
+grows one. **14 mutations applied, 14 caught** — one only after the handler
+ordering assertion stopped comparing whole-file offsets, which is the same
+lesson again: an assertion that cannot fail on the code it guards is not a
+guard.

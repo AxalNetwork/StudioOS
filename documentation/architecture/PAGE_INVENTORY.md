@@ -140,9 +140,22 @@ canvas behind it still shows up here.
 | HQ | Security | `/admin/security` | Support Security · Super |
 | HQ | Settings | `/account` | — (no canvas; shipped ahead of the design corpus) |
 
+## `branch_admin` — 8 destinations in 1 group
+
+| Group | Label | Route | Canvas behind it |
+| --- | --- | --- | --- |
+| Branch | Home | `/branch` | — (no canvas; shipped ahead of the design corpus) |
+| Branch | Accounts | `/branch/accounts` | — (no canvas; shipped ahead of the design corpus) |
+| Branch | Approvals | `/branch/approvals` | — (no canvas; shipped ahead of the design corpus) |
+| Branch | Programs | `/branch/programs` | — (no canvas; shipped ahead of the design corpus) |
+| Branch | Community | `/branch/community` | — (no canvas; shipped ahead of the design corpus) |
+| Branch | Contracts | `/branch/contracts` | — (no canvas; shipped ahead of the design corpus) |
+| Branch | Insights | `/branch/insights` | — (no canvas; shipped ahead of the design corpus) |
+| Branch | Settings | `/branch/settings` | — (no canvas; shipped ahead of the design corpus) |
+
 ## Destinations with no canvas
 
-64 of the 97 sidebar rows above are not claimed
+72 of the 105 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
@@ -212,5 +225,13 @@ rather than merely absent.
 - super_admin · HQ · Content (`/admin/content`)
 - super_admin · HQ · Platform (`/admin/platform`)
 - super_admin · HQ · Settings (`/account`)
+- branch_admin · Branch · Home (`/branch`)
+- branch_admin · Branch · Accounts (`/branch/accounts`)
+- branch_admin · Branch · Approvals (`/branch/approvals`)
+- branch_admin · Branch · Programs (`/branch/programs`)
+- branch_admin · Branch · Community (`/branch/community`)
+- branch_admin · Branch · Contracts (`/branch/contracts`)
+- branch_admin · Branch · Insights (`/branch/insights`)
+- branch_admin · Branch · Settings (`/branch/settings`)
 
 **Canvas corpus:** 110. **Workspace assignments:** 130.

@@ -36,6 +36,7 @@ const r = new Hono<{ Bindings: Env }>();
 /** The `branch_licence` singleton (migration 256), or null. */
 type BranchLicenceRow = {
   licence_uid: string;
+  licence_ref: string | null;
   legal_entity: string | null;
   brand_name: string | null;
   territory: string;
@@ -72,7 +73,7 @@ async function branchLicencePayload(env: Env, code: string) {
   let row: BranchLicenceRow | null = null;
   try {
     row = await env.DB.prepare(
-      `SELECT licence_uid, legal_entity, brand_name, territory, status, seats_json,
+      `SELECT licence_uid, licence_ref, legal_entity, brand_name, territory, status, seats_json,
               revenue_share_bps, token_split_bps, annual_fee_cents, currency, term_start, term_end,
               renewal_at, template_version, suspended_at, suspended_note, pushed_at
          FROM branch_licence WHERE id = 1`,
@@ -111,7 +112,15 @@ async function branchLicencePayload(env: Env, code: string) {
   return {
     licence: {
       uid: row.licence_uid,
-      legal_entity: row.legal_entity,
+      // THE KEYS ARE HQ'S, NOT THE TABLE'S. `branch_licence` stores
+      // `legal_entity`; the HQ payload this is a copy of calls the same fact
+      // `legal_entity_name`, and `MyLicencePage` reads the HQ name. A copy
+      // that renamed its own fields would render blank on exactly the tier it
+      // was built for — which is what it did until this line, and is why the
+      // page's fields are read off this object in its test rather than
+      // assumed to line up.
+      licence_ref: row.licence_ref,
+      legal_entity_name: row.legal_entity,
       brand_name: row.brand_name,
       status: row.status,
       territories,
