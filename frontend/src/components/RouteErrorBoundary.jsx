@@ -2,6 +2,7 @@ import React from 'react';
 import { useLocation } from 'react-router-dom';
 import { AlertTriangle, RefreshCcw, Home } from 'lucide-react';
 import { reportError } from '../lib/log';
+import { readAttempts, reloadWithinBudget } from '../lib/reloadGuard';
 
 /**
  * Page-level error boundary that wraps the lazy `<Routes>` tree.
@@ -46,6 +47,8 @@ function isChunkLoadError(error) {
 
 // sessionStorage key used to prevent auto-reload loops.
 const RELOAD_GUARD_KEY = 'axal:chunk-reload-boundary';
+const RELOAD_GUARD_PARAM = '__boundary';
+const MAX_BOUNDARY_RELOADS = 1;
 
 class RouteErrorBoundary extends React.Component {
   constructor(props) {
@@ -63,11 +66,7 @@ class RouteErrorBoundary extends React.Component {
     // reads the one-shot guard so its decision mirrors componentDidCatch's.
     let reloading = false;
     if (isChunkLoadError(error)) {
-      try {
-        reloading = sessionStorage.getItem(RELOAD_GUARD_KEY) !== '1';
-      } catch {
-        reloading = false; // sessionStorage blocked → can't auto-reload; show the card
-      }
+      reloading = readAttempts(RELOAD_GUARD_KEY, RELOAD_GUARD_PARAM) < MAX_BOUNDARY_RELOADS;
     }
     // `caughtAt` stamps when the error surfaced so componentDidUpdate can keep
     // a freshly-caught card visible across a redirect-induced pathname change
@@ -84,23 +83,11 @@ class RouteErrorBoundary extends React.Component {
       }
     } catch { /* never let the boundary itself throw */ }
 
-    // Auto-recover from chunk-load failures exactly once per session.
-    // The guard is cleared on a successful app load (see main.jsx), so
-    // it only loops-stops if the chunk is permanently broken.
+    // Auto-recover from chunk-load failures exactly once per tab (storage or URL).
     if (isChunkLoadError(error)) {
-      let willReload = false;
-      try {
-        if (sessionStorage.getItem(RELOAD_GUARD_KEY) !== '1') {
-          sessionStorage.setItem(RELOAD_GUARD_KEY, '1');
-          willReload = true;
-          window.location.reload();
-        }
-      } catch { /* sessionStorage blocked / write failed — fall through to the card */ }
-      // If we are NOT actually reloading (guard already spent, sessionStorage
-      // blocked, or the write threw), don't strand the user on the calm
-      // "updating" splash that getDerivedStateFromError optimistically chose —
-      // flip back to the actionable error card with its explicit Reload button.
-      if (!willReload) {
+      const reloaded = reloadWithinBudget(RELOAD_GUARD_KEY, RELOAD_GUARD_PARAM, MAX_BOUNDARY_RELOADS);
+      if (!reloaded) {
+        // Budget spent or storage refused with no URL marker — show the actionable card.
         this.setState({ reloading: false });
       }
     }
@@ -143,6 +130,11 @@ class RouteErrorBoundary extends React.Component {
 
   handleChunkReload = () => {
     try { sessionStorage.removeItem(RELOAD_GUARD_KEY); } catch {}
+    try {
+      const u = new URL(window.location.href);
+      u.searchParams.delete(RELOAD_GUARD_PARAM);
+      window.history.replaceState(null, '', u.pathname + u.search + u.hash);
+    } catch { /* ignore */ }
     window.location.reload();
   };
 
