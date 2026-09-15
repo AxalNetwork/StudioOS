@@ -7716,3 +7716,188 @@ grows one. **14 mutations applied, 14 caught** — one only after the handler
 ordering assertion stopped comparing whole-file offsets, which is the same
 lesson again: an assertion that cannot fail on the code it guards is not a
 guard.
+
+---
+
+## D108 — HQ reads every branch at once, one failure stays local, and a branch can finally push something up (2026-09-15, #216)
+
+**The rule the whole PR is shaped around.** Under D.2 each branch is its own
+Worker over its own database, so every cross-branch figure on an HQ screen is N
+remote calls and any of them can fail — or, worse, never answer. Two obvious
+implementations are both wrong: awaiting them together makes HQ's Home as
+available as its least available branch, and summing whatever came back prints
+a total that is quietly missing a territory. The second is the dangerous one,
+because it looks like an answer.
+
+So `services/branches.ts` is `Promise.allSettled` under a deadline, with a
+**per-branch state** and a denominator on every aggregate. "Of N branches, M
+answered" is a sentence H1 must be able to say. Three states, not two, and the
+third is the one that gets forgotten:
+
+- **`ok`** — it answered, with its own `as_of`.
+- **`unreadable`** — it did not. This is explicitly **not** a claim the branch
+  is down: a binding can be misconfigured, a deploy can be mid-flight, the
+  deadline can be tight. The copy says "could not be read" and offers a retry.
+- **`not_deployed`** — HQ holds a licence and a registry row but has no binding
+  yet, because a new branch's `[[services]]` entry reaches HQ on its next
+  deploy (D.7, and the accepted cost in F.11). Structurally different from a
+  failure and must not share its colour.
+
+**The entrypoint classes contain no logic, and that is a testability decision
+rather than a style one.** `WorkerEntrypoint` comes from `cloudflare:workers`,
+which does not exist under `node --test`, so anything written inside those
+classes could be verified only by deploying — for calls that cross the tier
+boundary, the worst possible place to learn something is wrong. The behaviour
+lives in `rpc/branchOps.ts` and `rpc/hqOps.ts`, plain modules tested against a
+real SQLite; `rpc/index.ts` is delegation, and a guard asserts it stays that
+way (no SQL, no control flow).
+
+**What a binding does not give you, stated once.** A callee cannot see which
+binding called it. So every branch→HQ call passes its own `BRANCH_CODE`, HQ
+validates it against the same regex `branchOf` uses, **and checks it against
+`licence_deployments`** — which is why migration 258 ships in this PR rather
+than with provisioning. A code HQ has never provisioned cannot file an
+escalation. That is attribution, not authentication, and the difference is
+worth naming: an entrypoint is callable by any Worker in the account, the
+account is ours, and treating the transport as an identity is how a binding
+ends up trusted for something it cannot establish. The money-adjacent calls
+need the per-deployment secret (`rpc_secret_hash`, migration 258); `reportUsage`
+is the first and PR 9 builds it.
+
+**Escalations exist now, so two false statements were deleted rather than
+reworded.** `admin_hq.ts` shipped the sentence "No escalation exists on the
+platform: a subsidiary cannot push a ticket up to HQ, so there is nothing to
+list", and HQ Home's rail said the same. Both were true and are now false.
+Migration 259 gives the concept a store — kind, subject, the branch that raised
+it, and a **due date rather than an SLA band**, because a band stored at write
+time is wrong an hour later. The band is derived on read, the way
+`okr_column_moves` stores the Monday and derives the window.
+
+**Four things the code corrected, each recorded rather than quietly fixed:**
+
+1. **Two of the four backlog table names were wrong in the first draft**
+   (`cohort_applications`, `spinout_moderation_queue`; the real ones are
+   `cohort_applicants` and `spinout_moderation_cases`), and so were two status
+   vocabularies. This would not have failed loudly — it would have reported the
+   backlog as permanently *unreadable*, a plausible-looking answer that is
+   never right. The names and statuses are now read off each store, and
+   referrals reuse the exported `PRE_VERDICT_STATUSES` minus `draft`: a draft
+   belongs to the member still writing it, and counting it as reviewer backlog
+   puts a branch admin under pressure for work nobody handed them.
+2. **`territory_licences` does not have the columns the branch copy has.** The
+   first `licence()` pull named `term_start`, `term_end`, `template_version`
+   and `token_margin_split_bps`; only a renamed `token_split_bps` exists, and
+   D1 would have thrown on every pull. `term_end` and `template_version` are
+   now sent as **null with a comment saying why** — the ledger holds
+   `term_years` beside `starts_on` and no end date, and deriving one here would
+   invent a fact HQ never asserted.
+3. **An unreadable queue voids the backlog rather than shrinking it.** If one
+   of the four stores cannot be read the answer is `null` with a reason naming
+   it, not the sum of the other three. A smaller number presented as the
+   backlog is worse than no number.
+4. **A test was at fault, not the code.** The LIKE-escaping assertion searched
+   for `'%'` — one character, which the short-needle guard rejects before the
+   query runs, so the test could not fail either way. It now searches `0%`
+   against two rows built so that escaping *changes the answer*. Third time
+   this lesson has been written down in this programme: an assertion that
+   cannot fail on the code it guards is not a guard.
+
+**What this does not do.** No branch is deployed, so `branches` is `[]` on
+production and every assertion here is exercised against fixtures — the first
+real fan-out is PR 7's throwaway branch. `revenueSummary`, `governanceFeed`,
+`mintSupportSession` and the HQ→branch pushes beyond `applyLicence` are not
+built; H4's grouped search has `searchAccounts` behind it but no page yet.
+Seats used stays `null` with its reason on both tiers until `seat_assignments`
+exists.
+
+**Verification.** `npm run test:drift` exit 0 — frontend 2389, worker
+3048 → 3069, retention 29. `branch_rpc_fanout.test.ts` is new (21);
+`hq_home.test.mjs` had two pins re-pointed rather than relaxed, because the
+property worth guarding was never "escalations are absent" but "the payload
+says which of the two it is". **7 mutations applied, 7 caught**, including
+`Promise.allSettled` → `Promise.all` and dropping the deadline, which hangs the
+suite rather than failing an assertion — a distinction the test measures
+elapsed time to catch.
+
+---
+
+## D109 — A branch can be made, by a workflow that has never run, and the PR says so (2026-09-15, #217)
+
+**Every ingredient existed and nothing could assemble one.** PRs 1–6 shipped
+the config generator, the migration runner, the branch-mode gates, the shell
+and the RPC surface, and there was still no path from "HQ issued a licence" to
+"`fr.axal.vc` answers". `branch-provision.yml` is that path.
+
+**IT HAS NEVER RUN, AND THAT IS THE HONEST STATE RATHER THAN AN OMISSION.** It
+cannot until the credentials D.11 lists exist: a Cloudflare token widened
+beyond today's Workers Scripts + D1 to KV, R2, Queues, Vectorize and **Zone
+DNS**, and — only for HQ's Deploy *button* — `GITHUB_ACCESS_TOKEN` with
+`actions: write` (task #192). So this PR ships the workflow, its guard and its
+runbook; it does not ship a green live run, and the PR body leads with that
+rather than burying it. A workflow is code: it can be reviewed, linted and
+tested as text, and the properties worth testing are not the ones a run would
+show anyway.
+
+**THE STEP ORDER IS A CORRECTNESS PROPERTY, NOT A STYLE ONE**, and the code
+decided it rather than the plan. `gen-branch-wrangler.mjs` refuses unless
+`infra/branches/<code>.json` exists; `migrate-d1.mjs --branch` refuses unless
+the generated toml exists. So the sequence is forced: create the resources,
+capture the ids, write the registry, generate the config, then migrate. Two
+more orderings matter for reasons the refusals do not enforce — secrets before
+deploy, because a Worker without `JWT_SECRET` answers **503 config_error** on
+every request (up, and refusing everything, which is not "live"), and deploy
+before smoke, because there is nothing to smoke otherwise. The guard asserts
+all four.
+
+**EVERY DISPATCHED VALUE IS DATA, NEVER SCRIPT TEXT.** `${{ }}` inside a
+`run:` block is substituted before the shell parses the line, so a value
+carrying `;` runs as a command on a runner holding `CLOUDFLARE_API_TOKEN`.
+Semgrep caught exactly this on PR 3's one interpolated step; this workflow has
+nine inputs and all nine arrive as job-level `env:` vars, charset-validated in
+one step before anything is built from them. **The single most valuable line in
+the guard** scans every `run:` block for `${{ inputs.` and asserts zero — it
+guards the class, not the instance. The same reasoning is why three steps are
+Node scripts rather than heredocs: a `run:` block building JSON or SQL from
+dispatched values would have to interpolate them, and `process.env` does not.
+
+**NO WRANGLER CALL MAY FALL THROUGH TO HQ'S CONFIG.** Every one names
+`--config wrangler.branch.<code>.toml`. A bare call reads `wrangler.toml`,
+whose `[[routes]]` are the apex custom domains — deploying a branch with it
+would move `axal.vc` onto the branch Worker, which is leak L10 and the reason
+the generated config exists at all. This also **designs out one of the three
+unknowns** the plan left for the first run: whether `wrangler d1 execute` with
+a name not in the config resolves through the account never arises, because the
+name is always in the config. The other two stay, and each gets a step that
+fails naming the exact right it is missing rather than a generic error.
+
+**Three smaller calls, each stated because the opposite is defensible:**
+
+- **The registry entry is written `provisioning`, never `live`.** The Worker is
+  not deployed when that file is written, and a status running ahead of the
+  deploy makes the registry a claim rather than a record.
+- **The principal row carries no password.** It is seeded `role='admin'` and
+  active with no credential; the principal signs in by magic link or Google
+  like everyone else. Writing a password would make this workflow's log, or the
+  secret that fed it, briefly the credential to a subsidiary's console.
+- **HQ's binding goes through a PR, not a push.** The committed `wrangler.toml`
+  is the deployed truth the apex guards and the parity guard read, and this
+  change adds the one thing that lets HQ reach another database. HQ gains the
+  binding on its **next deploy**, not on merge — which is why
+  `services/branches.ts` has a `not_deployed` state (D108) rather than
+  reporting the gap as an outage.
+
+**Idempotent by step, not by run.** Every create tolerates "already exists" and
+the principal seed is `INSERT OR IGNORE`, so a failure half way is re-runnable.
+The one refusal is a code whose registry file is already committed: that is a
+branch someone has already provisioned.
+
+**Verification.** `npm run test:drift` exit 0.
+`frontend/test/branch_provision_workflow.test.mjs` is new (9). **7 mutations
+applied, 7 caught** — an input interpolated into a `run:`, a wrangler call
+losing its `--config`, the deploy retry removed, the registry claiming `live`,
+the SQL literal no longer escaping a quote, the service binding written to one
+table instead of two, and the idempotence guard removed. One escaped on its
+first attempt because the test's own extractor stopped at a line end and read a
+call's `--config` on the next line as absent — the same shape of mistake as
+measuring a guard by a whole-file offset (D107), fixed by joining backslash
+continuations first. No `frontend/src` change, so `docs/` does not move.

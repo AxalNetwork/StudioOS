@@ -1,0 +1,350 @@
+name: Provision a branch
+
+# Make a subsidiary exist (D.2, D.3, D109).
+#
+# Every INGREDIENT of a branch shipped in PRs 1-6 — the config generator, the
+# migration runner, the branch-mode gates, the shell, the RPC surface — and
+# nothing could assemble one. This is the path from "HQ issued a licence" to
+# "<code>.axal.vc answers": create the resources, write the registry entry,
+# generate the config, build the database from the baseline, set the secrets,
+# seed the principal, deploy, smoke, and open the PR that gives HQ its binding.
+#
+# THIS HAS NEVER RUN, and the PR that added it says so. It cannot until the
+# credentials in D.11 exist: GITHUB_ACCESS_TOKEN with `actions: write` (so HQ's
+# Deploy button can dispatch it — task #192), and a Cloudflare token widened
+# beyond today's Workers Scripts + D1 to KV, R2, Queues, Vectorize and Zone
+# DNS. Until then it is run by hand from the Actions tab, and the first run
+# should use a throwaway code (`test`, test.axal.vc) which `delete` then
+# retires.
+#
+# IDEMPOTENT BY STEP, not by run. Each create step tolerates "already exists"
+# so a re-run after a mid-way failure resumes rather than duplicating; the one
+# thing it refuses outright is a code whose registry entry is already committed,
+# because that is a branch someone has already provisioned.
+#
+# WHY THE ORDER IS NOT NEGOTIABLE. `gen-branch-wrangler.mjs <code>` refuses
+# unless `infra/branches/<code>.json` exists, and `migrate-d1.mjs --branch`
+# refuses unless the generated toml exists. So: create resources -> capture ids
+# -> write registry -> generate config -> migrate. A step moved is a step that
+# fails.
+#
+# Required repository secrets:
+#   CLOUDFLARE_API_TOKEN   — Workers Scripts:Edit, D1:Edit, Workers KV:Edit,
+#                            R2:Edit, Queues:Edit, Vectorize:Edit, Zone DNS:Edit
+#   CLOUDFLARE_ACCOUNT_ID  — the account holding `studioos`
+#   BRANCH_SECRET_BUNDLE   — newline-separated NAME=VALUE pairs copied to the
+#                            new Worker (D.11's named list). Never echoed.
+
+on:
+  workflow_dispatch:
+    inputs:
+      code:
+        description: 'Branch code — lower-case, e.g. fr. Becomes studioos-<code> at <code>.axal.vc'
+        required: true
+        type: string
+      name:
+        description: 'Brand name, e.g. Axal VC France'
+        required: true
+        type: string
+      licence_uid:
+        description: 'The territory_licences.uid this deployment serves'
+        required: true
+        type: string
+      territory:
+        description: 'Comma-separated ISO 3166-1 alpha-2 codes, e.g. FR,BE,LU'
+        required: true
+        type: string
+      principal_email:
+        description: 'The licence principal — the ONE account the branch starts with. Leave blank to seed none (D.3)'
+        required: false
+        type: string
+      principal_name:
+        description: 'Display name for the principal'
+        required: false
+        default: 'Licence principal'
+        type: string
+      d1_jurisdiction:
+        description: 'EU residency for D1/R2. Only `eu` is available; leave as none for a non-EU branch (D.1)'
+        required: true
+        default: 'none'
+        type: choice
+        options: ['eu', 'none']
+      location_hint:
+        description: 'Where the D1 primary should live. A hint, never a guarantee (D.1)'
+        required: true
+        default: 'weur'
+        type: choice
+        options: ['weur', 'eeur', 'enam', 'wnam', 'apac', 'oc', 'none']
+      do_jurisdiction:
+        description: 'Durable Object jurisdiction'
+        required: true
+        default: 'eu'
+        type: choice
+        options: ['eu', 'us', 'none']
+
+concurrency:
+  # One provisioning run per code. Two concurrent runs would race on the
+  # registry file and could create two databases for one branch.
+  group: branch-provision-${{ inputs.code }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  provision:
+    name: provision ${{ inputs.code }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # EVERY DISPATCHED VALUE IS DATA, NEVER SCRIPT TEXT. `${{ }}` inside a
+      # `run:` block is substituted before the shell parses the line, so a
+      # value carrying `;` would run as a command with this job's Cloudflare
+      # credentials in scope. An env var is read by the shell AFTER parsing,
+      # and the validation step below checks every charset before anything is
+      # built from one. This is the same fix d1-migrate.yml carries for the
+      # Semgrep `run-shell-injection` finding on PR 3, and the guard test
+      # asserts no `run:` in this file interpolates an input.
+      BRANCH: ${{ inputs.code }}
+      BRANCH_NAME: ${{ inputs.name }}
+      LICENCE_UID: ${{ inputs.licence_uid }}
+      TERRITORY: ${{ inputs.territory }}
+      D1_JURISDICTION: ${{ inputs.d1_jurisdiction }}
+      LOCATION_HINT: ${{ inputs.location_hint }}
+      DO_JURISDICTION: ${{ inputs.do_jurisdiction }}
+      PRINCIPAL_EMAIL: ${{ inputs.principal_email }}
+      PRINCIPAL_NAME: ${{ inputs.principal_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Preflight — required secrets are set
+        run: |
+          MISSING=()
+          if [[ -z "${CLOUDFLARE_API_TOKEN}" ]]; then MISSING+=("CLOUDFLARE_API_TOKEN"); fi
+          if [[ -z "${CLOUDFLARE_ACCOUNT_ID}" ]]; then MISSING+=("CLOUDFLARE_ACCOUNT_ID"); fi
+          if [[ ${#MISSING[@]} -gt 0 ]]; then
+            echo "::error::Required repo secret(s) are missing or empty: ${MISSING[*]}"
+            exit 1
+          fi
+
+      # Every input's charset, in one place, before any of them is handed to a
+      # command. The code's shape is the same one scripts/lib/migrationTargets
+      # and util/branch.ts enforce — checked here as well because that is what
+      # makes it safe to use in a shell at all.
+      - name: Validate every input
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          [[ "$BRANCH" =~ ^[a-z][a-z0-9-]{1,15}$ ]] \
+            || fail "code must match ^[a-z][a-z0-9-]{1,15}\$ — got '$BRANCH'"
+          [[ "$BRANCH_NAME" =~ ^[[:alnum:][:space:].&'"'"'-]{2,80}$ ]] \
+            || fail "name must be 2-80 chars of letters, digits, spaces and . & ' -"
+          [[ "$LICENCE_UID" =~ ^[A-Za-z0-9_-]{4,64}$ ]] \
+            || fail "licence_uid must be 4-64 chars of [A-Za-z0-9_-]"
+          [[ "$TERRITORY" =~ ^[A-Z]{2}(,[A-Z]{2})*$ ]] \
+            || fail "territory must be comma-separated ISO alpha-2 codes, e.g. FR,BE,LU"
+          # The choice inputs are constrained by the dispatch form, but a
+          # workflow_call or an API dispatch is not bound by it.
+          case "$D1_JURISDICTION" in eu|none) ;; *) fail "d1_jurisdiction must be eu or none" ;; esac
+          case "$LOCATION_HINT" in weur|eeur|enam|wnam|apac|oc|none) ;; *) fail "location_hint is not one of the six Cloudflare hints" ;; esac
+          case "$DO_JURISDICTION" in eu|us|none) ;; *) fail "do_jurisdiction must be eu, us or none" ;; esac
+          # Optional, and checked here anyway: a malformed address would fail
+          # at the last step of a run that had already created every resource.
+          if [[ -n "$PRINCIPAL_EMAIL" && ! "$PRINCIPAL_EMAIL" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]]; then
+            fail "principal_email ${PRINCIPAL_EMAIL} is not an email address"
+          fi
+          if [[ -f "infra/branches/${BRANCH}.json" ]]; then
+            fail "infra/branches/${BRANCH}.json already exists — ${BRANCH} is already provisioned"
+          fi
+          echo "Provisioning ${BRANCH} (studioos-${BRANCH}) at ${BRANCH}.axal.vc"
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix cloudflare-worker
+
+      # ── create ───────────────────────────────────────────────────────────
+      # Each create tolerates an existing resource so a re-run resumes. The
+      # ids are captured into $GITHUB_ENV because the registry file is written
+      # from them two steps down.
+      - name: Create the D1 database
+        run: |
+          set -o pipefail
+          args=(d1 create "studioos-${BRANCH}")
+          [[ "$D1_JURISDICTION" != none ]] && args+=(--jurisdiction "$D1_JURISDICTION")
+          [[ "$LOCATION_HINT" != none ]] && args+=(--location "$LOCATION_HINT")
+          npx --yes wrangler@4.131.0 "${args[@]}" 2>&1 | tee d1.log || {
+            grep -qi 'already exists' d1.log \
+              || { echo "::error::d1 create failed — see above"; exit 1; }
+            echo "::notice::studioos-${BRANCH} already exists; reusing it"
+            npx --yes wrangler@4.131.0 d1 info "studioos-${BRANCH}" --json > d1.log
+          }
+          id=$(grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' d1.log | head -n 1)
+          [[ -n "$id" ]] || { echo "::error::could not read the new database id from wrangler's output"; exit 1; }
+          echo "D1_ID=$id" >> "$GITHUB_ENV"
+
+      - name: Create the two KV namespaces
+        run: |
+          set -o pipefail
+          for binding in TOKENS RATE_LIMITS; do
+            title="studioos-${BRANCH}-$(echo "$binding" | tr '[:upper:]' '[:lower:]')"
+            npx --yes wrangler@4.131.0 kv namespace create "$title" 2>&1 | tee "kv-${binding}.log" || {
+              grep -qi 'already exists' "kv-${binding}.log" \
+                || { echo "::error::kv namespace create failed for ${binding}"; exit 1; }
+            }
+            id=$(grep -oE '[0-9a-f]{32}' "kv-${binding}.log" | head -n 1)
+            [[ -n "$id" ]] || { echo "::error::could not read the ${binding} namespace id"; exit 1; }
+            echo "KV_${binding}=$id" >> "$GITHUB_ENV"
+          done
+
+      - name: Create the R2 buckets, the queues and the Vectorize index
+        run: |
+          set -o pipefail
+          tolerate() { "$@" 2>&1 | tee step.log || grep -qi 'already exists' step.log; }
+          for suffix in files publications backups; do
+            args=(r2 bucket create "studioos-${BRANCH}-${suffix}")
+            [[ "$D1_JURISDICTION" != none ]] && args+=(--jurisdiction "$D1_JURISDICTION")
+            tolerate npx --yes wrangler@4.131.0 "${args[@]}" \
+              || { echo "::error::r2 bucket create failed for ${suffix}"; exit 1; }
+          done
+          for q in "studioos-${BRANCH}-job-queue" "studioos-${BRANCH}-job-queue-dlq"; do
+            tolerate npx --yes wrangler@4.131.0 queues create "$q" \
+              || { echo "::error::queues create failed for ${q}"; exit 1; }
+          done
+          tolerate npx --yes wrangler@4.131.0 vectorize create "axal-search-${BRANCH}" \
+            --dimensions 768 --metric cosine \
+            || { echo "::error::vectorize create failed"; exit 1; }
+
+      # ── the registry entry, then the config it is the input to ───────────
+      - name: Write the registry entry
+        run: node scripts/write-branch-registry.mjs
+
+      - name: Generate the branch Worker config and check it
+        run: |
+          node scripts/gen-branch-wrangler.mjs "$BRANCH"
+          node scripts/check-branch-config.mjs
+
+      # ── the database ─────────────────────────────────────────────────────
+      # `--bootstrap` marks every migration at or below BASELINE_CUTOFF and
+      # applies the baseline; the plain run then applies everything above it.
+      # Migration 207 (the single super-admin holder) sits below the cutoff and
+      # is therefore MARKED, NEVER EXECUTED — a branch gets no super_admins
+      # row, which is exactly right (D106).
+      - name: Build the database from the baseline
+        run: |
+          node scripts/migrate-d1.mjs --branch "$BRANCH" --bootstrap
+          node scripts/migrate-d1.mjs --branch "$BRANCH"
+          node scripts/migrate-d1.mjs --branch "$BRANCH" --dry-run
+
+      # ── the bundle ───────────────────────────────────────────────────────
+      - name: Build the SPA
+        run: npm run build
+
+      # ── secrets, BEFORE the deploy ───────────────────────────────────────
+      # `/api/*` answers 503 config_error until JWT_SECRET and
+      # SCORING_HMAC_SECRET exist, so a deploy without these is a Worker that
+      # is up and refuses every request. The bundle is never echoed: each pair
+      # is piped straight into `wrangler secret put`.
+      - name: Put the Worker secrets
+        env:
+          BRANCH_SECRET_BUNDLE: ${{ secrets.BRANCH_SECRET_BUNDLE }}
+        run: |
+          set -o pipefail
+          put() { printf '%s' "$2" | npx --yes wrangler@4.131.0 secret put "$1" \
+            --config "wrangler.branch.${BRANCH}.toml" > /dev/null; }
+          # A per-deployment JWT secret: a session minted on one branch must
+          # not verify on another (D.4).
+          put JWT_SECRET "$(openssl rand -base64 48)"
+          # HQ keeps only this one's hash (licence_deployments.rpc_secret_hash).
+          RPC_SECRET="$(openssl rand -base64 48)"
+          put RPC_SECRET "$RPC_SECRET"
+          echo "RPC_SECRET_SHA256=$(printf '%s' "$RPC_SECRET" | openssl dgst -sha256 -hex | awk '{print $2}')" >> "$GITHUB_ENV"
+          if [[ -z "${BRANCH_SECRET_BUNDLE}" ]]; then
+            echo "::warning::BRANCH_SECRET_BUNDLE is unset — SCORING_HMAC_SECRET and the KEKs were not set."
+            echo "::warning::The Worker will answer 503 config_error until they are (D.11)."
+          else
+            while IFS= read -r line; do
+              [[ -z "$line" || "$line" == \#* ]] && continue
+              key="${line%%=*}"; value="${line#*=}"
+              [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] || { echo "::error::bad secret name in the bundle"; exit 1; }
+              put "$key" "$value"
+              echo "set ${key}"
+            done <<< "${BRANCH_SECRET_BUNDLE}"
+          fi
+
+      # ── the one account that exists on a new branch ──────────────────────
+      # The API refuses to mint an admin ("the only way to grant admin is via
+      # direct SQL", admin.ts), and no migration seeds a user, so the principal
+      # is inserted here. `INSERT OR IGNORE` keeps the step idempotent.
+      - name: Seed the licence principal
+        run: node scripts/seed-branch-principal.mjs
+
+      # ── deploy ───────────────────────────────────────────────────────────
+      # The 3x15s retry is pr-preview.yml's: a brand-new Worker's first deploy
+      # can fail with 10007 after the upload, when the subdomain/route call
+      # races propagation. A second attempt sees the script and succeeds.
+      - name: Deploy the branch Worker
+        run: |
+          set -o pipefail
+          deployed=0
+          for attempt in 1 2 3; do
+            if npx --yes wrangler@4.131.0 deploy --config "wrangler.branch.${BRANCH}.toml" 2>&1 | tee deploy.log; then
+              deployed=1
+              break
+            fi
+            if grep -qiE 'zone|dns|route' deploy.log; then
+              echo "::error::The deploy failed on the hostname. The API token needs Zone DNS:Edit on axal.vc"
+              echo "::error::plus the custom-domain right for ${BRANCH}.axal.vc (D.11)."
+            fi
+            echo "::warning::wrangler deploy attempt ${attempt} of 3 failed; retrying in 15s"
+            sleep 15
+          done
+          if [ "$deployed" != 1 ]; then
+            echo "::error::wrangler deploy failed three times — see the attempts above"
+            exit 1
+          fi
+
+      # "Worker live" means secrets present and /api/health 200 — not
+      # "deployed". A Worker that is up and answering 503 on every request has
+      # deployed and is not live.
+      - name: Smoke the new host
+        env:
+          SMOKE_HOSTS: https://${{ inputs.code }}.axal.vc
+        run: |
+          node scripts/check-spa-live.mjs
+          code=$(curl -s -o /dev/null -w '%{http_code}' "https://${BRANCH}.axal.vc/api/health")
+          [[ "$code" == 200 ]] || { echo "::error::/api/health answered ${code}, not 200 — the Worker is deployed but not live"; exit 1; }
+
+      # ── tell HQ ──────────────────────────────────────────────────────────
+      # The registry file and HQ's two `[[services]]` entries go through a PR
+      # rather than a direct push: the committed toml is the deployed truth
+      # that the apex tests and the parity guard read, so it changes the way
+      # every other change to it does. HQ gains the binding on its next deploy,
+      # which is the accepted cost in F.11.
+      - name: Open the PR that gives HQ its binding
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/open-branch-link-pr.mjs
+
+      - name: Summary
+        run: |
+          {
+            echo "### Branch ${BRANCH} provisioned"
+            echo
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Worker | studioos-${BRANCH} |"
+            echo "| Host | https://${BRANCH}.axal.vc |"
+            echo "| Database | studioos-${BRANCH} (\`${D1_ID}\`) |"
+            echo "| D1 jurisdiction | ${D1_JURISDICTION} |"
+            echo "| Location hint | ${LOCATION_HINT} |"
+            echo
+            echo "HQ gains its \`BRANCH_$(echo "$BRANCH" | tr '[:lower:]-' '[:upper:]_')\` binding when the linking PR merges and HQ redeploys."
+          } >> "$GITHUB_STEP_SUMMARY"

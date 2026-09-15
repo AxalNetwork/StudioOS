@@ -2042,3 +2042,10 @@ export default {
 // can find the classes named in wrangler.toml's [[durable_objects.bindings]].
 export { PipelineRoom } from './durable-objects/pipeline-room';
 export { OnboardingChat } from './durable-objects/onboarding-chat';
+
+// D108 — the two RPC entrypoints, re-exported here because a service
+// binding's `entrypoint` resolves against the Worker's MODULE EXPORTS, the
+// same reason the two Durable Objects above are re-exported rather than left
+// in their own files. Both ship on every deploy — one codebase — and each
+// method refuses on the tier it does not belong to.
+export { HqEntrypoint, BranchEntrypoint } from './rpc';
