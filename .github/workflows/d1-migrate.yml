@@ -63,9 +63,14 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      # One string every step passes to the runner, so a branch run cannot
-      # migrate production because one step was left un-edited.
-      TARGET: ${{ inputs.branch && format('--branch {0}', inputs.branch) || '--remote' }}
+      # THE BRANCH CODE IS UNTRUSTED INPUT AND NEVER REACHES A `run:` SCRIPT AS
+      # TEXT. `${{ }}` in a run block is substituted before the shell parses the
+      # line, so a dispatched value carrying `;` would run as a command with
+      # this job's Cloudflare credentials in scope. An env var is data: the
+      # shell reads it after parsing, and the step below validates its charset
+      # before anything is done with it. (This is the fix for the Semgrep
+      # `run-shell-injection` finding on the first version of this job.)
+      BRANCH: ${{ inputs.branch }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -90,11 +95,31 @@ jobs:
       - name: Install Worker dependencies
         run: npm ci --prefix cloudflare-worker
 
+      # One place decides which database every later step touches, so a branch
+      # run cannot migrate production because one step was left un-edited.
+      - name: Validate the branch code and pick the target
+        run: |
+          if [[ -z "$BRANCH" ]]; then
+            echo "TARGET_ARGS=--remote" >> "$GITHUB_ENV"
+            echo "Target: production (studioos-db)"
+            exit 0
+          fi
+          # The same shape scripts/lib/migrationTargets.mjs enforces. Checking
+          # it here as well is not redundant: it is what lets the value be used
+          # in a shell at all, and it fails the run before any credential is
+          # handed to a command built from it.
+          if [[ ! "$BRANCH" =~ ^[a-z][a-z0-9-]{1,15}$ ]]; then
+            echo "::error::branch must match ^[a-z][a-z0-9-]{1,15}\$ — got '$BRANCH'"
+            exit 1
+          fi
+          echo "TARGET_ARGS=--branch $BRANCH" >> "$GITHUB_ENV"
+          echo "Target: branch $BRANCH (studioos-$BRANCH)"
+
       # Gitignored build output, so it is never in the checkout. The runner
       # refuses --branch without it rather than falling back to HQ's config.
       - name: Generate the branch Worker config
         if: inputs.branch != ''
-        run: node scripts/gen-branch-wrangler.mjs "${{ inputs.branch }}"
+        run: node scripts/gen-branch-wrangler.mjs "$BRANCH"
 
       - name: A branch database is never baselined
         if: inputs.branch != '' && inputs.mode == 'adopt-and-baseline'
@@ -104,20 +129,20 @@ jobs:
           exit 1
 
       - name: Plan before (read-only)
-        run: node scripts/migrate-d1.mjs $TARGET --dry-run
+        run: node scripts/migrate-d1.mjs $TARGET_ARGS --dry-run
 
       - name: Adopt the legacy ledger and baseline
         if: inputs.mode == 'adopt-and-baseline'
-        run: node scripts/migrate-d1.mjs $TARGET --adopt-legacy-ledger --baseline
+        run: node scripts/migrate-d1.mjs $TARGET_ARGS --adopt-legacy-ledger --baseline
 
       - name: Verify marked rows against the live schema
         if: inputs.mode == 'verify-marked'
-        run: node scripts/migrate-d1.mjs $TARGET --verify-marked
+        run: node scripts/migrate-d1.mjs $TARGET_ARGS --verify-marked
 
       - name: Apply pending migrations
         if: inputs.mode == 'apply'
-        run: node scripts/migrate-d1.mjs $TARGET
+        run: node scripts/migrate-d1.mjs $TARGET_ARGS
 
       - name: Plan after (read-only)
         if: inputs.mode != 'dry-run'
-        run: node scripts/migrate-d1.mjs $TARGET --dry-run
+        run: node scripts/migrate-d1.mjs $TARGET_ARGS --dry-run
