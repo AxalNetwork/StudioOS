@@ -119,12 +119,31 @@ export const ASSIST_SURFACES = {
     },
   },
   // services/competitorAnalysis.ts → aiRun(…)
+  // services/fills/registry.ts → `market_input`, task `market_sizing_inputs`
   market: {
     task: 'explain',
     label: 'Market',
     unit: 'per comparison',
     modeNote: 'Eadwyn summarises what the sources say.',
     footer: { kind: 'neutral', chip: 'Sourced', note: 'Summaries cite the rows they came from.' },
+    // THE SECOND SURFACE TO DECLARE A CHOICE, and D17 named a brand page as the
+    // plausible one. It is this page instead, for a reason that only became true
+    // with migration 247: the market page BRANCHES now. Off, no figure is ever
+    // proposed and nothing is spent; on, Eadwyn looks for the inputs the page
+    // derives TAM from — an addressable population, an ACV benchmark, a growth
+    // rate — and proposes only the ones it can attach a source to.
+    //
+    // WHAT THIS SURFACE DOES NOT OFFER IS THE POINT. The page has said since it
+    // was written that "nothing on this page is auto-invented", and each card is
+    // stamped "Founder research" or "Founder model". A fill that proposed a TAM
+    // would write over the founder's own arithmetic and make all of that false,
+    // so the note says what is proposed and what is not, in those terms.
+    mode: {
+      kind: 'choice',
+      label: 'AI fills the blanks',
+      note: 'Two things, each proposed only when Eadwyn can cite it. The sizing inputs this page multiplies — an addressable population, an ACV benchmark, a growth rate — and competitors not yet on your list. It never proposes your TAM: the page derives that from your own assumptions. And it adds to your competitor list rather than starting one. Every item is yours to accept, edit or discard, and a card says when Eadwyn supplied it.',
+      manualNote: 'Nothing runs and nothing is spent. Every figure on this page is one you researched or derived.',
+    },
   },
 };
 

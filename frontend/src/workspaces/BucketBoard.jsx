@@ -49,12 +49,16 @@ import useBucketSources from './useBucketSources';
  * at all, so the two are mutually exclusive by construction, not by review.
  * `bucket_board.test.mjs` fails the build if a registry declares both.
  *
- * NO UNDECLARED TOKENS. `axal-ink-2`, `axal-ink-3`, `axal-surface-2`,
- * `axal-border` and `axal-border-soft` are used ~410 times across `pages/` and
- * `workspaces/` and are declared in no `@theme` block, so they emit nothing.
- * The canvas values map onto tokens that DO exist — `.card` #ececf1 is
- * `axal-hairline`, `.td` #f4f3f7 is `axal-ground` — and everything else uses
- * Tailwind's greys with a dark counterpart, as `ZoneActions.jsx` settled.
+ * TAILWIND GREYS, AND THE REASON HAS CHANGED. `axal-ink-2`, `axal-ink-3`,
+ * `axal-surface-2`, `axal-border` and `axal-border-soft` were used ~400 times while declared in no `@theme` block, so they emitted no
+ * CSS at all. All 575 such utilities have since been consolidated onto the
+ * declared neutrals — `axal-muted`, `-faint`, `-ground`, `-hairline` — and those
+ * spellings no longer appear in the tree. The greys here stay: the `index.css`
+ * auto-skin now pairs both vocabularies, so neither is the safer one and
+ * rewriting these would be churn. The canvas
+ * values always mapped onto tokens that DO exist — `.card` #ececf1 is
+ * `axal-hairline`, `.td` #f4f3f7 is `axal-ground` — which is what made the
+ * consolidation a rename rather than a restyle.
  */
 
 const SECTION = 'scroll-mt-24';

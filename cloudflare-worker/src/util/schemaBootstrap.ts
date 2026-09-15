@@ -41,6 +41,26 @@
  */
 import type { Env } from '../types';
 
+/**
+ * The key every per-binding cache in this worker is keyed on.
+ *
+ * WHY A FUNCTION AND NOT A CAST AT EACH SITE. `env.DB` is the only thing that
+ * distinguishes one database from another inside an isolate, and 120-odd lazy
+ * bootstraps need to remember "this binding is ready". Each of them used to
+ * remember it in a module-level `let ready = false` instead — which is the #203
+ * bug: a module is instantiated once per isolate, not once per database, so the
+ * first binding to be bootstrapped marks the job done for every other binding
+ * the same isolate goes on to serve. A `WeakMap` keyed on this value is the fix,
+ * and it lets the entry be collected with the binding.
+ *
+ * The cast is here so it exists once. `as unknown as object` is the kind of
+ * cast that gets copied slightly wrong, and a cache keyed on the wrong thing
+ * fails silently — it just never hits, or worse, hits for a stranger.
+ */
+export function bindingKey(env: Env): object {
+  return env.DB as unknown as object;
+}
+
 /** Per-DB-binding column cache. One isolate has one DB, so this is per-isolate. */
 const columnCache = new WeakMap<object, Map<string, Set<string>>>();
 

@@ -157,7 +157,7 @@ finish technical mitigation.
 
 | What | Where | Schedule | Retention | Restore script |
 |------|-------|----------|-----------|----------------|
-| D1 database | R2 `studioos-backups/d1/backup-YYYY-MM-DD.sql` | Daily 02:10 UTC (GH Actions) | 365 days, object-lock compliance mode | [`scripts/restore-d1.sh`](scripts/restore-d1.sh) |
+| D1 database | R2 `studioos-backups/d1/<database>/backup-YYYY-MM-DD.sql` (flat `d1/backup-…` before 2026-09-15; `scripts/dr-drill.sh` reads both) | Daily 02:10 UTC (GH Actions) | 365 days, object-lock compliance mode | [`scripts/restore-d1.sh`](scripts/restore-d1.sh) |
 | KV (`TOKENS`) | R2 `studioos-backups/kv/TOKENS/YYYY-MM-DD.jsonl` | Daily 02:00 UTC (worker cron) | 365 days | manual `wrangler kv:bulk put` |
 | R2 contracts | R2 versioning on `studioos-files` | Continuous (versioning) | 7 years (previous versions) | dashboard restore |
 | R2 KYC | R2 versioning on `studioos-files` (`kyc/` prefix) | Continuous (versioning) | 7 years (previous versions) | dashboard restore |

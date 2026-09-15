@@ -27,7 +27,6 @@ const shortlisted = (application) => ['shortlisted', 'interview', 'offer', 'hire
 export default function FounderGrowTalent() {
   const [params, setParams] = useSearchParams();
   const requestedId = params.get('project_id');
-  const [projects, setProjects] = useState([]);
   const [project, setProject] = useState(null);
   const [jobs, setJobs] = useState([]);
   const [applications, setApplications] = useState([]);
@@ -44,7 +43,6 @@ export default function FounderGrowTalent() {
         setError('The startup list is unavailable; talent records are still being checked.');
       }
       const selected = available.find((item) => String(item.id) === requestedId) || available[0] || (requestedId ? { id: Number(requestedId), name: 'Selected project', unavailable_name: true } : null);
-      setProjects(available.length ? available : selected ? [selected] : []);
       setProject(selected);
       if (!selected) { setJobs([]); setApplications([]); return; }
       if (String(selected.id) !== requestedId) {
@@ -80,7 +78,7 @@ export default function FounderGrowTalent() {
   const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Capital match', `/grow/capital-match${query}`], ['Brand', `/grow/brand${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-talent" data-testid="founder-grow-talent"><div className="a5-grow-canvas"><div className="a5-grow-main">
-    <header className="a5-grow-hero"><div className="fg-talent-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Talent</b></div><span>Founder / Grow</span><div><h1>Talent</h1><p>Roles, ranked candidates, job posts and applications.</p></div>{projects.length > 1 && <label className="fg-talent-picker"><span>Startup</span><select data-testid="select-grow-talent-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-talent-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Talent' ? 'is-active' : ''}>{label}</Link>)}</nav>
+    <header className="a5-grow-hero"><div className="fg-talent-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Talent</b></div><div><h1>Talent</h1><p>Roles, ranked candidates, job posts and applications.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-talent-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Talent' ? 'is-active' : ''}>{label}</Link>)}</nav>
     <ZoneToolbar
               filters={founderZoneFilters('grow/talent', { value: view, onChange: setView, dynamic: { roles: jobs.slice(0, 3).map((job) => ({ key: String(job.id), label: text(job.title, 'Untitled role') })) } })}
               actions={founderZoneActions('grow/talent', { query, view: { scope: project?.name, header: ['Candidate', 'Applied', 'Status'], rows: visible, cells: (r) => [r.name || r.member?.name, r.created_at, r.status] } })}

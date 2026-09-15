@@ -261,6 +261,67 @@ test('an entry cannot be logged as already withdrawn', async () => {
   assert.equal(res.status, 400, 'a promise that was never made was recorded as withdrawn');
 });
 
+test('a state nobody recognises is refused, not quietly recorded as a promise', async () => {
+  // THE ASYMMETRY THIS CLOSES. POST used to coerce — `SUPPORT_STATES.has(x) ? x
+  // : 'promised'` — so a typo answered 201 and was filed as a promise, while
+  // PATCH one handler down refuses the same typo with a 400. An investor who
+  // meant "delivered" and mistyped it got a promise they never made, and
+  // nothing told them.
+  const db = freshDb();
+  const before = db.prepare('SELECT COUNT(*) AS n FROM portfolio_support_entries').get() as any;
+  const res = await call(db, { user: MINE, role: 'investor' }, '/', {
+    method: 'POST',
+    body: JSON.stringify({ project_uid: 'p-alpha', kind: 'intro', state: 'delivred', summary: 'A typo' }),
+  });
+  assert.equal(res.status, 400, 'an unrecognised state was accepted');
+  const body: any = await res.json();
+  assert.match(String(body.detail), /promised or delivered/, 'the refusal does not name the states that are allowed');
+  const after = db.prepare('SELECT COUNT(*) AS n FROM portfolio_support_entries').get() as any;
+  assert.equal(Number(after.n), Number(before.n), 'a refused state still wrote a row');
+});
+
+test('an entry may open delivered — work is often logged after it is done', async () => {
+  // THE REGRESSION GUARD. The log form's State select offers exactly promised
+  // and delivered (InvestorPortfolioValueAdd.jsx), so narrowing creation to
+  // `promised` alone would 400 a shipped path. Refusing the unknown state above
+  // must not turn into refusing this known one.
+  const db = freshDb();
+  const res = await call(db, { user: MINE, role: 'investor' }, '/', {
+    method: 'POST',
+    body: JSON.stringify({ project_uid: 'p-alpha', kind: 'hiring', state: 'delivered', summary: 'Closed the VP Eng' }),
+  });
+  assert.equal(res.status, 201, 'a delivered entry could not be logged');
+  const body: any = await res.json();
+  assert.equal(body.item.state, 'delivered');
+  assert.match(String(body.item.delivered_at), /^\d{4}-\d{2}-\d{2}$/,
+    'opening delivered did not stamp a delivery date');
+});
+
+test('a date that is not a date on the calendar is dropped rather than stored', async () => {
+  // `Date.parse('2026-02-30')` returns a FINITE number in V8, so the old
+  // `/^\d{4}-\d{2}-\d{2}$/ && Number.isFinite(Date.parse(s))` pair let
+  // impossible days through and stored them verbatim. February 30th is not a
+  // typo the reader can spot later — it is a date the ledger asserts happened.
+  const db = freshDb();
+  const bad = await call(db, { user: MINE, role: 'investor' }, '/sup-a', {
+    method: 'PATCH', body: JSON.stringify({ state: 'delivered', delivered_at: '2026-02-30' }),
+  });
+  assert.equal(bad.status, 200);
+  const badBody: any = await bad.json();
+  assert.notEqual(badBody.item.delivered_at, '2026-02-30', 'a day that does not exist was stored');
+  assert.equal(badBody.item.delivered_at, new Date().toISOString().slice(0, 10),
+    'a dropped date did not fall back to the server stamp');
+
+  // And a real one is still honoured, so the check tightened rather than
+  // stopped reading the field.
+  const db2 = freshDb();
+  const ok = await call(db2, { user: MINE, role: 'investor' }, '/sup-a', {
+    method: 'PATCH', body: JSON.stringify({ state: 'delivered', delivered_at: '2026-03-04' }),
+  });
+  const okBody: any = await ok.json();
+  assert.equal(okBody.item.delivered_at, '2026-03-04', 'a valid delivery date was discarded');
+});
+
 test('delivering stamps a date, and delivered is terminal', async () => {
   const db = freshDb();
   const ok = await call(db, { user: MINE, role: 'investor' }, '/sup-a', {

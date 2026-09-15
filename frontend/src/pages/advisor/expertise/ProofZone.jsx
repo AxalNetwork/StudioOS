@@ -46,10 +46,10 @@ function ConsentLink({ token }) {
   const url = `${window.location.origin}/attest/${token}`;
   return (
     <Card variant="accent" padding="md" className="mt-3">
-      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
         Send this link yourself — shown once
       </div>
-      <p className="mt-1.5 text-[12px] leading-relaxed text-axal-ink-2">
+      <p className="mt-1.5 text-[12px] leading-relaxed text-axal-muted">
         Nothing was emailed. Give this to the person you named, through whatever channel you
         already have with them. It will not be shown again after you leave this page.
       </p>
@@ -204,9 +204,9 @@ export default function ProofZone() {
             { label: 'Credential verified', value: '—', note: 'no verifying body connected' },
           ].map((s) => (
             <Card key={s.label} padding="md">
-              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{s.label}</div>
+              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{s.label}</div>
               <div className="mt-1 text-[15px] font-extrabold tabular-nums">{s.value}</div>
-              <div className="mt-0.5 text-[10px] text-axal-ink-3">{s.note}</div>
+              <div className="mt-0.5 text-[10px] text-axal-faint">{s.note}</div>
             </Card>
           ))}
         </div>
@@ -275,11 +275,11 @@ export default function ProofZone() {
                         ? <Pill tone="ok" dot>Confirmed by {live.length === 1 ? live[0].attester_name : `${live.length} people`}</Pill>
                         : <Pill tone="warn">Self-stated</Pill>}
                     </div>
-                    <div className="mt-0.5 text-[11.5px] text-axal-ink-3">
+                    <div className="mt-0.5 text-[11.5px] text-axal-faint">
                       {[row.organization, row.period_note].filter(Boolean).join(' · ')}
                     </div>
                     {row.detail && (
-                      <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-axal-ink-2">{row.detail}</p>
+                      <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-axal-muted">{row.detail}</p>
                     )}
                   </div>
                   <div className="flex gap-2">
@@ -296,10 +296,10 @@ export default function ProofZone() {
 
                 {live.map((c) => (
                   <blockquote key={c.id} className="mt-3 border-l-2 border-emerald-400 pl-3">
-                    <p className="text-[12px] leading-relaxed text-axal-ink-2">
+                    <p className="text-[12px] leading-relaxed text-axal-muted">
                       {c.statement || 'Confirmed, with no statement added.'}
                     </p>
-                    <footer className="mt-1 text-[11px] text-axal-ink-3">
+                    <footer className="mt-1 text-[11px] text-axal-faint">
                       {c.attester_name}{c.attester_role ? `, ${c.attester_role}` : ''}
                       {c.relationship ? ` · ${c.relationship}` : ''}
                     </footer>
@@ -307,13 +307,13 @@ export default function ProofZone() {
                 ))}
 
                 {pending.length > 0 && (
-                  <p className="mt-2 text-[11.5px] text-axal-ink-3">
+                  <p className="mt-2 text-[11.5px] text-axal-faint">
                     Waiting on {pending.map((c) => c.attester_name).join(', ')}. Asking is not being
                     told yes — this stays self-stated until they answer.
                   </p>
                 )}
                 {withdrawn.length > 0 && (
-                  <p className="mt-2 text-[11.5px] text-axal-ink-3">
+                  <p className="mt-2 text-[11.5px] text-axal-faint">
                     {withdrawn.map((c) => c.attester_name).join(', ')} declined or withdrew. The
                     record is kept rather than deleted, because an attestation that can vanish is
                     not evidence of anything.

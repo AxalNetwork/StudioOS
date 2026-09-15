@@ -308,6 +308,35 @@ async function ghFetch(env: Env, path: string, init: RequestInit = {}): Promise<
   return { ok: false, status: 0, data: null, error: 'unreachable' };
 }
 
+/**
+ * Dispatch a `workflow_dispatch` workflow (D110).
+ *
+ * WHY THIS NEEDS A SCOPE THE TICKET SYNC DOES NOT. Every other call in this
+ * file works on Issues, which `GITHUB_ACCESS_TOKEN` can already do. Triggering
+ * a workflow needs **`actions: write`** — a strictly larger grant, and the
+ * reason D.11 lists this token separately rather than treating the ticket
+ * sync's presence as proof the button will work. A token with only the Issues
+ * scope answers 403 here, which is a different failure from "not configured"
+ * and the caller reports it as one.
+ *
+ * A SUCCESSFUL DISPATCH RETURNS 204 AND NO BODY, and it returns 204 whether
+ * the workflow then succeeds, fails or is never scheduled. So this answers
+ * "the request was accepted", never "the branch was provisioned" — which is
+ * exactly why `licence_deployments.status` starts at `requested` and moves
+ * only when the run itself says so.
+ */
+export async function dispatchWorkflow(
+  env: Env,
+  workflowFile: string,
+  ref: string,
+  inputs: Record<string, string>,
+): Promise<GhResult> {
+  return ghFetch(env, `/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`, {
+    method: 'POST',
+    body: JSON.stringify({ ref, inputs }),
+  });
+}
+
 export async function createIssue(env: Env, args: { title: string; body: string; labels: string[] }): Promise<GhResult> {
   return ghFetch(env, '/issues', { method: 'POST', body: JSON.stringify(args) });
 }

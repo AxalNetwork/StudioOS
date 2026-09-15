@@ -268,7 +268,7 @@ export default function PartnerPipelineAnalyticsZone() {
           </div>
 
           {p?.win_rate_basis && (
-            <p className="text-[12px] leading-relaxed text-axal-ink-2">{p.win_rate_basis}</p>
+            <p className="text-[12px] leading-relaxed text-axal-muted">{p.win_rate_basis}</p>
           )}
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.25fr_1fr]">
@@ -303,11 +303,11 @@ export default function PartnerPipelineAnalyticsZone() {
 
             {/* ══ QUARTER OVER QUARTER — win rate by shape ════════════════ */}
             <Section title="Quarter over quarter">
-              <p className="-mt-1 mb-2 text-[11px] font-semibold uppercase tracking-[.07em] text-axal-ink-3">
+              <p className="-mt-1 mb-2 text-[11px] font-semibold uppercase tracking-[.07em] text-axal-faint">
                 Win rate by shape
               </p>
               {quarters.length === 0 ? (
-                <p className="text-[12.5px] text-axal-ink-2">
+                <p className="text-[12.5px] text-axal-muted">
                   No quote has been decided yet, so there is no quarter to compare.
                 </p>
               ) : (
@@ -338,7 +338,7 @@ export default function PartnerPipelineAnalyticsZone() {
                             );
                           })}
                         </div>
-                        <div className="mt-2 text-center text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+                        <div className="mt-2 text-center text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
                           {q.quarter}
                         </div>
                       </div>
@@ -348,13 +348,13 @@ export default function PartnerPipelineAnalyticsZone() {
                     {series.map((s) => (
                       <div key={String(s.shape)} className="flex items-center gap-1.5">
                         <span className="h-2.5 w-2.5 flex-none rounded-[3px]" style={{ background: s.color }} />
-                        <span className="text-[11px] text-axal-ink-2">{shapeName(s.shape)}</span>
+                        <span className="text-[11px] text-axal-muted">{shapeName(s.shape)}</span>
                       </div>
                     ))}
                   </div>
                 </>
               )}
-              <p className="mt-2 text-[11px] leading-relaxed text-axal-ink-3">
+              <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
                 A quarter is the quarter the DECISION landed in, not the one the quote
                 was sent in — a proposal sent in March and lost in July is a Q3 loss.
                 Open quotes belong to no quarter yet; withdrawn ones are excluded for
@@ -367,13 +367,13 @@ export default function PartnerPipelineAnalyticsZone() {
 
           {/* ══ LOSS REASONS — the taxonomy, beside the narration ═════════ */}
           <Section title="Loss reasons">
-            <p className="-mt-1 mb-3 text-[11px] font-semibold uppercase tracking-[.07em] text-axal-ink-3">
+            <p className="-mt-1 mb-3 text-[11px] font-semibold uppercase tracking-[.07em] text-axal-faint">
               The taxonomy, not a summary sentence
             </p>
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
               <div>
                 {lostCount === 0 ? (
-                  <p className="text-[12.5px] text-axal-ink-2">
+                  <p className="text-[12.5px] text-axal-muted">
                     Nothing was lost in this window, so there is no loss pattern to read.
                   </p>
                 ) : (
@@ -384,7 +384,7 @@ export default function PartnerPipelineAnalyticsZone() {
                           <span className="text-[11.5px] font-semibold">{LOSS_LABEL[l.reason] || l.reason}</span>
                           <span className="text-[11.5px] font-bold tabular-nums">{l.count}</span>
                         </div>
-                        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-axal-surface-2">
+                        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-axal-ground">
                           <div
                             className="h-full rounded-full"
                             style={{
@@ -400,12 +400,12 @@ export default function PartnerPipelineAnalyticsZone() {
                         pattern over exactly the decisions somebody wrote up. */}
                     <div className="mt-1 border-t border-axal-hairline pt-2.5">
                       <div className="flex justify-between gap-2.5">
-                        <span className="text-[11.5px] font-semibold text-axal-ink-2">No reason recorded</span>
-                        <span className="text-[11.5px] font-bold tabular-nums text-axal-ink-2">
+                        <span className="text-[11.5px] font-semibold text-axal-muted">No reason recorded</span>
+                        <span className="text-[11.5px] font-bold tabular-nums text-axal-muted">
                           {d?.losses_unstated ?? 0}
                         </span>
                       </div>
-                      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-axal-surface-2">
+                      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-axal-ground">
                         <div
                           className="h-full rounded-full bg-gray-400 dark:bg-gray-600"
                           style={{ width: `${Math.round(((d?.losses_unstated ?? 0) / lossMax) * 100)}%` }}
@@ -414,7 +414,7 @@ export default function PartnerPipelineAnalyticsZone() {
                     </div>
                   </div>
                 )}
-                <p className="mt-3 text-[11px] leading-relaxed text-axal-ink-3">
+                <p className="mt-3 text-[11px] leading-relaxed text-axal-faint">
                   Reasons are picked from a fixed taxonomy on the proposal, not typed —
                   free text would make this chart unreadable within a quarter. Every
                   entry is drawn including the zeroes, because a chart missing its empty

@@ -79,3 +79,22 @@ test('the login logo is a link home, and is not nested inside another link', () 
   assert.match(codeOnly(read('frontend/src/components/PublicNav.jsx')), /<Link to="\/"[^>]*>\s*<AxalLogo/,
     'the public nav wraps it too, which is why the component cannot');
 });
+
+test('the app-header lockup stays ink on its dark-mode light island', () => {
+  // The header wraps the logo in dark:bg-white/95 so the colourful mark sits
+  // on a light chip against the dark header. Default AxalLogo ink is
+  // dark:text-gray-100 — white words on that chip, which is how "Axal VC"
+  // vanished in dark mode. onLight keeps gray-900 in both themes.
+  const app = read('frontend/src/App.jsx');
+  const headerStart = app.indexOf('Carta-style global top header');
+  assert.ok(headerStart >= 0, 'the global header landmark must still exist');
+  const header = app.slice(headerStart, headerStart + 1200);
+  assert.match(header, /dark:bg-white\/95/,
+    'the dark-mode header still uses a light island for the lockup');
+  assert.match(header, /<AxalLogo size="sm" onLight/,
+    'that island must pass onLight so the wordmark does not flip to near-white');
+  assert.match(logo, /onLight \? 'text-gray-900 dark:text-gray-900'/,
+    'onLight must keep ink in both themes, not dark:text-gray-100');
+  assert.match(logo, /onDark \? 'text-white' : onLight/,
+    'onDark (login photo) still wins over onLight');
+});

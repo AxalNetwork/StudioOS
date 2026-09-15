@@ -19,7 +19,7 @@
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { runSchemaBootstrap } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 
 export type InvestorTier = 'free' | 'professional' | 'institutional';
 
@@ -131,10 +131,10 @@ export function requireInvestorTier(required: Exclude<InvestorTier, 'free'>) {
   };
 }
 
-let _migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 /** Idempotent column bootstrap — mirrors ensureTierSchema. */
 export async function ensureInvestorPaywallSchema(env: Env): Promise<void> {
-  if (_migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const stmts: string[] = [
     `ALTER TABLE users ADD COLUMN investor_tier TEXT NOT NULL DEFAULT 'free'`,
     `ALTER TABLE users ADD COLUMN investor_subscription_status TEXT NOT NULL DEFAULT 'free'`,
@@ -194,7 +194,7 @@ export async function ensureInvestorPaywallSchema(env: Env): Promise<void> {
   // rethrow that and take the whole router down with it. See
   // util/schemaBootstrap.ts.
   await runSchemaBootstrap(env, stmts);
-  _migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 /** Returns the current quarter key, e.g. "2026Q2", in UTC. */

@@ -260,3 +260,81 @@ test('the Spin-Out Lab keeps its own chrome, and the exclusion is scoped to the 
   assert.ok(lab.some((f) => /AssistLayout|AssistRail/.test(src(f))),
     'the three legitimate AssistRail mounts in the Lab have been stripped');
 });
+
+test('the scope badge names the active company, and no caller restates the rule', () => {
+  // ONE SLOT, ONE SOURCE, FOUR PROFILES. `scope` is where the shell says whose
+  // data a page is showing, and its docblock calls that rule "visible rather than
+  // assumed". It was not visible: the prop was passed in exactly THREE of the six
+  // callers and every one passed a LITERAL — `"One venture"`, `"One fund"`,
+  // `"One firm"`. Three pages restated the rule, the rest of the product said
+  // nothing, and no page named a company.
+  //
+  // It could not have named one. `useActiveCompany` had three consumers in the
+  // whole frontend — the switcher, the context file, and Company settings — so no
+  // workspace page knew which company was active. The shell is the consumer now.
+  const shell = src('frontend/src/workspaces/WorkspaceShell.jsx');
+  assert.match(shell, /import \{ useActiveCompany \} from '\.\.\/contexts\/ActiveCompanyContext'/,
+    'the shell no longer reads the active company, so the badge cannot name one');
+  assert.match(shell, /const scopeLabel = scope \|\| companyName \|\| null;/,
+    'the scope slot must fall back to the company name, and to nothing after that');
+
+  // READ, NEVER WRITTEN. `ui/CompanySwitcher.jsx`'s docblock states the rule:
+  // "pages read ActiveCompanyContext, and this component is the single writer."
+  // A shell that called `setCompany` would make every workspace page a second
+  // writer of the session's scope.
+  assert.ok(!/setCompany/.test(shell),
+    'the shell writes the active company — it is a reader, and the switcher is the single writer');
+
+  // NO BADGE WHEN THERE IS NO COMPANY. `"One venture"` over an account with no
+  // company membership is a claim about data that is not there, which is the
+  // absent-is-not-empty rule applied to a header.
+  assert.match(shell, /\{scopeLabel && \(/,
+    'the badge renders unconditionally, so an account with no company gets an empty pill');
+
+  // AND NO CALLER RESTATES THE RULE. A literal here is how the slot came to hold
+  // a slogan instead of a name, so the three that did are asserted gone and a
+  // fourth cannot be added quietly.
+  for (const caller of SHELL_CALLERS) {
+    const s = src(caller);
+    assert.ok(!/scope="One /.test(s),
+      `${caller} passes a literal scope — the shell fills that slot from the active company`);
+  }
+});
+
+test('the in-body startup picker ledger is empty, and the sweep that fills it is not blind', () => {
+  // THIS TEST USED TO PIN THE BLOCKED STATE — `pickers.length >= 21`, because the
+  // deletion waited on a product question: the sidebar switcher selects a
+  // COMPANY, each picker selected a PROJECT behind `projects.length > 1`, so the
+  // picker was a second axis rather than a duplicate. The question is answered
+  // (one company, one startup, measured against production D1: 5 projects, 5
+  // founders, one project each), all 25 are gone, and the ledger is empty. The
+  // assertion moves with the invariant rather than being deleted: an empty
+  // ledger is a claim too, and this is what checks it.
+  //
+  // Task #84 removed these once, per route, and they came back, which is why the
+  // counting outlives the deletion.
+  const guard = read('scripts/check-inline-project-pickers.mjs');
+  assert.match(guard, /inline-project-pickers-baseline\.json/);
+  const baseline = JSON.parse(read('scripts/inline-project-pickers-baseline.json'));
+  assert.ok(Array.isArray(baseline.pickers), 'the ledger must still be a list');
+  assert.deepEqual(baseline.pickers, [],
+    'a picker is back on the ledger — that is a product change and needs a recorded decision');
+
+  // THE SWEEP HAS TO LOOK FOR BOTH SHAPES, and this is the part worth pinning.
+  // The original sweep keyed only on `data-testid="select-*-project"`. It found
+  // 21 and corrected the task, which had named eleven — and it was still wrong:
+  // FOUR pickers carried no testid at all, so a ledger reporting "21, all on
+  // record" was reporting a number it could not complete. The render guard is
+  // the property that actually defines the control, and cannot be left off.
+  assert.match(guard, /data-testid="\(select-\[a-z0-9-\]\*project\)"/,
+    'the testid sweep must stay — a picker may still carry one');
+  assert.match(guard, /projects\\s\*\\\.\\s\*length\\s\*>\\s\*1/,
+    'the guard must also sweep for the `projects.length > 1` render guard, or a picker '
+    + 'without a test attribute is invisible to it — which is how four of the 25 stayed '
+    + 'uncounted while the ledger claimed to hold them all');
+
+  // And it is in `test:guards`, or it is a script nobody runs.
+  const pkg = JSON.parse(read('package.json'));
+  assert.ok(pkg.scripts['test:guards'].includes('check-inline-project-pickers.mjs'),
+    'the picker guard is not in test:guards, so nothing runs it');
+});

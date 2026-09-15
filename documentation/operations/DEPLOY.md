@@ -65,6 +65,43 @@ The token behind `CLOUDFLARE_API_TOKEN` therefore needs **D1:Edit** as well as
 Workers Scripts:Edit. Until 2026-09-03 the deploy workflow called
 `wrangler deploy` directly — the first "silent skip" above, on every merge.
 
+### 1.3 A branch database
+
+A subsidiary branch is a separate Worker over a separate D1 database
+(`studioos-<code>`), so it is migrated separately — nothing about `main`
+touches it. The same runner takes `--branch <code>` instead of `--remote`:
+
+```sh
+node scripts/gen-branch-wrangler.mjs fr        # the config the next line needs
+node scripts/migrate-d1.mjs --branch fr --dry-run
+node scripts/migrate-d1.mjs --branch fr
+```
+
+Or from the Actions tab: `d1-migrate.yml` with a `branch` code, which
+generates the config for you. Three things differ from production, and each is
+enforced rather than remembered:
+
+- **The config comes first.** `wrangler.branch.<code>.toml` is gitignored
+  build output, so it is not in a fresh checkout. The runner refuses
+  `--branch` without it and prints the command above, rather than falling back
+  to HQ's config and asking wrangler to resolve a database name that config
+  never declared.
+- **`--bootstrap` is allowed here and refused for production.** A freshly
+  created branch database is empty, and `branch-provision.yml` builds it from
+  `sql/schema_baseline.sql` and then migrates forward. The old rule read the
+  `--remote` flag, which would have refused exactly this; it now names the
+  database that must never be bootstrapped (`bootstrapRefusal` in
+  `scripts/lib/migrationTargets.mjs`).
+- **`adopt-and-baseline` is production-only.** A branch has no legacy ledger
+  to adopt; the workflow fails the run rather than doing something plausible.
+
+Backups follow the same split: `backup-d1.yml` takes a `target_db` and now
+writes to `d1/<database>/backup-<date>.sql`, so a branch backup cannot
+overwrite production's restore point. `scripts/dr-drill.sh` reads both that
+shape and the flat `d1/backup-<date>.sql` used before 2026-09-15, because
+object lock keeps those for 365 days and they are the restore points for most
+of that year.
+
 ---
 
 ## 2. Pre-flight
@@ -241,7 +278,55 @@ already produced one false "production auth is broken" report.
 
 ---
 
-## 6. Related, but not this runbook
+## 6. Provisioning a branch — `branch-provision.yml`
+
+**This deploys a SECOND Worker, not this one.** `npm run deploy` ships HQ;
+this ships a subsidiary. Nothing in sections 1–5 applies to it except the
+migration rules, which it runs through the same `scripts/migrate-d1.mjs`.
+
+**It has never run.** Before the first run, someone with account access has to
+set three things (`DECISIONS.md` D.11) — until they exist the workflow fails
+at the step that needs them, which is deliberate: each failure names the exact
+right it is missing rather than a generic error.
+
+| what | why |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` widened to **Workers KV:Edit, R2:Edit, Queues:Edit, Vectorize:Edit, Zone DNS:Edit** (it has Workers Scripts and D1 today) | the create steps, and the custom domain for `<code>.axal.vc` |
+| `BRANCH_SECRET_BUNDLE` — newline-separated `NAME=VALUE` pairs | `SCORING_HMAC_SECRET`, `KEK_PII`, `KEK_R2`, `AXAL_ENCRYPTION_SECRET`, `TURNSTILE_SECRET_KEY`, the mail credentials. Without it the Worker deploys and answers **503 config_error** on every request — up, and refusing everything |
+| `GITHUB_ACCESS_TOKEN` with `actions: write` (task #192) | only for HQ's Deploy **button** to dispatch this. Running it by hand from the Actions tab needs nothing extra |
+
+**Run the first one on a throwaway.** Code `test`, hostname `test.axal.vc`.
+It exercises every step against a real account without a licence holder
+depending on the result, and the same workflow's delete path retires it.
+
+**What "done" means.** Not "the deploy succeeded". The smoke step is the
+definition: `check-spa-live.mjs` against the new host **and** `/api/health`
+returning 200. A Worker that deployed and answers 503 has deployed and is not
+live, which is exactly the state a missing `BRANCH_SECRET_BUNDLE` produces.
+
+**Afterwards, HQ still cannot call it.** The run opens a PR carrying the
+registry entry and HQ's `BRANCH_<CODE>` service binding; HQ gains the binding
+on its **next deploy**, not on merge. In between, HQ's Home shows the branch as
+`not_deployed` — it holds the registry row and has no way to call it — which is
+a different state from `unreadable` and renders differently. That gap is the
+accepted cost recorded in the plan's F.11.
+
+**If it fails half way, re-run it.** Every create step tolerates "already
+exists", and the principal seed is `INSERT OR IGNORE`. The one thing it
+refuses outright is a code whose `infra/branches/<code>.json` is already
+committed: that is a branch someone has already provisioned, and the fix is to
+use a different code or to retire the existing one first.
+
+**Per-branch setup a workflow cannot do.** Every OAuth provider's redirect URI
+for the new host (Google, LinkedIn, HubSpot, Salesforce, DocuSign, Carta,
+Slack, Stripe, Calendly, X), a Stripe account, an email sender. The branch's
+Integration Keys page names each one as not configured until it is — which it
+already does when credentials are unset, so nothing new has to be built for
+this to read correctly.
+
+---
+
+## 7. Related, but not this runbook
 
 - **How the apex came to be Worker-served** — `documentation/architecture/CLOUDFLARE-CUTOVER.md`
   is the plan that retired the GitHub Pages apex; its status line predates
@@ -260,7 +345,7 @@ already produced one false "production auth is broken" report.
 
 ---
 
-## 7. Why nothing here is hardcoded
+## 8. Why nothing here is hardcoded
 
 An earlier version of this procedure named the pending migrations as "184–188"
 and told the operator to stop if anything else appeared. Migrations 190 and 191

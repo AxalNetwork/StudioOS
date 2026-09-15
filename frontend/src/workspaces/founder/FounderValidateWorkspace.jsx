@@ -6,12 +6,16 @@ import WorkspaceShell, { NotRecorded } from '../WorkspaceShell';
 import ZoneToolbar from '../ZoneToolbar';
 import { founderZoneFilters } from '../founderZoneFilters';
 import { founderZoneActions } from '../founderZoneActions';
-import ValidateProposals from './ValidateProposals';
+import FillProposals from '../FillProposals';
 import InterviewRecording from './InterviewRecording';
 import useAssistMode from '../../hooks/useAssistMode';
 import LogInterviewModal from '../../components/discovery/LogInterviewModal';
 import { NewHypothesisDialog, LinkPainDialog } from './ValidateDialogs';
 import { bucketForPath, bucketTitle, zoneForPath } from '../shellConfig';
+import {
+  RECENTLY_MOVED_DAYS, daysBefore, historyReaches, laneChangedSince,
+  startOfMonth, verdictAsOf, verdictChangedSince,
+} from '../../lib/verdictHistory';
 
 /**
  * Validate — the four evidence stages, as four routes.
@@ -42,9 +46,20 @@ import { bucketForPath, bucketTitle, zoneForPath } from '../shellConfig';
  * `DiscoveryPage`'s interview modal carries the control that sends it. The claim
  * mattered because it is the fourth step of the filter check — a column with no
  * screen behind it can only ever be NULL — so leaving it standing would have
- * argued a live chip out of existence. `interview_pain_severities` is the half
- * that is STILL true: it exists with no reader and no writer anywhere, which is
- * why `/validate/pain-map`'s "Need-to-have" is prose rather than a chip.
+ * argued a live chip out of existence.
+ *
+ * THE SECOND HALF OF THAT PARAGRAPH IS GONE TOO. It said
+ * `interview_pain_severities` "exists with no reader and no writer anywhere,
+ * which is why `/validate/pain-map`'s Need-to-have is prose rather than a chip".
+ * Both ends exist now, and so do the other three: `getPainGroupsView` selects
+ * `icp_fit` and `interview_date` and attributes each theme's mentions to the
+ * interviews behind them, so the whole of V2's chip row is live. The pattern in
+ * all four cases was the same and is worth naming, because two more zones on this
+ * page still match it: the refusal was about a PAYLOAD, the column was already in
+ * the database, and no migration was needed to close it. What is still genuinely
+ * absent is a verdict history — `/validate/verdict`'s "As of last week" and
+ * "Changed this month", and `/validate/hypotheses`' "Recently moved", all want a
+ * record of a claim CHANGING that nothing writes.
  *
  * THE HEADER'S ACTION SLOT. `WorkspaceShell` has always had one; the first
  * version of this file was the first zone page in the product to pass it, which
@@ -76,11 +91,11 @@ function StatRow({ items }) {
     <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
       {items.map((it) => (
         <Card key={it.label} className="px-3 py-2.5">
-          <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{it.label}</div>
+          <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{it.label}</div>
           {it.value === null || it.value === undefined
             ? <div className="mt-1.5"><NotRecorded /></div>
             : <div className="mt-1 text-base font-extrabold tabular-nums tracking-tight">{it.value}</div>}
-          {it.note && <div className="mt-1 text-[10px] leading-snug text-axal-ink-3">{it.note}</div>}
+          {it.note && <div className="mt-1 text-[10px] leading-snug text-axal-faint">{it.note}</div>}
         </Card>
       ))}
     </div>
@@ -181,7 +196,7 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
         <Card className="p-4">
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <span className="text-sm font-extrabold tracking-tight">Interview log</span>
-            <span className="text-[11px] text-axal-ink-3">
+            <span className="text-[11px] text-axal-faint">
               {view === 'all' ? 'One venture · newest first' : `${shown.length} of ${rows.length} · newest first`}
             </span>
           </div>
@@ -192,11 +207,11 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
             true here — the log has rows, none of them in this view.
           */}
           {shown.length === 0 && (
-            <p className="py-2 text-[11px] text-axal-ink-3" data-testid="text-interviews-view-empty">
+            <p className="py-2 text-[11px] text-axal-faint" data-testid="text-interviews-view-empty">
               No interview in this log matches that view. The count in the strip above is the full log.
             </p>
           )}
-          <ul className="divide-y divide-axal-border-soft">
+          <ul className="divide-y divide-axal-hairline">
             {shown.slice(0, 25).map((r) => {
               const pains = r.pain_points || r.pains || [];
               return (
@@ -218,15 +233,15 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
                     <div className="truncate text-xs font-semibold text-axal-ink">
                       {r.interviewee_name || <NotRecorded>Name not recorded</NotRecorded>}
                     </div>
-                    <div className="mt-0.5 truncate text-[11px] text-axal-ink-3">
+                    <div className="mt-0.5 truncate text-[11px] text-axal-faint">
                       {r.interviewee_company || r.interviewee_role || <NotRecorded>No company recorded</NotRecorded>}
                     </div>
                   </div>
                   <div className="shrink-0 text-right">
-                    <div className="text-[11px] tabular-nums text-axal-ink-2">
+                    <div className="text-[11px] tabular-nums text-axal-muted">
                       {r.interview_date || <NotRecorded>No date</NotRecorded>}
                     </div>
-                    <div className="mt-0.5 text-[10px] text-axal-ink-3">
+                    <div className="mt-0.5 text-[10px] text-axal-faint">
                       {pains.length ? `${pains.length} pain${pains.length === 1 ? '' : 's'}` : 'no pain recorded'}
                     </div>
                     </div>
@@ -242,11 +257,25 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
                     fillsOn={fillsOn}
                     onChanged={() => setLocalKey((n) => n + 1)}
                   />
+                  {/* THE WRITER FOR `interview_pain_severities`, and it lives
+                      HERE rather than on the pain map for a reason the table's
+                      own key states: severity is per `(interview_id,
+                      phrase_norm)`. The map shows THEMES, which are many
+                      phrases from many interviews — there is no single
+                      interview on that page to write against. Judging a pain
+                      belongs beside the conversation it came out of. */}
+                  {pains.length > 0 && (
+                    <PainSeverity
+                      interviewId={r.id}
+                      pains={pains}
+                      onChanged={() => setLocalKey((n) => n + 1)}
+                    />
+                  )}
                 </li>
               );
             })}
           </ul>
-          <p className="mt-3 border-t border-axal-border-soft pt-3 text-[11px] leading-relaxed text-axal-ink-3">
+          <p className="mt-3 border-t border-axal-hairline pt-3 text-[11px] leading-relaxed text-axal-faint">
             These are the same records Discovery writes — one log, two doors. Consent to quote is a real field on
             an interview and it is three-state: yes, no, or never asked. Never-asked is counted apart from
             declined rather than folded into it, and nothing here presumes an interview quotable — that is the one
@@ -256,8 +285,8 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
       )}
 
       <Card className="p-4">
-        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Still here, still working</div>
-        <p className="mt-2 text-[11.5px] leading-relaxed text-axal-ink-2">
+        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Still here, still working</div>
+        <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">
           The Needs Marketplace and AI Advisory have no zone in the four evidence stages, so they keep their own
           routes rather than being dropped to make the taxonomy fit — {' '}
           <Link to="/build/marketplace" className="text-axal-violet underline">Marketplace</Link> and{' '}
@@ -273,9 +302,153 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
 // all four of this zone's canvas labels are `unbuilt`, so `zoneFilters` returns
 // an empty array and the toolbar draws its action side only. See
 // `founderZoneFilters.js` for why a grouped view cannot narrow by ICP.
+/**
+ * The pain map's chip row, in three parts because it has three KINDS of chip.
+ *
+ * V2's row is `ICP only · All interviews · Need-to-have · By recency`, and all
+ * four have a store behind them now: `getPainGroupsView` attributes each theme's
+ * mentions to the interviews they came from, so `icp_count`,
+ * `fit_unrecorded_count` and `last_mention_at` ride the same first-sight branch
+ * as `count`.
+ *
+ * WHY THREE MAPS AND NOT ONE. Its three siblings narrow and nothing else, so one
+ * predicate map said everything about them. This row does not: `All interviews`
+ * is the CLEARED state and `By recency` REORDERS the same set. Writing either as
+ * `() => true` would satisfy the guard while lying about what the chip does —
+ * and the guard exists precisely because a chip whose behaviour is not declared
+ * anywhere falls through and silently answers a different question. So each kind
+ * is declared as itself, and `zone_actions.test.mjs` checks that every live chip
+ * in the table is claimed by exactly one of the three.
+ */
+const PAIN_VIEWS = {
+  // A claim about INTERVIEWS, not about the founder's ranking: the theme is
+  // here because somebody they spoke to was recorded calling it a must.
+  need: (g) => (g.need_count || 0) > 0,
+  // Themes at least one RECORDED-ICP interviewee named. `fit_unrecorded_count`
+  // is deliberately not folded in: an interview whose fit nobody filled in is
+  // not evidence that its pain comes from a customer, and the footnote below
+  // says how many mentions this chip therefore cannot speak for.
+  icp: (g) => (g.icp_count || 0) > 0,
+};
+
+/**
+ * Chips that reorder rather than narrow. One so far.
+ *
+ * A STRING COMPARE, matching the server's own. `interview_date` is `YYYY-MM-DD`
+ * text, which sorts lexicographically in date order, and `Date.parse` on a bare
+ * date string is the local-versus-UTC trap this repo has been bitten by before.
+ * Themes with no date sort LAST rather than first or absent — a pain people
+ * named is not hidden because nobody recorded when they said it.
+ */
+const PAIN_SORTS = {
+  recency: (a, b) => {
+    const x = a.last_mention_at || '';
+    const y = b.last_mention_at || '';
+    if (x === y) return 0;
+    if (!x) return 1;
+    if (!y) return -1;
+    return y < x ? -1 : 1;
+  },
+};
+
+/**
+ * The chip that clears the row, named rather than assumed.
+ *
+ * `All interviews` is this zone's `All`, and the state the toggle returns to
+ * when a reader presses the chip they are already on. Declared as a constant so
+ * the guard can see that the table's fourth live key is accounted for — an `all`
+ * that only existed as a bare string in two `useState` calls is exactly the kind
+ * of key that can be renamed in the table and silently keep working here while
+ * meaning nothing.
+ */
+const PAIN_CLEARED = 'all';
+
+/**
+ * How severe was this pain, in this conversation?
+ *
+ * WRITES `interview_pain_severities`, which migration 211 created with the
+ * right shape, a unique index on `(interview_id, phrase_norm)`, and no reader
+ * and no writer anywhere in the worker — migration 215's header names it as its
+ * example of a column that comes to exist and is never read. The consequence on
+ * screen was `/validate/pain-map`'s `Need-to-have` chip, which carried exactly
+ * that reason.
+ *
+ * THREE STATES, NOT TWO. A pain is a need, a nice-to-have, or unjudged — and
+ * unjudged is the one that must stay reachable, because "nobody has decided"
+ * and "everybody said optional" are different findings and the map reports them
+ * differently. Clicking the current answer clears it.
+ *
+ * OPTIMISTIC, WITH THE SERVER'S ANSWER WINNING. The PUT returns the severity it
+ * stored; a failed write rolls the row back to what it was rather than leaving
+ * a judgement on screen that is not on file.
+ */
+function PainSeverity({ interviewId, pains, onChanged }) {
+  const [byPhrase, setByPhrase] = useState({});
+  const [busy, setBusy] = useState(null);
+  const [error, setError] = useState('');
+
+  const set = async (phrase, severity) => {
+    const current = byPhrase[phrase] ?? null;
+    const next = current === severity ? null : severity;
+    setBusy(phrase); setError('');
+    setByPhrase((m) => ({ ...m, [phrase]: next }));
+    try {
+      const r = await api.setInterviewPainSeverity(interviewId, phrase, next);
+      setByPhrase((m) => ({ ...m, [phrase]: r?.severity ?? next }));
+      onChanged?.();
+    } catch (e) {
+      setByPhrase((m) => ({ ...m, [phrase]: current }));
+      setError(e?.message || 'That judgement was not saved.');
+    } finally { setBusy(null); }
+  };
+
+  return (
+    <div className="mt-2">
+      <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">
+        How badly did they need it?
+      </div>
+      <ul className="mt-1 space-y-1">
+        {pains.map((p) => {
+          const phrase = typeof p === 'string' ? p : String(p?.pain ?? '');
+          if (!phrase) return null;
+          const chosen = byPhrase[phrase] ?? null;
+          return (
+            <li key={phrase} className="flex flex-wrap items-center gap-2">
+              <span className="min-w-0 flex-1 truncate text-[11px] text-axal-muted">{phrase}</span>
+              {[['need', 'Need-to-have'], ['nice', 'Nice-to-have']].map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  disabled={busy === phrase}
+                  aria-pressed={chosen === key}
+                  onClick={() => set(phrase, key)}
+                  data-testid={`button-pain-severity-${key}`}
+                  className={`rounded-[6px] border px-2 py-0.5 text-[10.5px] font-semibold disabled:opacity-60 ${
+                    chosen === key
+                      ? 'border-axal-violet bg-axal-violet/10 text-axal-violet'
+                      : 'border-axal-hairline text-axal-muted hover:border-axal-faint'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </li>
+          );
+        })}
+      </ul>
+      {error && <p className="mt-1 text-[11px] text-rose-600">{error}</p>}
+    </div>
+  );
+}
+
 function PainMap({ projectId, ready, zoneFilters, zoneActions }) {
   const [view, setView] = useState(null);
   const [error, setError] = useState(null);
+  // `all`, `need`, `icp` or `recency` — the chip row is the only thing that sets
+  // it. Named rather than boolean because the canvas's row has four entries and
+  // they are now all live; `recency` reorders where the others narrow, which one
+  // string holds and two booleans would not.
+  const [narrow, setNarrow] = useState(PAIN_CLEARED);
 
   useEffect(() => {
     if (!ready || !projectId) return undefined;
@@ -294,14 +467,52 @@ function PainMap({ projectId, ready, zoneFilters, zoneActions }) {
   const groups = view.groups || [];
   const ungrouped = view.ungrouped || [];
   const total = view.interview_total || 0;
-  const ranked = [...groups].sort((a, b) => (b.phrases?.length || 0) - (a.phrases?.length || 0));
-  const top = ranked[0];
+  // RANKED BY `count`, WHICH IS DISTINCT INTERVIEWS, and this line is a bug fix
+  // rather than a tidy-up. It sorted by `phrases?.length` — the number of
+  // WORDINGS a theme has collected — over a denominator of interviews, and the
+  // two are not the same number. `analyzePains` seeds every curated alias as a
+  // phrase whether or not anyone logged it, so a founder who grouped three
+  // wordings under one theme saw that theme at "3 phrases · 150%" with the bar
+  // pinned at 100% on a two-interview project **where nobody had mentioned it at
+  // all** (`count: 0`). `serializePainMapCsv`'s own docblock already asserted
+  // this page showed `count`; the export did and the page did not, so one record
+  // read two ways one screen apart.
+  //
+  // The sort is `count` desc, title as tie-break — the same order
+  // `analyzePains` gives `themes`, which is what the deck's Problem slide ranks
+  // by. The two now name the same leading pain, which matters because this
+  // zone's own `Send to Problem slide` op is a link to that slide.
+  const ordered = PAIN_SORTS[narrow]
+    ? [...groups].sort(PAIN_SORTS[narrow])
+    : [...groups].sort((a, b) => (b.count || 0) - (a.count || 0)
+      || String(a.title).localeCompare(String(b.title)));
+  // NARROWED ON THE ROWS THE SERVER COUNTED, not on a predicate invented here.
+  // `need_count` and `icp_count` are both DISTINCT INTERVIEWS — so each chip
+  // answers a question about the people who were interviewed, not about the
+  // founder's own ranking.
+  const shown = PAIN_VIEWS[narrow] ? ordered.filter(PAIN_VIEWS[narrow]) : ordered;
+  const top = ordered[0];
+  const needTotal = groups.filter((g) => (g.need_count || 0) > 0).length;
+  const icpTotal = groups.filter((g) => (g.icp_count || 0) > 0).length;
+  // Mentions this map cannot attribute to a customer or to a non-customer,
+  // because nobody recorded the interviewee's ICP fit. Counted over themes, the
+  // unit the chip beside it narrows.
+  const fitUnknownTotal = groups.filter((g) => (g.fit_unrecorded_count || 0) > 0).length;
 
   return (
     <div className="space-y-4">
       <ZoneToolbar
         role="founder"
-        filters={zoneFilters ? zoneFilters({}) : []}
+        filters={zoneFilters ? zoneFilters({
+          value: narrow,
+          // Clicking the current chip clears it, the same toggle the other
+          // zones use — otherwise a reader who narrows has no way back without
+          // reloading, because the row has no `All` of its own here.
+          onChange: (key) => setNarrow((cur) => (cur === key ? PAIN_CLEARED : key)),
+          // No count for `recency`: it reorders the same set, so a number beside
+          // it would be the total and would read as a narrowing that is not one.
+          counts: { need: needTotal, icp: icpTotal },
+        }) : []}
         actions={zoneActions ? zoneActions() : []}
       />
       <StatRow items={[
@@ -314,10 +525,55 @@ function PainMap({ projectId, ready, zoneFilters, zoneActions }) {
         { label: 'Themes', value: groups.length, note: 'you name them; nothing else does' },
         { label: 'Interviews behind them', value: total, note: 'the denominator for every frequency below' },
         { label: 'Ungrouped phrases', value: ungrouped.length, note: 'logged, not yet themed' },
-        { label: 'Severity tiering', value: null, note: 'need / good / nice is not a field a pain carries yet' },
+        // WAS `value: null` with "need / good / nice is not a field a pain
+        // carries yet". It is one now — `interview_pain_severities` has a
+        // reader and a writer — so the tile reports the count, and reports it
+        // as themes rather than as mentions because that is what the chip
+        // beside it narrows.
+        {
+          label: 'Need-to-have themes',
+          value: view.severity_recorded ? needTotal : null,
+          note: view.severity_recorded
+            ? 'someone interviewed was recorded calling these a must'
+            : 'no severity recorded against any pain yet',
+        },
+        // `null` WHEN THE FIELD WAS NEVER FILLED IN, the same rule as the tile
+        // above and as `verdictFor`'s. `icp_fit` arrived in migration 161, so a
+        // project logged before it has NULL on every interview — and reporting
+        // "0 themes from your ICP" there states a finding about the customers
+        // when the truth is that nobody recorded who they were.
+        {
+          label: 'Themes your ICP named',
+          value: view.icp_recorded ? icpTotal : null,
+          note: view.icp_recorded
+            ? (fitUnknownTotal > 0
+              ? `${fitUnknownTotal} more have mentions whose ICP fit was never recorded`
+              : 'every mention behind these has a recorded fit')
+            : 'no ICP fit recorded on any interview yet',
+        },
       ]} />
 
-      {groups.length === 0 && ungrouped.length === 0 ? (
+      {narrow === 'need' && shown.length === 0 && groups.length > 0 ? (
+        <EmptyState
+          title="No theme is recorded as a need yet"
+          description={view.severity_recorded
+            ? 'Severity is on file for this venture, and none of it marks a theme as a must-have. The map has themes; this narrowing has none.'
+            : 'Nothing has been marked need-to-have on any interview. This chip narrows on what interviewees were recorded saying, so with nothing recorded it has nothing to show — which is not the same as every pain being optional.'}
+        />
+      ) : narrow === 'icp' && shown.length === 0 && groups.length > 0 ? (
+        // THE SAME TWO ANSWERS AS `need`, AND THEY ARE DIFFERENT FINDINGS. One
+        // says the people you have spoken to are not your ICP; the other says
+        // nobody wrote down who they were. An empty map alone cannot tell them
+        // apart, which is why `icp_recorded` comes from the interview rows and
+        // not from these counts.
+        <EmptyState
+          title="No theme comes from a recorded ICP interview"
+          description={view.icp_recorded
+            ? 'ICP fit is on file for this venture, and none of the interviews that named a pain was recorded as a fit. The map has themes; none of them came from your customers.'
+            : 'No interview carries a recorded ICP fit, so nothing here can be attributed to your customers or ruled out as not from them. That is a gap in the log, not a finding about the pains.'}
+          action={<Link to="/validate/interviews" className="text-axal-violet underline">Record fit on the interviews</Link>}
+        />
+      ) : groups.length === 0 && ungrouped.length === 0 ? (
         <EmptyState
           title="No pains logged yet"
           description="Pain themes are grouped from the pains recorded against interviews. Until one is logged this map has nothing to draw, and drawing it anyway would be inventing the finding."
@@ -327,21 +583,67 @@ function PainMap({ projectId, ready, zoneFilters, zoneActions }) {
         <Card className="p-4">
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <span className="text-sm font-extrabold tracking-tight">Pain themes</span>
-            <span className="text-[11px] text-axal-ink-3">Frequency across {total} interview{total === 1 ? '' : 's'}</span>
+            <span className="text-[11px] text-axal-faint">Frequency across {total} interview{total === 1 ? '' : 's'}</span>
           </div>
           <ul className="space-y-2.5">
-            {ranked.map((g) => {
-              const n = g.phrases?.length || 0;
+            {shown.map((g) => {
+              // INTERVIEWS, NOT WORDINGS. `count` is the distinct interviews
+              // that mentioned this theme — the number the header's "Frequency
+              // across N interviews" is a fraction of, the number the CSV
+              // export writes, and the number the deck's Problem slide ranks by.
+              // The phrase count is still shown because it is what a founder
+              // curating the map needs to see, but it is no longer the
+              // numerator: three wordings from one interviewee is one person.
+              const n = g.count || 0;
+              const words = g.phrases?.length || 0;
               const pct = total ? Math.round((n / total) * 100) : 0;
               return (
                 <li key={g.id}>
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="truncate text-xs font-semibold">{g.title}</span>
-                    <span className="shrink-0 text-[11px] tabular-nums text-axal-ink-3">
-                      {n} phrase{n === 1 ? '' : 's'}{total ? ` · ${pct}%` : ''}
+                    <span className="shrink-0 text-[11px] tabular-nums text-axal-faint">
+                      {n} interview{n === 1 ? '' : 's'}{total ? ` · ${pct}%` : ''}
+                      {words > 0 && (
+                        <span className="ml-1.5">
+                          {words} wording{words === 1 ? '' : 's'}
+                        </span>
+                      )}
+                      {/* BOTH COUNTS, NEVER ONE VERDICT. The same pain is a
+                          must-have for one segment and optional for another,
+                          and collapsing that to a single label is the judgement
+                          this page exists to support rather than to make. */}
+                      {(g.need_count || 0) > 0 && (
+                        <span className="ml-1.5 rounded-[4px] bg-axal-ground px-1 py-px font-semibold text-axal-ink">
+                          {g.need_count} need
+                        </span>
+                      )}
+                      {(g.nice_count || 0) > 0 && (
+                        <span className="ml-1 rounded-[4px] px-1 py-px">{g.nice_count} nice</span>
+                      )}
+                      {/* WHO SAID IT, on the same terms as how badly they
+                          wanted it. `icp` is recorded fit; `fit ?` is the count
+                          this map cannot attribute either way, shown rather
+                          than rounded into the first — a theme that reads
+                          "1 icp · 4 fit ?" is a different finding from one that
+                          reads "1 icp" on five interviews all checked. */}
+                      {(g.icp_count || 0) > 0 && (
+                        <span className="ml-1.5 rounded-[4px] bg-axal-ground px-1 py-px font-semibold text-axal-ink">
+                          {g.icp_count} icp
+                        </span>
+                      )}
+                      {(g.fit_unrecorded_count || 0) > 0 && (
+                        <span className="ml-1 rounded-[4px] px-1 py-px" title="Interviews behind this theme with no ICP fit recorded">
+                          {g.fit_unrecorded_count} fit&nbsp;?
+                        </span>
+                      )}
+                      {narrow === 'recency' && g.last_mention_at && (
+                        <span className="ml-1.5 rounded-[4px] px-1 py-px" title="Latest interview date among the interviews that named this theme">
+                          {g.last_mention_at}
+                        </span>
+                      )}
                     </span>
                   </div>
-                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-axal-surface-2">
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-axal-ground">
                     <div className="h-full rounded-full bg-axal-violet" style={{ width: `${Math.min(pct, 100)}%` }} />
                   </div>
                 </li>
@@ -349,16 +651,31 @@ function PainMap({ projectId, ready, zoneFilters, zoneActions }) {
             })}
           </ul>
           {ungrouped.length > 0 && (
-            <p className="mt-3 text-[11px] text-axal-ink-3">
+            <p className="mt-3 text-[11px] text-axal-faint">
               {ungrouped.length} phrase{ungrouped.length === 1 ? '' : 's'} not yet in a theme. They count in the log and
               not in the map — a phrase in no theme is evidence, not a finding.
             </p>
           )}
-          <p className="mt-3 border-t border-axal-border-soft pt-3 text-[11px] leading-relaxed text-axal-ink-3">
-            Percentages are phrases over interviews, so a theme two people named twice each does not read as four
-            people. {top ? `“${top.title}” leads at ${total ? Math.round(((top.phrases?.length || 0) / total) * 100) : 0}%.` : ''}{' '}
-            Severity tiering — need-to-have, good-to-have, nice-to-have — is what the canvas adds here, and it needs a
-            field on the pain record that does not exist yet, so the column reads “Not recorded” instead of guessing.
+          <p className="mt-3 border-t border-axal-hairline pt-3 text-[11px] leading-relaxed text-axal-faint">
+            {/* WAS "percentages are phrases over interviews", which described
+                what the code did and not what the sentence went on to promise:
+                phrases over interviews is exactly how a theme two people named
+                twice each DOES read as four people, and a theme nobody
+                mentioned read as 150%. Both halves are true now. */}
+            Percentages are interviews over interviews, so a theme two people named two ways each reads as two people
+            and not as four. {top ? `“${top.title}” leads at ${total ? Math.round(((top.count || 0) / total) * 100) : 0}%.` : ''}{' '}
+            {view.icp_recorded
+              ? 'The “icp” badge counts interviews recorded as a strong or partial fit; “fit ?” counts those whose fit '
+                + 'was never recorded, kept separate because an unchecked interview is not a non-customer.'
+              : 'No interview carries a recorded ICP fit yet, so nothing here is attributed to your customers — the '
+                + 'map ranks by how many people named a pain, whoever they were.'}{' '}
+            {view.severity_recorded
+              ? 'Severity is recorded per pain and per interview, so one conversation can name a must-have and a '
+                + 'nice-to-have in the same breath. A theme counts once per interview however many ways that '
+                + 'interview worded it.'
+              : 'Severity — need-to-have against nice-to-have — is recorded on an interview, against the pain it '
+                + 'named. None is on file for this venture yet, so the map ranks by frequency alone and says so '
+                + 'rather than ranking by a severity it would have to invent.'}
           </p>
         </Card>
       )}
@@ -433,8 +750,8 @@ function NoVenture({ what }) {
 function FitGap({ base }) {
   if (!base || !base.fit_not_recorded) return null;
   return (
-    <Card className="border-dashed bg-axal-surface-2 px-3.5 py-2.5">
-      <p className="text-[12px] leading-relaxed text-axal-ink-2">
+    <Card className="border-dashed bg-axal-ground px-3.5 py-2.5">
+      <p className="text-[12px] leading-relaxed text-axal-muted">
         <span className="font-semibold">{base.fit_not_recorded}</span>
         {base.fit_not_recorded === 1 ? ' interview has ' : ' interviews have '}
         no ICP fit recorded. Those cannot count toward a claim, so any verdict that
@@ -457,6 +774,12 @@ function FitGap({ base }) {
 const HYPOTHESIS_VIEWS = {
   all: (h) => !h.retired_at,
   blocking: (h) => !h.retired_at && h.verdict === null,
+  // LANE, NOT VERDICT (#175). A claim leaves `none` for `testing` the moment its
+  // first supporting interview lands, and its verdict does not move at all — so
+  // a chip about the board's columns has to ask about columns. Claims whose
+  // record does not reach back that far are excluded rather than assumed
+  // unmoved; `movedNote` below is what says so on screen.
+  moved: (h, now) => !h.retired_at && laneChangedSince(h, daysBefore(now, RECENTLY_MOVED_DAYS)),
   retired: (h) => Boolean(h.retired_at),
 };
 
@@ -471,7 +794,17 @@ function HypothesisBoard({ projectId, ready, board, onNew, onRetire, retiring, z
   const items = data.hypotheses || [];
   const live = items.filter((h) => !h.retired_at);
   const base = data.evidence_base || {};
-  const shown = items.filter(HYPOTHESIS_VIEWS[view] || HYPOTHESIS_VIEWS.all);
+  const now = new Date();
+  const shown = items.filter((h) => (HYPOTHESIS_VIEWS[view] || HYPOTHESIS_VIEWS.all)(h, now));
+  // The seam, stated rather than left to look like an answer. Nothing is
+  // backfilled — the only timestamp a past lane could be invented from is
+  // `updated_at`, which moves when the CLAIM TEXT is edited — so a window that
+  // opens before the record starts says when the record starts.
+  const movedNote = view === 'moved' && !historyReaches(data.verdict_history_since, daysBefore(now, RECENTLY_MOVED_DAYS))
+    ? (data.verdict_history_since
+      ? `Lane history starts ${String(data.verdict_history_since).slice(0, 10)}, so moves before that are not on record.`
+      : 'No lane history is on record yet. It starts the first time this board is opened after the change that introduced it.')
+    : null;
   const byLane = (lane) => shown.filter((h) => h.lane === lane);
 
   return (
@@ -491,6 +824,10 @@ function HypothesisBoard({ projectId, ready, board, onNew, onRetire, retiring, z
 
       <FitGap base={base} />
 
+      {movedNote && shown.length > 0 && (
+        <p className="text-[11px] text-axal-faint" data-testid="text-hypotheses-moved-since">{movedNote}</p>
+      )}
+
       {items.length === 0 ? (
         <EmptyState
           title="No hypotheses yet"
@@ -505,10 +842,12 @@ function HypothesisBoard({ projectId, ready, board, onNew, onRetire, retiring, z
         // A live chip that matches nothing has to say which question it just
         // answered. Falling through to the board's own "No hypotheses yet" would
         // report an empty board, which is a different and untrue claim.
-        <p className="text-[12px] text-axal-ink-3" data-testid="text-hypotheses-view-empty">
+        <p className="text-[12px] text-axal-faint" data-testid="text-hypotheses-view-empty">
           {view === 'retired'
             ? 'No claim has been retired. A retired claim stays on the record — it is never deleted — so this view fills the first time you retire one.'
-            : 'No claim is waiting on an ICP fit. Every hypothesis on the board has the evidence it needs for a verdict.'}
+            : view === 'moved'
+              ? (movedNote || `No claim has changed lane in the last ${RECENTLY_MOVED_DAYS} days.`)
+              : 'No claim is waiting on an ICP fit. Every hypothesis on the board has the evidence it needs for a verdict.'}
         </p>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
@@ -518,20 +857,20 @@ function HypothesisBoard({ projectId, ready, board, onNew, onRetire, retiring, z
             return (
               <Card key={lane} className="p-3.5">
                 <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{label}</span>
-                  <span className="text-[11px] tabular-nums text-axal-ink-3">{cards.length}</span>
+                  <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</span>
+                  <span className="text-[11px] tabular-nums text-axal-faint">{cards.length}</span>
                 </div>
                 <ul className="mt-2.5 space-y-2.5">
                   {cards.map((h) => (
-                    <li key={h.id} className="rounded-lg border border-axal-border-soft p-2.5">
+                    <li key={h.id} className="rounded-lg border border-axal-hairline p-2.5">
                       <div className="text-[12.5px] font-semibold leading-snug">
-                        <span className="text-axal-ink-3">{h.code} · </span>{h.claim}
+                        <span className="text-axal-faint">{h.code} · </span>{h.claim}
                       </div>
-                      <div className="mt-1 text-[11px] tabular-nums text-axal-ink-3">
+                      <div className="mt-1 text-[11px] tabular-nums text-axal-faint">
                         {h.evidence.supporting} support · {h.evidence.contradicting} contradict
                         {h.evidence.fitUnrecorded > 0 && ` · ${h.evidence.fitUnrecorded} of unknown fit`}
                       </div>
-                      <div className="mt-0.5 text-[11px] text-axal-ink-3">
+                      <div className="mt-0.5 text-[11px] text-axal-faint">
                         {h.bar_note || 'Distance to the bar cannot be computed until the fits above are recorded.'}
                       </div>
                       {/*
@@ -551,7 +890,7 @@ function HypothesisBoard({ projectId, ready, board, onNew, onRetire, retiring, z
                           onClick={() => onRetire(h.id, !h.retired_at)}
                           disabled={retiring === h.id}
                           data-testid={`button-retire-hypothesis-${h.id}`}
-                          className="mt-1.5 text-[11px] font-semibold text-axal-ink-3 underline decoration-dotted underline-offset-2 hover:text-axal-violet disabled:opacity-50"
+                          className="mt-1.5 text-[11px] font-semibold text-axal-faint underline decoration-dotted underline-offset-2 hover:text-axal-violet disabled:opacity-50"
                         >
                           {retiring === h.id
                             ? 'Saving…'
@@ -567,7 +906,7 @@ function HypothesisBoard({ projectId, ready, board, onNew, onRetire, retiring, z
         </div>
       )}
 
-      <p className="text-[11px] leading-relaxed text-axal-ink-3">
+      <p className="text-[11px] leading-relaxed text-axal-faint">
         Lanes are computed from the evidence, never dragged: a claim sits where its
         interviews put it. The canvas also draws “Recently moved”, and nothing
         records a claim changing lanes — so that chip is not shown at all, rather
@@ -581,9 +920,32 @@ function HypothesisBoard({ projectId, ready, board, onNew, onRetire, retiring, z
 // standing — and `Retired claims` is the record of the ones that are not, which
 // exists because a retired claim is never deleted. The canvas's other two labels
 // ask for the board as it stood at a past moment, and no such moment is stored.
+/**
+ * The four verdict views, and two of them are TIME TRAVEL rather than filters
+ * (#175, migration 255).
+ *
+ * `current` and `retired` show the live verdict. `lastweek` shows the verdict
+ * that was in force seven days ago and EXCLUDES any claim whose record does not
+ * reach that far back — showing today's verdict under "as of last week" would be
+ * a confident wrong answer, which is precisely what the `unbuilt` reason these
+ * chips carried was protecting against. `changed` asks whether the verdict now
+ * differs from the verdict at the start of this month.
+ *
+ * Each returns the verdict to DISPLAY as well as whether to show the row,
+ * because a time-travel view that filtered but relabelled nothing would just be
+ * a shorter copy of today's table.
+ */
 const SUMMARY_VIEWS = {
-  current: (h) => !h.retired_at,
-  retired: (h) => Boolean(h.retired_at),
+  current: (h) => (h.retired_at ? null : { verdict: h.verdict }),
+  retired: (h) => (h.retired_at ? { verdict: h.verdict } : null),
+  lastweek: (h, now) => {
+    if (h.retired_at) return null;
+    const then = verdictAsOf(h, daysBefore(now, 7));
+    return then.known ? { verdict: then.verdict, asOf: true } : null;
+  },
+  changed: (h, now) => (!h.retired_at && verdictChangedSince(h, startOfMonth(now))
+    ? { verdict: h.verdict }
+    : null),
 };
 
 function ValidationSummary({ projectId, ready, board, zoneFilters, zoneActions }) {
@@ -614,7 +976,21 @@ function ValidationSummary({ projectId, ready, board, zoneFilters, zoneActions }
   // The strip keeps reporting the standing claims whichever view is selected:
   // "Validated 3 of 4" is a statement about the venture, not about the table
   // below it, and it would be a different sentence over the retired set.
-  const shown = items.filter(SUMMARY_VIEWS[view] || SUMMARY_VIEWS.current);
+  const now = new Date();
+  const pick = SUMMARY_VIEWS[view] || SUMMARY_VIEWS.current;
+  const shown = items
+    .map((h) => { const v = pick(h, now); return v ? { ...h, verdict: v.verdict } : null; })
+    .filter(Boolean);
+  // The seam, said out loud. Nothing is backfilled, so a window that opens
+  // before the record starts cannot be answered — and an empty table under
+  // "Changed this month" must not read as "nothing changed".
+  const openedAt = view === 'lastweek' ? daysBefore(now, 7)
+    : view === 'changed' ? startOfMonth(now) : null;
+  const historyNote = openedAt && !historyReaches(data.verdict_history_since, openedAt)
+    ? (data.verdict_history_since
+      ? `Verdict history starts ${String(data.verdict_history_since).slice(0, 10)}. Claims with nothing on record that far back are left out rather than shown at today's verdict.`
+      : 'No verdict history is on record yet. It starts the first time this board is opened after the change that introduced it.')
+    : null;
 
   return (
     <div className="space-y-4">
@@ -634,6 +1010,10 @@ function ValidationSummary({ projectId, ready, board, zoneFilters, zoneActions }
 
       <FitGap base={base} />
 
+      {historyNote && (
+        <p className="text-[11px] text-axal-faint" data-testid="text-summary-history-since">{historyNote}</p>
+      )}
+
       {items.length === 0 ? (
         <EmptyState
           title="Nothing to reconcile yet"
@@ -641,22 +1021,33 @@ function ValidationSummary({ projectId, ready, board, zoneFilters, zoneActions }
           action={<Link to="/validate/hypotheses" className="text-axal-violet underline">See hypotheses</Link>}
         />
       ) : shown.length === 0 ? (
-        <p className="text-[12px] text-axal-ink-3" data-testid="text-summary-view-empty">
-          No claim has been retired. Retiring one on the hypothesis board keeps it
-          here rather than deleting it, and this view is where it lands.
+        <p className="text-[12px] text-axal-faint" data-testid="text-summary-view-empty">
+          {view === 'lastweek'
+            ? (historyNote || 'No claim had a verdict on record a week ago.')
+            : view === 'changed'
+              ? (historyNote || 'No verdict has changed this month.')
+              : `No claim has been retired. Retiring one on the hypothesis board keeps it
+          here rather than deleting it, and this view is where it lands.`}
         </p>
       ) : (
         <Card className="p-4">
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <span className="text-sm font-extrabold tracking-tight">
-              {view === 'retired' ? 'Retired claims, with their receipts' : 'Every verdict, with its receipts'}
+              {view === 'retired' ? 'Retired claims, with their receipts'
+                : view === 'lastweek' ? 'Every verdict, as it stood a week ago'
+                  : view === 'changed' ? 'Verdicts that changed this month'
+                    : 'Every verdict, with its receipts'}
             </span>
-            <span className="text-[11px] text-axal-ink-3">Computed from the interview log</span>
+            <span className="text-[11px] text-axal-faint">
+              {view === 'lastweek' || view === 'changed'
+                ? 'Verdict from the recorded history · counts are current'
+                : 'Computed from the interview log'}
+            </span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-[12.5px]">
               <thead>
-                <tr className="text-left text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+                <tr className="text-left text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
                   <th className="py-1.5 pr-3">Hypothesis</th>
                   <th className="py-1.5 pr-3 text-right">For</th>
                   <th className="py-1.5 pr-3 text-right">Against</th>
@@ -664,18 +1055,18 @@ function ValidationSummary({ projectId, ready, board, zoneFilters, zoneActions }
                   <th className="py-1.5">Bar</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-axal-border-soft">
+              <tbody className="divide-y divide-axal-hairline">
                 {shown.map((h) => (
                   <tr key={h.id} className="align-top">
                     <td className="py-2 pr-3">
-                      <span className="text-axal-ink-3">{h.code} · </span>{h.claim}
+                      <span className="text-axal-faint">{h.code} · </span>{h.claim}
                     </td>
                     <td className="py-2 pr-3 text-right tabular-nums">{h.evidence.supporting}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{h.evidence.contradicting}</td>
                     <td className="py-2 pr-3">
                       {h.verdict ? VERDICT_LABEL[h.verdict] : <NotRecorded />}
                     </td>
-                    <td className="py-2 text-[11px] text-axal-ink-3">
+                    <td className="py-2 text-[11px] text-axal-faint">
                       {h.bar_note || h._note || '—'}
                     </td>
                   </tr>
@@ -687,12 +1078,12 @@ function ValidationSummary({ projectId, ready, board, zoneFilters, zoneActions }
       )}
 
       <Card className="p-4">
-        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
           What the venture decided
         </div>
         {current === undefined ? <div className="mt-2"><Skeleton className="h-10" /></div>
           : current === null ? (
-            <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink-2">
+            <p className="mt-2 text-[12.5px] leading-relaxed text-axal-muted">
               {decision === null
                 ? 'Not shown here. A venture’s proceed, pivot or stop is its own — the board above is read by studio staff and service partners, and this is not.'
                 : 'No decision recorded. The summary above is evidence; this is the call a person makes in front of it, and nobody has made one yet.'}
@@ -701,9 +1092,9 @@ function ValidationSummary({ projectId, ready, board, zoneFilters, zoneActions }
             <>
               <div className="mt-1.5 text-base font-extrabold capitalize tracking-tight">{current.decision}</div>
               {current.reasoning && (
-                <p className="mt-1.5 text-[12.5px] leading-relaxed text-axal-ink-2">{current.reasoning}</p>
+                <p className="mt-1.5 text-[12.5px] leading-relaxed text-axal-muted">{current.reasoning}</p>
               )}
-              <div className="mt-1.5 text-[11px] text-axal-ink-3">
+              <div className="mt-1.5 text-[11px] text-axal-faint">
                 Recorded {String(current.decided_at || '').slice(0, 10)}
                 {(decision?.history?.length || 0) > 1 && ` · ${decision.history.length - 1} earlier decision(s) kept`}
               </div>
@@ -946,7 +1337,6 @@ export default function FounderValidateWorkspace() {
           fills
         />
       )}
-      scope="One venture"
       title={isRoot ? bucketTitle(bucket) : undefined}
       activeSlug={isRoot ? null : undefined}
       intro={INTRO[zone?.slug] || INTRO.interviews}
@@ -972,7 +1362,7 @@ export default function FounderValidateWorkspace() {
         new heading is worse than a moment's blank.
       */}
       {zone?.slug === 'pain-map' && (
-        <ValidateProposals
+        <FillProposals
           key="pain-map"
           projectId={projectId}
           kind="pain_tag"
@@ -981,7 +1371,7 @@ export default function FounderValidateWorkspace() {
         />
       )}
       {zone?.slug === 'hypotheses' && (
-        <ValidateProposals
+        <FillProposals
           key="hypotheses"
           projectId={projectId}
           kind="hypothesis"

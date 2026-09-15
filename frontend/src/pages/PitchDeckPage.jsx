@@ -6,10 +6,11 @@ import {
   Sparkles, Loader2, Plus, Trash2, Share2, Download,
   History, RotateCcw, ChevronLeft, ChevronRight, Lock, Wand2,
   LayoutGrid, FileText, FileCode2, Settings, X, Check,
-  GripVertical, Eye, Clock,
+  GripVertical, Eye, Clock, Ban,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { deckReadinessState } from '../lib/deckReadiness';
+import { deckShareState } from '../lib/deckShares';
 import { downloadDeckPdf } from '../lib/deckPdf.jsx';
 import { useAuth } from '../hooks/useAuthSync';
 import { useSpinoutDeckFields } from '../hooks/useSpinoutDeckFields';
@@ -496,6 +497,31 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
     return () => { alive = false; };
   }, [deck?.id]);
 
+  // Task #196 — withdraw a share link. THE PANEL IS WHERE THIS BELONGS: it is
+  // already the only place a founder can see the links they have minted, and it
+  // has been listing view counts for links it could not stop being used.
+  //
+  // The refresh is awaited rather than fired and forgotten, because the row the
+  // founder is looking at is the one that has to change. A toast saying "link
+  // withdrawn" over a row still reading "active" would be the page contradicting
+  // itself about the one fact the founder came here to check.
+  const [revoking, setRevoking] = useState(null);
+  const onRevokeShare = async (shareId) => {
+    if (!deck?.id || !shareId) return;
+    setRevoking(shareId);
+    try {
+      await api.deckRevokeShare(deck.id, shareId);
+      const fresh = await api.deckEngagement(deck.id).catch(() => null);
+      if (fresh) setEngagement(fresh);
+      addToast('Share link withdrawn. It no longer opens.', 'success');
+    } catch (e) {
+      // Loud, because the founder acted to stop something reaching someone. A
+      // swallowed failure here leaves them believing a live link is dead.
+      setError(e.message || 'Could not withdraw that share link — it may still open.');
+      reportError('PitchDeckPage:revokeShare', e);
+    } finally { setRevoking(null); }
+  };
+
   const onRestore = async (id) => {
     try {
       const r = await api.deckRestore(id);
@@ -920,7 +946,7 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
 
               {/* Task #53 — Engagement panel: shows aggregate views,
                   read-time, and a recent-impressions list (hashed). */}
-              <EngagementPanel data={engagement} />
+              <EngagementPanel data={engagement} onRevoke={onRevokeShare} revoking={revoking} />
 
               <div className="bg-white dark:bg-slate-900 rounded-lg border dark:border-slate-800 p-3" data-card>
                 <div className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-2 flex items-center gap-1">
@@ -1716,7 +1742,22 @@ function fmtReadTime(seconds) {
   return `${h}h ${m % 60}m`;
 }
 
-function EngagementPanel({ data }) {
+/**
+ * Task #196 — FOUR STATES, NOT TWO. The panel used to render
+ * `exhausted ? 'gone' : 'active'`, which called an EXPIRED link active — a small
+ * lie while nothing could be done about it, and an unusable one now: withdrawing
+ * sets `expires_at` as well as `revoked_at`, so under the old pair a link the
+ * founder had just ended read "active" and the withdraw looked like it had
+ * failed. `deckShareState` is the rule; this is only what each state looks like.
+ */
+const SHARE_TONE = {
+  revoked: 'text-rose-600 dark:text-rose-400',
+  exhausted: 'text-amber-600 dark:text-amber-400',
+  expired: 'text-gray-400 dark:text-slate-500',
+  live: 'text-emerald-600 dark:text-emerald-400',
+};
+
+function EngagementPanel({ data, onRevoke, revoking }) {
   if (!data) {
     return (
       <div className="bg-white dark:bg-slate-900 rounded-lg border dark:border-slate-800 p-3" data-card>
@@ -1776,14 +1817,37 @@ function EngagementPanel({ data }) {
         <div className="mb-3">
           <div className="text-[10px] uppercase text-gray-400 mb-1">Share links</div>
           <div className="space-y-1 max-h-32 overflow-y-auto">
-            {shares.slice(0, 5).map((s) => (
-              <div key={s.id} className="flex items-center justify-between text-[11px] text-gray-500 dark:text-slate-400">
-                <span>{s.view_count}/{s.view_limit} used</span>
-                <span className={s.exhausted ? 'text-amber-600' : 'text-emerald-600'}>
-                  {s.exhausted ? 'gone' : 'active'}
-                </span>
-              </div>
-            ))}
+            {/* Task #196 — a withdrawn link STAYS ON THE LIST, marked. Hiding it
+                would take the view history of the link with it, which is the
+                evidence a founder most wants after discovering it went somewhere
+                it should not have. Withdraw is offered only on a link that still
+                opens: on a dead one it would change nothing the founder can see,
+                which is how a control teaches people not to trust it. */}
+            {shares.slice(0, 5).map((s) => {
+              const st = deckShareState(s);
+              return (
+                <div key={s.id} className="flex items-center justify-between gap-2 text-[11px] text-gray-500 dark:text-slate-400">
+                  <span>{s.view_count}/{s.view_limit} used</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className={SHARE_TONE[st.key]}>{st.label}</span>
+                    {st.live && typeof onRevoke === 'function' && (
+                      <button
+                        type="button"
+                        onClick={() => onRevoke(s.id)}
+                        disabled={revoking === s.id}
+                        className="px-1.5 py-0.5 rounded border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-50 inline-flex items-center gap-1"
+                        title="Stop this link opening. The views it already collected are kept."
+                      >
+                        {revoking === s.id
+                          ? <Loader2 className="w-3 h-3 animate-spin" />
+                          : <Ban className="w-3 h-3" />}
+                        Withdraw
+                      </button>
+                    )}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

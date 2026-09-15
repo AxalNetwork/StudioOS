@@ -61,10 +61,10 @@ export default function SuperAdminHolders() {
 
   return (
     <Card className="p-5" data-testid="super-admin-holders">
-      <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+      <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
         <ShieldCheck size={13} /> Super Admin holders
       </div>
-      <p className="mt-1 text-[12.5px] leading-relaxed text-axal-ink-2">
+      <p className="mt-1 text-[12.5px] leading-relaxed text-axal-muted">
         The account that licenses the platform to subsidiaries. One holder by decision; changes
         need your authenticator, are recorded in the admin audit log, and can never leave the
         set empty.
@@ -76,18 +76,18 @@ export default function SuperAdminHolders() {
         </p>
       )}
 
-      <ul className="mt-3 divide-y divide-axal-line" data-testid="super-admin-holder-list">
+      <ul className="mt-3 divide-y divide-axal-hairline" data-testid="super-admin-holder-list">
         {holders === null && !error && (
-          <li className="py-2 text-[12px] text-axal-ink-3"><Loader2 size={13} className="inline animate-spin" /> Loading holders…</li>
+          <li className="py-2 text-[12px] text-axal-faint"><Loader2 size={13} className="inline animate-spin" /> Loading holders…</li>
         )}
         {holders !== null && holders.length === 0 && (
-          <li className="py-2 text-[12px] text-axal-ink-3">No holder is recorded. Migration 207 names one; until it has applied to this database, nobody can franchise.</li>
+          <li className="py-2 text-[12px] text-axal-faint">No holder is recorded. Migration 207 names one; until it has applied to this database, nobody can franchise.</li>
         )}
         {(holders || []).map((h) => (
           <li key={h.id} className="flex items-center justify-between gap-3 py-2">
             <div className="min-w-0">
               <div className="truncate text-[13px] font-semibold text-axal-ink">{h.name || h.email}</div>
-              <div className="truncate text-[11.5px] text-axal-ink-3">{h.email}{Number(h.is_active) === 1 ? '' : ' · inactive'}</div>
+              <div className="truncate text-[11.5px] text-axal-faint">{h.email}{Number(h.is_active) === 1 ? '' : ' · inactive'}</div>
             </div>
             <button
               type="button"
@@ -106,13 +106,13 @@ export default function SuperAdminHolders() {
         className="mt-4 flex flex-wrap items-center gap-2"
         onSubmit={(e) => { e.preventDefault(); if (pick) run(() => api.superAdminGrant(Number(pick))).then(() => setPick('')); }}
       >
-        <label htmlFor="super-admin-grant" className="text-[12px] font-semibold text-axal-ink-2">Elevate an admin</label>
+        <label htmlFor="super-admin-grant" className="text-[12px] font-semibold text-axal-muted">Elevate an admin</label>
         <select
           id="super-admin-grant"
           value={pick}
           onChange={(e) => setPick(e.target.value)}
           disabled={busy || candidates.length === 0}
-          className="rounded-md border border-axal-line bg-white px-2 py-1.5 text-[12.5px] text-axal-ink dark:bg-gray-900"
+          className="rounded-md border border-axal-hairline bg-white px-2 py-1.5 text-[12.5px] text-axal-ink dark:bg-gray-900"
         >
           <option value="">{candidates.length ? 'Choose an admin…' : 'Every admin already holds it'}</option>
           {candidates.map((a) => (
@@ -126,7 +126,7 @@ export default function SuperAdminHolders() {
         >
           {busy ? <Loader2 size={13} className="inline animate-spin" /> : 'Grant'}
         </button>
-        <span className="text-[11.5px] text-axal-ink-3">Only an existing admin can be elevated.</span>
+        <span className="text-[11.5px] text-axal-faint">Only an existing admin can be elevated.</span>
       </form>
     </Card>
   );

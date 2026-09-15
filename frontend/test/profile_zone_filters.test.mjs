@@ -37,6 +37,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 
+/**
+ * The founder table's own source, for the one thing importing it cannot show:
+ * whether a shared `unbuilt` reason CONSTANT still exists. A reason that outlives
+ * the store being built gets cited again by the next reader — `NO_SESSION_RECORD`
+ * and `NO_CADENCE_STORE` both went when their migrations landed, and something has
+ * to notice if the third one does not.
+ *
+ * `codeOnly` FIRST, and this is the whole reason that helper exists. Both
+ * departures left a NOTE behind naming the constant they removed — "`…` stood
+ * here … and removing it is the point" — which is precisely the comment worth
+ * keeping, and it would make a ban on the name fail against correct code.
+ */
+const FILTERS_SRC = codeOnly(read('frontend/src/workspaces/founderZoneFilters.js'));
+
 
 /**
  * Zone key → the file that renders that zone's toolbar, for the surfaces four
@@ -224,12 +238,25 @@ const PROFILES = {
     // both through a `canvasDirs` key since the Expertise bucket landed there;
     // this file hardcoded the integrated directory until now, which is why I
     // reported these two licences as having no canvas at all. They have four.
-    canvasDirs: ['design/incoming'],
-    canvas: /^Pages · Advisor (Network|Research)\.dc\.html$/,
+    // WIDENED ON CANVAS PR1, and it had to be: this profile could not see
+    // `Advisor Detail · Practice.dc.html` at all — wrong directory and a name
+    // the regex did not match — so it reported the Practice bucket as
+    // specifying no filters. That is the same blind spot PR0 fixed in
+    // `profile_zone_actions.test.mjs`, one file later.
+    canvasDirs: ['design/incoming', 'design/canvases/integrated'],
+    canvas: /^(Pages · Advisor (Network|Research)\.dc\.html$|Advisor Detail · Practice)/,
+    // PR5 is a pointer to D4 in the backlog canvas — see `alsoZones` in
+    // `canvasFilters` for why the file is read by route and not by directory.
+    alsoZones: [['practice/earnings', 'design/canvases/backlog/Detail Layer Canvas II.dc.html']],
     pages: ['frontend/src/pages/advisor', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/advisorZoneActions.js',
-    zones: 7,
-    mounted: 7,
+    // 7 → 8 → 9 → 10 → 11: `practice/opportunities` brought the bucket's first
+    // live filter row on canvas PR1, `practice/engagements` its second on PR2,
+    // `practice/delivery` its third on PR3, `practice/sessions` its fourth on
+    // PR4. Every number moved because an artboard landed, not because anyone
+    // edited a count.
+    zones: 12,
+    mounted: 12,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.advisor },
     // THE ONE EXCLUSION THAT IS NOT A DEFERRAL. Founder and investor left this
     // list; advisor and partner do not follow, and the reason is not that their
@@ -241,10 +268,36 @@ const PROFILES = {
     // founder and advisor mount DIFFERENT files for organizations.
     excluded: [
       'network/organizations',
+      // ONE DEFERRAL LEFT, NOT A REFUSAL, and it arrived here as a side effect
+      // worth stating. Widening `canvasDirs`/`canvas` above to see the
+      // Practice canvas pulls ALL FOUR of its artboards into scope at once —
+      // `specified` is not bucket-filtered — so the ones whose pages have not
+      // been built yet have to be named or the exact-set check below fails.
+      // Each leaves this list as its artboard lands: `practice/engagements`
+      // left on PR2, `practice/delivery` on PR3 and `practice/sessions` on
+      // PR4. NONE REMAIN — every Practice artboard that draws chips now has
+      // them, and the only advisor exclusion left is the one above, which is
+      // a refusal rather than a deferral.
+      //
+      // `practice/earnings` WAS ABSENT HERE, on the reading that the canvas
+      // drew no chips for it. That was true of the PRACTICE canvas and false
+      // of the product: PR5 is a pointer ("drawn in full as D4"), and D4 draws
+      // four. `alsoZones` above reads that one artboard by route, so the zone
+      // is now specified and covered rather than deferred by an absence in the
+      // wrong file.
     ],
-    // No `samples`: not one advisor label carries a figure, and the assertion
-    // below proves that rather than taking it on trust — a canvas that gains an
-    // `All 14` forces this profile to declare a pattern.
+    // THE ADVISOR SET CARRIES SAMPLES NOW, AND ONLY IN ONE PLACE — which is
+    // exactly what the "prove the absence" branch below exists to catch, and
+    // it did the moment D4 came into scope, naming both labels.
+    //
+    // `Q3 2026` and `Q2 2026` are the quarter the artboard happened to be
+    // drawn in. A chip reading `Q3 2026` is wrong for every reader after it,
+    // so the two are a `dynamic` group instead: the page supplies today's two
+    // quarters and the label a reader sees is their own. Partner reached the
+    // same pattern from the same canvas problem and relabelled positionally
+    // ("This quarter"); this profile names the actual quarter, which is more
+    // useful and only possible because the label is computed.
+    samples: /\b(?:Q[1-4] )?20\d\d\b/,
     live: (route) => route.replace(/^\//, ''),
   },
 
@@ -260,7 +313,7 @@ const PROFILES = {
     // directory made `delivery/board`'s chip row look like labels from nowhere.
     canvasDirs: ['design/incoming', 'design/canvases/integrated'],
     // `Offers` JOINS THE REGEX, and `canvasDirs` needs no change for it:
-    // `design/incoming/Pages · Partner Offers.dc.html` is already in the
+    // `design/canvases/integrated/Pages · Partner Offers.dc.html` is already in the
     // directory this profile opens, and it is byte-identical on the nineteen
     // labels to the copy in `design/canvases/integrated/` — checked rather than
     // assumed, both name the same five routes in the same order.
@@ -395,7 +448,53 @@ function canvasFilters(profile) {
       for (const [route, labels] of Object.entries(found)) out[profile.live(route)] = labels;
     }
   }
+
+  // ONE ARTBOARD FROM A FILE THIS SCAN DOES NOT OPEN, NAMED ROUTE BY ROUTE —
+  // the same hook `profile_zone_actions.test.mjs` grew, for the same zone and
+  // the same reason. The Practice canvas draws PR5 as a POINTER ("drawn in
+  // full as D4") and D4 lives in `design/canvases/backlog/Detail Layer Canvas
+  // II`, a file that also holds artboards for cohorts and for two partner
+  // buckets. Sweeping the directory would hand this profile artboards it does
+  // not own; naming the route cannot.
+  //
+  // The backlog canvas stays in `backlog/` — reading it for intent is not
+  // promoting it.
+  for (const [zone, file] of profile.alsoZones || []) {
+    const chips = viewChipsFor(read(file), zone);
+    assert.ok(chips.length, `${file} draws no view chips for ${zone}`);
+    out[zone] = chips;
+  }
   return out;
+}
+
+/**
+ * One artboard's VIEW CHIPS, from the row that holds them.
+ *
+ * A THIRD SHAPE, scoped to a named zone rather than added to the two above.
+ * `Detail Layer Canvas II` builds its chips with `views([…])` inside the
+ * canvas's own data block — shape C's mechanism — but reaches them through a
+ * per-artboard key (`d4Views`) rather than through a `boards` array, so
+ * neither existing reader finds them.
+ *
+ * Read from the data block by key, because that is where the strings are: the
+ * markup only loops over them. The key is derived from the artboard's id in
+ * the crumb's own file (`d4` → `d4Views`), so a renamed artboard fails here
+ * rather than silently contributing nothing.
+ */
+function viewChipsFor(src, zone) {
+  const slug = (x) => x.trim().toLowerCase().replace(/\s+/g, '-');
+  // Find the artboard id whose sub-label names this zone: `<a class="ab-id"
+  // href="#d4">D4</a>` … `<span class="ab-sub">emerald · /practice/earnings`.
+  const re = /href="#(\w+)">[^<]*<\/a>[\s\S]{0,400}?class="ab-sub">[^<]*?\/([a-z0-9-]+\/[a-z0-9-]+)/g;
+  for (const m of src.matchAll(re)) {
+    if (slug(m[2]) !== zone) continue;
+    const key = `${m[1]}Views`;
+    const at = src.indexOf(`${key}: views([`);
+    if (at < 0) continue;
+    const block = src.slice(at, src.indexOf(']', at));
+    return [...block.matchAll(/'([^']+)'/g)].map((x) => x[1]);
+  }
+  return [];
 }
 
 /**
@@ -466,17 +565,13 @@ function artboardFilters(src) {
     // list is looked up rather than assumed from the section's id, because the
     // prefixes (`l_`, `pr_`, `n_`, `r_`, `a_`) are the canvas author's shorthand
     // and nothing makes them track the section ids.
-    // BUILT WITH `escapeRe`, NOT INTERPOLATED RAW. `binding[1]` comes out of a
-    // canvas file, and a canvas is an input this repo takes from outside — so a
-    // binding name carrying regex metacharacters would either build a pattern
-    // that means something else or, with the right nesting, one that
-    // backtracks. `\w+` in the match above already constrains it, which is why
-    // this is belt-and-braces rather than a live hole; escaping is still the
-    // right shape, and Semgrep's `detect-non-literal-regexp` is correct to
-    // insist on it (finding 6048).
-    const declared = src.match(new RegExp(`\\b${escapeRe(binding[1])}:\\s*views\\(\\[([^\\]]*)\\]\\)`));
+    // LOOKED UP WITH indexOf, NOT new RegExp. Semgrep's detect-non-literal-regexp
+    // (#6052) is right that a constructor built from a canvas token is the
+    // ReDoS shape even when `\w+` already constrains the name. A bounded
+    // indexOf cannot change meaning if the token grows a metacharacter.
+    const declared = viewsListFor(src, binding[1]);
     if (!declared) continue;
-    out[route[1]] = chips(declared[1]);
+    out[route[1]] = chips(declared);
   }
   return out;
 }
@@ -490,6 +585,31 @@ function artboardFilters(src) {
  * one chip into two — `Opened` and `unanswered` — and then reported the table as
  * having drifted from a canvas it matched exactly.
  */
+function viewsListFor(src, name) {
+  const key = `${name}:`;
+  let from = 0;
+  while (from < src.length) {
+    const at = src.indexOf(key, from);
+    if (at < 0) return null;
+    const prev = at === 0 ? '' : src[at - 1];
+    if (prev && /[A-Za-z0-9_]/.test(prev)) {
+      from = at + 1;
+      continue;
+    }
+    let i = at + key.length;
+    while (i < src.length && (src[i] === ' ' || src[i] === '\t' || src[i] === '\n')) i += 1;
+    if (!src.startsWith('views([', i)) {
+      from = at + 1;
+      continue;
+    }
+    const innerStart = i + 'views(['.length;
+    const innerEnd = src.indexOf(']', innerStart);
+    if (innerEnd < 0) return null;
+    return src.slice(innerStart, innerEnd);
+  }
+  return null;
+}
+
 function chips(list) {
   return [...list.matchAll(/'((?:[^'\\]|\\.)*)'/g)]
     .map((m) => m[1].replace(/\\(.)/g, '$1'))
@@ -682,21 +802,35 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     }
   });
 
-  test(`${name}: a filter with no source is never rendered at all`, () => {
-    // STRONGER THAN THE ASSERTION IT REPLACES, which allowed the item through
-    // as long as it carried no click handler — it then rendered as prose in the
-    // chip row. Nothing unbuilt reaches the renderer now, so every item the
-    // builder returns is a chip that runs.
+  test(`${name}: a filter with no source is drawn, and cannot be selected`, () => {
+    // THIS TEST HAS HELD THREE RULES AND THE CONSTRAINT UNDER THEM HAS NEVER
+    // MOVED. First it allowed an unbuilt item through as long as it carried no
+    // click handler — which let it render as PROSE in the chip row. Then
+    // nothing unbuilt reached the renderer at all, and the title read "never
+    // rendered"; that made 166 canvas controls invisible across the eight
+    // tables and produced five "elements are missing" reports in a week.
+    //
+    // Now it is drawn, disabled, with its reason on hover. The constant through
+    // all three: A FILTER THAT CANNOT RUN MUST NOT BE SELECTABLE. That is the
+    // one property that makes it safe — a dead filter does not fail loudly, it
+    // returns an empty set, and an empty set reads as an answer.
     for (const [zone, rows] of Object.entries(profile.table)) {
       const built = profile.build(zone, { value: '__none__' });
       for (const item of built) {
-        assert.ok(item.onSelect, `${zone} · ${item.label} is rendered but cannot be selected`);
         assert.equal(item.note, undefined, `${zone} · ${item.label} still carries prose`);
+        if (item.disabled) {
+          assert.equal(item.onSelect, undefined, `${zone} · ${item.label} is disabled and still selectable`);
+          assert.notEqual(item.active, true, `${zone} · ${item.label} is a dead chip drawn as the current view`);
+          assert.ok(item.title, `${zone} · ${item.label} is drawn dead and says nothing on hover`);
+        } else {
+          assert.ok(item.onSelect, `${zone} · ${item.label} is a live chip that cannot be selected`);
+        }
       }
       const dead = rows.filter((r) => r.unbuilt && !r.dynamic).map((r) => r.label || r.canvas);
       for (const label of dead) {
-        assert.ok(!built.some((i) => i.label === label),
-          `${zone} · ${label} has no source and is still drawn`);
+        const chip = built.find((i) => i.label === label);
+        assert.ok(chip, `${zone} · ${label} has no source and is not drawn at all`);
+        assert.equal(chip.disabled, true, `${zone} · ${label} has no source and is drawn live`);
       }
     }
   });
@@ -1173,9 +1307,39 @@ test('a dynamic group renders its stored names and nothing else', () => {
     value: 'referral',
     dynamic: { sources: [{ key: 'waitlist', label: 'Waitlist' }, { key: 'referral', label: 'Referral' }] },
   });
-  assert.deepEqual(bySource.map((i) => i.label), ['All', 'Waitlist', 'Referral']);
+  // The dynamic group's own entry carries an `unbuilt` reason about SEGMENTS,
+  // and that entry is the group — it is replaced by the supplied names rather
+  // than drawn beside them, so there is no dead chip here to find. A group with
+  // nothing supplied still contributes nothing: a placeholder chip labelled
+  // with the canvas's sample name would state a segment this founder has not
+  // got, which is the one thing a dynamic group may not do.
+  // `Stalled` IS LIVE, AND THIS ASSERTION IS INVERTED RATHER THAN DELETED.
+  //
+  // It used to pin the chip as drawn-dead, and the paragraph here explained why:
+  // the chip had once shipped LIVE with a predicate of `return []`, so clicking it
+  // answered "you have no stalled accounts" over a store that — the note said —
+  // "records no stalling at all". The first half was a real bug and was rightly
+  // caught. THE SECOND HALF WAS NEVER TRUE. `waitlist_signups` carries
+  // `created_at`, `invited_at`, `followed_up_at` and `promoted_at`;
+  // `WAITLIST_SELECT` in `progress.ts` returns all four, and that route's own
+  // comment calls them "independent activity marks". The timeline was there the
+  // whole time and nobody had read it.
+  //
+  // So the guard now holds the OPPOSITE state, and it is a stronger claim than the
+  // one it replaces: the chip must be selectable AND the page must compute the
+  // predicate from those stamps. A guard that pins a refusal is only as good as the
+  // belief behind it, which is why this one is turned over with the evidence rather
+  // than dropped.
+  assert.deepEqual(bySource.map((i) => i.label), ['All', 'Waitlist', 'Referral', 'Stalled']);
   assert.ok(bySource.find((i) => i.label === 'Referral').active, 'the supplied source cannot be selected');
   assert.ok(bySource.every((i) => !i.note), 'a sentence is back in the chip row');
+  const stalled = bySource.find((i) => i.label === 'Stalled');
+  assert.ok(!stalled.disabled, 'Stalled went back to being drawn dead over a store that does record activity');
+  assert.equal(typeof stalled.onSelect, 'function', 'Stalled is live but cannot be clicked');
+  for (const name of ['Waitlist', 'Referral']) {
+    assert.ok(!bySource.find((i) => i.label === name).disabled,
+      `${name} is a stored source name drawn as a dead chip`);
+  }
 
   // The reason survives on the table entry, and still says the same thing.
   const row = FOUNDER_ZONE_FILTERS['grow/customers'].find((r) => r.dynamic === 'sources');
@@ -1190,28 +1354,66 @@ test('a dynamic group renders its stored names and nothing else', () => {
   assert.match(talentRow.unbuilt, /no job post is linked/, 'the fallback reason stopped being recorded');
 });
 
-test('filters sharing one reason are recorded once and rendered never', () => {
-  // /build/cadence has four filters and one reason. That reason used to be
-  // collected into a sentence naming all four and printed under the chips;
-  // /build/this-week's two distinct reasons became two sentences. Both are now
-  // absent from the row entirely — a zone whose filters cannot run shows the
-  // ones that can, and nothing else.
-  const cadence = founderZoneFilters('build/cadence', { value: 'x' });
-  assert.deepEqual(cadence, [], 'a zone with no runnable filter still renders something');
+test('two zones whose stores arrived draw live chips, and their shared reasons are gone', () => {
+  // THIS TEST HAS BEEN THREE THINGS AND THE THIRD IS THE POINT.
+  //
+  // It began as `deepEqual(cadence, [])` under the title "rendered never" — the
+  // four-chip artboard row rendering as NOTHING, which is why /build/cadence was
+  // reported three times as missing its options. Then it asserted four DISABLED
+  // chips, each carrying its own hover, when the builder started drawing gaps.
+  //
+  // Migration 250 stored rituals, runs and templates, so all four are live and the
+  // old assertion — "every chip is disabled and unselectable" — would now be
+  // false. It is not loosened; it is INVERTED, because the fact it was written
+  // about has changed. A refusal kept beside a working feature is exactly the
+  // failure #193 was filed for.
+  const cadence = founderZoneFilters('build/cadence', { value: 'plans' });
+  assert.equal(cadence.length, FOUNDER_ZONE_FILTERS['build/cadence'].length,
+    'the cadence row stopped drawing one chip per artboard filter');
+  assert.ok(cadence.every((i) => !i.disabled && typeof i.onSelect === 'function'),
+    'a cadence chip is still dead after migration 250 gave the zone its store');
+  assert.ok(cadence.every((i) => !i.title),
+    'a live cadence chip still carries a gap explanation on hover');
+  // The selected chip is the one the page asked for, and only that one.
+  assert.equal(cadence.filter((i) => i.active).length, 1, 'exactly one chip is active');
+  assert.equal(cadence.find((i) => i.active).label, 'Plans');
+  // And the reason that covered all four is GONE from the module, not reworded.
+  // `zoneFilterBuilder`'s history is that a reason outliving its fix gets cited
+  // again; `NO_SESSION_RECORD` went the same way when migration 221 landed.
 
-  const week = founderZoneFilters('build/this-week', { value: 'now' });
-  assert.ok(week.every((i) => i.onSelect && !i.note), 'this-week renders prose in the chip row');
-  for (const label of ['Last 4', 'All weeks', 'Carried only']) {
-    assert.ok(!week.some((i) => i.label === label), `${label} has no source and is still drawn`);
+  // AND `build/this-week` CROSSED THE SAME LINE IN THE SAME PASS. Its three dead
+  // chips — `Last 4`, `All weeks`, `Carried only` — shared one reason, "a key
+  // result carries no week", and migration 252 records the column moves those
+  // weeks are derived from. So the test's title stopped being true too: this-week
+  // does draw live chips now. Both halves are asserted the new way rather than one
+  // being loosened to match the other.
+  const week = founderZoneFilters('build/this-week', { value: 'recent', counts: { all: 14 } });
+  assert.equal(week.length, FOUNDER_ZONE_FILTERS['build/this-week'].length,
+    'the this-week row stopped drawing one chip per artboard filter');
+  assert.ok(week.every((i) => !i.note), 'this-week renders prose in the chip row');
+  assert.ok(week.every((i) => !i.disabled && typeof i.onSelect === 'function'),
+    'a this-week chip is still dead after migration 252 recorded the column moves');
+  assert.equal(week.filter((i) => i.active).length, 1, 'exactly one this-week chip is active');
+  assert.equal(week.find((i) => i.active).label, 'Last 4 weeks');
+  // `All {n} weeks` takes the page's own count. The canvas says "All 14"; printing
+  // 14 on an account with no history is the thing `withCount` exists to refuse, so
+  // the figure comes from the store and the clause drops when there is none.
+  assert.ok(week.some((i) => i.label === 'All 14 weeks'), 'the count clause is not filled from the page');
+  const noCount = founderZoneFilters('build/this-week', { value: 'now' });
+  assert.ok(noCount.some((i) => i.label === 'All weeks'),
+    'a zero count still printed a number into the chip');
+
+  // Both shared reasons are gone from the module, not reworded.
+  for (const dead of ['NO_CADENCE_STORE', 'NO_WEEK_STAMP']) {
+    assert.ok(!FILTERS_SRC.includes(dead), `${dead} survived the store being built`);
   }
+  assert.equal(FOUNDER_ZONE_FILTERS['build/this-week'].filter((r) => r.unbuilt).length, 0,
+    'a this-week chip is a gap again');
 
-  // The reasons themselves stay in the table, distinct where they were distinct.
-  const reasons = new Set(FOUNDER_ZONE_FILTERS['build/this-week']
-    .filter((r) => r.unbuilt).map((r) => r.unbuilt));
-  assert.equal(reasons.size, 2, 'this-week\'s two distinct reasons were merged into one');
-  assert.equal(new Set(FOUNDER_ZONE_FILTERS['build/cadence']
-    .filter((r) => r.unbuilt).map((r) => r.unbuilt)).size, 1,
-    'cadence\'s one reason was split into several');
+  assert.equal(FOUNDER_ZONE_FILTERS['build/cadence'].filter((r) => r.unbuilt).length, 0,
+    'a cadence chip is a gap again');
+  assert.equal(FOUNDER_ZONE_FILTERS['build/cadence'].filter((r) => r.key).length, 4,
+    'cadence stopped declaring four live keys');
 });
 
 

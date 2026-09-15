@@ -12,6 +12,7 @@
 // user's normal navigation and is never replaced by lab-specific links.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { LAB_PAGE_PAD, LAB_PAGE_PAD_LOOSE } from '../components/spinout/labStyles';
 import {
   ArrowRight,
   Award,
@@ -501,7 +502,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
   };
 
   return (
-    <div className="px-4 sm:px-6 py-6 pb-24" data-testid="spinout-workspace">
+    <div className={`w-full ${LAB_PAGE_PAD} ${LAB_PAGE_PAD_LOOSE}`} data-testid="spinout-workspace">
       {/* ---- Program header (sticky, like the design's page header) ---- */}
       <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 bg-gray-50/90 dark:bg-gray-950/90 backdrop-blur border-b border-gray-200 dark:border-gray-800 pb-4 mb-8">
         <div className="flex flex-wrap items-center justify-between gap-4">

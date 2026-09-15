@@ -4,6 +4,7 @@ import * as QRCode from 'qrcode';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { createJWT, hashToken, generateToken, requireAuth, setAuthCookies, clearAuthCookies, generateCsrfToken, revokeStaleCrossIdentitySession, selectJwt, bumpJwtMinIat, STEP_UP_TTL_MINUTES } from '../auth';
+import { branchOf } from '../util/branch';
 import { sendVerificationEmail } from '../services/email';
 import { send as sendEmail } from '../services/email/send';
 import { ensureAuthBlockersSchema } from '../services/authBlockersSchema';
@@ -159,27 +160,68 @@ import { hashEmail } from '../util/hashEmail';
 // (routes/admin_exploring.ts) shows a suggestion immediately, before the
 // onboarding chatbot even runs.
 import { ensureExploringSchema, upsertSuggestedRole } from '../services/exploringSchema';
+import { withDeadline } from '../util/deadline';
 
-async function checkRateLimit(env: Env, key: string, max: number, windowSec: number): Promise<boolean> {
+/**
+ * The three answers a throttle can give. `deny` is the person's own doing —
+ * they really have asked too often. `unavailable` is ours: the limiter could
+ * not be consulted, so we refuse without knowing. Collapsing the two into one
+ * boolean is what made a KV outage reach the browser as "Too many requests.
+ * Please wait a minute" — advice that would never come true, sending the user
+ * away to wait on a queue that was not the problem.
+ */
+type RateVerdict = 'allow' | 'deny' | 'unavailable';
+
+// A KV round trip that has not answered in this long counts as an outage.
+// Nothing in the handler below can run until it returns, so the choice is not
+// between a fast answer and a slow one — it is between an answer and none.
+const RATE_KV_DEADLINE_MS = 2_000;
+
+async function checkRateLimit(env: Env, key: string, max: number, windowSec: number): Promise<RateVerdict> {
   // Fail-CLOSED on any KV error (audit M1). These limiters guard sensitive
   // auth / registration / magic-link / step-up endpoints, so a KV outage must
   // DENY rather than silently disable throttling — fail-open would re-open
   // credential-stuffing / OTP brute-force during the very window it's needed.
   // Log only the bucket prefix (the key tail carries the email → PII, L5).
+  //
+  // A STALL IS AN OUTAGE. Both KV calls carry a deadline because KV takes no
+  // AbortSignal: without one, a namespace that answers neither leaves this
+  // `await` pending for the life of the request and the fail-closed branch
+  // below — correct, and tested — never runs. That is how sign-in came to
+  // return the browser's own "The server did not respond within 30s" on
+  // 2026-09-12 with nothing logged: not a missing error path, an unreachable
+  // one. The verdict is `unavailable` rather than `deny` so the caller can say
+  // which of the two happened instead of blaming the person for our outage.
   let attempts: number[] = [];
   try {
-    const data = await env.RATE_LIMITS.get(key);
+    const data = await withDeadline(env.RATE_LIMITS.get(key), RATE_KV_DEADLINE_MS, `ratelimit-get:${key.split(':')[0]}`);
     const now = Date.now();
     attempts = data ? JSON.parse(data) : [];
     attempts = attempts.filter(t => now - t < windowSec * 1000);
-    if (attempts.length >= max) return false;
+    if (attempts.length >= max) return 'deny';
     attempts.push(now);
-    await env.RATE_LIMITS.put(key, JSON.stringify(attempts), { expirationTtl: windowSec });
+    await withDeadline(
+      env.RATE_LIMITS.put(key, JSON.stringify(attempts), { expirationTtl: windowSec }),
+      RATE_KV_DEADLINE_MS,
+      `ratelimit-put:${key.split(':')[0]}`,
+    );
   } catch (e) {
     console.error('checkRateLimit KV error (failing closed) bucket=%s', key.split(':')[0], e);
-    return false;
+    return 'unavailable';
   }
-  return true;
+  return 'allow';
+}
+
+// What a non-`allow` verdict looks like to the caller. `null` means carry on.
+// The 503 says the limiter is the thing that failed, and carries a code so the
+// cause is legible from a screenshot alone — the same reason SAFE_ERROR_CODES
+// exists above.
+const LIMITER_DOWN_COPY = 'We could not check the request limit for this endpoint, so the request was refused. This is a problem on our side, not yours — please try again in a moment.';
+
+function rateGate(c: any, verdict: RateVerdict, denyCopy: string): any | null {
+  if (verdict === 'allow') return null;
+  if (verdict === 'deny') return c.json({ error: denyCopy }, 429);
+  return c.json({ error: LIMITER_DOWN_COPY, code: 'rate_limiter_unavailable' }, 503);
 }
 
 async function sendVerification(env: Env, email: string, name: string, userId: number): Promise<{ sent: boolean; verificationUrl: string; tokenStored: boolean }> {
@@ -371,8 +413,11 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
   const regEmailHash = await hashEmail(email);
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_registered', ${`registered (lane=${role || 'partner'}) — holding in exploring pending admin review — pending email verification (email_hash=${regEmailHash})`}, ${regEmailHash}, ${user.id})`;
   // Auth v2 — seed the licence-picker gate row. RequireAuth pins new users to
-  // /onboarding/licence until POST /onboarding/licence advances them into the
-  // role wizard. Legacy accounts may still have flow='chat'.
+  // the SPA page `/onboarding` until the API call `POST /api/onboarding/licence`
+  // advances them into the role wizard. Those two paths are NOT the same thing
+  // and only the page moved: the picker used to live at `/onboarding/licence`,
+  // which read as the same string as its own endpoint. The endpoint keeps its
+  // name. Legacy accounts may still have flow='chat'.
   if ((role || 'partner') !== 'admin') {
     try {
       await c.env.DB.prepare(
@@ -438,8 +483,11 @@ auth.post('/resend-verification', async (c) => {
     return c.json({ error: 'Email required' }, 400);
   }
 
-  const allowed = await checkRateLimit(c.env, `resend:${email.toLowerCase()}`, 3, 3600);
-  if (!allowed) return c.json({ error: 'Maximum resend limit reached. Please try again in an hour.' }, 429);
+  const resendGate = rateGate(
+    c, await checkRateLimit(c.env, `resend:${email.toLowerCase()}`, 3, 3600),
+    'Maximum resend limit reached. Please try again in an hour.',
+  );
+  if (resendGate) return resendGate;
 
   let users: any[] = [];
   try {
@@ -494,8 +542,11 @@ auth.get('/verify-email', safe('verify-email', 'Could not verify your email link
   // single IP is still cheap noise we can drop. 10/15min/IP is generous enough
   // that a real user retrying after a typo or refreshing the tab is fine.
   const verifyIp = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-  const allowedIp = await checkRateLimit(c.env, `verify-email-ip:${verifyIp}`, 10, 900);
-  if (!allowedIp) return c.json({ error: 'Too many verification attempts. Please try again in 15 minutes.' }, 429);
+  const verifyGate = rateGate(
+    c, await checkRateLimit(c.env, `verify-email-ip:${verifyIp}`, 10, 900),
+    'Too many verification attempts. Please try again in 15 minutes.',
+  );
+  if (verifyGate) return verifyGate;
 
   const tokenHash = await hashToken(token);
   const sql = getSQL(c.env);
@@ -527,8 +578,11 @@ auth.post('/confirm-verify-email', safe('confirm-verify-email', 'Could not confi
   // IP-keyed brute-force cap as GET /verify-email (shared bucket: both are
   // steps of the same flow).
   const confirmIp = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-  const allowedConfirmIp = await checkRateLimit(c.env, `verify-email-ip:${confirmIp}`, 10, 900);
-  if (!allowedConfirmIp) return c.json({ error: 'Too many verification attempts. Please try again in 15 minutes.' }, 429);
+  const confirmGate = rateGate(
+    c, await checkRateLimit(c.env, `verify-email-ip:${confirmIp}`, 10, 900),
+    'Too many verification attempts. Please try again in 15 minutes.',
+  );
+  if (confirmGate) return confirmGate;
 
   await ensureAuthBlockersSchema(c.env);
   const tokenHash = await hashToken(token);
@@ -685,8 +739,11 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
     return c.json({ error: 'Bot verification failed. Please try again.' }, 403);
   }
 
-  const allowed = await checkRateLimit(c.env, `login:${email.toLowerCase()}`, 5, 300);
-  if (!allowed) return c.json({ error: 'Too many attempts. Try again in 5 minutes.' }, 429);
+  const loginGate = rateGate(
+    c, await checkRateLimit(c.env, `login:${email.toLowerCase()}`, 5, 300),
+    'Too many attempts. Try again in 5 minutes.',
+  );
+  if (loginGate) return loginGate;
 
   const sql = getSQL(c.env);
   const users = await sql`SELECT * FROM users WHERE email = ${email}`;
@@ -978,16 +1035,122 @@ auth.get('/me', async (c) => {
         return !!row;
       } catch { return false; }
     })(),
+    // Task #178 — does this account still owe an affirmative acceptance of the
+    // terms and the privacy policy?
+    //
+    // PR #549 made that consent real, but only at the onboarding licence gate,
+    // and only fresh Auth-v2 signups pass through it. Admins, impersonated
+    // sessions, `access_level = 'limited'` accounts, legacy `flow='chat'` rows
+    // and EVERY account that predates #549 still have `tos_v1` and `privacy_v1`
+    // sitting `pending`. Since #549 they are satisfiable; nothing has satisfied
+    // them.
+    //
+    // IT RIDES /me BECAUSE EVERY OTHER CANDIDATE WRITES. Each read-shaped
+    // `/trust/*` GET calls `seedObligations`, which is one unconditional UPDATE
+    // plus one `INSERT … ON CONFLICT DO UPDATE` per obligation def — gating page
+    // load on one would put those writes on every navigation, and
+    // `/trust/score/:userId` does them to ANOTHER user's rows. This is a SELECT
+    // on a response the SPA already fetches on every route change.
+    //
+    // A PURE FACT, NOT A POLICY. An admin really does have these rows pending
+    // and this says so. Whether a session is INTERRUPTED over it is the gate's
+    // call, in `App.jsx`, beside the licence and KYC gates whose exclusions it
+    // copies — one place that decides who gets stopped, rather than two that
+    // can disagree.
+    //
+    // ABSENT READS AS FALSE, deliberately, in both directions: a DB error or a
+    // missing table gates nobody, and neither does an account with no obligation
+    // rows at all. That last case is not a hole — `seedObligations` runs on
+    // every login path (registration, magic-link verify, Google callback), so
+    // rows exist for anyone who has signed in. The dev FastAPI returns a
+    // different shape entirely and therefore also gates nobody, which is why the
+    // SPA must read a missing key as "do not gate".
+    terms_acceptance_pending: await (async () => {
+      try {
+        const row: any = await c.env.DB.prepare(
+          `SELECT 1 FROM legal_obligations
+            WHERE user_id = ?
+              AND obligation_key IN ('tos_v1', 'privacy_v1')
+              AND required = 1
+              AND status IN ('pending', 'in_review')
+            LIMIT 1`,
+        ).bind(user.id).first();
+        return !!row;
+      } catch { return false; }
+    })(),
+    // D106 — WHICH DEPLOYMENT IS THIS, told once, on the response the SPA
+    // already fetches on every route change.
+    //
+    // `null` on HQ, and the SPA must read a missing key as HQ too: the dev
+    // FastAPI returns a different shape and would otherwise render the branch
+    // shell over HQ data.
+    //
+    // THE VARS ARE THE SOURCE, NOT THE DATABASE. `BRANCH_CODE`, `BRANCH_NAME`
+    // and `BRANCH_TERRITORY` come from the generated config (D105), so this
+    // answers correctly on a branch whose licence copy has not arrived yet —
+    // which is exactly the window in which someone is looking at the screen
+    // wondering why. `status` and `as_of` do come from the copy, and are null
+    // together when it is absent; a branch that reads `status: null` shows
+    // "awaiting HQ", never "active".
+    branch: await (async () => {
+      const code = branchOf(c.env);
+      if (!code) return null;
+      const e = c.env as unknown as Record<string, string | undefined>;
+      const territories = String(e.BRANCH_TERRITORY ?? '')
+        .split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
+      let status: string | null = null;
+      let as_of: string | null = null;
+      try {
+        const row: any = await c.env.DB.prepare(
+          'SELECT status, pushed_at FROM branch_licence WHERE id = 1',
+        ).first();
+        if (row) { status = String(row.status); as_of = String(row.pushed_at); }
+      } catch { /* migration 256 not applied yet — reads as awaiting HQ */ }
+      return { code, name: e.BRANCH_NAME || null, territories, status, as_of };
+    })(),
   });
 });
+
+/**
+ * Task #178 — the affirmative act the interstitial collects.
+ *
+ * Thin on purpose: `recordTermsAcceptance` already holds the whole rule — the
+ * append-only `legal_acceptances` evidence first, the `legal_obligations` status
+ * second, in that order and for that reason. This route's only jobs are to
+ * establish WHO is accepting and to name WHERE the act happened.
+ *
+ * `source` and `surface` are both passed and they are not the same thing.
+ * `surface` is the audit trail's own field. `source` is what
+ * `obligationSource` renders on the Trust Center row, and leaving it at its
+ * default would have printed "Accepted at signup" over an act that happened
+ * years later, in a different screen, for a different reason.
+ *
+ * No admin variant, no `userId` parameter, no backfill: an acceptance recorded
+ * on somebody's behalf forges the record this whole change exists to make
+ * honest.
+ */
+auth.post('/accept-terms', safe('accept-terms', 'Could not record your acceptance. Please try again.', async (c) => {
+  const user = await requireAuth(c);
+  const { recordTermsAcceptance } = await import('../services/trust');
+  const result = await recordTermsAcceptance(c.env, user.id, {
+    surface: 'reacceptance_interstitial',
+    source: 'reacceptance_interstitial',
+    ip: c.req.header('cf-connecting-ip') || null,
+    ua: c.req.header('user-agent') || null,
+  });
+  return c.json({ ok: true, keys: result.keys, satisfied: result.satisfied });
+}));
 
 auth.post('/verify-totp', safe('verify-totp', 'Could not verify your code. Please try again.', async (c) => {
   const parsed = await readJson(c);
   if (!parsed.ok) return parsed.res;
   const { email, totp_code } = parsed.body;
   if (!email || !totp_code) return c.json({ error: 'Email and TOTP code required' }, 400);
-  const allowed = await checkRateLimit(c.env, `login:${email.toLowerCase()}`, 5, 300);
-  if (!allowed) return c.json({ error: 'Too many attempts.' }, 429);
+  const totpLoginGate = rateGate(
+    c, await checkRateLimit(c.env, `login:${email.toLowerCase()}`, 5, 300),
+    'Too many attempts.',
+  );
+  if (totpLoginGate) return totpLoginGate;
 
   const sql = getSQL(c.env);
   const users = await sql`SELECT * FROM users WHERE email = ${email}`;
@@ -1019,16 +1182,20 @@ function publicBase(env: Env): string {
 auth.post('/magic/start', safe('magic-start', 'Could not send your sign-in link. Please try again in a moment.', async (c) => {
   await ensureAuthBlockersSchema(c.env);
   const ip = (c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '').split(',')[0].trim().slice(0, 64);
-  if (!(await checkRateLimit(c.env, `magic-start-ip:${ip || 'unknown'}`, 5, 300))) {
-    return c.json({ error: 'Too many requests. Please wait a minute and try again.' }, 429);
-  }
+  const startIpGate = rateGate(
+    c, await checkRateLimit(c.env, `magic-start-ip:${ip || 'unknown'}`, 5, 300),
+    'Too many requests. Please wait a minute and try again.',
+  );
+  if (startIpGate) return startIpGate;
   const parsed = await readJson(c);
   if (!parsed.ok) return parsed.res;
   const email = String(parsed.body?.email || '').toLowerCase().trim();
   if (!EMAIL_RE.test(email)) return c.json({ error: 'Please enter a valid email address' }, 400);
-  if (!(await checkRateLimit(c.env, `magic-start-email:${email}`, 3, 900))) {
-    return c.json({ error: 'Too many requests for this email. Please wait a few minutes.' }, 429);
-  }
+  const startEmailGate = rateGate(
+    c, await checkRateLimit(c.env, `magic-start-email:${email}`, 3, 900),
+    'Too many requests for this email. Please wait a few minutes.',
+  );
+  if (startEmailGate) return startEmailGate;
 
   const raw = generateToken();
   const tokenHash = await hashToken(raw);
@@ -1053,11 +1220,22 @@ auth.post('/magic/start', safe('magic-start', 'Could not send your sign-in link.
     await sql.end();
     if (rows.length && rows[0].name) name = rows[0].name;
   } catch {}
-  try {
-    await sendEmail(c.env, 'auth_magic_link', email, { name, magic_url: magicUrl });
-  } catch (e) {
-    console.error('[AUTH:magic-start] email send failed', e);
-  }
+  // THE LINK IS ALREADY VALID; THE MAIL IS A SEPARATE ERRAND. The token row was
+  // committed above, so whether Google's API answers in 30ms or not at all
+  // changes nothing about whether this sign-in can complete — and the response
+  // we are about to send says only "a link is on its way", which is true the
+  // moment the row exists. Awaiting the send made the availability of sign-in
+  // equal to the availability of Gmail: two bounded fetches (token + send) that
+  // can legitimately take 10s each, on top of the limiter and the schema
+  // bootstrap, is already past the 30s the browser waits. `waitUntil` keeps the
+  // send alive after the response goes out, which is exactly the shape of the
+  // work — and the `catch` stays, because a failed send must still be logged.
+  // D74.
+  const deliver = sendEmail(c.env, 'auth_magic_link', email, { name, magic_url: magicUrl })
+    .catch((e) => { console.error('[AUTH:magic-start] email send failed', e); });
+  const ctx = (() => { try { return c.executionCtx; } catch { return null; } })();
+  if (ctx?.waitUntil) ctx.waitUntil(deliver);
+  else await deliver;
   return c.json({ ok: true, message: 'If that email is valid, a sign-in link is on its way. It expires in 15 minutes.' }, 202);
 }));
 
@@ -1068,7 +1246,13 @@ auth.get('/magic/verify', safe('magic-verify', 'Could not complete your sign-in 
   const token = String(c.req.query('token') || '');
   if (!token) return fail('invalid');
   const ip = (c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '').split(',')[0].trim().slice(0, 64);
-  if (!(await checkRateLimit(c.env, `magic-verify-ip:${ip || 'unknown'}`, 20, 300))) return fail('rate');
+  // This handler answers with a redirect, not JSON, so it cannot use
+  // rateGate() — but it still has to tell the two refusals apart: 'rate' is
+  // the person's, 'limiter' is ours, and MAGIC_ERROR_COPY in LoginPage.jsx
+  // carries a line for each.
+  const verifyVerdict = await checkRateLimit(c.env, `magic-verify-ip:${ip || 'unknown'}`, 20, 300);
+  if (verifyVerdict === 'deny') return fail('rate');
+  if (verifyVerdict === 'unavailable') return fail('limiter');
 
   const tokenHash = await hashToken(token);
   // Atomic single-use claim — succeeds only for an unused, unexpired token.
@@ -1166,9 +1350,11 @@ auth.post('/step-up', safe('step-up', 'Could not verify your code. Please try ag
   if (!parsed.ok) return parsed.res;
   const code = String(parsed.body?.totp_code || '').trim();
   if (!code) return c.json({ error: 'Authenticator code required' }, 400);
-  if (!(await checkRateLimit(c.env, `stepup:${user.id}`, 5, 300))) {
-    return c.json({ error: 'Too many attempts. Please wait a few minutes.' }, 429);
-  }
+  const stepUpGate = rateGate(
+    c, await checkRateLimit(c.env, `stepup:${user.id}`, 5, 300),
+    'Too many attempts. Please wait a few minutes.',
+  );
+  if (stepUpGate) return stepUpGate;
   const sel = await selectJwt(c);
   const jti = sel?.payload?.jti as string | undefined;
   if (!jti) return c.json({ error: 'No active session' }, 401);

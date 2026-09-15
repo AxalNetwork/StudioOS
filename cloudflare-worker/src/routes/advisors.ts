@@ -10,7 +10,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { ensureTier } from '../middleware/requireTier';
+import { ensureTier, type TierUser } from '../middleware/requireTier';
 import {
   isAdmin, isFounder, mapError, nowIso, newUid, jload, trimOrNull, role,
 } from './_t13t14t15_helpers';
@@ -21,6 +21,18 @@ import {
   computeWatchOuts,
 } from '../services/matchingVectors';
 import { ensureAdvisorStoresSchema } from '../services/advisorStoresSchema';
+import {
+  PAYOUT_GATE, cutCents, derivePayoutState, settlementMode, takeRate, totalLines,
+} from '../services/advisorMoney';
+import {
+  PayoutAccountNotReady, SettlementDisabled,
+  chargeSession, connectLink, ensurePayoutAccount, loadPayoutAccount, refreshAccount,
+} from '../services/advisorConnect';
+// The platform customer the destination charge is made against. Reused rather
+// than re-derived: `routes/wellbeing.ts` charges its own bookings through this
+// same helper, and a second way of deciding who a customer is would be a second
+// answer to that question.
+import { ensurePaymentsCustomer } from './payments';
 import { ensureCohortGuidanceSchema } from '../services/cohortGuidanceSchema';
 import {
   guidanceCounts, oldestOpenHours, collisions, withinDays,
@@ -99,6 +111,10 @@ type BookingRow = {
   id: number; uid: string; slot_id: number; advisor_id: number;
   founder_user_id: number; topic: string | null; notes: string | null;
   status: string; cancel_reason: string | null;
+  // Migration 205. Declared here because `bookingDto` returns them: the two
+  // were on the row and off the type, so nothing complained when the DTO
+  // dropped them for a year.
+  amount_cents: number | null; billing_state: string;
   created_at: string; updated_at: string;
 };
 
@@ -146,6 +162,10 @@ function slotDto(s: SlotRow, taken = 0): any {
     created_at: s.created_at,
   };
 }
+/**
+ * The booking as BOTH parties may see it. Deliberately no money — see
+ * `advisorMoney` below for the two columns that are the advisor's alone.
+ */
 function bookingDto(b: BookingRow, extras: any = {}): any {
   return {
     id: b.id, uid: b.uid, slot_id: b.slot_id, advisor_id: b.advisor_id,
@@ -154,6 +174,60 @@ function bookingDto(b: BookingRow, extras: any = {}): any {
     cancel_reason: b.cancel_reason,
     created_at: b.created_at, updated_at: b.updated_at,
     ...extras,
+  };
+}
+
+/**
+ * Migration 205's two columns, for the advisor's own reads only.
+ *
+ * THE BUG THIS EXISTS TO FIX. Migration 205 added `amount_cents` and
+ * `billing_state` to `advisor_bookings`, and `PATCH /me/bookings/:id/billing`
+ * named them in its own response — but `bookingDto`, which every LIST goes
+ * through, is a whitelist and never did. `GET /me/bookings` selects `b.*`, so
+ * both columns arrived at the DTO and were dropped on the way out.
+ *
+ * `pages/advisor/practice/SessionsZone.jsx` is the page built specifically to
+ * show that money. With both fields undefined it rendered "Not recorded" on
+ * every row including priced ones, an empty state pill, "Set a price" where it
+ * should have said "Change", and an unpriced count that disagreed with
+ * Earnings — and, worst, its editor opened blank over a stored price and
+ * overwrote it on save. A whitelist that silently drops a column is
+ * indistinguishable from a column nobody ever wrote.
+ *
+ * WHY THIS IS A SEPARATE FUNCTION RATHER THAN TWO MORE LINES IN `bookingDto`.
+ * Three of the five DTO call sites answer the FOUNDER or either party:
+ * `POST /slots/:id/book` replies to the founder who just booked,
+ * `GET /bookings/me` is the founder's own list, and `transition()` answers
+ * whichever side moved the booking. Migration 205's header is explicit that
+ * `billing_state` is "the advisor's own bookkeeping note about their own
+ * arrangement" — no invoice is issued and Axal takes no position on
+ * collection — so `written_off` reaching the client would disclose that their
+ * advisor gave up collecting from them. Restoring the field to the shared DTO
+ * would have fixed a display bug by opening a leak, which is why the fix is
+ * scoped to the audience instead. Call this from advisor-authenticated reads;
+ * never from a founder-facing one.
+ *
+ * `billing_state` has a NOT NULL DEFAULT, so `?? 'unpriced'` only covers a row
+ * read through a path that did not select it. `amount_cents` is genuinely
+ * nullable and stays null — zero is a price an advisor may actually mean.
+ */
+function advisorMoney(b: Partial<BookingRow>): {
+  amount_cents: number | null; billing_state: string;
+  platform_cut_cents: number | null; take_rate_bps: number | null; net_cents: number | null;
+} {
+  const gross = b.amount_cents ?? null;
+  // 241 — THE STORED CUT, NOT A RECOMPUTED ONE. `platform_cut_cents` is what
+  // this line was actually divided by, stamped when the price was set. A null
+  // cut on a priced line means "recorded before 241", which is a different
+  // fact from a cut of nothing, and `net_cents` stays null with it rather than
+  // reporting gross as if the advisor kept all of it (D56/D68).
+  const cut = (b as any).platform_cut_cents ?? null;
+  return {
+    amount_cents: gross,
+    billing_state: b.billing_state ?? 'unpriced',
+    platform_cut_cents: cut,
+    take_rate_bps: (b as any).take_rate_bps ?? null,
+    net_cents: gross != null && cut != null ? gross - cut : null,
   };
 }
 
@@ -674,6 +748,7 @@ advisors.get('/me/bookings', async (c) => {
       : await c.env.DB.prepare(sql).bind(m.id).all<BookingRow>();
     return c.json({
       items: (rows.results || []).map((r: any) => bookingDto(r, {
+        ...advisorMoney(r),
         founder_name: r.founder_name ?? null,
         founder_email: r.founder_email ?? null,
         client_user_id: r.founder_user_id,
@@ -819,10 +894,30 @@ advisors.post('/bookings/:id/review', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+/**
+ * The two people on the booking, and nobody else.
+ *
+ * THIS READ HAD `requireAuth` AND NOTHING ELSE — any signed-in account could
+ * name any booking id and read both sides' reviews of a session they had no
+ * part in. A review carries a rating and free-text comment about a named
+ * advisor by a named founder; the id is a small integer, so the whole table
+ * was walkable.
+ *
+ * The predicate lives in the WHERE clause rather than in a branch, so "no such
+ * booking" and "not yours" are the same 404 and a stranger cannot confirm a
+ * booking exists. `requireOwnEngagement` answers the same way.
+ */
 advisors.get('/bookings/:id/reviews', async (c) => {
   try {
-    await requireAuth(c);
+    const user = await requireAuth(c);
     const id = Number(c.req.param('id'));
+    if (!Number.isFinite(id)) return c.json({ detail: 'Not found' }, 404);
+    const mine = await c.env.DB.prepare(
+      `SELECT b.id FROM advisor_bookings b
+         LEFT JOIN advisors a ON a.id = b.advisor_id
+        WHERE b.id = ? AND (b.founder_user_id = ? OR a.user_id = ?)`,
+    ).bind(id, user.id, user.id).first<{ id: number }>();
+    if (!mine && !isAdmin(user)) return c.json({ detail: 'Not found' }, 404);
     const rows = await c.env.DB.prepare(
       'SELECT * FROM advisor_reviews WHERE booking_id = ? ORDER BY created_at ASC'
     ).bind(id).all<any>();
@@ -1283,16 +1378,198 @@ advisors.patch('/me/bookings/:id/billing', async (c) => {
       billing_state = 'billed';
     }
 
+    // 241 — THE CUT IS STAMPED HERE, SERVER-SIDE, AND THE RATE WITH IT.
+    //
+    // Two reasons it is a stored column rather than something the page
+    // multiplies. The client never computes money: a rounding choice made in a
+    // component is a rounding choice nobody can audit. And the RATE is stored
+    // beside the amount because an operator may change it — a line divided at
+    // 15% must still read 15% after the setting moves to 12%, or a quarter an
+    // advisor already reconciled restates itself.
+    //
+    // Clearing the price clears both. A line with no amount has no cut, and
+    // leaving a stale cut behind would be a figure with nothing under it.
+    const rate = await takeRate(c.env);
+    const cut = cutCents(amount_cents, rate.bps);
     await c.env.DB.prepare(
-      'UPDATE advisor_bookings SET amount_cents = ?, billing_state = ?, updated_at = ? WHERE id = ?'
-    ).bind(amount_cents, billing_state, nowIso(), row.id).run();
+      `UPDATE advisor_bookings
+          SET amount_cents = ?, billing_state = ?,
+              platform_cut_cents = ?, take_rate_bps = ?, updated_at = ?
+        WHERE id = ?`
+    ).bind(
+      amount_cents, billing_state,
+      cut, amount_cents == null ? null : rate.bps,
+      nowIso(), row.id,
+    ).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?')
       .bind(row.id).first<BookingRow & { amount_cents: number | null; billing_state: string }>();
-    return c.json(bookingDto(fresh!, {
-      amount_cents: fresh!.amount_cents ?? null,
-      billing_state: fresh!.billing_state,
-    }));
+    return c.json(bookingDto(fresh!, advisorMoney(fresh!)));
   } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * The founder pays for a session the advisor has priced.
+ *
+ * THE MISSING MIDDLE OF A STATE MACHINE THAT WAS BUILT FROM BOTH ENDS. The
+ * PATCH above writes `billing_state = 'billed'` and stamps `amount_cents`,
+ * `platform_cut_cents` and `take_rate_bps`; `markSessionCharged` in
+ * `services/advisorConnect.ts` writes `'collected'` when Stripe's webhook says
+ * the money arrived. Nothing wrote the transition between them, which is why
+ * `chargeSession` was an exported function with no caller anywhere in the worker
+ * — only its own test file referenced it. This route is that caller. D81.
+ *
+ * CLIENT-FACING, AND DELIBERATELY NOT UNDER `/me`. Everything under `/me` in
+ * this file is the advisor reading or editing their own practice; `/bookings/:id/*`
+ * is the family the founder acts on (`confirm`, `cancel`, `complete`, `review`).
+ * Paying is the founder's act, so it belongs in the second family. An advisor
+ * cannot charge a client from here, and neither can an admin: the only caller
+ * who passes the ownership check is the person whose money it is.
+ *
+ * IT RETURNS 503 IN EVERY ENVIRONMENT TODAY, and that is the point rather than a
+ * defect. `settlementMode()` answers `'none'` until `ADVISOR_CHARGING_ENABLED`
+ * is exactly `'1'` AND a Stripe key is present, and that variable is set
+ * nowhere. What changes is that the flag is now SUFFICIENT: before this route
+ * existed, flipping it would have told advisors settlement was live — the value
+ * is reported as `settlement:` by seven OTHER handlers in this file — while
+ * nothing on any path could take a payment. D75, D81.
+ *
+ * THE SETTLEMENT CHECK IS FIRST AMONG THE NON-AUTH GUARDS, AND THAT ORDERING IS
+ * LOAD-BEARING. `chargeSession` throws `SettlementDisabled` on its own, so the
+ * route would refuse either way — but it throws AFTER this handler would have
+ * called `ensurePaymentsCustomer`, which creates a Stripe customer and writes
+ * `users.stripe_customer_id`. Checking here means a charge that cannot succeed
+ * leaves no customer behind, no `held_unpaid` on the slot, and no D1 write of
+ * any kind. The `catch` below still maps `SettlementDisabled`, because a guard
+ * a caller can reorder is not a guard.
+ */
+advisors.post('/bookings/:id/pay', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const row = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?')
+      .bind(Number(c.req.param('id'))).first<BookingRow>();
+    // 404 ON SOMEONE ELSE'S BOOKING, NEVER 403. A 403 distinguishes "exists but
+    // is not yours" from "does not exist", which is an enumeration oracle over
+    // other people's sessions. The two answers are deliberately identical.
+    if (!row || row.founder_user_id !== user.id) {
+      return c.json({ detail: 'Booking not found' }, 404);
+    }
+
+    const mode = settlementMode(c.env);
+    if (mode === 'none') {
+      return c.json({
+        detail: 'Advisory charging is not switched on, so this session cannot be paid here yet.',
+        settlement: mode,
+      }, 503);
+    }
+
+    // THE BILLING STATE DECIDES, AND EACH REFUSAL NAMES WHOSE MOVE IT IS.
+    // Collapsing these into one "cannot pay" would leave a founder unable to
+    // tell "your advisor has not priced it" from "you already paid".
+    if (row.billing_state === 'collected') {
+      return c.json({ detail: 'This session is already paid.', billing_state: row.billing_state }, 409);
+    }
+    if (row.billing_state === 'written_off') {
+      return c.json({ detail: 'This session was written off, so there is nothing to pay.' }, 409);
+    }
+    if (row.billing_state !== 'billed') {
+      // `unpriced` lands here, and so would any state a later migration adds:
+      // an unrecognised state is not a licence to charge.
+      return c.json({ detail: 'Your advisor has not priced this session yet.' }, 409);
+    }
+
+    // A PRICE OF NULL OR ZERO IS NOT A FREE SESSION. `chargeSession` refuses it
+    // too; this says which of its three refusals applied before a Stripe call.
+    const gross = row.amount_cents == null ? null : Number(row.amount_cents);
+    if (gross == null || !Number.isFinite(gross) || gross <= 0) {
+      return c.json({ detail: 'This session has no amount to charge.' }, 409);
+    }
+
+    const account = await loadPayoutAccount(c.env, row.advisor_id);
+    const state = derivePayoutState(account);
+    if (!account || state !== 'verified') {
+      // MIGRATION 240'S `held_unpaid` FINALLY HAS A WRITER. That column was
+      // created to record "a slot taken by a booking that could not be charged",
+      // and until now nothing ever set it — `markSessionCharged` only
+      // transitions OUT of it. Scoped to `not_applicable` so a slot already
+      // charged or refunded by another booking on the same capacity is never
+      // walked backwards, and best-effort because the founder's answer does not
+      // depend on the bookkeeping succeeding.
+      try {
+        await c.env.DB.prepare(
+          `UPDATE advisor_office_hour_slots
+              SET payment_state = 'held_unpaid'
+            WHERE id = ? AND payment_state = 'not_applicable'`,
+        ).bind(row.slot_id).run();
+      } catch (e: any) {
+        console.warn('[advisors] held_unpaid write failed:', String(e?.message || e));
+      }
+      // The gate sentence comes from `PAYOUT_GATE`, which exists so the worker
+      // and the page cannot word the same state differently.
+      return c.json({
+        detail: 'This advisor cannot take payment yet.',
+        payout_state: state,
+        gate: PAYOUT_GATE[state] ?? null,
+      }, 409);
+    }
+
+    const customerId = await ensurePaymentsCustomer(c.env, user as TierUser);
+    const intent = await chargeSession(c.env, {
+      account,
+      bookingUid: row.uid,
+      bookingId: row.id,
+      advisorId: row.advisor_id,
+      // THE BOOKING'S OWN STORED PRICE, never a recomputation. The advisor may
+      // have discounted this one session below the catalogue, and 241 stamped
+      // the cut against this figure; charging anything else would divide a
+      // number the ledger does not hold.
+      amountCents: gross,
+      description: row.topic ? `Advisory session · ${row.topic}` : 'Advisory session',
+      customerId,
+    });
+
+    // NO `payment_intent_id` IS STORED, and that is a decision rather than an
+    // omission. `advisor_bookings` has no column for one and adding it is a
+    // migration; nothing needs it, because `markSessionCharged` finds the
+    // booking by `metadata.booking_uid` and `chargeSession`'s idempotency key
+    // is derived from that same uid, so the intent is recoverable from Stripe
+    // without a second copy here. D81 records it as a possible follow-up.
+    return c.json({
+      booking_uid: row.uid,
+      client_secret: intent.client_secret,
+      payment_intent_id: intent.payment_intent_id,
+      amount_cents: gross,
+      application_fee_cents: intent.application_fee_cents,
+      take_rate_bps: intent.take_rate_bps,
+      settlement: intent.mode,
+    });
+  } catch (e: any) {
+    // The service's own refusals, mapped rather than surfaced as 500s. Both are
+    // reachable even with the checks above, because the service is the authority
+    // and a race between the two reads is exactly what it guards against.
+    if (e instanceof SettlementDisabled) {
+      // THE MODE COMES OFF THE THROWER, not from a literal and not from a second
+      // `settlementMode()` read. `advisor_connect_leg.test.ts` forbids hard-coding
+      // the mode anywhere in this file — a constant would keep reporting the same
+      // word after the flag flips — and that guard caught the first draft of this
+      // line. Note it scans the whole file as text, so it objects to the forbidden
+      // pair appearing even in a comment; that is why this one describes it
+      // instead of quoting it. Re-reading the env here would be wrong in a
+      // different way: it could answer `test` about a refusal that happened
+      // because the answer was `none`. `e.mode` is what the service decided.
+      return c.json({
+        detail: 'Advisory charging is not switched on, so this session cannot be paid here yet.',
+        settlement: e.mode,
+      }, 503);
+    }
+    if (e instanceof PayoutAccountNotReady) {
+      return c.json({
+        detail: 'This advisor cannot take payment yet.',
+        payout_state: e.state,
+        gate: PAYOUT_GATE[e.state] ?? null,
+      }, 409);
+    }
+    return mapError(c, e);
+  }
 });
 
 /**
@@ -1318,8 +1595,15 @@ advisors.get('/me/earnings', async (c) => {
     const by = new Map((rows.results || []).map((r) => [r.billing_state, r]));
     const cents = (k: string) => Number(by.get(k)?.total_cents || 0);
     const count = (k: string) => Number(by.get(k)?.bookings || 0);
+    // 241 — CARRIED HERE TOO, not only on the ledger, because this is the
+    // payload the shipped Earnings page reads and that page said in so many
+    // words that Axal "does not take a cut". A rate now exists; the page has
+    // to be able to state it rather than deny it, and it needs the number and
+    // the settlement mode in the same response to say both halves at once.
+    const rate = await takeRate(c.env);
     return c.json({
       currency: 'USD',
+      take_rate: { bps: rate.bps, source: rate.source, updated_at: rate.updated_at },
       billed_cents: cents('billed'),
       collected_cents: cents('collected'),
       written_off_cents: cents('written_off'),
@@ -1328,9 +1612,488 @@ advisors.get('/me/earnings', async (c) => {
       by_state: BILLING_STATES.map((state) => ({
         state, bookings: count(state), total_cents: cents(state),
       })),
-      // Said out loud because a page showing money must not imply a rail
-      // behind it: Axal records these figures and settles nothing.
-      settlement: 'none',
+      // 241 — COMPUTED, NOT WRITTEN AS A LITERAL. This answered a hard-coded
+      // 'none' before there was a take rate to be wrong about. It still
+      // answers 'none' today, and it will keep answering it until PR5b's flag
+      // flips — the difference is that turning settlement on is now one change
+      // in `services/advisorMoney.ts` rather than a search for every surface
+      // that promised it was off.
+      settlement: settlementMode(c.env),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// 241 — the money model: a configurable take rate, the payout account that
+// gates charging, the payout ledger, and the tax-year totals.
+//
+// NOTHING BELOW MOVES MONEY. Every figure is what a charge WOULD take,
+// computed from a rate an operator sets and stamped per line when a price is
+// recorded. `settlement` says which of the three modes is live, and while it
+// says 'none' no surface may render any of this as a receipt. D75.
+// ---------------------------------------------------------------------------
+
+/** One row of D4's "By client · Q3" table, reconciling by construction. */
+function clientLineDto(r: {
+  client_name: string | null; client_user_id: number | null;
+  sessions: number; gross_cents: number; cut_cents: number; unpriced: number;
+  retainer_cents?: number | null; engagement_shape?: string | null;
+}): any {
+  return {
+    client_user_id: r.client_user_id,
+    // NAMED OR NOT RECORDED, never "Unknown". A booking whose user row is
+    // gone still carries its money, and inventing a name for it would be a
+    // claim about who paid.
+    client_name: r.client_name,
+    sessions: r.sessions,
+    gross_cents: r.gross_cents,
+    cut_cents: r.cut_cents,
+    net_cents: r.gross_cents - r.cut_cents,
+    // Carried per row rather than only in the total, because a client whose
+    // sessions are mostly unpriced has a row that understates them and the
+    // reader needs to see which one that is.
+    unpriced_sessions: r.unpriced,
+    // D4's Retainer column. NOT from `advisor_bookings` — migration 238's
+    // header says so in as many words: "The reader is PR5/Earnings, whose
+    // per-client table carries a `retainer` figure … That figure cannot come
+    // from `advisor_bookings.amount_cents` … the cycle amount has to live
+    // here or nowhere." So it is the engagement's own `amount_cents`, and
+    // NULL means "no retainer recorded", never zero — an equity engagement is
+    // the ordinary case of a row with no cents.
+    retainer_cents: r.retainer_cents ?? null,
+    // Which of 238's four shapes this client bills under, so the table can
+    // say why a column is empty rather than leaving a gap.
+    engagement_shape: r.engagement_shape ?? null,
+  };
+}
+
+/**
+ * The Earnings ledger: by client, with the cut as its own column.
+ *
+ * THE TOTAL IS THE SUM OF THE LINE CUTS, not the rate applied to the gross
+ * total — D4's own note says *"The cut is charged per line, not netted at the
+ * bottom"*, and the two arithmetics differ by up to a cent per line. A table
+ * whose rows do not add up to its total is the most corrosive thing a ledger
+ * can do, so `totalLines` is the only thing that adds here.
+ *
+ * PERIOD IS A HALF-OPEN INTERVAL on `created_at`. Absent means everything,
+ * which is what "All time" asks for; the three other views pass explicit
+ * bounds so the server never has to guess what quarter the reader meant.
+ */
+advisors.get('/me/ledger', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const from = trimOrNull(c.req.query('from'), 32);
+    const until = trimOrNull(c.req.query('until'), 32);
+
+    // ONE QUERY TEXT, EVERY BOUND ALWAYS BOUND. The obvious shape here is to
+    // push clauses into an array and `join(' AND ')` them into the template —
+    // and `scripts/check-sql-prepare.mjs` refuses it, correctly: a `${…}`
+    // inside `DB.prepare` lands in the query TEXT, and a guard that has to
+    // decide case by case whether the fragments were literals is a guard that
+    // will eventually decide wrong. `? IS NULL OR` makes an absent bound a
+    // no-op with no interpolation at all.
+    const rows = await c.env.DB.prepare(
+      `SELECT b.founder_user_id AS client_user_id, u.name AS client_name,
+              b.amount_cents AS amount_cents, b.platform_cut_cents AS platform_cut_cents,
+              b.take_rate_bps AS take_rate_bps
+         FROM advisor_bookings b
+         LEFT JOIN users u ON u.id = b.founder_user_id
+        WHERE b.advisor_id = ?
+          AND (? IS NULL OR b.created_at >= ?)
+          AND (? IS NULL OR b.created_at < ?)
+        ORDER BY b.created_at DESC
+        LIMIT 2000`
+    ).bind(m.id, from, from, until, until).all<{
+      client_user_id: number | null; client_name: string | null;
+      amount_cents: number | null; platform_cut_cents: number | null; take_rate_bps: number | null;
+    }>();
+
+    const rate = await takeRate(c.env);
+    const lines = rows.results || [];
+
+    // Grouped in the worker rather than by SQL, because the cut of a line
+    // recorded before 241 has to be DERIVED from its stored rate (or the
+    // current one) rather than summed from a NULL column — and a SQL SUM over
+    // NULLs would silently report those lines as free.
+    // THE RETAINER COLUMN COMES FROM THE ENGAGEMENT, NOT THE BOOKING — 238's
+    // header is explicit that it "cannot come from `advisor_bookings.
+    // amount_cents` … the cycle amount has to live here or nowhere". Read as
+    // its own query rather than joined onto the booking rows, because a
+    // client with a retainer and no sessions in this window still belongs in
+    // the table, and an INNER-shaped join would drop exactly that row.
+    //
+    // Tolerated, not required: an advisor whose engagement table cannot be
+    // read still gets their session ledger, with the retainer column reading
+    // as absent rather than the page failing.
+    let engagements: Array<{
+      founder_user_id: number | null; client_name: string | null;
+      shape: string; amount_cents: number | null;
+    }> = [];
+    try {
+      const er = await c.env.DB.prepare(
+        `SELECT founder_user_id, client_name, shape, amount_cents
+           FROM advisor_engagements WHERE advisor_id = ? AND lane != 'drafting' LIMIT 500`
+      ).bind(m.id).all<any>();
+      engagements = er.results || [];
+    } catch { engagements = []; }
+
+    const byClient = new Map<string, {
+      client_name: string | null; client_user_id: number | null;
+      sessions: number; gross_cents: number; cut_cents: number; unpriced: number;
+      retainer_cents: number | null; engagement_shape: string | null;
+    }>();
+    const blank = (name: string | null, id: number | null) => ({
+      client_name: name, client_user_id: id,
+      sessions: 0, gross_cents: 0, cut_cents: 0, unpriced: 0,
+      retainer_cents: null as number | null, engagement_shape: null as string | null,
+    });
+    for (const line of lines) {
+      const key = line.client_user_id == null ? 'none' : String(line.client_user_id);
+      if (!byClient.has(key)) {
+        byClient.set(key, blank(line.client_name ?? null, line.client_user_id ?? null));
+      }
+      const g = byClient.get(key)!;
+      g.sessions += 1;
+      if (line.amount_cents == null) { g.unpriced += 1; continue; }
+      const bps = line.take_rate_bps != null ? Number(line.take_rate_bps) : rate.bps;
+      const cut = line.platform_cut_cents != null
+        ? Number(line.platform_cut_cents)
+        : (cutCents(line.amount_cents, bps) ?? 0);
+      g.gross_cents += Number(line.amount_cents);
+      g.cut_cents += cut;
+    }
+
+    // Fold the engagements in, creating a row for a client who has a contract
+    // and no priced session in this window — otherwise a retainer-only client
+    // is invisible on the page that is supposed to show what the practice
+    // earns. An engagement with no user id is keyed by name, which is 238's
+    // own rule for a client who is not on the platform.
+    let equityClients = 0;
+    for (const e of engagements) {
+      if (e.shape === 'equity') equityClients += 1;
+      const key = e.founder_user_id == null
+        ? `name:${String(e.client_name || '').toLowerCase()}`
+        : String(e.founder_user_id);
+      if (!byClient.has(key)) {
+        byClient.set(key, blank(e.client_name ?? null, e.founder_user_id ?? null));
+      }
+      const g = byClient.get(key)!;
+      if (!g.client_name) g.client_name = e.client_name ?? null;
+      g.engagement_shape = g.engagement_shape || e.shape;
+      // ONLY A RETAINER HAS A RETAINER FIGURE. A sprint's or a per-call
+      // engagement's `amount_cents` is a different thing, and putting it in a
+      // column headed "Retainer" would mislabel it; an equity engagement has
+      // no cents at all, which is the ordinary case 238 names.
+      if (e.shape === 'retainer' && e.amount_cents != null) {
+        g.retainer_cents = (g.retainer_cents ?? 0) + Number(e.amount_cents);
+      }
+    }
+
+    const totals = totalLines(
+      lines.map((l) => ({ amount_cents: l.amount_cents, take_rate_bps: l.take_rate_bps })),
+      rate.bps,
+    );
+    const clients = [...byClient.values()]
+      .sort((a, b) => b.gross_cents - a.gross_cents)
+      .map(clientLineDto);
+    const top = clients[0];
+
+    return c.json({
+      currency: 'USD',
+      from: from ?? null,
+      until: until ?? null,
+      clients,
+      totals: {
+        gross_cents: totals.gross_cents,
+        cut_cents: totals.cut_cents,
+        net_cents: totals.net_cents,
+        sessions: lines.length,
+        priced_sessions: totals.priced,
+        // Surfaced, never subtracted from view: a total that quietly skipped
+        // the sessions nobody priced would be a smaller number presented as a
+        // complete one.
+        unpriced_sessions: totals.unpriced,
+      },
+      // NULL WHEN THERE IS NOTHING TO CONCENTRATE. A share of zero gross is
+      // not 0% — it is a question with no answer, and 0% reads as "well
+      // spread", which is the opposite of what an empty quarter means.
+      concentration: top && totals.gross_cents > 0
+        ? { client_name: top.client_name, pct: Math.round((top.gross_cents / totals.gross_cents) * 100) }
+        : null,
+      take_rate: { bps: rate.bps, source: rate.source, updated_at: rate.updated_at },
+      // D4's cut note says a client billing in equity is absent from a cash
+      // table. Counted rather than asserted: "someone is missing from this
+      // table" is a claim about the reader's own book, and the page says it
+      // only when there is one.
+      equity_clients: equityClients,
+      settlement: settlementMode(c.env),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * 242 — the advisor's own note about one period.
+ *
+ * THE FOUR KEYS ARE THE FOUR CHIPS, and nothing else is storable. A key the
+ * page cannot ask for is a row nobody will ever read back, and validating
+ * here rather than trusting the client is what keeps the table's one-note-
+ * per-period index meaningful.
+ *
+ * `all` and a year are deliberately in the set even though D4 draws quarters:
+ * the chip row offers "Year to date" and "All time", and a note written under
+ * one of those is as real as one written under a quarter.
+ */
+const PERIOD_KEY = /^(\d{4}-Q[1-4]|\d{4}|all)$/;
+
+advisors.get('/me/period-notes/:key', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const key = String(c.req.param('key') || '');
+    if (!PERIOD_KEY.test(key)) return c.json({ detail: 'period must be YYYY-Qn, YYYY or all' }, 400);
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM advisor_period_notes WHERE advisor_id = ? AND period_key = ?'
+    ).bind(m.id, key).first<any>();
+    // ABSENT IS A 200 WITH `note: null`, not a 404. "You have not written one"
+    // is the ordinary case and the card renders it; a 404 would make the page
+    // treat a normal state as a failure.
+    return c.json({
+      period_key: key,
+      note: row ? {
+        uid: row.uid, body: row.body, source: row.source,
+        figures: jload<any>(row.figures_json, null),
+        updated_at: row.updated_at,
+      } : null,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.put('/me/period-notes/:key', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const key = String(c.req.param('key') || '');
+    if (!PERIOD_KEY.test(key)) return c.json({ detail: 'period must be YYYY-Qn, YYYY or all' }, 400);
+    const body = await c.req.json().catch(() => ({} as any));
+    const text = trimOrNull(body.body, 8000);
+    if (!text) return c.json({ detail: 'A note needs some text. Use DELETE to remove one.' }, 400);
+    const source = ['advisor', 'ai', 'edited'].includes(String(body.source))
+      ? String(body.source) : 'advisor';
+    // THE FIGURES ARE STAMPED WITH THE NOTE, not re-read later. A narrative
+    // says "gross is $18,450"; if a session is priced tomorrow the table moves
+    // and the sentence does not. Storing what was true when it was written is
+    // what lets the page say so instead of showing two numbers and no reason.
+    const figures = body.figures && typeof body.figures === 'object'
+      ? JSON.stringify(body.figures).slice(0, 4000) : null;
+    const now = nowIso();
+    await c.env.DB.prepare(
+      `INSERT INTO advisor_period_notes (uid, advisor_id, period_key, body, source, figures_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(advisor_id, period_key) DO UPDATE SET
+         body = excluded.body, source = excluded.source,
+         figures_json = excluded.figures_json, updated_at = excluded.updated_at`
+    ).bind(newUid(), m.id, key, text, source, figures, now, now).run();
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM advisor_period_notes WHERE advisor_id = ? AND period_key = ?'
+    ).bind(m.id, key).first<any>();
+    return c.json({
+      period_key: key,
+      note: {
+        uid: row.uid, body: row.body, source: row.source,
+        figures: jload<any>(row.figures_json, null), updated_at: row.updated_at,
+      },
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.delete('/me/period-notes/:key', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const key = String(c.req.param('key') || '');
+    if (!PERIOD_KEY.test(key)) return c.json({ detail: 'period must be YYYY-Qn, YYYY or all' }, 400);
+    await c.env.DB.prepare(
+      'DELETE FROM advisor_period_notes WHERE advisor_id = ? AND period_key = ?'
+    ).bind(m.id, key).run();
+    // Idempotent: discarding a note that was never written is not an error,
+    // and answering 404 would make Discard fail on the ordinary second click.
+    return c.json({ period_key: key, note: null });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * The payout account and the gate it implies.
+ *
+ * ALWAYS ANSWERS, even for an advisor who has never started one — `pending`
+ * with its gate sentence is a true statement about an account nobody has set
+ * up, and a 404 here would make the card unrenderable rather than informative.
+ * `started` is what distinguishes the two.
+ */
+advisors.get('/me/payout-account', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM advisor_payout_accounts WHERE advisor_id = ?'
+    ).bind(m.id).first<any>();
+    const state = derivePayoutState(row);
+    return c.json({
+      started: !!row,
+      state,
+      gate: PAYOUT_GATE[state],
+      provider: row?.provider ?? 'stripe',
+      // The account id is NOT returned. It identifies a Stripe account and
+      // nothing on the page needs it; the onboarding route in PR5b hands back
+      // a link instead.
+      charges_enabled: !!row?.charges_enabled,
+      payouts_enabled: !!row?.payouts_enabled,
+      blocked_reason: row?.blocked_reason ?? null,
+      // Null means never asked, which is different from asked and refused.
+      last_checked_at: row?.last_checked_at ?? null,
+      settlement: settlementMode(c.env),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Start or resume Connect onboarding, and hand back the URL to visit.
+ *
+ * NOT GATED ON THE CHARGING FLAG, deliberately. Connecting an account moves
+ * no money, and an advisor verifying while advisory charging is off is
+ * exactly how the platform gets ready to switch it on. What it does need is a
+ * Stripe key, and the absence of one is an explicit 503 rather than a
+ * simulated link — `util/paymentMode.ts`'s rule, which this route inherits
+ * through the service.
+ */
+advisors.post('/me/payout-account/connect', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    if (!c.env.STRIPE_SECRET_KEY) {
+      return c.json({ detail: 'Payouts are not configured on this environment.' }, 503);
+    }
+    const account = await ensurePayoutAccount(c.env, m.id, newUid());
+    const link = await connectLink(c.env, account, (user as any).email || '', '/practice/earnings');
+    return c.json({
+      url: link.url,
+      // SAID ON THE WAY IN, because an advisor who has just been asked to
+      // verify a payout account will reasonably assume it is about to be
+      // used. While settlement is 'none' it is not.
+      settlement: settlementMode(c.env),
+      note: settlementMode(c.env) === 'none'
+        ? 'Connecting an account does not start any charging. Nothing is taken through Axal today.'
+        : null,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Ask the provider what the account can do now, and write the answer back.
+ *
+ * A FAILED REFRESH IS A 200 THAT SAYS SO. The card must render either way,
+ * and "we could not ask" is not "blocked": the previous state and its
+ * `last_checked_at` stay put so a reader can tell a fresh answer from a stale
+ * one.
+ */
+advisors.post('/me/payout-account/refresh', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const account = await loadPayoutAccount(c.env, m.id);
+    if (!account) {
+      return c.json({ refreshed: false, state: 'pending', reason: 'not_started', started: false });
+    }
+    const res = await refreshAccount(c.env, account);
+    return c.json({
+      ...res,
+      started: true,
+      gate: PAYOUT_GATE[res.state] || null,
+      settlement: settlementMode(c.env),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** D4's payout history — date, amount, state. Newest first. */
+advisors.get('/me/payouts', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const rows = await c.env.DB.prepare(
+      `SELECT uid, amount_cents, currency, state, scheduled_for, paid_at,
+              failure_reason, created_at
+         FROM advisor_payouts WHERE advisor_id = ?
+        ORDER BY COALESCE(paid_at, scheduled_for, created_at) DESC LIMIT 200`
+    ).bind(m.id).all<any>();
+    return c.json({
+      items: (rows.results || []).map((r) => ({
+        uid: r.uid,
+        amount_cents: r.amount_cents,
+        currency: r.currency,
+        state: r.state,
+        // Two different kinds of time, kept apart: `scheduled_for` is a
+        // banking DAY and `paid_at` is the INSTANT it settled. A page that
+        // formatted the first as a timestamp would move "Sep 1" for every
+        // reader west of Greenwich.
+        scheduled_for: r.scheduled_for,
+        paid_at: r.paid_at,
+        failure_reason: r.failure_reason,
+      })),
+      settlement: settlementMode(c.env),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Tax-year totals.
+ *
+ * WHAT THIS IS, said in the payload rather than left to a component: a summary
+ * of what THIS PLATFORM RECORDED in a calendar year. It is not an IRS Form
+ * 1099, it is not issued by anyone, and it is not tax advice — `document`
+ * carries that so no surface can render the number without the sentence, and
+ * so a future CSV export inherits it.
+ *
+ * The year is the caller's calendar year over `created_at`, which is UTC.
+ * Stated in `basis` rather than assumed, because an advisor near a year
+ * boundary will otherwise wonder which side a late-December session fell.
+ */
+advisors.get('/me/tax-summary', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const raw = Number(c.req.query('year'));
+    const year = Number.isInteger(raw) && raw >= 2000 && raw <= 2999
+      ? raw
+      : Number(nowIso().slice(0, 4));
+    const rows = await c.env.DB.prepare(
+      `SELECT amount_cents, platform_cut_cents, take_rate_bps, founder_user_id
+         FROM advisor_bookings
+        WHERE advisor_id = ? AND created_at >= ? AND created_at < ?`
+    ).bind(m.id, `${year}-01-01T00:00:00.000Z`, `${year + 1}-01-01T00:00:00.000Z`)
+      .all<{ amount_cents: number | null; platform_cut_cents: number | null; take_rate_bps: number | null; founder_user_id: number | null }>();
+    const lines = rows.results || [];
+    const rate = await takeRate(c.env);
+    const totals = totalLines(lines, rate.bps);
+    const clients = new Set(lines.filter((l) => l.amount_cents != null).map((l) => l.founder_user_id));
+    return c.json({
+      year,
+      currency: 'USD',
+      gross_cents: totals.gross_cents,
+      platform_cut_cents: totals.cut_cents,
+      net_cents: totals.net_cents,
+      sessions: lines.length,
+      priced_sessions: totals.priced,
+      unpriced_sessions: totals.unpriced,
+      clients: clients.size,
+      basis: 'Calendar year in UTC, by the date each session was booked.',
+      document: {
+        is_tax_form: false,
+        note: 'A summary of what this platform recorded. It is not an IRS Form 1099, '
+          + 'no tax document is issued by Axal, and this is not tax advice. '
+          + 'Sessions with no price recorded are counted separately and are not in these totals.',
+      },
+      settlement: settlementMode(c.env),
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -2076,6 +2839,1213 @@ advisors.delete('/admin/cohort-assignments/:id', async (c) => {
       'UPDATE advisor_cohort_assignments SET is_active = 0, unassigned_at = ?, updated_at = ? WHERE id = ?'
     ).bind(now, now, row.id).run();
     return c.json({ ok: true, id: row.id, is_active: false, unassigned_at: now });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// 238 — Engagements. The contract behind the sessions, and whether it renewed.
+//
+// WHY THESE ARE FOUR VERBS AND NOT ONE PATCH. `advisor_engagements` carries
+// three fields nothing else in the product has — `lane`, `cycles` and
+// `outcome` — and the renewal rate is computed from the last two. A single
+// merge-PATCH over all three would let a caller set `outcome = 'renewed'`
+// without a cycle behind it, or clear a cycle without a decision, and the
+// instrument the artboard calls "the number that judges a practice" would be
+// whatever the last writer typed. So the descriptive columns merge freely
+// through PATCH, and the two columns the rate reads move ONLY through
+// `/advance` (a lane) and `/renewal` (a decision), each with its own rules.
+//
+// THE ONE TRANSITION THAT IS REFUSED is signed → ended through `/advance`.
+// Ending a signed contract IS the renewal decision that did not go the
+// advisor's way, and routing it through the lane verb would drop it out of
+// the denominator — the exact failure the canvas names: "a rate that excludes
+// its failures is not a rate." Ending an UNSIGNED row is allowed there and
+// records no outcome, because an abandoned draft never had a renewal to lose.
+// ---------------------------------------------------------------------------
+export const ENGAGEMENT_LANES = ['drafting', 'proposed', 'signed', 'renewal_due', 'ended'];
+export const ENGAGEMENT_SHAPES = ['retainer', 'sprint', 'equity', 'per_call'];
+/** The two lanes that mean "under contract" — what the Active tile counts. */
+const SIGNED_LANES = new Set(['signed', 'renewal_due']);
+
+type EngagementRow = {
+  id: number; uid: string; advisor_id: number;
+  founder_user_id: number | null; client_name: string;
+  lane: string; shape: string;
+  scope_label: string | null; scope_includes: string | null; scope_excludes: string | null;
+  amount_cents: number | null;
+  proposed_at: string | null; started_at: string | null;
+  term_ends_at: string | null; ended_at: string | null;
+  cycles: number; outcome: string | null; renewal_note: string | null;
+  created_at: string; updated_at: string;
+};
+
+function engagementDto(r: EngagementRow): any {
+  return {
+    id: r.id, uid: r.uid, advisor_id: r.advisor_id,
+    // NULL means the client is not (or not yet) a platform user. The name is
+    // what the board renders either way — see migration 238's header.
+    founder_user_id: r.founder_user_id ?? null,
+    client_name: r.client_name,
+    lane: r.lane, shape: r.shape,
+    scope_label: r.scope_label, scope_includes: r.scope_includes, scope_excludes: r.scope_excludes,
+    // Not zero. An advisory relationship with no amount recorded has not been
+    // declared free, and an equity engagement has no cents by its nature.
+    amount_cents: r.amount_cents ?? null,
+    proposed_at: r.proposed_at, started_at: r.started_at,
+    term_ends_at: r.term_ends_at, ended_at: r.ended_at,
+    cycles: Number(r.cycles || 0),
+    // NULL until the row is signed. The fixture's placeholder 'Active' on an
+    // unsent draft is the thing this deliberately does not reproduce.
+    outcome: r.outcome ?? null,
+    renewal_note: r.renewal_note,
+    created_at: r.created_at, updated_at: r.updated_at,
+  };
+}
+
+/** YYYY-MM-DD, or null. A malformed date is dropped rather than stored. */
+function engagementDate(v: unknown): string | null {
+  if (v == null || v === '') return null;
+  const s = String(v).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(Date.parse(s)) ? s : null;
+}
+
+/**
+ * One engagement of the caller's own, or a thrown 404.
+ *
+ * NOT 403, and not "check the id then load it": the row is loaded by id and
+ * the advisor is compared afterwards, so an engagement belonging to another
+ * advisor is indistinguishable from one that does not exist. `mapError` passes
+ * a thrown Response through untouched, which is why this can answer 404 from
+ * inside a helper at all.
+ */
+async function requireOwnEngagement(
+  c: Context<{ Bindings: Env }>, advisorId: number, id: number,
+): Promise<EngagementRow> {
+  const row = await c.env.DB.prepare('SELECT * FROM advisor_engagements WHERE id = ?')
+    .bind(id).first<EngagementRow>();
+  if (!row || row.advisor_id !== advisorId) {
+    throw c.json({ detail: 'Engagement not found' }, 404);
+  }
+  return row;
+}
+
+/**
+ * A client link — an account this advisor ALREADY HAS A RELATIONSHIP WITH, or
+ * null.
+ *
+ * THIS USED TO ACCEPT ANY EXISTING `users.id`, and that was wrong in both
+ * directions at once. An advisor has no way to learn another account's numeric
+ * id, so the column was unusable by a human; and an advisor who guessed one
+ * could attach a stranger's account to their own contract, then open a message
+ * thread with them through Delivery's nudge. A write that is simultaneously
+ * unreachable and over-trusting is not a link, it is a hole.
+ *
+ * THE RELATIONSHIP IS THE PERMISSION, and it is one of two facts the product
+ * already records: the account has BOOKED this advisor, or it has OPENED A
+ * RECORD to them (an active grant from migration 218). Either means the two
+ * people have met in this product; neither can be manufactured by the advisor
+ * alone. `DocumentShares` on the founder side settled this shape first —
+ * "offering an address the API would refuse is how a control teaches the wrong
+ * model" — so the picker on Engagements offers exactly this set.
+ *
+ * AN UNRELATED ACCOUNT RESOLVES TO NULL rather than erroring, which is the
+ * behaviour a dangling id already had: the engagement keeps its client NAME and
+ * simply stays unsendable. One rule, one outcome, and no new error path on the
+ * two routes that call this.
+ *
+ * `m.user_id` IS NULLABLE, so the grant half is skipped rather than compared
+ * against null — an advisor record with no account behind it has no grants by
+ * definition, and `advisor_user_id = NULL` would match nothing while reading as
+ * though it might.
+ */
+async function engagementClientUser(env: Env, m: AdvisorRow, v: unknown): Promise<number | null> {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n <= 0) return null;
+  const u = await env.DB.prepare(
+    `SELECT u.id FROM users u
+      WHERE u.id = ?
+        AND (EXISTS (SELECT 1 FROM advisor_bookings b
+                      WHERE b.advisor_id = ? AND b.founder_user_id = u.id)
+          OR EXISTS (SELECT 1 FROM advisor_client_grants g
+                      WHERE g.advisor_user_id = ? AND g.granted_by_user_id = u.id
+                        AND g.status = 'active'
+                        AND (g.expires_at IS NULL OR g.expires_at > datetime('now'))))`
+  ).bind(n, m.id, m.user_id ?? -1).first<{ id: number }>();
+  return u ? Number(u.id) : null;
+}
+
+advisors.get('/me/engagements', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const rows = await c.env.DB.prepare(
+      `SELECT * FROM advisor_engagements WHERE advisor_id = ?
+        ORDER BY updated_at DESC LIMIT 400`
+    ).bind(m.id).all<EngagementRow>();
+    const items = (rows.results || []).map(engagementDto);
+
+    // THE RATE IS COMPUTED HERE RATHER THAN ON THE PAGE, because its
+    // denominator is the whole argument. `decided` counts renewals that went
+    // either way and nothing else: a signed contract still running has made no
+    // decision, and an unsent draft never had one to make.
+    const renewed = items.filter((e) => e.outcome === 'renewed').length;
+    const ended = items.filter((e) => e.outcome === 'ended').length;
+    const decided = renewed + ended;
+    return c.json({
+      items,
+      totals: {
+        // Lanes, not outcomes — the canvas is explicit that a draft never sent
+        // and a proposal awaiting an answer are not engagements.
+        active: items.filter((e) => SIGNED_LANES.has(e.lane)).length,
+        renewal_due: items.filter((e) => e.lane === 'renewal_due').length,
+        ended_lane: items.filter((e) => e.lane === 'ended').length,
+        renewed, ended, decided,
+        // Null, never 0%. A practice that has not yet reached a renewal has
+        // not failed to renew, and 0% would say it had.
+        renewal_rate: decided > 0 ? Math.round((renewed / decided) * 100) : null,
+        // What the Active tile's breakdown note ("2 retainers, 1 sprint…")
+        // reads from.
+        by_shape: ENGAGEMENT_SHAPES.reduce((acc, s) => {
+          acc[s] = items.filter((e) => SIGNED_LANES.has(e.lane) && e.shape === s).length;
+          return acc;
+        }, {} as Record<string, number>),
+      },
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.post('/me/engagements', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const body = await c.req.json().catch(() => ({} as any));
+    const clientName = String(body.client_name || '').trim().slice(0, 200);
+    // The one required field. A contract board row with no client is a card
+    // nobody can act on, and the column is NOT NULL for the same reason.
+    if (!clientName) return c.json({ detail: 'An engagement needs a client name' }, 400);
+    const shape = String(body.shape || 'retainer').trim();
+    if (!ENGAGEMENT_SHAPES.includes(shape)) {
+      return c.json({ detail: `shape must be one of: ${ENGAGEMENT_SHAPES.join(', ')}` }, 400);
+    }
+    // A row is BORN DRAFTING. Signing is a transition with its own stamps and
+    // its own cycle, so letting a caller open one straight into 'signed' would
+    // mean two code paths for the same event and one of them would drift.
+    const now = nowIso();
+    const uid = newUid();
+    const r = await c.env.DB.prepare(
+      `INSERT INTO advisor_engagements
+         (uid, advisor_id, founder_user_id, client_name, lane, shape,
+          scope_label, scope_includes, scope_excludes, amount_cents,
+          term_ends_at, cycles, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'drafting', ?, ?, ?, ?, ?, ?, 0, ?, ?)`
+    ).bind(
+      uid, m.id, await engagementClientUser(c.env, m, body.founder_user_id), clientName, shape,
+      trimOrNull(body.scope_label, 200), trimOrNull(body.scope_includes, 2000),
+      trimOrNull(body.scope_excludes, 2000), parsePriceCents(body.amount_cents),
+      engagementDate(body.term_ends_at), now, now,
+    ).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_engagements WHERE id = ?')
+      .bind((r as any).meta?.last_row_id).first<EngagementRow>();
+    return c.json(engagementDto(fresh!), 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+// PATCH — the descriptive columns only. `lane`, `cycles` and `outcome` are
+// absent by design; see the block comment above.
+advisors.patch('/me/engagements/:id', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const row = await requireOwnEngagement(c, m.id, Number(c.req.param('id')));
+    const body = await c.req.json().catch(() => ({} as any));
+    const shape = body.shape == null ? row.shape : String(body.shape).trim();
+    if (!ENGAGEMENT_SHAPES.includes(shape)) {
+      return c.json({ detail: `shape must be one of: ${ENGAGEMENT_SHAPES.join(', ')}` }, 400);
+    }
+    await c.env.DB.prepare(
+      `UPDATE advisor_engagements
+          SET client_name = ?, founder_user_id = ?, shape = ?, scope_label = ?,
+              scope_includes = ?, scope_excludes = ?, amount_cents = ?,
+              term_ends_at = ?, updated_at = ?
+        WHERE id = ?`
+    ).bind(
+      // Merge, not replace: the board edits one field at a time, and an empty
+      // client name would blank a card rather than rename it.
+      String(body.client_name ?? '').trim().slice(0, 200) || row.client_name,
+      'founder_user_id' in body
+        ? await engagementClientUser(c.env, m, body.founder_user_id) : row.founder_user_id,
+      shape,
+      'scope_label' in body ? trimOrNull(body.scope_label, 200) : row.scope_label,
+      'scope_includes' in body ? trimOrNull(body.scope_includes, 2000) : row.scope_includes,
+      'scope_excludes' in body ? trimOrNull(body.scope_excludes, 2000) : row.scope_excludes,
+      'amount_cents' in body ? parsePriceCents(body.amount_cents) : row.amount_cents,
+      'term_ends_at' in body ? engagementDate(body.term_ends_at) : row.term_ends_at,
+      nowIso(), row.id,
+    ).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_engagements WHERE id = ?')
+      .bind(row.id).first<EngagementRow>();
+    return c.json(engagementDto(fresh!));
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * POST /me/engagements/:id/advance — move a card between lanes.
+ *
+ * A CONTROL RATHER THAN A DRAG, and the divergence is deliberate. The canvas
+ * labels the board "By contract state · drag to advance"; a per-card control
+ * is keyboard-reachable without a drag-and-drop implementation to make
+ * accessible, and the state change it writes is identical.
+ */
+advisors.post('/me/engagements/:id/advance', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const row = await requireOwnEngagement(c, m.id, Number(c.req.param('id')));
+    const body = await c.req.json().catch(() => ({} as any));
+    const lane = String(body.lane || '').trim();
+    if (!ENGAGEMENT_LANES.includes(lane)) {
+      return c.json({ detail: `lane must be one of: ${ENGAGEMENT_LANES.join(', ')}` }, 400);
+    }
+    // Ended is terminal, the same rule `portfolio_support.ts` applies to a
+    // delivered promise: re-opening one would let a recorded outcome be
+    // quietly un-recorded, and the renewal rate is exactly what that would
+    // falsify.
+    if (row.lane === 'ended') {
+      return c.json({ detail: 'an engagement that has ended cannot change lane' }, 409);
+    }
+    if (lane === 'ended' && SIGNED_LANES.has(row.lane)) {
+      return c.json({
+        detail: 'a signed engagement ends through a renewal decision — POST /me/engagements/:id/renewal with decision "ended"',
+      }, 409);
+    }
+
+    const now = nowIso();
+    const day = now.slice(0, 10);
+    const signing = SIGNED_LANES.has(lane) && !SIGNED_LANES.has(row.lane);
+    await c.env.DB.prepare(
+      `UPDATE advisor_engagements
+          SET lane = ?, proposed_at = ?, started_at = ?, ended_at = ?,
+              cycles = ?, outcome = ?, updated_at = ?
+        WHERE id = ?`
+    ).bind(
+      lane,
+      lane === 'proposed' ? (engagementDate(body.proposed_at) || day) : row.proposed_at,
+      signing ? (row.started_at || engagementDate(body.started_at) || day) : row.started_at,
+      // Only an UNSIGNED row can reach 'ended' here — the signed case was
+      // refused above — so this stamps an abandoned draft and nothing else.
+      lane === 'ended' ? (row.ended_at || day) : row.ended_at,
+      // The first term begins at signing. `max` rather than `+ 1` so a lane
+      // correction (renewal_due → signed and back) cannot inflate the count.
+      signing ? Math.max(Number(row.cycles || 0), 1) : row.cycles,
+      // Signing is what gives a row an outcome to have. Ending an unsigned one
+      // leaves it NULL, which is what keeps an abandoned draft out of the
+      // renewal rate's denominator.
+      signing ? (row.outcome || 'active') : row.outcome,
+      now, row.id,
+    ).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_engagements WHERE id = ?')
+      .bind(row.id).first<EngagementRow>();
+    return c.json(engagementDto(fresh!));
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * POST /me/engagements/:id/renewal — record the decision the practice is
+ * judged on.
+ *
+ * This is the only writer of `outcome` after signing and the only thing that
+ * moves `cycles` past 1, which is what makes the renewal rate mean something.
+ * It refuses an unsigned row rather than inventing a decision for it.
+ */
+advisors.post('/me/engagements/:id/renewal', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const row = await requireOwnEngagement(c, m.id, Number(c.req.param('id')));
+    const body = await c.req.json().catch(() => ({} as any));
+    const decision = String(body.decision || '').trim();
+    if (decision !== 'renewed' && decision !== 'ended') {
+      return c.json({ detail: 'decision must be "renewed" or "ended"' }, 400);
+    }
+    if (!SIGNED_LANES.has(row.lane)) {
+      return c.json({
+        detail: row.lane === 'ended'
+          ? 'this engagement has already ended'
+          : 'only a signed engagement has a renewal to decide',
+      }, 409);
+    }
+
+    const now = nowIso();
+    const day = now.slice(0, 10);
+    const renewed = decision === 'renewed';
+    await c.env.DB.prepare(
+      `UPDATE advisor_engagements
+          SET lane = ?, cycles = ?, outcome = ?, renewal_note = ?,
+              term_ends_at = ?, ended_at = ?, updated_at = ?
+        WHERE id = ?`
+    ).bind(
+      renewed ? 'signed' : 'ended',
+      // A renewal starts a term, so it adds one. Ending does not: the term
+      // that just ran was already counted when it began.
+      renewed ? Number(row.cycles || 0) + 1 : row.cycles,
+      decision,
+      // One note column, because the artboard draws one — migration 238's
+      // header records why there is no separate end_reason beside it.
+      'note' in body ? trimOrNull(body.note, 2000) : row.renewal_note,
+      renewed ? engagementDate(body.term_ends_at) : row.term_ends_at,
+      renewed ? row.ended_at : (row.ended_at || day),
+      now, row.id,
+    ).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_engagements WHERE id = ?')
+      .bind(row.id).first<EngagementRow>();
+    return c.json(engagementDto(fresh!));
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// 239 — Deliverables. What you sent a client, and whether they opened it.
+//
+// TWO INVARIANTS HOLD THIS WHOLE ZONE UP, and both are here rather than on the
+// page, because a page can only report what the routes let it be told.
+//
+// ONE: NO ROUTE IN THIS FILE WRITES `opened_at`. Migration 208's header states
+// the rule this store inherits — "Only the founder side can truthfully say a
+// thing was read, so a partner-side write to either would be the firm reporting
+// a metric about itself." The founder side writes it, through
+// `routes/advisor_grants.ts`. A receipt the advisor can set is not a receipt,
+// and three of the four tiles on this zone are receipts.
+//
+// TWO: SENDING REQUIRES A CLIENT WITH AN ACCOUNT. A version sent to a client
+// who cannot sign in can never be opened by anyone, so it would sit in
+// `Unopened` forever, inflate `Never opened`, and quietly bias `median to open`
+// toward whichever clients happen to be linked. Creating and versioning stay
+// open to any client — a draft needs no counterparty — and only the send
+// demands one, with a 409 that names what is missing. Same shape as the
+// engagement block above refusing signed → ended and naming the renewal route.
+//
+// STATE IS DERIVED AND THERE IS NO COLUMN FOR IT: `not_started` (nothing sent),
+// `sent` (sent, unopened), `opened`. See 239's header for why storing it would
+// reproduce D70's `investor_introductions` defect.
+// ---------------------------------------------------------------------------
+type DeliverableRow = {
+  id: number; uid: string; advisor_id: number;
+  engagement_id: number | null; client_name: string; title: string;
+  created_at: string; updated_at: string;
+};
+type VersionRow = {
+  id: number; uid: string; deliverable_id: number; version: number;
+  label: string | null; summary: string | null; link_url: string | null;
+  sent_at: string | null; opened_at: string | null; signed_off_at: string | null;
+  created_at: string; updated_at: string;
+};
+
+/** `not_started` | `sent` | `opened`, from the stamps alone. */
+export function deliverableState(versions: Pick<VersionRow, 'sent_at' | 'opened_at'>[]): string {
+  if (versions.some((v) => v.opened_at)) return 'opened';
+  if (versions.some((v) => v.sent_at)) return 'sent';
+  return 'not_started';
+}
+
+function versionDto(r: VersionRow): any {
+  return {
+    uid: r.uid, version: Number(r.version), label: r.label, summary: r.summary,
+    link_url: r.link_url,
+    // All three are null until they happen. Never coalesced to a date.
+    sent_at: r.sent_at, opened_at: r.opened_at, signed_off_at: r.signed_off_at,
+    created_at: r.created_at, updated_at: r.updated_at,
+  };
+}
+
+/**
+ * One deliverable of the caller's own, or a thrown 404 — `requireOwnEngagement`
+ * one table over, and 404 for the same reason: loading by id and comparing the
+ * advisor afterwards makes someone else's row indistinguishable from one that
+ * does not exist.
+ */
+async function requireOwnDeliverable(
+  c: Context<{ Bindings: Env }>, advisorId: number, id: number,
+): Promise<DeliverableRow> {
+  const row = await c.env.DB.prepare('SELECT * FROM advisor_deliverables WHERE id = ?')
+    .bind(id).first<DeliverableRow>();
+  if (!row || row.advisor_id !== advisorId) {
+    throw c.json({ detail: 'Deliverable not found' }, 404);
+  }
+  return row;
+}
+
+/** Hours between two stamps, or null if either is missing or unparseable. */
+function hoursBetween(from: string | null, to: string | null): number | null {
+  if (!from || !to) return null;
+  const a = Date.parse(from);
+  const b = Date.parse(to);
+  if (!Number.isFinite(a) || !Number.isFinite(b) || b < a) return null;
+  return (b - a) / 3600000;
+}
+
+/** The middle value, or null for an empty set — never 0. */
+function median(values: number[]): number | null {
+  if (!values.length) return null;
+  const s = [...values].sort((x, y) => x - y);
+  const mid = s.length >> 1;
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+advisors.get('/me/deliverables', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const [rows, versions] = await Promise.all([
+      // The client's ACCOUNT AND ADDRESS come through the engagement, and only
+      // for a linked one. This is what lets the zone offer a nudge over exactly
+      // the rows it can reach, rather than a bulk action that silently skips
+      // some of them.
+      c.env.DB.prepare(
+        `SELECT d.*, e.founder_user_id AS client_user_id,
+                u.name AS client_user_name, u.email AS client_user_email
+           FROM advisor_deliverables d
+           LEFT JOIN advisor_engagements e ON e.id = d.engagement_id
+           LEFT JOIN users u ON u.id = e.founder_user_id
+          WHERE d.advisor_id = ?
+          ORDER BY d.updated_at DESC
+          LIMIT 400`
+      ).bind(m.id).all<DeliverableRow & {
+        client_user_id: number | null; client_user_name: string | null; client_user_email: string | null;
+      }>(),
+      c.env.DB.prepare(
+        `SELECT v.* FROM advisor_deliverable_versions v
+           JOIN advisor_deliverables d ON d.id = v.deliverable_id
+          WHERE d.advisor_id = ?
+          ORDER BY v.deliverable_id, v.version DESC`
+      ).bind(m.id).all<VersionRow>(),
+    ]);
+
+    const byDeliverable = new Map<number, VersionRow[]>();
+    for (const v of versions.results || []) {
+      const list = byDeliverable.get(Number(v.deliverable_id)) || [];
+      list.push(v);
+      byDeliverable.set(Number(v.deliverable_id), list);
+    }
+
+    const items = (rows.results || []).map((d) => {
+      const vs = byDeliverable.get(Number(d.id)) || [];
+      const latest = vs[0] || null;   // the SELECT orders version DESC
+      return {
+        id: d.id, uid: d.uid, advisor_id: d.advisor_id,
+        engagement_id: d.engagement_id ?? null,
+        client_name: d.client_name, title: d.title,
+        // NULL means this client has no account, so nothing they are sent can
+        // ever be opened. The zone says so rather than showing a stuck row.
+        client_user_id: d.client_user_id ?? null,
+        client_user_name: d.client_user_name ?? null,
+        client_user_email: d.client_user_email ?? null,
+        state: deliverableState(vs),
+        version_count: vs.length,
+        latest_version: latest ? versionDto(latest) : null,
+        versions: vs.map(versionDto),
+        created_at: d.created_at, updated_at: d.updated_at,
+      };
+    });
+
+    const sent = items.filter((i) => i.state === 'sent' || i.state === 'opened');
+    const unopened = items.filter((i) => i.state === 'sent');
+    // THE MEASUREMENT, and unlike Opportunities' median this one is real: both
+    // stamps exist, so there is no need to substitute a last-touched column.
+    // Measured on the FIRST open of each deliverable, because a second version
+    // read later says nothing about how fast the work reached its reader.
+    const openHours = items
+      .map((i) => {
+        const opened = [...i.versions].reverse().find((v) => v.opened_at);
+        return opened ? hoursBetween(opened.sent_at, opened.opened_at) : null;
+      })
+      .filter((h): h is number => h != null);
+    const medianHours = median(openHours);
+    // The oldest thing that went out and was never read by anyone — no
+    // threshold, which is what keeps this from being an arbitrary rule.
+    const neverOpened = unopened
+      .map((i) => ({ title: i.title, client_name: i.client_name, sent_at: i.latest_version?.sent_at || null }))
+      .sort((a, b) => String(a.sent_at || '').localeCompare(String(b.sent_at || '')));
+
+    return c.json({
+      items,
+      totals: {
+        work_products: items.length,
+        clients: new Set(items.map((i) => i.client_name)).size,
+        sent: sent.length,
+        unopened: unopened.length,
+        opened: items.filter((i) => i.state === 'opened').length,
+        drafts: items.filter((i) => i.state === 'not_started').length,
+        // Null, never 0. Nothing opened yet is not "opened instantly" (D56/D68).
+        median_to_open_hours: medianHours == null ? null : Math.round(medianHours * 10) / 10,
+        never_opened: neverOpened.length,
+        oldest_never_opened: neverOpened[0] || null,
+        // How many rows a nudge could actually reach. The zone reports the gap
+        // rather than skipping rows quietly.
+        addressable: unopened.filter((i) => i.client_user_email).length,
+      },
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.post('/me/deliverables', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const body = await c.req.json().catch(() => ({} as any));
+    const title = String(body.title || '').trim().slice(0, 200);
+    if (!title) return c.json({ detail: 'A work product needs a title' }, 400);
+
+    // The client comes from the engagement when one is named, so the two cannot
+    // disagree about who this is for; otherwise it is typed.
+    let clientName = String(body.client_name || '').trim().slice(0, 200);
+    let engagementId: number | null = null;
+    if (body.engagement_id != null && body.engagement_id !== '') {
+      const eng = await requireOwnEngagement(c, m.id, Number(body.engagement_id));
+      engagementId = eng.id;
+      clientName = eng.client_name;
+    }
+    if (!clientName) return c.json({ detail: 'A work product needs a client' }, 400);
+
+    const now = nowIso();
+    const uid = newUid();
+    const r = await c.env.DB.prepare(
+      `INSERT INTO advisor_deliverables
+         (uid, advisor_id, engagement_id, client_name, title, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).bind(uid, m.id, engagementId, clientName, title, now, now).run();
+    const id = Number((r as any).meta?.last_row_id);
+    // VERSION 1 COMES WITH IT. A work product with no version is a title, and
+    // every read here assumes at least one row to be the latest.
+    await c.env.DB.prepare(
+      `INSERT INTO advisor_deliverable_versions
+         (uid, deliverable_id, version, label, summary, link_url, created_at, updated_at)
+       VALUES (?, ?, 1, ?, ?, ?, ?, ?)`
+    ).bind(newUid(), id, trimOrNull(body.label, 60), trimOrNull(body.summary, 2000),
+           trimOrNull(body.link_url, 2000), now, now).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverables WHERE id = ?')
+      .bind(id).first<DeliverableRow>();
+    return c.json({ ...fresh, state: 'not_started', version_count: 1 }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.patch('/me/deliverables/:id', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const row = await requireOwnDeliverable(c, m.id, Number(c.req.param('id')));
+    const body = await c.req.json().catch(() => ({} as any));
+    let engagementId = row.engagement_id;
+    let clientName = row.client_name;
+    if ('engagement_id' in body) {
+      if (body.engagement_id == null || body.engagement_id === '') engagementId = null;
+      else {
+        const eng = await requireOwnEngagement(c, m.id, Number(body.engagement_id));
+        engagementId = eng.id;
+        clientName = eng.client_name;
+      }
+    }
+    if ('client_name' in body && engagementId == null) {
+      clientName = String(body.client_name ?? '').trim().slice(0, 200) || row.client_name;
+    }
+    await c.env.DB.prepare(
+      `UPDATE advisor_deliverables
+          SET title = ?, engagement_id = ?, client_name = ?, updated_at = ?
+        WHERE id = ?`
+    ).bind(
+      String(body.title ?? '').trim().slice(0, 200) || row.title,
+      engagementId, clientName, nowIso(), row.id,
+    ).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverables WHERE id = ?')
+      .bind(row.id).first<DeliverableRow>();
+    return c.json(fresh);
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * POST /me/deliverables/:id/versions — the next version of a work product.
+ *
+ * The ordinal is `MAX(version) + 1` read inside the same request, and the
+ * table's `UNIQUE (deliverable_id, version)` is what turns a lost race into an
+ * error rather than two rows both calling themselves v3.
+ */
+advisors.post('/me/deliverables/:id/versions', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const row = await requireOwnDeliverable(c, m.id, Number(c.req.param('id')));
+    const body = await c.req.json().catch(() => ({} as any));
+    const top = await c.env.DB.prepare(
+      'SELECT MAX(version) AS v FROM advisor_deliverable_versions WHERE deliverable_id = ?'
+    ).bind(row.id).first<{ v: number | null }>();
+    const next = Number(top?.v || 0) + 1;
+    const now = nowIso();
+    const uid = newUid();
+    await c.env.DB.prepare(
+      `INSERT INTO advisor_deliverable_versions
+         (uid, deliverable_id, version, label, summary, link_url, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(uid, row.id, next, trimOrNull(body.label, 60), trimOrNull(body.summary, 2000),
+           trimOrNull(body.link_url, 2000), now, now).run();
+    await c.env.DB.prepare('UPDATE advisor_deliverables SET updated_at = ? WHERE id = ?')
+      .bind(now, row.id).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverable_versions WHERE uid = ?')
+      .bind(uid).first<VersionRow>();
+    return c.json(versionDto(fresh!), 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * POST /me/deliverables/:id/versions/:version/send — it went to the client.
+ *
+ * REFUSES A CLIENT WITH NO ACCOUNT, with a 409 that names the link. See the
+ * block comment at the top of this section: a version nobody can open would
+ * poison three of this zone's four tiles, and the alternative — letting the
+ * advisor claim it was opened — is the one thing this store exists to prevent.
+ */
+advisors.post('/me/deliverables/:id/versions/:version/send', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const row = await requireOwnDeliverable(c, m.id, Number(c.req.param('id')));
+    const version = Number(c.req.param('version'));
+    const v = await c.env.DB.prepare(
+      'SELECT * FROM advisor_deliverable_versions WHERE deliverable_id = ? AND version = ?'
+    ).bind(row.id, version).first<VersionRow>();
+    if (!v) return c.json({ detail: 'Version not found' }, 404);
+    if (v.sent_at) return c.json({ detail: 'That version has already been sent' }, 409);
+
+    const client = row.engagement_id == null ? null : await c.env.DB.prepare(
+      `SELECT u.id FROM advisor_engagements e
+         JOIN users u ON u.id = e.founder_user_id
+        WHERE e.id = ? AND e.advisor_id = ?`
+    ).bind(row.engagement_id, m.id).first<{ id: number }>();
+    if (!client) {
+      return c.json({
+        detail: 'Link this work product to an engagement whose client has an Axal account before sending — nothing an unlinked client is sent can ever be recorded as opened',
+      }, 409);
+    }
+
+    const now = nowIso();
+    await c.env.DB.prepare(
+      'UPDATE advisor_deliverable_versions SET sent_at = ?, updated_at = ? WHERE id = ?'
+    ).bind(now, now, v.id).run();
+    await c.env.DB.prepare('UPDATE advisor_deliverables SET updated_at = ? WHERE id = ?')
+      .bind(now, row.id).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverable_versions WHERE id = ?')
+      .bind(v.id).first<VersionRow>();
+    return c.json(versionDto(fresh!));
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// 239, the client's half — the receipt an advisor cannot write
+// ---------------------------------------------------------------------------
+/**
+ * THE WHOLE POINT OF THESE TWO ROUTES is that `opened_at` has no advisor-side
+ * writer and never will. Migration 208's header, inherited by 239, states the
+ * rule: `opened_at` and `signed_off_at` are the CLIENT's to set, because only
+ * the founder side can truthfully say a thing was read — an advisor-side write
+ * would be the practice reporting a metric about itself. `/me/deliverables`
+ * reports three tiles that stay null until a founder acts here.
+ *
+ * THEY SIT IN THIS FILE RATHER THAN `advisor_grants.ts`, AND THE SCHEMA IS WHY:
+ * no grant is involved. The relationship that carries a deliverable is the
+ * ENGAGEMENT, so a grant-scoped route would hide every work product from a
+ * founder who never opened a record — which is most of them. This router already
+ * holds the founder-facing half of the advisor surface (`/`, `/match`, `/:uid`,
+ * `/:uid/slots`, `/slots/:id/book`, `/bookings/:id/*`), all `requireAuth` with
+ * no advisor profile, and these join it.
+ */
+
+/**
+ * GET /received/deliverables — what my advisors have sent me.
+ *
+ * SENT VERSIONS ONLY, and that is a privacy rule rather than a filter. A version
+ * with no `sent_at` is the advisor's draft: they created it, they have not handed
+ * it over, and a client who could see it would be reading work in progress. A
+ * deliverable whose every version is unsent does not appear at all.
+ */
+advisors.get('/received/deliverables', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    await ensureAdvisorStoresSchema(c.env);
+    const rows = await c.env.DB.prepare(
+      `SELECT d.id, d.uid, d.title, d.client_name, d.created_at, d.updated_at,
+              a.display_name AS advisor_name, a.uid AS advisor_uid
+         FROM advisor_deliverables d
+         JOIN advisor_engagements e ON e.id = d.engagement_id
+         JOIN advisors a ON a.id = d.advisor_id
+        WHERE e.founder_user_id = ?
+          AND EXISTS (SELECT 1 FROM advisor_deliverable_versions v
+                       WHERE v.deliverable_id = d.id AND v.sent_at IS NOT NULL)
+        ORDER BY d.updated_at DESC LIMIT 200`
+    ).bind(user.id).all<any>();
+
+    const items = [] as any[];
+    for (const d of rows.results || []) {
+      const vs = await c.env.DB.prepare(
+        `SELECT * FROM advisor_deliverable_versions
+          WHERE deliverable_id = ? AND sent_at IS NOT NULL
+          ORDER BY version DESC`
+      ).bind(d.id).all<VersionRow>();
+      const versions = (vs.results || []).map(versionDto);
+      items.push({
+        uid: d.uid, title: d.title,
+        advisor_name: d.advisor_name, advisor_uid: d.advisor_uid,
+        // DERIVED BY THE SAME FUNCTION THE ADVISOR'S PAGE READS, so the two
+        // sides can never disagree about what "opened" means. `not_started` is
+        // unreachable here by construction — every row has a sent version — and
+        // that is worth leaving to the shared helper rather than re-deriving a
+        // two-state version of it that would drift.
+        state: deliverableState(versions),
+        version_count: versions.length,
+        versions,
+        updated_at: d.updated_at,
+      });
+    }
+    return c.json({
+      items,
+      totals: {
+        work_products: items.length,
+        unread: items.filter((i) => i.state === 'sent').length,
+        advisors: new Set(items.map((i) => i.advisor_uid)).size,
+      },
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * POST /received/deliverables/:uid/open — the receipt, stamped once.
+ *
+ * FIRST OPEN WINS, AND THE SQL IS WHAT ENFORCES IT: `WHERE opened_at IS NULL`
+ * on the UPDATE, not a read-then-write in the handler. A founder reloading the
+ * page cannot move the stamp, and two concurrent opens cannot race one past the
+ * other. The second call is not an error — reading something twice never is — so
+ * it returns the row with the original stamp intact.
+ *
+ * A DRAFT CANNOT BE OPENED. `sent_at IS NOT NULL` is in the scope query, so a
+ * version the advisor never sent answers 404 like anyone else's: without it a
+ * founder could stamp a deliverable nobody handed them, and `median_to_open` on
+ * the advisor's page would be measuring an interval that never happened.
+ *
+ * 404, NEVER 403, for a version belonging to someone else's engagement — the
+ * `requireOwnDeliverable` reasoning from PR3a, one table further out. Comparing
+ * after the load is what makes another client's row indistinguishable from one
+ * that does not exist.
+ */
+advisors.post('/received/deliverables/:uid/open', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    await ensureAdvisorStoresSchema(c.env);
+    const v = await c.env.DB.prepare(
+      `SELECT v.* FROM advisor_deliverable_versions v
+         JOIN advisor_deliverables d ON d.id = v.deliverable_id
+         JOIN advisor_engagements e ON e.id = d.engagement_id
+        WHERE v.uid = ? AND e.founder_user_id = ? AND v.sent_at IS NOT NULL`
+    ).bind(c.req.param('uid'), user.id).first<VersionRow>();
+    if (!v) return c.json({ detail: 'Work product not found' }, 404);
+
+    const now = nowIso();
+    await c.env.DB.prepare(
+      'UPDATE advisor_deliverable_versions SET opened_at = ?, updated_at = ? WHERE id = ? AND opened_at IS NULL'
+    ).bind(now, now, v.id).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverable_versions WHERE id = ?')
+      .bind(v.id).first<VersionRow>();
+    return c.json(versionDto(fresh!));
+  } catch (e) { return mapError(c, e); }
+});
+
+// ───────────────────────────── PR4 · Sessions — the rules, prices and links ──
+//
+// Migration 240's three stores plus the two new slot columns. The artboard
+// (`Advisor Detail · Practice.dc.html` PR4, tagged FEED) draws a calendar and,
+// beside it, the three things that decide what the calendar contains: the
+// availability rules that generate slots, the session types that price them,
+// and the booking links that fill them.
+//
+// NOTHING HERE CHARGES ANYONE. A `price_cents` is what the advisor asks for.
+// Migration 241 adds the take-rate and the payout account; the Stripe Connect
+// service leg lands after it in test mode behind a production flag. Until that
+// flag flips, `payment_state` records why a booking could NOT be charged and
+// never asserts that one was — which is why 'charged' is only ever written by
+// the settlement path, never by a route in this block. D75.
+
+type AvailabilityRow = {
+  id: number; advisor_id: number;
+  weekly_paid_cap: number | null; buffer_minutes: number | null;
+  min_notice_hours: number | null; blackouts_json: string;
+  timezone: string | null; created_at: string; updated_at: string;
+};
+type SessionTypeRow = {
+  id: number; uid: string; advisor_id: number; name: string;
+  duration_minutes: number | null; cadence_note: string | null;
+  price_cents: number | null; is_free_intro: number; once_per_client: number;
+  sort_order: number; is_active: number; created_at: string; updated_at: string;
+};
+type BookingLinkRow = {
+  id: number; uid: string; advisor_id: number; slug: string;
+  session_type_id: number | null; audience: string; cohort_ref: string | null;
+  requires_payout_account: number; note: string | null; is_active: number;
+  created_at: string; updated_at: string;
+};
+
+const LINK_AUDIENCES = ['public', 'cohort', 'private'];
+
+function availabilityDto(r: AvailabilityRow | null): any {
+  // NULL is "not set", and it stays null all the way to the page. A cap the
+  // advisor never chose must not render as a number they can be held to —
+  // D56/D68, the same rule `renewal_rate` follows above.
+  return {
+    weekly_paid_cap: r?.weekly_paid_cap ?? null,
+    buffer_minutes: r?.buffer_minutes ?? null,
+    min_notice_hours: r?.min_notice_hours ?? null,
+    blackouts: jload<any[]>(r?.blackouts_json, []),
+    timezone: r?.timezone ?? null,
+    // Lets the page tell "no rules configured" from "rules configured to
+    // nothing", which read identically in the four fields above.
+    configured: Boolean(r),
+  };
+}
+
+function sessionTypeDto(r: SessionTypeRow): any {
+  return {
+    id: r.id, uid: r.uid, name: r.name,
+    duration_minutes: r.duration_minutes, cadence_note: r.cadence_note,
+    price_cents: r.price_cents,
+    is_free_intro: !!r.is_free_intro,
+    once_per_client: !!r.once_per_client,
+    sort_order: r.sort_order, is_active: !!r.is_active,
+  };
+}
+
+function bookingLinkDto(r: BookingLinkRow): any {
+  return {
+    id: r.id, uid: r.uid, slug: r.slug,
+    session_type_id: r.session_type_id, audience: r.audience,
+    cohort_ref: r.cohort_ref,
+    requires_payout_account: !!r.requires_payout_account,
+    note: r.note, is_active: !!r.is_active,
+  };
+}
+
+/**
+ * A blackout window is a CALENDAR DAY AND CLOCK TIME, never an instant.
+ * `new Date('2026-11-04')` is midnight UTC, so a window stored as a timestamp
+ * moves an hour twice a year and lands on the wrong side of a Friday for every
+ * reader west of Greenwich. The shape is validated here so a malformed rule is
+ * refused at the door rather than silently generating the wrong calendar.
+ */
+function parseBlackouts(v: unknown): string {
+  if (v == null) return '[]';
+  if (!Array.isArray(v)) throw new Error('blackouts must be an array');
+  if (v.length > 50) throw new Error('blackouts is limited to 50 windows');
+  const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  const CLOCK = /^([01]\d|2[0-3]):[0-5]\d$/;
+  const out = v.map((w: any) => {
+    const day = String(w?.day || '').trim().toLowerCase();
+    if (!DAYS.includes(day)) throw new Error(`blackout day must be one of: ${DAYS.join(', ')}`);
+    const from = String(w?.from || '').trim();
+    const to = String(w?.to || '').trim();
+    if (!CLOCK.test(from) || !CLOCK.test(to)) throw new Error('blackout from/to must be HH:MM');
+    if (from >= to) throw new Error('a blackout window must end after it starts');
+    return { day, from, to };
+  });
+  return JSON.stringify(out);
+}
+
+function parseOptionalCount(v: unknown, label: string, max: number): number | null {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 0) throw new Error(`${label} must be a whole number, zero or more`);
+  if (n > max) throw new Error(`${label} is implausibly large`);
+  return n;
+}
+
+advisors.get('/me/availability', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM advisor_availability_rules WHERE advisor_id = ?'
+    ).bind(m.id).first<AvailabilityRow>();
+    return c.json(availabilityDto(row));
+  } catch (e) { return mapError(c, e); }
+});
+
+// PUT, not PATCH: one row per advisor, and the whole rule set is the unit an
+// advisor edits. A partial update would let a cap and a blackout disagree
+// about which edit won.
+advisors.put('/me/availability', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const body = await c.req.json().catch(() => ({} as any));
+    const cap = parseOptionalCount(body.weekly_paid_cap, 'weekly_paid_cap', 200);
+    const buffer = parseOptionalCount(body.buffer_minutes, 'buffer_minutes', 24 * 60);
+    const notice = parseOptionalCount(body.min_notice_hours, 'min_notice_hours', 24 * 365);
+    const blackouts = parseBlackouts(body.blackouts);
+    const now = nowIso();
+    await c.env.DB.prepare(
+      `INSERT INTO advisor_availability_rules
+         (advisor_id, weekly_paid_cap, buffer_minutes, min_notice_hours,
+          blackouts_json, timezone, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(advisor_id) DO UPDATE SET
+         weekly_paid_cap = excluded.weekly_paid_cap,
+         buffer_minutes = excluded.buffer_minutes,
+         min_notice_hours = excluded.min_notice_hours,
+         blackouts_json = excluded.blackouts_json,
+         timezone = excluded.timezone,
+         updated_at = excluded.updated_at`
+    ).bind(
+      m.id, cap, buffer, notice, blackouts,
+      trimOrNull(body.timezone, 64), now, now,
+    ).run();
+    const fresh = await c.env.DB.prepare(
+      'SELECT * FROM advisor_availability_rules WHERE advisor_id = ?'
+    ).bind(m.id).first<AvailabilityRow>();
+    return c.json(availabilityDto(fresh));
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.get('/me/session-types', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const rows = await c.env.DB.prepare(
+      `SELECT * FROM advisor_session_types WHERE advisor_id = ?
+        ORDER BY sort_order ASC, id ASC LIMIT 100`
+    ).bind(m.id).all<SessionTypeRow>();
+    return c.json({ items: (rows.results || []).map(sessionTypeDto) });
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.post('/me/session-types', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const body = await c.req.json().catch(() => ({} as any));
+    const name = String(body.name || '').trim().slice(0, 200);
+    if (!name) return c.json({ detail: 'A session type needs a name' }, 400);
+    const isFreeIntro = body.is_free_intro ? 1 : 0;
+    const price = parsePriceCents(body.price_cents);
+    // FREE AND UNPRICED ARE DIFFERENT FACTS and the pair must not contradict.
+    // A free intro carrying a price says two things at once, and the canvas
+    // prices its intro at "Free" precisely so a reader can trust the word.
+    if (isFreeIntro && price != null && price > 0) {
+      return c.json({ detail: 'A free intro cannot carry a price' }, 400);
+    }
+    const now = nowIso();
+    const uid = newUid();
+    const r = await c.env.DB.prepare(
+      `INSERT INTO advisor_session_types
+         (uid, advisor_id, name, duration_minutes, cadence_note, price_cents,
+          is_free_intro, once_per_client, sort_order, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
+    ).bind(
+      uid, m.id, name,
+      parseOptionalCount(body.duration_minutes, 'duration_minutes', 24 * 60),
+      trimOrNull(body.cadence_note, 200), price,
+      isFreeIntro, body.once_per_client ? 1 : 0,
+      parseOptionalCount(body.sort_order, 'sort_order', 999) ?? 0,
+      now, now,
+    ).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_session_types WHERE id = ?')
+      .bind((r as any).meta?.last_row_id).first<SessionTypeRow>();
+    return c.json(sessionTypeDto(fresh!), 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.patch('/me/session-types/:id', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM advisor_session_types WHERE id = ? AND advisor_id = ?'
+    ).bind(Number(c.req.param('id')), m.id).first<SessionTypeRow>();
+    // 404, never 403: the scope is in the WHERE clause, so another advisor's
+    // row is indistinguishable from one that does not exist.
+    if (!row) return c.json({ detail: 'Session type not found' }, 404);
+    const body = await c.req.json().catch(() => ({} as any));
+    const name = body.name == null ? row.name : String(body.name).trim().slice(0, 200);
+    if (!name) return c.json({ detail: 'A session type needs a name' }, 400);
+    const isFreeIntro = body.is_free_intro == null ? row.is_free_intro : (body.is_free_intro ? 1 : 0);
+    const price = body.price_cents === undefined ? row.price_cents : parsePriceCents(body.price_cents);
+    if (isFreeIntro && price != null && price > 0) {
+      return c.json({ detail: 'A free intro cannot carry a price' }, 400);
+    }
+    await c.env.DB.prepare(
+      `UPDATE advisor_session_types
+          SET name = ?, duration_minutes = ?, cadence_note = ?, price_cents = ?,
+              is_free_intro = ?, once_per_client = ?, sort_order = ?, is_active = ?,
+              updated_at = ?
+        WHERE id = ? AND advisor_id = ?`
+    ).bind(
+      name,
+      body.duration_minutes === undefined ? row.duration_minutes
+        : parseOptionalCount(body.duration_minutes, 'duration_minutes', 24 * 60),
+      body.cadence_note === undefined ? row.cadence_note : trimOrNull(body.cadence_note, 200),
+      price, isFreeIntro,
+      body.once_per_client == null ? row.once_per_client : (body.once_per_client ? 1 : 0),
+      body.sort_order === undefined ? row.sort_order
+        : (parseOptionalCount(body.sort_order, 'sort_order', 999) ?? 0),
+      body.is_active == null ? row.is_active : (body.is_active ? 1 : 0),
+      nowIso(), row.id, m.id,
+    ).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_session_types WHERE id = ?')
+      .bind(row.id).first<SessionTypeRow>();
+    return c.json(sessionTypeDto(fresh!));
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * THE OWNER'S VIEW OF A SLOT, and it exists because `GET /:uid/slots` must not
+ * grow these three columns. That route is readable by ANY authenticated user —
+ * it is how a founder browses an advisor's calendar — and `recording_state`,
+ * `payment_state` and `blocked_reason` are the advisor's own operational
+ * facts. A client who could see `held_unpaid` would learn that this advisor's
+ * payout account is unverified, and one who could read `blocked_reason` would
+ * read a private note about why an hour is not for sale. So `slotDto` stays
+ * lean and this one carries the operational half.
+ */
+function ownSlotDto(s: SlotRow & {
+  recording_state?: string; payment_state?: string; blocked_reason?: string | null;
+}, taken = 0): any {
+  return {
+    ...slotDto(s, taken),
+    recording_state: s.recording_state ?? 'none',
+    payment_state: s.payment_state ?? 'not_applicable',
+    blocked_reason: s.blocked_reason ?? null,
+  };
+}
+
+advisors.get('/me/slots', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    // The grid is two weeks forward by default, and the artboard's other three
+    // views (Month, Past sessions, Unpaid held) are narrowings of a window
+    // rather than different queries — so the window is the only parameter.
+    const days = Math.min(370, Math.max(1, Number(c.req.query('days') || 14)));
+    const from = c.req.query('from') || nowIso();
+    const until = new Date(new Date(from).getTime() + days * 86_400_000).toISOString();
+    const rows = await c.env.DB.prepare(
+      `SELECT * FROM advisor_office_hour_slots
+        WHERE advisor_id = ? AND starts_at >= ? AND starts_at < ?
+        ORDER BY starts_at ASC LIMIT 500`
+    ).bind(m.id, from, until).all<SlotRow>();
+    const items: any[] = [];
+    for (const s of (rows.results || []) as SlotRow[]) {
+      items.push(ownSlotDto(s as any, await takenForSlot(c.env, s.id)));
+    }
+    return c.json({ items, window: { from, until, days } });
+  } catch (e) { return mapError(c, e); }
+});
+
+// The artboard's "Block a date range" op. A blocked slot is NOT a cancelled
+// one: cancelling undoes a booking and tells whoever held it, while blocking
+// withdraws an hour that was never taken. Conflating them would send a
+// cancellation notice for an hour nobody had.
+advisors.post('/me/slots/block', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const body = await c.req.json().catch(() => ({} as any));
+    const from = trimOrNull(body.from, 40);
+    const until = trimOrNull(body.until, 40);
+    if (!from || !until) return c.json({ detail: 'A block needs a start and an end' }, 400);
+    if (!(from < until)) return c.json({ detail: 'A block must end after it starts' }, 400);
+    const reason = trimOrNull(body.reason, 200);
+
+    // A BOOKED SLOT IS NOT BLOCKABLE, and this is the whole care in the
+    // handler. Blocking an hour someone already holds would take their session
+    // away silently — they would keep the confirmation and lose the slot. Those
+    // are reported back by count so the advisor learns the range was not
+    // wholly applied, rather than assuming it was.
+    const inRange = await c.env.DB.prepare(
+      `SELECT id FROM advisor_office_hour_slots
+        WHERE advisor_id = ? AND starts_at >= ? AND starts_at < ? AND is_cancelled = 0`
+    ).bind(m.id, from, until).all<{ id: number }>();
+    const ids = (inRange.results || []).map((r) => r.id);
+    let blocked = 0;
+    let skippedBooked = 0;
+    for (const id of ids) {
+      if ((await takenForSlot(c.env, id)) > 0) { skippedBooked++; continue; }
+      await c.env.DB.prepare(
+        'UPDATE advisor_office_hour_slots SET blocked_reason = ? WHERE id = ? AND advisor_id = ?'
+      ).bind(reason || 'Blocked', id, m.id).run();
+      blocked++;
+    }
+    return c.json({ blocked, skipped_booked: skippedBooked, examined: ids.length });
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.get('/me/booking-links', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const rows = await c.env.DB.prepare(
+      `SELECT * FROM advisor_booking_links WHERE advisor_id = ?
+        ORDER BY is_active DESC, id ASC LIMIT 100`
+    ).bind(m.id).all<BookingLinkRow>();
+    return c.json({ items: (rows.results || []).map(bookingLinkDto) });
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.post('/me/booking-links', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const body = await c.req.json().catch(() => ({} as any));
+    // The slug is resolved from the URL alone, so it has to be URL-safe and it
+    // has to be unique across every advisor — hence the refusal below rather
+    // than a silent rewrite: a link the advisor did not type is a link they
+    // cannot give out from memory.
+    // Validated BEFORE any normalising, so 'Ada/Intro' is a 400 and not a
+    // quiet rewrite to 'ada/intro'. A lowercasing step here would hand back a
+    // link the advisor did not type, which is the one thing a link they read
+    // aloud or retype from memory cannot survive. The test for this caught the
+    // route doing exactly that.
+    const slug = String(body.slug || '').trim();
+    if (!/^[a-z0-9][a-z0-9/-]{1,98}[a-z0-9]$/.test(slug)) {
+      return c.json({ detail: 'A slug may use lowercase letters, digits, hyphens and slashes' }, 400);
+    }
+    const audience = String(body.audience || 'public').trim();
+    if (!LINK_AUDIENCES.includes(audience)) {
+      return c.json({ detail: `audience must be one of: ${LINK_AUDIENCES.join(', ')}` }, 400);
+    }
+    // A cohort link with no cohort admits everyone, which is the opposite of
+    // what it claims. Refuse rather than quietly widening the audience.
+    const cohortRef = trimOrNull(body.cohort_ref, 100);
+    if (audience === 'cohort' && !cohortRef) {
+      return c.json({ detail: 'A cohort link needs the cohort it admits' }, 400);
+    }
+    let sessionTypeId: number | null = null;
+    if (body.session_type_id != null && body.session_type_id !== '') {
+      const t = await c.env.DB.prepare(
+        'SELECT id FROM advisor_session_types WHERE id = ? AND advisor_id = ?'
+      ).bind(Number(body.session_type_id), m.id).first<{ id: number }>();
+      // Someone else's session type is not an option this advisor may sell.
+      if (!t) return c.json({ detail: 'Session type not found' }, 404);
+      sessionTypeId = t.id;
+    }
+    const now = nowIso();
+    const uid = newUid();
+    const existing = await c.env.DB.prepare('SELECT id FROM advisor_booking_links WHERE slug = ?')
+      .bind(slug).first<{ id: number }>();
+    if (existing) return c.json({ detail: 'That link is already taken' }, 409);
+    const r = await c.env.DB.prepare(
+      `INSERT INTO advisor_booking_links
+         (uid, advisor_id, slug, session_type_id, audience, cohort_ref,
+          requires_payout_account, note, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
+    ).bind(
+      uid, m.id, slug, sessionTypeId, audience, cohortRef,
+      body.requires_payout_account ? 1 : 0, trimOrNull(body.note, 300), now, now,
+    ).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_booking_links WHERE id = ?')
+      .bind((r as any).meta?.last_row_id).first<BookingLinkRow>();
+    return c.json(bookingLinkDto(fresh!), 201);
   } catch (e) { return mapError(c, e); }
 });
 

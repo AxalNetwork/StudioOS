@@ -1,4 +1,5 @@
 import { reportError } from './log';
+import { csrfCookieNameFor } from './branchHost';
 
 const BASE = '/api';
 
@@ -45,12 +46,15 @@ const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 function getCsrfHeader(method) {
   if (!method || !MUTATING_METHODS.has(method.toUpperCase())) return {};
   if (typeof document === 'undefined') return {};
+  // On a branch host the cookie is `studioos_csrf_<code>`; HQ's plain
+  // `studioos_csrf` is present there too and is not ours (D104, branchHost.js).
+  const name = csrfCookieNameFor(typeof window === 'undefined' ? '' : window.location.hostname);
   const cookie = document.cookie || '';
   for (const part of cookie.split(';')) {
     const trimmed = part.trim();
     const eq = trimmed.indexOf('=');
     if (eq === -1) continue;
-    if (trimmed.slice(0, eq) === 'studioos_csrf') {
+    if (trimmed.slice(0, eq) === name) {
       return { 'X-CSRF-Token': trimmed.slice(eq + 1) };
     }
   }
@@ -595,6 +599,11 @@ export const api = {
   smsVerifyChallenge: (email, session_info, code) =>
     request('/auth/sms/verify-challenge', { method: 'POST', body: JSON.stringify({ email, session_info, code }) }),
   getMe: () => request('/auth/me'),
+  // Task #178 — the affirmative act the re-acceptance interstitial collects.
+  // No body: the only thing the server needs is who is calling, and the one
+  // thing it must never accept is a user id — an acceptance recorded on
+  // somebody's behalf forges the record this exists to make honest.
+  acceptTerms: () => request('/auth/accept-terms', { method: 'POST' }),
   // Task #51 — "Continue with Google" sign-in. /auth/google/start returns
   // {url} when called with Accept: application/json so the SPA can do a
   // top-level navigation (window.location.href = url). 503 means the
@@ -608,7 +617,17 @@ export const api = {
     // records no suggested role, unlike every other signup path.
     if (params.lane) qs.set('lane', params.lane);
     const q = qs.toString();
-    return request(`/auth/google/start${q ? `?${q}` : ''}`, { headers: { accept: 'application/json' } });
+    // `timeoutMs` is forwarded because LoginPage calls this TWICE for different
+    // reasons: once on mount, only to find out whether the button should exist,
+    // and once when someone clicks it. The first is a probe whose answer decides
+    // what the page CLAIMS, so it needs a deadline short enough that a stalled
+    // worker becomes a stated absence rather than a silently shorter list of
+    // options — that is exactly what went wrong on 2026-09-12. The click keeps
+    // the default.
+    return request(`/auth/google/start${q ? `?${q}` : ''}`, {
+      headers: { accept: 'application/json' },
+      ...(params.timeoutMs !== undefined ? { timeoutMs: params.timeoutMs } : {}),
+    });
   },
   getConnectedAccounts: () => request('/settings/connected-accounts'),
   unlinkGoogle: () => request('/settings/connected-accounts/google/unlink', { method: 'POST' }),
@@ -671,6 +690,14 @@ export const api = {
   getProject: (id) => request(`/projects/${id}`),
   createProject: (data) => request('/projects', { method: 'POST', body: JSON.stringify(data) }),
   updateProject: (id, data) => request(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  // Task #188/#198 — the sizing assumptions BEHIND tam/sam/som, which
+  // `SpinoutLabMarketPage` used to hold in session state and drop when the tab
+  // closed. A PATCH: fields left out are kept, which is what lets one cited fill
+  // write one figure without blanking the eleven the founder typed.
+  getMarketAssumptions: (id) => request(`/projects/${id}/market-assumptions`),
+  saveMarketAssumptions: (id, assumptions) => request(`/projects/${id}/market-assumptions`, {
+    method: 'PUT', body: JSON.stringify({ assumptions }),
+  }),
   deleteProject: (id) => request(`/projects/${id}`, { method: 'DELETE' }),
   // Task #7 (AM) — Admin > Trash management for soft-deleted projects.
   adminListProjectTrash: () => request('/admin/projects/trash'),
@@ -1273,6 +1300,24 @@ export const api = {
   linkHypothesisPain: (id, data) => request(`/founder/validate/hypotheses/${id}/links`, { method: 'POST', body: JSON.stringify(data) }),
   unlinkHypothesisPain: (linkId) => request(`/founder/validate/links/${linkId}`, { method: 'DELETE' }),
   getValidationDecision: (projectId) => request(`/founder/validate/decision/${projectId}`),
+
+  // Build · Cadence (#176 FB4). ONE READ FOR THE WHOLE ZONE, because all four
+  // of its stat cards are counts over rows the same response carries — a
+  // separate `/stats` call would be a second answer to a question the rows
+  // already answer, and the two would disagree the moment a run is edited.
+  // The write surface is per-record because that is what a form submits.
+  getCadence: (projectId) => request(`/founder/cadence/${projectId}`),
+  getCadenceStarters: () => request('/founder/cadence/starters'),
+  createRitual: (projectId, data) => request(`/founder/cadence/${projectId}/rituals`, { method: 'POST', body: JSON.stringify(data) }),
+  updateRitual: (id, data) => request(`/founder/cadence/rituals/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteRitual: (id) => request(`/founder/cadence/rituals/${id}`, { method: 'DELETE' }),
+  logRitualRun: (projectId, data) => request(`/founder/cadence/${projectId}/runs`, { method: 'POST', body: JSON.stringify(data) }),
+  updateRitualRun: (id, data) => request(`/founder/cadence/runs/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteRitualRun: (id) => request(`/founder/cadence/runs/${id}`, { method: 'DELETE' }),
+  createRitualTemplate: (projectId, data) => request(`/founder/cadence/${projectId}/templates`, { method: 'POST', body: JSON.stringify(data) }),
+  updateRitualTemplate: (id, data) => request(`/founder/cadence/templates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteRitualTemplate: (id) => request(`/founder/cadence/templates/${id}`, { method: 'DELETE' }),
+
   // Validate · the three exports.
   //
   // ONE DOWNLOAD HELPER, NOT THREE. The blob → Content-Disposition →
@@ -1321,6 +1366,14 @@ export const api = {
     api._downloadCsv(`/founder/validate/summary/${projectId}/export.csv`, 'validation-summary.csv'),
   recordValidationDecision: (projectId, data) => request(`/founder/validate/decision/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
   updateInterviewEvidence: (id, data) => request(`/founder/validate/interviews/${id}/evidence`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // Severity is per PAIN and not per interview — one conversation names a
+  // must-have and a nice-to-have in the same breath — so it is its own call
+  // rather than a field on the evidence PATCH above. `severity: null` clears
+  // the record, which is a third state and not the same as 'nice'.
+  setInterviewPainSeverity: (id, phrase, severity) =>
+    request(`/founder/validate/interviews/${id}/pain-severity`, {
+      method: 'PUT', body: JSON.stringify({ phrase, severity }),
+    }),
 
   // ---------- Validate · "AI fills the blanks" (migration 214) ----------
   // A proposal is written by the worker and decided by a person. Nothing here
@@ -1334,7 +1387,13 @@ export const api = {
   proposeValidate: (projectId, data) => request(`/founder/validate/propose/${projectId}`, {
     method: 'POST', timeoutMs: 60_000, body: JSON.stringify(data),
   }),
-  acceptValidateProposal: (id) => request(`/founder/validate/proposals/${id}/accept`, { method: 'POST' }),
+  // `body` carries `{ value }` for an accept-with-edit and is omitted otherwise.
+  // Omitted rather than sent as the unchanged original, because `fill_provenance`
+  // derives `edited` from comparing the two and a table where every row is marked
+  // corrected says nothing about any of them.
+  acceptValidateProposal: (id, body) => request(`/founder/validate/proposals/${id}/accept`, {
+    method: 'POST', ...(body ? { body: JSON.stringify(body) } : {}),
+  }),
   discardValidateProposal: (id) => request(`/founder/validate/proposals/${id}/discard`, { method: 'POST' }),
 
   // ---------- Validate · interview recordings (migration 215) ----------
@@ -1369,10 +1428,47 @@ export const api = {
   renamePainGroup: (id, title) => request(`/progress/pain-groups/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
   deletePainGroup: (id) => request(`/progress/pain-groups/${id}`, { method: 'DELETE' }),
   listOkrs: (projectId) => request(`/progress/roadmap/${projectId}`),
+  // #176 FB1 — the three week windows `/build/this-week` draws chips for, as ID
+  // SETS rather than objectives. The page already has every OKR from `listOkrs`;
+  // returning them again under four keys would be the same rows four times and a
+  // second answer to what an objective is called. Migration 252 logs the column
+  // moves this is derived from; `history_since` says how far back the log goes,
+  // because it is not backfilled and an older commitment would otherwise look
+  // like a broken filter.
+  listOkrWeeks: (projectId) => request(`/progress/roadmap/${projectId}/weeks`),
+  // #176 FB2 — swimlanes on the execution board. Migration 253 puts a `lane` on the
+  // card and the LIST of lanes in `project_lanes`, which is what turns
+  // `Configure lanes` from "there is nothing for an editor to change" into an editor.
+  //
+  // THE CARDS COME BACK WITH THE LANES, not from `pipelineDealDetail`. Reading lanes
+  // from one call and cards from another shows a card in a lane it has been moved
+  // out of; and the detail endpoint's `SELECT *` predates the column.
+  getBoardLanes: (projectId) => request(`/founder/board/${projectId}`),
+  setBoardLane: (projectId, data) => request(`/founder/board/${projectId}/lanes`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteBoardLane: (id) => request(`/founder/board/lanes/${id}`, { method: 'DELETE' }),
+  // `Bulk move`. All-or-nothing: a move that would put a lane over its WIP limit
+  // writes nothing and answers 409 with the lane and the overage, because the
+  // artboard's own note says "the limit is a configuration, not a suggestion".
+  bulkMoveBoardCards: (projectId, data) => request(`/founder/board/${projectId}/cards/bulk`, { method: 'POST', body: JSON.stringify(data) }),
   createOkr: (projectId, data) => request(`/progress/roadmap/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
   updateOkr: (id, data) => request(`/progress/roadmap/okr/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   moveOkr: (id, kanban_status, sort_order = 0) => request(`/progress/roadmap/okr/${id}/move`, { method: 'POST', body: JSON.stringify({ kanban_status, sort_order }) }),
   deleteOkr: (id) => request(`/progress/roadmap/okr/${id}`, { method: 'DELETE' }),
+  // Task #176 (FB3) — the roadmap's dependency graph and its saved scenarios.
+  //
+  // ONE READ FOR THE WHOLE ZONE, because `/build/roadmap` needs every objective
+  // to turn a `Blocks` edge into a name anyway: splitting it would make the page
+  // fetch three times to draw one table.
+  //
+  // This is what the `Dependencies` chip was missing. It was LIVE before migration
+  // 254 and filtered on `item.dependency || item.dependencies || item.blocks`,
+  // none of which `roadmap_okrs` has or `/progress/roadmap/:id` returns — so it
+  // emptied the table under words that read as "this venture has none".
+  roadmapGraph: (projectId) => request(`/founder/roadmap/${projectId}`),
+  addOkrDependency: (projectId, data) => request(`/founder/roadmap/${projectId}/dependencies`, { method: 'POST', body: JSON.stringify(data) }),
+  deleteOkrDependency: (id) => request(`/founder/roadmap/dependencies/${id}`, { method: 'DELETE' }),
+  saveRoadmapScenario: (projectId, data) => request(`/founder/roadmap/${projectId}/scenarios`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteRoadmapScenario: (id) => request(`/founder/roadmap/scenarios/${id}`, { method: 'DELETE' }),
   // Task #13 — MVP Scope prioritization (value-ranked feature planning).
   listMvpFeatures: (projectId) => request(`/progress/mvp-scope/${projectId}`),
   createMvpFeature: (projectId, data) => request(`/progress/mvp-scope/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
@@ -1381,6 +1477,27 @@ export const api = {
   listMetricsSnapshots: (projectId) => request(`/progress/metrics/${projectId}`),
   createMetricsSnapshot: (projectId, data) => request(`/progress/metrics/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
   deleteMetricsSnapshot: (id) => request(`/progress/metrics/${id}`, { method: 'DELETE' }),
+  // Task #194 — metric targets. `metric_targets` shipped in migration 173 and
+  // had no reader and no writer for 21 migrations; these are both ends. The
+  // plan number is per project and per metric, never per snapshot, which is
+  // why the setter is an upsert on `(project_id, metric_key)` rather than a
+  // create. Pass `target_value: null` to clear one — 0 is a real target
+  // ("get churn to zero") so it cannot double as "no target".
+  listMetricTargets: (projectId) => request(`/progress/metrics/${projectId}/targets`),
+  setMetricTarget: (projectId, data) => request(`/progress/metrics/${projectId}/targets`, { method: 'PUT', body: JSON.stringify(data) }),
+  // #176 FB5 — metric DEFINITIONS, which are not targets. The canvas's own note
+  // says why the op exists: "definitions live on this page precisely so 'net
+  // burn' means the same thing in month 14 as in month 1". They could not ride on
+  // `metric_targets` because its `target_value` is NOT NULL, so defining a metric
+  // would have forced a plan number for it. Migration 251. `definition: null`
+  // clears, for the same reason `target_value: null` does above.
+  listMetricDefinitions: (projectId) => request(`/progress/metrics/${projectId}/definitions`),
+  setMetricDefinition: (projectId, data) => request(`/progress/metrics/${projectId}/definitions`, { method: 'PUT', body: JSON.stringify(data) }),
+  // #176 FB5 — the CSV importer. `{ csv, dry_run }` in; a verdict PER LINE out,
+  // because an importer that reports OK while eleven of fourteen months went
+  // missing is worse than one that fails. `dry_run: true` runs the same parse and
+  // writes nothing, so a founder sees what a file would do first.
+  importMetricsCsv: (projectId, data) => request(`/progress/metrics/${projectId}/import-csv`, { method: 'POST', body: JSON.stringify(data) }),
   // Build queue #121 — derived KPIs (growth, LTV:CAC, payback, retention)
   // computed server-side from the snapshot series, with `unavailable[]`
   // explaining any metric that could not be computed.
@@ -1824,7 +1941,15 @@ export const api = {
     request('/admin/github', { method: 'PUT', body: JSON.stringify(body || {}) }),
   adminTestGithub: () => request('/admin/github/test', { method: 'POST' }),
   adminDeleteGithubConfig: () => request('/admin/github', { method: 'DELETE' }),
-  adminUpdateRole: (userId, role) => request(`/admin/users/${userId}/role?role=${role}`, { method: 'PATCH' }),
+  // `overrideReason`, when given, asks the server to assign a role that the
+  // binding-agreement gate would otherwise refuse. It is NOT a formality: the
+  // route requires a super admin and a reason of real length, and writes the
+  // reason into the role_changed audit line. Passing a constant here would put
+  // a meaningless sentence into that audit, so callers send what was typed.
+  adminUpdateRole: (userId, role, overrideReason) => request(`/admin/users/${userId}/role?role=${role}`, {
+    method: 'PATCH',
+    ...(overrideReason ? { body: JSON.stringify({ override_reason: overrideReason }) } : {}),
+  }),
   adminToggleActive: (userId) => request(`/admin/users/${userId}/toggle-active`, { method: 'PATCH' }),
   // Set per-user access level. `level` is 'limited' (browse-only, no signing
   // until KYC) or null (revoke). Full access is granted via kycAdminApprove.
@@ -2094,7 +2219,15 @@ export const api = {
   onboardingGetProgress: () => request('/onboarding/progress'),
   onboardingSaveProgress: (payload) => request('/onboarding/progress', { method: 'PUT', body: JSON.stringify(payload) }),
   onboardingComplete: (flow) => request('/onboarding/complete', { method: 'POST', body: JSON.stringify({ flow }) }),
-  onboardingChooseLicence: (licence) => request('/onboarding/licence', { method: 'POST', body: JSON.stringify({ licence }) }),
+  // `accepted_terms` is required by the route, not decorative: this gate is where
+  // acceptance of the Terms and Privacy Policy is collected and recorded, because
+  // it is the one screen every fresh signup passes whatever the auth method.
+  // Passing it unconditionally here would defeat that — the caller sends the
+  // checkbox's real state and the server rejects a false one.
+  onboardingChooseLicence: (licence, acceptedTerms) => request('/onboarding/licence', {
+    method: 'POST',
+    body: JSON.stringify({ licence, accepted_terms: acceptedTerms === true }),
+  }),
 
   // Task #24 — Brand & landing page generator.
   brandLogo: (payload) => request('/brand/logo', { method: 'POST', body: JSON.stringify(payload) }),
@@ -2150,6 +2283,11 @@ export const api = {
     { method: 'POST', body: JSON.stringify({ view_id: viewId, seconds }) },
   ),
   deckEngagement: (id) => request(`/decks/${id}/engagement`),
+  // Task #196 — withdraw a share link. Revoking EXPIRES the row rather than
+  // deleting it, so the impression history stays attributable to a link the
+  // founder can still see they created; idempotent, so a double-click or a
+  // second tab cannot report that a withdrawn link might still be live.
+  deckRevokeShare: (id, shareId) => request(`/decks/${id}/shares/${shareId}`, { method: 'DELETE' }),
   // Task #6 — share-link viewer onboarding + conversion endpoints.
   deckShareContext: (token) => request(`/decks/share/${encodeURIComponent(token)}/context`),
   deckShareSignup: (token, payload) => request(
@@ -2786,6 +2924,12 @@ export const api = {
   // platform view over `integrations` + `cron_run_history`.
   hqContent: () => request('/admin/content/summary'),
   hqPlatform: () => request('/admin/platform/summary'),
+  // 241 — the advisory take rate, in BASIS POINTS. 1500 is 15%. The write
+  // refuses a percentage rather than guessing: `15` is ambiguous between
+  // 0.15% and 15%, and a form that guessed wrong would be out by a hundred.
+  hqTakeRate: () => request('/admin/platform/take-rate'),
+  setHqTakeRate: (bps) =>
+    request('/admin/platform/take-rate', { method: 'PUT', body: JSON.stringify({ bps }) }),
   // HQ · Security. The overview is read-only; force re-auth signs every
   // active account out everywhere (the caller included) and needs a TOTP
   // session with a recent step-up, which lib/api.js prompts for on the 403.
@@ -2800,6 +2944,68 @@ export const api = {
     request('/admin/security/force-reauth', { method: 'POST', body: JSON.stringify({ reason }) }),
   licence: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}`),
   licenceTerritories: () => request('/admin/licences/territories'),
+  // D110 — H3 step 6. Asks GitHub to run branch-provision.yml and writes the
+  // licence_deployments row. A 409 `github_not_configured` is a STATE, not a
+  // failure: the workflow can still be run by hand, and the page renders the
+  // reason rather than an error.
+  licenceDeploy: (uid, data) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/deploy`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  // H6 Platform → Deployments: the registry rows, each with a live health read
+  // that is a separate field from the provisioning status on purpose.
+  deployments: () => request('/admin/deployments'),
+  // D110 — H3 step 5. The contracts instantiated for this licence and the
+  // master templates available, in one payload: the screen's two states are
+  // "pick one" and "here is the one you picked".
+  licenceContract: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}/contract`),
+  licenceContractCreate: (uid, templateSlug) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/contract`, {
+      method: 'POST',
+      body: JSON.stringify({ template_slug: templateSlug }),
+    }),
+  // D111 — H5's statements ledger. `draw` computes owed from what the branch
+  // reported; `update` is the HQ-entered half (paid, disputed, status), which
+  // nothing reconciles against Stripe (D.8).
+  statements: (period) =>
+    request(`/admin/statements${period ? `?period=${encodeURIComponent(period)}` : ''}`),
+  statementDraw: (licenceUid, period) =>
+    request('/admin/statements/draw', {
+      method: 'POST',
+      body: JSON.stringify({ licence_uid: licenceUid, period }),
+    }),
+  statementUpdate: (uid, data) =>
+    request(`/admin/statements/${encodeURIComponent(uid)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data || {}),
+    }),
+  // The ceiling HQ sets and the branch issues within. `issued_cents` comes
+  // back from the branch, never from HQ.
+  promoCeilings: () => request('/admin/promo-ceilings'),
+  promoCeilingSet: (licenceUid, data) =>
+    request(`/admin/promo-ceilings/${encodeURIComponent(licenceUid)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data || {}),
+    }),
+  // D112 — escalations, both directions. H1 lists what is open, H6 filters to
+  // kind=content for the localisation lane, and the PATCH is HQ's decision.
+  // `pushed` on the response says whether the branch RECEIVED it, which is a
+  // different fact from whether HQ made it.
+  escalations: (filter) => {
+    const q = new URLSearchParams();
+    if (filter?.status) q.set('status', filter.status);
+    if (filter?.kind) q.set('kind', filter.kind);
+    const s = q.toString();
+    return request(`/admin/escalations${s ? `?${s}` : ''}`);
+  },
+  escalationAnswer: (uid, data) =>
+    request(`/admin/escalations/${encodeURIComponent(uid)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data || {}),
+    }),
+  // The BRANCH side, under its own prefix. Live only on a branch Worker; on HQ
+  // these answer 403 because HQ has no HQ to escalate to.
+  branchEscalations: () => request('/branch/escalations'),
+  branchEscalate: (data) =>
+    request('/branch/escalations', { method: 'POST', body: JSON.stringify(data || {}) }),
   licenceCreate: (data) => request('/admin/licences', { method: 'POST', body: JSON.stringify(data || {}) }),
   licenceSetTerritories: (uid, countries) =>
     request(`/admin/licences/${encodeURIComponent(uid)}/territories`, { method: 'PUT', body: JSON.stringify({ countries }) }),
@@ -3072,6 +3278,11 @@ export const api = {
   trustSanctions: () => request('/trust/sanctions'),
   trustMySigningUrl: (envelope_uuid) =>
     request(`/trust/agreements/${encodeURIComponent(envelope_uuid)}/my_signing_url`),
+  // Trust Center v2's per-agreement timeline, fetched when a row is expanded.
+  // Recipients only; the worker returns 404 for anyone else and never ships
+  // the audit trail's ip / ua / signer_email.
+  trustAgreementHistory: (envelope_uuid) =>
+    request(`/trust/agreements/${encodeURIComponent(envelope_uuid)}/history`),
   trustScore: (userId) => request(`/trust/score/${encodeURIComponent(userId)}`),
   // Task #40 — batch the per-row trust-score lookups on AdminPage / DealsPage
   // into a single request. Returns { scores: [{ user_id, score, missing[],
@@ -3256,6 +3467,134 @@ export const api = {
   updateMyAdvisorBookingBilling: (id, data) =>
     request(`/advisors/me/bookings/${id}/billing`, { method: 'PATCH', body: JSON.stringify(data) }),
   getMyAdvisorEarnings: () => request('/advisors/me/earnings'),
+
+  // Migration 241 — the money model. Every figure below is what a charge WOULD
+  // take: `settlement` on each response says which of none/test/live is
+  // running, and it says 'none' until the advisory charging flag ships.
+  //
+  // NO CLIENT-SIDE ARITHMETIC. The cut, the net and every total are computed
+  // in the worker from a rate an operator sets, in integer cents, because a
+  // rounding choice made in a component is one nobody can audit — and because
+  // a line keeps the rate it was stamped with, which the browser cannot know.
+  getMyAdvisorLedger: ({ from, until } = {}) => {
+    const q = new URLSearchParams();
+    if (from) q.set('from', from);
+    if (until) q.set('until', until);
+    const s = q.toString();
+    return request(`/advisors/me/ledger${s ? `?${s}` : ''}`);
+  },
+  getMyAdvisorPayoutAccount: () => request('/advisors/me/payout-account'),
+  // PR5b — Stripe Connect onboarding. NEITHER of these moves money: the first
+  // returns a URL the advisor visits, the second reads a status back. Both
+  // work while advisory charging is off, which is how an account gets
+  // verified before the flag flips; the responses carry `settlement` so the
+  // page says which.
+  connectMyAdvisorPayoutAccount: () =>
+    request('/advisors/me/payout-account/connect', { method: 'POST' }),
+  refreshMyAdvisorPayoutAccount: () =>
+    request('/advisors/me/payout-account/refresh', { method: 'POST' }),
+  listMyAdvisorPayouts: () => request('/advisors/me/payouts'),
+  getMyAdvisorTaxSummary: (year) =>
+    request(`/advisors/me/tax-summary${year ? `?year=${encodeURIComponent(year)}` : ''}`),
+
+  // Migration 242 — the advisor's own note about one period, which is what
+  // D4's AI band needs for Accept to file anything. The key is a CALENDAR
+  // LABEL ('2026-Q3', '2026', 'all'), never a date range: two notes that
+  // overlapped on the same quarter could not both be the note for it.
+  //
+  // GET answers 200 with `note: null` when none exists — not writing one is
+  // the ordinary case, and a 404 would make the card treat it as a failure.
+  // DELETE is idempotent for the same reason: Discard must not fail on a
+  // second click.
+  getMyAdvisorPeriodNote: (key) =>
+    request(`/advisors/me/period-notes/${encodeURIComponent(key)}`),
+  saveMyAdvisorPeriodNote: (key, data) =>
+    request(`/advisors/me/period-notes/${encodeURIComponent(key)}`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  deleteMyAdvisorPeriodNote: (key) =>
+    request(`/advisors/me/period-notes/${encodeURIComponent(key)}`, { method: 'DELETE' }),
+
+  // Migration 238 — the contract behind the sessions, and whether it renewed.
+  //
+  // FOUR VERBS AND NOT ONE PATCH, and the split is the worker's, not a
+  // convenience here: `lane`, `cycles` and `outcome` are the whole input to the
+  // renewal rate, so a merge-PATCH over them would let a caller assert a
+  // renewal with no cycle behind it. `updateMyAdvisorEngagement` carries the
+  // descriptive columns; the two POSTs carry a lane move and a decision. D71.
+  listMyAdvisorEngagements: () => request('/advisors/me/engagements'),
+  createMyAdvisorEngagement: (data) =>
+    request('/advisors/me/engagements', { method: 'POST', body: JSON.stringify(data) }),
+  updateMyAdvisorEngagement: (id, data) =>
+    request(`/advisors/me/engagements/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  advanceMyAdvisorEngagement: (id, lane) =>
+    request(`/advisors/me/engagements/${id}/advance`, { method: 'POST', body: JSON.stringify({ lane }) }),
+  // `decision` is 'renewed' or 'ended'. Ending a SIGNED engagement goes through
+  // here rather than through `advance`, so the loss lands in the denominator.
+  recordMyAdvisorEngagementRenewal: (id, data) =>
+    request(`/advisors/me/engagements/${id}/renewal`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // Migration 239 — what you sent a client, and whether they opened it.
+  //
+  // THERE IS NO METHOD HERE THAT MARKS SOMETHING OPENED, and that is the point
+  // rather than an omission. `opened_at` is the client's to set; the founder
+  // side writes it through `/advisor-grants`. D72.
+  listMyAdvisorDeliverables: () => request('/advisors/me/deliverables'),
+  createMyAdvisorDeliverable: (data) =>
+    request('/advisors/me/deliverables', { method: 'POST', body: JSON.stringify(data) }),
+  updateMyAdvisorDeliverable: (id, data) =>
+    request(`/advisors/me/deliverables/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  addMyAdvisorDeliverableVersion: (id, data) =>
+    request(`/advisors/me/deliverables/${id}/versions`, { method: 'POST', body: JSON.stringify(data) }),
+  // Refuses a client with no Axal account (409) — a version nobody can open
+  // would sit in Unopened forever and bias the median.
+  sendMyAdvisorDeliverableVersion: (id, version) =>
+    request(`/advisors/me/deliverables/${id}/versions/${version}/send`, { method: 'POST' }),
+
+  // Migration 240 — the three things that decide what the calendar contains.
+  // A price here is what the advisor ASKS FOR; nothing in this group charges
+  // anyone. The take-rate, the payout account and the Stripe Connect service
+  // leg land in 241 and after, in test mode behind a production flag. D75.
+  // The OWNER's view of the calendar, not the public `/:uid/slots` one. It
+  // carries `recording_state`, `payment_state` and `blocked_reason`, which a
+  // founder browsing an advisor's slots must never see: one would tell them
+  // the payout account is unverified, another is a private note about why an
+  // hour is not for sale.
+  listMyAdvisorSlots: ({ days = 14, from } = {}) => {
+    const qs = new URLSearchParams({ days: String(days) });
+    if (from) qs.set('from', from);
+    return request(`/advisors/me/slots?${qs}`);
+  },
+  // Withdraws hours nobody has taken. A booked hour is REFUSED rather than
+  // blocked, and the response reports how many were left alone — blocking one
+  // someone holds would take their session away without telling either side.
+  blockMyAdvisorSlotRange: (data) =>
+    request('/advisors/me/slots/block', { method: 'POST', body: JSON.stringify(data) }),
+  getMyAdvisorAvailability: () => request('/advisors/me/availability'),
+  // PUT, not PATCH: one row per advisor, and the rule set is the unit edited.
+  // A partial update would let a cap and a blackout disagree about which
+  // edit won.
+  saveMyAdvisorAvailability: (data) =>
+    request('/advisors/me/availability', { method: 'PUT', body: JSON.stringify(data) }),
+  listMyAdvisorSessionTypes: () => request('/advisors/me/session-types'),
+  // Refuses a free intro that carries a price (400): free and unpriced are
+  // different facts, and a type asserting both says nothing a reader can use.
+  createMyAdvisorSessionType: (data) =>
+    request('/advisors/me/session-types', { method: 'POST', body: JSON.stringify(data) }),
+  updateMyAdvisorSessionType: (id, data) =>
+    request(`/advisors/me/session-types/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  listMyAdvisorBookingLinks: () => request('/advisors/me/booking-links'),
+  // 409 on a slug another advisor already holds — the slug resolves from the
+  // URL alone, so it is unique across the table rather than per advisor.
+  createMyAdvisorBookingLink: (data) =>
+    request('/advisors/me/booking-links', { method: 'POST', body: JSON.stringify(data) }),
+
+  // The CLIENT's half of 239 — the only writer of `opened_at` in the product.
+  // These two are read and called by the FOUNDER, not the advisor: the receipt
+  // is theirs to give, and the pair above deliberately has no equivalent. D73.
+  listReceivedDeliverables: () => request('/advisors/received/deliverables'),
+  openReceivedDeliverableVersion: (uid) =>
+    request(`/advisors/received/deliverables/${encodeURIComponent(uid)}/open`, { method: 'POST' }),
 
   // The attester's own answer. Unauthenticated on purpose — the token is the
   // credential, and an attester is usually not a user of this product.

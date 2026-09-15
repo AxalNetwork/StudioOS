@@ -903,11 +903,19 @@ function ReviewQueue() {
 
 /* ------------------------------------------------------------------ */
 
-// `embedded`: mounted on /offers/perk-deals inside a WorkspaceShell that
-// already draws the crumb, the heading and the zone pills — and which supplies
-// its own page container, so the page drops its `max-w-6xl px-4 py-6` too
-// rather than centring a second column inside the first. The tab row stays:
-// Perks / My perks / My listings are views of this page, not sibling zones.
+// `embedded`: mounted on /offers/perk-deals as the zone body, inside a
+// WorkspaceShell that has already drawn the crumb, the heading and the zone
+// pills and which supplies its own page container. It renders `PartnerConsole`
+// alone — no heading, no container of its own, and no tab row.
+//
+// The sentence that stood here was "The tab row stays: Perks / My perks / My
+// listings are views of this page, not sibling zones." They are views of this
+// PAGE; they are not views of this ZONE. PO2 is the firm's own listings —
+// "Live, expiring and expired offers with redemption against cap" — while
+// Perks is the public catalogue of what other firms honour, My perks is what
+// this reader has redeemed, and Review queue is admin moderation. An admin got
+// all four under the "Perk deals" heading. All of them keep their home at
+// `/perks`, where this page mounts unembedded with every tab it ever had.
 /**
  * `zoneActions` is the same render prop `ServiceCatalogPage` takes, for the same
  * reason: `/offers/perk-deals` mounts this page as a partner zone and wants the
@@ -931,19 +939,37 @@ export default function PerksPage({ user, embedded = false, zoneActions, zoneFil
   // when this page is mounted as that zone, so it doubles as the signal.
   const [tab, setTab] = useState(zoneActions && (isPartner || isAdmin) ? 'partner' : 'browse');
 
-  return (
-    <div className={embedded ? '' : 'mx-auto max-w-6xl px-4 py-6'}>
-      {!embedded && (
-        <>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Perks &amp; products</h1>
-          <p className="mt-1 text-sm text-gray-600">
-            Offers partners have agreed to honour for people on the platform. Distinct from the
-            services marketplace and from plan pricing.
-          </p>
-        </>
-      )}
+  // MOUNTED AS `/offers/perk-deals`, THE ZONE IS `PartnerConsole` AND NOTHING
+  // ELSE. The tab above already lands on it; what remained was the ROW, drawn
+  // unconditionally, offering three other subjects under this zone's heading.
+  //
+  // PO2 in `design/canvases/integrated/Pages · Partner Offers.dc.html` declares
+  // `filters: ['All','Live','Expiring','Expired']` and `ops: ['New perk',
+  // 'Extend','Export']` — one control row, no tabs — under the h1 "Perk deals"
+  // and the subtitle "Live, expiring and expired offers with redemption against
+  // cap". Perks is the public catalogue of what OTHER firms honour; My perks is
+  // what this reader has redeemed; Review queue is admin moderation. Three
+  // different subjects, none of them this firm's own listings, and an admin saw
+  // all four rows here.
+  //
+  // The catalogue and the redemptions keep their own route at `/perks`, where
+  // this page mounts unembedded with every tab. See the matching note in
+  // `ServiceCatalogPage`, which had the same shape and one worse symptom.
+  if (embedded) {
+    return <PartnerConsole zoneActions={zoneActions} zoneFilters={zoneFilters} role={shellRole} />;
+  }
 
-      <div className={`${embedded ? '' : 'mt-5 '}flex gap-1 border-b border-gray-200 dark:border-gray-800`}>
+  // Everything below is the standalone `/perks` page: the zone mount returned
+  // above, so nothing here needs to ask whether it is embedded.
+  return (
+    <div className="mx-auto max-w-6xl px-4 py-6">
+      <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Perks &amp; products</h1>
+      <p className="mt-1 text-sm text-gray-600">
+        Offers partners have agreed to honour for people on the platform. Distinct from the
+        services marketplace and from plan pricing.
+      </p>
+
+      <div className="mt-5 flex gap-1 border-b border-gray-200 dark:border-gray-800">
         {tabs.map(({ k, label, icon: Icon }) => (
           <button
             key={k} type="button" onClick={() => setTab(k)}
