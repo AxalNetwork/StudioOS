@@ -172,8 +172,11 @@ test('the freeze gate never authenticates — an anonymous caller still gets 401
   assert.equal(r.status, 401);
 });
 
-test('index.ts maps the refusal to 423, off the shared constant', () => {
-  const src = read('cloudflare-worker/src/index.ts');
+test('the shared table maps the refusal to 423, off the shared constant', () => {
+  // D110 — the table moved from `index.ts` to `util/authErrors.ts`, because a
+  // second copy of the same decisions was found in `mapError`. What it
+  // promises is unchanged; where it lives is not.
+  const src = read('cloudflare-worker/src/util/authErrors.ts');
   // The computed key, not a second copy of the sentence — the drift that
   // turned "Super admin required" into a 500 before it had an entry.
   assert.match(src, /\[BRANCH_SUSPENDED\]:\s*423/);

@@ -164,6 +164,7 @@ import advisorGrantRoutes from './routes/advisor_grants';
 import messagesRoutes from './routes/messages';
 import perksRoutes from './routes/perks';
 import adminLicences from './routes/admin_licences';
+import adminDeployments from './routes/admin_deployments';
 import adminSuperAdmins from './routes/admin_super_admins';
 import adminHq from './routes/admin_hq';
 import adminRevenue from './routes/admin_revenue';
@@ -261,7 +262,10 @@ import orders from './routes/orders';
 import products from './routes/products';
 import { Jobs } from './models/jobs';
 import { writeCronRunHistory } from './util/cronHistory';
-import { branchOf, assertBranchAppUrl, HQ_ONLY, HQ_AUTHORING_ONLY, BRANCH_SUSPENDED } from './util/branch';
+import { branchOf, assertBranchAppUrl } from './util/branch';
+// D110 — one table of which thrown sentence is which status, shared with
+// `routes/_t13t14t15_helpers.ts`'s `mapError`. The two used to disagree.
+import { AUTH_ERROR_STATUSES } from './util/authErrors';
 import { enqueueReembedChunks } from './util/reembedSweep';
 import { rebuildUsersRoleCheckForInvestor, rebuildUsersRoleCheckForAdvisor } from './util/usersRoleRebuild';
 import { bindingKey } from './util/schemaBootstrap';
@@ -762,6 +766,12 @@ app.route('/api/admin/exploring', adminExploring);
 app.route('/api/admin/lp-applications', adminLpApplications);
 // Wave 4 — territory licence ledger. Mount BEFORE the catch-all /api/admin so
 // /api/admin/licences/* resolves here, not in the generic admin router.
+// D110 — the Deploy step and the Platform Deployments zone. Mounted at
+// /api/admin so it can own BOTH `/licences/:uid/deploy` and `/deployments`,
+// and BEFORE the licence ledger so the deploy path resolves here rather than
+// falling into `admin_licences`'s `/:uid` catch-all. Deploying is
+// infrastructure, not a licence change: the licence is unchanged by it.
+app.route('/api/admin', adminDeployments);
 app.route('/api/admin/licences', adminLicences);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
 // catch-all for the same reason as the licence ledger above.
@@ -1045,28 +1055,6 @@ app.notFound((c) => c.json({ detail: 'Not found' }, 404));
 // Map the auth helpers' plain `throw new Error('Unauthorized'/'Forbidden'/...)`
 // to the right HTTP status. Without this, RBAC failures surface as 500s and
 // the frontend can't distinguish "log in again" from "the server crashed".
-const AUTH_ERROR_STATUSES: Record<string, 401 | 403 | 423> = {
-  Unauthorized: 401,
-  'Admin required': 403,
-  // Migration 199. Without an entry here the throw falls through to the
-  // generic 500 below, so a subsidiary admin trying to franchise would see a
-  // server error instead of a refusal — the gate would work and say nothing.
-  'Super admin required': 403,
-  // D106 — branch mode's two refusals, keyed off the constants they are
-  // thrown from (util/branch.ts) rather than off a second copy of the
-  // sentence. The failure the entry above records is a message and a map key
-  // drifting apart; a shared constant is the shape where they cannot.
-  [HQ_ONLY]: 403,
-  [HQ_AUTHORING_ONLY]: 403,
-  // D107 — 423 Locked, and the only entry in this map that is not 401/403.
-  // A frozen queue is not a permission failure: the branch admin may take
-  // this decision, and HQ has stopped them from taking it today. The shell
-  // renders the two differently, so the status has to tell them apart.
-  [BRANCH_SUSPENDED]: 423,
-  Forbidden: 403,
-  'KYC required': 403,
-  'TOTP required': 403,
-};
 
 app.onError((err: any, c) => {
   const msg = (err?.message ?? '') as string;

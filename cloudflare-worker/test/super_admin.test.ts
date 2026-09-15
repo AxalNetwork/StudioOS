@@ -54,12 +54,25 @@ test('the gate is layered on requireAdmin, so it can only ever narrow', () => {
   assert.match(fn.slice(0, 400), /Super admin required/);
 });
 
-test("the refusal is a 403, not a 500", () => {
+test("the refusal is a 403 — not a 500, and not a 400", () => {
   // AUTH_ERROR_STATUSES maps thrown messages to statuses; anything missing
   // falls through to the generic 500. A gate that works and reports a server
   // error is a gate nobody can act on.
-  const src = read('cloudflare-worker/src/index.ts');
+  const src = read('cloudflare-worker/src/util/authErrors.ts');
   assert.match(src, /'Super admin required': 403/);
+
+  // D110 — AND THE OTHER READER, which is the one this console actually goes
+  // through. Every route in `admin_licences.ts` catches its own throws with
+  // `mapError`, so `app.onError` never sees them; `mapError` had its own list
+  // of sentences, that list did not include this one, and the whole franchise
+  // console answered a permission refusal with **400 Bad Request**. There is
+  // one table now and both readers index it.
+  const helpers = read('cloudflare-worker/src/routes/_t13t14t15_helpers.ts');
+  assert.match(helpers, /AUTH_ERROR_STATUSES\[msg\] \?\? 400/);
+  assert.ok(
+    !/msg === 'Forbidden' \|\| msg === 'Admin required'/.test(helpers),
+    'mapError must not carry a second list of which sentence is which status',
+  );
 });
 
 test('every route on the franchise console is super-admin only', () => {

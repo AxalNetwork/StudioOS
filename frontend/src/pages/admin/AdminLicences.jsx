@@ -26,15 +26,23 @@
 //      its countries; releasing them is a termination. The status chip says so
 //      explicitly, because the intuition runs the other way.
 //
-// Not reproduced from the design: the EU choropleth map, the token P&L and the
-// per-subsidiary health grid. The map is presentation of the same data the
-// territory list already carries; the other two need account attribution that
-// does not exist. A map is worth adding; inventing the numbers under it is not.
+// D110 — THE COVERAGE MAP IS DRAWN, AS A 27-CELL GRID. The refusal that stood
+// here said a map was "presentation of the same data the territory list
+// already carries", which was true of a map of what is HELD and missed what
+// the canvas asks for: the white space. A list of holders cannot show which
+// countries are still available, and that is the question H2 exists to answer.
+// A grid rather than a choropleth because the shape of a country carries no
+// information here and a projection is a large dependency for none.
+//
+// Still not reproduced: the token P&L and the per-subsidiary health grid. Both
+// need account attribution that does not exist, and inventing the numbers
+// under them is the thing this file refuses.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Loader2, AlertCircle, Check, X, Globe, Users, FileText, Ban, RotateCw,
 } from 'lucide-react';
 import { api } from '../../lib/api';
+import { coverageCells, renewalPipeline } from '../../lib/licenceCoverage';
 import { reportError } from '../../lib/log';
 
 const SEAT_TYPES = [
@@ -52,7 +60,51 @@ const STATUS_TONE = {
   terminated: 'bg-gray-100 text-gray-500 border-gray-200',
 };
 
-const STEPS = ['Entity', 'Territory', 'Seats', 'Terms', 'Activate'];
+// The canvas's six-step issue flow (D110). It was five, ending in "Activate",
+// and the Activate BUTTON has always sat above these tabs rather than inside
+// them — so the fifth tab was really the history. Steps 5 and 6 are now the
+// two the canvas draws, and the record keeps its own unnumbered tab: it is
+// provenance, not a step anybody performs.
+const STEPS = ['Entity', 'Territory', 'Seats', 'Terms', 'Contract', 'Deploy'];
+const HISTORY_STEP = STEPS.length + 1;
+
+// Residency, exactly as Cloudflare offers it (A.4, D.1). `eu` is the only
+// guarantee on D1; a hint is a hint, and there is no in-country option outside
+// the EU — which the step says rather than leaving someone to discover it.
+const D1_JURISDICTIONS = [
+  { v: 'eu', label: 'EU — guaranteed' },
+  { v: 'none', label: 'No jurisdiction — region-hinted only' },
+];
+const LOCATION_HINTS = [
+  { v: 'none', label: 'No hint' },
+  { v: 'weur', label: 'Western Europe' },
+  { v: 'eeur', label: 'Eastern Europe' },
+  { v: 'enam', label: 'Eastern North America' },
+  { v: 'wnam', label: 'Western North America' },
+  { v: 'apac', label: 'Asia-Pacific' },
+  { v: 'oc', label: 'Oceania' },
+];
+const DO_JURISDICTIONS = [
+  { v: 'none', label: 'No jurisdiction' },
+  { v: 'eu', label: 'EU' },
+  { v: 'us', label: 'US' },
+];
+
+// What provisioning reports, in the order it happens (migration 258). Kept as
+// a list rather than inferred from the row so a deployment sitting at
+// `schema_applied` shows the four steps still ahead of it.
+const DEPLOY_TIMELINE = [
+  ['requested', 'Requested'],
+  ['database_created', 'Database created'],
+  ['schema_applied', 'Schema applied'],
+  ['secrets_present', 'Secrets present'],
+  ['principal_seeded', 'Principal seeded'],
+  ['worker_live', 'Worker live'],
+  ['hostname_active', 'Hostname active'],
+  ['linked', 'Linked to HQ'],
+];
+
+const BRANCH_CODE_RE = /^[a-z][a-z0-9-]{1,15}$/;
 
 const n0 = (n) => Number(n || 0).toLocaleString();
 
@@ -311,6 +363,297 @@ function TermsEditor({ licence, onSaved }) {
 }
 
 /* ------------------------------------------------------------------ *
+ * H3 step 5 — Contract                                                 *
+ * ------------------------------------------------------------------ */
+
+/**
+ * The licence agreement, instantiated from a master template at a version.
+ *
+ * TWO HONESTY STATES THIS STEP MUST KEEP. The library may hold no templates at
+ * all, in which case there is nothing to instantiate and the step says so
+ * rather than showing an empty picker; and a template may ask for a merge
+ * field the licence cannot fill, in which case the placeholder is LEFT VISIBLE
+ * and listed. A contract with a silently blanked clause reads as finished.
+ */
+function ContractStep({ licence, onSaved }) {
+  const [data, setData] = useState(null);
+  const [slug, setSlug] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const load = useCallback(() => {
+    api.licenceContract(licence.uid)
+      .then((d) => { setData(d); setSlug((s) => s || d.templates?.[0]?.slug || ''); })
+      .catch((e) => { reportError('licence_contract_load_failed', e); setData(false); });
+  }, [licence.uid]);
+  useEffect(load, [load]);
+
+  async function instantiate() {
+    setBusy(true); setErr(null);
+    try { await api.licenceContractCreate(licence.uid, slug); load(); onSaved?.(); }
+    catch (e) { reportError('licence_contract_create_failed', e); setErr(e?.message || 'Could not instantiate.'); }
+    finally { setBusy(false); }
+  }
+
+  if (data === false) return <p className="text-sm text-red-600">Could not load this licence&apos;s contracts.</p>;
+  if (!data) return <p className="text-sm text-gray-500">Loading…</p>;
+
+  const current = (data.contracts || []).find((k) => !k.superseded_at) || null;
+  const superseded = (data.contracts || []).filter((k) => k.superseded_at);
+
+  return (
+    <div data-testid="licence-contract-step" className="space-y-4">
+      {!data.contracts_available && (
+        <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          {data.contracts_reason}
+        </p>
+      )}
+
+      {current ? (
+        <div className="rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+          <div className="flex flex-wrap items-center gap-2">
+            <FileText size={14} className="text-gray-500" />
+            <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{current.template_title}</span>
+            <Chip tone="bg-gray-100 text-gray-600 border-gray-200">v{current.template_version}</Chip>
+            <Chip tone={current.status === 'signed'
+              ? 'bg-green-50 text-green-700 border-green-200'
+              : 'bg-indigo-50 text-indigo-700 border-indigo-200'}>{current.status}</Chip>
+          </div>
+          <div className="mt-1 text-xs text-gray-500">
+            Instantiated {String(current.created_at || '').slice(0, 10)} from{' '}
+            <code>{current.template_slug}</code>
+          </div>
+          {current.unfilled_fields?.length > 0 && (
+            <div data-testid="contract-unfilled" className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+              This template asks for {current.unfilled_fields.length}{' '}
+              {current.unfilled_fields.length === 1 ? 'value' : 'values'} the licence does not carry:{' '}
+              {current.unfilled_fields.join(', ')}. They are left as placeholders in the text rather
+              than blanked — a contract with an empty clause reads as finished.
+            </div>
+          )}
+          <p className="mt-2 text-[11px] text-gray-500">
+            Unsigned. A pending signature does not block activation; a territory conflict does.
+          </p>
+        </div>
+      ) : (
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          No contract has been instantiated for this licence.
+        </p>
+      )}
+
+      {data.templates_reason ? (
+        <p className="text-sm text-gray-600 dark:text-gray-400">{data.templates_reason}</p>
+      ) : (
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="text-xs text-gray-600 dark:text-gray-400">
+            <span className="block">Master template</span>
+            <select
+              value={slug} onChange={(e) => setSlug(e.target.value)}
+              className="mt-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900"
+            >
+              {data.templates.map((t) => (
+                <option key={t.slug} value={t.slug}>{t.title} · v{t.version}</option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button" disabled={busy || !slug || !data.contracts_available} onClick={instantiate}
+            className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {current ? 'Re-issue at current version' : 'Instantiate'}
+          </button>
+        </div>
+      )}
+      {err && <p className="text-sm text-red-600">{err}</p>}
+
+      {superseded.length > 0 && (
+        <div className="text-xs text-gray-500">
+          {superseded.length} superseded {superseded.length === 1 ? 'contract' : 'contracts'} kept:
+          a re-issue supersedes, it never overwrites.
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * H3 step 6 — Deploy                                                   *
+ * ------------------------------------------------------------------ */
+
+/**
+ * Ask for a branch: residency, the hostname, what gets created, and where the
+ * request got to.
+ *
+ * THE CREDENTIAL IS RENDERED AS A REASON, NOT AS AN ERROR. `dispatch_available`
+ * comes back on the registry payload precisely so this button can be disabled
+ * with the sentence rather than pressed into a 409 (D110, task #192). The
+ * workflow still runs by hand from the Actions tab, and the step says so.
+ */
+function DeployStep({ licence }) {
+  const [reg, setReg] = useState(null);
+  const [code, setCode] = useState('');
+  const [d1, setD1] = useState('eu');
+  const [hint, setHint] = useState('none');
+  const [doJur, setDoJur] = useState('none');
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const load = useCallback(() => {
+    api.deployments()
+      .then(setReg)
+      .catch((e) => { reportError('deployments_load_failed', e); setReg(false); });
+  }, []);
+  useEffect(load, [load]);
+
+  if (reg === false) return <p className="text-sm text-red-600">Could not read the deployment registry.</p>;
+  if (!reg) return <p className="text-sm text-gray-500">Loading…</p>;
+
+  const mine = (reg.deployments || []).find((d) => d.licence_uid === licence.uid) || null;
+  const codeOk = BRANCH_CODE_RE.test(code);
+
+  async function deploy() {
+    setBusy(true); setErr(null);
+    try {
+      await api.licenceDeploy(licence.uid, {
+        code, d1_jurisdiction: d1, location_hint: hint, do_jurisdiction: doJur, principal_email: email,
+      });
+      load();
+    } catch (e) {
+      reportError('licence_deploy_failed', e);
+      setErr(e?.message || 'The deploy request was refused.');
+    } finally { setBusy(false); }
+  }
+
+  if (mine) {
+    const at = DEPLOY_TIMELINE.findIndex(([k]) => k === mine.status);
+    return (
+      <div data-testid="licence-deploy-step" className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Globe size={14} className="text-gray-500" />
+          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{mine.hostname}</span>
+          <Chip tone={mine.status === 'failed'
+            ? 'bg-red-50 text-red-700 border-red-200'
+            : 'bg-indigo-50 text-indigo-700 border-indigo-200'}>{mine.status.replace(/_/g, ' ')}</Chip>
+          {/* The live read is its own chip, never folded into the status: a
+              deployment that reached `worker_live` and is unreachable right
+              now has not regressed to `requested`. */}
+          <Chip tone={mine.live_state === 'ok'
+            ? 'bg-green-50 text-green-700 border-green-200'
+            : 'bg-gray-100 text-gray-600 border-gray-200'}>{mine.live_state.replace(/_/g, ' ')}</Chip>
+        </div>
+        {mine.status_note && <p className="text-sm text-red-700">{mine.status_note}</p>}
+        {mine.live_state !== 'ok' && mine.live_reason && (
+          <p className="text-xs text-gray-600 dark:text-gray-400">{mine.live_reason}</p>
+        )}
+        <ol data-testid="deploy-timeline" className="space-y-1 text-sm">
+          {DEPLOY_TIMELINE.map(([key, label], i) => {
+            const done = at >= 0 && i <= at;
+            return (
+              <li key={key} className="flex items-center gap-2">
+                {done
+                  ? <Check size={13} className="shrink-0 text-green-600" />
+                  : <span className="inline-block h-[13px] w-[13px] shrink-0 rounded-full border border-gray-300 dark:border-gray-700" />}
+                <span className={done ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500'}>{label}</span>
+              </li>
+            );
+          })}
+        </ol>
+        <p className="text-[11px] text-gray-500">
+          Residency requested: {mine.residency_requested || 'none'}. Granted:{' '}
+          {mine.residency_granted || 'not yet reported by provisioning'}.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div data-testid="licence-deploy-step" className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="text-xs text-gray-600 dark:text-gray-400">
+          <span className="block">Branch code</span>
+          <input
+            value={code} onChange={(e) => setCode(e.target.value)} placeholder="fr"
+            className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900"
+          />
+          <span className="mt-1 block text-[11px] text-gray-500">
+            Lower case, 2–16 characters, starting with a letter. It names the Worker, the database
+            and the hostname, so it is refused rather than corrected.
+          </span>
+        </label>
+        <div className="text-xs text-gray-600 dark:text-gray-400">
+          <span className="block">Hostname</span>
+          <div className="mt-1 rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-sm text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
+            {codeOk ? `${code}.axal.vc` : '—'}
+          </div>
+        </div>
+        <label className="text-xs text-gray-600 dark:text-gray-400">
+          <span className="block">Database residency</span>
+          <select value={d1} onChange={(e) => setD1(e.target.value)}
+            className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900">
+            {D1_JURISDICTIONS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+          </select>
+        </label>
+        <label className="text-xs text-gray-600 dark:text-gray-400">
+          <span className="block">Location hint</span>
+          <select value={hint} onChange={(e) => setHint(e.target.value)}
+            className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900">
+            {LOCATION_HINTS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+          </select>
+        </label>
+        <label className="text-xs text-gray-600 dark:text-gray-400">
+          <span className="block">Realtime residency</span>
+          <select value={doJur} onChange={(e) => setDoJur(e.target.value)}
+            className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900">
+            {DO_JURISDICTIONS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+          </select>
+        </label>
+        <label className="text-xs text-gray-600 dark:text-gray-400">
+          <span className="block">Licence principal&apos;s email</span>
+          <input
+            value={email} onChange={(e) => setEmail(e.target.value)} placeholder="principal@example.com"
+            className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900"
+          />
+          <span className="mt-1 block text-[11px] text-gray-500">
+            Seeded as the branch&apos;s only account, with no password — they sign in by magic link.
+            Leave empty and the branch is provisioned with nobody able to sign in to it.
+          </span>
+        </label>
+      </div>
+
+      <p data-testid="residency-caveat" className="rounded-md border border-gray-200 p-3 text-xs text-gray-600 dark:border-gray-800 dark:text-gray-400">
+        Cloudflare guarantees EU residency and nothing else. A hint keeps the primary near a region;
+        it is not a guarantee, and in-country storage outside the EU is not available on this
+        platform — a branch that needs it is a different data tier.
+      </p>
+
+      <div className="rounded-lg border border-gray-200 p-3 text-xs text-gray-600 dark:border-gray-800 dark:text-gray-400">
+        <div className="font-medium text-gray-900 dark:text-gray-100">What provisioning will create</div>
+        <ul className="mt-1 space-y-0.5">
+          <li>Worker <code>studioos-{codeOk ? code : '<code>'}</code> at <code>{codeOk ? `${code}.axal.vc` : '<code>.axal.vc'}</code></li>
+          <li>D1 database, two KV namespaces, three R2 buckets, a queue and its dead-letter queue</li>
+          <li>A Vectorize index, the schema from the baseline, and the Worker secrets</li>
+          <li>A pull request giving HQ its service binding — HQ reaches the branch on its next deploy</li>
+        </ul>
+      </div>
+
+      {!reg.dispatch_available && (
+        <p data-testid="deploy-credential-reason" className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          {reg.dispatch_reason}
+        </p>
+      )}
+      <button
+        type="button" disabled={busy || !codeOk || !reg.dispatch_available} onClick={deploy}
+        className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+      >
+        Deploy this branch
+      </button>
+      {err && <p className="text-sm text-red-600">{err}</p>}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
  * Detail                                                              *
  * ------------------------------------------------------------------ */
 
@@ -440,6 +783,16 @@ function Detail({ uid, held, onChanged }) {
             {i + 1}. {label}
           </button>
         ))}
+        {/* Unnumbered, because it is not a step of the issue flow — it is the
+            append-only record of what the flow did. */}
+        <button
+          type="button" onClick={() => setStep(HISTORY_STEP)}
+          className={`-mb-px border-b-2 px-3 py-2 text-xs ${
+            step === HISTORY_STEP ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          History
+        </button>
       </div>
       <div className="mt-4">
         {step === 1 && (
@@ -454,7 +807,9 @@ function Detail({ uid, held, onChanged }) {
         {step === 2 && <TerritoryEditor licence={d} held={held} onSaved={refresh} />}
         {step === 3 && <SeatEditor licence={d} onSaved={refresh} />}
         {step === 4 && <TermsEditor licence={d} onSaved={refresh} />}
-        {step === 5 && (
+        {step === 5 && <ContractStep licence={d} onSaved={refresh} />}
+        {step === 6 && <DeployStep licence={d} />}
+        {step === HISTORY_STEP && (
           <div>
             <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">History</h3>
             {(d.events || []).length === 0 ? (
@@ -482,6 +837,91 @@ function Detail({ uid, held, onChanged }) {
 }
 
 /* ------------------------------------------------------------------ */
+
+/**
+ * H2 — EU coverage as 27 cells, and the renewal pipeline beside it.
+ *
+ * THE THREE CELL STATES ARE NOT THREE SHADES OF ONE IDEA. Held-active and
+ * held-suspended are both TAKEN — a suspended licence keeps its territory, and
+ * a grid that freed those cells would invite the double-issue the ledger's
+ * UNIQUE index exists to prevent. Free is the third, and it is the reason the
+ * grid is 27 cells rather than a list of holders.
+ */
+function Coverage({ items }) {
+  const { cells, held_active: active, held_suspended: suspended, free, outside_eu: outside } =
+    useMemo(() => coverageCells(items), [items]);
+  const pipeline = useMemo(() => renewalPipeline(items), [items]);
+
+  const tone = {
+    held_active: 'border-green-300 bg-green-50 text-green-900 dark:border-green-900 dark:bg-green-950/40 dark:text-green-200',
+    held_suspended: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200',
+    free: 'border-gray-200 bg-white text-gray-400 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-500',
+  };
+
+  return (
+    <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]" data-testid="hq-coverage">
+      <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">EU territory coverage</h2>
+          <span className="text-[11.5px] text-gray-500">
+            {active} held · {suspended} suspended · {free} white space
+          </span>
+        </div>
+        <div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(64px,1fr))] gap-1.5">
+          {cells.map((c) => (
+            <div
+              key={c.code}
+              title={c.licence ? `${c.name} — ${c.licence.licence_ref} (${c.licence.status})` : `${c.name} — available`}
+              data-testid={`coverage-${c.code}`}
+              data-state={c.state}
+              className={`rounded-md border px-1.5 py-1 text-center ${tone[c.state]}`}
+            >
+              <div className="text-[12px] font-bold tabular-nums">{c.code}</div>
+              <div className="truncate text-[9.5px] leading-tight">
+                {c.licence ? c.licence.licence_ref : '—'}
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2.5 text-[11.5px] leading-relaxed text-gray-500">
+          A suspended licence still holds its countries — releasing them is a termination, not a
+          suspension — so those cells are taken, not free.
+          {outside.length > 0 && (
+            <> Outside the EU and not on this grid: <span className="font-medium">{outside.join(' ')}</span>.</>
+          )}
+        </p>
+      </div>
+
+      <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Renewal pipeline</h2>
+        {pipeline.length === 0 ? (
+          <p className="mt-2 text-[12.5px] text-gray-500">
+            No licence on the ledger carries a renewal date yet.
+          </p>
+        ) : (
+          <ul className="mt-2 divide-y divide-gray-100 dark:divide-gray-800" data-testid="hq-renewal-pipeline">
+            {pipeline.map((p) => (
+              <li key={p.uid} className="flex items-baseline justify-between gap-3 py-1.5 text-[12.5px]">
+                <span className="min-w-0 truncate">
+                  <span className="font-medium">{p.licence_ref}</span> · {p.brand_name}
+                </span>
+                <span className={`shrink-0 tabular-nums ${
+                  p.days === null ? 'text-gray-400'
+                    : p.days < 0 ? 'font-semibold text-rose-700 dark:text-rose-300'
+                      : p.days <= 60 ? 'text-amber-700 dark:text-amber-300' : 'text-gray-500'
+                }`}>
+                  {/* An overdue renewal is kept and marked, never dropped for
+                      sorting below zero — it is the most important row here. */}
+                  {p.days === null ? p.renews_on : p.days < 0 ? `${-p.days}d overdue` : `${p.days}d`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function AdminLicences() {
   const [data, setData] = useState(null);
@@ -535,6 +975,8 @@ export default function AdminLicences() {
           {creating ? 'Cancel' : 'New licence'}
         </button>
       </div>
+
+      <Coverage items={items} />
 
       {data.seats_used_available === false && (
         <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 dark:border-gray-800 dark:text-gray-300">

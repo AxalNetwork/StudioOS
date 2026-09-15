@@ -72,6 +72,17 @@ export default function PlatformPage() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  // D110 — Deployments is its own request: it fans out to every branch Worker
+  // for a live health read, which is slower and fails differently from the
+  // platform summary. Folding it into `hqPlatform` would make an unreachable
+  // branch able to delay or empty the keys-and-jobs half of this page.
+  const [deps, setDeps] = useState(null);
+  const loadDeps = useCallback(() => {
+    setDeps(null);
+    api.deployments().then(setDeps, (e) => { reportError('hq-deployments', e); setDeps(UNAVAILABLE); });
+  }, []);
+  useEffect(() => { loadDeps(); }, [loadDeps]);
+
   const ready = data && data !== UNAVAILABLE;
   const integrations = ready ? data.integrations : null;
   const jobs = ready ? data.jobs : null;
@@ -186,6 +197,79 @@ export default function PlatformPage() {
                 )
               ) : (
                 <Absent reason={jobs?.reason || 'The platform summary could not be read.'} />
+              )}
+            </Zone>
+
+            <Zone title="Deployments" sub="one row per branch: what HQ provisioned, and what answers now">
+              {deps === UNAVAILABLE ? (
+                <Unreadable
+                  what="The deployments list"
+                  claim="This is not a claim that no branch is deployed."
+                  onRetry={loadDeps}
+                />
+              ) : deps === null ? (
+                <p className="text-[12.5px] text-axal-muted">Reading every branch…</p>
+              ) : deps.registry_available === false ? (
+                <Absent reason={deps.registry_reason} />
+              ) : (deps.deployments || []).length === 0 ? (
+                <p className="text-[12.5px] leading-relaxed text-axal-muted">
+                  No branch has been provisioned. A licence gains a deployment from the Deploy step of
+                  the issue flow, which runs <code>branch-provision.yml</code>. This is an empty
+                  registry, not an unreadable one.
+                </p>
+              ) : (
+                <ul className="divide-y divide-axal-hairline" data-testid="hq-deployments">
+                  {deps.deployments.map((d) => (
+                    <li key={d.code} className="py-2">
+                      <div className="flex items-baseline justify-between gap-3 text-[12.5px]">
+                        <span className="min-w-0 truncate">
+                          <span className="font-semibold">{d.code}</span>
+                          <span className="text-axal-muted"> · {d.hostname}</span>
+                        </span>
+                        {/* THE TWO STATES ARE SHOWN SEPARATELY AND NEVER
+                            MERGED. `status` is how far provisioning got;
+                            `live_state` is whether it answered a moment ago. A
+                            branch that reached worker_live last week and is
+                            unreachable now has not regressed to requested, and
+                            one number could not say both. */}
+                        <span className="shrink-0 space-x-1.5">
+                          <span className="rounded-full bg-axal-ground px-2 py-0.5 text-[11px] text-axal-muted">
+                            {String(d.status || '').replace(/_/g, ' ')}
+                          </span>
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                            d.live_state === 'ok'
+                              ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300'
+                              : d.live_state === 'not_deployed'
+                                ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+                                : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                          }`}>
+                            {d.live_state === 'ok' ? 'answering'
+                              : d.live_state === 'not_deployed' ? 'no binding yet' : 'unreadable'}
+                          </span>
+                        </span>
+                      </div>
+                      {d.live_state !== 'ok' && d.live_reason && (
+                        <p className="mt-0.5 text-[11.5px] leading-snug text-axal-faint">{d.live_reason}</p>
+                      )}
+                      <div className="mt-0.5 text-[11px] text-axal-faint">
+                        {d.d1_name}
+                        {d.d1_jurisdiction ? ` · ${d.d1_jurisdiction.toUpperCase()} resident` : ''}
+                        {!d.d1_jurisdiction && d.location_hint ? ` · hinted ${d.location_hint.toUpperCase()} (not guaranteed)` : ''}
+                        {d.status_note ? ` · ${d.status_note}` : ''}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {deps && deps !== UNAVAILABLE && deps.dispatch_available === false && (
+                <p className="mt-2.5 text-[11.5px] leading-relaxed text-axal-muted">
+                  {deps.dispatch_reason}
+                </p>
+              )}
+              {deps && deps !== UNAVAILABLE && deps.coverage && !deps.coverage.complete && (
+                <p className="mt-1.5 text-[11.5px] text-axal-faint">
+                  {deps.coverage.answered} of {deps.coverage.total} branches answered.
+                </p>
               )}
             </Zone>
 
