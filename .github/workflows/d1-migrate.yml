@@ -14,6 +14,14 @@ name: D1 migrations
 #                       from the live schema, so `apply` runs them for real
 #   apply               apply every pending file, in order, recording each
 #
+# WHICH DATABASE. Empty `branch` means production (`studioos-db`), which is
+# what every mode above was written for. A branch code migrates that
+# subsidiary's database instead: the runner's `--branch <code>` target, whose
+# config this workflow generates first because it is gitignored build output.
+# `adopt-and-baseline` is refused for a branch — a branch database is built by
+# `branch-provision.yml` from the baseline, so there is no legacy ledger to
+# adopt and nothing to baseline.
+#
 # Required repository secrets:
 #   CLOUDFLARE_API_TOKEN  — D1:Edit (plus Workers Scripts:Edit for the deploy
 #                           workflow, which now runs this same step first)
@@ -32,6 +40,11 @@ on:
           - adopt-and-baseline
           - verify-marked
           - apply
+      branch:
+        description: 'Branch code to migrate instead of production (e.g. fr). Leave empty for production.'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -39,17 +52,20 @@ permissions:
 # One migration run at a time. The deploy workflow's own migration step is in
 # its own group; do not dispatch this while a deploy is in flight.
 concurrency:
-  group: d1-migrate
+  group: d1-migrate-${{ inputs.branch || 'production' }}
   cancel-in-progress: false
 
 jobs:
   migrate:
-    name: ${{ inputs.mode }} against studioos-db
+    name: ${{ inputs.mode }} against ${{ inputs.branch && format('studioos-{0}', inputs.branch) || 'studioos-db' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # One string every step passes to the runner, so a branch run cannot
+      # migrate production because one step was left un-edited.
+      TARGET: ${{ inputs.branch && format('--branch {0}', inputs.branch) || '--remote' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -74,21 +90,34 @@ jobs:
       - name: Install Worker dependencies
         run: npm ci --prefix cloudflare-worker
 
+      # Gitignored build output, so it is never in the checkout. The runner
+      # refuses --branch without it rather than falling back to HQ's config.
+      - name: Generate the branch Worker config
+        if: inputs.branch != ''
+        run: node scripts/gen-branch-wrangler.mjs "${{ inputs.branch }}"
+
+      - name: A branch database is never baselined
+        if: inputs.branch != '' && inputs.mode == 'adopt-and-baseline'
+        run: |
+          echo "::error::adopt-and-baseline is production-only. A branch database is built from"
+          echo "::error::the baseline by branch-provision.yml; it has no legacy ledger to adopt."
+          exit 1
+
       - name: Plan before (read-only)
-        run: node scripts/migrate-d1.mjs --remote --dry-run
+        run: node scripts/migrate-d1.mjs $TARGET --dry-run
 
       - name: Adopt the legacy ledger and baseline
         if: inputs.mode == 'adopt-and-baseline'
-        run: node scripts/migrate-d1.mjs --remote --adopt-legacy-ledger --baseline
+        run: node scripts/migrate-d1.mjs $TARGET --adopt-legacy-ledger --baseline
 
       - name: Verify marked rows against the live schema
         if: inputs.mode == 'verify-marked'
-        run: node scripts/migrate-d1.mjs --remote --verify-marked
+        run: node scripts/migrate-d1.mjs $TARGET --verify-marked
 
       - name: Apply pending migrations
         if: inputs.mode == 'apply'
-        run: node scripts/migrate-d1.mjs --remote
+        run: node scripts/migrate-d1.mjs $TARGET
 
       - name: Plan after (read-only)
         if: inputs.mode != 'dry-run'
-        run: node scripts/migrate-d1.mjs --remote --dry-run
+        run: node scripts/migrate-d1.mjs $TARGET --dry-run

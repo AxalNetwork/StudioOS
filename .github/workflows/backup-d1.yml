@@ -3,7 +3,9 @@ name: Daily D1 Backup → R2
 # Task #5 (IE) — Daily backup cron.
 # Exports the production D1 database via `wrangler d1 export`, uploads
 # the resulting .sql file to R2 bucket `studioos-backups` under key
-# `d1/backup-YYYY-MM-DD.sql`, and writes a heartbeat marker so
+# `d1/<database>/backup-YYYY-MM-DD.sql` (flat `d1/backup-…` before
+# 2026-09-15; both shapes are read by scripts/dr-drill.sh), and writes a
+# heartbeat marker so
 # /api/admin/backup-status can show "last successful backup at …".
 #
 # Schedule: 02:10 UTC daily. RPO commitment: 24 hours.
@@ -83,7 +85,12 @@ jobs:
         run: |
           DATE=$(date -u +%F)
           echo "filename=backup-${DATE}.sql" >> "$GITHUB_OUTPUT"
-          echo "key=d1/backup-${DATE}.sql"   >> "$GITHUB_OUTPUT"
+          # KEYED BY DATABASE. `target_db` has been an input since this
+          # workflow was written, but the key was not: running it for a
+          # second database wrote over the first one's backup for that
+          # day, and the heartbeat would still read "last successful
+          # backup at …". One prefix per database keeps them apart.
+          echo "key=d1/${TARGET_DB}/backup-${DATE}.sql" >> "$GITHUB_OUTPUT"
 
       - name: Export D1 → SQL
         env:
