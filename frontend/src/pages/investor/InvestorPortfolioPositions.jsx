@@ -169,7 +169,14 @@ function PositionsTable({ rows, healthUnavailable, updatesUnavailable, filter })
  * LP. A row whose basis is NULL predates the column's default and renders as
  * unrecorded — reporting it as a GP estimate would invent the provenance.
  */
-function MarkHistory({ state, onClose }) {
+// EXPORTED FOR THE TEST, and that is the whole reason. The page loads in a
+// `useEffect`, and `renderToStaticMarkup` never runs one — so a render of the
+// page itself emits the skeleton and nothing else, and these four states are
+// unreachable from the top. This component is pure and prop-driven (no hooks,
+// no `api`), so handing it a state renders the real markup. The alternative
+// was asserting the four states as source text, which cannot tell a rendered
+// row from a string that merely appears in the file.
+export function MarkHistory({ state, onClose }) {
   if (state === null) return null;
   return (
     <section className="i4-card ip1-marks" data-testid="ip1-mark-history">
