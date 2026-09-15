@@ -2819,7 +2819,6 @@ class AppErrorBoundary extends React.Component {
       // beacon carries a redacted entry, and the console line adds
       // `info.componentStack`, which toEntry has no field for.
       reportError('AppErrorBoundary:top-level-crash', error);
-      // eslint-disable-next-line no-console
       console.error('[AppErrorBoundary] top-level crash:', error, info?.componentStack);
     } catch { /* ignore */ }
   }

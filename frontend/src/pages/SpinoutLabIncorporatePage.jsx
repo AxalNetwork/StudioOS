@@ -32,6 +32,7 @@ import { pickLabProject } from './SpinoutLabStartupPage';
 import AxalCheckout from '../components/AxalCheckout';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
+import { reportError } from '../lib/log';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -189,7 +190,7 @@ export default function SpinoutLabIncorporatePage() {
         }
         setStatus('ready');
       } catch (e) {
-        console.error('[spinout-inc]', e);
+        reportError('spinout-inc:load', e);
         if (!dead) setStatus('error');
       }
     })();
@@ -214,7 +215,7 @@ export default function SpinoutLabIncorporatePage() {
         setSaveState('saved'); setSaveError('');
       } catch (e) {
         if (seq !== saveSeqRef.current) return;
-        console.error('[spinout-inc:save]', e);
+        reportError('spinout-inc:save', e);
         const detail = e?.data?.detail?.error || e?.data?.error || e?.message || 'Could not save.';
         setSaveState('error');
         setSaveError(typeof detail === 'string' ? detail : 'Could not save.');
@@ -313,7 +314,7 @@ export default function SpinoutLabIncorporatePage() {
         await onPaid(res?.incorporation_id);
       }
     } catch (e) {
-      console.error('[spinout-inc:pay]', e);
+      reportError('spinout-inc:pay', e);
       const detail = e?.data?.detail?.error || e?.data?.detail || e?.data?.error || e?.message || 'Payment could not be started.';
       setPayError(typeof detail === 'string' ? detail : 'Payment could not be started.');
       setPayBusy(false);

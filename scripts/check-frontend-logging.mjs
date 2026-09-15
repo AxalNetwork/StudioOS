@@ -29,6 +29,15 @@
  *      `auth:[redacted]` — `redact` strips `key:value` for a list of sensitive
  *      key names — and support would lose the one string they search by.
  *
+ *   4. NO REPORT AT ALL. 36 catches logged to the console and nowhere else —
+ *      33 of them across the eight Spin-Out Lab pages that never imported the
+ *      helper. A console line reaches neither the ring buffer nor the beacon:
+ *      it is visible only to someone who already had that browser's devtools
+ *      open at the moment it happened, which is nobody. Every `console.*` left
+ *      in `frontend/src` is allowlisted below with its reason, the console
+ *      methods that reason covers, and — for the boundaries — a requirement
+ *      that the file still reports.
+ *
  * Note what 1 and 2 do to each other: a check for argument order PASSES the
  * unimported call, because its first argument really is a string literal. They
  * are separate assertions on purpose.
@@ -37,7 +46,7 @@
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 import { redact } from '../frontend/src/lib/log.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -86,17 +95,120 @@ const CALL_G = /\breport(?:Error|Warn)\s*\(/g;
 // spellings the tree uses (`./log`, `../lib/log`, `../../lib/log`, `…/log.js`).
 const IMPORTS_REPORTER = /import\s*\{[^}]*\breport(?:Error|Warn)\b[^}]*\}\s*from\s*['"][^'"]*\blog(?:\.js)?['"]/;
 
+const CONSOLE = /\bconsole\.(log|warn|error|debug|info)\s*\(/;
+
+/**
+ * Where a bare `console.*` is still right, and why.
+ *
+ * Every other catch in `frontend/src` reports through `lib/log`, so its failure
+ * reaches the ring buffer support reads off the user's browser and — for errors
+ * — the production beacon. A console line alone reaches neither: it is visible
+ * only to someone who already had the affected browser's devtools open at the
+ * moment it happened, which is nobody.
+ *
+ * TWO THINGS KEEP AN ENTRY HONEST, because an allowlist keyed on the file alone
+ * would bless whatever that file later grows.
+ *
+ * `methods` names which console methods the reason actually covers. It is what
+ * `cloudflare-worker/scripts/check-console.mjs` already does on the worker side
+ * — ban `console.log`, keep `.warn`/`.error` — and the same split applies here:
+ * `.log` and `.debug` are debugging residue, and an entry admitting `.error`
+ * because it is an error boundary should not also admit a stray `.log`. A
+ * mutation caught this: a `console.log` dropped into `log.js` passed a
+ * file-keyed allowlist, which made this docblock's own claim untrue.
+ *
+ * `pairsWithReport` makes the allowlist do its own checking rather than take
+ * the entry's word for it. For the five error boundaries the console line is
+ * kept for ONE reason — it carries `info.componentStack`, which `toEntry` has
+ * no field for — and that reason only holds while the boundary also reports.
+ * So those entries require a `reportError` call in the same file, and a
+ * boundary that quietly loses its report fails this guard rather than sitting
+ * in an allowlist that stopped being true.
+ */
+const CONSOLE_ALLOWED = new Map([
+  ['frontend/src/lib/log.js', {
+    why: 'the reporter itself — this is the console line every other call gets',
+    methods: ['error', 'warn'],
+    pairsWithReport: false,
+  }],
+  ['frontend/src/lib/funnel.js', {
+    why: "two lines behind the file's own `isDev`, which never run in production",
+    methods: ['debug', 'warn'],
+    pairsWithReport: false,
+  }],
+  ['frontend/src/decks/templates/index.ts', {
+    why: 'a registry-integrity check at module evaluation — it runs before any '
+       + 'boundary exists to catch it, and a deck registry that imported empty '
+       + 'is a build fault, not a user-session error',
+    methods: ['error'],
+    pairsWithReport: false,
+  }],
+  ['frontend/src/App.jsx', {
+    why: 'AppErrorBoundary — adds info.componentStack', methods: ['error'], pairsWithReport: true,
+  }],
+  ['frontend/src/components/TopLevelErrorBoundary.jsx', {
+    why: 'adds info.componentStack', methods: ['error'], pairsWithReport: true,
+  }],
+  ['frontend/src/components/RouteErrorBoundary.jsx', {
+    why: 'adds info.componentStack', methods: ['error'], pairsWithReport: true,
+  }],
+  ['frontend/src/components/SafeMount.jsx', {
+    why: 'adds info.componentStack', methods: ['error'], pairsWithReport: true,
+  }],
+  ['frontend/src/decks/Thumbnail.tsx', {
+    why: 'ThumbnailBoundary — adds the template key', methods: ['error'], pairsWithReport: true,
+  }],
+]);
+
 const problems = [];
 
 for (const file of sourceFiles(TREE)) {
   const rel = relative(ROOT, file);
-  if (rel === DEFINER) continue;
 
   let text;
   try { text = readFileSync(file, 'utf8'); } catch { continue; }
-  if (!text.includes('reportError') && !text.includes('reportWarn')) continue;
 
   const lines = text.split('\n');
+
+  // 4 — a failure logged only to the console reaches nobody.
+  const allowed = CONSOLE_ALLOWED.get(rel.split(sep).join('/'));
+  lines.forEach((line, i) => {
+    if (isComment(line)) return;
+    const hit = line.match(CONSOLE);
+    if (!hit) return;
+    const method = hit[1];
+    if (allowed && !allowed.methods.includes(method)) {
+      problems.push(
+        `${rel}:${i + 1}: console.${method} is not what this file is allowlisted for `
+        + `(${allowed.methods.map((m) => `console.${m}`).join(' and ')} only — ${allowed.why}). `
+        + `\`.log\` and \`.debug\` are debugging residue; nothing reads them in production.`,
+      );
+      return;
+    }
+    if (!allowed) {
+      problems.push(
+        `${rel}:${i + 1}: a bare console.* call. Use reportError('Scope:op', err) — or reportWarn `
+        + `where warn is right — so the failure reaches the ring buffer and, for errors, the `
+        + `production beacon. A console line is visible only to someone who already had this `
+        + `browser's devtools open when it happened.`,
+      );
+      return;
+    }
+    if (allowed.pairsWithReport && !text.includes('reportError(')) {
+      problems.push(
+        `${rel}:${i + 1}: console.* is allowed here only because the boundary ALSO calls `
+        + `reportError (${allowed.why}), and this file no longer does. Restore the report or `
+        + `drop the allowlist entry in scripts/check-frontend-logging.mjs.`,
+      );
+    }
+  });
+
+  // Below here is about CALLING the reporters, which the module that defines
+  // them does not do. Its console lines are still scanned above, so a stray
+  // `console.log` in the logger itself is still caught.
+  if (rel === DEFINER) continue;
+  if (!text.includes('reportError') && !text.includes('reportWarn')) continue;
+
   let calls = 0;
 
   lines.forEach((line, i) => {
@@ -151,4 +263,8 @@ if (problems.length) {
   console.error('✖ check-frontend-logging:\n' + problems.map((p) => `  - ${p}`).join('\n'));
   process.exit(1);
 }
-console.log('✓ check-frontend-logging: every reportError/reportWarn call names an authored scope, imports the real reporter, and survives redact().');
+console.log(
+  `✓ check-frontend-logging: every reportError/reportWarn call names an authored scope, `
+  + `imports the real reporter and survives redact(); the only console.* left in frontend/src `
+  + `are the ${CONSOLE_ALLOWED.size} allowlisted files, each with its reason.`,
+);

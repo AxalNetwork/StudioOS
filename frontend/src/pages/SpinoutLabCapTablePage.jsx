@@ -33,6 +33,7 @@ import LabPageShell from '../components/spinout/LabPageShell';
 import { api, spinoutLab } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
+import { reportError } from '../lib/log';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -161,7 +162,7 @@ export default function SpinoutLabCapTablePage() {
         }
         if (!dead) setStatus('ready');
       } catch (e) {
-        console.error('[spinout-captable]', e);
+        reportError('spinout-captable:load', e);
         if (!dead) setStatus('error');
       }
     })();
@@ -179,7 +180,7 @@ export default function SpinoutLabCapTablePage() {
       setResult(r);
       setPreviewing(true);
     } catch (e) {
-      console.error('[spinout-captable:preview]', e);
+      reportError('spinout-captable:preview', e);
       setError(e?.data?.detail?.errors?.join('; ') || e?.data?.detail || e?.message || 'Preview failed.');
     } finally {
       setBusy('');
@@ -216,7 +217,7 @@ export default function SpinoutLabCapTablePage() {
       // else: the user kept editing during the save; keep their newer inputs
       // and the "unsaved changes" banner so nothing is silently lost.
     } catch (e) {
-      console.error('[spinout-captable:save]', e);
+      reportError('spinout-captable:save', e);
       // 402 (Growth tier, prod) opens the global upgrade modal via api.js.
       if (e?.status !== 402) {
         setError(e?.data?.detail?.errors?.join('; ') || e?.data?.detail || e?.message || 'Could not save the cap table.');

@@ -20,7 +20,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 // `window` must exist before the module is evaluated: log.js hangs
@@ -39,7 +39,8 @@ globalThis.localStorage ??= (() => {
 const { reportError, reportWarn, getClientErrors, clearClientErrors, redact } =
   await import('../src/lib/log.js');
 
-const LOG_SRC = readFileSync(resolve(process.cwd(), 'frontend/src/lib/log.js'), 'utf8');
+const SRC = resolve(process.cwd(), 'frontend/src');
+const LOG_SRC = readFileSync(resolve(SRC, 'lib/log.js'), 'utf8');
 
 /** Run `fn` with a fake `fetch`, collecting every beacon body, then restore. */
 async function withBeacons(fn) {
@@ -151,6 +152,47 @@ test('the ring buffer keeps the newest 50 and never throws on hostile storage', 
   globalThis.localStorage.setItem('axal:client-errors', '{"not":"an array"}');
   assert.doesNotThrow(() => reportError('RingProbe:poisoned', new Error('after')));
   assert.equal(last().message, 'after');
+});
+
+test('reportWarn has callers, and the console-only catches are gone', () => {
+  // `reportWarn` shipped with ZERO callers: every warn-level site logged to the
+  // console instead, so it reached neither the ring buffer nor support.
+  const grep = (re) => {
+    const out = [];
+    const walk = (d) => {
+      for (const ent of readdirSync(d, { withFileTypes: true })) {
+        const p = resolve(d, ent.name);
+        if (ent.isDirectory()) { walk(p); continue; }
+        if (!/\.(js|jsx|ts|tsx)$/.test(p)) continue;
+        const t = readFileSync(p, 'utf8');
+        t.split('\n').forEach((line, i) => {
+          if (re.test(line) && !line.trim().startsWith('//') && !line.trim().startsWith('*')) {
+            out.push(`${p.replace(SRC + '/', '')}:${i + 1}`);
+          }
+        });
+      }
+    };
+    walk(SRC);
+    return out;
+  };
+
+  assert.ok(grep(/\breportWarn\s*\(/).length >= 5,
+    'reportWarn is the documented home for warn-level sites; it had no callers at all');
+
+  // Every console.* left must be one the guard's allowlist names.
+  const ALLOWED = [
+    'lib/log.js', 'lib/funnel.js', 'decks/templates/index.ts', 'App.jsx',
+    'components/TopLevelErrorBoundary.jsx', 'components/RouteErrorBoundary.jsx',
+    'components/SafeMount.jsx', 'decks/Thumbnail.tsx',
+  ];
+  const stray = grep(/\bconsole\.(log|warn|error|debug|info)\s*\(/)
+    .filter((hit) => !ALLOWED.some((a) => hit.startsWith(`${a}:`)));
+  assert.deepEqual(stray, [], 'a console-only failure report reaches nobody');
+
+  // And the allowlist cannot rot: every file it names must still exist.
+  for (const a of ALLOWED) {
+    assert.ok(existsSync(resolve(SRC, a)), `the guard allowlists ${a}, which no longer exists`);
+  }
 });
 
 test('the guard that keeps this true is wired, and named where guards are listed', () => {

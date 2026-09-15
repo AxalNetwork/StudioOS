@@ -78,7 +78,6 @@ class RouteErrorBoundary extends React.Component {
     try {
       reportError('route-error-boundary', error);
       if (typeof console !== 'undefined' && info?.componentStack) {
-        // eslint-disable-next-line no-console
         console.error('[RouteErrorBoundary]', error, info.componentStack);
       }
     } catch { /* never let the boundary itself throw */ }

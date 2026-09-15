@@ -8474,3 +8474,72 @@ correctness, and land separately with the no-console half of the guard. Three of
 those catches set no UI state at all, so a failed delete, stage change or
 clipboard write is invisible to the user; giving them error UI is a
 user-visible change to shipped pages and is its own PR again.
+
+## D115 — Every catch reports; `console.*` in `frontend/src` becomes a reasoned allowlist
+
+**2026-09-15.** D114 fixed how the reporter was *called*. This is the other
+half: 36 catches whose only reporting was a `console.*` call, and which
+therefore reached neither the `localStorage` ring support reads off an affected
+browser nor, for errors, the production beacon. A console line is visible only
+to someone who already had that browser's devtools open at the moment it
+happened, which is nobody.
+
+**The split was clean and is worth recording, because it says what went wrong.**
+33 of the 36 were in **eight** Spin-Out Lab pages, and it is exactly the set of
+Spin-Out Lab pages that never imported `lib/log`. Twelve other Spin-Out Lab
+pages do import it and contained zero console calls. No file was in both sets —
+so this was never a judgement about which failures deserve reporting; it was
+eight files that missed the convention and then grew. `ErrorState.jsx:6` already
+named `console.error → generic toast` as an anti-pattern in its own docblock.
+
+The existing console scopes were already this repo's `kebab:operation` form
+inside brackets (`'[spinout-revenue:snapshots]'`), so they converted by dropping
+the brackets. The eight bare page-level scopes gained the operation their catch
+actually guards (`spinout-revenue` → `spinout-revenue:load`; all eight are the
+load catch, each setting `setStatus('error')`).
+
+### `reportWarn` gets its first callers
+
+It shipped with **zero**, having been written alongside `reportError` and never
+adopted. It is the right home for the genuinely warn-level sites — a
+service-worker registration that failed (`pwa.js`), a settled-promise read the
+page degrades past on purpose (`SpinoutLabCapitalPage`), a milestone write, an
+empty template registry — because it reaches the ring buffer **without**
+beaconing, which is the split `log.js` documents and the reason not to convert
+these to `reportError` and triple the beacon volume.
+
+### The allowlist checks itself twice
+
+Ten console calls remain and each is allowlisted with its reason. Two fields
+stop the allowlist from rotting into a blanket exemption, and **the second was
+added because a mutation escaped**:
+
+- **`methods`** — which console methods the stated reason covers. A
+  `console.log` dropped into `log.js` passed a file-keyed allowlist, which made
+  the guard's own docblock untrue. This is the split
+  `cloudflare-worker/scripts/check-console.mjs` already enforces on the worker
+  side: ban `.log`, keep `.warn`/`.error`.
+- **`pairsWithReport`** — the five error boundaries keep their console line for
+  exactly one reason, that it carries `info.componentStack`, which `toEntry` has
+  no field for. That reason holds only while the boundary also reports, so those
+  entries require a `reportError` call in the same file. A boundary that quietly
+  loses its report now fails the guard instead of resting on an entry that
+  stopped being true.
+
+### The seven inert `eslint-disable-next-line no-console` directives are gone
+
+They suppressed a rule that has never been enabled — `eslint.config.mjs`
+declares only `no-undef` — and `reportUnusedDisableDirectives` is `'off'`, so
+ESLint never reported them as unused either. With `check-frontend-logging.mjs`
+owning this rule, a directive that cannot silence it is worse than none: it
+reads as a sanctioned exception that does not exist.
+
+### Still not here
+
+Three of the converted catches set **no UI state at all**, so the failure is now
+reported but remains invisible to the user: a failed snapshot delete
+(`SpinoutLabRevenuePage`), a failed prospect stage change
+(`SpinoutLabCapitalPage`), and a failed clipboard write that also skips the
+`revenue_summary_generated` milestone. Giving them error UI is a user-visible
+change to shipped pages, so it is its own change rather than a rider on a
+mechanical one.

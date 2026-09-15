@@ -29,6 +29,7 @@ import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
+import { reportError } from '../lib/log';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -96,7 +97,7 @@ export default function SpinoutLabRevenuePage() {
       const rows = Array.isArray(res?.snapshots) ? res.snapshots : Array.isArray(res?.items) ? res.items : [];
       setSnapshots(rows);
     } catch (e) {
-      console.error('[spinout-revenue:snapshots]', e);
+      reportError('spinout-revenue:snapshots', e);
       setSnapshots({ failed: true });
     }
   };
@@ -130,7 +131,7 @@ export default function SpinoutLabRevenuePage() {
         }
         if (!dead) setStatus('ready');
       } catch (e) {
-        console.error('[spinout-revenue]', e);
+        reportError('spinout-revenue:load', e);
         if (!dead) setStatus('error');
       }
     })();
@@ -175,7 +176,7 @@ export default function SpinoutLabRevenuePage() {
       setModal(null);
       setSf({ snapshot_date: new Date().toISOString().slice(0, 10), mrr: '', active_users: '', new_users: '', notes: '' });
     } catch (e) {
-      console.error('[spinout-revenue:save-snapshot]', e);
+      reportError('spinout-revenue:save-snapshot', e);
       setFormError(e?.data?.detail?.error || e?.data?.detail || e?.message || 'Could not save the snapshot.');
     } finally {
       setBusy(false);
@@ -203,7 +204,7 @@ export default function SpinoutLabRevenuePage() {
       }
       setModal(null);
     } catch (e) {
-      console.error('[spinout-revenue:save-proof]', e);
+      reportError('spinout-revenue:save-proof', e);
       setFormError(e?.data?.detail?.error || e?.data?.detail || e?.message || 'Could not save traction proof.');
     } finally {
       setBusy(false);
@@ -220,7 +221,7 @@ export default function SpinoutLabRevenuePage() {
       // W3 deliverable — Stripe-synced metrics count as real revenue proof.
       markMilestone(user, 'revenue_proof_added');
     } catch (e) {
-      console.error('[spinout-revenue:stripe]', e);
+      reportError('spinout-revenue:stripe', e);
       if (e?.status === 404) {
         // ONLY 404 = capability not present in this environment (dev).
         setStripeState({ busy: false, unavailable: true, error: '', done: null });
@@ -249,7 +250,7 @@ export default function SpinoutLabRevenuePage() {
       await api.deleteMetricsSnapshot(id);
       await loadSnapshots(project.id);
     } catch (e) {
-      console.error('[spinout-revenue:delete]', e);
+      reportError('spinout-revenue:delete', e);
     } finally {
       setDeleteBusy(null);
     }
@@ -353,7 +354,7 @@ export default function SpinoutLabRevenuePage() {
                 // W3 deliverable — an investor-ready summary was generated
                 // from the real numbers on record.
                 markMilestone(user, 'revenue_summary_generated');
-              } catch (e) { console.error('[spinout-revenue:summary]', e); }
+              } catch (e) { reportError('spinout-revenue:summary', e); }
             }}
             className={labBtn('accent')}
           >

@@ -394,7 +394,7 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
         }
         setRegistryReady(true);
       } catch (err) {
-        console.error('PitchDeckPrintPage: failed to load template registry', err);
+        reportError('PitchDeckPrintPage:loadTemplates', err);
         setRegistryReady(true);
       }
     })();

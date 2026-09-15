@@ -133,7 +133,6 @@ export const EXPECTED_TEMPLATE_COUNT = 13;
 // resolves to fewer than the expected count, surface it loudly in the
 // console (the picker's empty state will then render the diagnostic).
 if (TEMPLATE_LIST.length !== EXPECTED_TEMPLATE_COUNT || TEMPLATE_LIST.some((t) => !t || !t.Component)) {
-  // eslint-disable-next-line no-console
   console.error(
     `[decks/templates] Registry integrity check failed — expected ${EXPECTED_TEMPLATE_COUNT} ` +
     `entries with Component bound, found ${TEMPLATE_LIST.length} ` +

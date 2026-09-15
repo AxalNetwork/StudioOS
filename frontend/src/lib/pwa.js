@@ -7,6 +7,7 @@
  */
 import { api } from './api';
 import { reloadWithinBudget } from './reloadGuard';
+import { reportWarn } from './log';
 
 // The service-worker update reload's budget. One is the whole intent — "reload
 // once when a new worker takes control" — and the point of a stored count
@@ -111,7 +112,11 @@ export function registerServiceWorker() {
         });
       })
       .catch((err) => {
-        console.warn('SW registration failed:', err);
+        // Warn, not error: the app works without a service worker. This is
+        // `reportWarn`'s first caller — it reaches the ring buffer support can
+        // read off the browser without adding beacon volume, which is the
+        // split log.js documents.
+        reportWarn('pwa:sw-register', err);
       });
 
     // Listen for in-page navigation requests posted from the SW (push click).
