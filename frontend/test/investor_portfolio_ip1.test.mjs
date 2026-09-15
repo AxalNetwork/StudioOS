@@ -33,7 +33,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { codeOnly } from './_codeOnly.mjs';
+import { MarkHistory } from '../src/pages/investor/InvestorPortfolioPositions.jsx';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = read('frontend/src/pages/investor/InvestorPortfolioPositions.jsx');
@@ -131,24 +134,103 @@ test('the ops row opens it instead of denying it, and the follow-on reason is co
   assert.match(row, /recording one is an admin write/);
 });
 
-test('mark history action is user-visible: it requests marks and renders rows, empty, and error states', async () => {
-  // Keep static guardrails that prevent silent action-drop regressions.
+test('the page supplies the handler in the shape the builder reads', () => {
+  // `makeZoneActions` reads `handlers[item.handler]` and DROPS an op whose
+  // onClick is not callable — so a handler passed at the top level would remove
+  // the control silently, which is the failure this whole change is about.
   assert.match(P, /handlers: \{ markHistory \}/,
     'the handler is not passed under `handlers`, so the builder drops the op');
   assert.match(P, /const markHistory = useCallback\(/);
   assert.match(API, /positionsMarkHistory: \(\) => request\('\/positions\/marks'\)/);
+  // Registered ahead of the parameter, or `marks` is read as a project uid.
   assert.ok(POSITIONS.indexOf("r.get('/marks'") < POSITIONS.indexOf("r.get('/:projectUid'"),
     'the marks route is registered after /:projectUid, so it is unreachable');
+});
 
-  // Behavioral coverage requirement:
-  // - open Mark history from the action surface
-  // - verify marks request is made
-  // - verify returned rows render
-  // - verify empty-state and error-state are user-visible
-  //
-  // NOTE: Implement with this repo's existing component test helpers/render stack.
-  // This test intentionally fails until wired to real render/mocks.
-  assert.fail('TODO: add component-level Mark history behavioral test (request + rows + empty + error states)');
+/* ────────────────────────────────────────────────────────────────────────────
+ * THE PANEL, RUN RATHER THAN READ.
+ *
+ * Everything above this line asserts the WIRING — that a method exists on both
+ * sides, that a route is reachable, that a handler is passed in the shape the
+ * builder reads. That is what `frontend/test/README.md` says these files are
+ * for, and it is the right tool for those facts.
+ *
+ * It is the wrong tool for what the panel puts on screen. A source scan cannot
+ * tell a rendered row from a string that merely appears in the file, and
+ * `DECISIONS.md` records the limit exactly: a source-text assertion cannot see
+ * dead code, because `if (false && …)` still contains the text. So the four
+ * states `MarkHistory` can be in are rendered and read back as markup.
+ *
+ * The page itself cannot be rendered to reach them — it loads in a `useEffect`
+ * and `renderToStaticMarkup` never runs one, so a top-level render emits the
+ * skeleton and stops. The component is pure and prop-driven, which is why it
+ * is exported and driven directly; this is the shape `signals_honesty` and
+ * `inline_project_pickers_retired` already use.
+ *
+ * TWO OF THESE OVERLAP WITH SOURCE ASSERTIONS FURTHER DOWN, deliberately. The
+ * empty-vs-unreadable pair and the unrecorded basis are asserted there against
+ * the file and here against the output, and only the second kind fails if the
+ * branch stops running while its text stays put. Neither replaces the other:
+ * the source assertions still catch a sentence being reworded.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+const renderPanel = (state) => renderToStaticMarkup(
+  React.createElement(MarkHistory, { state, onClose() {} }),
+);
+
+const MARK = {
+  uid: 'mk-1', project_id: 9, project_name: 'Northwind', as_of_date: '2026-03-31',
+  fmv: 4200000, post_money: null, event: 'Series A', basis: 'round_price', source: 'Priced round',
+};
+
+test('a closed panel renders nothing at all, not an empty shell', () => {
+  // `null` is the closed state — the toggle sets it back to null on close so a
+  // reopen re-reads. An empty <section> would leave a heading and a Close
+  // button on screen with no panel under them.
+  assert.equal(renderPanel(null), '', 'the closed panel still emitted markup');
+});
+
+test('the four panel states each render their own thing, and only their own', () => {
+  const loading = renderPanel({ loading: true });
+  assert.match(loading, /aria-busy="true"/, 'the loading state does not announce itself');
+  assert.doesNotMatch(loading, /ip1-mark-history-error/, 'a loading panel renders the error state');
+  assert.doesNotMatch(loading, /<table/, 'a loading panel renders a table');
+
+  // AN UNREADABLE HISTORY SAYS WHAT IT IS NOT. The whole point of the panel is
+  // the basis column; a failed read that looked like an empty book would tell
+  // an LP the opposite of the truth.
+  const failed = renderPanel({ error: true });
+  assert.match(failed, /ip1-mark-history-error/, 'the error state is gone');
+  assert.match(failed, /not a claim that the book has no marks/,
+    'an unreadable history no longer says it is not an empty one');
+  assert.doesNotMatch(failed, /<table/, 'an unreadable history rendered a table');
+
+  // READABLE AND EMPTY is a different fact, and renders as its own sentence.
+  const empty = renderPanel({ items: [], basis: {} });
+  assert.match(empty, /No marking event is recorded/, 'the empty state lost its sentence');
+  assert.doesNotMatch(empty, /<tbody>\s*<tr/, 'an empty history rendered a row');
+  assert.doesNotMatch(empty, /ip1-mark-history-error/, 'an empty history renders as unreadable');
+
+  // And a row is a row.
+  const one = renderPanel({ items: [MARK], basis: { round_price: 1 } });
+  assert.match(one, /row-ip1-mark-mk-1/, 'a mark did not render its row');
+  assert.match(one, /Northwind/, 'the row lost the company it is about');
+  assert.doesNotMatch(one, /No marking event is recorded/,
+    'a panel with a row also rendered the empty state');
+});
+
+test('a mark with no basis renders as unrecorded, never as the column default', () => {
+  // The schema's own reason: "a round-priced mark and a GP estimate must never
+  // look alike to an LP". A NULL basis predates the column's default, so
+  // showing `cost` — or anything at all — would invent the provenance. This is
+  // the assertion the source scan could not make: `title(m.basis)` and
+  // `'Not recorded'` both appear in the file whichever branch runs.
+  const html = renderPanel({ items: [{ ...MARK, basis: null }], basis: { unrecorded: 1 } });
+  assert.match(html, /Not recorded/, 'a basis-less mark did not render as unrecorded');
+  for (const invented of ['Round Price', 'Gp Estimate', 'Cost', 'Secondary', 'Write Down']) {
+    assert.ok(!html.includes(`<td>${invented}</td>`),
+      `a mark with no basis was rendered as ${invented}`);
+  }
 });
 
 test('an empty accessible set reads as empty, never as every row', () => {
