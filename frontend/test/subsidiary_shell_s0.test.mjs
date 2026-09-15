@@ -105,10 +105,23 @@ test('the shell arm decides a sidebar, never access', () => {
     "'branch_admin' must not appear in a guard() array — it is a sidebar, not a permission",
   );
   // And the branch routes are guarded as admin routes, which is what they are.
+  //
+  // NO REGEX IS BUILT FROM THE ROUTE. This compared `APP_CODE` against a
+  // pattern assembled from `r.to` with `/` escaped — which CodeQL flagged as
+  // incomplete escaping, and which was worse than that: `/` is only special
+  // in a regex LITERAL, never in `new RegExp()`, so the one character being
+  // escaped needed no escaping while every character that would actually
+  // change the pattern went through untouched. A correct escaper would have
+  // silenced the alert and left a regex assembled from data for no benefit.
+  // The route is a literal string, so it is compared as one.
   for (const r of rows) {
-    assert.match(
-      APP_CODE,
-      new RegExp(`path="${r.to.replace(/\//g, '\\/')}"\\s+element=\\{guard\\(\\['admin'\\]`),
+    const at = APP_CODE.indexOf(`path="${r.to}"`);
+    assert.ok(at > 0, `${r.to} must be a registered route`);
+    // Bounded to this route's own element so the assertion cannot be satisfied
+    // by a NEIGHBOURING route's guard — the one failure mode a substring scan
+    // has, and the reason the window is 80 rather than open-ended.
+    assert.ok(
+      APP_CODE.slice(at, at + 80).includes("guard(['admin']"),
       `${r.to} must be guarded as an admin route`,
     );
   }
