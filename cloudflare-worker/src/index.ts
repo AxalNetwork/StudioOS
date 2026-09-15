@@ -261,6 +261,7 @@ import orders from './routes/orders';
 import products from './routes/products';
 import { Jobs } from './models/jobs';
 import { writeCronRunHistory } from './util/cronHistory';
+import { branchOf, assertBranchAppUrl, HQ_ONLY, HQ_AUTHORING_ONLY } from './util/branch';
 import { enqueueReembedChunks } from './util/reembedSweep';
 import { rebuildUsersRoleCheckForInvestor, rebuildUsersRoleCheckForAdvisor } from './util/usersRoleRebuild';
 import { bindingKey } from './util/schemaBootstrap';
@@ -1051,6 +1052,12 @@ const AUTH_ERROR_STATUSES: Record<string, 401 | 403> = {
   // generic 500 below, so a subsidiary admin trying to franchise would see a
   // server error instead of a refusal — the gate would work and say nothing.
   'Super admin required': 403,
+  // D106 — branch mode's two refusals, keyed off the constants they are
+  // thrown from (util/branch.ts) rather than off a second copy of the
+  // sentence. The failure the entry above records is a message and a map key
+  // drifting apart; a shared constant is the shape where they cannot.
+  [HQ_ONLY]: 403,
+  [HQ_AUTHORING_ONLY]: 403,
   Forbidden: 403,
   'KYC required': 403,
   'TOTP required': 403,
@@ -1317,6 +1324,10 @@ export default {
       // score-integrity key cannot silently collide with JWT_SECRET. Dev
       // logs a one-shot warning instead of throwing.
       assertScoringHmacSecret(env);
+      // D106 — on a branch, every URL var must name the branch's own host.
+      // HQ has no BRANCH_CODE, so this is a no-op there and the 503 below is
+      // reachable on a branch only.
+      assertBranchAppUrl(env);
     } catch (err) {
       console.error('[boot] secret assertion failed:', (err as Error).message);
       return new Response(
@@ -1376,6 +1387,29 @@ export default {
           cronSummary.push(`drain processed=${r.processed} failed=${r.failed}`);
         }
         const now = new Date();
+        // D106 — PLATFORM CONTENT IS HQ'S WORK, AND N BRANCHES MUST NOT EACH
+        // DO IT. Four cadences below fetch from the open internet or send a
+        // platform-wide digest: the Founder Signals refresh, the whole
+        // market-intel connector block, the Platform Personas digest and the
+        // market-intel watchlist digest. Under one Worker per branch each of
+        // those would run N times — N× the external API quota against the
+        // same public sources, N copies of identical rows in N databases, and
+        // for the digests, N mails to a population that is HQ's, not the
+        // branch's.
+        //
+        // THE CRON TRIM IN THE GENERATED CONFIG DOES NOT DO THIS, and it is
+        // worth saying plainly because it looks as though it might. A branch
+        // keeps `* * * * *` (it needs the queue drain), and every block here
+        // gates on the WALL CLOCK rather than on which expression fired — so
+        // dropping HQ's other four expressions removes some duplicate
+        // invocations within a minute and stops not one of these cadences.
+        // The gate has to be here.
+        //
+        // Everything not gated stays per branch on purpose: the queue drain,
+        // job cleanup, trust and partner-deal expiry, the trash sweep, TOTP
+        // remediation, notification flushes and the score audits all act on
+        // this deployment's own rows and would be wrong to centralise.
+        const hqCadences = branchOf(env) === null;
         if (now.getUTCHours() === 3 && now.getUTCMinutes() === 0) {
           await Jobs.cleanup(env);
         }
@@ -1422,7 +1456,7 @@ export default {
         // signals + their evidence into D1, replacing the illustrative seed
         // corpus on the /signals page. Idempotent; a failed night just leaves
         // yesterday's real data (or the labeled examples) in place.
-        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 20) {
+        if (hqCadences && now.getUTCHours() === 4 && now.getUTCMinutes() === 20) {
           try {
             const { runRefresh } = await import('./services/signals/engine');
             const r = await runRefresh(env);
@@ -1577,7 +1611,7 @@ export default {
         // Task #4 (CF) — Platform Personas weekly digest. Mondays 09:00 UTC.
         // Fan-outs to Studio/Institutional + admin/partner/mentor only.
         // Idempotent via ISO-week KV marker inside the helper.
-        if (now.getUTCDay() === 1 && now.getUTCHours() === 9 && now.getUTCMinutes() === 0) {
+        if (hqCadences && now.getUTCDay() === 1 && now.getUTCHours() === 9 && now.getUTCMinutes() === 0) {
           try {
             const { sendPlatformPersonasDigest } = await import('./routes/market_intel');
             const r = await sendPlatformPersonasDigest(env);
@@ -1816,10 +1850,17 @@ export default {
         //   • daily sources    → 02:30 UTC
         //   • weekly sources   → Sunday 02:45 UTC (UTC day 0)
         //   • recomputeIndexes → 03:15 UTC nightly (after daily runs settle)
+        // D106 — the market-intel block is HQ's. `runSourcesByCadence` and
+        // `runFreeConnectors` call the open internet, and `recomputeIndexes`
+        // aggregates what they wrote, so on a branch it would recompute over
+        // nothing. A branch reads market intelligence from HQ (PR 6's `HQ`
+        // binding); it does not gather it. The guard is on the condition
+        // rather than around the try/catch so a skip is a skip, not an error
+        // the catch below would log as a market-intel failure.
         try {
           const { runSourcesByCadence, recomputeIndexes, runFreeConnectors } = await import('./services/market_intel/aggregator');
           await import('./services/market_intel/sources'); // ensures registerSource() ran
-          if (now.getUTCMinutes() === 0) {
+          if (hqCadences && now.getUTCMinutes() === 0) {
             const r = await runSourcesByCadence(env, 'hourly');
             if (r.scanned) console.info(`[cron] mi hourly scanned=${r.scanned} ok=${r.ok} failed=${r.failed} inserted=${r.inserted}`);
           }
@@ -1831,17 +1872,17 @@ export default {
           // ledger short-circuits duplicate writes within the same day.
           // This satisfies the spec contract that free sources refresh
           // every 6h end-to-end.
-          if ([0, 6, 12, 18].includes(now.getUTCHours()) && now.getUTCMinutes() === 5) {
+          if (hqCadences && [0, 6, 12, 18].includes(now.getUTCHours()) && now.getUTCMinutes() === 5) {
             for (const cad of ['hourly', 'daily', 'weekly'] as const) {
               const r = await runFreeConnectors(env, cad);
               if (r.scanned) console.info(`[cron] mi free-connectors-6h cadence=${cad} scanned=${r.scanned} ok=${r.ok} failed=${r.failed} inserted=${r.inserted}`);
             }
           }
-          if (now.getUTCHours() === 2 && now.getUTCMinutes() === 30) {
+          if (hqCadences && now.getUTCHours() === 2 && now.getUTCMinutes() === 30) {
             const r = await runSourcesByCadence(env, 'daily');
             if (r.scanned) console.info(`[cron] mi daily scanned=${r.scanned} ok=${r.ok} failed=${r.failed} inserted=${r.inserted}`);
           }
-          if (now.getUTCDay() === 0 && now.getUTCHours() === 2 && now.getUTCMinutes() === 45) {
+          if (hqCadences && now.getUTCDay() === 0 && now.getUTCHours() === 2 && now.getUTCMinutes() === 45) {
             const r = await runSourcesByCadence(env, 'weekly');
             if (r.scanned) console.info(`[cron] mi weekly scanned=${r.scanned} ok=${r.ok} failed=${r.failed} inserted=${r.inserted}`);
           }
@@ -1850,7 +1891,7 @@ export default {
           // through #14 for historical compatibility but the AK spec
           // pins this surface to a single nightly refresh window so
           // operators have one timestamp to monitor for staleness.
-          if (now.getUTCHours() === 4 && now.getUTCMinutes() === 0) {
+          if (hqCadences && now.getUTCHours() === 4 && now.getUTCMinutes() === 0) {
             const r = await recomputeIndexes(env);
             console.info(`[cron] mi recompute sectors=${r.sectors} rows_written=${r.rows_written}`);
             try {
@@ -1864,7 +1905,7 @@ export default {
           // renderer + R2 dropbox land with AA-2; this cron simply logs
           // the eligible window so we have an audit trail before the
           // generator ships. Fires on the 1st of Jan/Apr/Jul/Oct at 04:00.
-          if (now.getUTCDate() === 1 && [0, 3, 6, 9].includes(now.getUTCMonth()) && now.getUTCHours() === 4 && now.getUTCMinutes() === 0) {
+          if (hqCadences && now.getUTCDate() === 1 && [0, 3, 6, 9].includes(now.getUTCMonth()) && now.getUTCHours() === 4 && now.getUTCMinutes() === 0) {
             console.info(`[cron] mi quarterly_pdf eligible_period=${now.getUTCFullYear()}Q${Math.floor(now.getUTCMonth() / 3) + 1} (renderer pending AA-2)`);
           }
         } catch (e) {
@@ -1877,14 +1918,21 @@ export default {
         // last_period_key on confirmed delivery so a same-period retry
         // is a no-op. Cheap on every other tick: the helper exits in
         // O(1) when neither cadence window matches.
-        try {
-          const { sendMarketIntelDigests } = await import('./services/market_intel/digest');
-          const r = await sendMarketIntelDigests(env, now);
-          if (r.sent > 0 || r.failed > 0) {
-            console.info(`[cron] mi watchlist digest users=${r.users} sent=${r.sent} failed=${r.failed} rows=${r.rows}`);
+        // D106 — HQ only, and for a second reason beyond the fan-out: the
+        // digest composes a composite delta and new citations out of the
+        // market-intel rows the block above gathers, which on a branch are
+        // not there. Mailing a delta computed from an empty corpus is worse
+        // than not mailing.
+        if (hqCadences) {
+          try {
+            const { sendMarketIntelDigests } = await import('./services/market_intel/digest');
+            const r = await sendMarketIntelDigests(env, now);
+            if (r.sent > 0 || r.failed > 0) {
+              console.info(`[cron] mi watchlist digest users=${r.users} sent=${r.sent} failed=${r.failed} rows=${r.rows}`);
+            }
+          } catch (e) {
+            console.error('[cron] mi watchlist digest failed', e);
           }
-        } catch (e) {
-          console.error('[cron] mi watchlist digest failed', e);
         }
         // Task #14 — flush pending digest emails. Cheap on idle ticks
         // (single GROUP BY query) and only sends to users whose local

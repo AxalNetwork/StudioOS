@@ -7512,3 +7512,121 @@ new-binding case above; every `validateBranch` refusal, including an entry
 that kept HQ's database id; and every `checkRendered` refusal, each against
 its own mutation of a rendered config. `scripts/check-branch-config.mjs` also
 fails if a generated `wrangler.branch.*.toml` is ever committed.
+
+## D106 — on a branch the elevation does not exist, the platform content is not gathered, and the licence is a dated copy
+
+**Date:** 2026-09-15 · **Task:** #214 (HQ and branches plan, PR 4) · **Migration:** 256
+
+`BRANCH_CODE` now changes what the Worker will do, not only which cookie it
+reads. HQ is unchanged in every respect — the var is unset there and every
+gate below is a no-op.
+
+### The elevation is a property of the deployment, not a row
+
+`hydrateSuperAdmin` answers `0` whenever `branchOf(env)`, and does not query
+`super_admins` at all. That one line closes all 24 super-admin routes and the
+`/me` echo together, because every one of them reaches the flag through
+`requireSuperAdmin` → `isSuperAdmin`.
+
+**What was already true, and why it was not a gate.** A branch database is
+bootstrapped from the baseline with `BASELINE_CUTOFF = 219`, so migration 207
+— the single super-admin holder — is marked and never executed, and
+`super_admins` starts empty. The routes therefore already answered 403. But
+an empty table is a *data state*: one `INSERT INTO super_admins` on a branch
+database, by anyone who could reach it, would have reopened HQ's entire
+console over branch data with every route still behaving normally. So
+`cloudflare-worker/test/branch_mode_gates.test.ts` seeds that row before every
+deny assertion. A test that only ever asked an empty table would pass against
+the old code and prove nothing about the new one.
+
+`requireSuperAdmin` refuses on a branch with **"HQ only"** rather than
+falling through to "Super admin required". The second sentence reads as "ask
+HQ to elevate you", which is untrue: there is no elevation to grant on that
+deployment, and the ledger it guards is in another database. Both new
+sentences are exported constants (`util/branch.ts`) and `AUTH_ERROR_STATUSES`
+keys off the constants, because the failure that entry's own comment records
+is a message and a map key drifting apart — which turns a working refusal
+into a 500.
+
+### HQ authors, a branch reads (D.9)
+
+`requireHqAuthoring` is `requireAdmin` plus that refusal, applied to the three
+template-store writes in `admin_contracts.ts` and the seventeen authoring
+writes in `admin_assessment.ts`. It is **not** an elevation check: an
+unelevated HQ admin authors exactly as before. Reads are untouched — a branch
+must list, fetch, version and preview templates, because that is the S5
+picker — and assessment `preview` and `sessions/:id/rescore` keep the plain
+admin guard, because the results are the branch's (S4).
+
+### The cron trim did not do what it looked like it did
+
+`wrangler.branch.<code>.toml` ships two cron expressions instead of HQ's six
+(D105), and it would be easy to read that as the fix for "N branches each
+hitting the same external APIs". It is not. A branch keeps `* * * * *`, and
+every block in the scheduled handler gates on the **wall clock** rather than
+on which expression fired — so dropping the other four removes some duplicate
+invocations within a minute and stops not one cadence. The gate had to be in
+`index.ts`, and it is: `hqCadences` guards the Founder Signals refresh, the
+whole market-intel connector block, the Platform Personas digest and the
+market-intel watchlist digest. Everything else — the queue drain, job
+cleanup, trust and partner-deal expiry, the trash sweep, TOTP remediation,
+notification flushes, the score audits — stays per branch, and the test
+asserts that too: a gate that swallowed a branch's own housekeeping would be
+as wrong as no gate.
+
+### Three more leaks closed, one of which writes
+
+- `cloudflareSecrets.ts` loses its `|| 'studioos'` fallback **on a branch**.
+  This is the only one on the list whose consequence is a write: a branch
+  admin saving an integration key with `CF_WORKER_SCRIPT_NAME` unset would
+  have PUT that secret onto HQ's script, overwriting production's credential
+  from a screen that reported success. HQ keeps the fallback, because HQ is
+  the script it names.
+- A branch answers `X-Robots-Tag: noindex, nofollow`. Every branch serves
+  HQ's `docs/` bundle, whose canonical links, sitemap and OG URLs name
+  `axal.vc`; indexed, a branch host would be a full duplicate of the
+  marketing site with canonicals pointing away from itself.
+- Seven SPA links built from the literal `https://axal.vc` now come from
+  `appOrigin()`. The referral link is the sharp case: a branch member sharing
+  `https://axal.vc/register?ref=…` sends the referee to **HQ's database**,
+  where the reward is attributed against a member who is not there.
+  `ogRegistry.js`'s `SITE_URL` deliberately stays the apex — canonical tags
+  are statements about where the canonical document lives — and a test
+  asserts that too, so a later sweep cannot "fix" it and recreate the
+  duplicate `noindex` exists to avoid.
+
+### A boot assertion for the URL vars
+
+On a branch, `assertBranchAppUrl` refuses to serve `/api/*` unless `APP_URL`,
+`PUBLIC_BASE_URL`, `OAUTH_CALLBACK_BASE_URL` and `PUBLIC_MARKETING_URL` all
+name `<code>.axal.vc`. A branch deployed with HQ's values does not fail — it
+succeeds, and sends its users to HQ's host, where their branch-named cookie
+does not exist and their account is not in the database. The comparison is
+against `BRANCH_CODE`, not against one var trusting another.
+
+### Migration 256 — the licence is a copy, and it says how old it is
+
+`branch_licence`, `branch_promo_ceiling` and `branch_benchmarks` are
+singletons (the first two) and a small keyed table, each carrying `pushed_at`
+— HQ's assertion time, carried across in the push, not this database's write
+time. They are empty on HQ by construction; nothing writes them there, and
+reading a copy of your own ledger is a way to disagree with yourself.
+
+`GET /api/licence/mine` reads the copy on a branch and stamps the response
+`source: 'hq_copy'` with `as_of`. Without the branch path it would answer its
+existing 404 — "You do not administer a territory licence" — to the one
+person on the deployment who does, because `licence_admins` and
+`territory_licences` exist there and are empty. A row in another database and
+a row that does not exist must not read alike, so the two carry different
+codes (`licence_not_pushed` vs `no_licence`). `events` is `[]` with
+`events_available: false` and a reason: the trail is HQ's, and an empty array
+alone would claim nothing has happened to the licence.
+
+### What is guarded
+
+`branch_mode_gates.test.ts` (9) and `branch_licence_copy.test.ts` (5) in the
+worker suite; `frontend/test/branch_host.test.mjs` grows two (5 total).
+23 mutations applied, 23 caught — one only after the `appOrigin` fixture
+gained `{ location: {} }`, the single shape where dropping the optional chain
+changes the answer. An assertion that cannot fail on the machines that run it
+is not a guard.
