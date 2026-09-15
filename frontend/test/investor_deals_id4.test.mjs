@@ -202,6 +202,67 @@ test('none of the artboard’s fixture rows or figures reaches the page', () => 
   }
 });
 
+/** One tile's own element, bounded at its closing `/>`. */
+function tile(label) {
+  const at = Z.indexOf(`label="${label}"`);
+  assert.ok(at > 0, `the ${label} tile is gone`);
+  const end = Z.indexOf('/>', at);
+  assert.ok(end > at, `the ${label} tile is not a self-closing element any more`);
+  return Z.slice(at, end);
+}
+
+test('one failed read is never counted as a zero — this strip is a join', () => {
+  // THE FAILURE THIS PINS. `rows` is the envelopes filtered against the closing
+  // deals, so it needs BOTH `listDeals` and `esignList`, and it collapses to
+  // `[]` when either is missing. A tile gated on one flag therefore printed a
+  // number it could not know: with the deal record unreadable, "Executed" read
+  // "0 of 0" and "Awaiting" read "0", each under a sentence explaining what the
+  // figure meant. `bothFailed` never caught it, because that only fires when
+  // BOTH reads fail — the noisy case. One failed read was the quiet one.
+  //
+  // This zone's own docblock already says "a record that is readable and holds
+  // no deal at this stage is a different fact from a record that could not be
+  // read". These assertions are that sentence, applied to the strip.
+  assert.match(Z, /const joinedReady = dealsReady && envReady;/,
+    'the joined-readiness flag is gone, or is retyped per tile rather than derived once');
+
+  // Three of the four figures cross both reads.
+  for (const label of ['Executed', 'Signatures', 'Awaiting']) {
+    const t = tile(label);
+    assert.match(t, /value=\{joinedReady\b/, `${label} counts from a single read`);
+    assert.match(t, /note=\{joinedReady\b/, `${label} explains a figure it may not have`);
+  }
+
+  // "At closing" is the half-exception, and the autofix that prompted this
+  // missed it: its VALUE counts deals, so `dealsReady` is right there — but its
+  // NOTE counts documents, which needs the envelopes too.
+  const atClosing = tile('At closing');
+  assert.match(atClosing, /value=\{dealsReady \? String\(closing\.length\) : null\}/,
+    'the closing count stopped standing on the deal read alone');
+  assert.match(atClosing, /note=\{joinedReady\b/,
+    'the document count still renders under a single read');
+
+  // And the tone follows the same gate — an amber "Awaiting" over a figure
+  // that is not there would be an alarm about nothing.
+  assert.match(tile('Awaiting'), /tone=\{joinedReady && awaiting\.length/,
+    'the awaiting tone is raised from a figure that may not exist');
+});
+
+test('an unreadable tile names WHICH read is missing, not just that one is', () => {
+  // "unreadable" on its own sends a reader to refresh the wrong thing. Both
+  // single-failure branches are distinct sentences and both name their source.
+  assert.match(Z, /const missingRead = dealsReady/, 'the per-source reason is gone');
+  assert.match(Z, /the signature archive could not be read, so nothing can be counted/,
+    'a missing signature archive no longer says so');
+  assert.match(Z, /the deal record could not be read, so there is nothing to count envelopes against/,
+    'a missing deal record no longer says so');
+  // The bare word is not a reason, and was what two of these tiles used to say.
+  for (const label of ['Signatures', 'Awaiting']) {
+    assert.doesNotMatch(tile(label), /:\s*'unreadable'/,
+      `the ${label} tile still falls back to the bare word "unreadable"`);
+  }
+});
+
 test('no row is drawn as blocking, because the condition it would come from has no store', () => {
   // The artboard's note makes this explicit: the blocking item "arrived from
   // the Commit vote". ID3 established that no condition is stored, so ID4

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { investorZoneActions } from '../../../workspaces/investorZoneActions';
@@ -96,46 +96,49 @@ export default function InvestorClosingZone() {
   const [deals, setDeals] = useState(null);
   const [envelopes, setEnvelopes] = useState(null);
   const [view, setView] = useState('close');
-  const loadGenRef = useRef(0);
 
   const load = useCallback(() => {
-    const gen = ++loadGenRef.current;
     setDeals(null);
     setEnvelopes(null);
     api.listDeals(undefined, 'mine').then(
-      (r) => {
-        if (loadGenRef.current === gen) {
-          setDeals(Array.isArray(r) ? r : (r?.items || []));
-        }
-      },
-      () => {
-        if (loadGenRef.current === gen) {
-          setDeals(UNAVAILABLE);
-        }
-      },
+      (r) => setDeals(Array.isArray(r) ? r : (r?.items || [])),
+      () => setDeals(UNAVAILABLE),
     );
     api.esignList().then(
-      (r) => {
-        if (loadGenRef.current === gen) {
-          setEnvelopes(r?.envelopes || []);
-        }
-      },
-      () => {
-        if (loadGenRef.current === gen) {
-          setEnvelopes(UNAVAILABLE);
-        }
-      },
+      (r) => setEnvelopes(r?.envelopes || []),
+      () => setEnvelopes(UNAVAILABLE),
     );
   }, []);
-  useEffect(() => {
-    load();
-    return () => {
-      loadGenRef.current += 1;
-    };
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const dealsReady = deals !== null && deals !== UNAVAILABLE;
   const envReady = envelopes !== null && envelopes !== UNAVAILABLE;
+  /**
+   * THE THIRD FLAG, AND THE REASON THE OTHER TWO ARE NOT ENOUGH.
+   *
+   * This strip is a JOIN. `rows` is the envelopes filtered against the closing
+   * deals, so it needs BOTH reads; and `rows` collapses to `[]` when either one
+   * is missing. A tile gated on only its own source therefore prints a zero it
+   * cannot know: with the deal record unreadable, "Executed" rendered "0 of 0"
+   * and "Awaiting" rendered "0" — stated as fact, under a sentence explaining
+   * what the figure means. With the signature archive unreadable, "At closing"
+   * said "0 documents raised against them".
+   *
+   * `bothFailed` below only catches the case where BOTH reads fail, which is
+   * the case a reader would notice anyway. One failed read was the quiet one.
+   */
+  const joinedReady = dealsReady && envReady;
+  /**
+   * WHICH read is missing — because "unreadable" on its own sends a reader to
+   * refresh the wrong thing. The both-failed wording is kept correct even
+   * though `bothFailed` replaces the whole strip before it can render, so this
+   * stays true if that short-circuit ever moves.
+   */
+  const missingRead = dealsReady
+    ? 'the signature archive could not be read, so nothing can be counted against these deals'
+    : (envReady
+      ? 'the deal record could not be read, so there is nothing to count envelopes against'
+      : 'neither the deal record nor the signature archive could be read');
 
   /** The deals this stage is about, from the shared stage map rather than a status test. */
   const closing = useMemo(
@@ -226,50 +229,40 @@ export default function InvestorClosingZone() {
         <div className="space-y-6">
           {/* ══ THE ID4 STRIP ═══════════════════════════════════════════════ */}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4" data-testid="closing-strip">
-            {(() => {
-              const joinedReady = dealsReady && envReady;
-              return (
-                <>
-                  <CloseTile
-                    label="At closing"
-                    value={dealsReady ? String(closing.length) : null}
-                    note={dealsReady
-                      ? `${rows.length} document${rows.length === 1 ? '' : 's'} raised against them`
-                      : 'the deal record could not be read'}
-                  />
-                  <CloseTile
-                    label="Executed"
-                    value={joinedReady ? `${executed.length} of ${rows.length}` : null}
-                    note={!envReady
-                      ? 'the signature archive could not be read'
-                      : !dealsReady
-                        ? 'unavailable: the deal record could not be read, so closing-envelope counts cannot be joined'
-                        : 'an envelope counts as executed only when its status is completed'}
-                  />
-                  <CloseTile
-                    label="Signatures"
-                    value={joinedReady && sigs.required ? `${sigs.signed} of ${sigs.required}` : null}
-                    note={!envReady
-                      ? 'unreadable'
-                      : !dealsReady
-                        ? 'unavailable: the deal record could not be read, so signature counts for closing deals cannot be joined'
-                        : (sigs.unrecorded
-                          ? `${sigs.unrecorded} envelope${sigs.unrecorded === 1 ? ' records' : 's record'} no recipient, and ${sigs.unrecorded === 1 ? 'is' : 'are'} not counted`
-                          : 'summed across every envelope on these deals')}
-                  />
-                  <CloseTile
-                    label="Awaiting"
-                    value={joinedReady ? String(awaiting.length) : null}
-                    note={!envReady
-                      ? 'unreadable'
-                      : !dealsReady
-                        ? 'unavailable: the deal record could not be read, so awaiting counts cannot be joined'
-                        : 'sent and not yet completed'}
-                    tone={joinedReady && awaiting.length ? 'text-amber-700 dark:text-amber-300' : ''}
-                  />
-                </>
-              );
-            })()}
+            {/* THREE OF THESE FOUR FIGURES ARE JOINS, so they gate on
+                `joinedReady` and name the read that is missing rather than
+                counting to zero. "At closing" is the exception in one half:
+                its VALUE is a count of deals, so it stands on `dealsReady`
+                alone — but its note counts documents, which does not. */}
+            <CloseTile
+              label="At closing"
+              value={dealsReady ? String(closing.length) : null}
+              note={joinedReady
+                ? `${rows.length} document${rows.length === 1 ? '' : 's'} raised against them`
+                : (dealsReady ? missingRead : 'the deal record could not be read')}
+            />
+            <CloseTile
+              label="Executed"
+              value={joinedReady ? `${executed.length} of ${rows.length}` : null}
+              note={joinedReady
+                ? 'an envelope counts as executed only when its status is completed'
+                : missingRead}
+            />
+            <CloseTile
+              label="Signatures"
+              value={joinedReady && sigs.required ? `${sigs.signed} of ${sigs.required}` : null}
+              note={joinedReady
+                ? (sigs.unrecorded
+                  ? `${sigs.unrecorded} envelope${sigs.unrecorded === 1 ? ' records' : 's record'} no recipient, and ${sigs.unrecorded === 1 ? 'is' : 'are'} not counted`
+                  : 'summed across every envelope on these deals')
+                : missingRead}
+            />
+            <CloseTile
+              label="Awaiting"
+              value={joinedReady ? String(awaiting.length) : null}
+              note={joinedReady ? 'sent and not yet completed' : missingRead}
+              tone={joinedReady && awaiting.length ? 'text-amber-700 dark:text-amber-300' : ''}
+            />
           </div>
 
           {/* ══ THE COLLECTION THIS STAGE ACTUALLY HAS ══════════════════════ */}
