@@ -33,9 +33,16 @@ export async function verifyTurnstile(env: Env, token: string, ip?: string): Pro
     formData.append('response', token);
     if (ip) formData.append('remoteip', ip);
 
+    // A DEADLINE, BECAUSE THIS SITS IN FRONT OF SIGN-IN. Without it a
+    // siteverify that never answers holds the whole request open — and the
+    // `catch` below, which already fails closed, cannot run: a stall is not an
+    // error. Five seconds is generous for a call that normally takes tens of
+    // milliseconds, and a timeout lands in the same catch as any other failure,
+    // so an unreachable verifier refuses rather than hangs.
     const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
       method: 'POST',
       body: formData,
+      signal: AbortSignal.timeout(5_000),
     });
 
     const data = await res.json() as TurnstileResponse;

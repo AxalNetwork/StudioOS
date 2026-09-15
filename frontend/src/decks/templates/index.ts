@@ -20,7 +20,33 @@ import { Deck_narrative_brand } from './narrative_brand';
 // Task #15 — Axal 28-day Spin-Out Lab Demo Day deck (10 slides · editorial).
 import { Deck_axal_spinout_demoday } from './axal_spinout_demoday_app';
 
-export type TemplateCategory = 'commercial' | 'fundraising';
+/**
+ * The three values a template's `category` may take — WHO the deck is for.
+ *
+ * WIDENED IN #201, NARROWED AGAIN IN #207, and the two moves are the same
+ * lesson from opposite ends. #201 found the type reading
+ * `'commercial' | 'fundraising'` while `demo_day` and `axal_spinout_demoday`
+ * below both write `'event'` and `PitchDeckPage.jsx` hard-codes an `'event'`
+ * tab — the type was false about data that had shipped all along, so `'event'`
+ * was added. It also added `'narrative'`, for a different and weaker reason:
+ * the worker emitted it, and the note here said such a method was "reachable
+ * only under All".
+ *
+ * THAT WAS THE BUG, NOT A CAVEAT. `'narrative'` describes a deck's STYLE and
+ * every reader of this field routes by AUDIENCE — `shareDeckAudience.js` picks
+ * the post-NDA flow from it, and `PitchDeckPage.jsx:1570` prefers the worker's
+ * value over this table's for both the card label and the chips. So
+ * `sequoia_classic`, the template founders raise money with, displayed
+ * "NARRATIVE" in the picker and vanished from the Fundraising filter. #207
+ * retired the value at its source (`services/decks/methods.ts`, D102) rather
+ * than teaching more code to cope with it.
+ *
+ * Widening to `string` would still be the wrong repair, and now there is a test
+ * as well as a type: `frontend/test/deck_category_sources_agree.test.mjs` holds
+ * this table, the worker's and the FastAPI dev mirror to one answer, because
+ * nothing else did and two of the three had drifted.
+ */
+export type TemplateCategory = 'commercial' | 'fundraising' | 'event';
 
 export type BrandTheme = 'full' | 'accent_only' | 'off';
 
@@ -33,9 +59,20 @@ export interface TemplateMeta {
   /**
    * Task #6 — classifies the deck for share-link end-of-deck CTA routing.
    * `commercial` → customer-discovery feedback flow (Sales / Partnership /
-   * One-Pager / Narrative Brand). `fundraising` → auto-generated deal-pack
-   * + e-sign flow (everything else, including Demo Day even though its
-   * backend `category` is 'event').
+   * One-Pager / Narrative Brand); `fundraising` and `event` → the deal-pack +
+   * e-sign flow.
+   *
+   * NOTHING BRANCHES ON A LITERAL HERE ANY MORE. This used to say "`ShareDeckCTA`
+   * branches on `=== 'commercial'` and treats the remainder as fundraising" —
+   * that fall-through is exactly how a Demo Day viewer was promised documents
+   * the next step could not produce (#205). Since D97 the map lives in
+   * `frontend/src/lib/shareDeckAudience.js`, an unrecognised value renders no
+   * CTA at all rather than defaulting, and a test forbids either file from
+   * comparing `category` to a literal again.
+   *
+   * The wording before that said Demo Day was `fundraising` "even though its
+   * backend category is 'event'" — it is `'event'` here too, on the two entries
+   * below, and has been since they were added (#201).
    */
   category: TemplateCategory;
   Component: React.FC<DeckProps>;

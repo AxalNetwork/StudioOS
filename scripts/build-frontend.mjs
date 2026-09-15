@@ -27,6 +27,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { planAssetRetention } from './lib/assetRetention.mjs';
+import { sourceTreeHash } from './lib/sourceTreeHash.mjs';
 
 const RETAIN_BUILDS = Number(process.env.ASSET_RETAIN_BUILDS || 3);
 
@@ -128,6 +129,29 @@ execSync('node scripts/prerender-og.mjs', { cwd: root, stdio: 'inherit' });
 // Pages mirror. `docs/_headers` (copied by Vite from frontend/public/) is read
 // by Workers static assets and applied to the responses the assets binding
 // serves; it is parsed, not served, so it needs no exclusion either.
+
+// 6. Stamp docs/ with the source this build consumed — LAST, so a stamp only
+//    ever describes a build that finished.
+//
+// WHY A SEPARATE FILE RATHER THAN A KEY IN THE RETENTION LEDGER. The obvious
+// home is `docs/.asset-retention.json`, which is already written on every
+// build — but it is **gitignored** on purpose (see `.gitignore`: 45 KB that
+// churns wholesale), so CI never sees it and a stamp inside it would answer
+// nobody. This file is one line and changes only when the source does.
+//
+// WHAT IT IS FOR. `scripts/check-docs-fresh.mjs` asks whether the committed
+// docs/ is the build of the current frontend/src. Until now it could only ask
+// which commit was newer, and that proxy is wrong in both directions: commit
+// docs/ without rebuilding and it says fresh forever, while a comment-only or
+// type-only source edit emits a BYTE-IDENTICAL bundle — the minifier strips
+// comments, tsc erases types — leaving nothing to `git add` and a gate its own
+// printed fix could not satisfy, because `git commit` on an empty change
+// refuses. #207's PR is where that surfaced (D103).
+//
+// It is a hash, so it is also the thing that gives that no-op build a diff to
+// commit; the gate below it stays satisfiable either way.
+const stampPath = path.join(docsDir, '.build-source');
+fs.writeFileSync(stampPath, `${sourceTreeHash(path.join(root, 'frontend', 'src'))}\n`);
 
 console.log(
   `[build] done — ${newFiles.length} fresh asset(s); ${restored} prior hash(es) ` +

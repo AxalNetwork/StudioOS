@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Pill,
-  Field, SaveNote, UnlinkedZone, isNoPartnerProfile,
+  Field, SaveNote, NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, moneyDollars,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
@@ -88,7 +88,7 @@ function LeadCard({ row, busy, onPass, note }) {
   return (
     <div className={`rounded-[11px] border p-4 ${
       row.excluded_by
-        ? 'border-axal-hairline bg-axal-surface-2 dark:border-gray-700 dark:bg-gray-900'
+        ? 'border-axal-hairline bg-axal-ground dark:border-gray-700 dark:bg-gray-900'
         : (strong
           ? 'border-amber-200 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/15'
           : 'border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900')
@@ -103,10 +103,10 @@ function LeadCard({ row, busy, onPass, note }) {
             {/* PROVENANCE, and there is one kind of it on this build. */}
             <Pill tone="seam">{row.source_label}</Pill>
             {row.days_old != null && (
-              <span className="text-[11px] text-axal-ink-3">{row.days_old}d ago</span>
+              <span className="text-[11px] text-axal-faint">{row.days_old}d ago</span>
             )}
           </div>
-          <p className="mt-1 text-[12.5px] leading-relaxed text-axal-ink-2">
+          <p className="mt-1 text-[12.5px] leading-relaxed text-axal-muted">
             {row.title}
             {/* DOLLARS STRAIGHT THROUGH. `founder_needs.budget_*` is the old
                 REAL-dollars pipeline and `moneyDollars` formats dollars, so a
@@ -118,7 +118,7 @@ function LeadCard({ row, busy, onPass, note }) {
             {row.timeline && ` · ${row.timeline}`}
           </p>
           {row.need && (
-            <p className="mt-1 text-[12px] leading-relaxed text-axal-ink-3">{row.need}</p>
+            <p className="mt-1 text-[12px] leading-relaxed text-axal-faint">{row.need}</p>
           )}
         </div>
         <div className="text-right">
@@ -136,7 +136,7 @@ function LeadCard({ row, busy, onPass, note }) {
                   {row.score}
                 </span>
               ))}
-          <div className="text-[10px] font-semibold uppercase tracking-[.07em] text-axal-ink-3">match</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[.07em] text-axal-faint">match</div>
         </div>
       </div>
 
@@ -150,10 +150,10 @@ function LeadCard({ row, busy, onPass, note }) {
         </div>
       )}
       {row.excluded_by && (
-        <p className="mt-2 text-[11.5px] leading-relaxed text-axal-ink-2">{row.excluded_by}</p>
+        <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">{row.excluded_by}</p>
       )}
       {row.score_note && (
-        <p className="mt-2 text-[11.5px] leading-relaxed text-axal-ink-2">{row.score_note}</p>
+        <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">{row.score_note}</p>
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -166,7 +166,7 @@ function LeadCard({ row, busy, onPass, note }) {
       </div>
 
       {passing && (
-        <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
+        <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
           <div className="grid gap-3 md:grid-cols-2">
             <Field label="Reason" hint="A pass without one is a lead you read again next quarter.">
               <select className={inputClass} value={draft.reason}
@@ -250,23 +250,39 @@ export default function PartnerLeadsZone() {
 
   const rowActions = partnerZoneActions('pipeline/leads', { view: { header: ['Lead', 'Need', 'Score', 'Source', 'Budget max', 'Timeline'], rows: visible, cells: (r) => [r.who, r.title, r.score, r.source_label, r.budget_max, r.timeline] } });
 
-  if (isNoPartnerProfile(state.error)) {
-    return <UnlinkedZone title="Leads" actions={rowActions} />;
-  }
+  // NOT AN EARLY RETURN ANY MORE. This was
+  //   `if (isNoPartnerProfile(state.error)) return <UnlinkedZone … />;`
+  // which drew a card INSTEAD of the zone — on twelve zones, so an admin
+  // reading this workspace saw twelve copies of one card and never a page.
+  // `ZoneBody` takes the line as a `notice` above its states, and the zone
+  // renders underneath in its own empty state, which is also the state that
+  // says what this zone holds. The gate itself is untouched: the read still
+  // 400s, so `isEmpty` is forced rather than inferred from rows that never
+  // arrived, and `error` is cleared so the shared "This did not load" card —
+  // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
+  const unlinked = isNoPartnerProfile(state.error);
 
   return (
     <>
+      {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
+          An action states what the zone DOES and an export over nothing
+          loaded renders disabled and says so; a filter chip is a claim about
+          ROWS, and a selectable `Published` over a store this account cannot
+          read is the "an empty set reads as an answer" failure
+          `zoneFilterBuilder.js` exists to prevent, reached from a new
+          direction. `profile_zone_actions.test.mjs` asserts both halves. */}
       <ZoneToolbar
         className="mb-3"
         role="partner"
-        filters={partnerZoneFilters('pipeline/leads', { value: view, onChange: setView })}
+        filters={unlinked ? [] : partnerZoneFilters('pipeline/leads', { value: view, onChange: setView })}
         actions={rowActions}
       />
       <ZoneBody
         loading={state.loading}
-        error={state.error}
+        error={unlinked ? null : state.error}
         onRetry={load}
-        isEmpty={items.length === 0 && passed.length === 0}
+        notice={unlinked ? <NoPartnerProfile /> : null}
+        isEmpty={unlinked || (items.length === 0 && passed.length === 0)}
         empty={(
           <NothingYet
             title="No open lead right now"
@@ -321,7 +337,7 @@ export default function PartnerLeadsZone() {
           </div>
 
           {d?.scoring === 'none' && (
-            <p className="text-[12.5px] leading-relaxed text-axal-ink-2">{d.scoring_note}</p>
+            <p className="text-[12.5px] leading-relaxed text-axal-muted">{d.scoring_note}</p>
           )}
 
           {view !== 'passed' && (
@@ -341,7 +357,7 @@ export default function PartnerLeadsZone() {
                 />
               ))}
               {items.length > 0 && visible.length === 0 && (
-                <p className="text-[12px] text-axal-ink-2">
+                <p className="text-[12px] text-axal-muted">
                   No lead is in this state. {items.length} open in total.
                 </p>
               )}

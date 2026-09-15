@@ -75,7 +75,10 @@ function fmtWhen(iso) {
  * ------------------------------------------------------------------ */
 
 function FounderRoom({ projects, initialProjectUid }) {
-  const [projectUid, setProjectUid] = useState(initialProjectUid || projects[0]?.uid || '');
+  // NOT STATE ANY MORE (#181): the in-body picker was its only setter. The
+  // parent remounts this component with `key={initialProjectUid}`, so the room
+  // still follows `?project_id=` — it just cannot be switched from the body.
+  const projectUid = initialProjectUid || projects[0]?.uid || '';
   const [room, setRoom] = useState(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
@@ -118,16 +121,9 @@ function FounderRoom({ projects, initialProjectUid }) {
 
   return (
     <div className="space-y-6">
-      {projects.length > 1 && (
-        <select
-          value={projectUid}
-          onChange={(e) => setProjectUid(e.target.value)}
-          className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
-          aria-label="Project"
-        >
-          {projects.map((p) => <option key={p.uid} value={p.uid}>{p.name}</option>)}
-        </select>
-      )}
+      {/* The in-body startup picker is gone (#181) — see MarketIntelPage for the
+          reasoning. `projectUid` still defaults to `projects[0]?.uid`, which is
+          what it resolved to whenever the picker was hidden. */}
 
       {err && <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 text-sm text-red-700 dark:text-red-300">{err}</div>}
 

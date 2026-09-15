@@ -11,7 +11,7 @@ import {
   // `StatCard` went with the four tiles it drew: the strip is the artboard's
   // own now, and `On a retainer` was never on it — `Under-consuming` is, and it
   // is the figure this whole page argues for.
-  Section, Field, SaveNote, NotComputable, UnlinkedZone,
+  Section, Field, SaveNote, NotComputable, NoPartnerProfile,
   isNoPartnerProfile, inputClass, buttonClass, ghostButtonClass,
   moneyCents, dollarsToCents, formatDay,
 } from '../kit';
@@ -105,11 +105,11 @@ function Utilisation({ pct, note, used, retained }) {
         <span className={`text-sm font-extrabold tabular-nums ${over ? 'text-red-700 dark:text-red-300' : ''}`}>
           {pct}%
         </span>
-        <span className="text-[11px] text-axal-ink-3 tabular-nums">
+        <span className="text-[11px] text-axal-faint tabular-nums">
           {used}h of {retained}h
         </span>
       </div>
-      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-axal-surface-2">
+      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-axal-ground">
         <div
           className={`h-full rounded-full ${over ? 'bg-red-500' : low ? 'bg-amber-500' : 'bg-emerald-500'}`}
           style={{ width: `${Math.min(100, pct)}%` }}
@@ -157,7 +157,7 @@ function RetainerForm({ row, onSave, onDelete, busy, note }) {
   }
 
   return (
-    <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
+    <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
       <div className="grid gap-3 md:grid-cols-3">
         <Field label="Shape" hint="An embedded seat is a person inside the client's systems, not a scope of work.">
           <select className={inputClass} value={shape} onChange={(e) => setShape(e.target.value)}>
@@ -215,7 +215,7 @@ function UsageForm({ row, onSave, onDelete, busy }) {
 
   return (
     <div className="mt-3 rounded-lg border border-axal-hairline p-3 dark:border-gray-700">
-      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
         Hours for {period}
       </div>
       <div className="mt-2 grid gap-3 md:grid-cols-3">
@@ -247,7 +247,7 @@ function UsageForm({ row, onSave, onDelete, busy }) {
         </div>
       </div>
       {(row.usage || []).length > 1 && (
-        <p className="mt-2 text-[11.5px] text-axal-ink-3">
+        <p className="mt-2 text-[11.5px] text-axal-faint">
           Also logged:{' '}
           {(row.usage || []).filter((u) => u.period !== period)
             .map((u) => `${u.period} · ${u.hours_used}h`).join(', ')}
@@ -269,7 +269,7 @@ function RetainerRow({ row, onSaveRetainer, onDeleteRetainer, onSaveUsage, onDel
           <div className="text-sm font-extrabold tracking-tight">
             {row.founder_name || row.need_title || <Unrecorded>Unnamed client</Unrecorded>}
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11.5px] text-axal-ink-3">
+          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11.5px] text-axal-faint">
             <span>{row.engagement_uid}</span>
             {row.need_title && row.founder_name && <span>· {row.need_title}</span>}
             <span>· {row.engagement_status}</span>
@@ -288,15 +288,15 @@ function RetainerRow({ row, onSaveRetainer, onDeleteRetainer, onSaveUsage, onDel
       {r && (
         <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Amount</div>
+            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Amount</div>
             <div className="mt-0.5 text-sm font-extrabold tabular-nums">
               {r.amount_cents != null
-                ? <>{moneyCents(r.amount_cents)} <span className="text-[11px] font-semibold text-axal-ink-3">/ {CADENCE_LABEL[r.cadence]?.toLowerCase()}</span></>
+                ? <>{moneyCents(r.amount_cents)} <span className="text-[11px] font-semibold text-axal-faint">/ {CADENCE_LABEL[r.cadence]?.toLowerCase()}</span></>
                 : <Unrecorded>No amount recorded</Unrecorded>}
             </div>
           </div>
           <div>
-            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
               This period ({row.current_period})
             </div>
             <div className="mt-0.5">
@@ -307,17 +307,17 @@ function RetainerRow({ row, onSaveRetainer, onDeleteRetainer, onSaveUsage, onDel
             </div>
           </div>
           <div>
-            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Renews</div>
+            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Renews</div>
             <div className="mt-0.5 text-[12.5px]">
               {r.renews_at
-                ? <>{formatDay(r.renews_at)}{days !== null && <span className="ml-1.5 text-axal-ink-3">({days < 0 ? `${-days}d ago` : `in ${days}d`})</span>}</>
+                ? <>{formatDay(r.renews_at)}{days !== null && <span className="ml-1.5 text-axal-faint">({days < 0 ? `${-days}d ago` : `in ${days}d`})</span>}</>
                 : <Unrecorded>No renewal date</Unrecorded>}
             </div>
           </div>
           <div>
-            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Ended</div>
+            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Ended</div>
             <div className="mt-0.5 text-[12.5px]">
-              {r.ended_at ? formatDay(r.ended_at) : <span className="text-axal-ink-2">Running</span>}
+              {r.ended_at ? formatDay(r.ended_at) : <span className="text-axal-muted">Running</span>}
             </div>
           </div>
         </div>
@@ -431,16 +431,30 @@ export default function PartnerRetainersZone() {
   // Hoisted so the gate branch below and the live row draw the SAME row.
   // With nothing loaded the export renders disabled and says so itself,
   // which is what makes a header row over an unreadable store honest.
+  // `utilisation_pct` is TOP-LEVEL on the row, spread there by `utilisationFor()`
+  // — it is not part of the nested `retainer` record, unlike the four fields
+  // beside it. Exporting it as `r.retainer?.utilisation_pct` gave an empty
+  // Utilisation column while the table above rendered the real number from
+  // `r.utilisation_pct`. Nobody saw it because the export is disabled until
+  // rows load, and this firm had none.
   const rowActions = partnerZoneActions('pipeline/retainers', { view: {
         header: ['Client', 'Engagement', 'Amount (cents)', 'Cadence', 'Retained hours', 'Used', 'Utilisation %', 'Renews'],
         rows: visible,
         cells: (r) => [r.founder_name, r.need_title, r.retainer?.amount_cents, r.retainer?.cadence,
-          r.retained_hours, r.hours_used, r.retainer?.utilisation_pct, r.retainer?.renews_at],
+          r.retained_hours, r.hours_used, r.utilisation_pct, r.retainer?.renews_at],
       } });
 
-  if (isNoPartnerProfile(state.error)) {
-    return <UnlinkedZone title="Retainers" actions={rowActions} />;
-  }
+  // NOT AN EARLY RETURN ANY MORE. This was
+  //   `if (isNoPartnerProfile(state.error)) return <UnlinkedZone … />;`
+  // which drew a card INSTEAD of the zone — on twelve zones, so an admin
+  // reading this workspace saw twelve copies of one card and never a page.
+  // `ZoneBody` takes the line as a `notice` above its states, and the zone
+  // renders underneath in its own empty state, which is also the state that
+  // says what this zone holds. The gate itself is untouched: the read still
+  // 400s, so `isEmpty` is forced rather than inferred from rows that never
+  // arrived, and `error` is cleared so the shared "This did not load" card —
+  // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
+  const unlinked = isNoPartnerProfile(state.error);
 
   return (
     <>
@@ -448,17 +462,25 @@ export default function PartnerRetainersZone() {
           what cadence, how much of the retained time is being used and when it
           comes up. A row with no retainer carries blanks rather than zeroes —
           an engagement without one is not an engagement billing nothing. */}
+      {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
+          An action states what the zone DOES and an export over nothing
+          loaded renders disabled and says so; a filter chip is a claim about
+          ROWS, and a selectable `Published` over a store this account cannot
+          read is the "an empty set reads as an answer" failure
+          `zoneFilterBuilder.js` exists to prevent, reached from a new
+          direction. `profile_zone_actions.test.mjs` asserts both halves. */}
       <ZoneToolbar
         className="mb-3"
         role="partner"
-        filters={partnerZoneFilters('pipeline/retainers', { value: view, onChange: setView })}
+        filters={unlinked ? [] : partnerZoneFilters('pipeline/retainers', { value: view, onChange: setView })}
         actions={rowActions}
       />
     <ZoneBody
       loading={state.loading}
-      error={state.error}
+      error={unlinked ? null : state.error}
       onRetry={load}
-      isEmpty={items.length === 0}
+      notice={unlinked ? <NoPartnerProfile /> : null}
+      isEmpty={unlinked || (items.length === 0)}
       empty={(
         <NothingYet
           title="No engagement to hold a retainer yet"
@@ -525,7 +547,7 @@ export default function PartnerRetainersZone() {
         </div>
 
         {d?.mrr_note && d?.mrr_cents != null && (
-          <p className="text-[12px] leading-relaxed text-axal-ink-2">{d.mrr_note}</p>
+          <p className="text-[12px] leading-relaxed text-axal-muted">{d.mrr_note}</p>
         )}
 
         {/* ══ THE BOOK — the artboard's ledger ══════════════════════════════

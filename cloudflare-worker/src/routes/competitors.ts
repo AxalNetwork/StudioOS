@@ -14,9 +14,9 @@ import { getSQL } from '../db';
 import { requireAuth } from '../auth';
 import { canAccessProject } from '../services/projectAccess';
 import { ensureCompetitorSchema } from '../services/competitorSchema';
+import { insertManualCandidate } from './_competitor_writes';
 import {
   runCompetitorAnalysis,
-  buildManualCandidate,
   type AnalysisInputs,
   type AnalysisResult,
   type Candidate,
@@ -277,30 +277,20 @@ competitors.post('/:id/candidates', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   if (!body.name || typeof body.name !== 'string') return c.json({ error: 'name_required' }, 400);
 
+  // THE INSERT LIVES IN `_competitor_writes.ts` NOW, and this route is the reason
+  // it had to move: `services/fills/registry.ts` requires that an accepted
+  // proposal go through the function the manual form calls, and this insert was
+  // inline here — so there was nothing for a fill to call. Behaviour is unchanged;
+  // see that file's header for what a second copy of it would have got wrong
+  // (`position`, and the `edited = 1` that stops a re-run deleting manual rows).
   const inputs = safeParse(analysis.inputs_json, {}) as AnalysisInputs;
-  const posRows = await sql`SELECT COALESCE(MAX(position), -1) AS maxpos FROM competitor_candidates WHERE analysis_id = ${id}`;
-  const nextPos = Number(posRows[0]?.maxpos ?? -1) + 1;
-
-  const { candidate, sources, signals } = await buildManualCandidate(c.env, user.id, inputs, {
+  await insertManualCandidate(c.env, user.id, id, inputs, {
     name: body.name,
     url: typeof body.url === 'string' ? body.url : undefined,
     category: typeof body.category === 'string' ? body.category : undefined,
     summary: typeof body.summary === 'string' ? body.summary : undefined,
     crawl: !!body.crawl,
   });
-  candidate.position = nextPos;
-
-  await sql`INSERT INTO competitor_candidates (id, analysis_id, name, domain, url, category, relevance_score, scores_json, summary, details_json, origin, position)
-    VALUES (${candidate.id}, ${id}, ${candidate.name}, ${candidate.domain}, ${candidate.url}, ${candidate.category}, ${candidate.relevance_score}, ${JSON.stringify(candidate.scores)}, ${candidate.summary}, ${JSON.stringify(candidate.details)}, ${candidate.origin}, ${candidate.position})`;
-  for (const s of sources) {
-    await sql`INSERT INTO competitor_sources (id, analysis_id, candidate_id, url, kind, title, status, fetched_at)
-      VALUES (${s.id}, ${id}, ${s.candidate_id}, ${s.url}, ${s.kind}, ${s.title}, ${s.status}, ${s.fetched_at})`;
-  }
-  for (const g of signals) {
-    await sql`INSERT INTO competitor_signals (id, analysis_id, candidate_id, signal_type, label, detail)
-      VALUES (${g.id}, ${id}, ${g.candidate_id}, ${g.signal_type}, ${g.label}, ${g.detail})`;
-  }
-  await sql`UPDATE competitor_analyses SET edited = 1, updated_at = ${nowIso()} WHERE id = ${id}`;
   const full = await loadAnalysis(c.env, user.id, id);
   return c.json(full);
 });

@@ -21,8 +21,8 @@ import { Card } from '../ui';
  * as `plain` and appended `border-dashed` by hand, so they rendered a white
  * card with a dashed border rather than the transparent one the variant draws.
  *
- * And every copy asked for a tint with `bg-axal-surface-2` and muted text with
- * `text-axal-ink-2` / `-ink-3`. Those three tokens are declared in no `@theme`
+ * And every copy asked for a tint with `bg-axal-ground` and muted text with
+ * `text-axal-muted` / `-ink-3`. Those three tokens are declared in no `@theme`
  * block — `frontend/src/index.css` declares `axal-ink`, `-ground`, `-hairline`,
  * `-faint`, `-muted`, the violets, the lavender and the ambers, and nothing
  * else — so all three emitted no CSS at all. The tint was never on screen and

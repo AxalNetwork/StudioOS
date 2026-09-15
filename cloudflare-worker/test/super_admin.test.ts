@@ -54,12 +54,25 @@ test('the gate is layered on requireAdmin, so it can only ever narrow', () => {
   assert.match(fn.slice(0, 400), /Super admin required/);
 });
 
-test("the refusal is a 403, not a 500", () => {
+test("the refusal is a 403 — not a 500, and not a 400", () => {
   // AUTH_ERROR_STATUSES maps thrown messages to statuses; anything missing
   // falls through to the generic 500. A gate that works and reports a server
   // error is a gate nobody can act on.
-  const src = read('cloudflare-worker/src/index.ts');
+  const src = read('cloudflare-worker/src/util/authErrors.ts');
   assert.match(src, /'Super admin required': 403/);
+
+  // D110 — AND THE OTHER READER, which is the one this console actually goes
+  // through. Every route in `admin_licences.ts` catches its own throws with
+  // `mapError`, so `app.onError` never sees them; `mapError` had its own list
+  // of sentences, that list did not include this one, and the whole franchise
+  // console answered a permission refusal with **400 Bad Request**. There is
+  // one table now and both readers index it.
+  const helpers = read('cloudflare-worker/src/routes/_t13t14t15_helpers.ts');
+  assert.match(helpers, /AUTH_ERROR_STATUSES\[msg\] \?\? 400/);
+  assert.ok(
+    !/msg === 'Forbidden' \|\| msg === 'Admin required'/.test(helpers),
+    'mapError must not carry a second list of which sentence is which status',
+  );
 });
 
 test('every route on the franchise console is super-admin only', () => {
@@ -134,7 +147,22 @@ test('the elevation is read from super_admins, never from a users column', () =>
     'getCurrentUser hydrates the flag from the side table before anything downstream reads the row');
   const hydrate = exportedFn(auth, 'hydrateSuperAdmin');
   assert.match(hydrate, /\.is_super_admin = flag;/, "the row's own value, if a column still exists, is overwritten");
-  assert.match(hydrate, /isAdminRole \? await loadSuperAdminFlag\(/, 'non-admins are 0 without a lookup');
+  // The lookup is behind `isAdminRole` and stays behind it. D106 added a
+  // second conjunct (`&& !onBranch`), so this matches the CONDITION rather
+  // than the exact expression it was: a further narrowing is fine — every one
+  // makes more accounts read 0 without a lookup — while moving the call out
+  // from behind `isAdminRole`, or dropping the guard entirely, still fails.
+  assert.match(
+    hydrate,
+    /const flag: 0 \| 1 = isAdminRole[^?]*\? await loadSuperAdminFlag\(/,
+    'non-admins are 0 without a lookup, and the lookup stays behind isAdminRole',
+  );
+  assert.match(hydrate, /: 0;/, 'the other arm is the literal 0, not a second lookup');
+  // D106 — on a branch the answer is 0 and the table is not consulted at all.
+  // Pinned here as well as in branch_mode_gates.test.ts because this file is
+  // the one that reads as "everything about how the elevation is resolved".
+  assert.match(hydrate, /const onBranch = branchOf\(env\) !== null;/,
+    'branch mode decides the elevation, not a row count (D106)');
 });
 
 function fakeEnv(first: () => Promise<unknown>) {

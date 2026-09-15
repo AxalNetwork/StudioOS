@@ -49,6 +49,8 @@ export type TaskClass =
   | 'transcribe'
   | 'validate_tag_pains'
   | 'validate_draft_hypotheses'
+  | 'market_sizing_inputs'
+  | 'competitor_scan'
   | 'research_ask';
 
 export type RefusalReason =
@@ -355,6 +357,49 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
     // hundredth of a cent, is not a trade worth putting on screen.
     alternates: [MID_LLAMA, SMALL_LLAMA],
   },
+  // The market page's sizing INPUTS — an addressable population, an ACV
+  // benchmark — each proposed with a citation or dropped. The first `sourced`
+  // fill, so it is the first task in this table whose output is refused when it
+  // arrives unsupported rather than merely scored.
+  //
+  // A SEPARATE CLASS FROM THE TWO ABOVE, for this table's stated reason:
+  // `/api/ai/me/spend` groups by task and the rail quotes the caller's observed
+  // average per task. A sizing run reads a project's sector and its own library;
+  // folding it in with a tagging run would misreport both.
+  //
+  // No 3b in the alternates, and the asymmetry is the same one
+  // `validate_draft_hypotheses` makes. A shallower model asked for a market
+  // figure does not return a worse-written figure, it returns one whose citation
+  // is likelier to be invented — and the refusal path then drops the run
+  // entirely, so the cheaper model is not cheaper, it is a wasted call.
+  //
+  // Not cached. A sizing proposal reads the project's current sector and the
+  // documents in its library, which is exactly what changes between two asks.
+  market_sizing_inputs: {
+    provider: 'workers-ai',
+    model: MID_LLAMA,
+    fallbackChain: [SMALL_LLAMA],
+    alternates: [MID_LLAMA, SMALL_LLAMA],
+  },
+  // Naming competitors a founder has not listed, each with a citation or dropped.
+  //
+  // ITS OWN CLASS FOR THIS TABLE'S STATED REASON — `/api/ai/me/spend` groups by
+  // task and the rail quotes the caller's observed average — and for a second one
+  // that is specific to it: a sizing run reads a sector and returns numbers, and
+  // this reads a sector and returns names of real companies. The failure modes
+  // differ (a wrong number is a wrong number; an invented company is a
+  // fabrication), so their averages should not be folded into one figure that
+  // describes neither.
+  //
+  // Same alternates as sizing, and the same reason a 3b is absent: a shallower
+  // model asked to name competitors returns ones whose citation is likelier to be
+  // invented, and the refusal path then drops the run — so it is not cheaper.
+  competitor_scan: {
+    provider: 'workers-ai',
+    model: MID_LLAMA,
+    fallbackChain: [SMALL_LLAMA],
+    alternates: [MID_LLAMA, SMALL_LLAMA],
+  },
   // Research · Ask — answering a question over the caller's own indexed
   // documents, with citations.
   //
@@ -536,18 +581,26 @@ async function cacheKeyFor(opts: RunOptions, model: string): Promise<string | nu
 
 // ---------------------------------------------------------------------------
 // Schema bootstrap for ai_usage_logs (mirrors migration 040). Cheap, gated
-// behind a once-per-isolate flag so dev/SQLite is self-healing.
+// per D1 BINDING so dev/SQLite is self-healing and a second database in the
+// same isolate is not told the work is already done (#204).
+//
+// THE CAST IS SPELLED OUT HERE rather than taken from `util/schemaBootstrap`'s
+// `bindingKey`, and that is deliberate: `aiRouter.test.mjs` loads this file by
+// reading its bytes, stripping the single `import type` line and evaluating the
+// rest inside `new Function`. A value import would survive that strip and throw
+// `Cannot use import statement outside a module`. This module having no value
+// import is a property that test depends on, so it keeps its own cast.
 // ---------------------------------------------------------------------------
-let _logSchemaReady = false;
+let LOG_SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensureLogSchema(env: Env): Promise<void> {
-  if (_logSchemaReady) return;
+  if (LOG_SCHEMA_READY.get(env.DB as unknown as object)) return;
   try {
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))",
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_user_created ON ai_usage_logs(user_id, created_at DESC)");
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_task_created ON ai_usage_logs(task, created_at DESC)");
-    _logSchemaReady = true;
+    LOG_SCHEMA_READY.set(env.DB as unknown as object, true);
   } catch (e) {
     console.warn('[aiRouter] log schema:', (e as Error).message);
   }
@@ -1151,10 +1204,13 @@ export async function loadAiUsageReport(env: Env, days = 7): Promise<AiUsageRepo
   };
 }
 
-// Test-only export — lets the test harness reset the once-per-isolate
-// schema flag between scenarios.
+// Test-only export — drops what every binding has bootstrapped, so a scenario
+// that reuses one D1 stub still starts from a cold schema. Keyed per binding
+// (#204) this matters less than it did: a test handing over a FRESH stub now
+// gets a cold cache with no reset at all. It stays because the suites that
+// reuse a stub across cases still need it, not because the cache leaks.
 export function __resetForTest(): void {
-  _logSchemaReady = false;
+  LOG_SCHEMA_READY = new WeakMap<object, boolean>();
 }
 
 // Spec phrased the public entry point as `run(task, payload, opts)`.

@@ -241,11 +241,34 @@ test('Client prep blames the access rule, not a table that is actually there', (
   // asserts at both ends: searching a whole file instead is how a sibling test
   // matched an unrelated key three hundred lines down and failed for the wrong
   // reason.
-  const copy = block(copyCode, 'RESEARCH_CLIENT_PREP_COPY');
-  assert.match(copy, /access decision, not an absent table/,
-    'the card must name the access decision as the obstacle');
-  assert.match(copy, /carries their founder id and a project carries the same id/,
-    'the card must say the join exists, since claiming otherwise is what was wrong');
+  // THE OBSTACLE IS NOW ASSERTED WHERE A READER MEETS IT, AND THAT IS THE POINT
+  // OF THE MOVE. It used to be read out of `RESEARCH_CLIENT_PREP_COPY`, which
+  // `boards/research.js` rendered as a no-store GAP on both `/research` roots —
+  // eyebrow "No store behind this yet", heading "The client brief is not built
+  // yet" — over a zone that is in `LIVE_ZONES`, renders a real body and reads
+  // five API methods. The comment above this test already said the reason
+  // "belongs in the zone's own empty state ... rather than in a no-store note
+  // above a card that no longer exists"; the board had not caught up.
+  //
+  // The zone says it PER ROLE, which one board sentence could not: a partner is
+  // told nothing here requests a record, an advisor is told where the half they
+  // already hold lives. That is strictly more accurate than the copy this
+  // replaces, so the assertion moved rather than being dropped.
+  const zone = codeOnly(read('frontend/src/pages/research/ClientPrepZone.jsx'));
+  assert.match(zone, /No client has opened their record to you/,
+    'the zone must name the access decision as the obstacle, not an absent store');
+  assert.match(zone, /A founder opens their record to you by name, and chooses how much of it/,
+    'the advisor arm must say the join exists and is gated by permission');
+  assert.match(zone, /Nothing here requests one — an empty list means none is open/,
+    'the partner arm must distinguish "none open" from "a request is pending"');
+  assert.ok(!/RESEARCH_CLIENT_PREP_COPY/.test(copyCode),
+    'the dead no-store copy is back; a gap object for a live zone gets re-adopted');
+
+  // And the board must not gap a live zone again.
+  const researchBoard = codeOnly(read('frontend/src/workspaces/boards/research.js'));
+  assert.ok(!/gap:/.test(researchBoard.slice(researchBoard.indexOf("'client-prep'") - 200,
+    researchBoard.indexOf("'client-prep'") + 200)),
+    'client-prep is a gap section again, over a zone that renders a real body');
 });
 
 test('Client prep gives the two roles that see it their own reason', () => {
@@ -320,9 +343,8 @@ test('the Network overview shares one INTRO map and marks Organizations where it
 
 test('no overview blurb claims a platform cut or a booking count', () => {
   // Two recorded decisions, both contradicted by the first draft of this grid:
-  // Axal records amounts and settles nothing (no fee, no cut, no payout), and
-  // `units_sold` is null by design because a booking records a topic, not a
-  // service.
+  // nothing has been charged, and `units_sold` is null by design because a
+  // booking records a topic, not a service.
   const blurbBody = block(advisorCode, 'ZONE_BLURB');
   for (const claim of [
     /platform took/i,
@@ -334,4 +356,47 @@ test('no overview blurb claims a platform cut or a booking count', () => {
   ]) {
     assert.doesNotMatch(blurbBody, claim, `an overview blurb re-asserts ${claim}`);
   }
+});
+
+test('no static surface DENIES the cut either, now that one is recorded', () => {
+  // THE OTHER DIRECTION, and it is new. The test above bans claiming money was
+  // taken, which is still right — nothing has been charged. What it never
+  // banned was the opposite sentence, and three static surfaces shipped it:
+  // the Earnings blurb, the Practice board footnote and the AI rail's "Money
+  // movement" card all said Axal "takes no cut". Migration 241 records a rate
+  // per priced line and adds `advisor_payouts`, so the denial is false while
+  // the claim is premature — and a static string can assert NEITHER, because
+  // whether anything settles is `settlement` on the response and none of these
+  // surfaces reads it. Each one names the rate and defers. D75.
+  const surfaces = [
+    ['frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx', advisorCode],
+    ['frontend/src/workspaces/boards/advisorPractice.js', read('frontend/src/workspaces/boards/advisorPractice.js')],
+    ['frontend/src/pages/advisor/practice/EarningsZone.jsx', read('frontend/src/pages/advisor/practice/EarningsZone.jsx')],
+  ];
+  for (const [name, raw] of surfaces) {
+    // `codeOnly`, because the comment in each file explaining what it stopped
+    // saying necessarily says it — the self-matching trap.
+    const src = codeOnly(raw);
+    for (const denial of [
+      /takes? no cut/i,
+      /no payout rail/i,
+      /does not take a cut/i,
+      /no platform line to show/i,
+    ]) {
+      assert.doesNotMatch(src, denial, `${name} denies a cut that migration 241 records`);
+    }
+  }
+
+  // And the positive half, or the ban could be satisfied by deleting the
+  // subject entirely: each surface still tells the reader a rate exists.
+  for (const [name, raw] of surfaces) {
+    assert.match(codeOnly(raw), /platform rate/i,
+      `${name} no longer mentions the platform rate at all`);
+  }
+
+  // The migration the sentence now rests on must still define it, so removing
+  // the rate cannot quietly make the denial true again without failing here.
+  const m241 = read('cloudflare-worker/sql/migrations/241_advisor_money_model.sql');
+  assert.match(m241, /'advisor_take_rate_bps'/);
+  assert.match(m241, /platform_cut_cents/);
 });

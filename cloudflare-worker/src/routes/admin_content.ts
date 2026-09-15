@@ -153,11 +153,24 @@ r.get('/summary', async (c) => {
       + 'that does not exist.',
 
     // Localisation, which the artboard's header counts.
+    //
+    // NARROWED IN D112, NOT DELETED. This refusal had three parts and one PR
+    // closed two of them: a content escalation carries `branch_code`, which is
+    // the per-subsidiary attribution, and it now carries a decision, which is
+    // the brand-approval state. The third part is untouched and is the reason
+    // the header's count still has no source — NOTHING RECORDS THAT ONE PIECE
+    // LOCALISES ANOTHER. An escalation names what a branch submitted; it does
+    // not say which original it is a version of, so "4 localised" would be
+    // counting submissions and calling them translations.
     localisation_available: false,
     localisation_reason:
-      'Nothing records that a piece is a localisation of another, and nothing records which '
-      + 'subsidiary produced it. "4 localised, awaiting brand approval" has no source: there is no '
-      + 'localisation link, no brand-approval state, and no per-subsidiary attribution (U1).',
+      'Brand approval and per-subsidiary attribution exist now: a branch submits content as an '
+      + 'escalation of kind "content", which carries its branch code and takes an approve or '
+      + 'request-changes decision, and the lane is read from /api/admin/escalations?kind=content. '
+      + 'What is still not recorded is the LINK — nothing says that one piece is a localisation of '
+      + 'another, so a count of localised items would be a count of submissions wearing the wrong '
+      + 'name.',
+    localisation_lane_endpoint: '/api/admin/escalations?kind=content',
 
     ...DERIVED_UNAVAILABLE,
   });

@@ -4,6 +4,7 @@ import { getSQL } from '../db';
 import { requireAuth, requireApprovedKyc } from '../auth';
 import { ensureWorkflowSchema } from '../services/workflowSchema';
 import { aiQuotaGate, recordSharedServiceAction } from '../services/aiQuota';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const networkfx = new Hono<{ Bindings: Env }>();
 
@@ -11,9 +12,9 @@ const networkfx = new Hono<{ Bindings: Env }>();
 const COMPOUNDING_BPS = [10000, 5000, 2500];
 const MAX_LEVEL = 3;
 
-let migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env) {
-  if (migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS referral_chains (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,7 +70,7 @@ async function ensureSchema(env: Env) {
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
   // Shared with pipeline, legalcap and dashboard — see migration 177.
   await ensureWorkflowSchema(env);
-  migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 function safeJson<T>(s: any, def: T): T { try { return s ? JSON.parse(s) : def; } catch { return def; } }

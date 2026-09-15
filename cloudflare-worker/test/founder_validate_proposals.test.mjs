@@ -25,6 +25,7 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { transpileTs as transpile } from './_transpile-ts.mjs';
+import { codeOnly } from './_codeOnly.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -188,8 +189,12 @@ test('the two kinds route to two task classes, both real', async () => {
     assert.ok(task, `${kind} has no task class`);
     // Registered in ROUTE, or every figure the rail reports for it is wrong —
     // and `run()` refuses an unknown task outright.
-    assert.match(router, new RegExp(`^  ${task}: \\{`, 'm'), `${task} is not a ROUTE entry`);
-    assert.match(router, new RegExp(`\\| '${task}'`), `${task} is not in the TaskClass union`);
+    // Literal probes, not a regex built from `task`: Semgrep's
+    // `detect-non-literal-regexp` is right that a pattern compiled from a
+    // variable is worth avoiding, and `\n  x: {` says the same thing as the
+    // multiline anchor did.
+    assert.ok(router.includes(`\n  ${task}: {`), `${task} is not a ROUTE entry`);
+    assert.ok(router.includes(`| '${task}'`), `${task} is not in the TaskClass union`);
   }
   // Distinct classes, because /api/ai/me/spend groups by task and the rail
   // quotes the caller's observed average per task.
@@ -239,9 +244,18 @@ test('two founders cannot both accept one proposal', async () => {
   assert.match(body, /if \(!claim\.meta\?\.changes\)/,
     'the claim result is not checked, so a losing race writes anyway');
   assert.match(body, /409/, 'a lost race must be a 409, not a second write');
-  // Claim BEFORE the write, or two accepts can both pass the check.
-  assert.ok(body.indexOf("status = 'accepted'") < body.indexOf('insertHypothesis'),
-    'the row must be claimed before it is applied');
+  // Claim BEFORE the write, or two accepts can both pass the check. Compared in
+  // CODE ONLY: this assertion used to look for `insertHypothesis`, and once the
+  // dispatch moved to `services/fills/registry.ts` the only occurrence left in
+  // this handler was the comment explaining why that writer cannot be
+  // reimplemented — so the check was passing on prose. `spec.apply` is the write
+  // now, and a docblock mentioning it cannot satisfy this.
+  const code = codeOnly(body);
+  const claimedAt = code.indexOf("status = 'accepted'");
+  const writtenAt = code.indexOf('await spec.apply(');
+  assert.ok(claimedAt > 0, 'the claim statement is gone from the accept handler');
+  assert.ok(writtenAt > 0, 'the accept handler no longer applies through the registry');
+  assert.ok(claimedAt < writtenAt, 'the row must be claimed before it is applied');
 });
 
 test('a failed apply puts the proposal back rather than losing it', async () => {
@@ -251,11 +265,33 @@ test('a failed apply puts the proposal back rather than losing it', async () => 
   const body = handler(await routeSrc(), "founderValidate.post('/proposals/:id/accept'");
   assert.match(body, /const revert = async \(\) => \{/);
   assert.match(body, /status = 'pending', decided_by = NULL, decided_at = NULL/);
-  assert.match(body, /catch \(e\) \{\s*await revert\(\);/,
+
+  // REVERT IS THE FIRST THING THE CATCH DOES. Matched by position inside the
+  // catch rather than by a regex butted up against `catch (e) {`, because a
+  // comment between the two is not a behaviour change and this assertion should
+  // not fail on one.
+  const code = codeOnly(body);
+  const caught = code.slice(code.indexOf('} catch (e) {'));
+  assert.ok(caught.length > 20, 'the accept path no longer catches a failed apply');
+  assert.ok(caught.indexOf('await revert();') > 0
+    && caught.indexOf('await revert();') < caught.indexOf('return'),
     'a throw during apply leaves the proposal accepted and unwritten');
-  // A theme deleted between propose and accept is not a 500: it is a proposal
-  // that no longer applies, and it goes back rather than being swallowed.
-  assert.match(body, /if \(!ok\) \{ await revert\(\); return json\(\{ detail: 'That theme no longer exists' \}, 409\); \}/);
+
+  // A THEME DELETED BETWEEN PROPOSE AND ACCEPT IS NOT A 500: it is a proposal
+  // that no longer applies, and it goes back rather than being swallowed. The
+  // check itself moved into `services/fills/registry.ts` with the dispatch — the
+  // entry throws and this handler maps the throw — so the guarantee is asserted
+  // in both halves rather than dropped because the old one-liner is gone.
+  assert.match(code, /if \(\/no longer exists\/i\.test\(msg\)\) return json\(\{ detail: msg \}, 409\)/,
+    'a proposal whose theme is gone no longer comes back as a 409');
+  const registry = await readFile(resolve(__dirname, '../src/services/fills/registry.ts'), 'utf8');
+  assert.match(codeOnly(registry), /if \(!ok\) throw new Error\('That theme no longer exists'\)/,
+    'the pain tag entry no longer refuses a theme that is not this project’s');
+
+  // AND AN UNKNOWN KIND REVERTS TOO. A proposal whose kind has left the registry
+  // is the same "cannot be applied now" case, and a 500 would strand it accepted.
+  assert.match(code, /if \(!spec\) \{\s*await revert\(\);/,
+    'a proposal of an unregistered kind is not put back');
 });
 
 test('accepting writes through the same function the manual route uses', async () => {
@@ -264,11 +300,22 @@ test('accepting writes through the same function the manual route uses', async (
   // reissued; a second insert using `COUNT(*) + 1` would start handing out
   // duplicates the first time anything was retired.
   const src = await routeSrc();
-  assert.match(src, /import \{ insertHypothesis, upsertPainAlias \} from '\.\/_founder_validate_writes'/);
-  const inserts = [...src.matchAll(/INSERT INTO hypotheses/g)].length;
-  assert.equal(inserts, 0, `founder_validate.ts writes hypotheses directly (${inserts} statements)`);
-  const aliases = [...src.matchAll(/INSERT INTO pain_group_aliases/g)].length;
-  assert.equal(aliases, 0, 'founder_validate.ts writes pain aliases directly');
+  // ONE WRITER, WHEREVER THE CALLER LIVES. `insertHypothesis` stays imported here
+  // because `POST /hypotheses` — the manual form — is in this file. The alias
+  // upsert's callers moved: the accept path's is `services/fills/registry.ts` and
+  // the manual one is `progress.ts`. What this test protects is that no caller
+  // grew its own INSERT, which is checked directly below rather than inferred
+  // from an import list.
+  assert.match(src, /import \{ insertHypothesis \} from '\.\/_founder_validate_writes'/);
+  const registry = await readFile(resolve(__dirname, '../src/services/fills/registry.ts'), 'utf8');
+  assert.match(registry, /from '\.\.\/\.\.\/routes\/_founder_validate_writes'/,
+    'the fills registry no longer draws its writers from the shared module');
+  for (const [name, file] of [['founder_validate.ts', src], ['services/fills/registry.ts', registry]]) {
+    const inserts = [...file.matchAll(/INSERT INTO hypotheses/g)].length;
+    assert.equal(inserts, 0, `${name} writes hypotheses directly (${inserts} statements)`);
+    const aliases = [...file.matchAll(/INSERT INTO pain_group_aliases/g)].length;
+    assert.equal(aliases, 0, `${name} writes pain aliases directly`);
+  }
 
   // And the other caller went through it too, rather than keeping its copy.
   const progress = await readFile(resolve(__dirname, '../src/routes/progress.ts'), 'utf8');
@@ -291,9 +338,76 @@ test('a run reads only this project, and nothing a caller names', async () => {
   const body = handler(await routeSrc(), "founderValidate.post('/propose/:projectId'");
   assert.match(body, /const s = await scope\(c, Number\(c\.req\.param\('projectId'\)\), canWrite\)/,
     'propose is not behind the write gate');
-  // Every id that reaches the prompt comes from the project's own view.
-  assert.match(body, /getPainGroupsView\(c\.env, s\.project\.id\)/);
+
+  // EVERY ID THAT REACHES THE PROMPT STILL COMES FROM THE PROJECT'S OWN VIEW —
+  // the read moved into `services/fills/registry.ts`'s `gather`, so the assertion
+  // moved with it rather than being dropped. The route's only contribution is the
+  // context, and `projectId` there is the SCOPED project: `s.project.id`, resolved
+  // by `scope` from the path and gated, never a number off the request body.
+  assert.match(body, /const ctx = \{ env: c\.env, user: s\.user, projectId: s\.project\.id \};/,
+    'the fill context carries a project id the caller could have chosen');
+  assert.doesNotMatch(body, /b\.project|b\.projectId|body\?\.project/,
+    'the route reads a project id out of the request body');
+
+  // And no gather reaches past its own context for one.
+  const registry = await readFile(resolve(__dirname, '../src/services/fills/registry.ts'), 'utf8');
+  const gathers = [...registry.matchAll(/async gather\(ctx\)[\s\S]*?\n  \},/g)].map((m) => m[0]);
+  assert.ok(gathers.length >= 3, `only ${gathers.length} gathers found — has the registry shrunk?`);
+  for (const g of gathers) {
+    assert.doesNotMatch(g, /project_id = \?\s*'?\s*\)?\s*\.bind\((?!ctx\.projectId)/,
+      'a gather binds a project id that is not its context’s');
+    assert.doesNotMatch(g, /WHERE project_id = \d/, 'a gather hardcodes a project id');
+  }
+
   // And the route validates no model of its own — run() owns that list.
   assert.doesNotMatch(body, /alternates|@cf\//,
     'the route re-derives the model allow-list instead of letting run() decide');
+});
+
+test('a proposal is refused before it is stored, and the count is reported', async () => {
+  // THE GUARANTEE THE SOURCED CLASS RESTS ON, at the last point it can be
+  // enforced. `parse` refuses what it can see; `refuseReason` refuses what the
+  // CLASS requires regardless of what a parser was written to do — a `sourced`
+  // proposal with no citation, a citation with no quote, a restatement carrying
+  // one. Two checks and not a redundant one: the store must not be able to hold
+  // any of those, whatever the parser does.
+  const body = handler(await routeSrc(), "founderValidate.post('/propose/:projectId'");
+  assert.match(body, /const why = refuseReason\(spec, p\);/);
+  assert.ok(body.indexOf('const why = refuseReason(spec, p);') < body.indexOf('INSERT INTO validate_proposals'),
+    'a proposal is stored before the class check runs');
+  assert.match(body, /if \(why\) \{ refused\.push\(why\); continue; \}/);
+
+  // REPORTED, NOT SWALLOWED. A run that silently returns two of five reads as a
+  // model with little to say, when what happened is that three were refused.
+  assert.match(body, /refused: refused\.length,/);
+  assert.match(body, /refused_reasons: \[\.\.\.new Set\(refused\)\]/);
+
+  // And the columns migration 246 added are written, or a stored proposal cannot
+  // say which surface it belongs to or what it was drawn from.
+  // WORD TOKENS, PARSED ONCE. `includes` would be wrong here for the reason the
+  // old `\b…\b` existed: `surface` is a substring of `surface_ref`, so a bare
+  // substring check would pass on a column that is not the one asked for. One
+  // literal pattern over the body gives the same precision without compiling a
+  // regex per column — which is what `detect-non-literal-regexp` objects to.
+  const words = new Set([...body.matchAll(/[A-Za-z_][\w]*/g)].map((m) => m[0]));
+  for (const column of ['surface', 'fill_class', 'citation_json', 'target_ref']) {
+    assert.ok(words.has(column), `a stored proposal carries no ${column}`);
+  }
+  assert.match(body, /p\.citation \? JSON\.stringify\(p\.citation\) : null,/);
+});
+
+test('nothing is spent to be told there is nothing to work from', async () => {
+  // The empty cases are the ones a founder meets most and they are not errors:
+  // no themes to sort into, every phrase already grouped, every sizing input
+  // already filled. `gather` says so in the words the page shows, and the run
+  // never happens — spending a call to be told either by a model is a call wasted.
+  const body = handler(await routeSrc(), "founderValidate.post('/propose/:projectId'");
+  const gatherAt = body.indexOf('await spec.gather(ctx)');
+  const runAt = body.indexOf('await aiRun(c.env, {');
+  assert.ok(gatherAt > 0 && runAt > gatherAt, 'the model runs before the facts are gathered');
+  assert.match(body, /if \(gathered\.empty\) \{/);
+  assert.ok(body.indexOf('if (gathered.empty) {') < runAt,
+    'an empty project still spends a run');
+  assert.match(body, /message: gathered\.emptyReason \|\|/,
+    'the empty reason is dropped, so the page has to invent one');
 });

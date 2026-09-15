@@ -351,10 +351,37 @@ test('the worker INSERTs, UPDATEs and SELECTs no column that does not exist', ()
   // gate; this keeps the property visible in the test suite too. Covers both
   // INSERT lists, UPDATE SET clauses, single-table SELECT lists, qualified
   // join references and single-table predicates.
-  // One reviewed gap remains on record: corporate_profiles.kyb_status, where
+  // ONE reviewed gap remains on record: `corporate_profiles.kyb_status`, where
   // nothing writes a KYB decision at all, so a column would not help.
+  //
+  // SIX `metrics_snapshots.*` ENTRIES WERE HERE AND ARE GONE, which is what
+  // closing a gap looks like in this file. That name covered two different
+  // tables: production's is a DEAL metrics table (created at runtime by
+  // `routes/pipeline.ts`), while `services/queueWorker.ts` read and wrote a
+  // generic metric series — the retired `sql/historical/infrastructure.sql`
+  // shape. Three jobs threw `no such column` as a result, and the sharpest was
+  // `liquidity_valuation`, which died before `Listings.updateValuation` and left
+  // a secondary listing showing "— pending" forever.
+  //
+  // Task #183 repointed all three at stores that already existed — the per-deal
+  // review to `metrics_snapshots.ai_review`, the global counter to
+  // `system_metrics` — so the six names are no longer written anywhere and their
+  // baseline lines are deleted. No new table and no migration.
+  //
+  // They were invisible until `knownColumns()` stopped unioning `sql/historical/`
+  // into its harvest — that folder's own README says nothing builds from it, but
+  // `walk()` recursed into it anyway, so retired shapes merged with live ones and
+  // the union satisfied every query. That masked a live outage:
+  // `partner_pipeline.ts` read `service_offerings.partner_id`, a column that
+  // table has never had, and answered `D1_ERROR: no such column` to every
+  // partner while this assertion was green.
+  //
+  // Still an exact match, so a NEW unknown column fails here as before — and so
+  // does a re-added `metrics_snapshots.scope`.
   const unknown = [...unknownColumns().keys()].sort();
-  assert.deepEqual(unknown, ['corporate_profiles.kyb_status'], `unexpected: ${unknown.join(', ')}`);
+  assert.deepEqual(unknown, [
+    'corporate_profiles.kyb_status',
+  ], `unexpected: ${unknown.join(', ')}`);
 });
 
 test('a map is resolved by name, never by proximity', () => {
@@ -435,9 +462,28 @@ test('a collision counts only when neither definition can host the other', () =>
   // could host the other, so whichever ran first won and the loser's writer
   // threw on every call. Migration 235 adds the four columns to the real
   // table and the phantom declaration is gone, so there is one shape again.
+  //
+  // `advisor_bookings` AND `service_offerings` LEFT ON 2026-09-13, and they left
+  // a different way: not fixed, never real. `definitions()` walked
+  // `cloudflare-worker/sql` recursively and so harvested `sql/historical/`, whose
+  // own README says "Nothing builds from them." A definition that has never been
+  // a build input cannot be one of two definitions competing to be the table.
+  //
+  // What that produced was not a false pass but a false FINDING, and the shape of
+  // it is worth keeping: the `advisor_bookings` collision was reported between
+  // `historical/schema.sql:1024` and `historical/t13_t14_t15.sql:52` — two
+  // archived files disagreeing with EACH OTHER — while its single live definition
+  // in the baseline conflicts with nothing. `service_offerings` was worse: its
+  // archived shape is the one that took `/pipeline/leads` down in #182, so the
+  // ledger was asking someone to adjudicate between the live table and a file
+  // already established as wrong. Both entries are deleted from the baseline, and
+  // this list shrinks with them.
+  //
+  // The exclusion does not blind the gate: a fresh conflicting definition in a
+  // real build input still fails it, mutation-checked.
   assert.deepEqual([...all.keys()].sort(), [
-    'advisor_bookings', 'capital_calls', 'founder_checkins',
-    'ic_meetings', 'metrics_snapshots', 'service_offerings', 'wellbeing_resources',
+    'capital_calls', 'founder_checkins',
+    'ic_meetings', 'metrics_snapshots', 'wellbeing_resources',
   ]);
 });
 

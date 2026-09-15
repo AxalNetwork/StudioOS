@@ -32,8 +32,15 @@ const rootPkg = JSON.parse(at('package.json'));
 const workerPkg = JSON.parse(at('cloudflare-worker/package.json'));
 
 /** The operative procedure: everything before the section that explains itself. */
-const POSTMORTEM = '## 7. Why nothing here is hardcoded';
-const operative = doc.slice(0, doc.indexOf(POSTMORTEM));
+// ANCHORED ON THE TITLE, NOT THE NUMBER. This read `## 7. …` until D109
+// inserted a provisioning section ahead of it and every later heading shifted
+// by one — at which point the guard failed for a reason that had nothing to do
+// with what it guards. The section's identity is its name; its number is a
+// position that moves whenever the runbook grows.
+const POSTMORTEM_TITLE = 'Why nothing here is hardcoded';
+const POSTMORTEM_RE = /^## \d+\. Why nothing here is hardcoded$/m;
+const postmortemAt = doc.search(POSTMORTEM_RE);
+const operative = postmortemAt >= 0 ? doc.slice(0, postmortemAt) : doc;
 
 test('every `npm run <script>` the runbook names exists in package.json', () => {
   // Script names carry hyphens (`lfs:check-all`, `d1:verify-marked`). The
@@ -102,8 +109,8 @@ test('§1.1 is still right that the un-suffixed deploy hits the live worker', ()
 
 test('the operative sections name no migration file, range, or pattern count', () => {
   assert.ok(
-    doc.includes(POSTMORTEM),
-    `${DOC_PATH} lost its "${POSTMORTEM}" section, which anchors this rule`,
+    postmortemAt >= 0,
+    `${DOC_PATH} lost its "${POSTMORTEM_TITLE}" section, which anchors this rule`,
   );
   assert.ok(operative.length > 1000, 'the operative half of the runbook is implausibly short');
 

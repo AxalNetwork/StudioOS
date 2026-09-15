@@ -78,11 +78,11 @@ export default function ThinkingZone() {
             { label: 'Talk reach', value: counts?.talk_reach ?? null, note: 'where a piece ran is not recorded' },
           ].map((t) => (
             <Card key={t.label} className="px-3 py-2.5">
-              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{t.label}</div>
+              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{t.label}</div>
               {t.value === null || t.value === undefined
                 ? <div className="mt-1.5"><Unrecorded /></div>
                 : <div className="mt-1 text-base font-extrabold tabular-nums tracking-tight">{t.value}</div>}
-              <div className="mt-1 text-[10px] leading-snug text-axal-ink-3">{t.note}</div>
+              <div className="mt-1 text-[10px] leading-snug text-axal-faint">{t.note}</div>
             </Card>
           ))}
         </div>
@@ -90,9 +90,9 @@ export default function ThinkingZone() {
         <Card className="p-4">
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <span className="text-sm font-extrabold tracking-tight">Your shelf</span>
-            <span className="text-[11px] text-axal-ink-3">Newest first</span>
+            <span className="text-[11px] text-axal-faint">Newest first</span>
           </div>
-          <ul className="divide-y divide-axal-border-soft">
+          <ul className="divide-y divide-axal-hairline">
             {items.map((a) => (
               <li key={a.id} className="flex items-start justify-between gap-4 py-2.5">
                 <div className="min-w-0">
@@ -100,7 +100,7 @@ export default function ThinkingZone() {
                     <Pill tone={a.status === 'published' ? 'ok' : 'neutral'}>
                       {a.status === 'published' ? 'Published' : 'Draft'}
                     </Pill>
-                    {a.sector && <span className="text-[11px] text-axal-ink-3">{a.sector}</span>}
+                    {a.sector && <span className="text-[11px] text-axal-faint">{a.sector}</span>}
                   </div>
                   <div className="mt-1 text-[12.5px] font-semibold leading-snug">
                     {a.status === 'published' && a.slug
@@ -108,13 +108,13 @@ export default function ThinkingZone() {
                       : a.title}
                   </div>
                   {a.subtitle && (
-                    <div className="mt-0.5 truncate text-[11px] text-axal-ink-3">{a.subtitle}</div>
+                    <div className="mt-0.5 truncate text-[11px] text-axal-faint">{a.subtitle}</div>
                   )}
                 </div>
-                <div className="shrink-0 text-right text-[11px] tabular-nums text-axal-ink-3">
+                <div className="shrink-0 text-right text-[11px] tabular-nums text-axal-faint">
                   {/* A draft has no views because nobody can open it — that is a
                       real zero, not a missing number, so it is shown as one. */}
-                  <div className="font-semibold text-axal-ink-2">
+                  <div className="font-semibold text-axal-muted">
                     {a.status === 'published' ? `${a.views ?? 0} views` : '—'}
                   </div>
                   <div>{a.read_minutes ? `${a.read_minutes} min read` : `${a.word_count || 0} words`}</div>

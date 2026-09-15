@@ -279,10 +279,37 @@ export const dynamicColumns = new Set();
  */
 export const incompleteTables = new Set();
 
+/**
+ * `sql/historical/` IS NOT A SCHEMA AUTHORITY, and harvesting it shipped a bug.
+ *
+ * That folder's own README is unambiguous: "`../schema_baseline.sql` … supersedes
+ * every SQL file in this folder, and numbered files under `../migrations/` are the
+ * only incremental build inputs. The files here are kept for archaeology only.
+ * Nothing builds from them." `walk()` recurses, so every one of them was being
+ * unioned in as an equal authority anyway.
+ *
+ * What that cost: `historical/t13_t14_t15.sql:400` declares a marketplace
+ * `service_offerings` with `partner_id INTEGER NOT NULL` and no `owner_user_id`.
+ * Migration 200 drops and recreates that table the other way round, and the
+ * production baseline agrees with 200 — but the union carried `partner_id`
+ * forward, so `partner_pipeline.ts`'s `WHERE partner_id = ?` on that table
+ * resolved as "present" here while answering `D1_ERROR: no such column:
+ * partner_id` to every partner in production. The harvested set was seventeen
+ * columns wide; no real version of the table has ever had more than thirteen.
+ *
+ * This does NOT fix the general union problem described in the header — a table
+ * legitimately defined twice across the baseline and a migration is still
+ * unioned, and `check-sqlite-table-collisions.mjs` is still the complement for
+ * that. It removes the definitions that were never a build input at all.
+ */
+const ARCHIVE_DIR = path.join(SQL_DIR, 'historical');
+
 export function knownColumns() {
   const schema = new Map();
   const sources = [
-    ...walk(SQL_DIR, '.sql').map((f) => fs.readFileSync(f, 'utf8')),
+    ...walk(SQL_DIR, '.sql')
+      .filter((f) => !f.startsWith(ARCHIVE_DIR + path.sep))
+      .map((f) => fs.readFileSync(f, 'utf8')),
     ...walk(SRC, '.ts').map((f) => collapseStringConcat(fs.readFileSync(f, 'utf8'))),
   ];
   for (const text of sources) {

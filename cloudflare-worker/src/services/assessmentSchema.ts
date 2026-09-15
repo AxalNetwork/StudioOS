@@ -17,8 +17,9 @@
  * Cached per isolate (no re-execution on every hot request).
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 /**
  * The six canonical track keys. For the seeded tracks the game `slug` == the
@@ -58,7 +59,7 @@ export const BADGE_KINDS = ['archetype', 'milestone', 'event'] as const;
 export type BadgeKind = (typeof BADGE_KINDS)[number];
 
 export async function ensureAssessmentSchema(env: Env): Promise<void> {
-  if (_ready) return;
+  if (READY.get(bindingKey(env))) return;
   try {
     await env.DB.batch([
       // ── Authoring (107) ──────────────────────────────────────────────────
@@ -242,7 +243,7 @@ export async function ensureAssessmentSchema(env: Env): Promise<void> {
       env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_user_badges_user
         ON user_badges (user_id, awarded_at)`),
     ]);
-    _ready = true;
+    READY.set(bindingKey(env), true);
   } catch (err) {
     console.warn('[assessmentSchema] ensure failed', err);
   }

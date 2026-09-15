@@ -7,11 +7,12 @@
  * mirrored exactly from migration 115 / schema.sql.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 export async function ensureAxalFitSchema(env: Env): Promise<void> {
-  if (_ready) return;
+  if (READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS axal_values (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, value_key TEXT NOT NULL, score REAL NOT NULL DEFAULT 0, confidence REAL NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (user_id, value_key))",
@@ -40,7 +41,7 @@ export async function ensureAxalFitSchema(env: Env): Promise<void> {
     await env.DB.exec(
       "CREATE INDEX IF NOT EXISTS idx_consultation_bookings_status ON admin_consultation_bookings (status, requested_at)",
     );
-    _ready = true;
+    READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[axalFitSchema] ensure failed:', (e as Error).message);
   }

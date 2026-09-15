@@ -120,7 +120,7 @@ export const PARTNER_ZONE_ACTIONS = {
   // around: which rule an edit means is the first thing the edit needs, and
   // there is nowhere in a row of buttons to say it. Editing stays on the row.
   'offers/audience-fit': [
-    { label: 'Edit fit rules', unbuilt: 'every rule is edited on its own row — which rule you mean is the first thing an edit needs, and a header control cannot say it' },
+    { label: 'Edit fit rules', unbuilt: 'every rule is edited on its own row — which rule you mean is the first thing an edit needs, and a header control cannot say it', hover: 'Every rule is edited on its own row — a header control cannot say which rule you mean.' },
     { label: 'Pass reasons', kind: 'handler', handler: 'passReasons' },
     { label: 'Export', kind: 'export' },
   ],
@@ -228,7 +228,7 @@ export const PARTNER_ZONE_ACTIONS = {
   // the counterpart's. Gathering what is already recorded into one chronological
   // view invents nothing, which is why it can be built.
   'network/introductions': [
-    { label: 'New introduction', unbuilt: 'a proposition is an edge between two accounts and the firm’s book holds people who mostly have none, so there is nothing here to compose one from — and no write path that would accept it' },
+    { label: 'New introduction', unbuilt: 'a proposition is an edge between two accounts and the firm’s book holds people who mostly have none, so there is nothing here to compose one from — and no write path that would accept it', hover: 'The book holds people with no recorded edge between them, so there is nothing to compose from.' },
     { label: 'Consent log', kind: 'handler', handler: 'consentLog' },
     { label: 'Export', kind: 'export' },
   ],
@@ -249,7 +249,7 @@ export const PARTNER_ZONE_ACTIONS = {
   // exists to refuse.
   'network/organizations': [
     { label: 'Build records', kind: 'handler', handler: 'buildRecords' },
-    { label: 'Import', unbuilt: 'nothing here ingests a contact list — there is no upload, no parser and no route that would take one, and the book is filled a contact at a time from its own form' },
+    { label: 'Import', unbuilt: 'nothing here ingests a contact list — there is no upload, no parser and no route that would take one, and the book is filled a contact at a time from its own form', hover: 'Nothing here ingests a contact list; the book is filled one contact at a time from its own form.' },
     { label: 'Export', kind: 'export' },
   ],
 
@@ -281,7 +281,7 @@ export const PARTNER_ZONE_ACTIONS = {
     // it: what the firm can now write is a ROW of its own inside a brief that
     // already exists, which is a different act and has its own form on the page.
     // A control called `New brief` that added a row would name the wrong thing.
-    { label: 'New brief', unbuilt: 'a brief exists because a founder opened their record to you, and nothing here can ask for one — what the firm can add is a row inside a brief it already holds, which the form below takes' },
+    { label: 'New brief', unbuilt: 'a brief exists because a founder opened their record to you, and nothing here can ask for one — what the firm can add is a row inside a brief it already holds, which the form below takes', hover: 'A brief exists because a founder opened their record to the firm; nothing here can ask for one.' },
     // LIVE, AND IT WAS NEVER THE PROPOSAL THAT WAS MISSING. The note said
     // "nothing links a brief to a proposal record"; `quotes` (migration 034) is
     // live and `api.myQuotes()` reads it, so what was missing was the EDGE, and

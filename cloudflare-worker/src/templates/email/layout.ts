@@ -35,11 +35,13 @@ export const COMPANY_ADDR = SENDER_POSTAL;
 
 function lookup(vars: Record<string, unknown>, path: string): string {
   const parts = path.split('.');
-  let cur: any = vars;
+  let cur: unknown = vars;
   for (const p of parts) {
-    if (cur == null) return '';
+    if (cur == null || typeof cur !== 'object') return '';
     if (p === '__proto__' || p === 'constructor' || p === 'prototype') return '';
-    cur = cur[p];
+    if (!Object.hasOwn(cur, p)) return '';
+    const next = Object.getOwnPropertyDescriptor(cur, p)?.value;
+    cur = next;
   }
   return cur == null ? '' : String(cur);
 }

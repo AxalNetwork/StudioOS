@@ -122,12 +122,21 @@ export function rowsFromWranglerJson(text) {
   return rows;
 }
 
+// WHICH DATABASE THIS READS. Production by default, which is the only one the
+// deploy workflow cares about. A branch database has the same schema and the
+// same drift question, so the name and its config are overridable rather than
+// literal — `DRIFT_D1_NAME=studioos-fr DRIFT_D1_CONFIG=../wrangler.branch.fr.toml`.
+// Both must move together: naming a database a config does not declare asks
+// wrangler to resolve it through the account instead.
+const D1_NAME = process.env.DRIFT_D1_NAME || 'studioos-db';
+const D1_CONFIG = process.env.DRIFT_D1_CONFIG || '../wrangler.toml';
+
 function liveObjects() {
   let out;
   try {
     out = execFileSync('npx', [
-      '--no-install', 'wrangler', 'd1', 'execute', 'studioos-db',
-      '--config', '../wrangler.toml', '--remote', '--json',
+      '--no-install', 'wrangler', 'd1', 'execute', D1_NAME,
+      '--config', D1_CONFIG, '--remote', '--json',
       '--command',
       "SELECT type, name FROM sqlite_master WHERE type IN ('table','index','trigger','view')",
     ], { cwd: resolve(process.cwd(), 'cloudflare-worker'), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });

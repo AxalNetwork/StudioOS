@@ -103,7 +103,6 @@ export function csvToProspects(rows) {
 
 export default function RaisePipelinePage({ embedded = false }) {
   useAuth();
-  const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState(null);
   const [roundInfo, setRoundInfo] = useState({ round: null, raised: 0, committed_count: 0 });
   const [items, setItems] = useState([]);
@@ -124,7 +123,6 @@ export default function RaisePipelinePage({ embedded = false }) {
     api.listProjects()
       .then((list) => {
         const safe = list || [];
-        setProjects(safe);
         if (safe.length > 0) setProjectId(safe[0].id);
         else setLoading(false);
       })
@@ -200,12 +198,9 @@ export default function RaisePipelinePage({ embedded = false }) {
           </div>
         )}
         <div className="flex flex-wrap items-center gap-2">
-          {projects.length > 1 && (
-            <select value={projectId || ''} onChange={(e) => setProjectId(Number(e.target.value))}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm text-gray-900 dark:text-gray-100">
-              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          )}
+          {/* The in-body startup picker is gone (#181) — see MarketIntelPage for
+              the reasoning. `projectId` is still set from the first project the
+              fetch returns, which is what happened whenever it was hidden. */}
           <button onClick={() => setShowAdd(true)} disabled={!projectId} className={btnPrimary}>
             <Plus size={14} /> Add investor
           </button>

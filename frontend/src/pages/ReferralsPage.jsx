@@ -18,6 +18,7 @@ import { api } from '../lib/api';
 import { parseLinkedInCsv, PENDING_LINKEDIN_IMPORT_KEY } from '../lib/linkedinCsv';
 import { useToast } from '../components/useToast';
 import './referrals/referrals.css';
+import { appOrigin } from '../lib/branchHost';
 
 function LinkedinIcon({ size = 14 }) {
   return (
@@ -146,7 +147,7 @@ function formatShortDate(iso) {
  * same words whether you tap a composer or copy them by hand.
  */
 function shareMessages(link, code) {
-  const shareUrl = link || 'https://axal.vc/referrals';
+  const shareUrl = link || `${appOrigin()}/referrals`;
   return {
     shareUrl,
     linkedin: `Referring the right person is worth more than a hundred cold applications.\n\nAxal VC’s Refer & Earn program rewards founders, advisors, and operators who bring high-quality people into the network — real rewards for a real fit, every submission reviewed individually.\n\nIf you know a founder who should be building inside a structured 28-day formation program, an advisor with real operating depth, or a strategic introduction worth making — this is where it goes: ${shareUrl}`,
@@ -372,7 +373,7 @@ async function renderShareCard({ width, height, link, code }) {
 
 function inviteLink(code, email) {
   if (!code) return '—';
-  const base = `https://axal.vc/register?ref=${encodeURIComponent(code)}`;
+  const base = `${appOrigin()}/register?ref=${encodeURIComponent(code)}`;
   return email ? `${base}&invitee=${encodeURIComponent(email)}` : base;
 }
 
@@ -551,7 +552,7 @@ export default function ReferralsPage({ embedded = false }) {
   };
 
   const copyShareLink = async () => {
-    const link = overview?.referral_link || 'https://axal.vc/referrals';
+    const link = overview?.referral_link || `${appOrigin()}/referrals`;
     try {
       await navigator.clipboard.writeText(link);
       setShareCopied(true);

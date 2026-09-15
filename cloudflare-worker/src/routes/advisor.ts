@@ -112,6 +112,7 @@ import {
 } from '../services/advisor/stateMachine';
 import { enqueueJob } from '../services/queue';
 import { notifyAdvisorPageFill, notifyAdvisorProgress } from '../services/realtime';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const advisor = new Hono<{ Bindings: Env }>();
 
@@ -161,9 +162,9 @@ const EXPLAIN_MAX_TOKENS = 512;
 // Schema. Mirrors sql/migrations/029_advisor.sql; idempotent so an
 // uninitialised dev D1 still works.
 // ---------------------------------------------------------------------------
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS advisor_conversations (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, user_id INTEGER NOT NULL, persona TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'active', current_question_id TEXT, total_questions INTEGER NOT NULL DEFAULT 0, answered_count INTEGER NOT NULL DEFAULT 0, skipped_count INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))"
@@ -185,7 +186,7 @@ async function ensureSchema(env: Env): Promise<void> {
       "CREATE TABLE IF NOT EXISTS field_sources (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, question_id TEXT NOT NULL, page_target TEXT, saved_to_table TEXT, saved_to_column TEXT, saved_to_id TEXT, source TEXT NOT NULL DEFAULT 'advisor', evidence_text TEXT, filled_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(user_id, question_id))"
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_field_sources_user_page ON field_sources(user_id, page_target)");
-    _schemaReady = true;
+    SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.error('[advisor] schema:', (e as Error).message);
   }
@@ -211,9 +212,9 @@ function personaFor(user: User): Persona {
 // running the migration. Idempotent: PRAGMA table_info short-circuits
 // when the column is already present (production case).
 // ---------------------------------------------------------------------------
-let _userColsReady = false;
+const USER_COLS_READY = new WeakMap<object, boolean>();
 async function ensureAdvisorWeekColumn(env: Env): Promise<void> {
-  if (_userColsReady) return;
+  if (USER_COLS_READY.get(bindingKey(env))) return;
   try {
     const cols = await env.DB.prepare(`PRAGMA table_info(users)`).all<{ name: string }>();
     const have = new Set((cols.results || []).map((r) => r.name));
@@ -221,7 +222,7 @@ async function ensureAdvisorWeekColumn(env: Env): Promise<void> {
       try { await env.DB.exec(`ALTER TABLE users ADD COLUMN spinout_lab_week INTEGER`); }
       catch (e) { /* duplicate-column race; ignore */ void e; }
     }
-    _userColsReady = true;
+    USER_COLS_READY.set(bindingKey(env), true);
   } catch (e) {
     console.error('[advisor] ensureAdvisorWeekColumn:', (e as Error).message);
   }

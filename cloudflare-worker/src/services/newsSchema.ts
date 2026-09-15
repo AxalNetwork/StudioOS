@@ -7,11 +7,12 @@
  * replit.md pending-migrations gotcha).
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 export async function ensureNewsSchema(env: Env): Promise<void> {
-  if (_ready) return;
+  if (READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS articles (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT NOT NULL UNIQUE, title TEXT NOT NULL, subtitle TEXT, body_markdown TEXT NOT NULL DEFAULT '', body_html TEXT, cover_r2_key TEXT, cover_mime TEXT, tags TEXT, sector TEXT, status TEXT NOT NULL DEFAULT 'draft', author_user_id INTEGER NOT NULL REFERENCES users(id), reviewer_user_id INTEGER REFERENCES users(id), submitted_at TEXT, reviewed_at TEXT, approved_at TEXT, published_at TEXT, rejected_at TEXT, rejection_reason TEXT, word_count INTEGER NOT NULL DEFAULT 0, read_minutes INTEGER NOT NULL DEFAULT 0, excerpt TEXT, seo_title TEXT, canonical_url TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))",
@@ -59,7 +60,7 @@ export async function ensureNewsSchema(env: Env): Promise<void> {
     if (!names.has('views')) {
       await env.DB.exec('ALTER TABLE articles ADD COLUMN views INTEGER NOT NULL DEFAULT 0').catch(() => {});
     }
-    _ready = true;
+    READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[newsSchema] ensure failed:', (e as Error).message);
   }
