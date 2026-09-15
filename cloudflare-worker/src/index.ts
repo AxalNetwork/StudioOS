@@ -261,6 +261,7 @@ import orders from './routes/orders';
 import products from './routes/products';
 import { Jobs } from './models/jobs';
 import { writeCronRunHistory } from './util/cronHistory';
+import { branchOf, assertBranchAppUrl, HQ_ONLY, HQ_AUTHORING_ONLY } from './util/branch';
 import { enqueueReembedChunks } from './util/reembedSweep';
 import { rebuildUsersRoleCheckForInvestor, rebuildUsersRoleCheckForAdvisor } from './util/usersRoleRebuild';
 import { bindingKey } from './util/schemaBootstrap';
@@ -1081,7 +1082,6 @@ app.onError((err: any, c) => {
 // JWT_SECRET strength check runs at the very top of every request handler.
 // In prod a weak/missing secret aborts the request with a generic 503.
 import { assertJwtSecretStrength, assertScoringHmacSecret } from './auth';
-import { branchOf, assertBranchAppUrl, HQ_ONLY, HQ_AUTHORING_ONLY } from './util/branch';
 // A gate that refuses by THROWING a Response — the tier upsells, the fund
 // 404 — never reached the client without this: Hono re-throws non-Errors
 // past app.onError. See util/thrownResponse.ts.

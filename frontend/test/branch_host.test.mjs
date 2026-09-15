@@ -93,6 +93,13 @@ test('no user-facing link is still built from the hardcoded apex (D106, L9)', ()
   // to HQ, where they REGISTER IN HQ'S DATABASE and the reward is attributed
   // against a member who is not there. Re-typing the literal is the easy
   // regression, so the files that carry these links are scanned for it.
+  // ANY absolute axal.vc URL, not just the exact apex literal that was there.
+  // CodeQL flagged the `includes('https://axal.vc')` version as incomplete URL
+  // sanitization, which is wrong about the mechanism — this is a NEGATED scan
+  // over source text, not a host check, so over-matching is safe — and right
+  // that the assertion was narrow: `http://axal.vc`, `//axal.vc` and
+  // `https://www.axal.vc` are all the same regression and all passed it.
+  const ABSOLUTE_AXAL_URL = /(?:https?:)?\/\/[\w.-]*axal\.vc/;
   const files = [
     'frontend/src/pages/ReferralsPage.jsx',
     'frontend/src/pages/SettingsPage.jsx',
@@ -101,9 +108,10 @@ test('no user-facing link is still built from the hardcoded apex (D106, L9)', ()
   ];
   for (const f of files) {
     const src = codeOnly(readFileSync(resolve(process.cwd(), f), 'utf8'));
-    assert.ok(
-      !src.includes('https://axal.vc'),
-      `${f} must build shareable links from appOrigin(), not from the apex literal`,
+    assert.doesNotMatch(
+      src,
+      ABSOLUTE_AXAL_URL,
+      `${f} must build shareable links from appOrigin(), not from a hardcoded axal.vc URL`,
     );
     assert.ok(src.includes('appOrigin('), `${f} must call appOrigin()`);
   }
