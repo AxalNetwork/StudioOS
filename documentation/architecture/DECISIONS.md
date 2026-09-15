@@ -7818,3 +7818,86 @@ says which of the two it is". **7 mutations applied, 7 caught**, including
 `Promise.allSettled` → `Promise.all` and dropping the deadline, which hangs the
 suite rather than failing an assertion — a distinction the test measures
 elapsed time to catch.
+
+---
+
+## D109 — A branch can be made, by a workflow that has never run, and the PR says so (2026-09-15, #217)
+
+**Every ingredient existed and nothing could assemble one.** PRs 1–6 shipped
+the config generator, the migration runner, the branch-mode gates, the shell
+and the RPC surface, and there was still no path from "HQ issued a licence" to
+"`fr.axal.vc` answers". `branch-provision.yml` is that path.
+
+**IT HAS NEVER RUN, AND THAT IS THE HONEST STATE RATHER THAN AN OMISSION.** It
+cannot until the credentials D.11 lists exist: a Cloudflare token widened
+beyond today's Workers Scripts + D1 to KV, R2, Queues, Vectorize and **Zone
+DNS**, and — only for HQ's Deploy *button* — `GITHUB_ACCESS_TOKEN` with
+`actions: write` (task #192). So this PR ships the workflow, its guard and its
+runbook; it does not ship a green live run, and the PR body leads with that
+rather than burying it. A workflow is code: it can be reviewed, linted and
+tested as text, and the properties worth testing are not the ones a run would
+show anyway.
+
+**THE STEP ORDER IS A CORRECTNESS PROPERTY, NOT A STYLE ONE**, and the code
+decided it rather than the plan. `gen-branch-wrangler.mjs` refuses unless
+`infra/branches/<code>.json` exists; `migrate-d1.mjs --branch` refuses unless
+the generated toml exists. So the sequence is forced: create the resources,
+capture the ids, write the registry, generate the config, then migrate. Two
+more orderings matter for reasons the refusals do not enforce — secrets before
+deploy, because a Worker without `JWT_SECRET` answers **503 config_error** on
+every request (up, and refusing everything, which is not "live"), and deploy
+before smoke, because there is nothing to smoke otherwise. The guard asserts
+all four.
+
+**EVERY DISPATCHED VALUE IS DATA, NEVER SCRIPT TEXT.** `${{ }}` inside a
+`run:` block is substituted before the shell parses the line, so a value
+carrying `;` runs as a command on a runner holding `CLOUDFLARE_API_TOKEN`.
+Semgrep caught exactly this on PR 3's one interpolated step; this workflow has
+nine inputs and all nine arrive as job-level `env:` vars, charset-validated in
+one step before anything is built from them. **The single most valuable line in
+the guard** scans every `run:` block for `${{ inputs.` and asserts zero — it
+guards the class, not the instance. The same reasoning is why three steps are
+Node scripts rather than heredocs: a `run:` block building JSON or SQL from
+dispatched values would have to interpolate them, and `process.env` does not.
+
+**NO WRANGLER CALL MAY FALL THROUGH TO HQ'S CONFIG.** Every one names
+`--config wrangler.branch.<code>.toml`. A bare call reads `wrangler.toml`,
+whose `[[routes]]` are the apex custom domains — deploying a branch with it
+would move `axal.vc` onto the branch Worker, which is leak L10 and the reason
+the generated config exists at all. This also **designs out one of the three
+unknowns** the plan left for the first run: whether `wrangler d1 execute` with
+a name not in the config resolves through the account never arises, because the
+name is always in the config. The other two stay, and each gets a step that
+fails naming the exact right it is missing rather than a generic error.
+
+**Three smaller calls, each stated because the opposite is defensible:**
+
+- **The registry entry is written `provisioning`, never `live`.** The Worker is
+  not deployed when that file is written, and a status running ahead of the
+  deploy makes the registry a claim rather than a record.
+- **The principal row carries no password.** It is seeded `role='admin'` and
+  active with no credential; the principal signs in by magic link or Google
+  like everyone else. Writing a password would make this workflow's log, or the
+  secret that fed it, briefly the credential to a subsidiary's console.
+- **HQ's binding goes through a PR, not a push.** The committed `wrangler.toml`
+  is the deployed truth the apex guards and the parity guard read, and this
+  change adds the one thing that lets HQ reach another database. HQ gains the
+  binding on its **next deploy**, not on merge — which is why
+  `services/branches.ts` has a `not_deployed` state (D108) rather than
+  reporting the gap as an outage.
+
+**Idempotent by step, not by run.** Every create tolerates "already exists" and
+the principal seed is `INSERT OR IGNORE`, so a failure half way is re-runnable.
+The one refusal is a code whose registry file is already committed: that is a
+branch someone has already provisioned.
+
+**Verification.** `npm run test:drift` exit 0.
+`frontend/test/branch_provision_workflow.test.mjs` is new (9). **7 mutations
+applied, 7 caught** — an input interpolated into a `run:`, a wrangler call
+losing its `--config`, the deploy retry removed, the registry claiming `live`,
+the SQL literal no longer escaping a quote, the service binding written to one
+table instead of two, and the idempotence guard removed. One escaped on its
+first attempt because the test's own extractor stopped at a line end and read a
+call's `--config` on the next line as absent — the same shape of mistake as
+measuring a guard by a whole-file offset (D107), fixed by joining backslash
+continuations first. No `frontend/src` change, so `docs/` does not move.
