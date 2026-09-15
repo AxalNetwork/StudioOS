@@ -24,7 +24,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth } from '../auth';
+import { requireAuth, requireBranchNotSuspended } from '../auth';
 import { bindingKey } from '../util/schemaBootstrap';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -108,6 +108,8 @@ app.get('/:userId', async (c) => {
 app.post('/:userId', async (c) => {
   const admin = await requireAuth(c);
   if (admin.role !== 'admin') return c.json({ detail: 'Forbidden' }, 403);
+  // D107 — a suspended branch's queues are frozen: 423, after the admin gate.
+  await requireBranchNotSuspended(c);
   await ensureTables(c.env);
 
   const userId = Number(c.req.param('userId'));

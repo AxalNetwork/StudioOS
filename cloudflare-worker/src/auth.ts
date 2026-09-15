@@ -2,7 +2,7 @@ import type { Context } from 'hono';
 import { SignJWT, jwtVerify } from 'jose';
 import type { Env, User, JWTPayload } from './types';
 import { getSQL } from './db';
-import { branchOf, authCookieName, csrfCookieName, HQ_ONLY, HQ_AUTHORING_ONLY } from './util/branch';
+import { branchOf, authCookieName, csrfCookieName, HQ_ONLY, HQ_AUTHORING_ONLY, BRANCH_SUSPENDED } from './util/branch';
 
 const JWT_ALGORITHM = 'HS256';
 const JWT_EXPIRY_HOURS = 24;
@@ -566,6 +566,41 @@ export async function requireHqAuthoring(c: Context<{ Bindings: Env }>): Promise
   const user = await requireAdmin(c);
   if (branchOf(c.env)) throw new Error(HQ_AUTHORING_ONLY);
   return user;
+}
+
+/**
+ * Refuse a decision write while HQ has this branch's licence suspended
+ * (D107). A no-op on HQ, where there is no `branch_licence` row and no
+ * licence above this deployment to suspend it.
+ *
+ * WHY THIS IS NOT `requireAdmin` PLUS A FLAG. The caller has already
+ * established who may act; this establishes whether the DEPLOYMENT may act
+ * at all, which is a different question with a different answer shape — hence
+ * a separate call rather than a fifth clause inside an admin gate, and hence
+ * 423 rather than 403.
+ *
+ * IT DOES NOT AUTHENTICATE. Every call site puts it AFTER its own admin gate,
+ * so an anonymous caller still gets 401 rather than learning the branch's
+ * licence state. The order matters and the tests pin it.
+ *
+ * AN UNREADABLE COPY DOES NOT FREEZE THE BRANCH. A branch whose migration 256
+ * has not been applied, or whose licence HQ has not pushed yet, reads as NOT
+ * suspended: suspension is a claim HQ makes, and inferring it from a missing
+ * row would freeze every branch during the window between bootstrap and the
+ * first push — exactly when its principal is trying to work.
+ */
+export async function requireBranchNotSuspended(c: Context<{ Bindings: Env }>): Promise<void> {
+  if (!branchOf(c.env)) return;
+  let status = '';
+  try {
+    const row = await c.env.DB.prepare('SELECT status FROM branch_licence WHERE id = 1')
+      .first<{ status: string }>();
+    status = String(row?.status ?? '').toLowerCase();
+  } catch (e) {
+    console.warn('[branch] branch_licence unreadable on a write gate', (e as Error).message);
+    return;
+  }
+  if (status === 'suspended') throw new Error(BRANCH_SUSPENDED);
 }
 
 /**

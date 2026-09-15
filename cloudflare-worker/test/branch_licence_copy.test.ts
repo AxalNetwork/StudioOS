@@ -60,7 +60,8 @@ const SCHEMA = `
   CREATE TABLE licence_events (id INTEGER PRIMARY KEY AUTOINCREMENT, licence_id INTEGER,
                                event TEXT, note TEXT, detail_json TEXT, created_at TEXT);
   CREATE TABLE branch_licence (
-    id INTEGER PRIMARY KEY CHECK (id = 1), licence_uid TEXT NOT NULL, legal_entity TEXT, brand_name TEXT,
+    id INTEGER PRIMARY KEY CHECK (id = 1), licence_uid TEXT NOT NULL, licence_ref TEXT,
+    legal_entity TEXT, brand_name TEXT,
     territory TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'active', seats_json TEXT,
     revenue_share_bps INTEGER, token_split_bps INTEGER, annual_fee_cents INTEGER,
     currency TEXT, term_start TEXT, term_end TEXT,
@@ -79,9 +80,9 @@ function db(seed = '') {
 
 const PUSHED = `
   INSERT INTO branch_licence
-    (id, licence_uid, legal_entity, brand_name, territory, status, seats_json,
+    (id, licence_uid, licence_ref, legal_entity, brand_name, territory, status, seats_json,
      revenue_share_bps, token_split_bps, template_version, pushed_at)
-  VALUES (1, 'lic_fr_001', 'Axal VC France SAS', 'Axal VC France', 'FR, BE,lu', 'active',
+  VALUES (1, 'lic_fr_001', 'AXL-001', 'Axal VC France SAS', 'Axal VC France', 'FR, BE,lu', 'active',
           '{"founder":200,"investor_lp":80,"advisor":30,"service_partner":15}',
           3500, 3100, 'v4', '2026-09-14T22:10:00Z');
 `;
@@ -117,6 +118,31 @@ test('a branch serves the pushed copy, with the stamp that says how old it is', 
   assert.equal(body.licence.seats_used, null, 'seats USED still has no store — it must not read as zero');
   assert.equal(body.derived_metrics_available, false, 'the derived-metrics reason is the same on both tiers');
   assert.ok(String(body.derived_metrics_reason).length > 0);
+});
+
+test('the copy uses HQ\'s field names, because the page that reads it is HQ\'s page', async () => {
+  // D107 — this is a REGRESSION GUARD for a real defect, not a shape check.
+  // `branch_licence` stores `legal_entity`; the HQ payload calls the same fact
+  // `legal_entity_name`, and `MyLicencePage` reads the HQ name. The copy
+  // returned its own column names, so the one screen it exists to render
+  // showed a blank entity and a licence with no reference on it — on the one
+  // tier nobody had run yet. Migration 257 added the missing `licence_ref`.
+  //
+  // Asserted against the HQ payload's key NAMES rather than against a list
+  // written here, so a rename on either side fails rather than drifting.
+  const { body } = await get({ ...FR, DB: makeD1(db(PUSHED)) });
+  assert.equal(body.licence.legal_entity_name, 'Axal VC France SAS');
+  assert.equal(body.licence.licence_ref, 'AXL-001');
+  assert.ok(
+    !('legal_entity' in body.licence),
+    'the copy must not ALSO emit its own column name — two spellings of one fact is how they diverge',
+  );
+
+  const page = readFileSync(new URL('../../frontend/src/pages/subsidiary/MyLicencePage.jsx', import.meta.url), 'utf8');
+  for (const key of ['legal_entity_name', 'licence_ref', 'brand_name', 'status']) {
+    assert.ok(page.includes(`l.${key}`), `the page reads l.${key}; the payload must supply it`);
+    assert.ok(key in body.licence, `the payload is missing ${key}, which the page renders`);
+  }
 });
 
 test('the event trail is absent with a reason, not an empty history', async () => {

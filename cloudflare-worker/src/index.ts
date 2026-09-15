@@ -261,7 +261,7 @@ import orders from './routes/orders';
 import products from './routes/products';
 import { Jobs } from './models/jobs';
 import { writeCronRunHistory } from './util/cronHistory';
-import { branchOf, assertBranchAppUrl, HQ_ONLY, HQ_AUTHORING_ONLY } from './util/branch';
+import { branchOf, assertBranchAppUrl, HQ_ONLY, HQ_AUTHORING_ONLY, BRANCH_SUSPENDED } from './util/branch';
 import { enqueueReembedChunks } from './util/reembedSweep';
 import { rebuildUsersRoleCheckForInvestor, rebuildUsersRoleCheckForAdvisor } from './util/usersRoleRebuild';
 import { bindingKey } from './util/schemaBootstrap';
@@ -1045,7 +1045,7 @@ app.notFound((c) => c.json({ detail: 'Not found' }, 404));
 // Map the auth helpers' plain `throw new Error('Unauthorized'/'Forbidden'/...)`
 // to the right HTTP status. Without this, RBAC failures surface as 500s and
 // the frontend can't distinguish "log in again" from "the server crashed".
-const AUTH_ERROR_STATUSES: Record<string, 401 | 403> = {
+const AUTH_ERROR_STATUSES: Record<string, 401 | 403 | 423> = {
   Unauthorized: 401,
   'Admin required': 403,
   // Migration 199. Without an entry here the throw falls through to the
@@ -1058,6 +1058,11 @@ const AUTH_ERROR_STATUSES: Record<string, 401 | 403> = {
   // drifting apart; a shared constant is the shape where they cannot.
   [HQ_ONLY]: 403,
   [HQ_AUTHORING_ONLY]: 403,
+  // D107 — 423 Locked, and the only entry in this map that is not 401/403.
+  // A frozen queue is not a permission failure: the branch admin may take
+  // this decision, and HQ has stopped them from taking it today. The shell
+  // renders the two differently, so the status has to tell them apart.
+  [BRANCH_SUSPENDED]: 423,
   Forbidden: 403,
   'KYC required': 403,
   'TOTP required': 403,

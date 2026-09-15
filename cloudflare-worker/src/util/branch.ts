@@ -44,6 +44,20 @@ export const HQ_ONLY = 'HQ only';
  */
 export const HQ_AUTHORING_ONLY = 'Changing a template is a Content submission';
 
+/**
+ * A suspended branch's queues are frozen (D107, S0/S8 on the subsidiary
+ * canvas). Thrown by `requireBranchNotSuspended` and mapped to **423 Locked**
+ * — not 403 — because the two say different things and the shell renders
+ * them differently: 403 is "this is not yours", 423 is "this is yours and HQ
+ * has frozen it", which is a state with a date, a reason and an appeal path.
+ *
+ * READS ARE NEVER GATED BY IT. A frozen branch can still see its queue; that
+ * is what the banner is about. Only the decision writes stop, because a
+ * decision taken while the licence is suspended is one HQ would have to
+ * unwind.
+ */
+export const BRANCH_SUSPENDED = 'Branch suspended by HQ';
+
 /** The branch code this Worker is deployed for, lower-cased, or `null` on HQ. */
 export function branchOf(env: Pick<Env, 'BRANCH_CODE'> | undefined | null): string | null {
   const raw = String(env?.BRANCH_CODE ?? '').trim();

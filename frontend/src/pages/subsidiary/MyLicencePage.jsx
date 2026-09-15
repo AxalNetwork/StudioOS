@@ -84,7 +84,18 @@ export default function MyLicencePage() {
       .catch((e) => {
         // 404 is "you administer none", not a failure. The distinction matters:
         // one is an empty state, the other is a broken page.
-        if (e?.status === 404) setData({ none: true });
+        //
+        // D107 — and on a branch there is a THIRD state wearing the same 404.
+        // `licence_not_pushed` means this deployment exists and HQ has not
+        // sent it its licence yet: provisioning has not finished. Rendering
+        // that as "you do not administer a territory licence" would tell the
+        // one person on the deployment who DOES administer it that they do
+        // not, and would send them to ask HQ for an assignment they already
+        // have. The two need different sentences because they need different
+        // actions from support.
+        if (e?.status === 404 && e?.data?.error === 'licence_not_pushed') {
+          setData({ notPushed: true, branch: e?.data?.branch || null });
+        } else if (e?.status === 404) setData({ none: true });
         else { reportError(e); setErr(e?.message || 'Could not load your licence'); }
       });
   }, []);
@@ -103,6 +114,24 @@ export default function MyLicencePage() {
     return (
       <div className="flex items-center justify-center gap-2 p-16 text-sm text-gray-500 dark:text-gray-400">
         <Loader2 size={15} className="animate-spin" /> Loading your licence…
+      </div>
+    );
+  }
+
+  if (data.notPushed) {
+    return (
+      <div className="mx-auto max-w-4xl p-6" data-testid="licence-not-pushed">
+        <h1 className="mb-2 text-2xl font-bold text-gray-900 dark:text-white">My licence</h1>
+        <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center dark:border-gray-700">
+          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            HQ has not pushed this branch its licence yet.
+          </p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            This deployment{data.branch ? ` (${data.branch})` : ''} is running, and the licence
+            terms behind it are held at HQ until they are copied here. This is a provisioning
+            step that has not finished — not a licence you are missing.
+          </p>
+        </div>
       </div>
     );
   }
@@ -140,8 +169,22 @@ export default function MyLicencePage() {
           </span>
         </div>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          {l.legal_entity_name} · licence {l.licence_ref}
+          {l.legal_entity_name} · licence {l.licence_ref || 'Not recorded'}
         </p>
+        {/* D107 — a copy shows its age. On HQ `source` is absent and nothing
+            renders here: HQ's read IS the ledger, and stamping it would claim
+            a staleness it does not have. On a branch every HQ-owned figure on
+            the screen below came from this one push, so the stamp belongs at
+            the top of the page rather than repeated on each panel. */}
+        {data.source === 'hq_copy' && (
+          <p
+            data-testid="licence-as-of"
+            className="mt-1 text-xs text-gray-500 dark:text-gray-400"
+          >
+            Copy pushed by HQ · as of {fmtDate(data.as_of)}. HQ holds the licence itself;
+            a change there reaches this page on the next push.
+          </p>
+        )}
         {l.status_note && (
           <p className="mt-2 rounded-lg bg-amber-50 p-2.5 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
             {l.status_note}
@@ -210,7 +253,19 @@ export default function MyLicencePage() {
       </Panel>
 
       <Panel icon={History} title="History">
-        {(data.events || []).length === 0 ? (
+        {/* D107 — an empty array and an UNAVAILABLE trail are different claims
+            and must not share a sentence. `licence_events` is HQ's append-only
+            record and is not pushed to a branch, so the server sends
+            `events_available: false` with its reason; rendering that as
+            "Nothing recorded yet" would tell a branch admin that nothing has
+            happened to their licence, which is a statement about HQ's data
+            that this deployment cannot make. Checked BEFORE the length test,
+            since the array is empty in both cases. */}
+        {data.events_available === false ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400" data-testid="licence-events-unavailable">
+            {data.events_reason}
+          </p>
+        ) : (data.events || []).length === 0 ? (
           <p className="text-sm italic text-gray-400 dark:text-gray-500">Nothing recorded yet.</p>
         ) : (
           <ul className="divide-y divide-gray-100 dark:divide-gray-800">

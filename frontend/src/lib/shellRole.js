@@ -30,7 +30,34 @@ export function isSuperAdminUser(user) {
   return Number(user?.is_super_admin ?? 0) === 1;
 }
 
+/**
+ * The branch this deployment serves, as `/me` reports it (D106), or null.
+ *
+ * A branch Worker answers `/me.branch` with `{code, name, territories, …}`;
+ * HQ answers `null`, and the dev FastAPI and any older worker omit the key
+ * entirely. All three of those must read as "not a branch", which is why this
+ * asks for a non-empty `code` rather than for the object's truthiness.
+ */
+export function branchOfUser(user) {
+  const code = String(user?.branch?.code ?? '').trim();
+  return code ? code : null;
+}
+
 export function shellRoleFor(role, user, hqView = true) {
+  // D107 — the branch arm, and it is checked FIRST because the two facts
+  // cannot both be true: D106 makes `hydrateSuperAdmin` return 0 on a branch
+  // without querying the table, so `is_super_admin` is 0 on every branch
+  // deployment. Ordering it first is therefore not a precedence decision
+  // between two live claims, it is this file refusing to depend on that
+  // invariant holding elsewhere.
+  //
+  // The file's own rule is UNCHANGED and applies to this arm exactly as it
+  // does to the one below: it names a SIDEBAR, not a permission. Nothing that
+  // decides access may read it — the branch gates are D106's and D107's, in
+  // the Worker, keyed off `BRANCH_CODE` rather than off anything a browser
+  // says. A founder being viewed-as keeps the founder shell here for the same
+  // reason a founder viewed-as from HQ does.
+  if (role === 'admin' && branchOfUser(user)) return 'branch_admin';
   return role === 'admin' && Number(user?.is_super_admin ?? 0) === 1 && hqView ? 'super_admin' : role;
 }
 
