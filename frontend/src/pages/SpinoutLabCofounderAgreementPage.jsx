@@ -61,6 +61,7 @@ import DisputeCard from '../components/cofounder/DisputeCard';
 import ExecutionConsole from '../components/cofounder/ExecutionConsole';
 import SoloDeclaration from '../components/cofounder/SoloDeclaration';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 
 // Kept as a named export for unit-testability (moved to the view model).
 export { capTableSplit } from '../lib/cofounderAgreementViewModel';
@@ -437,7 +438,7 @@ export default function SpinoutLabCofounderAgreementPage() {
   );
 
   return (
-    <div className="w-full px-2 sm:px-4 py-3 space-y-5" data-testid="page-spinout-cofounder">
+    <LabPageShell width="full" testId="page-spinout-cofounder">
       <LabPageHeader
         icon={FileSignature}
         title="Co-founder Agreement"
@@ -765,6 +766,6 @@ export default function SpinoutLabCofounderAgreementPage() {
           </div>
         </>
       )}
-    </div>
+    </LabPageShell>
   );
 }

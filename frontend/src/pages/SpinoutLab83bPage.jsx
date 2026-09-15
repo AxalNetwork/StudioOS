@@ -48,6 +48,7 @@ import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import LabPageHeader from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 import { pickLabProject } from './SpinoutLabStartupPage';
 
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -271,16 +272,16 @@ export default function SpinoutLab83bPage() {
 
   if (status === 'loading') {
     return (
-      <div className="w-full px-2 sm:px-4 py-3" data-testid="page-spinout-83b">
+      <LabPageShell width="full" spaceY="" testId="page-spinout-83b">
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <Loader2 size={15} className="animate-spin" /> Loading your 83(b) tracker…
         </div>
-      </div>
+      </LabPageShell>
     );
   }
 
   return (
-    <div className="w-full px-2 sm:px-4 py-3 space-y-5" data-testid="page-spinout-83b">
+    <LabPageShell width="full" testId="page-spinout-83b">
       {/* Header — Lab shell, back to WORKSPACE (not Incorporate). */}
       <LabPageHeader
         icon={FileText}
@@ -636,6 +637,6 @@ export default function SpinoutLab83bPage() {
           </div>
         </>
       )}
-    </div>
+    </LabPageShell>
   );
 }

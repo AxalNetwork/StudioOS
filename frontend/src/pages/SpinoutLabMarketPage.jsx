@@ -3,9 +3,11 @@
 // spin-out-lab-pipeline/project). Every number is real:
 //   - TAM / SAM / SOM come from the founder's project record (recalculated
 //     here via the assumptions drawer — the Week-1 "Size your market"
-//     deliverable) via PUT /projects/:id. Only tam/sam/som persist; the other
-//     assumption fields are page-local session state until backend columns
-//     exist (the drawer says so in plain words).
+//     deliverable) via PUT /projects/:id. The TWELVE INPUTS behind them persist
+//     too, since migration 247, in project_market_assumptions via
+//     /projects/:id/market-assumptions — they used to be page-local session
+//     state, so the page kept the conclusion and dropped the derivation the
+//     moment a tab closed.
 //   - Market dynamics / segments come from the platform Market-Intel
 //     aggregator (sector compass + founder lens), matched to the project's
 //     sector. Growth-outlook rows are founder assumptions, labeled as such.
@@ -34,15 +36,19 @@ import {
   Lock,
   Pencil,
   ShieldCheck,
+  Sparkles,
   X,
 } from 'lucide-react';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 import { api, spinoutLab } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import { AssistLayout } from '../ui';
+import useAssistMode from '../hooks/useAssistMode';
+import FillProposals from '../workspaces/FillProposals';
 
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
 const CARD = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm';
@@ -54,6 +60,51 @@ const TXA = 'w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-wh
 const SEG_ON = 'bg-violet-600 border-violet-600 text-white';
 const SEG_OFF = 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300';
 const GHOST_SM = 'h-[26px] px-2.5 rounded-[7px] border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-violet-700 dark:text-violet-300 text-[11px] font-semibold';
+
+/**
+ * The stamp beside a figure Eadwyn supplied, with where it came from.
+ *
+ * THIS IS WHY `fill_provenance` EXISTS, and the page has needed it since the copy
+ * above the cards was written. Three statements on this page are true and unusual
+ * for being so: the comment recording that "AI-assisted estimates" was dropped
+ * "rather than lie about provenance", the on-screen "nothing on this page is
+ * auto-invented", and the per-card "Founder research" / "Founder model" stamp.
+ * They stay true only if a researched figure says so where it sits — a page that
+ * marked nothing would make the third one quietly wrong the first time Eadwyn
+ * filled a field.
+ *
+ * It renders NOTHING for a field the founder filled, which is the common case and
+ * the point: the absence of a stamp is the claim that they did it. And nothing for
+ * a figure they have since typed over — the server already withholds it, because a
+ * provenance row is compared against what the row holds now.
+ */
+function FilledMark({ fill }) {
+  if (!fill) return null;
+  const source = fill.citation?.kind === 'library'
+    ? fill.citation.title || 'a document in your library'
+    : fill.citation?.source || null;
+  // The title carries the quote, because the check a reader makes is reading the
+  // sentence — and a hover is where it belongs on a form this dense rather than
+  // three lines of prose per field. `title` is opt-in by hover, the same contract
+  // the workspace zone reasons use for an unbuilt control.
+  const detail = [
+    fill.edited ? 'Eadwyn proposed this and you changed it' : 'Eadwyn supplied this figure',
+    source ? `Source: ${source}` : null,
+    fill.citation?.quote ? `“${fill.citation.quote}”` : null,
+    fill.edited && fill.proposed_value ? `It proposed: ${fill.proposed_value}` : null,
+    fill.model ? `Model: ${fill.model.split('/').pop()}` : null,
+  ].filter(Boolean).join('\n');
+  return (
+    <span
+      className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-violet-100 px-1.5 py-0.5 align-middle text-[9.5px] font-bold text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+      title={detail}
+      data-testid="filled-mark"
+    >
+      <Sparkles size={9} aria-hidden="true" />
+      {fill.edited ? 'Eadwyn · edited' : 'Eadwyn · sourced'}
+    </span>
+  );
+}
 
 export function fmtMoney(v) {
   const n = Number(v);
@@ -103,33 +154,53 @@ const DIM_LABELS = {
 };
 
 // ---------------------------------------------------------------------------
-// Assumptions (drawer) — page-local session state. Only TAM/SAM/SOM persist
-// (PUT /projects/:id); the other fields need backend columns (or a
-// project_market_assumptions table) that don't exist yet, so they seed from
-// real project data where possible and otherwise start empty — never with
-// invented market numbers.
+// Assumptions (drawer) — PERSISTED since migration 247, in
+// `project_market_assumptions` via GET/PUT /projects/:id/market-assumptions.
+//
+// They used to be page-local session state, and this comment used to say so: only
+// TAM/SAM/SOM were saved and "the other fields need backend columns (or a
+// project_market_assumptions table) that don't exist yet". What that cost was a
+// page keeping the CONCLUSION and dropping the derivation — a founder typed a
+// population, an ACV, a geography, a CAGR, pressed Recalculate, and came back to
+// three numbers with nothing behind them. The inversions below are still here as
+// the FALLBACK for a project sized before 247, where the saved ratios are the
+// only trace of what the founder chose.
+//
+// Nothing seeds from an invented market number. Everything the store has no value
+// for starts empty, because empty is what the page says it means: not researched
+// yet.
 // ---------------------------------------------------------------------------
-function seedAssumptions(p) {
+function seedAssumptions(p, saved) {
   const tam = Number(p?.tam) || 0;
   const sam = Number(p?.sam) || 0;
   const som = Number(p?.som) || 0;
+  // A saved value always wins. `??` and not `||`: a field the founder cleared
+  // comes back as null and must stay cleared rather than re-seed from the
+  // project, and '0' is a figure somebody typed.
+  const s = (key, fallback = '') => {
+    const v = saved?.[key];
+    return v == null || v === '' ? fallback : String(v);
+  };
   return {
-    category: p?.sector || '',
-    geography: 'Global',
-    targetYear: '2026',
-    methodology: 'Top-down',
-    population: '',
-    acv: '',
-    tamOverride: '',
-    // Real inversions of the calculator when the record already has values.
-    samPct: tam > 0 && sam > 0 ? String(Math.round((sam / tam) * 100)) : '',
-    winRate: sam > 0 && som > 0 ? String(Math.round(((som / sam) / 2.2) * 100)) : '',
-    runway: '',
-    capacity: '',
-    cagr: '', // stays empty until the founder sets it — visuals fall back to the design's 24 default
-    growthDriver: '',
-    maturity: 'Growing',
-    segFilter: [],
+    category: s('category', p?.sector || ''),
+    geography: s('geography', 'Global'),
+    targetYear: s('targetYear', '2026'),
+    methodology: s('methodology', 'Top-down'),
+    population: s('population'),
+    acv: s('acv'),
+    tamOverride: s('tamOverride'),
+    // Real inversions of the calculator, for a project sized before 247 saved the
+    // percentages the founder actually chose.
+    samPct: s('samPct', tam > 0 && sam > 0 ? String(Math.round((sam / tam) * 100)) : ''),
+    winRate: s('winRate', sam > 0 && som > 0 ? String(Math.round(((som / sam) / 2.2) * 100)) : ''),
+    runway: s('runway'),
+    capacity: s('capacity'),
+    // Stays empty until the founder sets it — visuals fall back to the design's
+    // 24 and label it, which is a stated placeholder rather than a stored guess.
+    cagr: s('cagr'),
+    growthDriver: s('growthDriver'),
+    maturity: s('maturity', 'Growing'),
+    segFilter: Array.isArray(saved?.segFilter) ? saved.segFilter : [],
   };
 }
 
@@ -209,8 +280,59 @@ export default function SpinoutLabMarketPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [shared, setShared] = useState(false);
-  // Assumptions drawer (spec A) — session-local, see seedAssumptions().
+  // Assumptions drawer (spec A) — persisted since 247, see seedAssumptions().
   const [assume, setAssume] = useState(() => seedAssumptions(null));
+  // WHICH FIGURES EADWYN SUPPLIED — and only the ones that are STILL its figures.
+  // The server compares each provenance row against what the row holds now, so a
+  // figure the founder has since typed over comes back unmarked: a label reading
+  // "Eadwyn" over their own number is the same lie this page's copy exists to
+  // avoid, pointed the other way.
+  const [filled, setFilled] = useState({});
+  // The rail's switch, read from the same module store the rail reads it from.
+  // Off until the founder turns it on, per D17 and the money rule behind it.
+  const [fillsOn] = useAssistMode('market');
+
+  /**
+   * Re-read the drawer's fields and their provenance after an accept.
+   *
+   * WITHOUT THIS THE ACCEPT WORKS AND LOOKS LIKE IT DID NOT. The figure lands in
+   * `project_market_assumptions` and the drawer keeps showing the empty field it
+   * showed a second ago, so a founder presses the button again — and the band has
+   * already removed the proposal, so the second press does nothing either. A
+   * mechanism that succeeds invisibly is indistinguishable from one that failed.
+   *
+   * Both halves, because they are two facts: what the field now holds, and that
+   * Eadwyn is what put it there. Reading only the first would leave the stamp
+   * missing until a reload.
+   */
+  /**
+   * Re-read the competitor analysis after an accept, for the same reason.
+   *
+   * The board is rendered from `compAnalysis`, so without this an accepted
+   * competitor lands in D1 and the list on screen does not change — and the band
+   * has already removed the proposal, so pressing again does nothing either.
+   */
+  const reloadCompetitors = async () => {
+    if (!project) return;
+    try {
+      const list = await api.competitors.list();
+      const hit = (list?.analyses || []).find((a) => Number(a.project_id) === Number(project.id));
+      setCompAnalysis(hit ? await api.competitors.get(hit.id) : null);
+    } catch (e) {
+      reportError('SpinoutLabMarketPage:reloadCompetitors', e);
+    }
+  };
+
+  const reloadAssumptions = async () => {
+    if (!project) return;
+    try {
+      const saved = await api.getMarketAssumptions(project.id);
+      setAssume(seedAssumptions(project, saved?.assumptions));
+      setFilled(saved?.filled || {});
+    } catch (e) {
+      reportError('SpinoutLabMarketPage:reloadAssumptions', e);
+    }
+  };
   const [anim, setAnim] = useState(null); // {tam,sam,som} in dollars while the recalc tween runs
   const animRef = useRef(null);
   const finishRef = useRef({ tween: false, saved: false });
@@ -265,7 +387,7 @@ export default function SpinoutLabMarketPage() {
         setState(s);
         const p = pickLabProject(projects, user);
         setProject(p);
-        const [cp, fl, src, cit, ft, comp] = await Promise.all([
+        const [cp, fl, src, cit, ft, comp, saved] = await Promise.all([
           api.miSectorCompass().catch(() => null),
           api.miFounderLens().catch(() => null),
           api.miSources().catch(() => null),
@@ -282,6 +404,10 @@ export default function SpinoutLabMarketPage() {
                 })
                 .catch(() => null)
             : Promise.resolve(null),
+          // Migration 247 — the drawer's own inputs. Before it, these lived only
+          // in `useState` and went when the tab did, so a founder came back to
+          // the three saved figures and none of the reasoning behind them.
+          p ? api.getMarketAssumptions(p.id).catch(() => null) : Promise.resolve(null),
         ]);
         if (!alive) return;
         setCompass(cp);
@@ -290,7 +416,8 @@ export default function SpinoutLabMarketPage() {
         setCitations(cit);
         setFit(ft);
         setCompAnalysis(comp);
-        setAssume(seedAssumptions(p));
+        setAssume(seedAssumptions(p, saved?.assumptions));
+        setFilled(saved?.filled || {});
         setStatus('ready');
       })
       .catch((e) => {
@@ -382,13 +509,37 @@ export default function SpinoutLabMarketPage() {
     try {
       const updated = await api.updateProject(project.id, { tam, sam, som });
       setProject((prev) => ({ ...prev, ...updated }));
+      // THE REASONING GOES WITH THE RESULT, since migration 247. Saved AFTER the
+      // three figures and not instead of them: `projects.tam/.sam/.som` stay the
+      // canonical derived values every other surface reads, and this is what they
+      // were derived FROM. A failure here does not fail the recalculation — the
+      // figures are saved and correct — but it is reported, because assumptions
+      // that silently did not persist are what this page did for its whole life.
+      let assumptionsSaved = true;
+      try {
+        await api.saveMarketAssumptions(project.id, {
+          category: f.category, geography: f.geography, targetYear: f.targetYear,
+          methodology: f.methodology, population: f.population, acv: f.acv,
+          tamOverride: f.tamOverride, samPct: f.samPct, winRate: f.winRate,
+          runway: f.runway, capacity: f.capacity, cagr: f.cagr,
+          growthDriver: f.growthDriver, maturity: f.maturity, segFilter: f.segFilter,
+        });
+      } catch (e) {
+        reportError('SpinoutLabMarketPage:assumptions', e);
+        assumptionsSaved = false;
+        setSaveError('Your sizing saved. The assumptions behind it did not — press Recalculate again to keep them.');
+      }
       // W1 deliverable — sizing counts once both TAM and SAM are on record
       // (citations aggregate automatically from MI sources for the sector).
       if (tam != null && sam != null) await markMilestone(user, 'market_sizing_completed');
       finishRef.current.saved = true;
       if (finishRef.current.tween) setAnim(null);
       setAssumptionsReviewed(true);
-      setEditOpen(false);
+      // THE DRAWER STAYS OPEN WHEN THE ASSUMPTIONS DID NOT LAND, because
+      // `saveError` is drawn inside it: closing would file the one message that
+      // says what was lost behind a panel nobody has a reason to reopen, which is
+      // the silent failure this whole change exists to end.
+      if (assumptionsSaved) setEditOpen(false);
     } catch (e) {
       reportError('SpinoutLabMarketPage:save', e);
       clearInterval(animRef.current);
@@ -583,7 +734,7 @@ export default function SpinoutLabMarketPage() {
   const youDot = { x: POS_W * 0.72, y: POS_H * 0.28 };
 
   const page = (
-    <div className="w-full px-2 sm:px-4 py-3" data-testid="page-spinout-market">
+    <LabPageShell width="full" spaceY="" testId="page-spinout-market">
       {/* Header — brand rule, back control inline with the title, and the tool
           icon in its violet tile (design handoff). */}
       <LabPageHeader
@@ -645,6 +796,38 @@ export default function SpinoutLabMarketPage() {
           </>
         ) : null}
       />
+
+      {/* THE FILL'S OWN BAND, and the page it fills. Task #188's market kind
+          proposes an addressable population, an ACV benchmark and a growth rate —
+          each with a citation or dropped — into the drawer's own fields. It
+          renders only when the rail's switch is on, reads existing proposals and
+          runs nothing until the founder presses the button, and `onApplied`
+          reloads so an accepted figure appears in the drawer rather than after a
+          refresh. `useAssistMode('market')` is the same module store the rail
+          reads, so the switch and this band cannot disagree. */}
+      {project && (
+        <FillProposals
+          key="market-sizing"
+          projectId={project.id}
+          kind="market_input"
+          enabled={fillsOn}
+          onApplied={reloadAssumptions}
+        />
+      )}
+      {/* The second band on this page, and a separate kind rather than a second
+          shape in one: a sizing input is a number on the drawer and a competitor
+          is a row on a list, so they have different writers, different empties and
+          different costs. `/api/ai/me/spend` groups by task, which is why the
+          router has two classes for them too. */}
+      {project && (
+        <FillProposals
+          key="market-competitors"
+          projectId={project.id}
+          kind="competitor"
+          enabled={fillsOn}
+          onApplied={reloadCompetitors}
+        />
+      )}
 
       {/* Design's Week-2 notice (611-614) — informational only: StudioOS
           deliberately keeps this page editable in Week 2 (founders iterate
@@ -817,8 +1000,8 @@ export default function SpinoutLabMarketPage() {
                     ? `No aggregator segment matches “${project.sector || 'your sector'}” — showing the current leader.`
                     : 'Live sector signal from the platform aggregator.'}
               </p>
-              {/* Growth outlook (spec E) — drawer-fed founder assumptions,
-                  local-only until backend columns exist. */}
+              {/* Growth outlook (spec E) — drawer-fed founder assumptions, saved
+                  in project_market_assumptions since migration 247. */}
               <div className="mb-3.5" data-testid="market-growth-outlook">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Growth outlook · founder assumptions</span>
@@ -1224,10 +1407,12 @@ export default function SpinoutLabMarketPage() {
             <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-start justify-between gap-3 flex-none">
               <div>
                 <div className="text-[15px] font-extrabold text-gray-900 dark:text-gray-50">Edit Market Assumptions</div>
-                {/* The design shows an "Auto-saves" chip here — omitted because
-                    it would lie: only TAM/SAM/SOM persist, on explicit recalc. */}
+                {/* The design shows an "Auto-saves" chip here. Still omitted, and
+                    for a narrower reason than before: migration 247 persists every
+                    field on this drawer, but on the explicit Recalculate — nothing
+                    is written as you type, so "Auto-saves" would still be wrong. */}
                 <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 max-w-[280px] leading-relaxed">
-                  Assumptions inform the calculator — only TAM/SAM/SOM are saved to your startup record yet.
+                  Saved with your startup when you recalculate — these figures, and the TAM/SAM/SOM they produce.
                 </div>
               </div>
               <button type="button" data-testid="button-close-sizing" onClick={() => setEditOpen(false)} disabled={saving} className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 flex items-center justify-center flex-none">
@@ -1288,11 +1473,11 @@ export default function SpinoutLabMarketPage() {
                     ))}
                   </div>
                   <label>
-                    <span className={FLD}>Total addressable population (units)</span>
+                    <span className={FLD}>Total addressable population (units)<FilledMark fill={filled.population} /></span>
                     <input type="number" min="0" value={assume.population} onChange={setA('population')} className={INP} data-testid="input-population" />
                   </label>
                   <label>
-                    <span className={FLD}>Average contract value ($)</span>
+                    <span className={FLD}>Average contract value ($)<FilledMark fill={filled.acv} /></span>
                     <input type="number" min="0" value={assume.acv} onChange={setA('acv')} className={INP} data-testid="input-acv" />
                   </label>
                   <label>
@@ -1356,7 +1541,7 @@ export default function SpinoutLabMarketPage() {
                 <div className={`${LBL} mb-2.5`}>Growth</div>
                 <div className="flex flex-col gap-2.5">
                   <label>
-                    <span className={FLD}>CAGR estimate (%)</span>
+                    <span className={FLD}>CAGR estimate (%)<FilledMark fill={filled.cagr} /></span>
                     <input type="number" min="0" value={assume.cagr} onChange={setA('cagr')} className={INP} data-testid="input-cagr" />
                   </label>
                   <label>
@@ -1398,7 +1583,7 @@ export default function SpinoutLabMarketPage() {
           </div>
         </div>
       )}
-    </div>
+    </LabPageShell>
   );
 
   return <AssistLayout surface="market">{page}</AssistLayout>;

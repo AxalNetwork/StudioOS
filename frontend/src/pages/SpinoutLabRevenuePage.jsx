@@ -28,6 +28,7 @@ import { api, spinoutLab } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -321,7 +322,7 @@ export default function SpinoutLabRevenuePage() {
   ];
 
   return (
-    <div className="w-full px-2 sm:px-4 py-3 space-y-5" data-testid="page-spinout-revenue">
+    <LabPageShell width="full" testId="page-spinout-revenue">
       {/* Header — shared Lab header (LabPageHeader owns the rule, back link,
           icon tile, title/status/week chips and the action cluster). */}
       <LabPageHeader
@@ -732,6 +733,6 @@ export default function SpinoutLabRevenuePage() {
           </div>
         </div>
       )}
-    </div>
+    </LabPageShell>
   );
 }

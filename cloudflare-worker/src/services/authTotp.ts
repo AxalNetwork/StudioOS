@@ -31,12 +31,13 @@
  */
 import type { Env } from '../types';
 import { encryptColumn, decryptColumn } from './columnCipher';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const BASE32_RE = /^[A-Z2-7]{16,64}$/;
 
-let migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
-  if (migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS auth_totp (
        user_id INTEGER PRIMARY KEY,
@@ -60,7 +61,7 @@ async function ensureSchema(env: Env): Promise<void> {
       }
     }
   }
-  migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 export interface TotpRow {

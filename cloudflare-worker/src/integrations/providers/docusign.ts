@@ -594,6 +594,20 @@ async function reconcileEnvelope(env: Env, row: IntegrationRow, dsEnvelopeId: st
     await env.DB.prepare(
       `UPDATE esign_envelopes SET status = ?, signed_r2_key = ?, completed_at = CURRENT_TIMESTAMP, last_error = NULL WHERE id = ?`,
     ).bind(newStatus, signedKey, local.id).run();
+    // A DocuSign-signed NDA has to satisfy its obligation too. This path is a
+    // POLLER, not a webhook, and it does not share the in-house signing route's
+    // completion block — so an obligation satisfier added only there would
+    // silently skip every envelope routed through the provider. Idempotent, so
+    // seeing the same completed envelope on a later sweep changes nothing.
+    //
+    // The rest of that completion block — partner-deal activation and the
+    // `contract_signed` notification — is still missing here; it is a wider
+    // pre-existing gap than this change, and extracting the whole block into one
+    // shared function is recorded as a follow-up rather than done in passing.
+    try {
+      const { satisfyObligationFromEnvelope } = await import('../../services/trust');
+      await satisfyObligationFromEnvelope(env, local.id);
+    } catch (e) { console.warn('[docusign] satisfyObligationFromEnvelope failed', e); }
   } else {
     // For terminal non-completed states (rejected/void), persist the
     // provider-supplied reason on the envelope row so the admin

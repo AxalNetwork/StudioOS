@@ -12,11 +12,11 @@
     "lint": "npm run lint:no-console && tsc --noEmit"
   },
   "dependencies": {
-    "@simplewebauthn/server": "^13.3.3",
-    "hono": "^4.13.5",
-    "jose": "^6.2.10",
+    "@simplewebauthn/server": "^14.0.1",
+    "hono": "^4.13.7",
+    "jose": "^6.2.12",
     "mimetext": "^3.0.28",
-    "otpauth": "^9.5.1",
+    "otpauth": "^9.5.2",
     "pdf-lib": "^1.17.1",
     "qrcode": "^1.5.4"
   },

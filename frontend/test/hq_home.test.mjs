@@ -42,8 +42,27 @@ test('the page reads one endpoint and never sends a tenant to the server', () =>
 
 test('every per-subsidiary figure renders Not recorded, and nothing renders an invented zero', () => {
   // The four per-card facts the canvas shows that the store cannot hold.
+  //
+  // NO REGEX IS BUILT FROM THE LABEL. It used to be, with `·` replaced by `.`
+  // — an escape that made the pattern LOOSER rather than safer, and left every
+  // character that would actually change it (`( ) [ ] + ? * |`) untouched.
+  //
+  // It is anchored on the card's `</dt>` rather than on the bare word, which
+  // is a second thing the regex got wrong quietly: `Accounts` also names the
+  // platform-wide TILE, and a pattern that scanned the whole file was free to
+  // satisfy itself on whichever occurrence happened to work. EVERY definition
+  // term with this label is checked, so a second card cannot appear with a
+  // number in it.
   for (const label of ['Accounts', 'MTD · backlog']) {
-    assert.match(PAGE, new RegExp(`${label.replace(/[.·]/g, '.')}[\\s\\S]{0,120}<Unrecorded />`), `${label} per licence must be Not recorded`);
+    const term = `>${label}</dt>`;
+    let at = PAGE.indexOf(term);
+    assert.ok(at > 0, `${label} must be a definition term on the subsidiary card`);
+    for (; at !== -1; at = PAGE.indexOf(term, at + 1)) {
+      assert.ok(
+        PAGE.slice(at, at + term.length + 120).includes('<Unrecorded />'),
+        `${label} per licence must be Not recorded`,
+      );
+    }
   }
   // A tile renders Not recorded for any null value, so MTD revenue — which
   // has no source at all — is passed as null rather than as a number.
@@ -83,7 +102,20 @@ test('the overview endpoint is super-admin only and carries the shared honesty b
   assert.match(ROUTE, /await requireSuperAdmin\(c\)/);
   assert.match(ROUTE, /\.\.\.DERIVED_UNAVAILABLE/, 'the same wording GET /licence/mine sends, not a second phrasing');
   assert.match(read('cloudflare-worker/src/routes/licence.ts'), /export const DERIVED_UNAVAILABLE/);
-  assert.match(ROUTE, /escalations_available: false/);
+  // D108 — escalations HAVE a store now (migration 259), so the old
+  // `escalations_available: false` pin is re-pointed rather than deleted: the
+  // property worth guarding was never "escalations are absent", it was "the
+  // payload says which of the two it is". The refusal string must be gone,
+  // and the flag must be able to answer true.
+  assert.doesNotMatch(
+    ROUTE, /No escalation exists on the platform/,
+    'the retired refusal must be deleted, not reworded — a stale reason gets cited by the next surface',
+  );
+  assert.match(ROUTE, /escalations_available: escalations\.available/);
+  assert.match(ROUTE, /openEscalations\(env, ESCALATION_LIMIT\)/);
+  // An unreadable hq_escalations table is reported as unreadable, never as an
+  // empty queue — the same rule the ticket queue below follows.
+  assert.match(ROUTE, /available: false,\s*\n\s*reason: 'The hq_escalations table could not be read/);
   // The queue is platform-wide; an unreadable table is reported, not zeroed.
   assert.match(ROUTE, /queue = \{ available: false, reason:/);
 });
@@ -97,8 +129,51 @@ test('the overview is mounted before the /api/admin catch-all', () => {
 
 test('the rail names what is not connected instead of implying it is', () => {
   assert.match(PAGE, /role="super_admin"/);
-  assert.match(PAGE, /\['Per-subsidiary accounts, revenue and queue depth', 'No account names its licence yet \(U1\)\.'\]/);
-  assert.match(PAGE, /\['Escalations', 'No subsidiary-to-HQ escalation exists on the platform\.'\]/);
+  // D108 — both of these lines are retired. Per-branch accounts and queue
+  // depth come from the fan-out now, and escalations have a store, so the
+  // rail must no longer name either as unconnected. Asserted as an ABSENCE
+  // because that is the regression: a note that still reads plausibly.
+  assert.doesNotMatch(PAGE, /No account names its licence yet/);
+  assert.doesNotMatch(PAGE, /No subsidiary-to-HQ escalation exists on the platform/);
+  // What is still genuinely unsourced stays named, so the rail does not
+  // quietly become empty.
+  assert.match(PAGE, /\['Revenue per subsidiary', '[^']+'\]/);
+  assert.match(PAGE, /\['Seat utilisation', '[^']+'\]/);
+  assert.match(PAGE, /\['Token P&L per subsidiary', '[^']+'\]/);
+});
+
+test('D112 — the escalations list is no longer a queue nobody can clear', () => {
+  // WHAT CHANGED IS THE LOOP, NOT THE LIST. Before D112 a branch could push an
+  // item up and HQ could read it and do nothing else, so every item stayed in
+  // this zone forever. The note is what tells a reader the loop closes, and
+  // where — so all three of its properties are pinned, because each can be
+  // lost on its own.
+  const at = PAGE.indexOf('data-testid="hq-escalations-answer-link"');
+  assert.ok(at > 0, 'the escalations zone lost the route to answering one');
+
+  // 1. The destination is a REGISTERED route, not a plausible-looking string.
+  //    A note pointing at a 404 is worse than no note: it reads as shipped.
+  const link = PAGE.slice(PAGE.lastIndexOf('<Link', at), at);
+  const to = /to="([^"]+)"/.exec(link);
+  assert.ok(to, 'the answer link has no destination');
+  assert.ok(APP.includes(`path="${to[1]}"`), `${to[1]} is not a registered route`);
+
+  // 2. The two facts stay two. D111's promo-ceiling precedent, restated on the
+  //    page that invites the action: a decision that was recorded but did not
+  //    reach the branch must not read as a decision that never happened, or an
+  //    operator enters it twice.
+  const note = PAGE.slice(PAGE.lastIndexOf('<p', at), at);
+  assert.match(note, /records HQ&rsquo;s decision/, 'the note does not say the decision is recorded');
+  assert.match(note, /reported separately/,
+    'the note collapses "decided" and "delivered" into one outcome');
+
+  // 3. It is gated on the queue being READABLE. Inviting someone to answer a
+  //    list that could not be read points them at nothing.
+  assert.match(
+    PAGE.slice(Math.max(0, at - 700), at),
+    /data\.escalations_available !== false &&/,
+    'the answer note renders even when the escalations queue is unreadable',
+  );
 });
 
 /* ────────────────────────────────────────────────────────────────────────────

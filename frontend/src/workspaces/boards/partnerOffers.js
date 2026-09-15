@@ -1,4 +1,4 @@
-import { count, summary, title, top, usd } from './format.js';
+import { count, summary, title, top, usd, usdCents } from './format.js';
 
 /*
  * `/offers` — Partner Operator Canvas P5, "Package what we sell".
@@ -42,7 +42,16 @@ export default function partnerOffersBoard(role, api) {
         columns: ['Offering', 'Category', 'Price'],
         empty: 'Nothing is listed in this firm’s catalog yet.',
         summary: (d) => summary(count(Array.isArray(d?.items) ? d.items.length : null, 'offering')),
-        rows: (d) => top(d?.items).map((o) => [o.name, title(o.category), usd(o.price)]),
+        // THE FIELD NAMES ARE THE PAYLOAD'S. `o.name` and `o.price` are neither:
+        // `GET /services/offerings` serializes `title`, `category`, `price_usd`
+        // and `price_cents` and has never sent either of those two, so the
+        // Offering and Price columns rendered blank on every row while Category
+        // filled — a board that looked broken beside one that worked. `usdCents`
+        // rather than `usd` for the same reason the zone page uses it: the
+        // artboard's instMeta is "Prices stored as integers, formatted once",
+        // and feeding a cents integer to the dollars formatter reads $480,000
+        // where the page reads $4,800.
+        rows: (d) => top(d?.items).map((o) => [o.title, title(o.category), usdCents(o.price_cents)]),
         footnote: () =>
           'The catalog is what a founder browsing the network sees. Each entry carries its own '
           + 'pricing model; nothing here quotes against a posted need on the firm’s behalf.',

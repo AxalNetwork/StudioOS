@@ -392,6 +392,49 @@ select::-ms-expand { display: none; }
   background-color: #374151;
 }
 
+/* The axal NEUTRALS get the same treatment as the greys above, and until now
+   they did not — which is how two HQ pages shipped unreadable.
+
+   `--color-axal-ink` is #18181b. `pages/hq/AccountsPage.jsx` and
+   `ContractsPage.jsx` carry zero `dark:` classes and head themselves with a
+   bare `text-axal-ink`, so on a dark surface that was near-black text on
+   #111827. Every other HQ page has some `dark:` coverage; those two had none,
+   and `pages/hq/README.md` says "Dark mode is not optional".
+
+   THE GUARD COULD NOT SEE IT. `scripts/check-dark-mode.mjs` pairs only
+   `bg-white`, `text-gray-700|800|900` and `border-gray-200|300`, and the skin
+   above rewrites only those same Tailwind greys. A token-based neutral was
+   outside both, so a near-black heading on a dark ground passed every check.
+
+   FIXED HERE RATHER THAN IN NINETY-ODD FILES, because that is what this block
+   is for. `text-axal-ink` appears in 59 files under pages/ and components/,
+   `border-axal-hairline` in 38, `bg-axal-ground` in 9; requiring an explicit
+   `dark:` beside each would be churn in place of a fix, and the next file to
+   use the token would be wrong again. `frontend/test/ui_design_tokens.test.mjs`
+   asserts that every declared axal neutral has a counterpart here, so a new one
+   cannot arrive without one.
+
+   ONLY THE NEUTRALS. The brand violets are legible on either ground and D2
+   keeps them at their spec values deliberately; a "dark variant" of a brand
+   colour would be a second palette, not a skin. Each mapping mirrors the grey
+   rule for the same role, so the two systems cannot drift into two different
+   dark greys. */
+:where(.dark [data-app-main] .text-axal-ink:not([data-keep-light] *):not([data-keep-light])) {
+  color: var(--app-text);
+}
+:where(.dark [data-app-main] .text-axal-muted:not([data-keep-light] *):not([data-keep-light])) {
+  color: var(--app-text-muted);
+}
+:where(.dark [data-app-main] .text-axal-faint:not([data-keep-light] *):not([data-keep-light])) {
+  color: #94a3b8;
+}
+:where(.dark [data-app-main] .border-axal-hairline:not([data-keep-light] *):not([data-keep-light])) {
+  border-color: var(--app-border);
+}
+:where(.dark [data-app-main] .bg-axal-ground:not([data-keep-light] *):not([data-keep-light])) {
+  background-color: var(--app-surface-2);
+}
+
 /* ---------------------------------------------------------------------------
    Task #8 — Article reader prose overrides.
    Scoped under .article-prose so it only affects the reading column.
@@ -564,4 +607,72 @@ details > summary .details-chevron {
     border-bottom: 1px dashed var(--app-border);
   }
   [data-table-cards] [data-table-card-row] > *:last-child { border-bottom: 0; }
+}
+
+/* Range inputs — Task #145.
+   `appearance-none` STRIPS the native widget, and with it everything
+   `accent-color` was doing. The onboarding sliders carried both: an
+   `accent-violet-600` that could no longer reach a thumb, over a track with
+   no filled portion, which is why the investor wizard's "What matters most
+   to you" step read as five empty pills and gave no clue what was selected.
+
+   Once the native widget is gone the fill and the thumb have to be drawn,
+   so: the fill is a hard-stop gradient at `--range-pct`, which React sets
+   from the value, and the thumb is styled per-engine because WebKit and
+   Gecko expose different pseudo-elements and a selector either engine
+   cannot parse invalidates the whole rule for BOTH. They stay in separate
+   blocks for that reason — do not merge them into one selector list.
+
+   #7c3aed is authV2.purple, written literally rather than as
+   var(--color-axal-violet): Tailwind v4 tree-shakes an @theme token that no
+   utility references, and a dropped token here would silently paint
+   nothing — which is the exact failure this rule exists to fix. */
+.axal-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    #7c3aed 0%,
+    #7c3aed var(--range-pct, 50%),
+    #e4e4e7 var(--range-pct, 50%),
+    #e4e4e7 100%
+  );
+  cursor: pointer;
+  outline-offset: 3px;
+}
+
+.axal-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #7c3aed;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(36, 31, 56, 0.35);
+  cursor: pointer;
+}
+
+.axal-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #7c3aed;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(36, 31, 56, 0.35);
+  cursor: pointer;
+}
+
+/* Firefox paints its own track under the gradient; keep it transparent so
+   the one fill above is the only thing the reader sees. */
+.axal-range::-moz-range-track {
+  background: transparent;
+  height: 8px;
+}
+
+.axal-range:focus-visible {
+  outline: 2px solid #6d28d9;
 }

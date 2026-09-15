@@ -24,6 +24,7 @@ import { archetypeMeta } from '../lib/assessmentMeta';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 import IncomingLeadsStrip from '../components/IncomingLeadsStrip';
 import {
   buildMatchBrief, buildEvidenceModules, buildDecisionModel, serializeDecision,
@@ -214,7 +215,7 @@ export default function SpinoutLabCofounderMatchPage() {
     : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400');
 
   return (
-    <div className="w-full px-2 sm:px-4 py-3" data-testid="page-spinout-cofounder-match">
+    <LabPageShell width="full" spaceY="" testId="page-spinout-cofounder-match">
       {/* Header */}
       <LabPageHeader
         className="mb-5"
@@ -558,6 +559,6 @@ export default function SpinoutLabCofounderMatchPage() {
           )}
         </div>
       </div>
-    </div>
+    </LabPageShell>
   );
 }

@@ -13,7 +13,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin } from '../auth';
+import { requireAdmin, requireHqAuthoring } from '../auth';
 import {
   ensureAssessmentSchema,
   GAME_STATUSES,
@@ -41,6 +41,30 @@ adminAssessment.use('*', async (c, next) => {
 async function admin(c: any) {
   try {
     return await requireAdmin(c);
+  } catch (e) {
+    const msg = (e as Error)?.message;
+    return c.json({ error: msg || 'Admin required' }, msg === 'Unauthorized' ? 401 : 403);
+  }
+}
+
+/**
+ * D106 / D.9 — the same guard, plus "not on a branch".
+ *
+ * S4 SPLITS THIS SURFACE DOWN THE MIDDLE and the split is what this helper
+ * encodes: a branch owns its assessment RESULTS — runs, sessions, scores,
+ * rescoring — and HQ owns the QUESTIONS. Every route below that writes a
+ * game, chapter, item, archetype or badge is authoring, and uses this.
+ * `preview` and `sessions/:id/rescore` keep the plain `admin` helper: the
+ * first writes nothing, and the second recomputes a branch's own sessions
+ * against the questions it already holds.
+ *
+ * Shaped exactly like `admin` — returns a user or a Response the caller
+ * returns — so swapping one for the other at a call site is a one-word change
+ * and cannot half-apply.
+ */
+async function hqAuthor(c: any) {
+  try {
+    return await requireHqAuthoring(c);
   } catch (e) {
     const msg = (e as Error)?.message;
     return c.json({ error: msg || 'Admin required' }, msg === 'Unauthorized' ? 401 : 403);
@@ -107,7 +131,7 @@ adminAssessment.get('/games', async (c) => {
 });
 
 adminAssessment.post('/games', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const b = await c.req.json().catch(() => ({}));
   const slug = String(b?.slug || '').trim();
@@ -167,7 +191,7 @@ adminAssessment.get('/games/:slug', async (c) => {
 });
 
 adminAssessment.put('/games/:slug', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const game = await gameBySlug(c.env, c.req.param('slug'));
   if (!game) return c.json({ error: 'not found' }, 404);
@@ -213,17 +237,17 @@ async function setGameStatus(c: any, slug: string, status: string) {
   return c.json({ game: shapeGame(await gameBySlug(c.env, slug)) });
 }
 adminAssessment.post('/games/:slug/publish', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   return setGameStatus(c, c.req.param('slug'), 'published');
 });
 adminAssessment.post('/games/:slug/archive', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   return setGameStatus(c, c.req.param('slug'), 'archived');
 });
 adminAssessment.post('/games/:slug/version', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const game = await gameBySlug(c.env, c.req.param('slug'));
   if (!game) return c.json({ error: 'not found' }, 404);
@@ -237,7 +261,7 @@ adminAssessment.post('/games/:slug/version', async (c) => {
 
 // ── CHAPTERS ────────────────────────────────────────────────────────────────
 adminAssessment.post('/games/:slug/chapters', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const game = await gameBySlug(c.env, c.req.param('slug'));
   if (!game) return c.json({ error: 'not found' }, 404);
@@ -263,7 +287,7 @@ adminAssessment.post('/games/:slug/chapters', async (c) => {
 });
 
 adminAssessment.put('/chapters/:id', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const id = Number(c.req.param('id'));
   const b = await c.req.json().catch(() => ({}));
@@ -285,7 +309,7 @@ adminAssessment.put('/chapters/:id', async (c) => {
 });
 
 adminAssessment.delete('/chapters/:id', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const id = Number(c.req.param('id'));
   const itemCount = await c.env.DB.prepare(`SELECT COUNT(*) AS n FROM assessment_items WHERE chapter_id = ?`)
@@ -300,7 +324,7 @@ adminAssessment.delete('/chapters/:id', async (c) => {
 
 // ── ITEMS ──────────────────────────────────────────────────────────────────
 adminAssessment.post('/games/:slug/items', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const game = await gameBySlug(c.env, c.req.param('slug'));
   if (!game) return c.json({ error: 'not found' }, 404);
@@ -350,7 +374,7 @@ adminAssessment.post('/games/:slug/items', async (c) => {
 });
 
 adminAssessment.put('/items/:id', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const id = Number(c.req.param('id'));
   const b = await c.req.json().catch(() => ({}));
@@ -392,7 +416,7 @@ adminAssessment.put('/items/:id', async (c) => {
 });
 
 adminAssessment.delete('/items/:id', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const id = Number(c.req.param('id'));
   // Hard-delete only if never answered; otherwise soft-deactivate to preserve
@@ -412,7 +436,7 @@ adminAssessment.delete('/items/:id', async (c) => {
 
 // ── ARCHETYPES ───────────────────────────────────────────────────────────--
 adminAssessment.post('/games/:slug/archetypes', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const game = await gameBySlug(c.env, c.req.param('slug'));
   if (!game) return c.json({ error: 'not found' }, 404);
@@ -447,7 +471,7 @@ adminAssessment.post('/games/:slug/archetypes', async (c) => {
 });
 
 adminAssessment.put('/archetypes/:id', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const id = Number(c.req.param('id'));
   const b = await c.req.json().catch(() => ({}));
@@ -473,7 +497,7 @@ adminAssessment.put('/archetypes/:id', async (c) => {
 });
 
 adminAssessment.delete('/archetypes/:id', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   await c.env.DB.prepare(`DELETE FROM assessment_archetypes WHERE id = ?`).bind(Number(c.req.param('id'))).run();
   return c.json({ ok: true });
@@ -490,7 +514,7 @@ adminAssessment.get('/badges', async (c) => {
 });
 
 adminAssessment.post('/badges', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const b = await c.req.json().catch(() => ({}));
   const slug = String(b?.slug || '').trim();
@@ -523,7 +547,7 @@ adminAssessment.post('/badges', async (c) => {
 });
 
 adminAssessment.put('/badges/:slug', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const slug = c.req.param('slug');
   const b = await c.req.json().catch(() => ({}));
@@ -558,7 +582,7 @@ adminAssessment.put('/badges/:slug', async (c) => {
 });
 
 adminAssessment.delete('/badges/:slug', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   await c.env.DB.prepare(`DELETE FROM assessment_badges WHERE slug = ?`).bind(c.req.param('slug')).run();
   return c.json({ ok: true });

@@ -25,6 +25,7 @@ import { api, spinoutLab } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 import { TOOL_INFO, WEEK_DEFS, countDeliverables, milestoneKeySet } from './SpinoutLabWorkspace';
 
 // Past-tense titles for the activity timeline; falls back to the raw key.
@@ -362,7 +363,7 @@ export default function SpinoutLabStartupPage() {
   ];
 
   return (
-    <div className="w-full px-2 sm:px-4 py-3" data-testid="page-spinout-startup">
+    <LabPageShell width="full" spaceY="" testId="page-spinout-startup">
       {/* Header — back control sits INLINE with the title (design handoff),
           and every action stays inside the Lab rather than navigating out. */}
       <LabPageHeader
@@ -985,6 +986,6 @@ export default function SpinoutLabStartupPage() {
           </div>
         </div>
       )}
-    </div>
+    </LabPageShell>
   );
 }

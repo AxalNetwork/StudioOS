@@ -37,6 +37,7 @@ import { esignEnvelopeScope } from '../services/tenancyScope';
 import { sendAgreementAssignedEmail } from '../services/email';
 import { renderAgreementPdf, sha256Hex } from '../services/pdf';
 import { PDFDocument } from 'pdf-lib';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const esign = new Hono<{ Bindings: Env }>();
 
@@ -47,9 +48,9 @@ const MAX_SIGNATURE_BYTES = 256 * 1024; // 256 KB
 // ---------------------------------------------------------------------------
 // Schema (defensive lazy migration — same pattern as other routes).
 // ---------------------------------------------------------------------------
-let migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
-  if (migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS esign_envelopes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -137,7 +138,7 @@ async function ensureSchema(env: Env): Promise<void> {
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); } catch {}
   }
-  migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 // ---------------------------------------------------------------------------
@@ -1055,6 +1056,21 @@ esign.post('/sign/:token', async (c) => {
         const { activatePartnerDealOnSignature } = await import('../services/partnerDeals');
         await activatePartnerDealOnSignature(c.env, rec.envelope_id);
       } catch (e) { console.warn('[esign] activatePartnerDealOnSignature failed', e); }
+      // Record the signature against the obligation it satisfies — the three
+      // NDAs and the advisor disclaimer. Until this hook existed, all four had
+      // a signable document, a wired template and a send route, and nothing
+      // wrote the result back, so they stayed `pending` for the life of the
+      // account (`test/obligation_satisfiable.test.ts`).
+      //
+      // RUNS LAST, AFTER THE PARTNER ACTIVATOR, because that activator seeds
+      // Trust Center rows; a satisfier ahead of it could find no row to update.
+      // Never fails the signature: the user has already signed, and a
+      // bookkeeping error must not turn that into an error response.
+      try {
+        const { satisfyObligationFromEnvelope } = await import('../services/trust');
+        const done = await satisfyObligationFromEnvelope(c.env, rec.envelope_id);
+        if (done?.changed) console.log(`[esign] obligation ${done.key} satisfied by signature`);
+      } catch (e) { console.warn('[esign] satisfyObligationFromEnvelope failed', e); }
       if (envelopeRow?.user_id) {
         const { notify } = await import('../services/notify');
         await notify(c.env, {

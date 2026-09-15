@@ -1,5 +1,4 @@
 import { count, day, summary, top } from './format.js';
-import { RESEARCH_CLIENT_PREP_COPY } from '../noStoreCopy.js';
 
 /*
  * `/research` — Partner Operator Canvas P7 and Advisor Canvas V6.
@@ -30,13 +29,21 @@ export default function researchBoard(role, api) {
     },
     sections: [
       card('ask', 'Ask', 'Questions answered only from your own library, with the passage each answer used.'),
-      {
-        slug: 'client-prep',
-        anchor: 'rs-client',
-        title: 'Client prep',
-        span: 'full',
-        gap: RESEARCH_CLIENT_PREP_COPY,
-      },
+      // A CARD, NOT A GAP, BECAUSE THE ZONE IS LIVE. This rendered the shared
+      // client-prep no-store copy — eyebrow "No store behind this yet", heading
+      // "The client brief is not built yet" — on both `/research` roots, over a
+      // zone that is in `LIVE_ZONES`, renders a real body, and reads five API
+      // methods across migrations 218 and 222. A card telling a reader a working
+      // feature does not exist is worse than a missing button.
+      //
+      // NOTHING WAS LOST WITH THAT COPY. Its one good sentence — that what
+      // stands in the way is an access decision rather than an absent table — is
+      // already in the zone's own empty state, said PER ROLE and so more
+      // accurately than one board sentence could: a partner reads that nothing
+      // here requests a record, an advisor reads where the half they already hold
+      // lives. `advisor_bucket_overview.test.mjs` now asserts it there.
+      card('client-prep', 'Client prep',
+        'One client per brief, assembled from what they opened to you and what you already hold.'),
       card('markets', 'Markets', 'Signals from the sectors you work in, with the date each one was gathered.'),
       ...(isPartner ? [] : [
         card('companies', 'Companies', 'The competitor and market analyses you have run yourself.'),

@@ -11,6 +11,13 @@ import LabIntro from "../components/spinout/LabIntro";
 // this file imports the marketing page and the marketing page renders the
 // intro — a cycle, if the intro had to reach back up here for them.
 import {
+  // `LAB_APPLY_HREF` is `ApplyCtaSection`'s DEFAULT `applyHref` and was never
+  // imported — a latent `ReferenceError` in an exported component. Every caller
+  // happens to pass the prop today (this file's own at the bottom, and
+  // `SpinoutLabMarketingPage`), so the default is never evaluated and nothing has
+  // thrown yet; the first caller that omits it would blank the page. Found by
+  // ESLint's `no-undef`, which is the whole reason that step exists.
+  LAB_APPLY_HREF,
   LAB_JURISDICTIONS, labJurisdiction, LAB_APPLY_HREF_SIGNED_IN, LAB_CONTACT_HREF,
   parseSqliteUtc, fmtRaised, useSpinoutStats, companiesLabel, openCohortCopy,
   useCohortDirectory, useShippedFeed,

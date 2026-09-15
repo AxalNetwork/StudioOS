@@ -61,18 +61,37 @@ test('static, health, and verified anonymous public reads bypass blocking role-s
   );
 });
 
-test('cold-isolate role-schema repairs are single-flight', async () => {
+test('cold-isolate role-schema repairs are single-flight, per database', async () => {
   const index = await read('src/index.ts');
   const exploring = await read('src/services/exploringSchema.ts');
 
-  for (const [source, marker] of [
-    [index, '_investorSchemaBootstrap'],
-    [index, '_advisorSchemaBootstrap'],
-    [exploring, '_exploringSchemaBootstrap'],
+  // UPDATED FOR #204, AND STRENGTHENED RATHER THAN REPOINTED. The three latches
+  // used to be `let _xSchemaBootstrap: Promise<void> | null = null` — module
+  // state, so ONE ISOLATE SERVING TWO BINDINGS would hand a request on database
+  // B the promise of a rebuild that ran against database A, and B would be told
+  // its users-table CHECK had been relaxed when nothing had touched it. The
+  // single-flight property this test has always defended is still asserted; the
+  // `WeakMap` line below is the new half, and it is the one that would have
+  // failed before this change.
+  for (const [source, latch] of [
+    [index, 'INVESTOR_SCHEMA_IN_FLIGHT'],
+    [index, 'ADVISOR_SCHEMA_IN_FLIGHT'],
+    [exploring, 'IN_FLIGHT'],
   ]) {
-    assert.match(source, new RegExp(`if \\(${marker}\\) return ${marker};`));
-    assert.match(source, new RegExp(`${marker} = \\(async \\(\\) => \\{`));
-    assert.match(source, new RegExp(`${marker} = null;`));
+    assert.match(source, new RegExp(`const ${latch} = new WeakMap<object, Promise<void>>\\(\\);`),
+      `${latch} must be keyed on the binding, never a module-level let`);
+    assert.match(source, new RegExp(`const pending = ${latch}\\.get\\(key\\);`));
+    assert.match(source, /if \(pending\) return pending;/);
+    assert.match(source, new RegExp(`${latch}\\.set\\(key, started\\);`));
+    assert.match(source, new RegExp(`${latch}\\.delete\\(key\\);`));
+  }
+  // And the readiness latch beside each of them, for the same reason.
+  for (const [source, ready] of [
+    [index, 'INVESTOR_SCHEMA_READY'],
+    [index, 'ADVISOR_SCHEMA_READY'],
+    [exploring, 'READY'],
+  ]) {
+    assert.match(source, new RegExp(`const ${ready} = new WeakMap<object, boolean>\\(\\);`));
   }
 });
 
@@ -89,9 +108,15 @@ test('public production reads never run lazy schema DDL', async () => {
     'src/routes/spinout_certificates.ts',
   ]) {
     const source = await read(relativePath);
+    // The latch moved from `flag = true` to `<WeakMap>.set(bindingKey(env), true)`
+    // in #204. What is pinned is unchanged and is the only thing that matters
+    // here: production takes the early return WITHOUT running a statement, and
+    // it still marks itself done so the check is paid once. The `.set(` form is
+    // required explicitly, so a file that drops back to a module-level boolean
+    // fails this test as well as the readiness guard.
     assert.match(
       source,
-      /if \(env\.ENVIRONMENT === 'production'\) \{\s*(?:_[A-Za-z_]+|migrated) = true;\s*return(?: true)?;\s*\}/s,
+      /if \(env\.ENVIRONMENT === 'production'\) \{\s*[A-Z_]+\.set\(bindingKey\(env\), true\);\s*return(?: true)?;\s*\}/s,
       `${relativePath} must let production migrations, not request-time DDL, own its schema`,
     );
   }

@@ -329,9 +329,16 @@ test('the ops row is the artboard’s three, and two are still prose', () => {
     assert.match(entry, /unbuilt: '/, `${entry} claims a control it does not have`);
   }
   // The export header is hoisted above the gate branch so an unlinked account
-  // draws the same row — disabled, and saying so itself.
-  assert.match(zone, /<UnlinkedZone title="Board" actions=\{rowActions\} \/>/,
+  // draws the same row — disabled, and saying so itself. It used to check
+  // `<UnlinkedZone title="Board" actions={rowActions} />`, the card that
+  // stood INSTEAD of the zone; the row now goes to the toolbar the live
+  // branch uses, and the gate is a line above the body.
+  assert.match(zone, /actions=\{rowActions\}/,
     'the gate branch no longer draws the same header row as the live one');
+  assert.match(zone, /notice=\{unlinked \? <NoPartnerProfile \/> : null\}/,
+    'the gate stopped saying why the zone is empty');
+  assert.match(zone, /filters=\{unlinked \? \[\] :/,
+    'a filter chip is drawn over rows this account cannot read');
 });
 
 test('the read is scoped, mounted where the SPA calls it, and the draft is told what not to say', () => {
