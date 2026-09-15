@@ -26,6 +26,7 @@ import AuthorCard from '../components/AuthorCard';
 // Task #11 — shared first-time optional TOTP enrolment wizard (also used on
 // the email-verification page).
 import TotpEnrollment from '../components/TotpEnrollment';
+import { appOrigin } from '../lib/branchHost';
 
 // Task #4 (Y-2) — small reusable trust score on the profile surface so
 // the user can see their compliance posture without bouncing to the
@@ -1178,7 +1179,7 @@ function ProfileSection({ data, onSaved, flash, patch }) {
         {data.id ? (
           <div className="mt-4 flex flex-wrap items-center gap-4">
             <a
-              href={`https://axal.vc/authors/${data.id}`}
+              href={`${appOrigin()}/authors/${data.id}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm text-violet-700 dark:text-violet-400 hover:underline"
@@ -1189,7 +1190,7 @@ function ProfileSection({ data, onSaved, flash, patch }) {
               type="button"
               onClick={() => {
                 try {
-                  navigator.clipboard.writeText(`https://axal.vc/authors/${data.id}`);
+                  navigator.clipboard.writeText(`${appOrigin()}/authors/${data.id}`);
                   flash('Link copied!');
                 } catch { flash('Could not copy'); }
               }}

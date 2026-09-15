@@ -4,6 +4,7 @@ import * as QRCode from 'qrcode';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { createJWT, hashToken, generateToken, requireAuth, setAuthCookies, clearAuthCookies, generateCsrfToken, revokeStaleCrossIdentitySession, selectJwt, bumpJwtMinIat, STEP_UP_TTL_MINUTES } from '../auth';
+import { branchOf } from '../util/branch';
 import { sendVerificationEmail } from '../services/email';
 import { send as sendEmail } from '../services/email/send';
 import { ensureAuthBlockersSchema } from '../services/authBlockersSchema';
@@ -1076,6 +1077,36 @@ auth.get('/me', async (c) => {
         ).bind(user.id).first();
         return !!row;
       } catch { return false; }
+    })(),
+    // D106 — WHICH DEPLOYMENT IS THIS, told once, on the response the SPA
+    // already fetches on every route change.
+    //
+    // `null` on HQ, and the SPA must read a missing key as HQ too: the dev
+    // FastAPI returns a different shape and would otherwise render the branch
+    // shell over HQ data.
+    //
+    // THE VARS ARE THE SOURCE, NOT THE DATABASE. `BRANCH_CODE`, `BRANCH_NAME`
+    // and `BRANCH_TERRITORY` come from the generated config (D105), so this
+    // answers correctly on a branch whose licence copy has not arrived yet —
+    // which is exactly the window in which someone is looking at the screen
+    // wondering why. `status` and `as_of` do come from the copy, and are null
+    // together when it is absent; a branch that reads `status: null` shows
+    // "awaiting HQ", never "active".
+    branch: await (async () => {
+      const code = branchOf(c.env);
+      if (!code) return null;
+      const e = c.env as unknown as Record<string, string | undefined>;
+      const territories = String(e.BRANCH_TERRITORY ?? '')
+        .split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
+      let status: string | null = null;
+      let as_of: string | null = null;
+      try {
+        const row: any = await c.env.DB.prepare(
+          'SELECT status, pushed_at FROM branch_licence WHERE id = 1',
+        ).first();
+        if (row) { status = String(row.status); as_of = String(row.pushed_at); }
+      } catch { /* migration 256 not applied yet — reads as awaiting HQ */ }
+      return { code, name: e.BRANCH_NAME || null, territories, status, as_of };
     })(),
   });
 });

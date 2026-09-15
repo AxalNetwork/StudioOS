@@ -32,3 +32,30 @@ export function csrfCookieNameFor(hostname) {
   const code = branchCodeFromHost(hostname);
   return code ? `studioos_csrf_${code}` : 'studioos_csrf';
 }
+
+/**
+ * The origin a link the user is about to COPY or SEND should carry (D106).
+ *
+ * WHY THIS EXISTS RATHER THAN `https://axal.vc` INLINE. Seven places built a
+ * shareable URL from that literal: a referral link, an author profile link, a
+ * team-page link, an article link. On a branch every one of them would hand a
+ * branch member a link into HQ — and a referral link is the sharpest case,
+ * because the referee who follows it REGISTERS IN HQ'S DATABASE and the
+ * reward is attributed against a member who is not there. A wrong link is not
+ * a cosmetic bug when following it creates an account on the wrong tier.
+ *
+ * `window.location.origin` is the answer on every tier at once: HQ serves
+ * `https://axal.vc`, a branch serves `https://<code>.axal.vc`, and neither
+ * needs to be told which it is. The SSR/test fallback is the apex because
+ * these strings are only ever rendered in a browser; a prerender that emitted
+ * one would emit HQ's, which is the correct canonical for prerendered HTML.
+ *
+ * NOT FOR CANONICAL TAGS OR THE SITEMAP. `lib/ogRegistry.js`'s `SITE_URL`
+ * stays the apex on purpose: those are statements about where the canonical
+ * document lives, which is HQ, and a branch answers `X-Robots-Tag: noindex`
+ * precisely so the duplicate is never indexed.
+ */
+export function appOrigin() {
+  if (typeof window !== 'undefined' && window.location?.origin) return window.location.origin;
+  return 'https://axal.vc';
+}
