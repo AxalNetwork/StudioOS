@@ -119,11 +119,11 @@ export default function CalendarZone() {
             { label: 'Missing prep', value: counts?.missing_prep ?? null, note: 'no brief is recorded anywhere' },
           ].map((t) => (
             <Card key={t.label} className="px-3 py-2.5">
-              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{t.label}</div>
+              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{t.label}</div>
               {t.value === null || t.value === undefined
                 ? <div className="mt-1.5"><Unrecorded /></div>
                 : <div className="mt-1 text-base font-extrabold tabular-nums tracking-tight">{t.value}</div>}
-              <div className="mt-1 text-[10px] leading-snug text-axal-ink-3">{t.note}</div>
+              <div className="mt-1 text-[10px] leading-snug text-axal-faint">{t.note}</div>
             </Card>
           ))}
         </div>
@@ -135,9 +135,9 @@ export default function CalendarZone() {
         <Card className="p-4">
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <span className="text-sm font-extrabold tracking-tight">Next fourteen days</span>
-            <span className="text-[11px] text-axal-ink-3">Soonest first</span>
+            <span className="text-[11px] text-axal-faint">Soonest first</span>
           </div>
-          <ul className="divide-y divide-axal-border-soft">
+          <ul className="divide-y divide-axal-hairline">
             {items.map((it) => (
               <li key={it.ref} className="flex items-start justify-between gap-4 py-2.5">
                 <div className="min-w-0">
@@ -147,7 +147,7 @@ export default function CalendarZone() {
                   </div>
                   <div className="mt-1 truncate text-[12.5px] font-semibold">{it.title}</div>
                 </div>
-                <div className="shrink-0 text-right text-[11px] tabular-nums text-axal-ink-3">
+                <div className="shrink-0 text-right text-[11px] tabular-nums text-axal-faint">
                   <div>{String(it.starts_at || '').slice(0, 10)}</div>
                   <div>{String(it.starts_at || '').slice(11, 16)}</div>
                 </div>

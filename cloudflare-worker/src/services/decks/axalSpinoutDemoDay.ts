@@ -51,6 +51,7 @@ import { parseUseOfFundsValue } from '../../util/useOfFunds';
 import { simulate, type Inputs, type SimulateResult } from '../captable';
 import { ensureCapTableVariantColumn } from '../captableSchema';
 import { ensureCompetitorSchema } from '../competitorSchema';
+import { bindingKey } from '../../util/schemaBootstrap';
 
 /**
  * Task #1 — Load admin-managed mentor/partner network profiles.
@@ -142,15 +143,15 @@ const fmtMonths = (n: unknown): string => {
  * D1 has no `ADD COLUMN IF NOT EXISTS`, so wrap in try/catch and
  * swallow the "duplicate column name" error.
  */
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 export async function ensureSpinoutDeckSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(`ALTER TABLE cap_table_holders ADD COLUMN kind TEXT`);
   } catch {
     /* already exists — fine */
   }
-  _schemaReady = true;
+  SCHEMA_READY.set(bindingKey(env), true);
 }
 
 // Mirrors services/spinoutLabCatalog.ts MILESTONES. Duplicated here so

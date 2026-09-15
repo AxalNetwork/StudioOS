@@ -541,7 +541,7 @@ export default function SpinoutLabCapitalPage() {
   const week = num(user?.spinout_lab_week) || state?.week || 4;
 
   return (
-    <div className="max-w-[1200px] mx-auto px-4 py-6 space-y-5" data-testid="page-spinout-capital">
+    <div className="w-full px-2 sm:px-4 py-3 space-y-5" data-testid="page-spinout-capital">
       {/* Header — shared LabPageHeader. The design anchors carry over as props:
             A1 — the 3px violet topline  → topRule (on by default)
             A2 — 34px violet icon tile   → icon (the old divider is dropped;

@@ -1,0 +1,40 @@
+{
+  // The SPA's type-check, and ONLY its type-check — `noEmit` is the point.
+  //
+  // WHY THIS FILE DID NOT EXIST UNTIL #201. Vite never needed it: Vite 8 hands
+  // `.ts`/`.tsx` to oxc, which STRIPS types and never checks them, so the 27
+  // TypeScript files under `src/` shipped unverified. `npm run test:types` is
+  // the worker's tsconfig, and `npm run lint:undef` is globbed `{js,jsx}`
+  // because espree cannot parse TypeScript — so against a missing import, which
+  // is a runtime ReferenceError the bundler emits without complaint, these files
+  // were covered by nothing but fourteen hard-coded hook names.
+  //
+  // STRICT IS THE SMALL OPTION HERE, WHICH IS NOT THE OBVIOUS WAY ROUND and is
+  // why it is worth a note. Measured over exactly these files: fully loose
+  // reports 15 errors, `noImplicitAny` alone 18, and strict 10. Loose mode reads
+  // `data.features[idx] ?? {}` in `demo_day_app.tsx` as narrowing to the empty
+  // type and reports seven property errors against a defensive fallback that is
+  // already correct; under `strictNullChecks` the left side is known non-nullish,
+  // the `??` narrows away, and all seven vanish. `allowJs` takes the last one —
+  // `decks/spinout/deckData.js` is the only `.js` any of these files import, and
+  // admitting it lets TS infer the shape instead of refusing the import. That is
+  // 9 to fix, all nine fixed, and the whole check runs in about 1.4s.
+  //
+  // `checkJs` stays OFF on purpose: this types one import, it does not quietly
+  // make the SPA's JavaScript a type-check target.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "allowJs": true,
+    "checkJs": false,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
+}

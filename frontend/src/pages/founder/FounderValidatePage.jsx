@@ -5,7 +5,7 @@ import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import DiscoveryPage from '../DiscoveryPage';
 import { zonePillClass } from './deskZoneNav';
-import ValidateProposals from '../../workspaces/founder/ValidateProposals';
+import FillProposals from '../../workspaces/FillProposals';
 import useAssistMode from '../../hooks/useAssistMode';
 import './founderValidate.css';
 import './founderValidateWorkspace.css';
@@ -262,7 +262,7 @@ function EvidenceCards({ loading, projects, projectId, fillsOn, onApplied, featu
           copy about what accepting means cannot drift between two surfaces.
           Gated on the same per-workspace mode, which is OFF until a founder
           turns it on — every run spends their own budget. */}
-      <ValidateProposals key="overview-hypotheses" projectId={projectId} kind="hypothesis" enabled={fillsOn} onApplied={onApplied} />
+      <FillProposals key="overview-hypotheses" projectId={projectId} kind="hypothesis" enabled={fillsOn} onApplied={onApplied} />
       <Link data-testid="link-open-hypotheses" className="manage-link" to={stageLinks.hypotheses}>Open hypotheses <ChevronRight size={14} /></Link></section>
     <section className="evidence-card" id="validate-3"><SectionHead icon={FileText} title="Validation summary" meta="Living verdict · rewrites as evidence lands" /><Verdict evidence={evidence} interviews={interviews} signals={signals} /><Link data-testid="link-open-verdict" className="manage-link" to={stageLinks.verdict}>Open the verdict <ChevronRight size={14} /></Link></section>
   </div>;

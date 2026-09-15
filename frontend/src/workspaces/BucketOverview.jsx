@@ -82,7 +82,7 @@ export default function BucketOverview({
               </span>
             </div>
             {line && (
-              <p className="mt-2 text-[12px] leading-relaxed text-axal-ink-2">
+              <p className="mt-2 text-[12px] leading-relaxed text-axal-muted">
                 {gap && <span className="bo-unbuilt">Not built</span>}
                 {line}
               </p>

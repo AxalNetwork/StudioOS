@@ -379,14 +379,22 @@ something actually made that request.
 
 ## U11 — Tailwind classes naming tokens that are declared nowhere
 
-**STATUS 2026-09-08 (task #107, `DECISIONS.md` D66) — the guard half is done;
-the sweep half is open.** The guard this item asked for, in its own words — "a
-guard that fails a NEW undeclared `axal-*` class, so the number can only go
-down" — now exists. It was not a new script: `frontend/test/ui_design_tokens.test.mjs`
-already asserted exactly this invariant and walked only `frontend/src/ui/`,
-which was the one directory that did not need it. It walks `pages/` and
-`workspaces/` too, with a shrink-only allowlist of the eight tokens in use
-today, and it runs under `test:drift` already.
+**RESOLVED 2026-09-13 — both halves. The sweep is taken and the allowlist is
+empty.** All eight names are gone from the tree: 575 utilities across 53 files
+were consolidated onto the five neutrals `@theme` already declares, and
+`UNDECLARED_TODAY` in `frontend/test/ui_design_tokens.test.mjs` is now
+`new Set([])`, so any reappearance fails `test:drift`. Verified in the built
+bundle rather than assumed: `.text-axal-faint{color:var(--color-axal-faint)}`
+and its four siblings emit real declarations, and a grep of
+`docs/assets/index-*.css` for each old name returns zero.
+
+**STATUS 2026-09-08 (task #107, `DECISIONS.md` D66) — the guard half was done
+first.** The guard this item asked for, in its own words — "a guard that fails a
+NEW undeclared `axal-*` class, so the number can only go down" — was not a new
+script: `frontend/test/ui_design_tokens.test.mjs` already asserted exactly this
+invariant and walked only `frontend/src/ui/`, which was the one directory that
+did not need it. It was widened to `pages/` and `workspaces/` with a shrink-only
+allowlist of the eight tokens then in use.
 
 **THE NUMBER IN THIS ITEM'S TITLE WAS WRONG, AND SO WAS ITS TABLE.** The census
 for #107 counted **397 occurrences across 8 tokens in 50 files**, comments
@@ -405,21 +413,41 @@ The three sibling docblocks disagreed with it and with each other too
 (`BucketBoard.jsx` said ~410, `ZoneToolbar.jsx` and `ZoneActions.jsx` ~400),
 which is what a number nobody could re-derive looks like.
 
-**WHY THE SWEEP IS STILL OPEN, and it is a bigger job than this item estimated.**
-Not one of the 397 call sites has a `dark:` counterpart — `grep
-"dark:text-axal|dark:bg-axal|dark:border-axal"` returns zero. So declaring the
-eight tokens is not sufficient: eight light values would flip the whole
-workspace surface to light-only in dark mode. The two branches are (a) declare
-eight colours in BOTH themes, obeying D2's palette rule, or (b) move 397 call
-sites to Tailwind's own greys — a restyle across four licences needing its own
-render pass. `frontend/src/workspaces/bucketOverview.css:45,51,57` is the only
-place in the tree that assigns concrete values to `ink-2`/`ink-3`/`border`
-(#4b5563 / #6b7280 / #e5e7eb), and is the anchor either way.
+**HOW THE SWEEP WENT — a third branch this item did not consider.** The two it
+named were (a) declare eight colours in BOTH themes, and (b) move every call site
+to Tailwind's own greys, a restyle across four licences. It rejected (a) for a
+good reason: not one call site had a `dark:` counterpart, so eight light values
+would flip the whole workspace surface to light-only in dark mode. The third
+branch — move the call sites onto the five neutrals ALREADY declared — that
+objection does not reach, because the same branch that took this sweep first gave
+`axal-ink`, `-muted`, `-faint`, `-hairline` and `-ground` dark counterparts in the
+`index.css` auto-skin. A call site landing on one is skinned the moment it lands,
+so this was a rename, not a restyle.
 
-**Blocks:** nothing ships wrong today — this is a visual-fidelity debt, not a
-correctness one. It blocks trusting the workspace layer's colour in dark mode,
-and it blocks any claim that the `@theme` block is the single source of truth
-for colour, which D2 and `theme_token_census.test.mjs` otherwise enforce.
+The mapping came from how each name was applied, not from its digits: `ink-1` only
+ever wrapped `<strong>` emphasis inside muted prose (→ `ink`), `ink-2` was
+11.5–12.5px `leading-relaxed` body copy (→ `muted`), `ink-3` was 9–11px uppercase
+micro-labels, captions and empty states (→ `faint`), `surface-2` was the tint
+already paired with hairline borders (→ `ground`), `border`/`border-soft`/`line`
+were one hairline under three names, and `blue` was a single link (→ `violet`).
+Decisive evidence that they were synonyms rather than a finer ramp: **no file in
+the tree used both vocabularies** — 52 used `ink-n` only, 5 used `muted`/`faint`
+only. Two authoring eras, not two scales.
+
+`frontend/src/workspaces/bucketOverview.css:45,51,57` was the only place assigning
+concrete values, and it is the one piece of evidence NOT followed: its fallbacks
+(#4b5563 / #6b7280 / #e5e7eb) read as a tighter pair than role does, putting
+`ink-2` and `ink-3` one step apart where `muted`→`faint` is two. Role won, on the
+grounds that one component's fallbacks are not the system's ramp — so 9px
+micro-labels are now visibly fainter than body copy. Those three were raw `var()`
+in a plain stylesheet, so they were repointed to `var(--color-axal-*)`, the real
+`@theme` variable name, keeping their fallbacks.
+
+**THE DEBT WAS GROWING WHILE THIS ITEM SAT OPEN.** The honest 2026-09-07 total was
+~379; by 2026-09-13 it was 597 bare occurrences (575 utilities, 22 in prose). The
+guard added on 09-08 stopped NEW token names, not new uses of the eight already
+allowlisted — worth remembering the next time an allowlist is described as
+holding a number down.
 
 ---
 

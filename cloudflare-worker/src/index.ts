@@ -97,7 +97,7 @@ import search, { ensureAcademySchema } from './routes/search';
 import kyc from './routes/kyc';
 import esign from './routes/esign';
 import trust from './routes/trust';
-import { expireDueArtifacts as expireTrustArtifacts, resyncKycKyb } from './services/trust';
+import { expireDueArtifacts as expireTrustArtifacts, resyncKycKyb, renewalSweep } from './services/trust';
 import integrations from './routes/integrations';
 // Task #2 — HubSpot provider. Side-effect import: the module's top-level
 // `registerProvider({ key: 'hubspot', ... })` runs at boot so the route
@@ -204,6 +204,12 @@ import partnerPipeline from './routes/partner_pipeline';
 import partnerOffers from './routes/partner_offers';
 import partnerDelivery from './routes/partner_delivery';
 import founderValidate from './routes/founder_validate';
+// The operating cadence (#176 FB4) — rituals, the runs that archive them, and
+// the templates they are conducted from. Migration 250.
+import founderCadence from './routes/founder_cadence';
+// Swimlanes and the WIP limit on the execution board (#176 FB2). Migration 253.
+import founderBoard from './routes/founder_board';
+import founderRoadmap from './routes/founder_roadmap';
 import insightsRoutes from './routes/insights';
 // Signals — founder decision-engine over public company data (not a trading UI).
 import signalsRoutes from './routes/signals';
@@ -255,8 +261,10 @@ import orders from './routes/orders';
 import products from './routes/products';
 import { Jobs } from './models/jobs';
 import { writeCronRunHistory } from './util/cronHistory';
+import { branchOf, assertBranchAppUrl, HQ_ONLY, HQ_AUTHORING_ONLY } from './util/branch';
 import { enqueueReembedChunks } from './util/reembedSweep';
 import { rebuildUsersRoleCheckForInvestor, rebuildUsersRoleCheckForAdvisor } from './util/usersRoleRebuild';
+import { bindingKey } from './util/schemaBootstrap';
 // Task #9 — 'exploring' holding-state role (CHECK relax + user_role_review side table).
 import { ensureExploringSchema, exploringSchemaReady } from './services/exploringSchema';
 import { queueConsumer, dlqConsumer } from './queue-consumer';
@@ -1012,6 +1020,15 @@ app.route('/api/partner/offers', partnerOffers);
 // and is never stored.
 app.route('/api/partner/delivery', partnerDelivery);
 app.route('/api/founder/validate', founderValidate);
+// `/build/cadence`'s store. Read by whoever may read the interviews; written by
+// the venture's own and admins — the same two predicates Validate uses, imported
+// rather than re-derived.
+app.route('/api/founder/cadence', founderCadence);
+// `/build/board`'s lanes. The CARDS are `mvp_tasks`, which `pipeline.ts` owns and
+// keys on `deal_id` — a `projects.id`, the same misnaming D86 recorded. This router
+// is the founder's own view of them, gated by the Validate predicates.
+app.route('/api/founder/board', founderBoard);
+app.route('/api/founder/roadmap', founderRoadmap);
 app.route('/api/insights', insightsRoutes);
 // Signals — founder-actionable opportunity engine over public-market evidence.
 app.route('/api/signals', signalsRoutes);
@@ -1035,6 +1052,12 @@ const AUTH_ERROR_STATUSES: Record<string, 401 | 403> = {
   // generic 500 below, so a subsidiary admin trying to franchise would see a
   // server error instead of a refusal — the gate would work and say nothing.
   'Super admin required': 403,
+  // D106 — branch mode's two refusals, keyed off the constants they are
+  // thrown from (util/branch.ts) rather than off a second copy of the
+  // sentence. The failure the entry above records is a message and a map key
+  // drifting apart; a shared constant is the shape where they cannot.
+  [HQ_ONLY]: 403,
+  [HQ_AUTHORING_ONLY]: 403,
   Forbidden: 403,
   'KYC required': 403,
   'TOTP required': 403,
@@ -1068,15 +1091,19 @@ import { withThrownResponses } from './util/thrownResponse';
 // Lazy, idempotent, runs at most once per worker isolate. We piggy-back on the
 // fetch entry point because workers have no startup hook; the cold-start
 // penalty is one cheap PRAGMA + two CREATE/ALTER ... IF NOT EXISTS calls.
-let _investorSchemaReady = false;
-let _investorSchemaBootstrap: Promise<void> | null = null;
+const INVESTOR_SCHEMA_READY = new WeakMap<object, boolean>();
+const INVESTOR_SCHEMA_IN_FLIGHT = new WeakMap<object, Promise<void>>();
 async function ensureInvestorSchema(env: Env): Promise<void> {
-  if (_investorSchemaReady) return;
+  const key = bindingKey(env);
+  if (INVESTOR_SCHEMA_READY.get(key)) return;
   // A cold isolate can receive several requests before its first D1 operation
   // settles. Share the migration work inside that isolate rather than issuing
-  // overlapping CREATE/ALTER/rebuild statements for every concurrent request.
-  if (_investorSchemaBootstrap) return _investorSchemaBootstrap;
-  _investorSchemaBootstrap = (async () => {
+  // overlapping CREATE/ALTER/rebuild statements for every concurrent request —
+  // per DATABASE, so a second binding is not handed the first one's promise and
+  // told a users-table rebuild it never saw has already happened (#204).
+  const pending = INVESTOR_SCHEMA_IN_FLIGHT.get(key);
+  if (pending) return pending;
+  const started = (async () => {
   try {
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS investors (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL, user_id INTEGER, investor_type TEXT NOT NULL DEFAULT 'angel', accreditation_status TEXT NOT NULL DEFAULT 'unverified', check_size_min REAL, check_size_max REAL, sector_focus TEXT, stage_focus TEXT, notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
@@ -1100,7 +1127,7 @@ async function ensureInvestorSchema(env: Env): Promise<void> {
     // public-id data or index is lost the first time the rebuild commits.
     // Latch-on-success only (mirrors ensureExploringSchema): a failed rebuild
     // must retry on the next request in this isolate, or role changes to
-    // 'investor' 500 forever behind a permanently-set _investorSchemaReady.
+    // 'investor' 500 forever behind a permanently-latched INVESTOR_SCHEMA_READY.
     let investorRebuildOk = true;
     try {
       await rebuildUsersRoleCheckForInvestor(env);
@@ -1122,14 +1149,15 @@ async function ensureInvestorSchema(env: Env): Promise<void> {
     } catch (e) {
       console.warn('[boot] investor promote step skipped:', (e as Error).message);
     }
-    if (investorRebuildOk) _investorSchemaReady = true;
+    if (investorRebuildOk) INVESTOR_SCHEMA_READY.set(key, true);
   } catch (e) {
     console.error('[boot] ensureInvestorSchema failed:', (e as Error).message);
   } finally {
-    _investorSchemaBootstrap = null;
+    INVESTOR_SCHEMA_IN_FLIGHT.delete(key);
   }
   })();
-  return _investorSchemaBootstrap;
+  INVESTOR_SCHEMA_IN_FLIGHT.set(key, started);
+  return started;
 }
 
 // Task #74 — Mentor→Advisor rename. Idempotent, runs at most once per isolate.
@@ -1139,14 +1167,17 @@ async function ensureInvestorSchema(env: Env): Promise<void> {
 // cannot do this safely (it would abort on any chain-only DB). Every step is
 // existence-checked + try/catch so a partially-migrated prod DB can never abort
 // the boot path.
-let _advisorSchemaReady = false;
-let _advisorSchemaBootstrap: Promise<void> | null = null;
+const ADVISOR_SCHEMA_READY = new WeakMap<object, boolean>();
+const ADVISOR_SCHEMA_IN_FLIGHT = new WeakMap<object, Promise<void>>();
 async function ensureAdvisorSchema(env: Env): Promise<void> {
-  if (_advisorSchemaReady) return;
+  const key = bindingKey(env);
+  if (ADVISOR_SCHEMA_READY.get(key)) return;
   // See ensureInvestorSchema: concurrent first requests must not race the
-  // live-DDL migration path against each other.
-  if (_advisorSchemaBootstrap) return _advisorSchemaBootstrap;
-  _advisorSchemaBootstrap = (async () => {
+  // live-DDL migration path against each other, and the coalescing is per
+  // database so two bindings cannot share one rebuild.
+  const pending = ADVISOR_SCHEMA_IN_FLIGHT.get(key);
+  if (pending) return pending;
+  const started = (async () => {
   try {
     // (a) relax the users.role CHECK so 'advisor' is accepted before any flip.
     // Latch-on-success only (mirrors ensureExploringSchema): a failed rebuild
@@ -1196,14 +1227,15 @@ async function ensureAdvisorSchema(env: Env): Promise<void> {
     try { await env.DB.exec("UPDATE OR IGNORE field_sources SET question_id = 'advisor.' || substr(question_id, 8) WHERE question_id LIKE 'mentor.%'"); } catch {}
     // (g) rename the spinout-lab milestone key so existing week-3 progress is preserved.
     try { await env.DB.exec("UPDATE OR IGNORE spinout_lab_milestones SET milestone_key = 'advisor_meeting_booked' WHERE milestone_key = 'mentor_meeting_booked'"); } catch {}
-    if (advisorRebuildOk) _advisorSchemaReady = true;
+    if (advisorRebuildOk) ADVISOR_SCHEMA_READY.set(key, true);
   } catch (e) {
     console.error('[boot] ensureAdvisorSchema failed:', (e as Error).message);
   } finally {
-    _advisorSchemaBootstrap = null;
+    ADVISOR_SCHEMA_IN_FLIGHT.delete(key);
   }
   })();
-  return _advisorSchemaBootstrap;
+  ADVISOR_SCHEMA_IN_FLIGHT.set(key, started);
+  return started;
 }
 
 /**
@@ -1292,6 +1324,10 @@ export default {
       // score-integrity key cannot silently collide with JWT_SECRET. Dev
       // logs a one-shot warning instead of throwing.
       assertScoringHmacSecret(env);
+      // D106 — on a branch, every URL var must name the branch's own host.
+      // HQ has no BRANCH_CODE, so this is a no-op there and the 503 below is
+      // reachable on a branch only.
+      assertBranchAppUrl(env);
     } catch (err) {
       console.error('[boot] secret assertion failed:', (err as Error).message);
       return new Response(
@@ -1303,13 +1339,13 @@ export default {
     // verified anonymous public reads, and telemetry endpoints are safe without
     // these schemas and must stay responsive during cold starts and D1 contention.
     if (requiresBlockingRoleSchemaBootstrap(pathname, request.method) && env.DB) {
-      if (!_investorSchemaReady) {
+      if (!INVESTOR_SCHEMA_READY.get(bindingKey(env))) {
         await ensureInvestorSchema(env);
       }
-      if (!_advisorSchemaReady) {
+      if (!ADVISOR_SCHEMA_READY.get(bindingKey(env))) {
         await ensureAdvisorSchema(env);
       }
-      if (!exploringSchemaReady()) {
+      if (!exploringSchemaReady(env)) {
         await ensureExploringSchema(env);
       }
     }
@@ -1351,6 +1387,29 @@ export default {
           cronSummary.push(`drain processed=${r.processed} failed=${r.failed}`);
         }
         const now = new Date();
+        // D106 — PLATFORM CONTENT IS HQ'S WORK, AND N BRANCHES MUST NOT EACH
+        // DO IT. Four cadences below fetch from the open internet or send a
+        // platform-wide digest: the Founder Signals refresh, the whole
+        // market-intel connector block, the Platform Personas digest and the
+        // market-intel watchlist digest. Under one Worker per branch each of
+        // those would run N times — N× the external API quota against the
+        // same public sources, N copies of identical rows in N databases, and
+        // for the digests, N mails to a population that is HQ's, not the
+        // branch's.
+        //
+        // THE CRON TRIM IN THE GENERATED CONFIG DOES NOT DO THIS, and it is
+        // worth saying plainly because it looks as though it might. A branch
+        // keeps `* * * * *` (it needs the queue drain), and every block here
+        // gates on the WALL CLOCK rather than on which expression fired — so
+        // dropping HQ's other four expressions removes some duplicate
+        // invocations within a minute and stops not one of these cadences.
+        // The gate has to be here.
+        //
+        // Everything not gated stays per branch on purpose: the queue drain,
+        // job cleanup, trust and partner-deal expiry, the trash sweep, TOTP
+        // remediation, notification flushes and the score audits all act on
+        // this deployment's own rows and would be wrong to centralise.
+        const hqCadences = branchOf(env) === null;
         if (now.getUTCHours() === 3 && now.getUTCMinutes() === 0) {
           await Jobs.cleanup(env);
         }
@@ -1397,7 +1456,7 @@ export default {
         // signals + their evidence into D1, replacing the illustrative seed
         // corpus on the /signals page. Idempotent; a failed night just leaves
         // yesterday's real data (or the labeled examples) in place.
-        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 20) {
+        if (hqCadences && now.getUTCHours() === 4 && now.getUTCMinutes() === 20) {
           try {
             const { runRefresh } = await import('./services/signals/engine');
             const r = await runRefresh(env);
@@ -1422,6 +1481,18 @@ export default {
         // NDAs past their `valid_until`, then runs the KYC/KYB resync stub
         // (no-op until Persona/Sumsub are wired). All side-effects are
         // idempotent so re-runs after a missed minute are safe.
+        // Task #163 — renewal warnings at 04:15 UTC, TWENTY MINUTES BEFORE
+        // the expiry sweep below. Ordering matters on the day an item is due:
+        // running after 04:35 would mean the row had already been flipped to
+        // 'expired' and the last warning would be the one nobody got.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 15) {
+          try {
+            const r = await renewalSweep(env, now);
+            if (r.claimed || r.notified) {
+              console.info(`[cron] renewal notices scanned=${r.scanned} claimed=${r.claimed} notified=${r.notified}`);
+            }
+          } catch (e) { console.error('[cron] renewal sweep failed', e); }
+        }
         if (now.getUTCHours() === 4 && now.getUTCMinutes() === 35) {
           try {
             const r = await expireTrustArtifacts(env);
@@ -1540,7 +1611,7 @@ export default {
         // Task #4 (CF) — Platform Personas weekly digest. Mondays 09:00 UTC.
         // Fan-outs to Studio/Institutional + admin/partner/mentor only.
         // Idempotent via ISO-week KV marker inside the helper.
-        if (now.getUTCDay() === 1 && now.getUTCHours() === 9 && now.getUTCMinutes() === 0) {
+        if (hqCadences && now.getUTCDay() === 1 && now.getUTCHours() === 9 && now.getUTCMinutes() === 0) {
           try {
             const { sendPlatformPersonasDigest } = await import('./routes/market_intel');
             const r = await sendPlatformPersonasDigest(env);
@@ -1779,10 +1850,17 @@ export default {
         //   • daily sources    → 02:30 UTC
         //   • weekly sources   → Sunday 02:45 UTC (UTC day 0)
         //   • recomputeIndexes → 03:15 UTC nightly (after daily runs settle)
+        // D106 — the market-intel block is HQ's. `runSourcesByCadence` and
+        // `runFreeConnectors` call the open internet, and `recomputeIndexes`
+        // aggregates what they wrote, so on a branch it would recompute over
+        // nothing. A branch reads market intelligence from HQ (PR 6's `HQ`
+        // binding); it does not gather it. The guard is on the condition
+        // rather than around the try/catch so a skip is a skip, not an error
+        // the catch below would log as a market-intel failure.
         try {
           const { runSourcesByCadence, recomputeIndexes, runFreeConnectors } = await import('./services/market_intel/aggregator');
           await import('./services/market_intel/sources'); // ensures registerSource() ran
-          if (now.getUTCMinutes() === 0) {
+          if (hqCadences && now.getUTCMinutes() === 0) {
             const r = await runSourcesByCadence(env, 'hourly');
             if (r.scanned) console.info(`[cron] mi hourly scanned=${r.scanned} ok=${r.ok} failed=${r.failed} inserted=${r.inserted}`);
           }
@@ -1794,17 +1872,17 @@ export default {
           // ledger short-circuits duplicate writes within the same day.
           // This satisfies the spec contract that free sources refresh
           // every 6h end-to-end.
-          if ([0, 6, 12, 18].includes(now.getUTCHours()) && now.getUTCMinutes() === 5) {
+          if (hqCadences && [0, 6, 12, 18].includes(now.getUTCHours()) && now.getUTCMinutes() === 5) {
             for (const cad of ['hourly', 'daily', 'weekly'] as const) {
               const r = await runFreeConnectors(env, cad);
               if (r.scanned) console.info(`[cron] mi free-connectors-6h cadence=${cad} scanned=${r.scanned} ok=${r.ok} failed=${r.failed} inserted=${r.inserted}`);
             }
           }
-          if (now.getUTCHours() === 2 && now.getUTCMinutes() === 30) {
+          if (hqCadences && now.getUTCHours() === 2 && now.getUTCMinutes() === 30) {
             const r = await runSourcesByCadence(env, 'daily');
             if (r.scanned) console.info(`[cron] mi daily scanned=${r.scanned} ok=${r.ok} failed=${r.failed} inserted=${r.inserted}`);
           }
-          if (now.getUTCDay() === 0 && now.getUTCHours() === 2 && now.getUTCMinutes() === 45) {
+          if (hqCadences && now.getUTCDay() === 0 && now.getUTCHours() === 2 && now.getUTCMinutes() === 45) {
             const r = await runSourcesByCadence(env, 'weekly');
             if (r.scanned) console.info(`[cron] mi weekly scanned=${r.scanned} ok=${r.ok} failed=${r.failed} inserted=${r.inserted}`);
           }
@@ -1813,7 +1891,7 @@ export default {
           // through #14 for historical compatibility but the AK spec
           // pins this surface to a single nightly refresh window so
           // operators have one timestamp to monitor for staleness.
-          if (now.getUTCHours() === 4 && now.getUTCMinutes() === 0) {
+          if (hqCadences && now.getUTCHours() === 4 && now.getUTCMinutes() === 0) {
             const r = await recomputeIndexes(env);
             console.info(`[cron] mi recompute sectors=${r.sectors} rows_written=${r.rows_written}`);
             try {
@@ -1827,7 +1905,7 @@ export default {
           // renderer + R2 dropbox land with AA-2; this cron simply logs
           // the eligible window so we have an audit trail before the
           // generator ships. Fires on the 1st of Jan/Apr/Jul/Oct at 04:00.
-          if (now.getUTCDate() === 1 && [0, 3, 6, 9].includes(now.getUTCMonth()) && now.getUTCHours() === 4 && now.getUTCMinutes() === 0) {
+          if (hqCadences && now.getUTCDate() === 1 && [0, 3, 6, 9].includes(now.getUTCMonth()) && now.getUTCHours() === 4 && now.getUTCMinutes() === 0) {
             console.info(`[cron] mi quarterly_pdf eligible_period=${now.getUTCFullYear()}Q${Math.floor(now.getUTCMonth() / 3) + 1} (renderer pending AA-2)`);
           }
         } catch (e) {
@@ -1840,14 +1918,21 @@ export default {
         // last_period_key on confirmed delivery so a same-period retry
         // is a no-op. Cheap on every other tick: the helper exits in
         // O(1) when neither cadence window matches.
-        try {
-          const { sendMarketIntelDigests } = await import('./services/market_intel/digest');
-          const r = await sendMarketIntelDigests(env, now);
-          if (r.sent > 0 || r.failed > 0) {
-            console.info(`[cron] mi watchlist digest users=${r.users} sent=${r.sent} failed=${r.failed} rows=${r.rows}`);
+        // D106 — HQ only, and for a second reason beyond the fan-out: the
+        // digest composes a composite delta and new citations out of the
+        // market-intel rows the block above gathers, which on a branch are
+        // not there. Mailing a delta computed from an empty corpus is worse
+        // than not mailing.
+        if (hqCadences) {
+          try {
+            const { sendMarketIntelDigests } = await import('./services/market_intel/digest');
+            const r = await sendMarketIntelDigests(env, now);
+            if (r.sent > 0 || r.failed > 0) {
+              console.info(`[cron] mi watchlist digest users=${r.users} sent=${r.sent} failed=${r.failed} rows=${r.rows}`);
+            }
+          } catch (e) {
+            console.error('[cron] mi watchlist digest failed', e);
           }
-        } catch (e) {
-          console.error('[cron] mi watchlist digest failed', e);
         }
         // Task #14 — flush pending digest emails. Cheap on idle ticks
         // (single GROUP BY query) and only sends to users whose local

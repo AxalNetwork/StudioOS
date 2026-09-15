@@ -259,7 +259,7 @@ export default function SpinoutLabPitchDeckPage() {
   const cur = vm.slides[slideIdx];
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6" data-testid="spinout-pitch-deck-page">
+    <div className="w-full px-2 sm:px-4 py-3" data-testid="spinout-pitch-deck-page">
       {/* ---- page header (app shell chrome, not the design's own sidebar) ---- */}
       <LabPageHeader
         icon={Presentation}

@@ -523,7 +523,7 @@ export default function SpinoutLabProfilingPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-5" data-testid="page-spinout-profiling">
+    <div className="w-full px-2 sm:px-4 py-3 space-y-5" data-testid="page-spinout-profiling">
       {/* Header — shared Lab header. The phase stripe (design: 3px violet bar
           across the top of the tool) is LabPageHeader's `topRule`. */}
       <LabPageHeader

@@ -174,7 +174,12 @@ test('every chip narrows, and the narrowing is what the instrument draws', () =>
 test('the zone is mounted on its own route and the workspace no longer draws it', () => {
   assert.match(ROUTES, /pipeline: lazy\(\(\) => import\('\.\.\/\.\.\/pages\/investor\/deals\/PipelineZone'\)\)/);
   assert.match(ROUTES, /const Zone = ZONES\[zone\?\.slug\]/);
-  assert.match(ROUTES, /\{Zone && !isRoot/, 'the registry is declared and never consulted');
+  // WAS `/\{Zone && !isRoot/`. The root no longer reaches this expression at
+  // all — it renders the bucket board — so the shape is a root branch and then
+  // the registry. The invariant is unchanged and is the one the message names:
+  // `ZONES` must be consulted, or four artboards sit in a map nothing reads.
+  assert.match(ROUTES, /\{isRoot\s*\n?\s*\? <DealsRoot /, 'the root no longer renders its own overview');
+  assert.match(ROUTES, /\(Zone \? <Zone \/>/, 'the registry is declared and never consulted');
   // Two files mounting one zone row is two chip rows and two export buttons
   // for one route — the defect `profile_zone_actions` caught when this landed.
   assert.ok(!WORKSPACE.includes("investorZoneFilters('deals/pipeline'"),

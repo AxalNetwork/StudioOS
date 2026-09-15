@@ -26,14 +26,15 @@ import {
   signPublicationToken,
   uniqueSlug, periodLabel, K_MIN,
 } from '../services/publications';
+import { bindingKey } from '../util/schemaBootstrap';
 
 type AppCtx = Context<{ Bindings: Env }>;
 const r = new Hono<{ Bindings: Env }>();
 
 // ---------- ensure schema (idempotent self-healing) ----------
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   // Only create the new admin_publications table — admin_audit_log is
   // owned by an earlier migration and must NOT be mutated from a request
   // path. The audit-write helper handles a missing actor column by
@@ -44,7 +45,7 @@ async function ensureSchema(env: Env): Promise<void> {
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_admin_publications_slug ON admin_publications(slug)");
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_admin_publications_status_created ON admin_publications(status, created_at DESC)");
-    _schemaReady = true;
+    SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[admin_publications] ensureSchema failed:', (e as Error).message);
   }

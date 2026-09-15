@@ -496,7 +496,7 @@ export default function SpinoutLabAdvisorsPage() {
   const week = num(user?.spinout_lab_week) || state?.week || 3;
 
   const page = (
-    <div className="max-w-[1200px] mx-auto px-4 py-6 space-y-5" data-testid="page-spinout-advisors">
+    <div className="w-full px-2 sm:px-4 py-3 space-y-5" data-testid="page-spinout-advisors">
       {/* Header — canonical Lab header (LabPageHeader owns the back link, the
           icon tile, the title/status row and the week pill). */}
       <LabPageHeader

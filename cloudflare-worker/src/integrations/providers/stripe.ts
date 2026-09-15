@@ -5,7 +5,7 @@
  * scope). On first sync (and via webhook deltas + 15-min cron) we pull MRR /
  * ARR / paying_customers / monthly_churn_pct from /v1/subscriptions and
  * project them into:
- *   - `metrics_snapshots` rows tagged `source='stripe'` (history),
+ *   - `project_metrics` rows tagged `source='stripe'` (history),
  *   - `financial_models.assumptions_json` (current MRR/ARR/users/churn) so
  *     the cap-table simulator + scoring engine see live numbers.
  *
@@ -306,36 +306,63 @@ async function ensureMetricAnomalies(env: Env): Promise<void> {
 }
 
 /**
- * Write a stripe-sourced metrics_snapshots row + upsert the relevant
+ * Write a stripe-sourced project_metrics row + upsert the relevant
  * fields onto financial_models.assumptions_json. Also writes the anomaly
  * flag when self-reported MRR diverges by >20%.
  */
 async function projectMetricsToProject(
   env: Env, projectId: number, m: StripeMetrics,
 ): Promise<void> {
-  // Lazy schema bootstrap (mirror progress.ts ensureMetricsSnapshotsSchema
-  // shape). Using inline ensure avoids cross-import cycles.
+  // Lazy schema bootstrap, mirroring migration 249 and
+  // `progress.ts`'s `ensureProjectMetricsSchema`. Inline rather than imported to
+  // avoid a cross-import cycle.
+  //
+  // WHAT THIS USED TO DECLARE WAS THE PROBLEM, NOT THE SOLUTION. It created
+  // `metrics_snapshots` with `project_id` — which is a no-op in production,
+  // because that table already exists with `deal_id NOT NULL` from
+  // `routes/pipeline.ts`. The INSERT below then threw `no such column:
+  // project_id` on every Stripe sync, and this CREATE is what made
+  // `check-sqlite-columns` believe the column existed: a writer's own CREATE
+  // vouching for its own names is the union limitation that guard documents.
   try {
     await env.DB.exec(
-      'CREATE TABLE IF NOT EXISTS metrics_snapshots (' +
+      'CREATE TABLE IF NOT EXISTS project_metrics (' +
       'id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, ' +
       'snapshot_date TEXT NOT NULL, mrr REAL, arr REAL, cac REAL, ltv REAL, ' +
       'monthly_churn_pct REAL, active_users INTEGER, new_users INTEGER, ' +
+      'net_burn REAL, cash_balance REAL, headcount INTEGER, ' +
+      'nrr_pct REAL, paying_accounts INTEGER, ' +
       'notes TEXT, source TEXT, created_by INTEGER, ' +
       'created_at TEXT NOT NULL DEFAULT (datetime("now")))',
     );
   } catch { /* table exists */ }
+  // The upsert below needs this index as its conflict target, so it is part of
+  // the bootstrap rather than an optimisation.
+  try {
+    await env.DB.exec(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_project_metrics_day_source '
+      + 'ON project_metrics(project_id, snapshot_date, source)',
+    );
+  } catch { /* index exists */ }
 
   const date = new Date().toISOString().slice(0, 10);
-  // Replace today's stripe row to avoid duplicates on re-sync.
-  try {
-    await env.DB.prepare(
-      'DELETE FROM metrics_snapshots WHERE project_id = ? AND snapshot_date = ? AND source = "stripe"',
-    ).bind(projectId, date).run();
-  } catch { /* non-fatal */ }
+  // AN UPSERT, NOT A DELETE-THEN-INSERT. The old pair was a read-modify-write
+  // with a window where the day had no figure at all, and the DELETE was wrapped
+  // in a catch while the INSERT was not — so a failed DELETE left a duplicate and
+  // a failed INSERT took the whole sync down. Migration 249's UNIQUE index on
+  // `(project_id, snapshot_date, source)` makes one statement enough, and two
+  // syncs in the same minute cannot leave two rows.
+  //
+  // `excluded.*` IS EXPLICIT RATHER THAN A BLANKET REPLACE. Only the four figures
+  // Stripe actually knows are overwritten; anything a founder recorded against the
+  // same day in another column is left alone, because Stripe has no opinion about
+  // their headcount.
   await env.DB.prepare(
-    'INSERT INTO metrics_snapshots (project_id, snapshot_date, mrr, arr, monthly_churn_pct, active_users, source) ' +
-    'VALUES (?, ?, ?, ?, ?, ?, "stripe")',
+    'INSERT INTO project_metrics (project_id, snapshot_date, mrr, arr, monthly_churn_pct, active_users, source) '
+    + "VALUES (?, ?, ?, ?, ?, ?, 'stripe') "
+    + 'ON CONFLICT(project_id, snapshot_date, source) DO UPDATE SET '
+    + 'mrr = excluded.mrr, arr = excluded.arr, '
+    + 'monthly_churn_pct = excluded.monthly_churn_pct, active_users = excluded.active_users',
   ).bind(projectId, date, m.mrr, m.arr, m.monthly_churn_pct, m.paying_customers).run();
 
   // Upsert into financial_models.assumptions_json — keep existing keys but
@@ -385,7 +412,7 @@ async function projectMetricsToProject(
   try {
     const cutoff = new Date(Date.now() - 30 * 86400 * 1000).toISOString().slice(0, 10);
     const self = await env.DB.prepare(
-      `SELECT mrr FROM metrics_snapshots
+      `SELECT mrr FROM project_metrics
         WHERE project_id = ? AND (source IS NULL OR source != 'stripe')
           AND snapshot_date >= ? AND mrr IS NOT NULL
         ORDER BY snapshot_date DESC, id DESC LIMIT 1`,

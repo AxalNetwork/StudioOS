@@ -271,7 +271,7 @@ export default function SpinoutLab83bPage() {
 
   if (status === 'loading') {
     return (
-      <div className="max-w-[1200px] mx-auto px-4 py-6" data-testid="page-spinout-83b">
+      <div className="w-full px-2 sm:px-4 py-3" data-testid="page-spinout-83b">
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <Loader2 size={15} className="animate-spin" /> Loading your 83(b) tracker…
         </div>
@@ -280,7 +280,7 @@ export default function SpinoutLab83bPage() {
   }
 
   return (
-    <div className="max-w-[1200px] mx-auto px-4 py-6 space-y-5" data-testid="page-spinout-83b">
+    <div className="w-full px-2 sm:px-4 py-3 space-y-5" data-testid="page-spinout-83b">
       {/* Header — Lab shell, back to WORKSPACE (not Incorporate). */}
       <LabPageHeader
         icon={FileText}

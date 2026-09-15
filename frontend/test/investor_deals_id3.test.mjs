@@ -164,8 +164,10 @@ test('a vote IS opened and closed, so the ops row says the narrower true thing',
   assert.match(put, /status = 'decided'/, 'setting a decision no longer closes the vote');
   assert.match(put, /decidedAt = decidedAt \|\| nowIso\(\)/, 'closing no longer stamps a time');
 
-  // So the reason must not claim the capability is absent. `served by the API`
-  // is the file's own idiom for this, four rows down on the LP form.
+  // SO THE ROW IS A HANDLER NOW, not a better-worded refusal. The reason said
+  // the capability was served and only a screen was missing; task #195 added
+  // the screen, so what this must assert is that the op is PERFORMED and that
+  // the page performing it is the one that reads the decision.
   const at = ACTIONS.indexOf("'deals/commit': [");
   const rowsrc = ACTIONS.slice(at, ACTIONS.indexOf('],', at));
   // ON THE REASON STRINGS, NOT ON THE FILE. The table QUOTES the old claim in
@@ -175,10 +177,41 @@ test('a vote IS opened and closed, so the ops row says the narrower true thing',
   const reasons = [...ACTIONS.matchAll(/unbuilt: '([^']*)'/g)].map((m) => m[1]);
   for (const reason of reasons) {
     assert.doesNotMatch(reason, /no vote is opened here/, 'the false reason is back');
+    assert.doesNotMatch(reason, /closing a vote is served by the API/,
+      'the op is a handler now, so a reason saying only the screen is missing is stale');
   }
-  assert.match(rowsrc, /Close vote', unbuilt: 'closing a vote is served by the API/);
-  assert.match(ACTIONS, /adding an LP is served by the API; no screen offers the form yet/,
-    'the idiom this row was matched to is gone, so the pair no longer reads as one convention');
+  assert.match(rowsrc, /\{ label: 'Close vote', kind: 'handler', handler: 'closeVote' \}/,
+    'Close vote is not the page-performed op it became');
+
+  // AND THE PAGE SUPPLIES IT CONDITIONALLY, which is the half that keeps it
+  // honest. `PUT /:uid` admits the decision's author and an admin and refuses a
+  // colleague with a 403, so the page must decide before the click rather than
+  // let the refusal be the explanation. Three states, each with its own reason:
+  // no decision open, already decided, and not the caller's to close.
+  const zone = read('frontend/src/pages/investor/deals/CommitZone.jsx');
+  assert.match(zone, /handlers: \{ closeVote \}/, 'the page declares no handler for the op the table names');
+  assert.match(zone, /api\.icUpdate\(closing, \{ decision \}\)/, 'nothing records the decision');
+  assert.match(zone, /current\.status === 'decided'/,
+    'a closed decision can be closed again, and the route would take the second answer');
+  assert.match(zone, /Number\(current\.created_by\) === Number\(user\.id\)/,
+    'the author check is gone, so the control is offered to colleagues the route refuses');
+  // `created_by` has to reach the page for that check to be possible at all.
+  assert.match(read('cloudflare-worker/src/routes/ic.ts'), /created_by: d\.created_by \?\? null,/,
+    'the commit-room summary stopped carrying created_by, so the author check reads undefined');
+  // ONLY THE THREE OUTCOMES THE STORE ADMITS, and read off the array the page
+  // maps rather than off the testids — those are built by a template, so the
+  // literal `button-close-vote-invest` never appears in the source. Asserting
+  // the rendered string would have been checking for something that does not
+  // exist until the browser runs.
+  assert.match(zone, /\['invest', 'pass', 'defer'\]\.map\(\(decision\)/,
+    'the outcome list is not the three the route accepts');
+  assert.match(zone, /data-testid=\{`button-close-vote-\$\{decision\}`\}/,
+    'the outcome buttons carry no stable testid');
+  // A free field would let any string through, and `PUT /:uid` coerces an
+  // unrecognised decision to null — closing nothing while looking like a save.
+  assert.doesNotMatch(zone, /name="decision"/, 'the outcome became a free field');
+  assert.match(ACTIONS, /\{ label: 'Add LP', kind: 'handler', handler: 'addLp' \}/,
+    'the row this one was matched to is gone, so the pair no longer reads as one convention');
   // The guard in `profile_zone_actions` forbids a path in an unbuilt reason
   // because nothing checks it. Held here too, so a later edit cannot quietly
   // reintroduce one in this row alone.

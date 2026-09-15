@@ -21,7 +21,7 @@ import {
   Globe, Brain, Activity, Shield, ShieldCheck,
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale,
   MessageSquare, Package, Calendar, Heart, Bookmark, Megaphone, Send,
-  Gamepad2, ShieldAlert,
+  Gamepad2, ShieldAlert, Trash2,
   Inbox, Radar, Wallet, Landmark,
   Mail, Gift, Map, UserCog, Coins, FileStack, SlidersHorizontal,
 } from 'lucide-react';
@@ -147,6 +147,24 @@ export const SIDEBAR_GROUPS = {
       // Re-enable once X_CLIENT_ID/SECRET are bound on the prod worker.
       // { to: '/admin/x', icon: Megaphone, label: 'X (Twitter)' },
       { to: '/admin/articles', icon: FileText, label: 'Content Queue' },
+      // The five rows below were added because their pages had NO door at all:
+      // every one is a working, API-backed surface reachable only by typing the
+      // URL. `admin_route_reachability.test.mjs` is the guard that found them and
+      // now keeps every /admin route either linked or explicitly exempt.
+      //
+      // "Publications" opens the list page, and that one row un-strands three
+      // routes: the list, /admin/publications/new and /admin/publications/:id
+      // already linked to each other but formed a closed cycle with no way in.
+      { to: '/admin/publications', icon: FileStack, label: 'Publications' },
+      // The partner INVITATION flow (App.jsx says so where it retired the old
+      // /partners page) — not the public directory at /directory.
+      { to: '/admin/partners', icon: Handshake, label: 'Partner Invitations' },
+      { to: '/admin/refer-earn', icon: Gift, label: 'Referral Review' },
+      // NOT "Team". The Team row in the HQ group points at /admin/accounts, the
+      // cross-tenant accounts table; THIS is the public team-page editor, and the
+      // comment above this block has warned about the collision since the HQ shell
+      // landed. Labelled for what it edits so the two cannot be confused.
+      { to: '/admin/team', icon: Users, label: 'Public Team Page' },
       // A subsidiary administrator's read of their OWN licence — terms,
       // territories, seats licensed, history. HQ's ledger of every licence
       // (/admin/licences) is NOT here: every call behind it is
@@ -154,6 +172,10 @@ export const SIDEBAR_GROUPS = {
       // was a door that opened onto 403s. It lives in the HQ group above.
       // GET /licence/mine 404s for anyone who administers none.
       { to: '/admin/my-licence', icon: Map, label: 'My Licence' },
+      // Last in the group deliberately: soft-deleted projects, with a hard-delete
+      // that does not come back. A destructive surface goes at the bottom, not
+      // beside the everyday queues.
+      { to: '/admin/trash', icon: Trash2, label: 'Trash' },
     ]},
     { key: 'studio', label: 'Studio', items: [
       { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },

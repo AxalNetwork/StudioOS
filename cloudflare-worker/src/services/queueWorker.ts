@@ -7,15 +7,24 @@
  * can show throughput live.
  */
 import type { Env, User } from '../types';
-import { Jobs, QueueJob } from '../models/jobs';
+// `QueueJob` and `BuyerCandidate` below are interfaces, so they are imported with
+// `type`. Not cosmetic: Node's `--experimental-strip-types` — which this repo's
+// own worker-test loader uses — erases the import list literally, and a bare
+// `import { QueueJob }` becomes a runtime request for an export that does not
+// exist. Task #197 found this the first time any test imported this module.
+import { Jobs, type QueueJob } from '../models/jobs';
 import { aiScoreDeal } from '../../ai-workers/scoring';
 import { aiTractionReview } from '../../ai-workers/traction';
 import { aiRecommendEquity } from '../../ai-workers/equity';
-import { aiValueAsset, aiMatchBuyers, BuyerCandidate } from '../../ai-workers/valuation';
+import { aiValueAsset, aiMatchBuyers, type BuyerCandidate } from '../../ai-workers/valuation';
 import { aiGenerateLPA } from '../../ai-workers/lpa';
 import { Listings, Matches } from '../models/liquidity';
 import { Funds } from '../models/funds';
 import { Distributions } from '../models/distributions';
+import { insertCapitalCalls } from '../routes/_capital_call_writes';
+import {
+  recentSnapshots, metricPointsFrom, recordReview, latestMomentum,
+} from './tractionSnapshots';
 
 async function meter(env: Env, jobType: string, status: 'completed' | 'failed', latency: number) {
   try {
@@ -81,15 +90,35 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       return;
     }
     case 'traction_review': {
-      const snaps = await env.DB.prepare(
-        `SELECT metric_name, value, captured_at FROM metrics_snapshots
-         WHERE scope = 'project' AND scope_id = ? ORDER BY captured_at DESC LIMIT 30`
-      ).bind(payload.project_id).all<{ metric_name: string; value: number; captured_at: string }>();
-      const result = await aiTractionReview(env, { project_id: payload.project_id, snapshots: snaps.results || [] });
-      await env.DB.prepare(
-        `INSERT INTO metrics_snapshots (scope, scope_id, metric_name, value, extra)
-         VALUES ('project', ?, 'ai_momentum', ?, ?)`
-      ).bind(payload.project_id, result.momentum, JSON.stringify(result)).run();
+      // WAS DEAD END TO END against the generic-series shape `metrics_snapshots`
+      // does not have — `SELECT metric_name, value, captured_at … WHERE scope =
+      // 'project'` threw `no such column` before the AI ever ran, and the INSERT
+      // after it threw too. See `services/tractionSnapshots.ts` for the whole
+      // story and for why the review lands on `ai_review` rather than in a new
+      // table or on `traction_score`.
+      const projectId = Number(payload.project_id);
+      if (!projectId) throw new Error('missing project_id');
+      const rows = await recentSnapshots(env, projectId);
+      const snapshots = metricPointsFrom(rows);
+      const result = await aiTractionReview(env, { project_id: projectId, snapshots });
+      // NOTHING TO ANNOTATE IS NOT A FAILURE. A venture whose metrics nobody has
+      // entered has no snapshot to carry a review, and throwing here would put
+      // the job back to `pending` to fail again on every retry for as long as the
+      // venture stays un-measured.
+      if (!rows.length) {
+        console.warn(`[queueWorker] traction_review: project ${projectId} has no metrics snapshot to review`);
+        return;
+      }
+      await recordReview(env, rows[0].id, {
+        momentum: result.momentum,
+        trend: result.trend,
+        summary: result.summary,
+        reviewed_at: new Date().toISOString(),
+        // The count the review was actually based on. `aiTractionReview` returns
+        // `momentum: 0` with "No metrics captured yet" for an empty input, and a
+        // reader cannot otherwise tell that zero from a genuine zero.
+        points: snapshots.length,
+      });
       return;
     }
     case 'spinout_processing': {
@@ -143,14 +172,29 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       return;
     }
     case 'metrics_aggregation': {
-      // Roll up project metrics into a global snapshot (lightweight example).
+      // Roll up project metrics into a global counter.
+      //
+      // WRITES `system_metrics`, NOT `metrics_snapshots`. The old INSERT named
+      // `scope, scope_id, metric_name, value` on a DEAL metrics table and threw
+      // `no such column`, so this counter has never once been recorded. A global
+      // figure has no `deal_id` and never belonged in that table — and the
+      // generic named series it wanted already exists as `system_metrics`
+      // (`metric_name, value, labels`), which `meter()` twenty lines up writes to
+      // on every job and `analyticsReports.ts` reads in five places.
+      //
+      // Safe to add a name there: every existing read filters
+      // `metric_name = 'request'`, so `projects_24h` rows pollute nothing. The
+      // `labels` JSON carries the window so a reader is never guessing what "24h"
+      // was measured from.
       const totals = await env.DB.prepare(
         `SELECT COUNT(*) as n FROM projects WHERE created_at > datetime('now','-1 day')`
       ).first<{ n: number }>();
       await env.DB.prepare(
-        `INSERT INTO metrics_snapshots (scope, scope_id, metric_name, value)
-         VALUES ('global', NULL, 'projects_24h', ?)`
-      ).bind(totals?.n ?? 0).run();
+        `INSERT INTO system_metrics (metric_name, value, labels) VALUES ('projects_24h', ?, ?)`
+      ).bind(totals?.n ?? 0, JSON.stringify({
+        window: '24h',
+        trigger: typeof payload.trigger === 'string' ? payload.trigger : null,
+      })).run();
       return;
     }
     case 'liquidity_valuation': {
@@ -165,10 +209,18 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
         `SELECT total_score FROM score_snapshots WHERE project_id = ?
          ORDER BY id DESC LIMIT 1`
       ).bind(sub?.deal_id ?? 0).first();
-      const momentum: any = await env.DB.prepare(
-        `SELECT value FROM metrics_snapshots WHERE scope='project' AND scope_id=? AND metric_name='ai_momentum'
-         ORDER BY id DESC LIMIT 1`
-      ).bind(sub?.deal_id ?? 0).first();
+      // THE SHARPEST CONSEQUENCE OF THE COLLISION WAS HERE, not in the job the
+      // task was filed about. This read named `scope`, `scope_id`, `metric_name`
+      // and `value` — four columns `metrics_snapshots` does not have — and it sits
+      // BEFORE `Listings.updateValuation`, with no catch between. So the whole
+      // valuation job threw: a founder listed a subsidiary for sale,
+      // `ai_valuation_cents` stayed NULL, and `LiquidityPage.jsx:562` rendered
+      // "— pending" for that listing forever.
+      //
+      // `latestMomentum` reads it out of the review JSON and returns null rather
+      // than throwing on a row it cannot parse — because a valuation that dies on
+      // a malformed annotation is the failure this line already caused once.
+      const momentum = await latestMomentum(env, Number(sub?.deal_id ?? 0));
       const result = await aiValueAsset(env, {
         subsidiary_id: subId,
         subsidiary_name: sub?.subsidiary_name,
@@ -176,7 +228,7 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
         sector: sub?.sector,
         stage: sub?.stage,
         total_score: lastScore?.total_score,
-        momentum: momentum?.value,
+        momentum: momentum ?? undefined,
       });
       await Listings.updateValuation(env, listingId, result.valuation_cents);
       return;
@@ -241,8 +293,25 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       return;
     }
     case 'capital_call_notice': {
-      // Send pro-rata capital call notices to each LP (mock email = activity_log entry)
-      // AND update the fund's deployed_capital ledger so the legacy invariant is preserved.
+      // A GP's capital call: one `capital_calls` ledger row per LP and a pro-rata
+      // notice to each. Nothing else — see the note at the end of this case about
+      // the `deployed_capital` bump that used to live here and why it left.
+      //
+      // TASK #197 ADDED THE LEDGER ROWS, WHICH WERE THE MISSING HALF. Before
+      // this, a call produced an activity_log line and a moved dashboard number
+      // and nothing else — while `PartnerPortal.jsx` and `CapitalPage.jsx` both
+      // read `capital_calls` through `api.listCapitalCalls()` and both carry a
+      // working Pay button over it. The receivable a GP had just issued existed
+      // nowhere, so there was nothing to pay.
+      //
+      // AND THE REASON THIS HANDLER IS WRITTEN THE WAY IT IS: **it gets re-run.**
+      // On the D1 path `Jobs.markFailed` puts the same row back to `pending`; on
+      // the CF Queue path the consumer DELETES its idempotency claim in the
+      // failure branch on purpose, "so a CF retry actually re-runs the handler".
+      // `claimDelivery` only dedupes concurrent redeliveries of one message — its
+      // own comment names the race it closed as the one where "both run the job
+      // and we double-charge LPs". So every effect below has to be once-only by
+      // construction, or a retry turns a missing receivable into a doubled one.
       const fundId = payload.fund_id;
       const amountCents = Math.round(payload.amount_cents ?? 0);
       if (!fundId || amountCents <= 0) throw new Error('fund_id and amount_cents required');
@@ -256,23 +325,81 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       const totalCommit = rows.reduce((s, r) => s + Number(r.commitment_amount || 0), 0);
       if (totalCommit <= 0) return;
       const amountDollars = amountCents / 100;
-      const stmts: any[] = rows.map(lp => {
-        const share = (Number(lp.commitment_amount || 0) / totalCommit) * amountDollars;
-        return env.DB.prepare(
+
+      // The call's identity, minted by the enqueueing route. A payload without
+      // one predates this change or came from `/api/infra/enqueue` by hand; it
+      // still has to work, so it falls back to the fund and the amount — which
+      // means such a call is deduped per AMOUNT rather than per press, and two
+      // identical hand-enqueued calls would collapse into one. That is the right
+      // trade for a path nobody presses: a lost duplicate beats a doubled
+      // receivable.
+      const callUid = String(payload.call_uid || '').trim()
+        || `legacy:${fundId}:${amountCents}`;
+      const dueDate = typeof payload.due_date === 'string' && payload.due_date.trim()
+        ? payload.due_date.trim() : null;
+
+      // Each LP's share, computed ONCE so the ledger row and the notice text
+      // cannot disagree about what this LP owes.
+      const shares = rows.map((lp) => ({
+        lp,
+        share: (Number(lp.commitment_amount || 0) / totalCommit) * amountDollars,
+      }));
+
+      // A zero share means an LP with no commitment. A zero-dollar receivable is
+      // noise on a page whose job is to say what is owed, so it is skipped here
+      // rather than rejected in the writer — `POST /capital/capitalCall` still
+      // accepts 0 and this is not the place to change that.
+      const billable = shares.filter((s) => s.share > 0);
+      if (!billable.length) return;
+
+      // ONE ROW PER LP, IDEMPOTENT ON `uid`. `insertCapitalCalls` batches them
+      // into a single round-trip and reports which ones were actually new.
+      const writes = await insertCapitalCalls(env, billable.map(({ lp, share }) => ({
+        limitedPartnerId: lp.id,
+        amount: share,
+        dueDate,
+        uid: `cc:${callUid}:${lp.id}`,
+      })));
+
+      // Notices go ONLY to the LPs whose row was just created, so a retry that
+      // fills in the rows it missed does not tell everyone again.
+      const notices = billable
+        .map((s, i) => ({ ...s, inserted: writes[i]?.inserted }))
+        .filter((s) => s.inserted)
+        .map(({ lp, share }) => env.DB.prepare(
           `INSERT INTO activity_logs (action, details, actor, user_id)
            VALUES ('capital_call_notice', ?, 'system', ?)`
         ).bind(
           `Capital call from fund #${fundId}: $${share.toFixed(2)} due (pro-rata of $${amountDollars.toFixed(0)}).`,
           lp.user_id ?? null,
-        );
-      });
-      // Bump deployed_capital so dashboards reflect the call. Single statement, atomic with notices.
-      stmts.push(env.DB.prepare(
-        `UPDATE vc_funds
-            SET deployed_capital = deployed_capital + ?, updated_at = datetime('now')
-          WHERE id = ?`
-      ).bind(amountDollars, fundId));
-      await env.DB.batch(stmts);
+        ));
+      if (notices.length) await env.DB.batch(notices);
+
+      // AND THIS HANDLER NO LONGER TOUCHES `vc_funds.deployed_capital`. It used
+      // to bump it by the call amount here, and removing that is a deliberate,
+      // visible behaviour change — a fund dashboard no longer advances the moment
+      // a call is issued, only when an LP pays.
+      //
+      // WRITING THE LEDGER ROW IS WHAT FORCED IT. `POST /capital/calls/:id/pay`
+      // already does `deployed_capital += call.amount` when an LP actually pays
+      // (`routes/capital.ts`), and `test/capital.test.ts` pins that: a 500 call
+      // marked paid leaves `deployed_capital` at 500. Until now the two could not
+      // both fire for one call, because there was no row to pay. The moment this
+      // job creates the row, issuing and then paying would count the same money
+      // twice on an investor's dashboard.
+      //
+      // Of the three ways out, only this one is sound. Keeping both and
+      // suppressing the pay-path bump per row needs a marker and leaves the
+      // figure meaning neither called nor deployed; dropping the PAY bump instead
+      // would contradict an existing money invariant to fit a new feature. So the
+      // issuance bump goes, which is also the only option the readers agree with:
+      // `FundPerformancePage` labels this figure "Invested into portfolio",
+      // `InvestorFundLanding` shows Deployed beside Called expecting
+      // called ≥ deployed, and `services/fundRollup.ts` records that a call is not
+      // a dated cash receipt at all — which is why it refuses to compute IRR.
+      //
+      // What a GP loses is a number that moved on a notice that might never be
+      // paid. What they gain is `capital_calls`, which says who owes what.
       return;
     }
     case 'returns_distribution': {

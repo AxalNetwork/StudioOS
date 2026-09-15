@@ -162,7 +162,7 @@ export default function SpinoutLabCertificatePage() {
   const { cert } = vm;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6" data-testid="page-spinout-certificate">
+    <div className="w-full px-2 sm:px-4 py-3" data-testid="page-spinout-certificate">
       {/* Header — the shared Lab header. The single merged "Unlocked · Wk 4"
           chip is the week chip (there is no separate status chip on this
           page), and Wk 4 stays the literal it has always been. */}

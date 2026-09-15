@@ -32,7 +32,7 @@ import { codeOnly } from './_codeOnly.mjs';
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const read = (p) => codeOnly(raw(p));
 
-const CANVAS = raw('design/incoming/Pages · Partner Offers.dc.html');
+const CANVAS = raw('design/canvases/integrated/Pages · Partner Offers.dc.html');
 const pageRaw = raw('frontend/src/pages/PerksPage.jsx');
 const page = read('frontend/src/pages/PerksPage.jsx');
 const worker = raw('cloudflare-worker/src/routes/perks.ts');
@@ -385,4 +385,29 @@ test('the form writes both new columns, and an empty field is an absence', () =>
   assert.ok(insert.includes('ends_at, grant_scope'), 'the insert no longer carries the two new columns');
   assert.ok(insert.includes('dateOrNull(b?.ends_at), str(b?.grant_scope, 300) || null'),
     'the insert no longer binds the two new columns');
+});
+
+test('the zone mount is PartnerConsole alone — the four-tab row is the /perks page’s', () => {
+  // PO2 DECLARES ONE CONTROL ROW AND NO TAB ROW: `filters` and `ops`, which is
+  // the `ZoneToolbar` this page already draws. What it also drew was the
+  // standalone page's tab row — Perks, My perks, My listings and, for an
+  // admin, Review queue — under the zone's own "Perk deals" heading.
+  //
+  // The note this replaces argued they were "views of this page, not sibling
+  // zones". They are views of the PAGE and not of the ZONE: Perks is the
+  // public catalogue of what OTHER firms honour, My perks is what this reader
+  // redeemed, Review queue is admin moderation. Only My listings answers "live,
+  // expiring and expired offers with redemption against cap", which is what the
+  // artboard defines /offers/perk-deals to be.
+  const guard = page.slice(page.indexOf('if (embedded)'));
+  assert.match(guard.slice(0, 200), /return <PartnerConsole\b/,
+    'the zone mount must return the listings body itself, not a shell that chooses a tab');
+  assert.match(guard.slice(0, 200), /zoneActions=\{zoneActions\}/,
+    'without the render prop the zone header loses its filters and actions');
+
+  // Nothing is removed from the product: the tab list is intact below the
+  // early return, for the unembedded `/perks` mount.
+  assert.match(page, /k: 'browse', label: 'Perks'/, 'the public catalogue must survive on /perks');
+  assert.match(page, /k: 'mine', label: 'My perks'/, 'redemptions must survive on /perks');
+  assert.match(page, /k: 'review', label: 'Review queue'/, 'admin moderation must survive on /perks');
 });

@@ -120,7 +120,6 @@ export default function PartnerStudioHome({
 
       <header className="partner-masthead">
         <div>
-          <div className="partner-eyebrow">Service Partner / Operator</div>
           <div className="partner-title"><h1>Studio</h1><Status tone="violet">Partner</Status><span>Good to see you, {first}.</span></div>
         </div>
         <time>{new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' }).format(new Date())}</time>

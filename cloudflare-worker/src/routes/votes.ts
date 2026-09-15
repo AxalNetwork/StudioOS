@@ -27,6 +27,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const votes = new Hono<{ Bindings: Env }>();
 
@@ -38,9 +39,9 @@ const VOTE_THRESHOLD_WEIGHT = 12;
 // and what the React client sends from PipelinePage VOTE_OPTIONS.
 const VOTE_TYPES = new Set(['Strong_Buy', 'Buy', 'Hold', 'Pass']);
 
-let votesMigrated = false;
+const VOTES_MIGRATED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
-  if (votesMigrated) return;
+  if (VOTES_MIGRATED.get(bindingKey(env))) return;
   await env.DB.prepare(
     `CREATE TABLE IF NOT EXISTS pipeline_votes (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,7 +62,7 @@ async function ensureSchema(env: Env): Promise<void> {
        fired_at TEXT DEFAULT CURRENT_TIMESTAMP
      )`,
   ).run();
-  votesMigrated = true;
+  VOTES_MIGRATED.set(bindingKey(env), true);
 }
 
 export interface PublicTally {

@@ -65,6 +65,43 @@ The token behind `CLOUDFLARE_API_TOKEN` therefore needs **D1:Edit** as well as
 Workers Scripts:Edit. Until 2026-09-03 the deploy workflow called
 `wrangler deploy` directly — the first "silent skip" above, on every merge.
 
+### 1.3 A branch database
+
+A subsidiary branch is a separate Worker over a separate D1 database
+(`studioos-<code>`), so it is migrated separately — nothing about `main`
+touches it. The same runner takes `--branch <code>` instead of `--remote`:
+
+```sh
+node scripts/gen-branch-wrangler.mjs fr        # the config the next line needs
+node scripts/migrate-d1.mjs --branch fr --dry-run
+node scripts/migrate-d1.mjs --branch fr
+```
+
+Or from the Actions tab: `d1-migrate.yml` with a `branch` code, which
+generates the config for you. Three things differ from production, and each is
+enforced rather than remembered:
+
+- **The config comes first.** `wrangler.branch.<code>.toml` is gitignored
+  build output, so it is not in a fresh checkout. The runner refuses
+  `--branch` without it and prints the command above, rather than falling back
+  to HQ's config and asking wrangler to resolve a database name that config
+  never declared.
+- **`--bootstrap` is allowed here and refused for production.** A freshly
+  created branch database is empty, and `branch-provision.yml` builds it from
+  `sql/schema_baseline.sql` and then migrates forward. The old rule read the
+  `--remote` flag, which would have refused exactly this; it now names the
+  database that must never be bootstrapped (`bootstrapRefusal` in
+  `scripts/lib/migrationTargets.mjs`).
+- **`adopt-and-baseline` is production-only.** A branch has no legacy ledger
+  to adopt; the workflow fails the run rather than doing something plausible.
+
+Backups follow the same split: `backup-d1.yml` takes a `target_db` and now
+writes to `d1/<database>/backup-<date>.sql`, so a branch backup cannot
+overwrite production's restore point. `scripts/dr-drill.sh` reads both that
+shape and the flat `d1/backup-<date>.sql` used before 2026-09-15, because
+object lock keeps those for 365 days and they are the restore points for most
+of that year.
+
 ---
 
 ## 2. Pre-flight
