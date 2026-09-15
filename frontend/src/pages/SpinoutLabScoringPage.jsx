@@ -280,12 +280,22 @@ export default function SpinoutLabScoringPage() {
       // milestones are user-scoped, so only the project's own founder marks
       // it (same ownership guard as the roadmap OKR milestone).
       const owns = !!(user?.founder_id && project?.founder_id && user.founder_id === project.founder_id);
+      // WRAPPED FOR THE SAME REASON DiscoveryPage WRAPS ITS OWN, and with the
+      // same shape. `markMilestone` is already best-effort — every await inside
+      // it sits in its own try and its catch calls `reportError`, so today its
+      // promise cannot reject. This defends the CONTRACT, not a live bug: the
+      // two calls below sit after `api.scoreStartup` has already succeeded, so
+      // a future throw would jump to the catch at the bottom and tell a person
+      // their successful scoring run failed, leaving the form open over a
+      // result that was saved.
+      //
+      // Nothing is logged here on purpose. `markMilestone` reports its own
+      // failures through `reportError`; a second line would double-log the one
+      // event and put the raw console call back on a page that has too many.
       if (owns) {
         try {
           await markMilestone(user, 'scoring_run_completed');
-        } catch (milestoneErr) {
-          console.warn('[spinout-scoring:milestone:scoring_run_completed]', milestoneErr);
-        }
+        } catch { /* best-effort; the hook reports its own failures */ }
       }
       // If the post-run refresh fails, keep the history we already have
       // rather than wiping it to a fake empty state.
@@ -297,11 +307,12 @@ export default function SpinoutLabScoringPage() {
         // the fresh snapshot.
         const fresh = scores[0];
         if (fresh && owns && buildDimensions(fresh).filter((d) => d.pct >= 70).length >= 5) {
+          // Same guard as above, and this one strands more: the snapshot is
+          // already in state by here, so a throw would paint a red error line
+          // over a history that had just refreshed correctly.
           try {
             await markMilestone(user, 'scoring_confidence_70');
-          } catch (milestoneErr) {
-            console.warn('[spinout-scoring:milestone:scoring_confidence_70]', milestoneErr);
-          }
+          } catch { /* best-effort; the hook reports its own failures */ }
         }
       }
       setFormOpen(false);
