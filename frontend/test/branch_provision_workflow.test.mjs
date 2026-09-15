@@ -26,11 +26,12 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { resolve, dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-import { buildEntry } from '../../scripts/write-branch-registry.mjs';
+import { buildEntry, writeEntry } from '../../scripts/write-branch-registry.mjs';
 import { principalSql, sqlLiteral } from '../../scripts/seed-branch-principal.mjs';
 import { addServiceBinding, bindingName } from '../../scripts/open-branch-link-pr.mjs';
 import { validateBranch } from '../../scripts/lib/branchConfig.mjs';
@@ -171,6 +172,67 @@ test('the registry entry this writes is one validateBranch accepts', () => {
   assert.equal(hinted.residency.d1_jurisdiction, null);
   assert.equal(hinted.residency.location_hint, 'apac');
   assert.deepEqual(validateBranch(hinted), []);
+});
+
+test('a second run against a provisioned code refuses, and does not touch the first entry', () => {
+  // THE SECOND HALF IS THE ONE THAT MATTERS. `infra/branches/<code>.json` is
+  // the only source of truth for a deployment's ids (D105), so a re-run that
+  // overwrote a live branch's entry would forget the D1 database and the two
+  // KV namespaces of a working subsidiary — a branch nobody can redeploy or
+  // back up, with nothing on screen to say so.
+  //
+  // The write is one exclusive `wx` create rather than an existsSync followed
+  // by a write, so there is no window between the check and the use. That was
+  // a real CodeQL finding on this file, and it was right.
+  // A directory that does NOT exist yet, because `main()` writes into
+  // `infra/branches` on a fresh clone where it may not — so the mkdir is
+  // load-bearing and a test against a directory that already exists would
+  // pass with it deleted.
+  const dir = join(mkdtempSync(join(tmpdir(), 'branch-registry-')), 'infra', 'branches');
+  const env = {
+    BRANCH: 'fr', BRANCH_NAME: 'Axal VC France', LICENCE_UID: 'lic_fr_001', TERRITORY: 'FR',
+    D1_JURISDICTION: 'eu', LOCATION_HINT: 'weur', DO_JURISDICTION: 'eu',
+    D1_ID: '00000000-0000-4000-8000-000000000001',
+    KV_TOKENS: '0'.repeat(32), KV_RATE_LIMITS: '1'.repeat(32),
+    BRANCH_CREATED_AT: '2026-09-15T00:00:00Z',
+  };
+
+  const path = writeEntry(dir, buildEntry(env));
+  const first = readFileSync(path, 'utf8');
+  assert.equal(JSON.parse(first).ids.d1, '00000000-0000-4000-8000-000000000001');
+  assert.ok(first.endsWith('\n'), 'the file ends in a newline, like every other committed JSON');
+
+  // The same code again, carrying DIFFERENT ids — which is what a re-run after
+  // a half-failed provisioning actually looks like.
+  const second = { ...env, D1_ID: '00000000-0000-4000-8000-00000000000f', KV_TOKENS: '9'.repeat(32) };
+  assert.throws(
+    () => writeEntry(dir, buildEntry(second)),
+    /already exists .* is already provisioned/,
+    'a code that already has a registry entry must be refused',
+  );
+  assert.equal(readFileSync(path, 'utf8'), first, 'and the first entry must be untouched, byte for byte');
+
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('a failure that is NOT EEXIST is not reported as "already provisioned"', () => {
+  // "Already provisioned" is a specific claim. A read-only mount or a full
+  // disk reported as one sends whoever reads the run log to look for a branch
+  // that does not exist — so only EEXIST becomes the refusal, and everything
+  // else is rethrown as itself.
+  const dir = mkdtempSync(join(tmpdir(), 'branch-registry-'));
+  // A path segment that is a FILE makes the mkdirSync fail with ENOTDIR,
+  // reaching the same helper by a different error.
+  writeFileSync(join(dir, 'wall'), 'not a directory', 'utf8');
+  assert.throws(
+    () => writeEntry(join(dir, 'wall', 'branches'), buildEntry({
+      BRANCH: 'fr', BRANCH_NAME: 'Axal VC France', LICENCE_UID: 'lic_fr_001', TERRITORY: 'FR',
+      D1_ID: 'x', KV_TOKENS: 'y', KV_RATE_LIMITS: 'z',
+    })),
+    (e) => !/already provisioned/.test(String(e?.message)),
+    'a filesystem failure must keep its own reason',
+  );
+  rmSync(dir, { recursive: true, force: true });
 });
 
 test('a value whose escaping would be dialect-dependent is refused, not rewritten', () => {

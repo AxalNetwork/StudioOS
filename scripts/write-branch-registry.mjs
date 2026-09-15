@@ -21,7 +21,7 @@
  *   D1_ID, KV_TOKENS, KV_RATE_LIMITS                 (captured from wrangler)
  *   BRANCH_CREATED_AT                                (optional; for tests)
  */
-import { writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -79,17 +79,60 @@ export function buildEntry(env) {
   };
 }
 
+/**
+ * Write the entry, creating the file ONLY if it does not already exist.
+ *
+ * WHY THE `wx` FLAG AND NOT AN `existsSync` FIRST. This used to check and then
+ * write, which CodeQL flagged as a file-system race and which is one:
+ * `wx` asks the filesystem for the thing the pair only implied — create,
+ * exclusively, or fail — in a single syscall with no window between the two.
+ *
+ * THE WINDOW IS SMALL AND THE CONSEQUENCE IS NOT. `infra/branches/<code>.json`
+ * is the only source of truth for a deployment's ids (D105). The refusal
+ * exists because a second provisioning run against a code that already has a
+ * branch must stop, not overwrite: the entry it would replace names the D1
+ * database and two KV namespaces of a LIVE subsidiary, and a registry that
+ * quietly forgot them is a branch nobody can redeploy or back up.
+ *
+ * ONLY `EEXIST` BECOMES THE REFUSAL. Anything else — a read-only mount, a
+ * full disk — is rethrown, because "already provisioned" is a specific claim
+ * and reporting a permissions failure as one sends whoever reads the run log
+ * to look for a branch that does not exist.
+ *
+ * Exported, and taking its directory, so a test can run it against a scratch
+ * path without a git tree — the same reason `buildEntry` is separate from
+ * `main`.
+ */
+export function writeEntry(dir, entry) {
+  const path = join(dir, `${entry.code}.json`);
+  try {
+    // `recursive: true` is already idempotent, so there is no `existsSync`
+    // ahead of it either: that guard was a second check-then-use pair buying
+    // nothing. It is INSIDE the try so the helper has one error boundary —
+    // a directory that cannot be created is the same class of failure as a
+    // file that cannot be written, and both must keep their own reason.
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path, `${JSON.stringify(entry, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
+  } catch (e) {
+    if (e?.code === 'EEXIST') {
+      throw new Error(`${path} already exists — ${entry.code} is already provisioned`);
+    }
+    throw e;
+  }
+  return path;
+}
+
 function main() {
   const entry = buildEntry(process.env);
   const problems = validateBranch(entry);
   if (problems.length) {
     die(`the entry this would write is not valid:\n  - ${problems.join('\n  - ')}`);
   }
-  const dir = join(ROOT, 'infra/branches');
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  const path = join(dir, `${entry.code}.json`);
-  if (existsSync(path)) die(`${path} already exists — ${entry.code} is already provisioned`);
-  writeFileSync(path, `${JSON.stringify(entry, null, 2)}\n`, 'utf8');
+  try {
+    writeEntry(join(ROOT, 'infra/branches'), entry);
+  } catch (e) {
+    die(e.message);
+  }
   console.log(`✓ wrote infra/branches/${entry.code}.json`);
 }
 
