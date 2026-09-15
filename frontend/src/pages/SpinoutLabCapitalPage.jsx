@@ -36,6 +36,7 @@ import { api, spinoutLab } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 import IncomingLeadsStrip from '../components/IncomingLeadsStrip';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
@@ -541,7 +542,7 @@ export default function SpinoutLabCapitalPage() {
   const week = num(user?.spinout_lab_week) || state?.week || 4;
 
   return (
-    <div className="w-full px-2 sm:px-4 py-3 space-y-5" data-testid="page-spinout-capital">
+    <LabPageShell width="full" testId="page-spinout-capital">
       {/* Header — shared LabPageHeader. The design anchors carry over as props:
             A1 — the 3px violet topline  → topRule (on by default)
             A2 — 34px violet icon tile   → icon (the old divider is dropped;
@@ -1272,6 +1273,6 @@ export default function SpinoutLabCapitalPage() {
           </div>
         </div>
       )}
-    </div>
+    </LabPageShell>
   );
 }

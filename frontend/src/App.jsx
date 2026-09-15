@@ -25,7 +25,7 @@ import {
   ChevronDown, Eye, ArrowLeft, Sparkles,
   Gift
 } from 'lucide-react';
-import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED } from './sidebarConfig';
+import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES } from './sidebarConfig';
 import PaywallModal from './components/PaywallModal';
 import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
@@ -837,19 +837,19 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // licence — including `/research/*`, which was carved out of both lists
   // precisely because the shell had no padding of its own.
   const fullBleedSurface = (FULL_BLEED_BY_ROLE[activeRole] || []).includes(location.pathname)
-    || SHARED_FULL_BLEED.includes(location.pathname);
+    || SHARED_FULL_BLEED.includes(location.pathname)
+    // The Lab's tool routes, by prefix rather than by twenty-three entries.
+    // This is where `/spinout-lab/` is tested, and the only place: it used to
+    // be typed on the width flag below AND on the padding flag under it, which
+    // is two tests of one fact that could be changed apart.
+    || SHARED_FULL_BLEED_PREFIXES.some((prefix) => location.pathname.startsWith(prefix));
   const fullWidthSurface = fullBleedSurface
     // Advisor's blanket clause stays, and only this clause is still blanket:
     // it also covers the advisor pages OUTSIDE any workspace, which have been
     // full width since the advisor shell shipped. Narrowing it to the derived
     // list would silently re-centre those, which is a separate decision from
     // this one.
-    || activeRole === 'advisor'
-    // `/spinout-lab` itself is no longer hand-typed here: it went into
-    // SHARED_FULL_BLEED, and fullBleedSurface above already implies full
-    // width. The sub-routes stay — the Lab's tool pages are full width but
-    // keep the shell's padding.
-    || location.pathname.startsWith('/spinout-lab/');
+    || activeRole === 'advisor';
   const flushSurface = fullBleedSurface;
   const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user, hqView);
 

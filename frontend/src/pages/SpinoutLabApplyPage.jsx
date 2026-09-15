@@ -4,6 +4,7 @@ import { Check, Loader2, ArrowLeft } from "lucide-react";
 import { useAuth } from "../hooks/useAuthSync";
 import { spinoutLab } from "../lib/api";
 import { labJurisdiction, resolveOpenCohort } from "../lib/spinoutLab";
+import LabPageShell from "../components/spinout/LabPageShell";
 
 // Apply to the open cohort — signed-in application form (reference design:
 // Spin-Out Lab.dc.html APPLY VIEW). The heading used to read "Apply to Cohort
@@ -116,14 +117,16 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-32 text-gray-400">
-        <Loader2 className="animate-spin" size={22} />
-      </div>
+      <LabPageShell width="apply" spaceY="" className="py-16" testId="spinout-apply-page">
+        <div className="flex items-center justify-center text-gray-400">
+          <Loader2 className="animate-spin" size={22} />
+        </div>
+      </LabPageShell>
     );
   }
 
   return (
-    <div className="max-w-[1080px] mx-auto" data-testid="spinout-apply-page">
+    <LabPageShell width="apply" spaceY="" testId="spinout-apply-page">
       <Link
         to="/spinout-lab"
         className="inline-flex items-center gap-2 h-[34px] px-3 rounded-[9px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 text-[13px] font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors mb-5"
@@ -285,6 +288,6 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
           </div>
         </div>
       </div>
-    </div>
+    </LabPageShell>
   );
 }

@@ -37,6 +37,7 @@ import SpinoutSlideEditor from '../components/SpinoutSlideEditor';
 import { PitchDeckExportModal, PitchDeckShareModal } from '../components/PitchDeckModals';
 import PitchDeckSlideCard from '../components/PitchDeckSlideCard';
 import LabPageHeader from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import { TEMPLATES } from '../decks/templates';
 import {
@@ -259,7 +260,7 @@ export default function SpinoutLabPitchDeckPage() {
   const cur = vm.slides[slideIdx];
 
   return (
-    <div className="w-full px-2 sm:px-4 py-3" data-testid="spinout-pitch-deck-page">
+    <LabPageShell width="full" spaceY="" testId="spinout-pitch-deck-page">
       {/* ---- page header (app shell chrome, not the design's own sidebar) ---- */}
       <LabPageHeader
         icon={Presentation}
@@ -460,6 +461,6 @@ export default function SpinoutLabPitchDeckPage() {
         onExpiryChange={changeExpiry}
         onClose={() => setShareOpen(false)}
       />
-    </div>
+    </LabPageShell>
   );
 }
