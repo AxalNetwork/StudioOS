@@ -165,6 +165,7 @@ import messagesRoutes from './routes/messages';
 import perksRoutes from './routes/perks';
 import adminLicences from './routes/admin_licences';
 import adminDeployments from './routes/admin_deployments';
+import adminStatements from './routes/admin_statements';
 import adminSuperAdmins from './routes/admin_super_admins';
 import adminHq from './routes/admin_hq';
 import adminRevenue from './routes/admin_revenue';
@@ -772,6 +773,9 @@ app.route('/api/admin/lp-applications', adminLpApplications);
 // falling into `admin_licences`'s `/:uid` catch-all. Deploying is
 // infrastructure, not a licence change: the licence is unchanged by it.
 app.route('/api/admin', adminDeployments);
+// D111 — statements and promo ceilings. Mounted with the deployments router,
+// before the /api/admin catch-all, for the same reason.
+app.route('/api/admin', adminStatements);
 app.route('/api/admin/licences', adminLicences);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
 // catch-all for the same reason as the licence ledger above.
