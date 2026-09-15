@@ -3,6 +3,7 @@
  */
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
+import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 
 export function role(u: { role: string }): string {
   return (u.role || '').toLowerCase();
@@ -116,10 +117,13 @@ export function mapError(c: Context<{ Bindings: Env }>, e: any) {
     return c.json({ detail: 'Something went wrong loading this. The failure has been logged.' }, 500);
   }
 
-  const status =
-    msg === 'Unauthorized' ? 401 :
-    msg === 'Forbidden' || msg === 'Admin required' || msg === 'KYC required' ? 403 :
-    400;
+  // D110 — THE SHARED TABLE, not a second copy of it. This ternary used to
+  // list four sentences of its own and did not know 'Super admin required',
+  // so every route in `admin_licences.ts` — which catches its own throws, so
+  // `app.onError` never sees them — answered a permission refusal with **400
+  // Bad Request**. The SPA cannot tell a refusal from a malformed request at
+  // 400, and the gate that worked reported the wrong thing.
+  const status = AUTH_ERROR_STATUSES[msg] ?? 400;
   return c.json({ detail: msg }, status as any);
 }
 

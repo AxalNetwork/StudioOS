@@ -37,6 +37,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import adminPartners from '../src/routes/admin_partners.ts';
+import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 
 /**
  * The sub-app under the SAME error mapping production gives it.
@@ -268,17 +269,21 @@ test('a partner cannot reach either endpoint', async () => {
   assert.equal(linkOf(db, ORPHAN), null);
 });
 
-test('the statuses this file asserts are the ones index.ts actually sends', () => {
-  // The harness above replicates two rows of `AUTH_ERROR_STATUSES`, which is a
-  // private const rather than an export. Replicating a mapping is fine; letting
-  // the copy outlive the original is not — the authorization tests would then
-  // pass against a status nothing produces.
+test('the statuses this file asserts are the ones the Worker actually sends', () => {
+  // The harness above replicates two rows of `AUTH_ERROR_STATUSES`. Replicating
+  // a mapping is fine; letting the copy outlive the original is not — the
+  // authorization tests would then pass against a status nothing produces.
+  //
+  // D110 — the table moved out of `index.ts` into `util/authErrors.ts` when it
+  // turned out there were TWO of them: `app.onError` read this one and
+  // `mapError` had its own list. So this now reads the real object rather than
+  // scanning a file for it, and checks both readers are still wired.
+  assert.equal(AUTH_ERROR_STATUSES.Unauthorized, 401);
+  assert.equal(AUTH_ERROR_STATUSES['Admin required'], 403);
   const HERE = dirname(fileURLToPath(import.meta.url));
   const index = readFileSync(resolve(HERE, '../src/index.ts'), 'utf8');
-  const at = index.indexOf('const AUTH_ERROR_STATUSES');
-  assert.ok(at > 0, 'index.ts no longer declares AUTH_ERROR_STATUSES');
-  const table = index.slice(at, index.indexOf('};', at));
-  assert.match(table, /Unauthorized:\s*401/);
-  assert.match(table, /'Admin required':\s*403/);
   assert.match(index, /app\.onError/, 'nothing maps the auth throws to a status any more');
+  assert.match(index, /AUTH_ERROR_STATUSES\[msg\]/, 'app.onError must read the shared table');
+  const helpers = readFileSync(resolve(HERE, '../src/routes/_t13t14t15_helpers.ts'), 'utf8');
+  assert.match(helpers, /AUTH_ERROR_STATUSES\[msg\]/, 'mapError must read the same table, not its own list');
 });

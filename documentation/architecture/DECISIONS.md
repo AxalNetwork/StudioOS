@@ -7901,3 +7901,124 @@ first attempt because the test's own extractor stopped at a line end and read a
 call's `--config` on the next line as absent — the same shape of mistake as
 measuring a guard by a whole-file offset (D107), fixed by joining backslash
 continuations first. No `frontend/src` change, so `docs/` does not move.
+
+---
+
+## D110 — A licence gets a contract and a deployment, the grid shows what nobody holds, and a missing credential is a state (2026-09-15, #218)
+
+H2 and H3 are the two HQ artboards that were built honest and incomplete. The
+ledger drew who holds what; the coverage map was refused, the renewal pipeline
+had no zone, the issue flow stopped at Activate, and there was nothing anywhere
+that could ask for a branch to exist. This is those four, plus the Platform
+console that watches the result.
+
+**The coverage grid is built from the EU, not from the ledger — because the
+white space is the point.** The refusal that stood in `AdminLicences.jsx` said a
+map was "presentation of the same data the territory list already carries".
+That was true of a map of what is *held* and missed what H2 exists to answer:
+which countries are still available. A grid assembled from the licences that
+exist can only ever show what is taken. So `lib/licenceCoverage.js` starts from
+the 27 member states and joins the ledger onto them. It is a 27-cell grid and
+not a choropleth because the shape of a country carries no information here and
+a projection is a large dependency for none.
+
+Three cell states, and **the middle one is the whole reason there are three**: a
+**suspended licence still holds its territory**. Releasing a country is a
+termination, not a lapse — `AdminLicences.jsx` already says the intuition runs
+the other way — and a grid that painted a suspended holder's countries as free
+would invite exactly the double-issue migration 187's UNIQUE index exists to
+make unrepresentable. A terminated licence holds nothing, so it is excluded
+rather than given a fourth colour. A country a licence holds that is **not** in
+the EU is reported in `outside_eu` rather than dropped: a grid titled "EU
+coverage" that silently swallowed a Swiss territory would make the ledger look
+smaller than it is.
+
+**`days` to renewal is derived on read, and an overdue row is kept.** The same
+rule the escalation SLA band follows (D108): a number of days baked in at render
+time is wrong tomorrow, so `renewalPipeline` takes the date to measure from.
+Overdue renewals go negative and stay in the list, because an overdue renewal is
+the single most important row on the zone and hiding it because it sorted below
+zero is how a lapsed licence goes unnoticed.
+
+**The issue flow is six steps now, and the record is not one of them.** It was
+five, ending in "Activate" — but the Activate *button* has always sat above the
+tabs rather than inside them, so the fifth tab was really the history. Steps 5
+and 6 are the two the canvas draws, Contract and Deploy, and the history keeps
+its own unnumbered tab: it is provenance, not a step anybody performs.
+
+**Step 5 stores the rendered text, which is the whole reason migration 259
+exists.** `legal_template_versions` keeps every prior version precisely because
+an archived version *stays binding on the contracts that carry it*. A row that
+held only a slug and a version number would still be re-rendered from today's
+merge values, so a licence signed at a €90,000 fee would display tomorrow's
+€95,000 — a contract that silently restates itself is not a record of anything.
+The version is **read from the library, never passed by the caller**: an
+archived version stays binding on a contract that already carries it, it is not
+newly issuable. A re-issue **supersedes**, never overwrites, for the same reason
+`licence_events` is append-only.
+
+**A merge field the licence cannot fill keeps its placeholder and is named.**
+Blanking it turns "we never agreed a governing law" into a contract that reads
+as complete and says nothing — the most expensive silent failure available on
+this screen. `unfilled_fields` is a column, not a computation, so the gap
+travels with the instrument.
+
+**Step 6 is the first thing in the programme that can ask for a branch**, and
+two of its decisions are about honesty rather than mechanism:
+
+- **The credential is a STATE, not an error.** `GITHUB_ACCESS_TOKEN` with the
+  `actions: write` scope is task #192 and is not set in production, so the
+  normal answer today is **409 `github_not_configured`** carrying the exact
+  secrets to set and the note that the workflow still runs by hand from the
+  Actions tab. A 500 would read as a broken button and send someone to the
+  logs. `GET /api/admin/deployments` returns `dispatch_available` so the page
+  disables the button with the server's own sentence rather than letting
+  someone press it into a 409 — the SPA never carries a second copy of a secret
+  name. And a **403 from GitHub is reported as the scope**, not as an unset
+  secret: telling someone to set a secret that is already set sends them to fix
+  the wrong thing.
+- **The row is written before the dispatch.** A `workflow_dispatch` returns 204
+  with no body whether the run then succeeds, fails, or is never scheduled, so
+  the dispatch establishes only that GitHub accepted the request. Writing first
+  means a failed attempt leaves a row saying `failed` with the reason instead of
+  leaving no trace of something someone did.
+
+**The provisioning status and the live read are separate fields, everywhere.** A
+deployment that reached `worker_live` last week and is unreachable right now has
+not regressed to `requested`; conflating them loses which of the two is wrong.
+For the same reason the Deployments zone's coverage counts only the branches HQ
+**asked** — a registry row HQ has no binding to yet was never asked, and folding
+it into `unreadable` would report a deploy HQ owes itself as a branch that is
+down.
+
+**A branch code is refused, not corrected.** `FR` is rejected rather than
+lower-cased, on both sides. It names the Worker, the database and the hostname,
+and `write-branch-registry.mjs` and `check-branch-config.mjs` both refuse it
+(D105): a code HQ silently rewrote would be accepted at one end and rejected by
+the workflow it was dispatched to, which is two definitions of a valid branch
+code. There is one.
+
+**The defect this PR found on the way, and fixed rather than worked around.**
+`AUTH_ERROR_STATUSES` lived in `index.ts` and said `'Super admin required':
+403` — but `routes/_t13t14t15_helpers.ts`'s `mapError`, which **31 route files
+call inside their own `try/catch` so `app.onError` never sees their throws**,
+carried its own ternary listing four sentences and not that one. So the entire
+HQ franchise console answered a permission refusal with **400 Bad Request**,
+and the SPA cannot tell a refusal from a malformed request at 400. It is the
+same failure the map's own comment records — a decision in two places — reached
+from the other side. The table now lives in `util/authErrors.ts` and both
+readers index it.
+
+**Deliberately not here.** Sending a contract for signature (the row carries
+`status` and `envelope_uid` and nothing writes them yet — the e-signature leg is
+its own work), and the Deployments zone's rollout percentage and rollback, which
+need the Cloudflare versions API rather than the registry.
+
+**Verification.** `npm run test:drift` exit 0, read as the exit code.
+`cloudflare-worker/test/admin_licences_deploy.test.ts` (16),
+`cloudflare-worker/test/licence_contract_instantiate.test.ts` (14) and
+`frontend/test/hq_licences_h2h3.test.mjs` (17) are new. **44 mutations applied,
+44 caught** — one escaped first: nothing proved the template version came from
+the library rather than from the request body, which is exactly the archived-
+version hole the route's comment claims to close, so the assertion was added
+rather than the comment softened.

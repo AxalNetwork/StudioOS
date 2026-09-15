@@ -2944,6 +2944,24 @@ export const api = {
     request('/admin/security/force-reauth', { method: 'POST', body: JSON.stringify({ reason }) }),
   licence: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}`),
   licenceTerritories: () => request('/admin/licences/territories'),
+  // D110 — H3 step 6. Asks GitHub to run branch-provision.yml and writes the
+  // licence_deployments row. A 409 `github_not_configured` is a STATE, not a
+  // failure: the workflow can still be run by hand, and the page renders the
+  // reason rather than an error.
+  licenceDeploy: (uid, data) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/deploy`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  // H6 Platform → Deployments: the registry rows, each with a live health read
+  // that is a separate field from the provisioning status on purpose.
+  deployments: () => request('/admin/deployments'),
+  // D110 — H3 step 5. The contracts instantiated for this licence and the
+  // master templates available, in one payload: the screen's two states are
+  // "pick one" and "here is the one you picked".
+  licenceContract: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}/contract`),
+  licenceContractCreate: (uid, templateSlug) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/contract`, {
+      method: 'POST',
+      body: JSON.stringify({ template_slug: templateSlug }),
+    }),
   licenceCreate: (data) => request('/admin/licences', { method: 'POST', body: JSON.stringify(data || {}) }),
   licenceSetTerritories: (uid, countries) =>
     request(`/admin/licences/${encodeURIComponent(uid)}/territories`, { method: 'PUT', body: JSON.stringify({ countries }) }),

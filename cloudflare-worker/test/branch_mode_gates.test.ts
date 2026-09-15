@@ -196,12 +196,15 @@ test('requireHqAuthoring: an HQ admin authors, a branch admin is told where the 
   }
 });
 
-test('both refusals are mapped to 403 in index.ts, by the constant and not by a copy of the sentence', () => {
+test('both refusals are mapped to 403 by the constant, not by a copy of the sentence', () => {
   // Source-parsed for the reason the map's own comment gives: an entry that
   // is missing does not weaken the gate, it turns a working refusal into a
   // 500. Matching on the CONSTANT NAMES is what makes this survive a reword
   // of either sentence — and fail if someone re-types the string instead.
-  const src = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
+  //
+  // D110 — the table lives in `util/authErrors.ts` now. It was in `index.ts`
+  // until a second copy of the same decisions turned up in `mapError`.
+  const src = readFileSync(new URL('../src/util/authErrors.ts', import.meta.url), 'utf8');
   const map = src.match(/const AUTH_ERROR_STATUSES[\s\S]*?\n\};/);
   assert.ok(map, 'AUTH_ERROR_STATUSES must still be a single object literal');
   assert.match(map[0], /\[HQ_ONLY\]:\s*403/, 'HQ_ONLY must map to 403 via the constant');
