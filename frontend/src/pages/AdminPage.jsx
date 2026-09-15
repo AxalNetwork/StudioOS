@@ -3230,7 +3230,7 @@ function SignedDocLightbox({ uid, onClose, onChanged }) {
       try {
         const r = await api.adminGetForwardLog(doc.id);
         if (!cancelled) setForwards(r.forwards || []);
-      } catch (e) { if (!cancelled) reportError(e, 'forward-log'); }
+      } catch (e) { if (!cancelled) reportError('AdminPage:forward-log', e); }
     })();
     return () => { cancelled = true; };
   }, [doc]);
@@ -5421,7 +5421,7 @@ function IntegrationKeysPanel() {
       const r = await api.adminListIntegrationKeys();
       setRows(r.providers || []);
     } catch (e) {
-      reportError(e, { where: 'IntegrationKeysPanel.refresh' });
+      reportError('IntegrationKeysPanel:refresh', e);
       showToast({ kind: 'err', msg: e.message || 'Failed to load' });
     } finally { setLoading(false); }
   };

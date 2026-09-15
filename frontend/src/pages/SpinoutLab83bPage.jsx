@@ -175,7 +175,7 @@ export default function SpinoutLab83bPage() {
       setActiveId((cur) => cur ?? list[0]?.id ?? null);
       setStatus('ready');
     } catch (e) {
-      reportError(e, { where: 'SpinoutLab83bPage.load' });
+      reportError('SpinoutLab83bPage:load', e);
       setStatus('error');
     }
   }, [user]);
@@ -218,21 +218,27 @@ export default function SpinoutLab83bPage() {
   ]), [tracker]);
   const proofHave = proofs.filter((p) => p.have).length;
 
-  const act = async (fn, where) => {
+  // `op` is the operation alone, not a whole scope: the page name belongs here
+  // once rather than at each caller, and a template literal is a scope
+  // `check-frontend-logging.mjs` can read. Passing the assembled string in a
+  // variable would be correct at runtime and unverifiable statically — the
+  // guard cannot tell a scope variable from an error variable, which is the
+  // reversed-argument bug it exists to catch.
+  const act = async (fn, op) => {
     setBusy(true); setErr('');
     try { await fn(); await load(); } catch (e) {
-      reportError(e, { where }); setErr(e?.message || 'Action failed.');
+      reportError(`SpinoutLab83bPage:${op}`, e); setErr(e?.message || 'Action failed.');
     } finally { setBusy(false); }
   };
 
   const markMailed = () => act(async () => {
     await api.legal83bUpdate(tracker.id, { mailed_at: new Date().toISOString(), status: 'mailed' });
     await markMilestone(user, 'section83b_filed');
-  }, 'SpinoutLab83bPage.markMailed');
+  }, 'markMailed');
 
   const uploadReceipt = (file) => act(
     () => api.legal83bUploadReceipt(tracker.id, file),
-    'SpinoutLab83bPage.uploadReceipt',
+    'uploadReceipt',
   );
 
   // The election statement is generated server-side when the tracker is
@@ -253,7 +259,7 @@ export default function SpinoutLab83bPage() {
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
     } catch (e) {
-      reportError(e, { where: 'SpinoutLab83bPage.downloadElection' });
+      reportError('SpinoutLab83bPage:downloadElection', e);
       setErr(e?.message || 'Could not download the election.');
     } finally {
       setBusy(false);
@@ -268,7 +274,7 @@ export default function SpinoutLab83bPage() {
       grant_date: grantDate,
     });
     setCreating(false);
-  }, 'SpinoutLab83bPage.create');
+  }, 'create');
 
   if (status === 'loading') {
     return (

@@ -345,7 +345,7 @@ export default function SpinoutLabProfilingPage() {
         setStatus('ready');
       } catch (e) {
         if (!dead) {
-          reportError(e);
+          reportError('SpinoutLabProfilingPage:load', e);
           setStatus('error');
         }
       }

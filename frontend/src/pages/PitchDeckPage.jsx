@@ -147,7 +147,7 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
           const rec = await api.deckRecommend(projectId);
           setRecommendation(rec);
         } catch { setRecommendation(null); }
-      } catch (e) { setError(e.message || 'Failed to load decks'); reportError(e); }
+      } catch (e) { setError(e.message || 'Failed to load decks'); reportError('PitchDeckPage:loadDecks', e); }
     })();
   }, [projectId]);
 
@@ -255,7 +255,7 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
           programDay: Number.isFinite(r?.program_day) ? r.program_day : null,
         });
       })
-      .catch((e) => { if (alive) { setDeckPreview(null); if (e?.status !== 402) reportError(e); } })
+      .catch((e) => { if (alive) { setDeckPreview(null); if (e?.status !== 402) reportError('PitchDeckPage:deckPreview', e); } })
       .finally(() => { if (alive) setPreviewLoading(false); });
     return () => { alive = false; };
   }, [isSpinoutDeck, projectId, deckDataReload]);
@@ -362,7 +362,7 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
       if (e.status === 402) {
         addToast('That template is on the Growth plan — upgrade to unlock.', 'info');
       } else {
-        setError(e.message || 'Failed to apply method'); reportError(e);
+        setError(e.message || 'Failed to apply method'); reportError('PitchDeckPage:applyMethod', e);
       }
     } finally { setBusy(false); }
   };
@@ -388,7 +388,7 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
       } else if (e.status === 402) {
         addToast('That template is on the Growth plan — upgrade to unlock.', 'info');
       } else {
-        setError(e.message || 'Refill failed'); reportError(e);
+        setError(e.message || 'Refill failed'); reportError('PitchDeckPage:refill', e);
       }
     } finally { setBusy(false); }
   };
@@ -462,7 +462,7 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
       if (e?.status === 402) {
         addToast('The Spin-Out deck is part of the Growth plan. Upgrade to unlock.', 'error');
       } else {
-        setError(e.message || 'Export failed'); reportError(e);
+        setError(e.message || 'Export failed'); reportError('PitchDeckPage:export', e);
       }
     } finally { setExporting(''); }
   };
@@ -1296,7 +1296,7 @@ function loadTemplates() {
       .catch((err) => {
         // Reset so a transient failure (e.g. network blip) can retry next open.
         _templatesPromise = null;
-        reportError(err);
+        reportError('PitchDeckPage:loadTemplates', err);
         // A module-eval throw (e.g. a top-level ReferenceError baked
         // into a stale chunk) lands here, not in the empty-registry
         // branch above. Same recovery path: if we're still serving
@@ -1322,7 +1322,7 @@ function loadThumbnailModule() {
   if (!_thumbnailModulePromise) {
     _thumbnailModulePromise = import('../decks/Thumbnail').catch((err) => {
       _thumbnailModulePromise = null;
-      reportError(err);
+      reportError('PitchDeckPage:loadThumbnailModule', err);
       return null;
     });
   }

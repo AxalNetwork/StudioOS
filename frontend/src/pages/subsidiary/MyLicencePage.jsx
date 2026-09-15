@@ -96,7 +96,7 @@ export default function MyLicencePage() {
         if (e?.status === 404 && e?.data?.error === 'licence_not_pushed') {
           setData({ notPushed: true, branch: e?.data?.branch || null });
         } else if (e?.status === 404) setData({ none: true });
-        else { reportError(e); setErr(e?.message || 'Could not load your licence'); }
+        else { reportError('MyLicencePage:load', e); setErr(e?.message || 'Could not load your licence'); }
       });
   }, []);
 

@@ -1279,7 +1279,7 @@ function AdvisorTicketPanel({ onFiled, onClose }) {
       });
       onFiled(ticket);
     } catch (e) {
-      reportError(e, { where: 'AdvisorTicketPanel.submit' });
+      reportError('AdvisorTicketPanel:submit', e);
       setError(e?.message || 'Could not file your ticket. Please try again.');
     } finally {
       setSubmitting(false);
