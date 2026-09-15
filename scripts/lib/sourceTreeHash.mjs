@@ -13,9 +13,15 @@
  * is sorted; and path separators are normalised to `/` so a Windows checkout
  * and a Linux one agree.
  *
- * Used by `scripts/build-frontend.mjs` to stamp `docs/.asset-retention.json`
- * with the source it built from, and by `scripts/check-docs-fresh.mjs` to ask
- * whether the committed `docs/` is that build. See D103.
+ * Used by `scripts/build-frontend.mjs` to stamp `docs/.build-source` with the
+ * source it built from, and by `scripts/check-docs-fresh.mjs` to ask whether
+ * the committed `docs/` is that build. See D103.
+ *
+ * NOT `docs/.asset-retention.json`, which this comment claimed until D113
+ * corrected it. That file is gitignored on purpose — 45 KB that churns
+ * wholesale on every rebuild — so CI never sees it and a stamp inside it would
+ * answer nobody. D103 says so at length; the comment here had simply never
+ * caught up with the code it describes.
  */
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
