@@ -61,7 +61,13 @@ export default function FollowButton({
       setFollowing(!!r.following);
       if (typeof r.followers === 'number') setFollowers(r.followers);
     } catch (e) {
-      reportError(e, { where: 'FollowButton.toggle', entityType, entityId });
+      // `entityType` rides in the scope because it is low-cardinality and names
+      // a different operation; `entityId` deliberately does not. The beacon
+      // dedupes on `scope|message` (lib/log.js), so an id in the scope would
+      // make every failure unique, defeat the 5s window and burn the 25-beacon
+      // budget on one broken follow list. The page is already recorded in
+      // `entry.path`.
+      reportError(`FollowButton:toggle:${entityType}`, e);
     } finally {
       setBusy(false);
     }

@@ -307,7 +307,7 @@ export default function SpinoutLabStartupPage() {
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch (e) {
-      reportError(e, { where: 'SpinoutLabStartupPage.copyShare' });
+      reportError('SpinoutLabStartupPage:copyShare', e);
     }
   };
 
@@ -346,7 +346,7 @@ export default function SpinoutLabStartupPage() {
       setProject((p) => ({ ...p, ...(updated && typeof updated === 'object' ? updated : editForm) }));
       setEditOpen(false);
     } catch (err) {
-      reportError(err, { where: 'SpinoutLabStartupPage.saveEdit' });
+      reportError('SpinoutLabStartupPage:saveEdit', err);
       setSaveError(err?.message || 'Could not save. Please try again.');
     } finally {
       setSaving(false);

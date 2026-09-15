@@ -110,7 +110,7 @@ export default function SpinoutLabCompliancePage() {
       }
       setStatus('ready');
     } catch (e) {
-      reportError(e, { where: 'SpinoutLabCompliancePage.load' });
+      reportError('SpinoutLabCompliancePage:load', e);
       setStatus('error');
     }
   }, [user]);

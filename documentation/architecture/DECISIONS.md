@@ -8362,3 +8362,115 @@ That GitHub honours `merge=union` in its own mergeability computation is
 if `mergeable_state` still reports `dirty` on this path, the attribute bought
 nothing and only the `--strict` hardening is worth keeping. Say so either way
 rather than assuming it worked.
+
+## D114 — The client error beacon reports the error, not the argument order, and `scope` stops being the unsanitised field
+
+**2026-09-15.** `frontend/src/lib/log.js` has been the SPA's error reporter
+since Task #10: it consoles, keeps a 50-entry `localStorage` ring
+(`axal:client-errors`) support can read off an affected browser, and in
+production beacons `POST /api/client-error` so the failure lands in the
+Worker's deployment logs. 205 call sites used it correctly. Three ways of
+calling it wrongly had also shipped, and every one of them is silent — the code
+runs, nothing throws, and the report never arrives or arrives useless.
+
+### 1. Reversed arguments, at 27 call sites, in 13 files
+
+`reportError(err, { where })` instead of `reportError('Scope:op', err)`.
+`toEntry`'s `isErrObj` test (`log.js:61`) is a bare `typeof err === 'object'`,
+which the context object satisfies, so the entry is built by reading
+`.name`/`.message`/`.stack` off `{ where }`. Traced:
+
+| field | correct call | reversed call |
+| --- | --- | --- |
+| `scope` | `'ScoringPage:run'` | `"TypeError: Failed to fetch"` |
+| `message` | the message, redacted | `"[object Object]"` |
+| `stack` | the stack, redacted | `undefined` |
+| `name` | `'TypeError'` | `undefined` |
+
+Because `message` collapses to that constant for every such call, the beacon's
+dedupe key (`scope|message`) degenerates to scope alone, so two unrelated errors
+that stringify alike suppress each other inside the 5 s window.
+
+**And it is a leak, not only a loss.** `toEntry` redacts `message`, `stack` and
+`path`; it did not redact `scope`, correctly, because a scope is a
+developer-authored literal. The Worker's sink depends on that:
+`cloudflare-worker/src/index.ts:452-453` states the beacon carries "no token,
+and no PII" and `:478-480` that "the client already redacts secrets/PII from the
+free-form fields above" — then clips `scope` to 200 characters and writes it
+verbatim into a `console.error('[client-error]', …)` line, deliberately
+greppable in deployment logs. A reversed call therefore puts raw error text —
+which can quote an email, a magic-link URL or a token — into the one field
+nothing cleans, and from there into `wrangler tail`.
+
+`toEntry` now redacts the scope too. That is defence in depth, not the fix; the
+fix is the argument order and the guard below.
+
+### 2. One call reached the *browser's* `reportError`, and nothing could have caught it
+
+`SpinoutLabLpWorkspacePage.jsx:1075` called `reportError('…:apply', e)` without
+importing it. That is not a `ReferenceError`: **`reportError` is a standard Web
+API global** (`window.reportError`), present in `globals.browser`, which
+`eslint.config.mjs:100` loads. So `no-undef` — this repo's only ESLint rule —
+cannot ever flag it; `npx eslint` exits 0 on the file. At runtime the call
+reached the browser's one-argument "report an exception" API, which reported the
+**scope string** as an uncaught error and discarded the real one, so a failed LP
+application reached neither the ring buffer nor the beacon.
+
+This is why the guard has two assertions rather than one: **a check on argument
+order passes this call**, because its first argument really is a string literal.
+
+### 3. A scope `redact()` would eat
+
+A consequence of the fix in 1, and guarded rather than hoped away. `redact`
+rewrites `key:value` for a list of sensitive key names, so a future scope of
+`auth:refresh` would be stored as `auth:[redacted]` and support would lose the
+one string they search by. All 203 literal scopes in the tree pass through
+unchanged — measured, not assumed — and the guard now asserts it for each new
+one.
+
+### The guard, and why not ESLint
+
+`scripts/check-frontend-logging.mjs`, in `test:guards`. Not ESLint's
+`no-console`/argument rules, for two measured reasons: the config is
+deliberately one rule and its header refuses style rules outright; and its glob
+is `frontend/src/**/*.{js,jsx}`, so the 26 `.ts`/`.tsx` files are never linted
+at all. **The trap:** seven files already carry
+`// eslint-disable-next-line no-console` for a rule that has never been enabled,
+`App.jsx:2814` among them, and `reportUnusedDisableDirectives` is `'off'` so
+ESLint will not even report them as unused. Turning the rule on would silently
+bless the worst gap in the tree.
+
+### Also fixed here
+
+`App.jsx`'s `AppErrorBoundary` (`:2812`) and `decks/Thumbnail.tsx`'s
+`ThumbnailBoundary` (`:41`) were the two boundaries whose `componentDidCatch`
+never called `reportError` — `App.jsx` did not import `lib/log` at all — so a
+top-level crash, the exact class `log.js`'s header says it was built for,
+reached no beacon. Both now pair the two calls the way
+`TopLevelErrorBoundary`, `RouteErrorBoundary` and `SafeMount` always have: the
+beacon takes a redacted entry, and the console line adds `info.componentStack`,
+which `toEntry` has no field for. `Thumbnail.tsx` is the first `.tsx` caller of
+the JS logger, which `frontend/tsconfig.json`'s `allowJs: true` /
+`checkJs: false` pair already admits.
+
+`SpinoutLab83bPage`'s `act(fn, where)` helper passed an assembled scope in a
+variable. That was correct at runtime and **unverifiable statically** — the
+guard cannot tell a scope variable from an error variable, which is the bug it
+exists to catch — so `act` now takes the operation alone and builds
+`` `SpinoutLab83bPage:${op}` `` at the call. The guard found that site itself.
+
+`redact` is exported so the guard and the test use the real function rather than
+a second copy that drifts. `frontend/test/client_error_beacon.test.mjs` is the
+first test `log.js` has ever had, and it is a unit test rather than this
+suite's usual source scan for the reason `api_request_timeout.test.mjs` gives
+about the request deadline: the bug compiles, lints and runs, so only calling
+the function can see it.
+
+### What is not here
+
+The 36 catches whose only reporting is a `console.*` call — 33 of them in eight
+Spin-Out Lab pages that never imported the helper — are coverage, not
+correctness, and land separately with the no-console half of the guard. Three of
+those catches set no UI state at all, so a failed delete, stage change or
+clipboard write is invisible to the user; giving them error UI is a
+user-visible change to shipped pages and is its own PR again.

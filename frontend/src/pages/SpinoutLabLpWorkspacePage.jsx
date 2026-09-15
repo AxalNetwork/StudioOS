@@ -29,6 +29,15 @@ import {
   AlertCircle, MessageSquare, RefreshCw, FileDown, Loader2,
 } from 'lucide-react';
 import { WorkspaceHeader } from '../components/WorkspaceTabs';
+// WITHOUT THIS IMPORT THE CALL BELOW STILL RESOLVES, TO THE WRONG FUNCTION.
+// `reportError` is a Web API global (`window.reportError`), so an unimported
+// call is not a ReferenceError and `no-undef` — the repo's only ESLint rule —
+// cannot flag it. It silently invoked the browser's one-argument "report an
+// exception" API instead, which reported the SCOPE STRING as an uncaught
+// error and discarded the real one, so a failed LP application reached
+// neither the ring buffer nor the beacon. `check-frontend-logging.mjs` now
+// requires this import wherever the name is called.
+import { reportError } from '../lib/log';
 import { useAuth } from '../hooks/useAuthSync';
 import { api, spinoutLab } from '../lib/api';
 import {

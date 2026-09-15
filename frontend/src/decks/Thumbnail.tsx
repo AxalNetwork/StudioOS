@@ -2,6 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { TemplateMeta } from './templates';
 import type { DeckData } from './DeckBase';
 import { previewDataFor } from './sample';
+// The first `.tsx` caller of the JS logger. `frontend/tsconfig.json` sets
+// `allowJs: true` with `checkJs: false` for exactly this — the module is
+// admitted and its shape inferred, without making the SPA's JavaScript a
+// type-check target.
+import { reportError } from '../lib/log';
 
 const INNER_W = 1920;
 const INNER_H = 1080;
@@ -39,8 +44,14 @@ class ThumbnailBoundary extends React.Component<
   }
 
   componentDidCatch(error: unknown) {
-     
-    console.error(`[Thumbnail] Failed to render ${this.props.templateKey}:`, error);
+    try {
+      // A template that throws on render used to leave the console line below
+      // and nothing else: no ring-buffer entry, no beacon. A deck template is
+      // exactly the code that breaks for one project's data and nobody else's,
+      // which is the case the beacon exists to catch.
+      reportError(`Thumbnail:render:${this.props.templateKey}`, error);
+      console.error(`[Thumbnail] Failed to render ${this.props.templateKey}:`, error);
+    } catch { /* never let the boundary itself throw */ }
   }
 
   render() {

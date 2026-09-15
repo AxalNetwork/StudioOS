@@ -1,0 +1,1 @@
+import{t as e}from"./log-CzCrTewG.js";import{E as t}from"./api-_-Vh6yw2.js";async function n(n,r){if(!(!n||n.spinout_lab_active!==1)&&r)try{let e=await t.complete(r);try{window.dispatchEvent(new CustomEvent(`spinout-lab:advanced`,{detail:{state:e,milestoneKey:r}}))}catch{}}catch(t){e(`spinoutLabHooks:${r}`,t)}}export{n as t};

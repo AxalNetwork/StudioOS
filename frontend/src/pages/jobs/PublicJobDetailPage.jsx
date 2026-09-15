@@ -68,7 +68,10 @@ export default function PublicJobDetailPage() {
       } catch (e) {
         if (!cancelled) {
           setLoadError(e?.status === 404 ? 'This role could not be found.' : 'Could not load this role.');
-          reportError(e, { where: 'PublicJobDetailPage.load', slug });
+          // `slug` is dropped rather than folded into the scope: it is the
+          // page's own path segment, so `entry.path` already records it, and a
+          // per-slug scope would break the beacon's `scope|message` dedupe.
+          reportError('PublicJobDetailPage:load', e);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -198,7 +201,7 @@ export default function PublicJobDetailPage() {
         try { window.turnstile.reset(turnstileWidgetId.current); } catch {}
         setTurnstileToken('');
       }
-      if (!APPLY_ERROR_MESSAGES[raw]) reportError(err, { where: 'PublicJobDetailPage.apply', slug });
+      if (!APPLY_ERROR_MESSAGES[raw]) reportError('PublicJobDetailPage:apply', err);
     }
   };
 

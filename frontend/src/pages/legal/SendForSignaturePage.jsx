@@ -96,7 +96,7 @@ export default function SendForSignaturePage() {
   useEffect(() => {
     api.esignTemplates()
       .then((r) => setTemplates(Array.isArray(r?.items) ? r.items : []))
-      .catch((e) => { reportError(e); setLoadError(e?.message || 'Could not load templates'); });
+      .catch((e) => { reportError('SendForSignaturePage:loadTemplates', e); setLoadError(e?.message || 'Could not load templates'); });
   }, []);
 
   const chosen = useMemo(
@@ -119,7 +119,7 @@ export default function SendForSignaturePage() {
       setSent(r);
       setStep(3);
     } catch (e) {
-      reportError(e);
+      reportError('SendForSignaturePage:send', e);
       setErr(e?.message || 'Could not send the envelope');
     } finally {
       setBusy(false);

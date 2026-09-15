@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { safeReadJSON } from './lib/storage';
+import { reportError } from './lib/log';
 import { preserveReloadGuards } from './lib/reloadGuard';
 import { consumePendingNextOnce, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
 import { Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
@@ -2811,6 +2812,13 @@ class AppErrorBoundary extends React.Component {
   }
   componentDidCatch(error, info) {
     try {
+      // This is the crash class lib/log.js's own header says it was built for
+      // — "a production-only failure left no trace anywhere" — and it was the
+      // one boundary that never reported. The other three (TopLevelErrorBoundary,
+      // RouteErrorBoundary, SafeMount) have always paired the two calls: the
+      // beacon carries a redacted entry, and the console line adds
+      // `info.componentStack`, which toEntry has no field for.
+      reportError('AppErrorBoundary:top-level-crash', error);
       // eslint-disable-next-line no-console
       console.error('[AppErrorBoundary] top-level crash:', error, info?.componentStack);
     } catch { /* ignore */ }
