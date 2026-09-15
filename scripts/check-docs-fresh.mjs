@@ -46,6 +46,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sourceTreeHash } from './lib/sourceTreeHash.mjs';
+import { classifyStamp } from './lib/buildStamp.mjs';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 
@@ -106,14 +107,48 @@ if (!existsSync(join(ROOT, 'docs'))) skip('no docs/ directory');
 const STAMP = join(ROOT, 'docs', '.build-source');
 const SRC = join(ROOT, 'frontend', 'src');
 
-const stampedSource = (() => {
+const stamp = classifyStamp((() => {
   try {
-    const v = readFileSync(STAMP, 'utf8').trim();
-    return /^[0-9a-f]{64}$/.test(v) ? v : null;
+    return readFileSync(STAMP, 'utf8');
   } catch {
     return null;  // docs/ built before builds recorded their source
   }
-})();
+})());
+
+// A STAMP THAT IS PRESENT BUT UNREADABLE IS A FAILURE, NOT A FALLBACK.
+//
+// This used to collapse "no file" and "corrupt file" into one `null`, and
+// `null` falls through to the commit-timestamp proxy below — the proxy D103
+// exists instead of, which passes whenever docs/ was committed after
+// frontend/src. So a stamp nobody could parse silently downgraded this gate to
+// the thing it replaced, and said ✓ while doing it.
+//
+// Absent stays a fallback: a docs/ built before builds recorded their source
+// genuinely has no stamp, and the proxy is the only answer available.
+//
+// The case this was written for is a MERGE. `.gitattributes` marks this path
+// `merge=union` so two branches that both rebuilt produce a two-line file
+// rather than a conflict (D113); the rebuild that must follow overwrites it,
+// and this is what refuses to let it pass if nobody rebuilds.
+if (stamp.present && !stamp.valid) {
+  const mark = strict ? '✖' : '⚠';
+  (strict ? console.error : console.warn)(`
+${mark} check-docs-fresh: docs/.build-source is there but cannot be read — ${stamp.why}.
+
+  A build writes exactly 64 hex characters, so this file was edited, truncated,
+  or merged. Two lines means two branches each rebuilt and git kept both
+  (see D113); the fix is the same either way, and it is not to delete the file:
+
+    npm run build && git add docs && git commit -m "Rebuild docs/"
+
+  Refusing to fall back to the commit-timestamp proxy: that proxy passes
+  whenever docs/ was committed after frontend/src, which a merge commit always
+  is, so falling back here would report fresh without checking anything.
+`);
+  if (strict) process.exit(1);
+}
+
+const stampedSource = stamp.valid ? stamp.value : null;
 
 if (stampedSource && existsSync(SRC)) {
   const actual = sourceTreeHash(SRC);

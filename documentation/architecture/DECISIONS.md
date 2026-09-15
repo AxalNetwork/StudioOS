@@ -8273,3 +8273,92 @@ and were fixed rather than the code**: one scanned raw source and matched the
 comment explaining the very thing it checked, the other grepped for the word
 "reply" and matched the sentence telling the reader there is no reply box. An
 assertion that fails on the correct implementation is worse than none.
+
+## D113 — the build stamp stops being a merge conflict, and starts being answerable
+
+**Date:** 2026-09-15 · **Task:** #224 · **Migration:** none
+
+`.gitattributes` marks `docs/.build-source` `merge=union`, and
+`scripts/check-docs-fresh.mjs` now refuses a stamp that is present but
+unparseable instead of falling through to the commit-timestamp proxy.
+
+### The problem, measured rather than estimated
+
+D103 made `docs/.build-source` a tracked one-line SHA-256 of `frontend/src`.
+That is the right design and it is not being reversed here. But because the line
+changes whenever the source does, **any two branches that touch `frontend/src`
+conflict on it — always, by construction.** On 2026-09-15 that cost five
+separate mechanical resolutions across #516, #518, #520, #522 and #527, twice on
+the same branch. The resolution is never a judgement call: reset `docs/` to
+main's build, re-run the root `npm run build`, push.
+
+### The fix that was rejected, and why it is written down
+
+A custom merge driver (`merge=ours` and its relatives) is the obvious answer and
+it cannot work here:
+
+- A custom driver needs repo-**local** `git config merge.<name>.driver`, which
+  cannot be committed. This repo has **no `postinstall`, no `prepare`, no
+  `.githooks/` and no `core.hooksPath`** — nothing runs at clone or install
+  time. The one precedent, `npm run lfs:install-hook`, is explicitly opt-in.
+- Bot branches (Copilot autofix, the AI-findings autofixer, Dependabot, Cursor)
+  never run a setup step at all.
+- Decisively: the check that actually goes red is `og-tags`, which runs against
+  **GitHub's own server-side merge**, where no local git config exists. A driver
+  would not have prevented any of the five conflicts.
+
+It is recorded here so the next person does not re-propose it and re-derive the
+same three reasons.
+
+### What a merge attribute does and does not buy
+
+`union` is a **built-in** driver, so it needs no config and applies to bot
+branches and to GitHub's merge alike. Two branches that both rebuilt now produce
+a two-line file rather than a conflict — verified in a scratch repo, not
+assumed.
+
+**It does not remove the rebuild, and pretending otherwise would be the whole
+mistake.** The correct value is a pure function of the merged source, so it can
+only come from re-running the build. What changes is that a stale `docs/` is
+reported by a CI message that prints the exact command, instead of by a conflict
+marker in a file that looks binary.
+
+### The hole that made the attribute unsafe on its own — and that was already open
+
+`check-docs-fresh.mjs` read the stamp as
+`/^[0-9a-f]{64}$/.test(v) ? v : null` and treated a corrupt file exactly like a
+missing one. Missing falls through to the commit-timestamp proxy — **the proxy
+D103 exists instead of**, which passes whenever `docs/` was committed after
+`frontend/src`, as a merge commit always is. So an unparseable stamp silently
+downgraded the gate to the thing it replaced, and printed a tick while doing it.
+
+That was true before this change and independent of merges; the union attribute
+would merely have made it reachable every day. `scripts/lib/buildStamp.mjs` now
+classifies three states, not two:
+
+| state | under `--strict` |
+| --- | --- |
+| absent | falls back to the proxy — a `docs/` built before D103 genuinely has no stamp |
+| present and valid | the real comparison |
+| **present and unparseable** | **refuses**, naming what is wrong (`2 lines`, `not 64 hex`) |
+
+Extracted to `scripts/lib/` rather than left inline because `check-docs-fresh`
+resolves its own root from `import.meta.url` and cannot be pointed at a fixture;
+a pure classifier is testable, and `scripts/lib/*.test.mjs` is where
+`sourceTreeHash`'s own test already lives.
+
+### Also corrected here
+
+`scripts/lib/sourceTreeHash.mjs`'s docblock still said the hash stamps
+`docs/.asset-retention.json`. It stamps `docs/.build-source`; the retention
+ledger is gitignored on purpose and a stamp inside it would answer nobody, which
+is D103's own stated reason for not putting it there. The comment had never
+caught up with the code.
+
+### What to watch
+
+That GitHub honours `merge=union` in its own mergeability computation is
+**expected, not yet observed**. The next pair of `frontend/src` PRs is the test:
+if `mergeable_state` still reports `dirty` on this path, the attribute bought
+nothing and only the `--strict` hardening is worth keeping. Say so either way
+rather than assuming it worked.
