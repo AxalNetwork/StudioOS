@@ -704,3 +704,30 @@ export const SHARED_FULL_BLEED = [
   // it had none and was relying on the shell's.
   '/spinout-lab',
 ];
+
+/**
+ * Full-bleed by PREFIX, for a family of routes rather than a path.
+ *
+ * WHY A SECOND EXPORT AND NOT TWENTY-THREE MORE ENTRIES ABOVE. The Lab's tool
+ * routes are one surface with many doors, and listing each would mean a new
+ * tool is full width only if somebody remembers to add it here — the exact
+ * failure `FOUNDER_FULL_BLEED` was derived from the shell config to prevent.
+ * The Lab has no shell config to derive from, so the prefix is the derivation.
+ *
+ * AND WHY IT LIVES HERE RATHER THAN IN `App.jsx`. It was written there first,
+ * as a `startsWith` on the padding flag — but `App.jsx` already tested the same
+ * prefix on the WIDTH flag, so the two could be changed apart, and a route
+ * could end up full width with the shell's padding or flush inside a centred
+ * column. One list, read once, and both flags follow it.
+ *
+ * Every `/spinout-lab/<tool>` page owns its own gutters through `LabPageShell`
+ * (`LAB_PAGE_PAD`), which is what makes flushing the shell correct rather than
+ * merely tidier. `/spinout-lab/brief` is outside the shell entirely (public
+ * marketing collateral that prints with no nav), and
+ * `/spinout-lab/investor-workspace` is a workspace route, which `WorkspaceShell`
+ * pads from the canvases' own `.main` — both are flush for reasons that predate
+ * this list.
+ */
+export const SHARED_FULL_BLEED_PREFIXES = [
+  '/spinout-lab/',
+];
