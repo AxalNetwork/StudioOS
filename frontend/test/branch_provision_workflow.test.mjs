@@ -173,6 +173,22 @@ test('the registry entry this writes is one validateBranch accepts', () => {
   assert.deepEqual(validateBranch(hinted), []);
 });
 
+test('a value whose escaping would be dialect-dependent is refused, not rewritten', () => {
+  // A backslash is an escape in MySQL and a plain character in SQLite, so an
+  // escaper that handled it would be wrong in one of the two. Refusing is the
+  // only answer that is right in both, and nothing a principal has carries
+  // one. Control characters go the same way.
+  for (const bad of ['C:\\Users\\sam', 'back\\slash', 'line\nbreak', 'tab\there', 'nul\u0000']) {
+    assert.throws(() => sqlLiteral(bad), /backslash or a control character/, `${JSON.stringify(bad)} must be refused`);
+  }
+  // The other direction, and the half that matters most: every ordinary name
+  // still passes, accents and apostrophes included. A guard that refused
+  // "Sophie O'Brien" would be a guard nobody could provision a branch with.
+  for (const ok of ["Sophie O'Brien", 'Zoë Müller', 'Jean-Luc', 'Ana María', '李雷']) {
+    assert.doesNotThrow(() => sqlLiteral(ok), `${ok} must pass`);
+  }
+});
+
 test('the principal statement escapes a quote rather than ending the literal', () => {
   // `wrangler d1 execute --command` takes no bindings, so the values are
   // literals and the escape is the whole defence.

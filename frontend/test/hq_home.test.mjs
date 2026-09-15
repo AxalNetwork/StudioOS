@@ -42,8 +42,27 @@ test('the page reads one endpoint and never sends a tenant to the server', () =>
 
 test('every per-subsidiary figure renders Not recorded, and nothing renders an invented zero', () => {
   // The four per-card facts the canvas shows that the store cannot hold.
+  //
+  // NO REGEX IS BUILT FROM THE LABEL. It used to be, with `·` replaced by `.`
+  // — an escape that made the pattern LOOSER rather than safer, and left every
+  // character that would actually change it (`( ) [ ] + ? * |`) untouched.
+  //
+  // It is anchored on the card's `</dt>` rather than on the bare word, which
+  // is a second thing the regex got wrong quietly: `Accounts` also names the
+  // platform-wide TILE, and a pattern that scanned the whole file was free to
+  // satisfy itself on whichever occurrence happened to work. EVERY definition
+  // term with this label is checked, so a second card cannot appear with a
+  // number in it.
   for (const label of ['Accounts', 'MTD · backlog']) {
-    assert.match(PAGE, new RegExp(`${label.replace(/[.·]/g, '.')}[\\s\\S]{0,120}<Unrecorded />`), `${label} per licence must be Not recorded`);
+    const term = `>${label}</dt>`;
+    let at = PAGE.indexOf(term);
+    assert.ok(at > 0, `${label} must be a definition term on the subsidiary card`);
+    for (; at !== -1; at = PAGE.indexOf(term, at + 1)) {
+      assert.ok(
+        PAGE.slice(at, at + term.length + 120).includes('<Unrecorded />'),
+        `${label} per licence must be Not recorded`,
+      );
+    }
   }
   // A tile renders Not recorded for any null value, so MTD revenue — which
   // has no source at all — is passed as null rather than as a number.

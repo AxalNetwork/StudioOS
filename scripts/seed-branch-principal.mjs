@@ -35,9 +35,39 @@ const WRANGLER = 'wrangler@4.131.0';
 
 const die = (msg) => { console.error(`✗ seed-branch-principal: ${msg}`); process.exit(1); };
 
-/** SQLite string literal: the only escape inside one is a doubled quote. */
+/**
+ * A SQLite string literal — doubling the quote, and REFUSING the characters
+ * whose meaning depends on which SQL dialect is reading.
+ *
+ * WHY IT REFUSES RATHER THAN ESCAPING MORE. In SQLite a backslash inside a
+ * string literal is just a backslash; in MySQL it is an escape. Doubling the
+ * quote is therefore complete *for SQLite* and would be incomplete the day
+ * this statement were pointed anywhere else — and `wrangler d1 execute
+ * --command` takes no bindings, so this function is the whole defence. A
+ * hand-rolled escaper that is correct only under an assumption nobody restates
+ * is the shape to remove, not to extend: escaping the backslash as well would
+ * be worse, because `C:\x` would then be stored with two of them.
+ *
+ * Nothing a principal has contains one. An email address is already refused by
+ * the caller unless it matches `x@y.z`, and a person's name — accents,
+ * apostrophes, hyphens and all — passes untouched. A value that does not is
+ * named in the refusal rather than silently mangled.
+ */
+const UNSAFE_IN_LITERAL = /[\\\u0000-\u001f\u007f]/;
+
 export function sqlLiteral(value) {
-  return `'${String(value ?? '').replace(/'/g, "''")}'`;
+  const s = String(value ?? '');
+  if (UNSAFE_IN_LITERAL.test(s)) {
+    throw new Error(
+      `${JSON.stringify(s)} carries a backslash or a control character. Those are not escaped `
+      + 'here because their meaning is dialect-dependent, so the value is refused rather than '
+      + 'rewritten. Re-run with a plain name.',
+    );
+  }
+  // Doubling, spelled as a split/join: the operation is "put a quote between
+  // every piece", which is what a SQLite literal means, rather than a pattern
+  // substitution that a reader has to check for completeness.
+  return `'${s.split("'").join("''")}'`;
 }
 
 /**
@@ -54,6 +84,16 @@ export function principalSql(email, name) {
 }
 
 function main() {
+  try {
+    seed();
+  } catch (e) {
+    // `sqlLiteral` throws rather than exiting so a test can call it; the CLI is
+    // where a refusal becomes a failed step with the reason on screen.
+    die(e.message);
+  }
+}
+
+function seed() {
   const code = String(process.env.BRANCH ?? '').trim();
   if (!BRANCH_CODE_RE.test(code)) die(`"${code}" is not a branch code`);
 
