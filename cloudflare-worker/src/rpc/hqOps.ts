@@ -28,6 +28,7 @@
  */
 import type { Env } from '../types';
 import { branchOf, BRANCH_CODE_RE } from '../util/branch';
+import { PERIOD_RE } from '../services/statements';
 
 /** The four things a branch cannot decide for itself (migration 259). */
 export const ESCALATION_KINDS = ['moderation', 'content', 'seat_increase', 'other'] as const;
@@ -233,6 +234,180 @@ export async function licenceForBranch(
     suspended_note: row.status_note,
     // Stamped by HQ at the moment it asserts the content — the branch stores
     // this verbatim rather than the moment its own write lands.
+    pushed_at: new Date().toISOString(),
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Money-adjacent: the calls that carry a per-deployment secret (D111) *
+ * ------------------------------------------------------------------ */
+
+/**
+ * Verify the branch's own RPC secret against the hash HQ stores.
+ *
+ * WHY THESE CALLS NEED MORE THAN A CODE, when escalations do not. The header
+ * of this file records that a service binding cannot identify its caller, so
+ * `callerCode` is attribution, not authentication: any Worker in the account
+ * could claim to be `fr`. For an escalation that is acceptable — the worst
+ * case is a spurious item in a queue a person reads. For a USAGE REPORT it is
+ * not: the report is the input to a statement, so a false one changes what a
+ * subsidiary is billed. The secret is what makes the claim checkable.
+ *
+ * SHA-256 OF THE SECRET IS WHAT HQ STORES, never the secret. It is generated
+ * by `branch-provision.yml`, put on the branch Worker as `RPC_SECRET`, and its
+ * hash written into `licence_deployments.rpc_secret_hash` — a read of this
+ * table therefore cannot impersonate a branch.
+ *
+ * A DEPLOYMENT WITH NO HASH REFUSES, and this is the important default. Every
+ * branch provisioned before the hash was wired has a NULL there, and treating
+ * null as "skip the check" would make the guard disappear on exactly the
+ * deployments nobody has audited. The refusal names what to do.
+ */
+async function sha256Hex(s: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Length-independent, difference-independent compare over two hex digests. */
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+export type BranchIdentity = { code: string; licence_uid: string };
+
+/**
+ * Resolve and authenticate a branch making a money-adjacent call.
+ *
+ * Throws rather than returning an error shape, because every caller of this
+ * wants the same thing on failure — to not perform the write — and a returned
+ * error is one `if` away from being ignored.
+ */
+export async function authenticateBranch(
+  env: Env, callerCode: string, secret: string,
+): Promise<BranchIdentity> {
+  requireHq(env);
+  // LOWERED, DELIBERATELY — and this is the opposite of the rule the DEPLOY
+  // route follows, which validates a new code exactly as typed. The difference
+  // is what the string is: there, it is a name being chosen, and accepting
+  // `FR` would create a branch whose code is not what the operator wrote.
+  // Here it is an identifier being presented, and the deployment it resolves
+  // to is the same one either way — `FR` reaches `fr` and must still present
+  // `fr`'s own secret, so the normalisation cannot reach a branch the caller
+  // could not already reach.
+  const code = String(callerCode ?? '').trim().toLowerCase();
+  if (!BRANCH_CODE_RE.test(code)) throw new Error('rpc: the caller must name a valid branch code');
+
+  const dep = await env.DB.prepare(
+    'SELECT code, licence_uid, rpc_secret_hash FROM licence_deployments WHERE code = ?',
+  ).bind(code).first<{ code: string; licence_uid: string; rpc_secret_hash: string | null }>();
+  if (!dep) throw new Error(`rpc: ${code} is not a provisioned branch`);
+
+  if (!dep.rpc_secret_hash) {
+    throw new Error(
+      `rpc: ${code} has no rpc_secret_hash on file, so a money-adjacent call from it cannot be `
+      + 'verified. Re-run branch-provision.yml for this code, or set the hash from the secret '
+      + 'the provisioning run generated.',
+    );
+  }
+  const presented = String(secret ?? '');
+  if (!presented) throw new Error(`rpc: ${code} presented no secret`);
+  if (!constantTimeEqual(await sha256Hex(presented), dep.rpc_secret_hash.trim().toLowerCase())) {
+    throw new Error(`rpc: ${code} presented the wrong secret`);
+  }
+  return { code: dep.code, licence_uid: dep.licence_uid };
+}
+
+export type UsageFigure = {
+  stream: string;
+  gross_cents: number | null;
+  currency?: string;
+  is_estimate?: boolean;
+  estimate_basis?: string;
+  available?: boolean;
+  reason?: string;
+};
+
+/**
+ * A branch reports what it billed in a period (D.8).
+ *
+ * A RE-REPORT REPLACES, rather than adding a second row: a branch correcting
+ * itself is a correction, not a second quarter's trading, and the UNIQUE index
+ * on (licence, period, stream) is what makes that structural instead of
+ * remembered. `reported_at` is the BRANCH's own stamp, so a statement built
+ * from a three-week-old report shows the age of its evidence.
+ *
+ * A FIGURE THE BRANCH COULD NOT MEASURE IS STORED AS NULL, NOT 0. Measured
+ * against the schema: no branch can total subscription revenue locally
+ * (`account_subscriptions` has a plan and no amount; the charges are in
+ * Stripe), so this is the normal case and not an edge one. A zero there would
+ * make a statement drawn from it read as a complete quarter that earned less.
+ */
+export async function reportUsage(
+  env: Env, callerCode: string, secret: string,
+  period: string, figures: UsageFigure[],
+): Promise<{ ok: true; period: string; streams: number }> {
+  const who = await authenticateBranch(env, callerCode, secret);
+  const p = String(period ?? '').trim();
+  if (!PERIOD_RE.test(p)) throw new Error(`rpc: ${JSON.stringify(p)} is not a period (YYYY-Qn)`);
+
+  const now = new Date().toISOString();
+  const rows = (figures || []).filter((f) => f && typeof f.stream === 'string' && f.stream.trim());
+  for (const f of rows) {
+    const gross = f.available === false || f.gross_cents === null || f.gross_cents === undefined
+      ? null
+      : Math.trunc(Number(f.gross_cents) || 0);
+    await env.DB.prepare(
+      `INSERT INTO subsidiary_usage_reports
+         (licence_uid, branch_code, period, stream, gross_cents, currency,
+          is_estimate, estimate_basis, reported_at)
+       VALUES (?,?,?,?,?,?,?,?,?)
+       ON CONFLICT(licence_uid, period, stream) DO UPDATE SET
+         gross_cents = excluded.gross_cents, currency = excluded.currency,
+         is_estimate = excluded.is_estimate, estimate_basis = excluded.estimate_basis,
+         reported_at = excluded.reported_at`,
+    ).bind(
+      who.licence_uid, who.code, p, String(f.stream).trim().slice(0, 40),
+      gross, String(f.currency || 'EUR').toUpperCase().slice(0, 3),
+      f.is_estimate ? 1 : 0, f.estimate_basis ? String(f.estimate_basis).slice(0, 300) : null,
+      now,
+    ).run();
+  }
+  return { ok: true, period: p, streams: rows.length };
+}
+
+/**
+ * The promo ceiling HQ has set for this branch's current period, for the
+ * branch to store as a dated copy (`branch_promo_ceiling`, migration 256).
+ *
+ * `issued_cents` IS NOT SENT BACK. HQ does not know it — the branch issues the
+ * codes and reports the figure through `reportUsage`. Echoing HQ's last-known
+ * value would let a stale number overwrite the branch's own fresher one.
+ */
+export async function promoCeilingForBranch(
+  env: Env, callerCode: string,
+): Promise<{ period: string; ceiling_cents: number; currency: string; pushed_at: string } | { error: 'no_ceiling_set' }> {
+  requireHq(env);
+  const code = String(callerCode ?? '').trim().toLowerCase();
+  if (!BRANCH_CODE_RE.test(code)) throw new Error('promoCeiling: the caller must name a valid branch code');
+
+  const dep = await env.DB.prepare('SELECT licence_uid FROM licence_deployments WHERE code = ?')
+    .bind(code).first<{ licence_uid: string }>();
+  if (!dep) return { error: 'no_ceiling_set' };
+
+  const row = await env.DB.prepare(
+    `SELECT period, ceiling_cents, currency FROM licence_promo_ceilings
+      WHERE licence_uid = ? ORDER BY period DESC LIMIT 1`,
+  ).bind(dep.licence_uid).first<{ period: string; ceiling_cents: number; currency: string }>();
+  if (!row) return { error: 'no_ceiling_set' };
+
+  return {
+    period: row.period,
+    ceiling_cents: Number(row.ceiling_cents) || 0,
+    currency: row.currency,
+    // Stamped when HQ asserts it, like every other pushed copy (D106).
     pushed_at: new Date().toISOString(),
   };
 }

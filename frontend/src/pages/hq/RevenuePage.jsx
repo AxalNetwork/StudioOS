@@ -1,19 +1,25 @@
 /**
  * HQ · Revenue — canvas H5, "the money rails, and the token P&L".
  *
- * FIVE ZONES, AND ONLY TWO OF THEM HAVE A STORE. That is the fact this page
- * is built around, and checking it before drawing anything is what changed
- * the page: the artboard's five zones map onto two real reads, one half
- * read, and two figures the platform has never recorded.
+ * FIVE ZONES, AND NOW THREE OF THEM HAVE A STORE. That is the fact this page
+ * is built around, and it has moved once: D111 gave statements and promo
+ * ceilings a real ledger, so two zones that used to carry a stated refusal
+ * now carry figures. What has NOT moved is the token line, and the page says
+ * which is which.
  *
  *   By stream          licence fees are real; subscriptions cannot be
  *                      totalled; the token line is a cost with no price.
  *   Token P&L by sub.  U1 — nothing ties spend to a licence.
- *   Statements         no subsidiary statement store exists.
+ *   Statements         REAL (migration 260) — one row per subsidiary per
+ *                      period, owed computed from the branch's reported
+ *                      gross, paid and disputed entered by HQ. Read from its
+ *                      OWN endpoint, so a slow ledger costs this zone only.
  *   Open disputes      real, and read from its OWN endpoint so that Stripe
  *                      being slow or down costs this zone and not the page.
- *   Promo budget       there is no budget in the product; what exists is a
- *                      list of codes, and that is what is shown.
+ *   Promo ceilings     REAL — HQ sets a ceiling per licence per period and
+ *                      pushes it to the branch. What is still absent is the
+ *                      ISSUED figure when a branch has not reported one, and
+ *                      a null there is not a zero.
  *
  * NO CROSS-CURRENCY TOTAL. Licence fees are denominated per licence and the
  * token cost is USD. The canvas's single "Q3 · €X platform revenue" headline
@@ -48,6 +54,22 @@ function money(cents, currency) {
 const usd = (v) => (v === null || v === undefined || !Number.isFinite(Number(v))
   ? null
   : new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(Number(v)));
+
+/**
+ * A statement's state, as a pill.
+ *
+ * `void` IS NOT TINTED LIKE A FAILURE and `paid` is the only green. A drawn
+ * statement nobody has sent is a working figure, an issued one is a claim
+ * somebody has seen, and reading the second as the first is the mistake this
+ * colour exists to prevent.
+ */
+const PILL = 'shrink-0 rounded-full px-2 py-0.5 text-[9.5px] font-extrabold uppercase tracking-[.08em]';
+const STATEMENT_PILL = {
+  draft: `${PILL} bg-axal-hairline text-axal-muted`,
+  issued: `${PILL} bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300`,
+  paid: `${PILL} bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300`,
+  void: `${PILL} bg-axal-hairline text-axal-faint line-through`,
+};
 
 function Zone({ title, sub, children }) {
   return (
@@ -86,6 +108,11 @@ export default function RevenuePage() {
   // from Stripe, and folding them into the summary would mean an outage
   // there blanked four zones that read D1 perfectly well.
   const [disputes, setDisputes] = useState(null);
+  // Statements and ceilings load separately for the same reason, and not
+  // because they are slow: they are the two zones with WRITES behind them,
+  // so they re-read after an edit without re-fetching the summary.
+  const [statements, setStatements] = useState(null);
+  const [ceilings, setCeilings] = useState(null);
 
   const load = useCallback(() => {
     setData(null);
@@ -98,7 +125,23 @@ export default function RevenuePage() {
       setDisputes(UNAVAILABLE);
     });
   }, []);
-  useEffect(() => { load(); loadDisputes(); }, [load, loadDisputes]);
+  const loadStatements = useCallback(() => {
+    setStatements(null);
+    api.statements().then(setStatements, (e) => {
+      reportError('hq-revenue-statements', e);
+      setStatements(UNAVAILABLE);
+    });
+  }, []);
+  const loadCeilings = useCallback(() => {
+    setCeilings(null);
+    api.promoCeilings().then(setCeilings, (e) => {
+      reportError('hq-revenue-ceilings', e);
+      setCeilings(UNAVAILABLE);
+    });
+  }, []);
+  useEffect(() => {
+    load(); loadDisputes(); loadStatements(); loadCeilings();
+  }, [load, loadDisputes, loadStatements, loadCeilings]);
 
   const ready = data && data !== UNAVAILABLE;
   const fees = ready ? data.licence_fees : null;
@@ -107,6 +150,8 @@ export default function RevenuePage() {
   const openDisputes = disputes && disputes !== UNAVAILABLE
     ? (disputes.disputes || []).filter((d) => d.status !== 'won' && d.status !== 'lost').length
     : null;
+  const ledger = statements && statements !== UNAVAILABLE && statements.available ? statements : null;
+  const ceilingRows = ceilings && ceilings !== UNAVAILABLE && ceilings.available ? ceilings.items : null;
 
   const rail = (
     <WorkerRail
@@ -116,8 +161,10 @@ export default function RevenuePage() {
         ['Subscription revenue', 'No local charge ledger; Stripe is read per customer.'],
         ['Token margin', 'The cost of a call is recorded, the price charged for it is not.'],
         ['Token P&L per subsidiary', 'No account names its licence yet (U1).'],
-        ['Subsidiary statements', 'No statement store exists.'],
-        ['Promotional budget', 'The product has codes and caps, not budgets.'],
+        // Statements and ceilings came OFF this list in D111, because they
+        // acquired a store. What is left absent is the issued figure a branch
+        // has not reported, which is a per-row state rather than a zone's.
+        ['Promotional spend per code', 'A code names no subsidiary, so a branch reports its own issued figure.'],
       ]}
       data-testid="hq-revenue-rail"
     />
@@ -147,9 +194,10 @@ export default function RevenuePage() {
               unreadable title either. */}
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">Revenue</h1>
           <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
-            Three streams and the one line that is a margin rather than a fee. Licence fees and open disputes
-            are read from their stores; subscriptions, the token margin, the per-subsidiary split and the
-            statement ledger are not recorded anywhere, and each says so where its figure would be.
+            Three streams and the one line that is a margin rather than a fee. Licence fees, open disputes,
+            the statement ledger and the promo ceilings are read from their stores; subscriptions, the token
+            margin and the per-subsidiary split are not recorded anywhere, and each says so where its figure
+            would be.
           </p>
         </header>
 
@@ -238,7 +286,72 @@ export default function RevenuePage() {
             </Zone>
 
             <Zone title="Statements and Stripe" sub="what is owed, and what is stuck">
-              <Absent reason={ready ? data.statements_reason : 'The revenue summary could not be read.'} />
+              {ledger && ledger.items.length > 0 && (
+                <div className="space-y-2" data-testid="hq-revenue-statements">
+                  {ledger.items.map((s) => (
+                    <div
+                      key={s.uid}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-axal-hairline bg-axal-ground p-2.5"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-[12px] font-bold">
+                          {s.brand_name || s.licence_ref || s.licence_uid}
+                        </div>
+                        <div className="mt-0.5 text-[10.5px] tabular-nums text-axal-faint">
+                          {s.period} · owed {money(s.owed_cents, s.currency)} · paid {money(s.paid_cents, s.currency)}
+                          {s.disputed_cents > 0 && ` · ${money(s.disputed_cents, s.currency)} disputed`}
+                        </div>
+                        {/* A FLOOR IS NOT A TOTAL, and it is said on the row
+                            rather than in a legend under the table, because
+                            the figure it qualifies is on this line. */}
+                        {!s.complete && (
+                          <div className="mt-0.5 text-[10.5px] text-amber-700 dark:text-amber-300">
+                            {s.unreported_streams > 0
+                              ? `${s.unreported_streams} stream${s.unreported_streams === 1 ? '' : 's'} unreported — this owed figure is a floor, not a total.`
+                              : 'Drawn over an estimated stream — not an invoiced figure.'}
+                          </div>
+                        )}
+                      </div>
+                      <span className={STATEMENT_PILL[s.status] || STATEMENT_PILL.draft}>{s.status}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {ledger && ledger.items.length === 0 && (
+                <p className="text-[12.5px] leading-relaxed text-axal-muted" data-testid="hq-revenue-statements-empty">
+                  No statement has been drawn. The store exists and is empty, which is not the same as a
+                  figure nobody can produce: draw one for {ledger.current_period} from what the branches
+                  have reported.
+                </p>
+              )}
+              {ledger && Object.keys(ledger.totals_by_currency).length > 0 && (
+                <div className="mt-3 space-y-1" data-testid="hq-revenue-owed">
+                  {Object.entries(ledger.totals_by_currency).map(([cur, t]) => (
+                    <div key={cur} className="flex items-baseline justify-between text-[11.5px]">
+                      <span className="text-axal-faint">Owed in {cur}</span>
+                      <span className="font-bold tabular-nums">
+                        {money(t.owed, cur)} · {money(t.paid, cur)} paid
+                      </span>
+                    </div>
+                  ))}
+                  {/* Same rule as the stream table above: per currency, never
+                      one figure. */}
+                  <p className="text-[10.5px] text-axal-faint">One line per currency — statements are not summed across them.</p>
+                </div>
+              )}
+              {statements !== UNAVAILABLE && statements && !statements.available && (
+                <Absent reason={statements.reason} />
+              )}
+              {statements === UNAVAILABLE && (
+                <div className="mb-2">
+                  <Unreadable
+                    what="The statement ledger"
+                    claim="This is not a claim that nothing is owed."
+                    onRetry={loadStatements}
+                  />
+                </div>
+              )}
+
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <Stat
                   label="Open disputes"
@@ -246,7 +359,11 @@ export default function RevenuePage() {
                   note={disputes === UNAVAILABLE ? 'Stripe could not be read' : 'from Stripe, not the local ledger'}
                   tone={openDisputes ? 'text-red-700 dark:text-red-300' : 'text-axal-ink'}
                 />
-                <Stat label="Owed by subsidiaries" value={null} note="no statement store" />
+                <Stat
+                  label="Statements drawn"
+                  value={ledger ? num(ledger.items.length) : null}
+                  note={ledger ? `newest first · current period ${ledger.current_period}` : 'the ledger could not be read'}
+                />
               </div>
               {disputes === UNAVAILABLE && (
                 <div className="mt-2">
@@ -260,18 +377,81 @@ export default function RevenuePage() {
             </Zone>
           </div>
 
-          <Zone title="Promotions" sub="codes and redemptions — there is no budget">
+          <Zone title="Promotions" sub="the ceiling HQ sets, and the codes it cannot attribute">
             {promos?.available ? (
-              <>
-                <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-                  <Stat label="Active codes" value={num(promos.active_codes)} note="redeemable now" />
-                  <Stat label="Redemptions" value={num(promos.redemptions)} note="across active codes" />
-                  <Stat label="Budget left" value={null} note="no budget exists to spend down" />
-                </div>
-                <p className="mt-3 text-[12.5px] leading-relaxed text-axal-muted">{promos.budget_reason}</p>
-              </>
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+                <Stat label="Active codes" value={num(promos.active_codes)} note="redeemable now" />
+                <Stat label="Redemptions" value={num(promos.redemptions)} note="across active codes" />
+                <Stat
+                  label="Ceilings set"
+                  value={ceilingRows ? num(ceilingRows.length) : null}
+                  note={ceilingRows ? 'one per licence per period' : 'the ceilings could not be read'}
+                />
+              </div>
             ) : (
               <Absent reason={promos?.reason || 'The promotion codes could not be read.'} />
+            )}
+
+            {ceilingRows && ceilingRows.length > 0 && (
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-left text-[12.5px]">
+                  <thead>
+                    <tr className="border-b border-axal-hairline text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">
+                      <th className="py-1.5 pr-3">Licence</th>
+                      <th className="py-1.5 pr-3">Period</th>
+                      <th className="py-1.5 pr-3">Ceiling</th>
+                      <th className="py-1.5 pr-3">Issued</th>
+                      <th className="py-1.5">Remaining</th>
+                    </tr>
+                  </thead>
+                  <tbody data-testid="hq-revenue-ceilings">
+                    {ceilingRows.map((x) => (
+                      <tr key={`${x.licence_uid}:${x.period}`} className="border-b border-axal-hairline/60">
+                        <td className="py-2 pr-3 font-medium">{x.brand_name || x.licence_ref || x.licence_uid}</td>
+                        <td className="py-2 pr-3 tabular-nums">{x.period}</td>
+                        <td className="py-2 pr-3 tabular-nums">{money(x.ceiling_cents, x.currency)}</td>
+                        {/* NULL ISSUED IS NOT ZERO ISSUED. A branch that has
+                            not reported reads as <Unrecorded/>, because a zero
+                            here would say the whole ceiling is still
+                            available — the one wrong number this zone can
+                            produce. */}
+                        <td className="py-2 pr-3 tabular-nums">
+                          {x.issued_available ? money(x.issued_cents, x.currency) : <Unrecorded />}
+                        </td>
+                        <td className="py-2 tabular-nums">
+                          {x.issued_available ? money(x.remaining_cents, x.currency) : <Unrecorded />}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="mt-2 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-revenue-issued-note">
+                  An issued figure is reported by the branch. Where one is absent the branch has not said,
+                  which is not the same as having issued nothing.
+                </p>
+              </div>
+            )}
+            {ceilingRows && ceilingRows.length === 0 && (
+              <p className="mt-3 text-[12.5px] leading-relaxed text-axal-muted" data-testid="hq-revenue-ceilings-empty">
+                No ceiling has been set. Setting one stores it at HQ and pushes it to the branch if a
+                deployment is bound to that licence; whether the push landed is reported separately from
+                whether the ceiling was saved.
+              </p>
+            )}
+            {ceilings !== UNAVAILABLE && ceilings && !ceilings.available && (
+              <div className="mt-3"><Absent reason={ceilings.reason} /></div>
+            )}
+            {ceilings === UNAVAILABLE && (
+              <div className="mt-3">
+                <Unreadable
+                  what="The promo ceilings"
+                  claim="This is not a claim that none are set."
+                  onRetry={loadCeilings}
+                />
+              </div>
+            )}
+            {promos?.available && (
+              <p className="mt-3 text-[12.5px] leading-relaxed text-axal-muted">{promos.budget_reason}</p>
             )}
           </Zone>
         </div>

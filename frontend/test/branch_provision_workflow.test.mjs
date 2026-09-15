@@ -103,15 +103,63 @@ test('no wrangler call may fall through to HQ\'s own config', () => {
   for (const call of calls) {
     const isCreate = /^("?\$\{args\[@\]\}"?|d1 (create|info)|kv namespace create|r2 bucket create|queues create|vectorize create)/.test(call.trim());
     const namesBranchConfig = call.includes('wrangler.branch.');
+    // D111 — THE ONE CALL THAT LEGITIMATELY READS HQ'S CONFIG, and the rule
+    // narrowed to admit it rather than the call widened to dodge the rule.
+    // Provisioning has to write `licence_deployments.rpc_secret_hash` into
+    // HQ's database, which means naming HQ's database, which means HQ's
+    // config. What this guard is actually protecting is leak L10 — a call
+    // that can CREATE, DEPLOY or ROUTE must not read a config whose
+    // `[[routes]]` are the apex custom domains — and `d1 execute` against an
+    // explicitly named database can do none of those three. The blanket
+    // "never name wrangler.toml" would also have refused a `d1 info` on HQ,
+    // so it was broader than the property it stood for.
+    const isHqDatabaseCall = /^d1 (execute|info) studioos-db\b/.test(call.trim());
     assert.ok(
-      isCreate || namesBranchConfig,
+      isCreate || namesBranchConfig || isHqDatabaseCall,
       `this wrangler call would read HQ's wrangler.toml, whose routes are the apex custom domains: ${call}`,
     );
   }
+  // And the narrowed form of the blanket rule: HQ's config may be named ONLY
+  // by a call against HQ's database by name. A deploy, a create or a secret
+  // put that reached for it is the leak this whole file exists to prevent.
+  const hqConfigCalls = calls.filter((x) => /--config wrangler\.toml\b/.test(x));
+  for (const call of hqConfigCalls) {
+    assert.match(
+      call.trim(), /^d1 (execute|info) studioos-db\b/,
+      `only a call against HQ's database by name may read HQ's config: ${call}`,
+    );
+  }
   assert.ok(
-    !/--config wrangler\.toml/.test(WF),
-    'branch provisioning must never name HQ\'s config',
+    !/deploy[^\n]*--config wrangler\.toml/.test(joined),
+    'a deploy must never read HQ\'s config — that is how the apex domains move onto a branch',
   );
+});
+
+test('the RPC secret hash reaches HQ, and is charset-checked before it is interpolated', () => {
+  // D111 — THE HASH WAS COMPUTED AND NEVER STORED. This workflow generated
+  // RPC_SECRET, put it on the branch and exported its digest to $GITHUB_ENV,
+  // and nothing read it: `licence_deployments.rpc_secret_hash` stayed NULL, so
+  // HQ had nothing to verify a money-adjacent call against and `reportUsage`
+  // would have refused every branch it was built for.
+  assert.match(WF, /RPC_SECRET_SHA256=\$\(printf/, 'the digest must still be computed');
+  const uses = [...WF.matchAll(/\$\{?RPC_SECRET_SHA256\}?/g)];
+  assert.ok(uses.length >= 2, 'the digest must be USED, not only exported');
+  assert.match(WF, /UPDATE licence_deployments SET rpc_secret_hash/);
+
+  // `--command` takes no bindings, so both interpolated values are checked
+  // against a charset first. A digest that cannot contain a quote is what
+  // makes the literal safe rather than lucky — the same reasoning
+  // `seed-branch-principal.mjs` refuses a backslash on.
+  // Anchored on the UPDATE, not on `rpc_secret_hash`: the secrets step names
+  // the column in a comment, so matching the column name finds that block
+  // instead and the charset assertions below would have been checked against
+  // a step that does no interpolation at all.
+  const step = runBlocks(WF).find((b) => b.includes('UPDATE licence_deployments'));
+  assert.ok(step, 'there must be a step that records the hash');
+  assert.match(step, /\[\[ "\$RPC_SECRET_SHA256" =~ \^\[0-9a-f\]\{64\}\$ \]\]/,
+    'the digest must be checked as 64 hex characters before it reaches the SQL');
+  assert.match(step, /\[\[ "\$BRANCH" =~ \^\[a-z\]\[a-z0-9-\]/,
+    'the code must be re-checked in the step that interpolates it');
 });
 
 test('the steps run in the only order that works', () => {

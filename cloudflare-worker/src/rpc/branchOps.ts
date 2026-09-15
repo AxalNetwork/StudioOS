@@ -294,3 +294,157 @@ export async function applyLicenceCopy(
   ).run();
   return { applied: true, branch, as_of: pushedAt };
 }
+
+/* ------------------------------------------------------------------ *
+ * H5 — what a branch can say about its own money (D111)               *
+ * ------------------------------------------------------------------ */
+
+export type StreamReport = {
+  stream: string;
+  gross_cents: number | null;
+  currency: string;
+  available: boolean;
+  is_estimate?: boolean;
+  estimate_basis?: string;
+  reason?: string;
+};
+
+/**
+ * What this branch billed in a period, per stream, with the unavailable ones
+ * named rather than zeroed.
+ *
+ * THE HONEST ANSWER TODAY IS MOSTLY "CANNOT MEASURE", and that was worth
+ * checking rather than assuming. Read against the schema on 2026-09-15:
+ *
+ *   subscriptions  `account_subscriptions` carries `plan`, `status`,
+ *                  `period_end` and Stripe ids and NO AMOUNT. The charges live
+ *                  in the Stripe API, read one customer at a time by
+ *                  `/api/admin/billing/ltv`. There is no local charge ledger
+ *                  to total a quarter from — on a branch any more than at HQ,
+ *                  which is the same finding `admin_revenue.ts` already
+ *                  records for the platform.
+ *   licence_fees   A branch charges no onward licence fee in the product. The
+ *                  annual fee flows the other way, from the branch to HQ, and
+ *                  it is a term of the licence rather than something the
+ *                  branch bills.
+ *   token_margin   `ai_usage_logs.est_cost_usd` is a COST and is real. What
+ *                  tokens were BILLED at is stored nowhere, so a margin cannot
+ *                  be derived — only the cost reported, flagged as an estimate
+ *                  with its basis, and never presented as invoiced.
+ *
+ * REPORTING THE COST AS `token_margin` WOULD BE A LIE, so it is not. The
+ * stream is reported unavailable with the cost carried in `estimate_basis`,
+ * which is the one shape that gives HQ the number it has without letting a
+ * statement sum it as revenue.
+ *
+ * `engagement_invoices` is deliberately NOT read here even though it carries
+ * `total_cents`: it is a partner billing a founder, not the branch billing
+ * anyone. Summing it would report other people's trade as the subsidiary's.
+ */
+export async function branchRevenueSummary(
+  env: Env, period: string,
+): Promise<BranchAnswer<{ period: string; streams: StreamReport[] }>> {
+  const code = branchOf(env);
+  if (!code) throw new Error('revenueSummary is only live on a branch');
+
+  // THE PERIOD IS VALIDATED HERE, NOT WHERE IT IS USED. `quarterBounds` throws
+  // on a period it cannot parse, and the only call to it sits inside a
+  // try/catch that turns any throw into "the usage log could not be read" — so
+  // a nonsense period would have produced a plausible summary with a false
+  // reason attached, and HQ would have drawn a statement over a window nobody
+  // meant. Refusing up front is the only place the caller learns the truth.
+  const bounds = quarterBounds(period);
+
+  const streams: StreamReport[] = [
+    {
+      stream: 'subscriptions',
+      gross_cents: null,
+      currency: 'EUR',
+      available: false,
+      reason:
+        'Subscription revenue is not totalled in this database. `account_subscriptions` records a '
+        + 'plan and a status but no amount, and the charges live in the Stripe API. HQ can enter '
+        + 'the figure on the statement; nothing here can derive it.',
+    },
+    {
+      stream: 'licence_fees',
+      gross_cents: null,
+      currency: 'EUR',
+      available: false,
+      reason:
+        'A subsidiary charges no onward licence fee in the product — the annual fee is a term of '
+        + 'its own licence and flows to HQ, so there is nothing for this branch to report.',
+    },
+  ];
+
+  // The one figure that IS measured, reported as a cost and named as one.
+  try {
+    const q = await env.DB.prepare(
+      `SELECT COALESCE(SUM(est_cost_usd), 0) AS cost, COUNT(*) AS calls
+         FROM ai_usage_logs WHERE created_at >= ? AND created_at < ?`,
+    ).bind(...bounds).first<{ cost: number; calls: number }>();
+    const costCents = Math.round((Number(q?.cost) || 0) * 100);
+    streams.push({
+      stream: 'token_margin',
+      gross_cents: null,
+      currency: 'USD',
+      available: false,
+      is_estimate: true,
+      estimate_basis:
+        `Inference COST for the period was USD ${(costCents / 100).toFixed(2)} over `
+        + `${Number(q?.calls) || 0} calls (ai_usage_logs.est_cost_usd).`,
+      reason:
+        'The margin on tokens cannot be derived: the cost is recorded and what tokens were billed '
+        + 'at is not. The cost is carried in estimate_basis so HQ has the number it does have, '
+        + 'without a statement summing a cost as revenue.',
+    });
+  } catch {
+    streams.push({
+      stream: 'token_margin',
+      gross_cents: null,
+      currency: 'USD',
+      available: false,
+      reason: 'The AI usage log could not be read on this branch.',
+    });
+  }
+
+  return { branch: code, as_of: new Date().toISOString(), period: String(period), streams };
+}
+
+/** The half-open [start, end) ISO bounds of a 'YYYY-Qn' period. */
+function quarterBounds(period: string): [string, string] {
+  const m = /^(\d{4})-Q([1-4])$/.exec(String(period || '').trim());
+  if (!m) throw new Error(`revenueSummary: ${JSON.stringify(period)} is not a period (YYYY-Qn)`);
+  const y = Number(m[1]);
+  const q = Number(m[2]) - 1;
+  return [
+    new Date(Date.UTC(y, q * 3, 1)).toISOString(),
+    new Date(Date.UTC(y, q * 3 + 3, 1)).toISOString(),
+  ];
+}
+
+/**
+ * Store the promo ceiling HQ pushed, as a dated copy (migration 256).
+ *
+ * `issued_cents` IS LEFT ALONE. The branch owns that figure — it issues the
+ * codes — and a push that reset it to HQ's last-known value would erase the
+ * branch's own count every time HQ changed the ceiling.
+ */
+export async function applyPromoCeiling(
+  env: Env, c: { period: string; ceiling_cents: number; currency: string; pushed_at: string },
+): Promise<{ ok: true }> {
+  if (!branchOf(env)) throw new Error('applyPromoCeiling is only live on a branch');
+  await env.DB.prepare(
+    `INSERT INTO branch_promo_ceiling (id, period, ceiling_cents, currency, pushed_at, updated_at)
+     VALUES (1, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       period = excluded.period, ceiling_cents = excluded.ceiling_cents,
+       currency = excluded.currency, pushed_at = excluded.pushed_at,
+       updated_at = excluded.updated_at`,
+  ).bind(
+    String(c.period), Math.trunc(Number(c.ceiling_cents) || 0),
+    String(c.currency || 'EUR').toUpperCase().slice(0, 3),
+    String(c.pushed_at), new Date().toISOString(),
+  ).run();
+  return { ok: true };
+}

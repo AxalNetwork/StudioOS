@@ -2962,6 +2962,29 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ template_slug: templateSlug }),
     }),
+  // D111 — H5's statements ledger. `draw` computes owed from what the branch
+  // reported; `update` is the HQ-entered half (paid, disputed, status), which
+  // nothing reconciles against Stripe (D.8).
+  statements: (period) =>
+    request(`/admin/statements${period ? `?period=${encodeURIComponent(period)}` : ''}`),
+  statementDraw: (licenceUid, period) =>
+    request('/admin/statements/draw', {
+      method: 'POST',
+      body: JSON.stringify({ licence_uid: licenceUid, period }),
+    }),
+  statementUpdate: (uid, data) =>
+    request(`/admin/statements/${encodeURIComponent(uid)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data || {}),
+    }),
+  // The ceiling HQ sets and the branch issues within. `issued_cents` comes
+  // back from the branch, never from HQ.
+  promoCeilings: () => request('/admin/promo-ceilings'),
+  promoCeilingSet: (licenceUid, data) =>
+    request(`/admin/promo-ceilings/${encodeURIComponent(licenceUid)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data || {}),
+    }),
   licenceCreate: (data) => request('/admin/licences', { method: 'POST', body: JSON.stringify(data || {}) }),
   licenceSetTerritories: (uid, countries) =>
     request(`/admin/licences/${encodeURIComponent(uid)}/territories`, { method: 'PUT', body: JSON.stringify({ countries }) }),
