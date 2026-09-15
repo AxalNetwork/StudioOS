@@ -19,21 +19,21 @@ import { Card } from '../../ui';
  */
 export default function SuperAdminOnlyNotice() {
   return (
-    <Card className="border-dashed bg-axal-surface-2 p-6" data-testid="super-admin-only-notice">
+    <Card className="border-dashed bg-axal-ground p-6" data-testid="super-admin-only-notice">
       <div className="max-w-2xl">
-        <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+        <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
           <Landmark size={13} /> HQ only
         </div>
         <h2 className="mt-2 text-lg font-extrabold tracking-tight">
           This console belongs to the Super Admin
         </h2>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink-2">
+        <p className="mt-2 text-[12.5px] leading-relaxed text-axal-muted">
           The Super Admin is the single account that licenses the platform to subsidiaries:
           it issues, re-terms, suspends and terminates territory licences, and names who holds
           that power. You are signed in as an admin without that elevation, so this page stays
           closed here rather than opening and refusing every action.
         </p>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink-2">
+        <p className="mt-2 text-[12.5px] leading-relaxed text-axal-muted">
           If you administer a licence, your own read of it is under My Licence. Everything
           else in the admin product is unchanged.
         </p>

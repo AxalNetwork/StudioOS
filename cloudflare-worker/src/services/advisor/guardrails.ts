@@ -26,6 +26,7 @@
  */
 import type { Env, User } from '../../types';
 import * as aiRouter from '../aiRouter';
+import { bindingKey } from '../../util/schemaBootstrap';
 
 // ---------------------------------------------------------------------------
 // L4 — canonical refusal bank. Embedded in the system prompt so the model
@@ -488,16 +489,16 @@ export interface TurnAudit {
   shadowFlagged: boolean;
 }
 
-let _auditSchemaReady = false;
+const AUDIT_SCHEMA_READY = new WeakMap<object, boolean>();
 export async function ensureAuditSchema(env: Env): Promise<void> {
-  if (_auditSchemaReady) return;
+  if (AUDIT_SCHEMA_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS advisor_turn_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, conversation_id INTEGER, model TEXT, prompt_hash TEXT NOT NULL, tool_calls_json TEXT, ai_spend_usd REAL NOT NULL DEFAULT 0, safety_score REAL, sanitisation_actions_json TEXT, refusal_reason TEXT, shadow_flagged INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')))",
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_advisor_turn_audit_user    ON advisor_turn_audit(user_id, created_at DESC)");
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_advisor_turn_audit_flagged ON advisor_turn_audit(shadow_flagged, created_at DESC)");
-    _auditSchemaReady = true;
+    AUDIT_SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[advisor.guardrails] audit schema:', (e as Error).message);
   }
@@ -532,9 +533,9 @@ export async function writeTurnAudit(env: Env, a: TurnAudit): Promise<void> {
 // Also surfaces users.advisor_shadow_flag (does not hard-block; route layer
 // renders the templated REFUSAL.shadow reply instead).
 // ---------------------------------------------------------------------------
-let _userColsReady = false;
+const USER_COLS_READY = new WeakMap<object, boolean>();
 export async function ensureGuardrailColumns(env: Env): Promise<void> {
-  if (_userColsReady) return;
+  if (USER_COLS_READY.get(bindingKey(env))) return;
   try {
     const ucols = await env.DB.prepare(`PRAGMA table_info(users)`).all<{ name: string }>();
     const uhave = new Set((ucols.results || []).map((r) => r.name));
@@ -556,7 +557,7 @@ export async function ensureGuardrailColumns(env: Env): Promise<void> {
       try { await env.DB.exec(`ALTER TABLE advisor_messages ADD COLUMN sanitisation_actions_json TEXT`); }
       catch (e) { void e; }
     }
-    _userColsReady = true;
+    USER_COLS_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[advisor.guardrails] ensureGuardrailColumns:', (e as Error).message);
   }

@@ -25,6 +25,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -42,9 +43,9 @@ const REASONS = new Set([
 ]);
 const SEVERITIES = new Set(['low', 'medium', 'high']);
 
-let _migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureTables(env: Env) {
-  if (_migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS spinout_moderation_cases (
       id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,7 +71,7 @@ async function ensureTables(env: Env) {
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); } catch { /* already applied */ }
   }
-  _migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 const CASE_COLS =

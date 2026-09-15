@@ -59,10 +59,19 @@ trap on_exit EXIT
 # ---------- 1. Find the latest backup -------------------------------
 STEP="list_backups"
 log "listing latest backup in r2://${BUCKET}/d1/"
+# TWO KEY SHAPES, BOTH PRODUCTION'S. Backups were written to
+# `d1/backup-<date>.sql` until 2026-09-15 and to `d1/studioos-db/backup-<date>.sql`
+# after it, when the key gained the database name so a second database could
+# not overwrite production's restore point. Object lock keeps the old ones for
+# 365 days, and they are the restore points for most of that year — matching
+# only the new shape would have quietly narrowed this drill to whatever had
+# been written since the rename. Sorting is by the DATE, not the key, because
+# the two prefixes do not sort against each other.
 LATEST_KEY=$(wrangler r2 object list "${BUCKET}" --prefix "d1/" 2>/dev/null \
   | awk '{print $NF}' \
-  | grep -E '^d1/backup-[0-9]{4}-[0-9]{2}-[0-9]{2}\.sql$' \
-  | sort -r | head -n1)
+  | grep -E '^d1/(studioos-db/)?backup-[0-9]{4}-[0-9]{2}-[0-9]{2}\.sql$' \
+  | awk -F'backup-' '{print $2"\t"$0}' \
+  | sort -r | head -n1 | cut -f2-)
 
 if [[ -z "${LATEST_KEY:-}" ]]; then
   log "FATAL: no backups found in r2://${BUCKET}/d1/"

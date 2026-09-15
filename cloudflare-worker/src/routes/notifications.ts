@@ -18,6 +18,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const notifications = new Hono<{ Bindings: Env }>();
 
@@ -73,9 +74,9 @@ async function unsubscribeHandler(c: any) {
 notifications.get('/unsubscribe', unsubscribeHandler);
 notifications.post('/unsubscribe', unsubscribeHandler);
 
-let inboxMigrated = false;
+const INBOX_MIGRATED = new WeakMap<object, boolean>();
 async function ensureInbox(env: Env): Promise<boolean> {
-  if (inboxMigrated) return true;
+  if (INBOX_MIGRATED.get(bindingKey(env))) return true;
   try {
     await env.DB.prepare(
       `CREATE TABLE IF NOT EXISTS notifications_inbox (
@@ -95,7 +96,7 @@ async function ensureInbox(env: Env): Promise<boolean> {
       `CREATE INDEX IF NOT EXISTS idx_inbox_user_unread
          ON notifications_inbox(user_id, read_at, created_at)`,
     ).run();
-    inboxMigrated = true;
+    INBOX_MIGRATED.set(bindingKey(env), true);
     return true;
   } catch (e) {
     console.error('[notifications_inbox] migration failed', e);

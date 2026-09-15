@@ -134,7 +134,22 @@ test('the elevation is read from super_admins, never from a users column', () =>
     'getCurrentUser hydrates the flag from the side table before anything downstream reads the row');
   const hydrate = exportedFn(auth, 'hydrateSuperAdmin');
   assert.match(hydrate, /\.is_super_admin = flag;/, "the row's own value, if a column still exists, is overwritten");
-  assert.match(hydrate, /isAdminRole \? await loadSuperAdminFlag\(/, 'non-admins are 0 without a lookup');
+  // The lookup is behind `isAdminRole` and stays behind it. D106 added a
+  // second conjunct (`&& !onBranch`), so this matches the CONDITION rather
+  // than the exact expression it was: a further narrowing is fine — every one
+  // makes more accounts read 0 without a lookup — while moving the call out
+  // from behind `isAdminRole`, or dropping the guard entirely, still fails.
+  assert.match(
+    hydrate,
+    /const flag: 0 \| 1 = isAdminRole[^?]*\? await loadSuperAdminFlag\(/,
+    'non-admins are 0 without a lookup, and the lookup stays behind isAdminRole',
+  );
+  assert.match(hydrate, /: 0;/, 'the other arm is the literal 0, not a second lookup');
+  // D106 — on a branch the answer is 0 and the table is not consulted at all.
+  // Pinned here as well as in branch_mode_gates.test.ts because this file is
+  // the one that reads as "everything about how the elevation is resolved".
+  assert.match(hydrate, /const onBranch = branchOf\(env\) !== null;/,
+    'branch mode decides the elevation, not a row count (D106)');
 });
 
 function fakeEnv(first: () => Promise<unknown>) {

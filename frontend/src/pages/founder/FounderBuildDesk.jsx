@@ -128,6 +128,17 @@ export default function FounderBuildDesk() {
   // because that is how the Command Palette's "Create startup" entry addressed
   // /projects and a <Navigate> redirect cannot carry a query string.
   const [creating, setCreating] = useState(() => searchParams.get('new') === '1');
+  // AND IT HAS TO FOLLOW THE PARAM, not just seed from it. `?new=1` used to be
+  // read once, at mount, which is enough for the twelve links that arrive here
+  // from another route — but not for the Command Palette, which can be opened
+  // from this very page. `nav('/build?new=1')` from /build changes the search
+  // string without remounting, so the initializer never ran again and the entry
+  // did nothing at all. That went unnoticed because the form also carried its
+  // own "New Startup" button, and #181 has just removed it: the URL is the only
+  // handle now, so the URL has to work from everywhere.
+  useEffect(() => {
+    if (searchParams.get('new') === '1') setCreating(true);
+  }, [searchParams]);
 
   useEffect(() => {
     if (workspace) return;

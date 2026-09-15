@@ -17,6 +17,7 @@
  */
 import type { Env } from '../types';
 import { getSQL } from '../db';
+import { bindingKey } from '../util/schemaBootstrap';
 
 export interface SubscriptionPlanRow {
   plan_id: string;
@@ -43,7 +44,7 @@ export interface PlanPricing {
   nativeAmount: number;    // monthly amount in `currency` (0 if unknown)
 }
 
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 
 /**
  * Idempotent CREATE TABLE + seed. Mirrors migrations 004 + 005 so a fresh
@@ -51,7 +52,7 @@ let _schemaReady = false;
  * hasn't been applied yet (matches the pattern used by `ensureMiPaywallSchema`).
  */
 export async function ensureSubscriptionPlansSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       'CREATE TABLE IF NOT EXISTS subscription_plans (' +
@@ -94,7 +95,7 @@ export async function ensureSubscriptionPlansSchema(env: Env): Promise<void> {
     for (const [c, r] of seed) {
       await env.DB.prepare('INSERT OR IGNORE INTO fx_rates (currency, usd_rate) VALUES (?, ?)').bind(c, r).run();
     }
-    _schemaReady = true;
+    SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[subscriptionPlans] ensureSchema failed:', (e as Error).message);
   }

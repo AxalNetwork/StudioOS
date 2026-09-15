@@ -163,9 +163,9 @@ export default function ServicesZone() {
             { label: 'Unpriced', value: String(unpriced.length), note: unpriced.length ? 'scope settled, price is not' : 'all priced' },
           ].map((s) => (
             <Card key={s.label} padding="md">
-              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{s.label}</div>
+              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{s.label}</div>
               <div className="mt-1 text-[15px] font-extrabold tabular-nums">{s.value}</div>
-              <div className="mt-0.5 text-[10px] text-axal-ink-3">{s.note}</div>
+              <div className="mt-0.5 text-[10px] text-axal-faint">{s.note}</div>
             </Card>
           ))}
         </div>
@@ -227,10 +227,10 @@ export default function ServicesZone() {
                     {!row.is_active && <Pill tone="warn">Hidden</Pill>}
                   </div>
                   {row.duration_note && (
-                    <div className="mt-0.5 text-[11.5px] text-axal-ink-3">{row.duration_note}</div>
+                    <div className="mt-0.5 text-[11.5px] text-axal-faint">{row.duration_note}</div>
                   )}
                   {row.scope && (
-                    <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-axal-ink-2">{row.scope}</p>
+                    <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-axal-muted">{row.scope}</p>
                   )}
                 </div>
                 <div className="text-right">
@@ -250,7 +250,7 @@ export default function ServicesZone() {
               </div>
             </Card>
           ))}
-          <p className="text-[11px] leading-relaxed text-axal-ink-3">
+          <p className="text-[11px] leading-relaxed text-axal-faint">
             How many times each service has been delivered is not shown. Nothing in the product links
             a booking to a service — a booking records a free-text topic — so a count here would be a
             guess wearing the shape of a number.

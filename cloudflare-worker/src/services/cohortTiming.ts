@@ -23,6 +23,7 @@
  */
 import type { Env } from '../types';
 import { MILESTONES } from './spinoutLabCatalog';
+import { bindingKey } from '../util/schemaBootstrap';
 
 export const COHORT_TZ = 'America/New_York';
 export const REMINDER_THRESHOLDS_HOURS = [48, 24, 3] as const;
@@ -169,9 +170,9 @@ const iso = (ms: number): string => new Date(ms).toISOString().replace('T', ' ')
 // Schema ensure (mirrors migration 156 for dev/preview D1)
 // ---------------------------------------------------------------------------
 
-let schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 export async function ensureCohortTimingSchema(env: Env): Promise<void> {
-  if (schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   const ddl = [
     `CREATE TABLE IF NOT EXISTS cohort_cycles (id INTEGER PRIMARY KEY AUTOINCREMENT, year INTEGER NOT NULL, month INTEGER NOT NULL, start_at TEXT NOT NULL, end_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'scheduled', created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(year, month))`,
     `CREATE TABLE IF NOT EXISTS week_windows (id INTEGER PRIMARY KEY AUTOINCREMENT, cohort_cycle_id INTEGER NOT NULL, week_number INTEGER NOT NULL, unlock_at TEXT NOT NULL, deadline_at TEXT NOT NULL, UNIQUE(cohort_cycle_id, week_number))`,
@@ -184,7 +185,7 @@ export async function ensureCohortTimingSchema(env: Env): Promise<void> {
   ];
   try {
     for (const s of ddl) await env.DB.prepare(s).run();
-    schemaReady = true;
+    SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.error('[cohort] schema ensure failed', e);
   }

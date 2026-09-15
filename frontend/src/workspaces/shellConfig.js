@@ -279,10 +279,23 @@ export const SHELLS = {
       { kind: 'link', label: 'Home', to: '/studio' },
       { kind: 'bucket', label: 'Practice', prefix: '/practice', tagline: 'Run my advisory business',
         zones: [
-          { slug: 'opportunities', label: 'Opportunities', archetype: A.MATCH_ENGINE, legacy: '/advisor/advisory/opportunities' },
+          // THREE OF THESE FIVE ADVERTISED THE WRONG PAGE TYPE, and the canvas
+          // has said so since it was drawn. `Advisor Detail · Practice.dc.html`
+          // tags each artboard in its own header and repeats the set in
+          // `setIndex`, and the two agree: Opportunities FEED, Engagements WORK
+          // BOARD, Delivery COLLECTION, Sessions FEED, Earnings LEDGER. This
+          // list said MATCH ENGINE, WORK BOARD, WORK BOARD, WORK BOARD, LEDGER.
+          //
+          // It went unnoticed because the archetype is only read by ZoneNav and
+          // the badge — nothing breaks, the nav just names the wrong kind of
+          // page — and because `investor_shell_canvas.test.mjs` pins the
+          // investor shell to its canvases while the advisor shell had no
+          // equivalent. `advisor_shell_canvas.test.mjs` is that equivalent, and
+          // it reads the canvas rather than remembering it.
+          { slug: 'opportunities', label: 'Opportunities', archetype: A.FEED, legacy: '/advisor/advisory/opportunities' },
           { slug: 'engagements', label: 'Engagements', archetype: A.WORK_BOARD, legacy: '/advisor/advisory/engagements' },
-          { slug: 'delivery', label: 'Delivery', archetype: A.WORK_BOARD, legacy: '/advisor/advisory/delivery' },
-          { slug: 'sessions', label: 'Sessions', archetype: A.WORK_BOARD },
+          { slug: 'delivery', label: 'Delivery', archetype: A.COLLECTION, legacy: '/advisor/advisory/delivery' },
+          { slug: 'sessions', label: 'Sessions', archetype: A.FEED },
           { slug: 'earnings', label: 'Earnings', archetype: A.LEDGER },
         ] },
       // Cohorts reads Spin-Out Lab data. Read-only: it owns no Lab route and
@@ -394,11 +407,33 @@ export function bucketForPath(role, pathname) {
  */
 export const bucketTitle = (bucket) => bucket?.tagline || bucket?.label;
 
-/** The zone within a bucket that a pathname resolves to. Defaults to the first. */
+/**
+ * The zone within a bucket that a pathname resolves to.
+ *
+ * A BUCKET ROOT ANSWERS WITH THE FIRST ZONE; AN UNKNOWN SLUG ANSWERS NULL, AND
+ * THE DIFFERENCE IS THE WHOLE POINT. This used to end `|| bucket.zones[0]` for
+ * both cases, which is right for the root (`/research`, where there is no slug
+ * to match) and quietly wrong for a slug this role's shell does not list.
+ * `ResearchWorkspace` dispatches its BODY on the resolved slug, so an advisor
+ * at `/research/funds` — a zone only the founder shell has — rendered Ask's
+ * body under Ask's heading. Not an error, not an empty state: a different page
+ * wearing the URL of the one that was asked for, across nineteen role/route
+ * combinations.
+ *
+ * `route_role_zone_contract.test.mjs` stops the routes admitting those roles in
+ * the first place. This is the second half of that fix rather than a duplicate
+ * of it: a guard list is hand-maintained, and when the next one drifts the
+ * caller should get `null` and redirect, not silently serve a neighbour.
+ *
+ * Callers already treat null as "no zone" — five of the eight resolve the root
+ * themselves (`isRoot ? null : zoneForPath(...)`), so for them the old fallback
+ * was already unreachable.
+ */
 export function zoneForPath(bucket, pathname) {
   if (!bucket) return null;
   const rest = String(pathname || '').slice(bucket.prefix.length).replace(/^\//, '');
-  return bucket.zones.find((z) => z.slug === rest) || bucket.zones[0];
+  if (!rest) return bucket.zones[0];
+  return bucket.zones.find((z) => z.slug === rest) || null;
 }
 
 /** `/prefix/slug` for a zone. The one place a workspace URL is composed. */

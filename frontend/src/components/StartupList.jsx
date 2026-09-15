@@ -127,7 +127,21 @@ export default function StartupList({ statusFilter = null, onNewStartup = null }
           icon={Rocket}
           title="No startups yet"
           body='Create your first startup to start scoring, due-diligence, and pipeline tracking.'
-          cta={{ label: 'New startup', onClick: () => (onNewStartup ? onNewStartup() : setShowForm(true)) }}
+          // THE FALLBACK CALLED A SETTER THIS COMPONENT DOES NOT HAVE.
+          // `setShowForm` was local state once; the component now takes
+          // `onNewStartup` instead and the setter went with the refactor, but the
+          // `:` branch kept naming it. `onNewStartup` defaults to null and the one
+          // caller (`ExecutionPage`) passes nothing, so the throwing branch was
+          // the ONLY branch that ever ran: a new account with no startups clicked
+          // "New startup" and got `ReferenceError: setShowForm is not defined`.
+          //
+          // An undefined identifier is a runtime error, not a build one, so Vite
+          // emitted this happily. ESLint's `no-undef` is what found it.
+          //
+          // No handler now means no button, rather than a button that throws — the
+          // empty state keeps its "Learn more" link and stops promising an action
+          // nothing can perform.
+          cta={onNewStartup ? { label: 'New startup', onClick: onNewStartup } : undefined}
           secondary={{ label: 'Learn more', to: '/help#core/projects' }}
         />
       ) : (

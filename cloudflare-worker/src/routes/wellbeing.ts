@@ -53,6 +53,7 @@ import {
 import { hasFeatureUnlock } from '../services/featureUnlocks';
 import { stripeCall } from './billing';
 import { clampLimit } from '../util/pagination';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const wellbeing = new Hono<{ Bindings: Env }>();
 
@@ -83,9 +84,9 @@ function uuidHex(): string {
 // so wellbeing tables may not exist on prod D1. This function self-heals on
 // the first request and is cheap thereafter (CREATE IF NOT EXISTS).
 // --------------------------------------------------------------------------
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensureWellbeingSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   const STMTS = [
     `CREATE TABLE IF NOT EXISTS wellbeing_checkins (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -264,7 +265,7 @@ async function ensureWellbeingSchema(env: Env): Promise<void> {
       }
     }
   }
-  _schemaReady = true;
+  SCHEMA_READY.set(bindingKey(env), true);
 }
 
 // ---------------------------------------------------------------------------

@@ -26,7 +26,6 @@ const normalizedStage = (row) => String(row.stage || row.status || '').toLowerCa
 export default function FounderGrowCapitalMatch() {
   const [params, setParams] = useSearchParams();
   const requestedId = params.get('project_id');
-  const [projects, setProjects] = useState([]);
   const [project, setProject] = useState(null);
   const [prospects, setProspects] = useState([]);
   const [view, setView] = useState('all');
@@ -42,7 +41,6 @@ export default function FounderGrowCapitalMatch() {
         setError('The startup list is unavailable; capital prospects are still being checked.');
       }
       const selected = available.find((item) => String(item.id) === requestedId) || available[0] || (requestedId ? { id: Number(requestedId), name: 'Selected project' } : null);
-      setProjects(available.length ? available : selected ? [selected] : []);
       setProject(selected);
       if (!selected) { setProspects([]); return; }
       if (String(selected.id) !== requestedId) {
@@ -63,8 +61,16 @@ export default function FounderGrowCapitalMatch() {
 
   const query = project?.id ? `?project_id=${project.id}` : '';
   const stages = useMemo(() => [...new Set(prospects.map(normalizedStage).filter(Boolean))], [prospects]);
+  // A WARM PATH IS A `contact_id`, and that is not a heuristic — migration
+  // 128_contact_promotion.sql adds the column to `raise_prospects` and indexes it
+  // as `idx_raise_prospects_contact`, and `contacts` is the network book. A
+  // prospect carrying one was reached through somebody the founder already knows.
+  // Nothing is inferred from a shared domain or a similar name.
+  const hasWarmPath = (row) => row?.contact_id != null && String(row.contact_id).trim() !== '';
+  const warmCount = useMemo(() => prospects.filter(hasWarmPath).length, [prospects]);
   const visible = useMemo(() => {
     if (view === 'all') return prospects;
+    if (view === 'warm') return prospects.filter(hasWarmPath);
     return prospects.filter((row) => normalizedStage(row) === view);
   }, [prospects, view]);
   const passedCount = prospects.filter((row) => normalizedStage(row) === 'passed').length;
@@ -72,24 +78,24 @@ export default function FounderGrowCapitalMatch() {
   const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Capital match', `/grow/capital-match${query}`], ['Brand', `/grow/brand${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-capital-match" data-testid="founder-grow-capital-match"><div className="a5-grow-canvas"><div className="a5-grow-main">
-    <header className="a5-grow-hero"><div className="fg-capital-match-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Capital match</b></div><div><h1>Capital match</h1><p>Investor fit, warm paths and outreach state.</p></div>{projects.length > 1 && <label className="fg-capital-match-picker"><span>Startup</span><select data-testid="select-grow-capital-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-capital-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Capital match' ? 'is-active' : ''}>{label}</Link>)}</nav>
+    <header className="a5-grow-hero"><div className="fg-capital-match-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Capital match</b></div><div><h1>Capital match</h1><p>Investor fit, warm paths and outreach state.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-capital-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Capital match' ? 'is-active' : ''}>{label}</Link>)}</nav>
     <ZoneToolbar
               filters={founderZoneFilters('grow/capital-match', { value: view, onChange: setView, dynamic: { stages: stages.filter((stage) => stage !== 'passed').map((stage) => ({ key: stage, label: labelStage(stage) })) } })}
               actions={founderZoneActions('grow/capital-match', { query, view: { scope: project?.name, header: ['Fund or prospect', 'Firm', 'Email', 'Stage', 'Status', 'Updated'], rows: visible, cells: (r) => [r.name, r.firm, r.email, r.stage, r.status, r.updated_at] } })}
             /></header>
     {error && <div className="a5-grow-error" data-testid="status-grow-capital-partial"><AlertCircle size={15} /><span>{error}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
-    {loading ? <CapitalSkeleton /> : !project ? <EmptyCapital /> : <CapitalContent project={project} prospects={prospects} visible={visible} stages={stages} view={view} setView={setView} query={query} error={error} passedCount={passedCount} contactedCount={contactedCount} />}
+    {loading ? <CapitalSkeleton /> : !project ? <EmptyCapital /> : <CapitalContent project={project} prospects={prospects} visible={visible} stages={stages} view={view} setView={setView} query={query} error={error} passedCount={passedCount} contactedCount={contactedCount} warmCount={warmCount} />}
   </div><CapitalRail project={project} prospects={prospects} error={error} /></div></main>;
 }
 
-function CapitalContent({ project, prospects, visible, stages, view, setView, query, error, passedCount, contactedCount }) {
+function CapitalContent({ project, prospects, visible, stages, view, setView, query, error, passedCount, contactedCount, warmCount }) {
   return <div className="a5-sections"><div className="fg-capital-context"><div><span>Selected startup</span><strong data-testid="text-grow-capital-project">{text(project.name)}</strong></div><div><span>Capital source</span><strong>{error ? 'Unavailable' : prospects.length ? 'Stored raise prospects' : 'No prospects recorded'}</strong></div></div>
         {/* Its tabs are the zone header's now. "Right stage" is the canvas's
         name for one chip per stage, so the chips are the stages actually
         stored on this project's prospects — `passed` excluded, because the
         canvas gives it its own chip and one record should not be two. */}
     <div className="fg-capital-tabs"><div className="fg-capital-actions"><Link to={`/raise/capital/pipeline${query}`} data-testid="link-open-grow-capital-workspace"><CircleDot size={13} /> Open workspace</Link></div></div>
-    <div className="fg-capital-stats"><Stat label="Prospects tracked" value={error ? 'Unavailable' : prospects.length} note={error ? 'Capital source unavailable' : 'Project-scoped records'} muted={Boolean(error)} /><Stat label="With a warm path" value="Unavailable" note="No connector-path source connected" muted /><Stat label="Contacted" value={error ? 'Unavailable' : contactedCount} note={error ? 'Capital source unavailable' : 'Derived from recorded stage'} muted={Boolean(error)} /><Stat label="Passed" value={error ? 'Unavailable' : passedCount} note={error ? 'Capital source unavailable' : 'Recorded passed stage'} muted={Boolean(error)} /></div>
+    <div className="fg-capital-stats"><Stat label="Prospects tracked" value={error ? 'Unavailable' : prospects.length} note={error ? 'Capital source unavailable' : 'Project-scoped records'} muted={Boolean(error)} /><Stat label="With a warm path" value={error ? 'Unavailable' : warmCount} note={error ? 'Capital source unavailable' : warmCount ? 'Promoted from a network-book contact' : 'No prospect names a contact yet'} muted={Boolean(error) || !warmCount} /><Stat label="Contacted" value={error ? 'Unavailable' : contactedCount} note={error ? 'Capital source unavailable' : 'Derived from recorded stage'} muted={Boolean(error)} /><Stat label="Passed" value={error ? 'Unavailable' : passedCount} note={error ? 'Capital source unavailable' : 'Recorded passed stage'} muted={Boolean(error)} /></div>
     <section className="a5-card fg-capital-table"><Head icon={CircleDot} title="Investor prospects" meta={view === 'all' ? 'Project-scoped records' : `${visible.length} matching record${visible.length === 1 ? '' : 's'}`} />{error ? <EmptyTable error /> : <ProspectTable rows={visible} />}</section>
     <section className="a5-focus fg-capital-read"><div className="a5-head"><div><Sparkles size={15} /><h2>Read the match honestly</h2></div><span>Source-derived</span></div><p>{error ? 'The selected-project capital source is unavailable, so FG5 cannot determine which prospects are tracked. Fit, warm paths, outreach state, and commitment outcomes remain unavailable.' : prospects.length ? `FG5 shows ${prospects.length} stored project-scoped prospect${prospects.length === 1 ? '' : 's'} and their recorded stages. It does not turn a prospect row into a fit score, warm path, ranking rationale, or commitment.` : 'No project-scoped investor prospects are stored for this startup, so fit, warm paths, outreach state, and commitment outcomes remain unavailable.'}</p><Link className="a5-link" to={`/raise/capital/pipeline${query}`}>Open capital pipeline <ChevronRight size={14} /></Link></section>
   </div>;
