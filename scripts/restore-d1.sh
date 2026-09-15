@@ -21,7 +21,7 @@
 #
 # Examples:
 #   scripts/restore-d1.sh ./backup-2026-05-20.sql studioos-db-restore
-#   scripts/restore-d1.sh r2://studioos-backups/d1/backup-2026-05-20.sql studioos-db-preview
+#   scripts/restore-d1.sh r2://studioos-backups/d1/studioos-db/backup-2026-05-20.sql studioos-db-preview
 #
 # WARNING: This imports into the TARGET database. It does NOT truncate
 # existing tables first — apply against an EMPTY DB (e.g. a freshly
@@ -37,7 +37,7 @@ BUCKET="${BACKUP_BUCKET:-studioos-backups}"
 if [[ -z "${BACKUP_ARG}" ]]; then
   echo "usage: $0 <backup-file-or-r2-key> [target-db-name]" >&2
   echo "       $0 ./backup-2026-05-20.sql studioos-db-restore" >&2
-  echo "       $0 r2://studioos-backups/d1/backup-2026-05-20.sql studioos-db-preview" >&2
+  echo "       $0 r2://studioos-backups/d1/studioos-db/backup-2026-05-20.sql studioos-db-preview" >&2
   exit 2
 fi
 

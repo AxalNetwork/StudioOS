@@ -1,4 +1,5 @@
 import type { Context, Next } from 'hono';
+import { branchOf } from '../util/branch';
 
 /**
  * Adds defense-in-depth HTTP security headers to every API response.
@@ -72,6 +73,15 @@ export function securityHeadersMiddleware() {
     // (frontend/public/_headers, applied by Workers static assets to the
     // responses this middleware never sees).
     h.set('Referrer-Policy', 'no-referrer');
+    // D106 / D.10 — A BRANCH IS NOT INDEXED, because it serves HQ's bundle.
+    // Every branch Worker ships the same `docs/` build, whose canonical
+    // links, sitemap and OG URLs all name axal.vc (`lib/ogRegistry.js`,
+    // `scripts/prerender-og.mjs`). Indexed, a branch host would offer a
+    // search engine a full duplicate of the marketing site under a second
+    // hostname, with canonical tags pointing away from itself — the textbook
+    // shape for having both demoted. `noindex` until a per-branch build
+    // exists; HQ, with no BRANCH_CODE, is unaffected.
+    if (branchOf(c.env as never)) h.set('X-Robots-Tag', 'noindex, nofollow');
     // Task #33 — broaden Permissions-Policy to deny every powerful sensor
     // by default. Add features only when an actual route needs them.
     h.set(

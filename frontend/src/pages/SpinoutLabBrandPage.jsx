@@ -320,6 +320,18 @@ export default function SpinoutLabBrandPage() {
   const [applyBrandColors, setApplyBrandColors] = useState(false);
   const [suggest, setSuggest] = useState(null); // { block, loading, variants }
   const autofillRef = useRef(null); // one cached autofill promise per editor session
+  // WHAT EADWYN PROPOSED, KEPT THROUGH THE DRAFT (task #199). The autofill route
+  // has always returned `ai_generated: true` and this page has always dropped it
+  // at the pick, so a published headline Eadwyn drafted was indistinguishable from
+  // one the founder typed — on the same page whose rail names the model.
+  //
+  // A MAP AND NOT A SET, which is the whole point. The founder edits a picked line
+  // freely afterwards, and keeping the proposal lets Save record both values with
+  // `edited` derived from comparing them: a drafted line half-rewritten is neither
+  // the model's work nor unaided, and being able to say which is what the table is
+  // for. Cleared when the editor closes, along with the cached response.
+  const [aiProposed, setAiProposed] = useState({}); // { blockKey: proposed text }
+  const aiModelRef = useRef(null); // the model that RAN, from the autofill receipt
 
   // Resolve the founder's Lab project (same picker as the other tool pages).
   // The full record is kept — not just the id — so template auto-population
@@ -665,6 +677,10 @@ export default function SpinoutLabBrandPage() {
       setPublishedFlash(null);
       setLinkCopied(false);
       autofillRef.current = null;
+      // A NEW EDITOR SESSION CARRIES NO PROPOSALS. Keeping them across pages would
+      // file one page's drafted headline against another's row.
+      setAiProposed({});
+      aiModelRef.current = null;
       setEditorRec(rec);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e) {
@@ -677,6 +693,8 @@ export default function SpinoutLabBrandPage() {
     setEditorRec(null);
     setSuggest(null);
     setPublishedFlash(null);
+    setAiProposed({});
+    aiModelRef.current = null;
   };
 
   // Build the PUT body for the editor. brandUpdatePage is a FULL-ROW update
@@ -726,6 +744,28 @@ export default function SpinoutLabBrandPage() {
 
     payload.audience = rec.audience || editorAud;
     payload.goal = rec.goal || editorTpl?.primaryGoal || null;
+
+    // WHAT EADWYN PROPOSED, KEYED BY THE COLUMN IT LANDED IN (task #199). Block
+    // keys are this editor's own names and mean nothing to the server, so they are
+    // mapped here — `body` in particular writes to a per-audience column, which is
+    // exactly the mapping the server cannot guess. The server checks every name
+    // against the row it actually wrote, so a wrong one here files nothing rather
+    // than filing provenance against a value nobody set.
+    const proposalColumn = (blockKey) => (
+      blockKey === 'body' ? `audience_${editorAud}_body` : blockKey
+    );
+    const proposals = {};
+    for (const [blockKey, proposed] of Object.entries(aiProposed)) {
+      const column = proposalColumn(blockKey);
+      // Only a column this payload is actually writing. A proposal for a field the
+      // founder has since removed from the page is not a fill of anything.
+      if (payload[column] === undefined || payload[column] === null) continue;
+      proposals[column] = proposed;
+    }
+    if (Object.keys(proposals).length) {
+      payload.ai_proposals = proposals;
+      payload.ai_model = aiModelRef.current || null;
+    }
     return payload;
   };
 
@@ -848,11 +888,27 @@ export default function SpinoutLabBrandPage() {
       setSuggest({ block: blockKey, loading: false, variants: [] });
       return;
     }
-    setSuggest({ block: blockKey, loading: false, variants: variantsForBlock(blockKey, r || {}) });
+    // The model that RAN, from the route's own receipt. Kept here rather than read
+    // at pick time because the response is cached for the session and one popover
+    // may be answered from a call another popover made.
+    if (r?.ai_generated && r?.model) aiModelRef.current = String(r.model);
+    setSuggest({
+      block: blockKey, loading: false,
+      variants: variantsForBlock(blockKey, r || {}),
+      // Only an AI-generated response makes a pick attributable. The route falls
+      // back to `heuristicHeroCopy` and says `ai_generated: false` when it does,
+      // and a heuristic template string is not something Eadwyn wrote.
+      fromAi: r?.ai_generated === true,
+    });
   };
 
   const pickSuggestion = (blockKey, text) => {
     setEditorShared((b) => ({ ...b, [blockKey]: text }));
+    // RECORDED HERE, NOT AT SAVE, because this is the only moment the page knows
+    // the value came from Eadwyn. A later keystroke does NOT clear it: the founder
+    // editing a drafted line is the case `edited` exists to describe, and dropping
+    // the proposal on the first keypress would lose exactly that.
+    if (suggest?.fromAi) setAiProposed((m) => ({ ...m, [blockKey]: text }));
     setSuggest(null);
   };
 

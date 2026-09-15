@@ -9,7 +9,7 @@ import { zoneFiltersFor } from './zoneFiltersByRole';
 import BucketBoard from './BucketBoard';
 import { boardFor } from './boards';
 import { api } from '../lib/api';
-import { NETWORK_ORG_COPY } from './noStoreCopy';
+import { NETWORK_ORG_COPY, ORG_BACKED } from './noStoreCopy';
 
 const FounderNetworkRelationships = lazy(() => import('../pages/founder/FounderNetworkRelationships'));
 const FounderNetworkIntroductions = lazy(() => import('../pages/founder/FounderNetworkIntroductions'));
@@ -105,7 +105,9 @@ const ADVISOR_ZONE = {
  * fuller one than founder's: it has something to group. Nothing changes for the
  * other three; `contacts` still has no organisation column at all (task #94).
  */
-const ORG_BACKED = new Set(['founder', 'investor', 'partner']);
+// Defined in `noStoreCopy.js` beside the copy it decides between — there used
+// to be a second copy in `boards/network.js` and the two disagreed.
+// (ORG_BACKED imported above.)
 
 /**
  * One line per zone, shared by the overview cards and the zone headers below

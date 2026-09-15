@@ -5,6 +5,7 @@ The API client, formatters and helpers. Nothing here renders.
 | File | What it is |
 | --- | --- |
 | `api.js` | **The only way the SPA talks to the worker.** Every endpoint the frontend uses is a method here. |
+| `branchHost.js` | `branchCodeFromHost`, `csrfCookieNameFor` — the SPA's half of D104: which CSRF cookie this page mirrors, decided from the hostname so it agrees with the Worker's `BRANCH_CODE` without a request. |
 | `url.js` | `safeExternalUrl` and link handling — user-supplied URLs pass through it. |
 | `seo.js` | `usePageMeta`, for title/description/OG on public routes. |
 | `log.js` | `reportError`, the client error channel. |

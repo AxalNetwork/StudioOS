@@ -136,7 +136,7 @@ it, where in their nav, and how do they get there.*
 | Legal & Capital Engine | `/legal-capital` | Capital & Legal | Full page | Sidebar → Capital & Legal → Legal & Capital | UPGRADE | High |
 | Scoring Engine v2 | `/scoring` | Studio | Full page | Sidebar → Studio → Scoring Engine | UPGRADE | High |
 | Support · Subsidiary | `/help` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | Admin | Full page | Sidebar → Admin → Admin Console | NEW | High |
+| Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | Admin | Full page | Sidebar → Admin → Public Team Page | NEW | High |
 
 ## Super Admin — 7 canvases
 

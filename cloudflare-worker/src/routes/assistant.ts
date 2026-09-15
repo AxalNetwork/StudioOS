@@ -42,6 +42,7 @@ import type { Env, User } from '../types';
 import { requireAuth, requireAdmin } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { hashEmail } from '../util/hashEmail';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const assistant = new Hono<{ Bindings: Env }>();
 
@@ -83,9 +84,9 @@ function costMicros(model: string, inTok: number, outTok: number, cachedTok: num
 // Schema. Mirrors sql/migrations/010_assistant.sql; idempotent so an
 // uninitialised dev D1 still works.
 // ---------------------------------------------------------------------------
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS assistant_conversations (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL, user_id INTEGER NOT NULL, title TEXT NOT NULL DEFAULT 'New conversation', model_default TEXT NOT NULL DEFAULT 'claude-haiku-4-5-20251001', input_tokens INTEGER NOT NULL DEFAULT 0, output_tokens INTEGER NOT NULL DEFAULT 0, cached_tokens INTEGER NOT NULL DEFAULT 0, cost_usd_micros INTEGER NOT NULL DEFAULT 0, message_count INTEGER NOT NULL DEFAULT 0, extended_retention INTEGER NOT NULL DEFAULT 0, archived_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))"
@@ -114,7 +115,7 @@ async function ensureSchema(env: Env): Promise<void> {
         try { await env.DB.exec("ALTER TABLE users ADD COLUMN assistant_retain_history INTEGER NOT NULL DEFAULT 0"); } catch {}
       }
     } catch {}
-    _schemaReady = true;
+    SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.error('[assistant] schema:', (e as Error).message);
   }

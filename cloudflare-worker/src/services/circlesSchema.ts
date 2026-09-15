@@ -10,8 +10,9 @@
  * pattern as services/jobBoardSchema.ts / services/eventsSchema.ts).
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 const STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS circles (
@@ -41,11 +42,11 @@ const STATEMENTS: string[] = [
 ];
 
 export async function ensureCirclesSchema(env: Env): Promise<boolean> {
-  if (_ready) return true;
+  if (READY.get(bindingKey(env))) return true;
   // The production D1 migration is authoritative. Avoid running table/index
   // DDL from a cold public request, while preserving dev/preview convenience.
   if (env.ENVIRONMENT === 'production') {
-    _ready = true;
+    READY.set(bindingKey(env), true);
     return true;
   }
   try {
@@ -58,7 +59,7 @@ export async function ensureCirclesSchema(env: Env): Promise<boolean> {
         console.warn('[circlesSchema] statement failed (continuing)', (e as Error).message);
       }
     }
-    _ready = true;
+    READY.set(bindingKey(env), true);
     return true;
   } catch (e) {
     console.error('[circlesSchema] bootstrap failed', e);

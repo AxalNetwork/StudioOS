@@ -144,10 +144,14 @@ test('the page converts entered currency to cents and shows bps as a percentage'
 });
 
 /* ---------------------------------------------------------------- *
- * The five-step flow                                                *
+ * The six-step flow                                                 *
  * ---------------------------------------------------------------- */
 
 test('every step of the issue flow has an endpoint', () => {
+  // D110 — five became six. Contract and Deploy are the two the canvas draws
+  // and the flow stopped short of; "Activate" was never a tab (the button sits
+  // above them) and the fifth tab was really the history, which now has its
+  // own unnumbered one.
   const s = read(ROUTE);
   for (const [step, marker] of [
     ['Entity', "r.post('/'"],
@@ -155,11 +159,23 @@ test('every step of the issue flow has an endpoint', () => {
     ['Seats', "r.put('/:uid/seats'"],
     ['Terms', "r.patch('/:uid/terms'"],
     ['Activate', "r.post('/:uid/activate'"],
+    ['Contract', "r.post('/:uid/contract'"],
   ]) {
     assert.ok(s.includes(marker), `step ${step} has no endpoint (${marker})`);
   }
-  assert.match(read(PAGE), /const STEPS = \['Entity', 'Territory', 'Seats', 'Terms', 'Activate'\]/,
-    'the UI must name the same five steps');
+  // Deploy is the one step whose endpoint is NOT in the ledger, deliberately:
+  // deploying does not change a licence, it creates infrastructure, and
+  // folding a workflow_dispatch in beside the money writes would make every
+  // reader check which was which. It still has to exist, and be reachable.
+  const deployments = read('cloudflare-worker/src/routes/admin_deployments.ts');
+  assert.ok(deployments.includes("r.post('/licences/:uid/deploy'"), 'step Deploy has no endpoint');
+  assert.match(read('cloudflare-worker/src/index.ts'), /app\.route\('\/api\/admin', adminDeployments\)/);
+
+  assert.match(
+    read(PAGE),
+    /const STEPS = \['Entity', 'Territory', 'Seats', 'Terms', 'Contract', 'Deploy'\]/,
+    'the UI must name the same six steps',
+  );
 });
 
 test('activation lists what blocks it, and a pending signature does not', () => {

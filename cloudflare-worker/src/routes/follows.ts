@@ -15,16 +15,17 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const r = new Hono<{ Bindings: Env }>();
 
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 export async function ensureFollowsSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   // The production migration is authoritative; public follower counts should
   // never first create tables or indexes on the request path.
   if (env.ENVIRONMENT === 'production') {
-    _schemaReady = true;
+    SCHEMA_READY.set(bindingKey(env), true);
     return;
   }
   try {
@@ -44,7 +45,7 @@ export async function ensureFollowsSchema(env: Env): Promise<void> {
     await env.DB.prepare(
       `CREATE INDEX IF NOT EXISTS idx_follows_entity ON follows(entity_type, entity_id)`,
     ).run();
-    _schemaReady = true;
+    SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.error('[follows] schema ensure failed', e);
   }

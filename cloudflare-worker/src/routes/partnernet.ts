@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { runSchemaBootstrap } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
 
@@ -16,9 +16,9 @@ const REL_CREATE_RATE_LIMIT = 20;
 const SCORE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min — keep recompute off the hot read path
 const scoreCache = new Map<number, number>(); // userId -> next-allowed-recompute-timestamp
 
-let migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env) {
-  if (migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const alters = [
     `ALTER TABLE users ADD COLUMN kyc_status TEXT DEFAULT 'pending'`,
     `ALTER TABLE users ADD COLUMN partner_since TIMESTAMP`,
@@ -159,7 +159,7 @@ async function ensureSchema(env: Env) {
       FROM users u`,
   ];
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch (e: any) { console.error('partnernet schema:', e?.message); } }
-  migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 function safeJson<T>(s: any, def: T): T { try { return s ? JSON.parse(s) : def; } catch { return def; } }

@@ -15,7 +15,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin } from '../auth';
+import { requireAdmin, requireBranchNotSuspended } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import {
   ensureCohortTimingSchema,
@@ -289,6 +289,8 @@ r.post('/applications/settings', async (c) => {
 
 r.post('/applications/:applicant_id/decide', async (c) => {
   const adminUser = await requireAdmin(c);
+  // D107 — a suspended branch's queues are frozen: 423, after the admin gate.
+  await requireBranchNotSuspended(c);
   const { ensureCohortAppSchema, logCycleEvent, notifyOnce, monthLabel } = await import('../services/cohortApplications');
   await ensureCohortAppSchema(c.env);
   const applicantId = parseInt(c.req.param('applicant_id'));

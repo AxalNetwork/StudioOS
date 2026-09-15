@@ -26,7 +26,6 @@ const sourceLabel = (value) => text(value, 'Source not recorded');
 export default function FounderGrowCustomers() {
   const [params, setParams] = useSearchParams();
   const requestedId = params.get('project_id');
-  const [projects, setProjects] = useState([]);
   const [project, setProject] = useState(null);
   const [customers, setCustomers] = useState([]);
   const [view, setView] = useState('all');
@@ -42,7 +41,6 @@ export default function FounderGrowCustomers() {
         setError('The startup list is unavailable; customer records are still being checked.');
       }
       const selected = available.find((item) => String(item.id) === requestedId) || available[0] || (requestedId ? { id: Number(requestedId), name: 'Selected project' } : null);
-      setProjects(available.length ? available : selected ? [selected] : []);
       setProject(selected);
       if (!selected) { setCustomers([]); return; }
       if (String(selected.id) !== requestedId) {
@@ -63,8 +61,33 @@ export default function FounderGrowCustomers() {
 
   const query = project?.id ? `?project_id=${project.id}` : '';
   const sources = useMemo(() => [...new Set(customers.map((row) => sourceLabel(row.source)))], [customers]);
+  // STALLED IS ARITHMETIC OVER FOUR STAMPS THIS PAGE ALREADY RECEIVES.
+  //
+  // The chip was refused with "no activity timeline is stored, so no account can
+  // be called stalled". `waitlist_signups` carries `created_at`, `invited_at`,
+  // `followed_up_at` and `promoted_at`, `WAITLIST_SELECT` returns all four, and
+  // the route's own comment calls them "independent activity marks". The timeline
+  // was there; nobody had read it.
+  //
+  // THE NEWEST STAMP IS THE LAST TOUCH, not `created_at` — an account invited
+  // yesterday is not stalled because it signed up in March. A row whose stamps are
+  // all unparseable is NOT called stalled: silence about a date is not evidence of
+  // neglect, and a false accusation here sends a founder chasing a live account.
+  const STALL_DAYS = 14;
+  const lastTouch = (row) => {
+    const times = [row?.promoted_at, row?.followed_up_at, row?.invited_at, row?.created_at]
+      .map((v) => Date.parse(v || ''))
+      .filter((t) => Number.isFinite(t));
+    return times.length ? Math.max(...times) : null;
+  };
+  const isStalled = (row) => {
+    const at = lastTouch(row);
+    return at != null && Date.now() - at > STALL_DAYS * 86400000;
+  };
+  const stalledCount = useMemo(() => customers.filter(isStalled).length, [customers]);
   const visible = useMemo(() => {
     if (view === 'all') return customers;
+    if (view === 'stalled') return customers.filter(isStalled);
     return customers.filter((row) => sourceLabel(row.source) === view);
   }, [customers, view]);
   const grouped = useMemo(() => sources.map((source) => {
@@ -74,26 +97,31 @@ export default function FounderGrowCustomers() {
   const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Capital match', `/grow/capital-match${query}`], ['Brand', `/grow/brand${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-customers" data-testid="founder-grow-customers"><div className="a5-grow-canvas"><div className="a5-grow-main">
-    <header className="a5-grow-hero"><div className="fg-customers-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Customers</b></div><div><h1>Customer pipeline</h1><p>Pipeline, segments, sequences and step conversion.</p></div>{projects.length > 1 && <label className="fg-customers-picker"><span>Startup</span><select data-testid="select-grow-customers-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-customers-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Customers' ? 'is-active' : ''}>{label}</Link>)}</nav>
+    <header className="a5-grow-hero"><div className="fg-customers-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Customers</b></div><div><h1>Customer pipeline</h1><p>Pipeline, segments, sequences and step conversion.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-customers-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Customers' ? 'is-active' : ''}>{label}</Link>)}</nav>
     <ZoneToolbar
               filters={founderZoneFilters('grow/customers', { value: view, onChange: setView, dynamic: { sources: sources.map((source) => ({ key: source, label: source })) } })}
               actions={founderZoneActions('grow/customers', { query, view: { scope: project?.name, header: ['Account', 'Email', 'Source', 'Recorded stage', 'Captured'], rows: visible, cells: (r) => [r.name, r.email, r.source, r.crm_status, r.created_at] } })}
             /></header>
     {error && <div className="a5-grow-error" data-testid="status-grow-customers-partial"><AlertCircle size={15} /><span>{error}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
-    {loading ? <CustomersSkeleton /> : !project ? <EmptyCustomers /> : <CustomersContent project={project} customers={customers} visible={visible} grouped={grouped} sources={sources} view={view} setView={setView} query={query} error={error} />}
+    {loading ? <CustomersSkeleton /> : !project ? <EmptyCustomers /> : <CustomersContent project={project} customers={customers} visible={visible} grouped={grouped} sources={sources} view={view} setView={setView} query={query} error={error} stalledCount={stalledCount} />}
   </div><CustomersRail project={project} customers={customers} grouped={grouped} error={error} /></div></main>;
 }
 
-function CustomersContent({ project, customers, visible, grouped, sources, view, setView, query, error }) {
+function CustomersContent({ project, customers, visible, grouped, sources, view, setView, query, error, stalledCount }) {
   return <div className="a5-sections"><div className="fg-customers-context"><div><span>Selected startup</span><strong data-testid="text-grow-customers-project">{text(project.name)}</strong></div><div><span>Customer source</span><strong>{error ? 'Unavailable' : customers.length ? 'Stored discovery records' : 'No records recorded'}</strong></div></div>
-        {/* Its tabs are the zone header's now. "Stalled" is prose there: its
-        predicate here was `return []`, so selecting it answered "you have no
-        stalled accounts" when the truth is that nothing stores activity at
-        all. The canvas's three segment names are sample data, and a customer
-        record stores the source it was captured from rather than a segment,
-        so the chips are the stored sources and the row says so. */}
+        {/* Its tabs are the zone header's now.
+        "Stalled" IS LIVE, AND THE PARAGRAPH THAT STOOD HERE WAS WRONG TWICE OVER.
+        It said the predicate "was `return []`, so selecting it answered 'you have
+        no stalled accounts' when the truth is that nothing stores activity at
+        all". The first half was the bug; the second half was the belief that kept
+        it. `waitlist_signups` stores four activity stamps and the route returns
+        every one, so the predicate is now the newest of them being older than
+        fourteen days.
+        The segment chips are a different matter and the note about them stands: a
+        customer record stores the SOURCE it was captured from, not a market
+        segment, so the chips are the stored sources and the row says so. */}
     <div className="fg-customers-tabs"><div className="fg-customers-actions"><Link to={`/build/discovery?mode=workspace&project_id=${project.id}`} data-testid="link-open-grow-customers-workspace"><BarChart3 size={13} /> Open workspace</Link></div></div>
-    <div className="fg-customers-stats"><Stat label="Accounts" value={error ? 'Unavailable' : customers.length} note={error ? 'Customer source unavailable' : `${grouped.length} source${grouped.length === 1 ? '' : 's'}`} muted={Boolean(error)} /><Stat label="Weighted ARR" value="Unavailable" note="No opportunity-value source connected" muted /><Stat label="Worst step" value="Unavailable" note="No funnel-step events connected" muted /><Stat label="Stalled > 14d" value="Unavailable" note="No activity timeline connected" muted /></div>
+    <div className="fg-customers-stats"><Stat label="Accounts" value={error ? 'Unavailable' : customers.length} note={error ? 'Customer source unavailable' : `${grouped.length} source${grouped.length === 1 ? '' : 's'}`} muted={Boolean(error)} /><Stat label="Weighted ARR" value="Unavailable" note="No opportunity-value source connected" muted /><Stat label="Worst step" value="Unavailable" note="No funnel-step events connected" muted /><Stat label="Stalled > 14d" value={error ? 'Unavailable' : stalledCount} note={error ? 'Customer source unavailable' : 'No invite, follow-up or promotion in 14 days'} muted={Boolean(error) || !stalledCount} /></div>
     <section className="a5-card fg-customers-table"><Head icon={Users} title="Customer records, by source" meta={view === 'all' ? 'Source rows are grouped from stored records' : `${visible.length} matching record${visible.length === 1 ? '' : 's'}`} />{error ? <EmptyTable error /> : view === 'all' ? <SourceTable rows={grouped} /> : <CustomerTable rows={visible} />}</section>
     <section className="a5-focus fg-customers-read"><div className="a5-head"><div><Sparkles size={15} /><h2>Read the pipeline honestly</h2></div><span>Source-derived</span></div><p>{error ? 'The selected-project customer source is unavailable, so FG3 cannot determine whether accounts or segments exist. Conversion, weighted value, stalled age, and sequence outcomes remain unavailable.' : customers.length ? `FG3 groups ${customers.length} stored customer record${customers.length === 1 ? '' : 's'} by their recorded source. It does not turn source labels into market segments or infer conversion from CRM status.` : 'No customer discovery records are stored for this startup, so account counts, segments, conversion, weighted value, and sequence outcomes remain unavailable.'}</p><Link className="a5-link" to={`/build/discovery?mode=workspace&project_id=${project.id}`}>Open customer discovery <ChevronRight size={14} /></Link></section>
   </div>;

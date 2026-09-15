@@ -25,6 +25,7 @@
 import type { Env } from '../types';
 import { stripTrailingSlashes } from '../util/url';
 import { getUserSettings, isInQuietHours } from './userSettings';
+import { bindingKey } from '../util/schemaBootstrap';
 
 export type NotifyChannel = 'in_app' | 'email' | 'slack';
 export type NotifyCategory =
@@ -36,6 +37,12 @@ export type NotifyCategory =
   | 'calendar'
   | 'scoring'
   | 'proactive_nudges'
+  // Task #163 — obligations and NDAs approaching expiry. Named here rather
+  // than passed as a bare string so the omission below is deliberate:
+  // `compliance` is NOT in CRITICAL_CATEGORIES, because a renewal notice is
+  // exactly the kind of thing quiet hours and the digest exist for. A
+  // critical one would wake someone at 3am about a deadline 30 days out.
+  | 'compliance'
   | string;
 
 /** Categories that bypass quiet hours AND digest — spec'd by Task #14. */
@@ -59,9 +66,9 @@ export interface NotifyArgs {
   category?: NotifyCategory;
 }
 
-let inboxMigrated = false;
+const INBOX_MIGRATED = new WeakMap<object, boolean>();
 async function ensureInbox(env: Env): Promise<boolean> {
-  if (inboxMigrated) return true;
+  if (INBOX_MIGRATED.get(bindingKey(env))) return true;
   try {
     await env.DB.prepare(
       `CREATE TABLE IF NOT EXISTS notifications_inbox (
@@ -114,7 +121,7 @@ async function ensureInbox(env: Env): Promise<boolean> {
       `CREATE INDEX IF NOT EXISTS idx_outbox_user_pending
          ON notification_outbox(user_id, flushed_at)`,
     ).run();
-    inboxMigrated = true;
+    INBOX_MIGRATED.set(bindingKey(env), true);
     return true;
   } catch (e) {
     console.error('[notify] inbox migration failed', e);

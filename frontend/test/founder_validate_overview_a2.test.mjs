@@ -194,14 +194,14 @@ test('the three ways in are three different things, and the page acts on each', 
 
 test('the hypotheses card carries the artboard’s proposal band, and one drafter', () => {
   assert.ok(A2.includes('Proposal · Advisor'), 'the artboard’s proposal band is gone');
-  assert.match(page, /<ValidateProposals key="overview-hypotheses" projectId=\{projectId\} kind="hypothesis"/,
+  assert.match(page, /<FillProposals key="overview-hypotheses" projectId=\{projectId\} kind="hypothesis"/,
     'the overview does not mount the artboard’s proposal band');
 
   // THE SAME COMPONENT THE HYPOTHESES PAGE MOUNTS, with the same kind: one
   // drafter, so accepting here and accepting there are the same write and the
   // copy about what accepting means cannot drift between two surfaces.
   assert.match(workspace, /kind="hypothesis"/, 'the hypotheses page stopped mounting the drafter');
-  assert.match(page, /import ValidateProposals from '\.\.\/\.\.\/workspaces\/founder\/ValidateProposals'/,
+  assert.match(page, /import FillProposals from '\.\.\/\.\.\/workspaces\/FillProposals'/,
     'the overview grew its own copy of the drafter');
 
   // AND IT IS OFF UNTIL A FOUNDER TURNS IT ON. Every run spends their budget.

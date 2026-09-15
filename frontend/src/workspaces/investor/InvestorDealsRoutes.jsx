@@ -2,7 +2,11 @@ import React, { Suspense, lazy } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Skeleton, WorkerRail } from '../../ui';
 import WorkspaceShell from '../WorkspaceShell';
+import BucketBoard from '../BucketBoard';
+import BucketOverview from '../BucketOverview';
+import { boardFor } from '../boards';
 import { bucketForPath, bucketTitle, zoneForPath } from '../shellConfig';
+import { api } from '../../lib/api';
 
 const InvestorDealsWorkspace = lazy(() => import('../../pages/investor/InvestorDealsWorkspace'));
 /**
@@ -60,51 +64,57 @@ const ZONES = {
  * the reader is looking at, and the pipeline counts above them do not move when
  * the wrong one is clicked.
  */
+/**
+ * One line per zone. Module scope rather than a local, because two surfaces
+ * print them: the shell's intro on a zone route, and the root's card grid when
+ * no board is registered. Two copies could describe the same zone differently.
+ */
+const ZONE_LINES = {
+  // The stale flag is the sentence the artboard's note is entirely about, and
+  // it belongs on the one line the shell prints — the zone below says it once
+  // or not at all.
+  pipeline: 'Every live deal by stage, and how long each has been sitting where it is. '
+    + 'The stale flag is the product: a stage count cannot say who stopped moving.',
+  // WAS "the deal on the desk now", which described the one-record panel
+  // rather than the artboard. ID2 is a desk over every scored deal, its
+  // flags and the fund's pass memory.
+  screening: 'Every deal that has been scored, what the rubric said, and every pass the fund has recorded.',
+  // WAS "what the committee decided, and what the decision was based on",
+  // over a panel that showed three deal columns and no vote at all. ID3
+  // is the ledger: every vote with the reason its author wrote.
+  commit: 'Every vote on the decision, with the reason its author wrote beside it. '
+    + 'A tally without reasons is not a record a fund can defend.',
+  // WAS "signed terms, wired capital, and what is still outstanding" — over
+  // three hard-coded rows, one of which said wired capital is not recorded
+  // here. ID4 is the paper: every envelope raised against a deal at
+  // closing, with its signature state.
+  closing: 'Every document raised against a deal at closing, and how far through signature it is. '
+    + 'The platform records the movement of money; it does not move it.',
+};
+
 export default function InvestorDealsRoutes() {
   const location = useLocation();
   const bucket = bucketForPath('investor', location.pathname);
   // Same root opt-out as NetworkWorkspace, ResearchWorkspace,
-  // AdvisorBucketRoutes and PartnerBucketRoutes. `/deals` serves DealsPage
-  // today so this is unreachable — but `zoneForPath` answers a bucket root
-  // with its first zone, so a root mounted here would light "Pipeline" and
-  // scroll to `#deals-pipeline` as if the reader had asked for it.
+  // AdvisorBucketRoutes and PartnerBucketRoutes: `zoneForPath` answers a bucket
+  // root with its FIRST zone, so without this a reader landing on `/deals`
+  // would get Pipeline lit in the pill row as if they had asked for it.
   const isRoot = Boolean(bucket) && location.pathname === bucket.prefix;
   const zone = zoneForPath(bucket, location.pathname);
 
-  // The bucket root still stacks all four sections from the workspace, so a
-  // zone component is chosen only on its own route.
   const Zone = ZONES[zone?.slug];
 
-  const INTRO = {
-    // The stale flag is the sentence the artboard's note is entirely about, and
-    // it belongs on the one line the shell prints — the zone below says it once
-    // or not at all.
-    pipeline: 'Every live deal by stage, and how long each has been sitting where it is. '
-      + 'The stale flag is the product: a stage count cannot say who stopped moving.',
-    // WAS "the deal on the desk now", which described the one-record panel
-    // rather than the artboard. ID2 is a desk over every scored deal, its
-    // flags and the fund's pass memory.
-    screening: 'Every deal that has been scored, what the rubric said, and every pass the fund has recorded.',
-    // WAS "what the committee decided, and what the decision was based on",
-    // over a panel that showed three deal columns and no vote at all. ID3
-    // is the ledger: every vote with the reason its author wrote.
-    commit: 'Every vote on the decision, with the reason its author wrote beside it. '
-      + 'A tally without reasons is not a record a fund can defend.',
-    // WAS "signed terms, wired capital, and what is still outstanding" — over
-    // three hard-coded rows, one of which said wired capital is not recorded
-    // here. ID4 is the paper: every envelope raised against a deal at
-    // closing, with its signature state.
-    closing: 'Every document raised against a deal at closing, and how far through signature it is. '
-      + 'The platform records the movement of money; it does not move it.',
-  };
-
+  // NO `scope` PROP. It read `scope="One fund"` — a literal, on one of only
+  // three surfaces in the product that passed the prop at all. `WorkspaceShell`
+  // fills that slot from `ActiveCompanyContext` now, so the badge names the
+  // company instead of restating the rule. A fund-scoped label belongs here only
+  // once a fund is actually selected on this route, and nothing selects one yet.
   return (
     <WorkspaceShell
       role="investor"
-      scope="One fund"
       title={isRoot ? bucketTitle(bucket) : undefined}
       activeSlug={isRoot ? null : undefined}
-      intro={INTRO[zone?.slug] || INTRO.pipeline}
+      intro={ZONE_LINES[zone?.slug] || ZONE_LINES.pipeline}
       rail={(
         <WorkerRail
           workspace="Deals"
@@ -119,18 +129,46 @@ export default function InvestorDealsRoutes() {
         />
       )}
     >
-      {/* `embedded`: the shell above already draws the heading, the zone row
-          and the rail. Without it the workspace drew all three again inside
-          them — two h1s, two pill rows and two Worker AI rails on one page.
+      {/* THE ROOT IS THE BOARD, AND THAT IS A REPAIR RATHER THAN AN ADDITION.
+          What stood here sent the root to `InvestorDealsWorkspace` with
+          `zone={null}`, under a note reading "all four sections derive from it,
+          so `/deals` still stacks them as the bucket overview". True when it was
+          written. ID1–ID4 then moved each of those four sections onto its own
+          zone page, one at a time, and that file's closing comment records where
+          it ended: "All four decision panels are gone." So the root stacked
+          nothing — an investor with no pending invitation saw a heading, a pill
+          row and an empty column, which is exactly how it was reported.
 
-          `zone`: which one section this route is for. `null` on the root, where
-          all four stack — the same two props, for the same two reasons, that
-          `NetworkWorkspace` passes `InvestorNetworkWorkspace`. */}
+          `boardFor` is the same overview every partner and advisor bucket root
+          already uses, reading the four zones' own endpoints so the board cannot
+          report a number the page behind it cannot reproduce. The
+          `BucketOverview` fall-through beside it is written out rather than left
+          to the registry's "a root whose key is absent falls through" sentence,
+          because `BucketBoard` answers a null board with `return null` — the
+          fall-through only happens if a caller performs it, and a caller that
+          did not is how this route came to render nothing in the first place.
+
+          `embedded`: the shell above already draws the heading, the zone row and
+          the rail. Without it the workspace drew all three again inside them —
+          two h1s, two pill rows and two Worker AI rails on one page. */}
       <Suspense fallback={<div className="space-y-3"><Skeleton className="h-8" /><Skeleton className="h-64" /></div>}>
-        {Zone && !isRoot
-          ? <Zone />
-          : <InvestorDealsWorkspace embedded zone={isRoot ? null : zone?.slug} />}
+        {isRoot
+          ? <DealsRoot bucket={bucket} />
+          : (Zone ? <Zone /> : <InvestorDealsWorkspace embedded zone={zone?.slug} />)}
       </Suspense>
     </WorkspaceShell>
   );
+}
+
+/**
+ * The `/deals` root: the board when one is registered, the zone cards when not.
+ *
+ * The card grid's descriptions are `ZONE_LINES` — the same lines the shell
+ * prints above a zone — so the two overviews cannot describe one zone twice and
+ * differently.
+ */
+function DealsRoot({ bucket }) {
+  const board = boardFor('investor', bucket.prefix, api);
+  if (board) return <BucketBoard bucket={bucket} role="investor" board={board} />;
+  return <BucketOverview bucket={bucket} role="investor" descriptions={ZONE_LINES} />;
 }

@@ -2,6 +2,7 @@ import React from 'react';
 import AssistRail from './AssistRail';
 import { eadwynConfig } from './eadwynConfig';
 import useAiSpend from '../hooks/useAiSpend';
+import useAssistMode from '../hooks/useAssistMode';
 
 /**
  * Wraps a page's content and puts the AI rail beside it.
@@ -36,6 +37,17 @@ import useAiSpend from '../hooks/useAiSpend';
 export default function AssistLayout({ surface, children, className = '' }) {
   const { spend, pricing, loading } = useAiSpend();
   const config = (!loading && spend) ? eadwynConfig({ surface, spend, pricing }) : null;
+  // THE SWITCH WAS ALREADY BUILT AND HAD NOTHING BEHIND IT. `AssistRail` renders
+  // the toggle when its config declares `kind: 'choice'` and takes `mode` /
+  // `onModeChange` for it; this wrapper never passed either, so the first surface
+  // to declare a choice here — the market page — would have drawn a switch that
+  // reported `true` and changed nothing. That is exactly the dead control D17
+  // refused, so the hook is wired rather than the switch suppressed.
+  //
+  // The PAGE calls the same hook for its own band, and reads the same answer:
+  // `useAssistMode` is a module store precisely so the rail and the page cannot
+  // disagree. Nothing is passed down, because nothing needs to be.
+  const [mode, setMode] = useAssistMode(surface);
 
   if (!config) return <>{children}</>;
 
@@ -45,6 +57,8 @@ export default function AssistLayout({ surface, children, className = '' }) {
       <AssistRail
         config={config}
         page={surface}
+        mode={mode}
+        onModeChange={setMode}
         lastRun={spend?.last_run}
         className="hidden xl:flex sticky top-20"
       />

@@ -27,21 +27,30 @@
  */
 import type { Env } from '../types';
 import { rebuildUsersRoleCheckForExploring } from '../util/usersRoleRebuild';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let _exploringSchemaReady = false;
-let _exploringSchemaBootstrap: Promise<void> | null = null;
+// BOTH of these are per binding, not per module (#204). The boolean is the
+// obvious one; the in-flight promise is the one that bites harder, because a
+// module-level latch would hand a request on database B the promise of a
+// bootstrap that ran against database A — so B would be told the users-table
+// CHECK had been relaxed when nothing had touched it.
+const READY = new WeakMap<object, boolean>();
+const IN_FLIGHT = new WeakMap<object, Promise<void>>();
 
-export function exploringSchemaReady(): boolean {
-  return _exploringSchemaReady;
+export function exploringSchemaReady(env: Env): boolean {
+  return READY.get(bindingKey(env)) === true;
 }
 
 export async function ensureExploringSchema(env: Env): Promise<void> {
-  if (_exploringSchemaReady) return;
+  const key = bindingKey(env);
+  if (READY.get(key)) return;
   // Multiple requests can land on a cold isolate before the first live-DDL
   // repair completes. Coalesce them so only one users-table rebuild and schema
-  // setup runs at a time in that isolate.
-  if (_exploringSchemaBootstrap) return _exploringSchemaBootstrap;
-  _exploringSchemaBootstrap = (async () => {
+  // setup runs at a time in that isolate — per database, so two bindings still
+  // get one rebuild each rather than one between them.
+  const pending = IN_FLIGHT.get(key);
+  if (pending) return pending;
+  const started = (async () => {
   try {
     // A successful call means the live CHECK now admits 'exploring' (either it
     // already did — no-op — or the table was rebuilt). Only then may the
@@ -84,14 +93,15 @@ export async function ensureExploringSchema(env: Env): Promise<void> {
         "ALTER TABLE user_role_review ADD COLUMN needs_assessment_completed INTEGER DEFAULT 0"
       );
     } catch { /* column already exists */ }
-    if (roleCheckOk) _exploringSchemaReady = true;
+    if (roleCheckOk) READY.set(key, true);
   } catch (e) {
     console.error('[boot] ensureExploringSchema failed:', (e as Error).message);
   } finally {
-    _exploringSchemaBootstrap = null;
+    IN_FLIGHT.delete(key);
   }
   })();
-  return _exploringSchemaBootstrap;
+  IN_FLIGHT.set(key, started);
+  return started;
 }
 
 /**

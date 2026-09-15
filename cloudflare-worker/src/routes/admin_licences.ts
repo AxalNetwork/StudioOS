@@ -53,6 +53,8 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
 import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
+import { ensureLegalTemplatesSchema, getTemplate, listTemplates } from '../services/legalTemplateStore';
+import { mergeValues, renderContract } from '../services/licenceContract';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -559,6 +561,138 @@ r.delete('/:uid/admins/:userId{[0-9]+}', async (c) => {
     await logEvent(c.env, licence.id, 'terms_changed', admin.id,
       { administrator_removed: gone.email });
     return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+/* ------------------------------------------------------------------ *
+ * H3 step 5 — the contract, instantiated from a master template        *
+ * ------------------------------------------------------------------ */
+
+// GET /:uid/contract — what has been instantiated, and what could be.
+//
+// THE TEMPLATE LIST AND THE CONTRACT LIST COME BACK TOGETHER because the
+// screen's two states are "pick one" and "here is the one you picked", and a
+// second request to learn which of those it is would be a request whose
+// failure mode is a picker that renders empty for a licence that already has
+// a contract.
+r.get('/:uid/contract', async (c) => {
+  try {
+    await requireSuperAdmin(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+
+    let contracts: any[] = [];
+    let store = true;
+    try {
+      const q = await c.env.DB.prepare(
+        `SELECT uid, template_slug, template_version, template_title, unfilled_fields,
+                status, envelope_uid, superseded_at, created_at, sent_at, signed_at
+           FROM licence_contracts WHERE licence_uid = ? ORDER BY created_at DESC, id DESC`,
+      ).bind(licence.uid).all<any>();
+      contracts = (q.results || []).map((row) => ({
+        ...row,
+        unfilled_fields: JSON.parse(String(row.unfilled_fields || '[]')),
+      }));
+    } catch { store = false; }
+
+    await ensureLegalTemplatesSchema(c.env);
+    const templates = await listTemplates(c.env);
+
+    return c.json({
+      licence_uid: licence.uid,
+      contracts,
+      contracts_available: store,
+      ...(store ? {} : {
+        contracts_reason:
+          'The licence_contracts table could not be read on this database (migration 259).',
+      }),
+      // What the master library actually holds. Offered as-is rather than
+      // filtered to a "licence agreement" category: `legal_templates` has four
+      // categories and none of them is that, so a filter would show an empty
+      // picker over a library that is not empty.
+      templates: templates.map((t) => ({
+        slug: t.slug, title: t.title, category: t.category, version: t.version,
+      })),
+      ...(templates.length ? {} : {
+        templates_reason:
+          'HQ has authored no master templates yet, so there is nothing to instantiate. '
+          + 'The library lives on Contracts.',
+      }),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /:uid/contract — instantiate the named template at its current version.
+//
+// THE VERSION IS READ, NOT PASSED. A caller naming a version could instantiate
+// an archived one, and the rule the library runs on is that an archived
+// version stays binding on contracts that ALREADY carry it — not that it can
+// be newly issued. The current version is the only one HQ is offering today.
+r.post('/:uid/contract', async (c) => {
+  try {
+    const admin = await requireSuperAdmin(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+
+    const b = await c.req.json().catch(() => ({} as any));
+    const slug = str(b?.template_slug, 120);
+    if (!slug) return c.json({ error: 'template_slug is required' }, 400);
+
+    await ensureLegalTemplatesSchema(c.env);
+    const tpl = await getTemplate(c.env, slug);
+    if (!tpl) return c.json({ error: 'template_not_found', template_slug: slug }, 404);
+
+    const [terr, seats] = await Promise.all([
+      c.env.DB.prepare(
+        'SELECT country_code FROM licence_territories WHERE licence_id = ? ORDER BY country_code',
+      ).bind(licence.id).all<{ country_code: string }>(),
+      c.env.DB.prepare(
+        'SELECT seat_type, seats_licensed FROM licence_seats WHERE licence_id = ? ORDER BY seat_type',
+      ).bind(licence.id).all<{ seat_type: string; seats_licensed: number }>(),
+    ]);
+
+    const { body, unfilled } = renderContract(
+      tpl.body_md,
+      mergeValues(licence, (terr.results || []).map((t) => t.country_code), seats.results || []),
+    );
+
+    // The prior contract is SUPERSEDED, never deleted or edited — the same
+    // rule licence_events runs on, and for the same reason: a contract
+    // dispute is exactly the case where the overwritten copy was the one that
+    // mattered.
+    const now = nowIso();
+    await c.env.DB.prepare(
+      'UPDATE licence_contracts SET superseded_at = ?, updated_at = ? WHERE licence_uid = ? AND superseded_at IS NULL',
+    ).bind(now, now, licence.uid).run();
+
+    const uid = newUid();
+    await c.env.DB.prepare(
+      `INSERT INTO licence_contracts
+         (uid, licence_uid, template_slug, template_version, template_title, body_md,
+          unfilled_fields, status, created_by_user_id, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?, 'draft', ?,?,?)`,
+    ).bind(
+      uid, licence.uid, tpl.slug, tpl.version, tpl.title, body,
+      JSON.stringify(unfilled), admin.id, now, now,
+    ).run();
+
+    await logEvent(c.env, licence.id, 'contract_instantiated', admin.id, {
+      contract_uid: uid, template_slug: tpl.slug, template_version: tpl.version,
+      unfilled_fields: unfilled,
+    });
+
+    return c.json({
+      uid,
+      template_slug: tpl.slug,
+      template_version: tpl.version,
+      template_title: tpl.title,
+      status: 'draft',
+      unfilled_fields: unfilled,
+      body_md: body,
+      // Said here because the screen's next control is Activate, and the rule
+      // is the canvas's own.
+      note: 'Instantiated unsigned. A pending signature does not block activation; a territory conflict does.',
+    }, 201);
   } catch (e) { return mapError(c, e); }
 });
 

@@ -262,7 +262,12 @@ test('the three ops reasons are each true about their own object', () => {
 
   // EDIT RULES stays unbuilt, and now for the right reason: the set exists and
   // has no writer, rather than not existing.
-  assert.match(row, /\{ label: 'Edit rules', unbuilt: '[^']*KPI set companies are held to is stored firm-wide and read-only here[^']*' \}/,
+  // The needles stop at the closing quote rather than the closing brace: an
+  // entry may now carry a `hover:` after its `unbuilt:` — the short line a
+  // reader sees on the disabled control, where `unbuilt` is the engineering
+  // reason kept in the table. What is asserted is the reason's content, which
+  // is what this test has always been about.
+  assert.match(row, /\{ label: 'Edit rules', unbuilt: '[^']*KPI set companies are held to is stored firm-wide and read-only here[^']*'/,
     'the Edit rules reason no longer names the set that is actually stored');
   assert.ok(!/'no reminder rules are stored'/.test(row), 'the reason that described a different object is back');
   // And it is genuinely unwritable: no route anywhere writes the table.
@@ -272,7 +277,7 @@ test('the three ops reasons are each true about their own object', () => {
   // CHASE stays unbuilt, with the narrower reason. The old one claimed this
   // route never reaches mail; it does, on a different trigger to a different
   // recipient.
-  assert.match(row, /\{ label: 'Chase all overdue', unbuilt: '[^']*only outbound on this desk fires when an update arrives[^']*' \}/,
+  assert.match(row, /\{ label: 'Chase all overdue', unbuilt: '[^']*only outbound on this desk fires when an update arrives[^']*'/,
     'the chase reason no longer describes the outbound that does exist');
   assert.ok(!/'nothing on this desk sends mail'/.test(row), 'the reason that was too broad by one call is back');
   assert.match(UPDATES, /async function notifyProjectFollowers/, 'the follower fan-out the reason describes is gone');
@@ -283,7 +288,7 @@ test('the three ops reasons are each true about their own object', () => {
 
   // No unbuilt reason may carry a path. Precise endpoints belong in route
   // docblocks, where they are maintained; in a button they rot silently.
-  for (const reason of row.match(/unbuilt: '([^']*)'/g) || []) {
+  for (const reason of row.match(/(?:unbuilt|hover): '([^']*)'/g) || []) {
     assert.ok(!/(^|\s)\/[a-z]/.test(reason), `an ops reason carries a path: ${reason}`);
   }
 });

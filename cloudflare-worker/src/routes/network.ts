@@ -5,12 +5,13 @@ import { requireAuth, requireAdmin } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { generateUniqueShortReferralCode } from '../services/referrals/codes';
 import { resolveReferralCode } from '../services/referrals/resolveCode';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const network = new Hono<{ Bindings: Env }>();
 
-let migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env) {
-  if (migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const db = env.DB;
   const stmts = [
     `ALTER TABLE users ADD COLUMN referral_code TEXT`,
@@ -84,7 +85,7 @@ async function ensureSchema(env: Env) {
       await db.prepare(`INSERT OR IGNORE INTO commission_rules (rule_key, source_type, amount_cents, percentage_bps, description) VALUES (?, ?, ?, ?, ?)`).bind(key, st, amt, bps, desc).run();
     } catch {}
   }
-  migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 // Task #4 (DH) — Brand-new codes use the 6-char Crockford-base32 short

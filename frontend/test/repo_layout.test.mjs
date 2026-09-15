@@ -125,3 +125,33 @@ test('every moved document is reachable from the index', () => {
     assert.ok(existsSync(join(root, 'documentation/architecture', f)), `${f} must be where the index says`);
   }
 });
+
+/**
+ * Two TypeScript pins, and they have to agree.
+ *
+ * #201 gave the SPA a `tsc --noEmit` and had to put the compiler somewhere the
+ * frontend could reach. The worker already declares `typescript` for its own
+ * check and CI runs that job with only `cloudflare-worker/node_modules`
+ * installed, so the worker cannot borrow a hoisted one — the root gets a second
+ * pin. Two pins that drift would mean two halves of one repository checked by
+ * two different compilers, and the SPA would be the half nobody notices: it has
+ * nine errors' worth of history and a version bump could quietly add more or
+ * silence some.
+ *
+ * The repo has answered a duplicated pin this way before — the `image-size`
+ * override lives in two package.json files and
+ * `pptx_image_size_not_bundled.test.mjs` asserts both. Same shape here.
+ */
+test('the root and the worker pin the same TypeScript', () => {
+  // NOT `root` — the module already binds that to the repo path, and shadowing
+  // it inside the test is a temporal-dead-zone ReferenceError, not a shadow.
+  const rootPkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
+  const workerPkg = JSON.parse(readFileSync(resolve(root, 'cloudflare-worker/package.json'), 'utf8'));
+  const a = rootPkg.devDependencies?.typescript;
+  const b = workerPkg.devDependencies?.typescript;
+  assert.ok(a, 'the root no longer declares typescript — `npm run test:types:frontend` has nothing to run');
+  assert.ok(b, 'cloudflare-worker no longer declares typescript — `npm run test:types` has nothing to run');
+  assert.equal(a, b,
+    `TypeScript pins have drifted: root ${a} vs cloudflare-worker ${b}. `
+    + 'Two compilers checking two halves of one repo is how the halves stop agreeing.');
+});

@@ -54,7 +54,7 @@ function Zone({ title, sub, children }) {
     <Card>
       <div className="mb-2 flex items-baseline justify-between gap-3">
         <h2 className="text-[14.5px] font-extrabold tracking-tight">{title}</h2>
-        {sub && <span className="text-[11.5px] text-axal-ink-3">{sub}</span>}
+        {sub && <span className="text-[11.5px] text-axal-faint">{sub}</span>}
       </div>
       {children}
     </Card>
@@ -64,7 +64,7 @@ function Zone({ title, sub, children }) {
 /** A figure the platform does not have, with the server's own reason. */
 function Absent({ reason }) {
   return (
-    <p className="text-[12.5px] leading-relaxed text-axal-ink-2">
+    <p className="text-[12.5px] leading-relaxed text-axal-muted">
       <Unrecorded /> — {reason}
     </p>
   );
@@ -72,10 +72,10 @@ function Absent({ reason }) {
 
 function Stat({ label, value, note, tone = 'text-axal-ink' }) {
   return (
-    <div className="rounded-xl border border-axal-line bg-axal-surface-2 p-3">
-      <div className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{label}</div>
+    <div className="rounded-xl border border-axal-hairline bg-axal-ground p-3">
+      <div className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</div>
       <div className={`mt-1 text-lg font-extrabold tracking-tight tabular-nums ${tone}`}>{value ?? <Unrecorded />}</div>
-      {note && <div className="mt-0.5 text-[10px] text-axal-ink-3">{note}</div>}
+      {note && <div className="mt-0.5 text-[10px] text-axal-faint">{note}</div>}
     </div>
   );
 }
@@ -137,7 +137,7 @@ export default function RevenuePage() {
         </div>
 
         <header className="mt-4">
-          <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+          <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             <Coins size={13} /> HQ · Revenue
           </div>
           {/* `text-axal-ink` is #18181b with no dark-mode value in the @theme
@@ -146,7 +146,7 @@ export default function RevenuePage() {
               fix across the tier — but this page is not shipping with an
               unreadable title either. */}
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">Revenue</h1>
-          <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-ink-2">
+          <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
             Three streams and the one line that is a margin rather than a fee. Licence fees and open disputes
             are read from their stores; subscriptions, the token margin, the per-subsidiary split and the
             statement ledger are not recorded anywhere, and each says so where its figure would be.
@@ -169,7 +169,7 @@ export default function RevenuePage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-[12.5px]">
                   <thead>
-                    <tr className="border-b border-axal-line text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-ink-3">
+                    <tr className="border-b border-axal-hairline text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">
                       <th className="py-1.5 pr-3">Stream</th>
                       <th className="py-1.5 pr-3">This quarter</th>
                       <th className="py-1.5 pr-3">Cost</th>
@@ -178,20 +178,20 @@ export default function RevenuePage() {
                   </thead>
                   <tbody data-testid="hq-revenue-streams">
                     {fees.by_currency.map((row) => (
-                      <tr key={row.currency} className="border-b border-axal-line/60">
+                      <tr key={row.currency} className="border-b border-axal-hairline/60">
                         <td className="py-2 pr-3 font-medium">Licence fees · {row.currency}</td>
                         <td className="py-2 pr-3 tabular-nums">{money(row.quarter_cents, row.currency)}</td>
-                        <td className="py-2 pr-3 text-axal-ink-3">No cost of goods</td>
-                        <td className="py-2 text-[11.5px] text-axal-ink-2">
+                        <td className="py-2 pr-3 text-axal-faint">No cost of goods</td>
+                        <td className="py-2 text-[11.5px] text-axal-muted">
                           {row.licences} active licence{row.licences === 1 ? '' : 's'}. {fees.basis}
                         </td>
                       </tr>
                     ))}
-                    <tr className="border-b border-axal-line/60">
+                    <tr className="border-b border-axal-hairline/60">
                       <td className="py-2 pr-3 font-medium">Subscriptions</td>
                       <td className="py-2 pr-3"><Unrecorded /></td>
-                      <td className="py-2 pr-3 text-axal-ink-3">Not applicable</td>
-                      <td className="py-2 text-[11.5px] text-axal-ink-2">{ready ? data.subscriptions_reason : null}</td>
+                      <td className="py-2 pr-3 text-axal-faint">Not applicable</td>
+                      <td className="py-2 text-[11.5px] text-axal-muted">{ready ? data.subscriptions_reason : null}</td>
                     </tr>
                     <tr>
                       <td className="py-2 pr-3 font-medium">Token margin</td>
@@ -199,7 +199,7 @@ export default function RevenuePage() {
                       <td className="py-2 pr-3 tabular-nums">
                         {token?.available ? usd(token.cost_usd) : <Unrecorded />}
                       </td>
-                      <td className="py-2 text-[11.5px] text-axal-ink-2">
+                      <td className="py-2 text-[11.5px] text-axal-muted">
                         {token?.available ? token.billed_reason : (token?.reason || null)}
                       </td>
                     </tr>
@@ -214,7 +214,7 @@ export default function RevenuePage() {
                   </p>
                 )}
                 {/* Never one number. Said on the page, not only in the code. */}
-                <p className="mt-2 text-[11px] leading-relaxed text-axal-ink-3">
+                <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
                   Rows are not added together: licence fees are denominated per licence and the token cost is
                   USD, so a single total would be wrong by the exchange rate and stated to the cent.
                 </p>
@@ -268,7 +268,7 @@ export default function RevenuePage() {
                   <Stat label="Redemptions" value={num(promos.redemptions)} note="across active codes" />
                   <Stat label="Budget left" value={null} note="no budget exists to spend down" />
                 </div>
-                <p className="mt-3 text-[12.5px] leading-relaxed text-axal-ink-2">{promos.budget_reason}</p>
+                <p className="mt-3 text-[12.5px] leading-relaxed text-axal-muted">{promos.budget_reason}</p>
               </>
             ) : (
               <Absent reason={promos?.reason || 'The promotion codes could not be read.'} />
