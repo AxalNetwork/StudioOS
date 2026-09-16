@@ -10509,3 +10509,173 @@ the extracted `resetExploringReview`, the two corrected sentences) ·
 `frontend/test/licence_admins_ui_d134.test.mjs` (new, 7) ·
 `cloudflare-worker/test/super_admin.test.ts` (re-pointed) · **D134**.
 **No migration — 264 remains free**, for the eighth consecutive PR.
+
+---
+
+## D135 — the compliance ladder: a notice, a clock, and a freeze that is not a ban
+
+**Date:** 2026-09-16 · **Task:** #257 · **Status:** shipped
+
+The owner's requirement, in full:
+
+> *"Super admin (HQ) should be able to notify admins and send warnings or
+> notifications, on licence renewal terms, fees, term violations … if admins do
+> not respect the terms of the contracts and agreement terms of the Super admin
+> (HQ), admin accounts can be terminated, but first admins get notified; if
+> admins do not act on notifications, admin accounts are frozen until they act
+> on things from what they have been notified; and lastly if they don't comply
+> admin accounts are terminated."*
+
+D132 gave **ban**, D133 **supervise**, D134 **open and close**. This is what
+gives all four their meaning: the evidence and the sequence behind them.
+
+```
+ACTIVE ──notice issued──▶ ISSUED ──deadline passes unanswered──▶ OVERDUE
+                             │                                      │
+                   admin responds                         admin responds
+                             └──────────▶ RESPONDED ◀───────────────┘
+                                             │
+                              HQ accepts ────┴──── HQ rejects
+                                   │                    │
+                              ACCEPTED              REJECTED
+                         (freeze lifts if this   (freeze stays; HQ's next
+                          was the last holder)    move is a new notice or
+                                                  a deliberate termination)
+```
+
+### The state is the licence's own — a second flag would be a second truth
+
+`territory_licences.status` already carries the two end states with the comments
+that prove the semantics were chosen deliberately (migration 187): `suspended` —
+*"not trading, STILL HOLDS ITS TERRITORY"* — and `terminated` — *"over;
+territory released"* — beside `suspended_at`, `terminated_at` and `status_note`.
+`/suspend`, `/reinstate` and `/terminate` exist, are super-admin-only, and are
+audited through `licence_events`' CHECK. **Migration 264 supplies the reason and
+the clock; the licence supplies the state.** The reuse is sound because the
+subjects match: renewal terms, fees and term violations are licence matters, and
+`licence_admins` is `UNIQUE(user_id)`.
+
+### The freeze goes inside `requireAdmin` — one edit, not a path list
+
+271 call sites across 51 files. A list of frozen paths in `index.ts` would go
+stale the next time a route is added — the failure D106 avoided by putting the
+branch gate inside `hydrateSuperAdmin`. Four properties are deliberate:
+
+- **It never gates a read.** `requireBranchNotSuspended` states the rule for its
+  branch-side twin; the reason is sharper here, because an admin who cannot see
+  what they were asked cannot do the thing that lifts the freeze.
+- **It never freezes the super admin**, and the code says so rather than relying
+  on there being nobody to do it.
+- **It does nothing on a branch.** `admin_notices` is HQ's table; a branch has
+  the twin, reading its own pushed copy. Two tiers, two lookups.
+- **An unreadable table is not a freeze.** A database between deploy and
+  migration reads as not frozen — inferring a freeze from a missing row would
+  freeze every admin exactly when somebody is trying to work.
+
+**423, not 403**, for D107's stated reason about the twin: a frozen admin *may*
+take this decision, and HQ has stopped them taking it today.
+
+### The response route is not an admin route, so there is no exception list
+
+The reply lives on `routes/licence.ts` — already *"one licence, for the person
+who administers it"*, already `requireAuth`, already mounted. Behind
+`requireAdmin` the freeze would lock the addressee out of the one action that
+lifts it, and the usual patch is a list of skipped paths, which is the thing that
+rots. Ownership is in the WHERE, so somebody else's notice answers **404** rather
+than 403 — a 403 confirms it exists.
+
+**Responding lifts the freeze; HQ's acceptance is not what unblocks writing.**
+`responded` is not a freezing status, so an admin who answers can work while HQ
+reads. Holding the freeze through a review of unknown length would punish
+somebody for doing exactly what they were asked. A rejection freezes again, and
+that is a decision somebody made rather than a queue they sat in.
+
+### Three corrections the code forced on the plan
+
+1. **`notify()` is not the only sanctioned path, and the plan's "never a direct
+   `sendEmail`" conflated two different things.** `services/email/send.ts`'s
+   `send()` renders a designed template, queues through JOB_QUEUE so a failure
+   retries into the DLQ, writes `email_send_log`, **and mirrors the message into
+   the inbox** with its category and CTA — six modules already use it. `notify()`
+   has no template at all: its mail is `[Axal] <title>` plus the body as plain
+   text, and `template_key` is only *stamped* on the inbox row as metadata. So a
+   template added for `notify()` to render would have been a template nothing
+   reaches. The notice — the one piece of mail on this ladder worth designing —
+   goes through `send()`; the freeze and the licence transitions go through
+   `notify()`, because by then the person is looking at a 423 and what they need
+   is one sentence and the route back.
+2. **The sweep's two writes had to become two passes, and a test is what found
+   it.** The first shape suspended the licence inside the flip loop, so a pass
+   that flipped the notice and then failed to suspend could never retry: the next
+   pass no longer selects a row that is not `issued`, and the account would read
+   frozen while its licence went on trading. The suspend is now its own pass,
+   selecting *every active licence with a notice currently holding it frozen* —
+   true of a row flipped a second ago and of one whose suspend failed an hour
+   ago. The test written for the retry is what caught it.
+3. **`check-sql-prepare` refuses a generated placeholder list**, so
+   `FREEZING_STATUSES` could not be spread into the SQL. It is a fixed-length
+   **tuple type**, so adding a third status is a compile error at every binding
+   site rather than a silent under-bind, and a test counts the placeholders
+   against its length.
+
+### `respond_by` is named so the timestamp guard can see it
+
+`check-timestamp-comparisons.mjs` has **no allowlist by design**, so a deadline
+column outside `TTL_COLUMN` is a column nobody is watching — and a deadline swept
+against the clock is precisely the defect class it exists for. The name goes in
+the guard in the same commit the column is created, and every write goes through
+`datetime('now', '+N days')`, so the format is the sweep's own rather than an ISO
+string that would not bite until the UTC date rolled over.
+
+### The sweep: five-minute cadence, no new cron, never terminating
+
+No new cron expression — `* * * * *` already fires every minute and every block
+gates on the **wall clock**, so this is one `if` and nothing in `wrangler.toml`.
+**Not gated on `hqCadences`**, on the D122 precedent one block up: a branch holds
+no notices, so the sweep's own predicate is the tier discriminator and a better
+one — it selects rows by what they are, not by which deployment is asking.
+`froze_at` is stamped with the **computed deadline**, never the sweep's clock, so
+the cadence bounds how long an account writes past its deadline and never changes
+what a row says.
+
+**It never terminates.** A clock owns the reversible rung; ending an account
+stays a deliberate human act. That split is what makes the automatic half safe to
+run every minute, and a test asserts it against a notice 400 days overdue.
+
+### Two escapes that were the same discovery from opposite sides
+
+Widening the sweep's SELECT and making its flip unconditional both escaped their
+first tests. The reason is one fact: **in a single-threaded run the two conjuncts
+are each independently sufficient**, so neither can be killed while the other
+stands. They are not redundant in production — two isolates can race, both SELECT
+the row while it is `issued`, and only the conditional UPDATE decides which owns
+the transition. Each is now pinned where it is actually observable: the SELECT
+through the reported `due` count, the UPDATE through two interleaved sweeps over
+one database. 22 mutations, 22 caught.
+
+### One guard re-pointed — the sixth
+
+`licence_admins.test.mjs` banned `c.req.param('uid')` across the whole of
+`routes/licence.ts`, to express *"the licence must come from the session, never
+from the request"*. D135 adds a route taking a **notice** uid, scoped by the
+session in its own WHERE — which does not cross that line, but failed the
+spelling. The ban is now bounded to the `/mine` handler it was about, and the new
+route carries the same claim in the form that applies to it: ownership in the
+read's WHERE *and* in the write's. The file also reads through `codeOnly()` now,
+because its `requireAdmin` ban was tripping on a comment explaining why this
+router deliberately does not use `requireAdmin`.
+
+### Files
+
+`sql/migrations/264_admin_notices.sql` (new) ·
+`scripts/check-timestamp-comparisons.mjs` (`respond_by` joins `TTL_COLUMN`) ·
+`util/authErrors.ts` (`ADMIN_FROZEN`, `FREEZING_STATUSES`, `adminFrozenBody`) ·
+`auth.ts` (the freeze inside `requireAdmin`) · `index.ts` + `routes/_t13t14t15_helpers.ts`
+(both error readers) · `services/complianceLadder.ts` (new — the sweep and the
+fan-out) · `routes/admin_licences.ts` (issue, list, review, and the three
+transitions that now tell the holder) · `routes/licence.ts` (the addressee's two)
+· `templates/email/{layout,registry}.ts` (the `compliance` category and one
+template) · `frontend/src/lib/api.js` ·
+`cloudflare-worker/test/compliance_ladder_d135.test.ts` (new, 25) ·
+`frontend/test/licence_admins.test.mjs` (re-pointed, +1) · **D135**.
+**Migration 264 — the first new store in eight PRs.** Next free is **265**.

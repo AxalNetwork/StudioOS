@@ -3,6 +3,7 @@ import { SignJWT, jwtVerify } from 'jose';
 import type { Env, User, JWTPayload } from './types';
 import { getSQL } from './db';
 import { branchOf, authCookieName, csrfCookieName, HQ_ONLY, HQ_AUTHORING_ONLY, BRANCH_SUSPENDED } from './util/branch';
+import { ADMIN_FROZEN, FREEZING_STATUSES } from './util/authErrors';
 
 const JWT_ALGORITHM = 'HS256';
 const JWT_EXPIRY_HOURS = 24;
@@ -443,7 +444,70 @@ export async function requireAuth(c: Context<{ Bindings: Env }>): Promise<User> 
 export async function requireAdmin(c: Context<{ Bindings: Env }>): Promise<User> {
   const user = await requireAuth(c);
   if (user.role !== 'admin') throw new Error('Admin required');
+  await refuseWhileFrozen(c, user);
   return user;
+}
+
+/**
+ * D135 — THE COMPLIANCE FREEZE, and it lives here rather than in a path list.
+ *
+ * The ladder's middle rung: HQ notifies, and an admin who does not act is
+ * frozen until they do. "Frozen" has to mean something on every surface an
+ * admin can write through, and there are 271 `requireAdmin` call sites across
+ * 51 files. A list of frozen paths in `index.ts` would go stale the next time a
+ * route is added — the exact failure D106 avoided by putting the branch gate
+ * inside `hydrateSuperAdmin` rather than beside the routes. One edit here
+ * covers every one of them, including the ones nobody has written yet.
+ *
+ * FOUR THINGS IT DELIBERATELY DOES NOT DO:
+ *
+ *  - IT NEVER GATES A READ. `requireBranchNotSuspended` already states the rule
+ *    for its branch-side twin — "READS ARE NEVER GATED BY IT" — and the reason
+ *    is sharper here: an admin who cannot see what they were asked cannot do
+ *    the thing that lifts the freeze. GET, HEAD and OPTIONS pass untouched.
+ *  - IT NEVER FREEZES THE SUPER ADMIN, and the code says so rather than relying
+ *    on there being nobody to do it. HQ issues the notices; a HQ frozen by its
+ *    own ladder could not lift anybody's.
+ *  - IT DOES NOTHING ON A BRANCH. `admin_notices` is HQ's table; a branch has
+ *    the twin above, reading its own pushed licence copy. Two tiers, two
+ *    lookups, neither pretending to be the other.
+ *  - AN UNREADABLE TABLE IS NOT A FREEZE. A database that has not applied
+ *    migration 264 reads as not frozen, on `requireBranchNotSuspended`'s stated
+ *    reasoning: being frozen is a claim somebody MADE, and inferring it from a
+ *    missing row would freeze every admin during the window between deploy and
+ *    migration — exactly when somebody is trying to work.
+ *
+ * WHAT HOLDS THE FREEZE is a notice in `overdue` (the sweep moved it there when
+ * its deadline passed unanswered) or `rejected` (HQ read the response and did
+ * not accept it). An `issued` notice inside its window freezes nothing: the
+ * admin has been told and has time to act, which is the rung before this one.
+ *
+ * THE LOOKUP SELECTS THE NOTICE, NOT A COUNT, and costs the same. A 423 that
+ * cannot say which notice caused it leaves the holder with nothing to act on,
+ * and this is the one row that answers it.
+ */
+async function refuseWhileFrozen(c: Context<{ Bindings: Env }>, user: User): Promise<void> {
+  const method = String(c.req.method || '').toUpperCase();
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return;
+  if (branchOf(c.env)) return;
+  if (isSuperAdmin(user as any)) return;
+  let notice: { uid: string; subject: string; respond_by: string; status: string } | null = null;
+  try {
+    notice = await c.env.DB.prepare(
+      `SELECT uid, subject, respond_by, status
+         FROM admin_notices
+        WHERE user_id = ? AND status IN (?, ?)
+        ORDER BY datetime(respond_by)
+        LIMIT 1`,
+    ).bind(user.id, ...FREEZING_STATUSES).first<{ uid: string; subject: string; respond_by: string; status: string }>();
+  } catch (e) {
+    console.warn('[compliance] admin_notices unreadable on a write gate', (e as Error).message);
+    return;
+  }
+  if (!notice) return;
+  const err: any = new Error(ADMIN_FROZEN);
+  err.notice = notice;
+  throw err;
 }
 
 /**

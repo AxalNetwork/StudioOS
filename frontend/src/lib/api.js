@@ -1893,6 +1893,22 @@ export const api = {
   // licence binding until it is detached separately.
   adminDemoteAdmin: (userId, reason) =>
     request(`/admin/users/${userId}/demote-admin`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  // D135 — the compliance ladder. HQ's three are on the licence router behind
+  // the write bar; the addressee's two are on `/licence`, which is NOT an admin
+  // router — that is what stops the freeze locking somebody out of the one
+  // action that lifts it.
+  licenceNotices: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}/notices`),
+  licenceNoticeIssue: (uid, data) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/notices`, { method: 'POST', body: JSON.stringify(data) }),
+  licenceNoticeReview: (uid, noticeUid, data) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/notices/${encodeURIComponent(noticeUid)}/review`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  myNotices: () => request('/licence/notices'),
+  myNoticeRespond: (noticeUid, response) =>
+    request(`/licence/notices/${encodeURIComponent(noticeUid)}/respond`, {
+      method: 'POST', body: JSON.stringify({ response }),
+    }),
   // Task #14 — forward signed PDF to legal partner(s).
   adminForwardContract: (id, data) =>
     request(`/legal/esign/${id}/forward`, { method: 'POST', body: JSON.stringify(data) }),
