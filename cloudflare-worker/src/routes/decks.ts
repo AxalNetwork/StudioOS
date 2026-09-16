@@ -835,7 +835,7 @@ decks.get('/share/:token', async (c) => {
             used_at = CASE WHEN view_count + 1 >= view_limit THEN datetime('now') ELSE used_at END
       WHERE token_hash = ?
         AND view_count < view_limit
-        AND expires_at > datetime('now')
+        AND datetime(expires_at) > datetime('now')
         -- Task #196. Revoking sets expires_at too, so this predicate is
         -- belt-and-braces, deliberately: without it the guarantee would depend on
         -- two writes both landing, and a revoke that set revoked_at and failed to

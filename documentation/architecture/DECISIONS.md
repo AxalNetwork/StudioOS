@@ -9432,3 +9432,88 @@ predicate is accidentally right — the test would have passed against unfixed
 code for one minute a day. **7 mutations, 7 caught**, four of them the
 *plausible* half-fix rather than a full revert. No migration, no schema change,
 no `frontend/src` change, so `docs/` did not move.
+
+## D125 — the rest of the timestamp comparisons, and the guard that needed nothing left to allowlist
+
+**What D124 left.** D124 fixed the thirteen comparisons that gate access and
+named the rest rather than quietly dropping them. This is the rest: the sweep
+found **75 comparison sites** in `cloudflare-worker/src`, carrying **five
+idioms**, three of which were correct by different means —
+`datetime(col) > datetime('now')` (`partnerDeals.ts:570`), a SQL-format writer
+with a plain read (`branchOps.ts`, D120), and an ISO normalised on write
+(`decks.ts:1184`). The two broken ones were the bare column against
+`CURRENT_TIMESTAMP` and against `datetime('now')`.
+
+**What this changes, and one of them is not a reporting figure.**
+
+| site | column | what it did |
+| --- | --- | --- |
+| `services/featureUnlocks.ts:98,113` | `feature_unlocks.expires_at` | **an expired PAID feature kept being granted** — the row carries `source_payment_intent_id` |
+| `services/referralAttribution.ts:85` | `referral_attributions.expires_at` | the attribution window outlived its term, so a referrer could be credited outside it |
+| `services/shareLink.ts:145` | `captable_share_tokens.expires_at` | **the mixed-writer case**: revoking writes SQL format and killed a link, minting writes ISO and did not expire one |
+| `routes/settings.ts:214` | `email_change_requests.confirm_expires_at` | display only — the accept path checks expiry in JavaScript at `:483`, so nothing was granted |
+| `routes/assistant.ts:298` | `calendar_events.start_at` | listed every meeting **earlier the same day** as upcoming |
+| `routes/events.ts:260`, `routes/events_public.ts:69,70,85` | `events.starts_at` | finished events in the upcoming feed, and today's missing from the archive |
+| `rpc/branchOps.ts:391-394` | `ai_usage_logs.created_at` | **the reverse direction** — see below |
+
+**Two of these run the OPPOSITE way from a TTL**, which is why the class is
+worth stating rather than assuming understood. An ISO value sorts ABOVE
+`datetime('now')`, so where a TTL under-expires, a start time **over**-selects:
+`start_at >= datetime('now')` kept finished meetings in "upcoming". The comment
+above that query says its `catch` exists so a failure does not turn "every
+answer into 'no upcoming meetings'"; the real defect was the reverse.
+
+And `branchOps.ts:391-394` is the mirror image again: a SQL-format column
+(`DEFAULT datetime('now')`) compared against bounds `quarterBounds` builds with
+`.toISOString()`, so **every row dated on the quarter's first day was dropped**
+from the branch's reported AI cost — the figure HQ's statements read under D.8.
+Measured: three rows in, one out. It sits in the same file whose comment 300
+lines later explains this exact trap.
+
+**FOUR ALREADY-CORRECT SITES WERE CONVERTED ANYWAY, and that is the point of the
+guard.** `branchOps.ts:817`, `decks.ts:838`, `company.ts:766` and
+`introductions.ts:254` were all FINE — their writers emit SQL format. Converting
+them buys no correctness. It buys `scripts/check-timestamp-comparisons.mjs` with
+**no baseline**: one rule, zero exceptions, and one idiom left in the codebase
+instead of five. The alternative was a four-entry ledger, and
+`check-inline-project-pickers.mjs` shows what that shape costs — a list somebody
+has to curate, which goes stale.
+
+**What the guard cannot see, said plainly so a green run is not over-read.** A
+column compared against a **bound parameter** (`created_at >= ?`) is the same
+defect with its format at the bind site, and is invisible to a lexical scan.
+That is exactly how `branchOps` came to drop a day. `routes/market_intel.ts:1036,
+:1047, :1109` are in that class and are **not** resolved here; they need the
+bind traced, which is a different tool and a separate task.
+
+**THE FIX WAITED FOR THE TESTS, and this is the part worth keeping.** The source
+change was written first and mutation-checked before being committed: reverting
+it on `featureUnlocks`, `referralAttribution`, `assistant` and `branchOps` each
+left `npm run test:drift` at **exit 0 with zero failures**. Four correct fixes
+that nothing could catch. An assertion that cannot fail is decoration, and a fix
+nothing can catch is the same thing one layer down — so the commit that landed
+them says so in its own message, and stayed on a local branch until
+`expiry_window_datetime_d125.test.ts` existed. All six now fail on revert.
+
+**One home for the fixtures.** `_baseline.mjs` already exported
+`tableFromBaseline` and `stripForeignKeys`, and its own header records that it
+exists because three files carried a byte-identical regex. D124's test file made
+it a fourth by rolling its own slicer and standing up stub `users`/`projects`
+rows. Both files now use the shared readers, and `_timeFixture.mjs` holds
+`sqlAround` and the same-UTC-date fixture — `frontend/src/lib/README.md`'s rule
+one layer along: "if a helper appears in two places, put it here once."
+
+`sqlAround` got stricter twice while this was written, both times because it
+**produced** something instead of refusing. It first assumed a template literal,
+and `routes/assistant.ts` keeps its SQL in a double-quoted string, so it sliced
+unrelated TypeScript. Taking the nearest quote of any kind then landed inside
+`datetime('now')` when that preceded the anchor — and survived an "the slice
+contains the anchor" check. The contract is now that an anchor names a
+statement's **opening words**, so the quote before them is unambiguously the one
+that opened it; ambiguous and non-opening anchors are both hard failures.
+
+**Verification.** `npm run test:drift` exit 0, read as the exit code. Worker
+`tsc --noEmit` exit 0. Six mutations on the source, six caught. Two on the guard
+— a bare column and a `CURRENT_TIMESTAMP` comparison — both caught with the
+offending file and line named. No migration (264 stays free), no schema change,
+no `frontend/src` change, so `docs/` did not move.

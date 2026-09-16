@@ -211,7 +211,7 @@ const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
     SELECT id, new_email, requested_at, confirm_expires_at, confirmed_at, revoked_at
     FROM email_change_requests
     WHERE user_id = ${user.id} AND confirmed_at IS NULL AND revoked_at IS NULL
-      AND confirm_expires_at > datetime('now')
+      AND datetime(confirm_expires_at) > datetime('now')
     ORDER BY requested_at DESC LIMIT 1
   `;
   // AE-1: include only currently-connected integrations on the root

@@ -257,7 +257,7 @@ events.get('/suggested', async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT * FROM events e
       WHERE e.visibility = 'public' AND e.status = 'published' AND e.admin_published = 1
-        AND e.starts_at >= datetime('now')
+        AND datetime(e.starts_at) >= datetime('now')
         AND e.host_user_id != ?
         AND NOT EXISTS (
           SELECT 1 FROM event_registrations r

@@ -54,74 +54,27 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
+import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
+import { sqlAround, expiredIso, LIVE_ISO } from './_timeFixture.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel: string) => readFileSync(resolve(ROOT, rel), 'utf8');
 const BASELINE = read('cloudflare-worker/sql/schema_baseline.sql');
 const src = (rel: string) => read(`cloudflare-worker/src/${rel}`);
 
-/** The table's shape as production has it, sliced from the baseline verbatim. */
-function ddl(name: string): string {
-  const at = `\n${BASELINE}`.indexOf(`\nCREATE TABLE ${name} (`);
-  assert.ok(at >= 0, `${name} is no longer defined in schema_baseline.sql`);
-  const end = BASELINE.indexOf(');', at);
-  assert.ok(end > at, `${name}'s definition in the baseline is unterminated`);
-  return BASELINE.slice(at, end + 2);
-}
-
-/**
- * The template literal containing `anchor`, taken out of a source file.
- *
- * THE ANCHOR MUST BE UNIQUE, and that is enforced rather than assumed. The
- * first draft of this file anchored the NDA sweep on `UPDATE pairwise_ndas`,
- * which appears TWICE in `trust.ts`, and the obligation sweep on
- * `UPDATE legal_obligations`, which appears NINE times. `indexOf` cheerfully
- * returned the first — a different statement in both cases — so the tests ran
- * against SQL they were not about and one of them failed for the wrong reason.
- * A test aimed at code other than the code it names proves nothing, and the
- * near miss is that it could as easily have PASSED. Both misses (absent, and
- * ambiguous) are hard failures here.
- */
-function sqlAround(file: string, anchor: string): string {
-  const s = src(file);
-  const hits = s.split(anchor).length - 1;
-  assert.ok(hits > 0, `${file}: "${anchor}" not found — this test is aimed at code that moved`);
-  assert.equal(hits, 1, `${file}: "${anchor}" matches ${hits} places — pick an anchor that names one statement`);
-  const at = s.indexOf(anchor);
-  const open = s.lastIndexOf('`', at);
-  const close = s.indexOf('`', at);
-  assert.ok(open > 0 && close > at, `${file}: "${anchor}" is not inside a template literal`);
-  return s.slice(open + 1, close);
-}
-
 function db(...tables: string[]) {
   const d = new DatabaseSync(':memory:');
-  // The grant tables carry real foreign keys to `users` and `projects`, and the
-  // baseline shapes are kept verbatim rather than trimmed — a fixture that
-  // quietly dropped the constraints would not be the table production has. Two
-  // stub parents satisfy them; `users` is at D1's 100-column cap and nothing
-  // here reads a column of it, so a one-column stand-in is the honest minimum.
-  d.exec('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY)');
-  d.exec('CREATE TABLE IF NOT EXISTS projects (id INTEGER PRIMARY KEY)');
-  for (let i = 1; i <= 300; i += 1) {
-    d.prepare('INSERT INTO users (id) VALUES (?)').run(i);
-    if (i <= 10) d.prepare('INSERT INTO projects (id) VALUES (?)').run(i);
-  }
-  for (const t of tables) d.exec(ddl(t));
+  // Foreign keys are stripped rather than satisfied with stub parents: D1 ignores
+  // `PRAGMA foreign_keys` inside a batch (see `_baseline.mjs`), so production is
+  // not relying on them either, and a fixture need not stand up `users` — a table
+  // at D1's 100-column cap — to exercise one predicate.
+  for (const t of tables) d.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   return d;
 }
 
-/** Today's UTC date at midnight, in the ISO shape every broken writer emits. */
-function expiredIso(d: InstanceType<typeof DatabaseSync>): string {
-  const row = d.prepare("SELECT date('now') AS day").get() as { day: string };
-  return `${row.day}T00:00:00.000Z`;
-}
-/** Unambiguously live under any comparison, in the same ISO shape. */
-const LIVE_ISO = '2099-01-01T00:00:00.000Z';
-
 test('a magic-link token that expired today cannot be claimed', () => {
   const d = db('magic_link_tokens');
-  const sql = sqlAround('routes/auth.ts', 'UPDATE magic_link_tokens SET used_at');
+  const sql = sqlAround(src('routes/auth.ts'), 'UPDATE magic_link_tokens SET used_at', 'auth.ts');
   const ins = d.prepare('INSERT INTO magic_link_tokens (email, token_hash, expires_at) VALUES (?, ?, ?)');
   ins.run('spent@example.com', 'hash-spent', expiredIso(d));
   ins.run('live@example.com', 'hash-live', LIVE_ISO);
@@ -136,7 +89,7 @@ test('a magic-link token that expired today cannot be claimed', () => {
 
 test('a passkey challenge that expired today cannot be claimed', () => {
   const d = db('webauthn_challenges');
-  const sql = sqlAround('routes/auth_passkey.ts', 'UPDATE webauthn_challenges SET used_at');
+  const sql = sqlAround(src('routes/auth_passkey.ts'), 'UPDATE webauthn_challenges SET used_at', 'auth_passkey.ts');
   const ins = d.prepare('INSERT INTO webauthn_challenges (challenge, user_id, kind, expires_at) VALUES (?, ?, ?, ?)');
   ins.run('c-spent', 1, 'authentication', expiredIso(d));
   ins.run('c-live', 1, 'authentication', LIVE_ISO);
@@ -147,7 +100,7 @@ test('a passkey challenge that expired today cannot be claimed', () => {
 
 test('an advisor grant that expired today no longer opens the brief', () => {
   const d = db('advisor_client_grants');
-  const sql = sqlAround('routes/advisor_grants.ts', "AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))");
+  const sql = sqlAround(src('routes/advisor_grants.ts'), 'SELECT * FROM advisor_client_grants\n', 'advisor_grants.ts');
   const ins = d.prepare(
     `INSERT INTO advisor_client_grants (uid, project_id, advisor_user_id, granted_by_user_id, status, expires_at)
      VALUES (?, ?, ?, 9, 'active', ?)`,
@@ -165,7 +118,7 @@ test('an advisor grant that expired today no longer opens the brief', () => {
 
 test('a data-room grant that expired today no longer lists files', () => {
   const d = db('data_room_grants');
-  const sql = sqlAround('routes/data_room.ts', 'SELECT * FROM data_room_grants');
+  const sql = sqlAround(src('routes/data_room.ts'), 'SELECT * FROM data_room_grants', 'data_room.ts');
   const ins = d.prepare(
     `INSERT INTO data_room_grants (uid, project_id, investor_user_id, granted_by_user_id, status, expires_at)
      VALUES (?, ?, ?, 9, 'active', ?)`,
@@ -181,7 +134,7 @@ test('a data-room grant that expired today no longer lists files', () => {
 
 test('an NDA whose term ended today stops reading as active', () => {
   const d = db('pairwise_ndas');
-  const sql = sqlAround('routes/data_room.ts', "AND (valid_until IS NULL OR datetime(valid_until) > datetime('now'))");
+  const sql = sqlAround(src('routes/data_room.ts'), 'SELECT 1 FROM pairwise_ndas\n', 'data_room.ts');
   const ins = d.prepare(
     `INSERT INTO pairwise_ndas (party_a_user_id, party_b_user_id, status, valid_until) VALUES (?, ?, 'active', ?)`,
   );
@@ -197,7 +150,7 @@ test('an NDA whose term ended today stops reading as active', () => {
 test('the daily sweep expires the artifacts whose term ended today', () => {
   const d = db('pairwise_ndas', 'legal_obligations');
 
-  const ndaSweep = sqlAround('services/trust.ts', "AND datetime(valid_until) < datetime('now')");
+  const ndaSweep = sqlAround(src('services/trust.ts'), "UPDATE pairwise_ndas\n          SET status = 'expired'", 'trust.ts');
   const nda = d.prepare(
     `INSERT INTO pairwise_ndas (party_a_user_id, party_b_user_id, status, valid_until) VALUES (?, ?, 'active', ?)`,
   );
@@ -211,8 +164,8 @@ test('the daily sweep expires the artifacts whose term ended today', () => {
   assert.equal(state(2), 'active', 'the sweep expired an NDA that is still running');
   assert.equal(state(3), 'active', 'the sweep expired an open-ended NDA');
 
-  const obSweep = sqlAround('services/trust.ts', "AND datetime(expires_at) < datetime('now')");
-  const cols = ddl('legal_obligations');
+  const obSweep = sqlAround(src('services/trust.ts'), "UPDATE legal_obligations\n          SET status = 'expired'", 'trust.ts');
+  const cols = tableFromBaseline(BASELINE, 'legal_obligations');
   const ob = d.prepare(
     `INSERT INTO legal_obligations (${/user_id/.test(cols) ? 'user_id, ' : ''}obligation_key, status, expires_at) VALUES (${/user_id/.test(cols) ? '?, ' : ''}?, 'satisfied', ?)`,
   );

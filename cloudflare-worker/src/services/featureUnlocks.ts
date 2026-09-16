@@ -95,7 +95,7 @@ export async function hasFeatureUnlock(
   const row = await env.DB.prepare(
     `SELECT 1 FROM feature_unlocks
       WHERE user_id = ? AND feature_key = ?
-        AND (expires_at IS NULL OR expires_at > datetime('now'))
+        AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))
       LIMIT 1`,
   ).bind(userId, featureKey).first();
   return !!row;
@@ -110,7 +110,7 @@ export async function listActiveUnlocks(
   const res = await env.DB.prepare(
     `SELECT feature_key, expires_at FROM feature_unlocks
       WHERE user_id = ?
-        AND (expires_at IS NULL OR expires_at > datetime('now'))
+        AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))
       ORDER BY created_at DESC`,
   ).bind(userId).all<{ feature_key: string; expires_at: string | null }>();
   return res.results ?? [];
