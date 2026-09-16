@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, Clock3, FileText, LockKeyhole, RefreshCw, ShieldCheck, Sparkles, Waves } from 'lucide-react';
 import { api } from '../../lib/api';
+import { text } from '../../lib/absence';
 import { WorkerRail } from '../../ui';
 import './founderRaiseCapital.css';
 import './founderRaiseLiquidity.css';
@@ -14,7 +15,6 @@ const list = (value, ...keys) => {
   for (const key of keys) if (Array.isArray(value?.[key])) return value[key];
   return [];
 };
-const text = (value, fallback = 'Not recorded') => String(value ?? '').trim() || fallback;
 const money = (value) => {
   const amount = Number(value);
   if (!Number.isFinite(amount)) return 'Not recorded';

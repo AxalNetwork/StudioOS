@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, BarChart3, ChevronRight, RefreshCw, Sparkles, Users } from 'lucide-react';
 import { api } from '../../lib/api';
+import { text, titleCase } from '../../lib/absence';
 import { WorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowCustomers.css';
@@ -14,13 +15,12 @@ const list = (value, ...keys) => {
   for (const key of keys) if (Array.isArray(value?.[key])) return value[key];
   return [];
 };
-const text = (value, fallback = 'Not recorded') => String(value ?? '').trim() || fallback;
 const dateLabel = (value) => {
   if (!value) return 'Date not recorded';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
 };
-const statusLabel = (value) => text(value, 'Status not recorded').replace(/[_-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+const statusLabel = (value) => titleCase(value) || 'Status not recorded';
 const sourceLabel = (value) => text(value, 'Source not recorded');
 
 export default function FounderGrowCustomers() {

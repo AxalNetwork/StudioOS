@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, ChevronRight, CircleDot, RefreshCw, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
+import { text, titleCase } from '../../lib/absence';
 import { WorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowCapitalMatch.css';
@@ -14,13 +15,12 @@ const list = (value, ...keys) => {
   for (const key of keys) if (Array.isArray(value?.[key])) return value[key];
   return [];
 };
-const text = (value, fallback = 'Not recorded') => String(value ?? '').trim() || fallback;
 const dateLabel = (value) => {
   if (!value) return 'Date not recorded';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
 };
-const labelStage = (value) => text(value, 'Stage not recorded').replace(/[_-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+const labelStage = (value) => titleCase(value) || 'Stage not recorded';
 const normalizedStage = (row) => String(row.stage || row.status || '').toLowerCase();
 
 export default function FounderGrowCapitalMatch() {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, BriefcaseBusiness, ChevronRight, RefreshCw, Sparkles, UserRound, Users } from 'lucide-react';
 import { api, jobs as jobsApi } from '../../lib/api';
+import { text, titleCase } from '../../lib/absence';
 import { WorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowTalent.css';
@@ -14,14 +15,13 @@ const list = (value, ...keys) => {
   for (const key of keys) if (Array.isArray(value?.[key])) return value[key];
   return [];
 };
-const text = (value, fallback = 'Not recorded') => String(value ?? '').trim() || fallback;
 const dateLabel = (value) => {
   if (!value) return 'Date not recorded';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
 };
 const projectMatch = (job, project) => project && String(job?.project_id ?? '') === String(project.id);
-const shortStatus = (status) => text(status, 'Stage not recorded').replace(/[_-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+const shortStatus = (status) => titleCase(status) || 'Stage not recorded';
 const shortlisted = (application) => ['shortlisted', 'interview', 'offer', 'hired'].includes(String(application?.status || '').toLowerCase());
 
 export default function FounderGrowTalent() {

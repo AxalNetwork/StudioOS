@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CalendarDays, ChevronRight, RefreshCw, Rocket, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
+import { text, titleCase } from '../../lib/absence';
 import { WorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowLaunch.css';
@@ -14,15 +15,14 @@ const list = (value, ...keys) => {
   for (const key of keys) if (Array.isArray(value?.[key])) return value[key];
   return [];
 };
-const text = (value, fallback = 'Not recorded') => String(value ?? '').trim() || fallback;
 const linked = (row, project) => row?.project_id != null && project?.id != null && String(row.project_id) === String(project.id);
 const dateLabel = (value) => {
   if (!value) return 'Date not recorded';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
 };
-const kindLabel = (value) => text(value, 'Event').replace(/[_-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
-const statusLabel = (value) => text(value, 'State not recorded').replace(/[_-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+const kindLabel = (value) => titleCase(value) || 'Event';
+const statusLabel = (value) => titleCase(value) || 'State not recorded';
 
 export default function FounderGrowLaunch() {
   const [params, setParams] = useSearchParams();

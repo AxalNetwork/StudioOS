@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, ChevronRight, CircleDot, FileText, RefreshCw, Target } from 'lucide-react';
 import { api } from '../../lib/api';
+import { text } from '../../lib/absence';
 import { WorkerRail } from '../../ui';
 import './founderRaiseStatus.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
@@ -10,7 +11,6 @@ import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 
 const asList = (value, key) => Array.isArray(value) ? value : (Array.isArray(value?.[key]) ? value[key] : []);
 const clean = (value) => String(value ?? '').trim();
-const display = (value, fallback = 'Not recorded') => clean(value) || fallback;
 const money = (value) => {
   if (value === null || value === undefined || value === '' || !Number.isFinite(Number(value))) return 'Not recorded';
   return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(value));
@@ -20,7 +20,7 @@ const date = (value) => {
   const parsed = new Date(`${value}T12:00:00`);
   return Number.isNaN(parsed.getTime()) ? String(value) : new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(parsed);
 };
-const stateText = (value) => display(value).replace(/[_-]/g, ' ');
+const stateText = (value) => text(value).replace(/[_-]/g, ' ');
 const stateTone = (value) => {
   const normalized = clean(value).toLowerCase();
   if (['signed', 'filed', 'closed', 'done', 'passed', 'committed'].includes(normalized)) return 'good';
@@ -110,19 +110,19 @@ export default function FounderRaiseStatus() {
   const rows = useMemo(() => [
     ...documents.map((document, index) => ({
       id: `document-${document.id || index}`,
-      label: display(document.title || document.name || document.doc_type, 'Untitled legal document'),
-      owner: display(document.owner_name || document.owner, 'Not recorded'),
+      label: text(document.title || document.name || document.doc_type, 'Untitled legal document'),
+      owner: text(document.owner_name || document.owner, 'Not recorded'),
       state: stateText(document.status),
-      holds: display(document.holds_up || document.blocks || document.next_step, 'Not recorded'),
+      holds: text(document.holds_up || document.blocks || document.next_step, 'Not recorded'),
       at: document.updated_at || document.created_at || null,
       source: 'Legal record',
     })),
     ...prospects.map((prospect, index) => ({
       id: `prospect-${prospect.id || index}`,
-      label: display(prospect.name || prospect.investor_name || prospect.company, 'Unnamed investor prospect'),
-      owner: display(prospect.owner_name || prospect.owner, 'Not recorded'),
+      label: text(prospect.name || prospect.investor_name || prospect.company, 'Unnamed investor prospect'),
+      owner: text(prospect.owner_name || prospect.owner, 'Not recorded'),
       state: stateText(prospect.stage || prospect.status),
-      holds: display(prospect.next_step || prospect.notes || prospect.holds_up, 'Not recorded'),
+      holds: text(prospect.next_step || prospect.notes || prospect.holds_up, 'Not recorded'),
       at: prospect.updated_at || prospect.created_at || null,
       source: 'Investor prospect',
     })),
@@ -181,7 +181,7 @@ export default function FounderRaiseStatus() {
 
 function StatusContent({ project, round, roundInfo, target, raised, coverage, rows, allRows, blockerCount, openDate, documents, prospects, errors, filter, setFilter, query }) {
   return <div className="fr-status-content">
-    <div className="fr-status-context"><div><span className="fr-status-label">Selected startup</span><strong data-testid="text-status-project">{display(project.name)}</strong><span>{display(project.sector, 'Sector not recorded')}</span></div><div className="fr-status-context-right"><span className="fr-status-label">Round record</span><strong>{errors.round ? 'Round source unavailable' : display(round?.name, 'No round recorded')}</strong><span>{errors.round ? 'Could not read this source' : (openDate ? `Open since ${date(openDate)}` : 'Open date not recorded')}</span></div></div>
+    <div className="fr-status-context"><div><span className="fr-status-label">Selected startup</span><strong data-testid="text-status-project">{text(project.name)}</strong><span>{text(project.sector, 'Sector not recorded')}</span></div><div className="fr-status-context-right"><span className="fr-status-label">Round record</span><strong>{errors.round ? 'Round source unavailable' : text(round?.name, 'No round recorded')}</strong><span>{errors.round ? 'Could not read this source' : (openDate ? `Open since ${date(openDate)}` : 'Open date not recorded')}</span></div></div>
     <div className="fr-status-stat-strip">
       <Stat label="Signed" value={errors.round ? 'Unavailable' : money(raised)} note={errors.round ? 'Round source unavailable' : (coverage !== null ? `${coverage}% of target` : 'Committed amount')} muted={Boolean(errors.round)} />
       <Stat label="Weighted pipeline" value="Unavailable" note="Probability data not returned" muted />

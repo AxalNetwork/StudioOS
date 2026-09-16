@@ -59,6 +59,12 @@ export { default as CompanySwitcher } from './CompanySwitcher';
 // The two ways a page says it does not know something. One pair, because
 // four copies had already drifted apart in their wording — see Honesty.jsx.
 export { Unrecorded, Unreadable } from './Honesty';
+// The same rule one layer down, for the cases that need a STRING rather than
+// an element — inside a `title=`, a template literal, an export column. They
+// had drifted the same way and further: `text` was declared 19 times in two
+// behaviours, and a title-caser 30 times under 14 names, one of which re-cased
+// its own fallback sentence into "Stage Not Recorded". See lib/absence.js.
+export { NOT_RECORDED, text, titleCase } from '../lib/absence';
 
 // Pre-existing, re-exported so `ui/` is the one import surface.
 export { default as EmptyState } from '../components/EmptyState';

@@ -1,3 +1,5 @@
+import { NOT_RECORDED } from './absence';
+
 /**
  * Deal Flow — the operator's vocabulary, mirrored from the worker.
  *
@@ -80,8 +82,14 @@ export const SLA_BAND_CLASS = {
   none: 'text-gray-500 bg-transparent border-transparent dark:text-gray-500',
 };
 
-/** What the platform shows where it has nothing recorded. Never a guess. */
-export const NOT_RECORDED = 'Not recorded';
+/**
+ * What the platform shows where it has nothing recorded. Never a guess.
+ *
+ * Re-exported rather than declared: this file and `fundAnalytics.js` each held
+ * their own copy of the same string. Every existing importer keeps working —
+ * `lib/absence.js` is where the one definition lives now.
+ */
+export { NOT_RECORDED };
 
 /**
  * Format a percentage that may legitimately have no answer.

@@ -16,8 +16,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import React from 'react';
 import { api } from './api';
+import { NOT_RECORDED } from './absence';
 
-export const NOT_RECORDED = 'Not recorded';
+// Re-exported, not declared: `dealFlow.js` held a second copy of this exact
+// string. One definition now, in `lib/absence.js`; every importer is unchanged.
+export { NOT_RECORDED };
 
 /** Money arrives as integer cents and is only ever divided for display. */
 export function fmtCents(cents) {

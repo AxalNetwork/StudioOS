@@ -8587,3 +8587,116 @@ paste is not delivered. The test pins the call's position between `try {` and
 
 Nothing about which failures are *reported* — that was D115, and all three were
 already reporting before this. This is only what the screen says.
+
+## D117 — One home for the string-level absence helpers, and the fallback stops being re-cased
+
+`frontend/src/lib/README.md` has said since it was written: *"If a helper
+appears in two places, put it here once rather than a third time."* Nothing
+checked it. Measured against `main` at `597f0f68c`:
+
+| duplicate | count |
+| --- | --- |
+| `const text = (value, fallback = 'Not recorded')` | **16**, in three spellings |
+| the same function under the name `display` | **3** |
+| a title-casing helper | **30**, under **14** names |
+| `export const NOT_RECORDED = 'Not recorded'` | **2** (`lib/dealFlow.js`, `lib/fundAnalytics.js`) |
+
+`ui/Honesty.jsx` made this argument one layer up — `Unrecorded` and
+`Unreadable` were four components whose copy had already drifted apart. These
+are the string-level half of the same rule, for the cases that need a string
+rather than an element, and they had drifted the same way.
+
+### The two divergences, both demonstrable
+
+**1. `text` had two behaviours.** Twelve pages used
+`String(value ?? '').trim() || fallback`. Four — `FounderBuildBoard`,
+`FounderBuildRoadmap`, `FounderBuildThisWeek`, `FounderBuildCadence` — tested
+trimmed-emptiness and then returned `String(value)` **un-trimmed**. So
+`text('  x  ')` was `'x'` on twelve pages and `'  x  '` on four.
+
+**2. Every founder title-caser re-cased its own fallback sentence.** This is the
+finding recorded against #522 and left latent there; it is worse than that note
+said. The helpers ran `text(value, fallback)` *first* and title-cased the
+result, so a formatter that cannot tell a human-written sentence from data was
+handed one. Verified by running the shipped expressions:
+
+```
+labelStage(null)  ->  "Stage Not Recorded"
+statusLabel(null) ->  "State Not Recorded"
+pretty(null)      ->  "Not Recorded"
+```
+
+Meanwhile `InvestorPortfolioPositions.jsx` cased *first* and fell back after, so
+the same null there read `"Not recorded"`. The same absence, two strings, in one
+product. Nobody wrote "Stage Not Recorded".
+
+### The fix, and why `titleCase` takes no fallback
+
+`frontend/src/lib/absence.js` holds `NOT_RECORDED`, `text(value, fallback)` and
+`titleCase(value)`. `text` **trims**, which is what twelve of the sixteen did.
+`titleCase` cases the value and returns `''` for an absent one, so the caller
+writes its own fallback after it:
+
+```js
+titleCase(row.stage) || 'Stage not recorded'
+```
+
+**The fallback is deliberately not a parameter.** There are nine different ones
+in the tree — "Stage not recorded", "State not recorded", "Event",
+"relationship" — and they are not interchangeable, so folding them into the
+helper would flatten copy somebody chose *and* put the sentence back inside the
+caser, which is the bug. This is the shape `InvestorPortfolioPositions` already
+had; it is now the only shape.
+
+Nineteen founder pages convert. `lib/dealFlow.js` and `lib/fundAnalytics.js`
+re-export `NOT_RECORDED` rather than declaring it, so no import site moved.
+`ui/index.js` re-exports all three beside `Unrecorded`/`Unreadable`.
+
+### What changes on screen
+
+Two things, both moving a minority onto what the majority already did:
+
+1. The four Build pages start trimming.
+2. Twelve founder sites stop rendering a title-cased fallback — "Stage Not
+   Recorded" becomes "Stage not recorded".
+
+### The guard, and why it starts dirty
+
+`frontend/test/absence_helpers_single_definition.test.mjs` asserts each helper
+is **defined once**, not counted — a count passes as soon as somebody deletes
+one copy and adds another. It refuses both `text` and its `display` alias,
+because the alias is how three files hid from the first measurement.
+
+The 18 title-casers outside the founder pages are on a **named deferred list**
+with their reason, the shape `check-inline-project-pickers.mjs` uses for its own
+baseline, and the guard refuses **stale** entries as well as new ones — a ledger
+is only worth reading if every line still points at something. The list may only
+shrink; the follow-up empties it. `InvestorPortfolioPositions` stays on it on
+purpose: it is the reference for the correct ordering.
+
+### Left alone deliberately
+
+- **`dateLabel` / `date` / `formatDate`** — byte-identical in 7 files, with
+  `'Date not recorded'` at 17 sites. An `Intl` formatter, not an absence helper.
+- **`money` must not be merged.** `FounderRaiseCapital` formats whole dollars as
+  currency; `FounderRaiseLiquidity` abbreviates to `$1.2M`. Two deliberate
+  behaviours under one name — the exact trap this change exists to avoid.
+
+### One assertion was wrong before it was right
+
+The check that `titleCase` has no fallback was first written as
+`titleCase.length === 1`. A **defaulted** parameter does not count toward
+`Function.length`, so `(value, fallback = NOT_RECORDED)` still reports 1 and the
+assertion walked straight through the mutation it existed to catch. It asserts
+the behaviour now — a second argument must do nothing. Six mutations, six
+caught; that one only after the assertion was fixed rather than the code.
+
+### One existing guard was repointed, and it got stronger
+
+`fund_surfaces_live.test.mjs` asserted `/Not recorded/` against the **source
+text** of `fundAnalytics.js`. Moving the literal broke it — correctly: it was
+watching a string, not a behaviour. It now follows the reference one hop (the
+module must import the shared constant, and the shared module must define it as
+that sentence) and adds the check the original could not make: that `fmtCents`
+**answers** a null with it. Mutation-checked — making `fmtCents` return `'0'`
+fails the new assertion and would have passed the old one.
