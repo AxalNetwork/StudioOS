@@ -7,6 +7,18 @@
  * the Worker's, keyed off `BRANCH_CODE`, and no assertion here should ever be
  * read as evidence that anything is enforced in the browser.
  *
+ * THE RENAME IS PARTIAL BECAUSE THE DESIGN IS. As of #238/D123 the badge chip
+ * reads `BRANCH`, and that is the ONLY word that moved — measured in the canvas
+ * rather than inferred from its CHANGELOG. `Admin · Subsidiary.dc.html` still
+ * titles S0 "Subsidiary Admin — the tenancy wall", still passes
+ * `tier="subsidiary"` to `AdminRail` at fourteen call sites, and still says
+ * "a subsidiary cannot see" in its own prose. So the file names, the role key
+ * `branch_admin`, the `/branch/*` routes and every comment below stay as they
+ * are: finishing the rename here would make the repo disagree with the export
+ * it exists to mirror. (Unrelated and NOT part of any rename: "Subsidiary
+ * Spin-Out" in `LegalCapitalPage.jsx` and `legalcap.ts` is a founder
+ * incorporating a subsidiary company — a different noun that shares a spelling.)
+ *
  * THE ROW/ROUTE RULE, HELD. `sidebarConfig.js` forbids a row pointing at a
  * route that does not exist, because it "looks shipped and 404s". All eight
  * canvas rows ship here and all eight resolve: the ones whose artboards are
@@ -95,7 +107,23 @@ test('the territory badge renders from /me.branch and nothing else', () => {
   // renders no badge at all rather than an empty chip.
   assert.match(APP_CODE, /const branchFact = branchOfUser\(user\) \? user\.branch : null;/);
   assert.match(APP_CODE, /\{branchFact && \(/);
-  assert.ok(APP_CODE.includes('SUBSIDIARY'), 'the badge names the tier, per the canvas');
+
+  // The tier word, BOUNDED TO THE BADGE'S OWN ELEMENT.
+  //
+  // This was `APP_CODE.includes('SUBSIDIARY')` — a whole-file scan, which was
+  // a real guard only by luck: `SUBSIDIARY` happened to appear nowhere else in
+  // App.jsx. `BRANCH` does. `codeOnly` leaves JSX comments in place, and one of
+  // them reads "THE ROOT BRANCHES TOO" (the `/research` note), so the same
+  // assertion renamed word-for-word would have passed with the badge deleted
+  // entirely. An assertion that cannot fail on the bug it was written for is
+  // decoration, so the scan is bounded to the span it is about.
+  const badgeAt = APP_CODE.indexOf('data-testid="territory-badge"');
+  const badge = APP_CODE.slice(badgeAt, APP_CODE.indexOf('</span>', badgeAt));
+  assert.match(badge, /\{' · BRANCH'\}/, 'the badge names the tier, per the canvas');
+  // And it is the word the canvas now uses. `Admin · Subsidiary.dc.html` changed
+  // exactly one byte across S0–S6 (#238/D123) and this is it — so a revert here
+  // would put the shell back out of step with its own design source.
+  assert.ok(!badge.includes('SUBSIDIARY'), 'the badge still carries the retired word');
 });
 
 test('the shell arm decides a sidebar, never access', () => {
