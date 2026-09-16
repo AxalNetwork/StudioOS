@@ -31,6 +31,7 @@ import { NOT_RECORDED, text, titleCase } from '../src/lib/absence.js';
 
 const SRC = resolve(process.cwd(), 'frontend/src');
 const HOME = 'lib/absence.js';
+const ABSENCE = readFileSync(resolve(SRC, HOME), 'utf8');
 
 /** Every source file under frontend/src, as `path relative to src` → contents. */
 function sources() {
@@ -126,14 +127,18 @@ test('titleCase takes no fallback, which is the whole fix', () => {
   // A fallback that passes THROUGH the caser comes out re-cased, so the job
   // here is to stop someone "helpfully" adding the second parameter back.
   //
-  // NOT `titleCase.length === 1`, which is what this assertion said first and
-  // which a mutation walked straight through: a DEFAULTED parameter does not
-  // count toward `Function.length`, so `(value, fallback = NOT_RECORDED)`
-  // still reports 1. The assertion could not fail on the change it existed to
-  // catch. Assert the behaviour instead — a second argument must do nothing.
-  assert.equal(titleCase(null, 'Stage not recorded'), '',
-    'titleCase grew a fallback parameter — the fallback belongs at the call site');
-  assert.equal(titleCase('   ', NOT_RECORDED), '');
+  // THIS ASSERTION HAS BEEN WRONG TWICE, WHICH IS WHY IT READS LIKE THIS.
+  // First it was `titleCase.length === 1` — but a DEFAULTED parameter does not
+  // count toward `Function.length`, so `(value, fallback = NOT_RECORDED)` still
+  // reports 1 and it walked straight through the change it existed to catch.
+  // Then it passed a second argument and asserted it did nothing — which works,
+  // but CodeQL reads a literal extra argument to a one-parameter function as a
+  // superfluous-argument defect (alerts 6108/6109), and it is RIGHT: the
+  // argument is dead. Reading the signature catches both mutation shapes —
+  // `(value, fallback = X)` and a bare `(value, fallback)` — without writing a
+  // call that is dead by construction.
+  assert.match(ABSENCE, /export function titleCase\(value\) \{/,
+    'titleCase grew a parameter — the fallback belongs at the call site');
   assert.equal(titleCase(null), '', 'an absent value must return empty so `|| fallback` works');
   assert.equal(titleCase(undefined), '');
   assert.equal(titleCase('   '), '');
