@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
+import { FREEZING_STATUSES, noticeKindLabel } from '../../lib/notices';
 
 /**
  * My Licence — /admin/my-licence. The subsidiary administrator's own view.
@@ -91,7 +92,10 @@ function Row({ label, value }) {
 //   `rejected` — HQ read your answer and did not accept it. Still frozen.
 // Rendering the first as a freeze would be a false alarm; rendering the second
 // as a reminder would be the opposite failure, and worse.
-const FREEZING = new Set(['overdue', 'rejected']);
+// D138 — `FREEZING` was declared here AND in `AdminLicences.jsx`; it is
+// `FREEZING_STATUSES` in `lib/notices.js` now, imported above, on the rule
+// `lib/README.md` states. `ANSWERABLE` stays here: it has exactly one caller,
+// and a single-use export is not a consolidation.
 const ANSWERABLE = new Set(['issued', 'overdue']);
 
 const NOTICE_TONE = {
@@ -103,12 +107,6 @@ const NOTICE_TONE = {
   withdrawn: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
 };
 
-const KIND_LABEL = {
-  renewal_terms: 'Renewal terms',
-  fees: 'Fees',
-  term_violation: 'A term of the agreement',
-  other: 'Your licence',
-};
 
 // NOT DISMISSIBLE, AND THAT IS THE POINT. `components/InfoStrip.jsx` and both
 // `*Banner*` components persist a dismissal to `localStorage`; a compliance
@@ -120,7 +118,7 @@ const KIND_LABEL = {
 // show — their territory, their terms, their seats — and exactly one thing they
 // have to do, so the banner sits above the page rather than replacing it.
 function NoticeBanner({ notices }) {
-  const frozen = notices.filter((n) => FREEZING.has(n.status));
+  const frozen = notices.filter((n) => FREEZING_STATUSES.has(n.status));
   const open = notices.filter((n) => n.status === 'issued');
   if (frozen.length === 0 && open.length === 0) return null;
 
@@ -203,7 +201,7 @@ function NoticeCard({ notice, onAnswered }) {
         <div className="min-w-0">
           <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{notice.subject}</div>
           <div className="text-xs text-gray-500 dark:text-gray-400">
-            {KIND_LABEL[notice.kind] || notice.kind} · issued {fmtDate(notice.created_at)}
+            {noticeKindLabel(notice.kind)} · issued {fmtDate(notice.created_at)}
           </div>
         </div>
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${NOTICE_TONE[notice.status] || NOTICE_TONE.withdrawn}`}>
@@ -215,7 +213,7 @@ function NoticeCard({ notice, onAnswered }) {
 
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
         <span>Answer by {fmtDate(notice.respond_by)}</span>
-        {notice.froze_at && FREEZING.has(notice.status) && (
+        {notice.froze_at && FREEZING_STATUSES.has(notice.status) && (
           <span className="font-medium text-rose-700 dark:text-rose-300">
             Frozen since {fmtDate(notice.froze_at)}
           </span>

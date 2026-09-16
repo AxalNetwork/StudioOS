@@ -38,7 +38,9 @@ import { hydrate, type LicenceRow } from './admin_licences';
 import { DERIVED_UNAVAILABLE } from './licence';
 import { fanOut, coverage, withRegistry } from '../services/branches';
 import { openEscalations } from '../rpc/hqOps';
-import type { BranchOverview } from '../rpc/branchOps';
+import type { BranchOverview, BranchAccountHit } from '../rpc/branchOps';
+import { FREEZING_STATUSES } from '../util/authErrors';
+import { ensureLastActiveColumn } from '../middleware/lastActive';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -50,6 +52,33 @@ const ESCALATION_LIMIT = 25;
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+/** What one branch answers a search with. */
+type BranchAccountSearch = { results: BranchAccountHit[]; truncated: boolean };
+
+/** How many hits HQ asks one branch for. The RPC clamps to 50; this is its own default. */
+const BRANCH_SEARCH_LIMIT = 20;
+
+/**
+ * The deployment rows `withRegistry` merges the fan-out against, so a licence
+ * HQ has provisioned but holds no binding to yet reads `not_deployed` rather
+ * than vanishing.
+ *
+ * Migration 258 not applied on this database means an empty registry, not a
+ * failure: the bindings still answer and the fan-out is unaffected; only the
+ * `not_deployed` rows are missing, and an empty registry produces none. Two
+ * callers since D138 (`/overview` and `/admins`), which is why it is a function.
+ */
+async function deployedBranches(env: Env): Promise<Array<{ code: string; hostname: string; status: string }>> {
+  try {
+    const dep = await env.DB.prepare(
+      'SELECT code, hostname, status FROM licence_deployments ORDER BY code',
+    ).all<{ code: string; hostname: string; status: string }>();
+    return dep.results || [];
+  } catch {
+    return [];
+  }
 }
 
 r.get('/overview', async (c) => {
@@ -127,18 +156,7 @@ r.get('/overview', async (c) => {
   // state so one unreachable territory does not empty the page. Merged with
   // the deployment registry so a licence HQ has provisioned but has no binding
   // to yet reads `not_deployed` rather than vanishing.
-  let registry: Array<{ code: string; hostname: string; status: string }> = [];
-  try {
-    const dep = await env.DB.prepare(
-      'SELECT code, hostname, status FROM licence_deployments ORDER BY code',
-    ).all<{ code: string; hostname: string; status: string }>();
-    registry = dep.results || [];
-  } catch {
-    // Migration 258 not applied on this database. The bindings still answer,
-    // so the fan-out below is unaffected; only the `not_deployed` rows are
-    // missing, and an empty registry produces none.
-    registry = [];
-  }
+  const registry = await deployedBranches(env);
   const branches = withRegistry(await fanOut<BranchOverview>(env, 'overview'), registry);
   const branchCoverage = coverage(branches);
 
@@ -176,6 +194,238 @@ r.get('/overview', async (c) => {
     branches,
     branches_coverage: branchCoverage,
     ...DERIVED_UNAVAILABLE,
+  });
+});
+
+/**
+ * GET /admins — H9 · Team, the first screen whose SUBJECT is the admin accounts.
+ *
+ * WHY IT EXISTS (D138). The owner's sentence is "HQ needs to be able to
+ * supervise all admins." Five merged PRs built every power that implies — open
+ * (D134), freeze (D135), the two screens that work a notice (D136), the push
+ * that reaches a branch (D137) — and there was no screen anywhere whose subject
+ * was the administrators. Supervising meant opening one licence at a time:
+ * /admin/licences → a licence → Administrators → Notices. "Who is frozen right
+ * now" could not be asked, only assembled.
+ *
+ * THE ROLE FILTER IS SERVER-SIDE, AND THAT IS THE DEFECT THIS CLOSES.
+ * `SuperAdminHolders.jsx` fed its grant picker from `GET /admin/users` with no
+ * arguments — `ORDER BY created_at DESC LIMIT 100` — and filtered that PAGE to
+ * `role === 'admin'` in the browser. Admins are among the OLDEST accounts, so
+ * past a hundred rows an admin is simply absent from the list, and the picker
+ * reads "No other admin to hand it to" about a database that has several. In a
+ * picker, absence is not a display problem: the elevation cannot be granted at
+ * all. The query below has no LIMIT because it has a predicate — admins are one
+ * per licence plus HQ, not a directory — which is the same shape
+ * `routes/users.ts` already runs for `?role=`.
+ *
+ * WHY IT IS SUPER-ADMIN-ONLY. D132's header states the rule and D133 applied it
+ * to four more routes: a route that reads another admin's licence, ladder state
+ * and last-active is a cross-admin read whatever it renders, and gating some of
+ * them is gating none of them.
+ *
+ * THE LADDER IS READ AS A CLAIM SOMEBODY MADE, NEVER INFERRED FROM SILENCE.
+ * `admin_notices` is migration 264 and a database that has not applied it must
+ * render `ladder_readable: false` with its reason — NOT four rungs of "clear".
+ * `auth.ts`'s own freeze gate says why in the same words: being frozen is a
+ * claim somebody made, and inferring its absence from an unreadable table is
+ * how a screen comes to report the opposite of the truth. It is also the D133
+ * lesson twice over — two fixtures narrower than the schema once had seven
+ * tests reporting "HQ has not pushed this branch its licence" about a row
+ * sitting in front of them.
+ *
+ * THE GROUPS ARE H9'S OWN MODEL. The canvas: "There is no global accounts
+ * table. HQ asks each branch over its private link and groups what comes back,
+ * so a search result is really four answers and a fifth for HQ-held accounts —
+ * and when one branch does not answer, its group says so instead of showing
+ * zero." So the HQ roster is complete and always returned, and `q` is what HQ
+ * ASKS THE BRANCHES; the fan-out's three states (`ok` / `unreadable` /
+ * `not_deployed`) come through untouched. With no branch provisioned `branches`
+ * is [], every admin is HQ-held, and that is true rather than empty.
+ */
+type TeamAdminRow = {
+  id: number; uid: string | null; email: string; name: string | null;
+  is_active: number; last_active_at: string | null; created_at: string;
+};
+
+type TeamLicenceRow = {
+  user_id: number; admin_role: string; uid: string;
+  licence_ref: string | null; brand_name: string | null; status: string | null;
+};
+
+type TeamNoticeRow = {
+  user_id: number; status: string; n: number;
+  oldest_respond_by: string | null; oldest_froze_at: string | null;
+};
+
+/**
+ * The statuses a notice is still OPEN in — the four rungs the ladder can be on.
+ *
+ * TYPED AS A FOUR-TUPLE, and the SQL below writes its four `?` as literal text
+ * rather than joining them from this array. `check-sql-prepare` refuses a `${}`
+ * inside `DB.prepare(\`…\`)` even when it could only ever emit placeholders —
+ * the same refusal D128's search hit — and it is right to: a guard that made an
+ * exception for "provably safe" interpolation would have to judge that at every
+ * site. `util/authErrors.ts` states the compensating rule for its own tuple:
+ * typing the length means adding a fifth status is a COMPILE error at the bind
+ * site rather than a silent under-bind, and a test counts the placeholders
+ * against it so the two cannot drift.
+ */
+const OPEN_NOTICE_STATUSES: readonly ['overdue', 'rejected', 'responded', 'issued'] =
+  [...FREEZING_STATUSES, 'responded', 'issued'];
+
+/**
+ * Worst first, and the same ordering the SPA sorts by (`lib/notices.js`).
+ * Frozen outranks waiting-on-HQ outranks waiting-on-them, because that is the
+ * order in which somebody has to do something.
+ */
+function rungOf(statuses: Set<string>): 'frozen' | 'awaiting_review' | 'notified' | 'clear' {
+  for (const s of FREEZING_STATUSES) if (statuses.has(s)) return 'frozen';
+  if (statuses.has('responded')) return 'awaiting_review';
+  if (statuses.has('issued')) return 'notified';
+  return 'clear';
+}
+
+r.get('/admins', async (c) => {
+  await requireSuperAdmin(c);
+  const env = c.env;
+  // `last_active_at` is a runtime-added column on databases older than
+  // migration 049's helper (see its header). Selecting it without this is the
+  // "no such column" 500 that #203 was written about.
+  await ensureLastActiveColumn(env);
+
+  const admins = await env.DB.prepare(
+    `SELECT id, uid, email, name, is_active, last_active_at, created_at
+       FROM users
+      WHERE role = 'admin'
+      ORDER BY created_at ASC`,
+  ).all<TeamAdminRow>();
+  const rows = admins.results || [];
+
+  // One licence per admin — `licence_admins` is UNIQUE(user_id) by migration
+  // 190's own decision, so this Map cannot lose a row to a collision. Read
+  // user→licence, which is the direction no route read before: D134's
+  // `GET /:uid/admins` reads licence→users, one licence at a time, which is
+  // exactly the per-licence walk this screen exists to replace.
+  const byUser = new Map<number, TeamLicenceRow>();
+  let licencesReadable = true;
+  let licencesReason: string | null = null;
+  try {
+    const held = await env.DB.prepare(
+      `SELECT la.user_id, la.admin_role, tl.uid, tl.licence_ref, tl.brand_name, tl.status
+         FROM licence_admins la JOIN territory_licences tl ON tl.id = la.licence_id`,
+    ).all<TeamLicenceRow>();
+    for (const row of held.results || []) byUser.set(Number(row.user_id), row);
+  } catch (e) {
+    licencesReadable = false;
+    licencesReason = 'The licence ledger could not be read, so which licence each administrator '
+      + `holds is unknown rather than none: ${(e as Error).message}`;
+  }
+
+  // The ladder, per admin. `GROUP BY user_id, status` rides
+  // `idx_admin_notices_user(user_id, status)`, which migration 264 created for
+  // the addressee's own list and the freeze gate — this is the first read of it
+  // for a THIRD party, and it needs no new index.
+  const noticesByUser = new Map<number, { statuses: Set<string>; open: number; respond_by: string | null; froze_at: string | null }>();
+  let ladderReadable = true;
+  let ladderReason: string | null = null;
+  try {
+    const notices = await env.DB.prepare(
+      `SELECT user_id, status, COUNT(*) AS n,
+              MIN(respond_by) AS oldest_respond_by,
+              MIN(froze_at) AS oldest_froze_at
+         FROM admin_notices
+        WHERE status IN (?, ?, ?, ?)
+        GROUP BY user_id, status`,
+    ).bind(...OPEN_NOTICE_STATUSES).all<TeamNoticeRow>();
+    for (const row of notices.results || []) {
+      const id = Number(row.user_id);
+      const acc = noticesByUser.get(id) || { statuses: new Set<string>(), open: 0, respond_by: null, froze_at: null };
+      acc.statuses.add(String(row.status));
+      acc.open += Number(row.n) || 0;
+      // The EARLIEST deadline and the EARLIEST freeze, because what a
+      // supervisor needs is the oldest unanswered thing, not the newest.
+      if (row.oldest_respond_by && (!acc.respond_by || row.oldest_respond_by < acc.respond_by)) acc.respond_by = row.oldest_respond_by;
+      if (row.oldest_froze_at && (!acc.froze_at || row.oldest_froze_at < acc.froze_at)) acc.froze_at = row.oldest_froze_at;
+      noticesByUser.set(id, acc);
+    }
+  } catch (e) {
+    ladderReadable = false;
+    ladderReason = 'The compliance ladder could not be read on this database, so no rung is shown. '
+      + 'An unreadable notices table is not a clear ladder: being under notice is a claim somebody '
+      + `made, and a screen that inferred "clear" from silence would say the opposite of the truth (${(e as Error).message}).`;
+  }
+
+  // The elevation. One row per holder; `super_admins` is the side table
+  // migration 199 moved it to because `users` sits at D1's 100-column cap.
+  const holders = new Set<number>();
+  let holdersReadable = true;
+  try {
+    const held = await env.DB.prepare('SELECT user_id FROM super_admins').all<{ user_id: number }>();
+    for (const row of held.results || []) holders.add(Number(row.user_id));
+  } catch { holdersReadable = false; }
+
+  const items = rows.map((u) => {
+    const licence = byUser.get(Number(u.id)) || null;
+    const ladder = noticesByUser.get(Number(u.id)) || null;
+    return {
+      user_id: u.id,
+      uid: u.uid,
+      email: u.email,
+      name: u.name,
+      is_active: Number(u.is_active) === 1 ? 1 : 0,
+      last_active_at: u.last_active_at,
+      created_at: u.created_at,
+      super_admin: holders.has(Number(u.id)) ? 1 : 0,
+      // Every account on HQ's own database is HQ-held. It is a fact about where
+      // the row lives, not a placeholder: a branch's accounts live on the
+      // branch's database and reach this screen through the fan-out below.
+      branch: null as string | null,
+      licence: licence
+        ? {
+          uid: licence.uid,
+          licence_ref: licence.licence_ref,
+          brand_name: licence.brand_name,
+          status: licence.status,
+          admin_role: licence.admin_role,
+        }
+        : null,
+      ...(ladderReadable
+        ? {
+          rung: rungOf(ladder?.statuses || new Set<string>()),
+          open_notices: ladder?.open || 0,
+          respond_by: ladder?.respond_by || null,
+          froze_at: ladder?.froze_at || null,
+        }
+        : {}),
+    };
+  });
+
+  // H9's branch groups. `q` is what HQ ASKS each branch: a branch cannot be
+  // listed exhaustively from here (D.2 — its accounts are on its own database),
+  // so an unasked branch answers nothing and says so rather than rendering as
+  // an empty territory.
+  const q = String(c.req.query('q') || '').trim();
+  const registry = await deployedBranches(env);
+  const branches = q
+    ? withRegistry(await fanOut<BranchAccountSearch>(env, 'searchAccounts', [q, BRANCH_SEARCH_LIMIT]), registry)
+    : withRegistry([], registry);
+
+  return c.json({
+    // The HQ-held group: every administrator on this database, complete. The
+    // page filters it in the browser, which is honest HERE and was the defect
+    // THERE: filtering a complete list narrows it, filtering a page hides rows.
+    items,
+    total: items.length,
+    active: items.filter((x) => x.is_active === 1).length,
+    holders_available: holdersReadable,
+    licences_available: licencesReadable,
+    ...(licencesReadable ? {} : { licences_reason: licencesReason }),
+    ladder_readable: ladderReadable,
+    ...(ladderReadable ? {} : { ladder_reason: ladderReason }),
+    searched: q.length > 0,
+    branches,
+    branches_coverage: coverage(branches),
   });
 });
 
