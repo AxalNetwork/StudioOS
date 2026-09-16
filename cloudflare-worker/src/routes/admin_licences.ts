@@ -60,6 +60,10 @@ import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { hashEmail } from '../util/hashEmail';
 import { ensureLegalTemplatesSchema, getTemplate, listTemplates } from '../services/legalTemplateStore';
 import { mergeValues, renderContract } from '../services/licenceContract';
+// D137 — every transition below now reaches the branch that runs under the
+// licence. `applyLicence` had no caller at all, so HQ's suspend changed four
+// columns here and nothing on the subsidiary.
+import { pushLicenceToBranch } from '../services/licencePush';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -420,7 +424,8 @@ r.post('/:uid/activate', async (c) => {
       "UPDATE territory_licences SET status = 'active', status_note = NULL, suspended_at = NULL, updated_at = ? WHERE id = ?",
     ).bind(nowIso(), licence.id).run();
     await logEvent(c.env, licence.id, 'activated', admin.id);
-    return c.json({ ok: true, status: 'active' });
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, status: 'active', pushed });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -447,7 +452,11 @@ r.post('/:uid/suspend', async (c) => {
       body: `${note} Your territory is not released — suspension is not a lapse — and reading is unaffected.`,
       payload: { licence_uid: licence.uid },
     });
-    return c.json({ ok: true, status: 'suspended', territory_released: false });
+    // REPORTED, NEVER THROWN. The suspension is recorded at HQ whatever the
+    // branch does; `pushed.ok === false` is a fact about the branch, and a 502
+    // here would ask an operator to re-suspend something already suspended.
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, status: 'suspended', territory_released: false, pushed });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -469,7 +478,8 @@ r.post('/:uid/reinstate', async (c) => {
       body: 'HQ has reinstated it. Your account can make changes again.',
       payload: { licence_uid: licence.uid },
     });
-    return c.json({ ok: true, status: 'active' });
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, status: 'active', pushed });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -494,7 +504,8 @@ r.post('/:uid/renew', async (c) => {
       'UPDATE territory_licences SET renews_on = ?, updated_at = ? WHERE id = ?',
     ).bind(next, nowIso(), licence.id).run();
     await logEvent(c.env, licence.id, 'renewed', admin.id, { renews_on: next });
-    return c.json({ ok: true, renews_on: next });
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, renews_on: next, pushed });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -527,7 +538,10 @@ r.post('/:uid/terminate', async (c) => {
       body: `${note} ${codes.length ? `The ${codes.length === 1 ? 'territory' : `${codes.length} territories`} it held ${codes.length === 1 ? 'has' : 'have'} been released.` : ''}`.trim(),
       payload: { licence_uid: licence.uid, released: codes },
     });
-    return c.json({ ok: true, status: 'terminated', released: codes });
+    // Pushed AFTER the territory release, so the copy the branch receives
+    // reports the same empty territory the ledger now holds.
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, status: 'terminated', released: codes, pushed });
   } catch (e) { return mapError(c, e); }
 });
 

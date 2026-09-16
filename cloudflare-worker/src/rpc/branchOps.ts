@@ -310,11 +310,18 @@ export async function applyLicenceCopy(
   };
   const pushedAt = s('pushed_at') || nowIso();
   await env.DB.prepare(
+    // D137 — the five columns migration 265 adds ride here, because a column
+    // the push does not bind is a column that stays NULL however many times HQ
+    // pushes. `registered_address`, `signatory_name`, `signatory_title`,
+    // `term_years` and `terminated_at` are the five `MyLicencePage` reads and
+    // the copy never carried.
     `INSERT INTO branch_licence
        (id, licence_uid, licence_ref, legal_entity, brand_name, territory, status, seats_json,
         revenue_share_bps, token_split_bps, annual_fee_cents, currency, term_start, term_end,
-        renewal_at, template_version, suspended_at, suspended_note, pushed_at, updated_at)
-     VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        renewal_at, template_version, suspended_at, suspended_note,
+        registered_address, signatory_name, signatory_title, term_years, terminated_at,
+        pushed_at, updated_at)
+     VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
      ON CONFLICT(id) DO UPDATE SET
        licence_uid = excluded.licence_uid, licence_ref = excluded.licence_ref,
        legal_entity = excluded.legal_entity, brand_name = excluded.brand_name,
@@ -324,13 +331,18 @@ export async function applyLicenceCopy(
        term_start = excluded.term_start, term_end = excluded.term_end,
        renewal_at = excluded.renewal_at, template_version = excluded.template_version,
        suspended_at = excluded.suspended_at, suspended_note = excluded.suspended_note,
+       registered_address = excluded.registered_address,
+       signatory_name = excluded.signatory_name, signatory_title = excluded.signatory_title,
+       term_years = excluded.term_years, terminated_at = excluded.terminated_at,
        pushed_at = excluded.pushed_at, updated_at = datetime('now')`,
   ).bind(
     s('licence_uid') ?? '', s('licence_ref'), s('legal_entity'), s('brand_name'),
     s('territory') ?? '', s('status') ?? 'active', s('seats_json'),
     n('revenue_share_bps'), n('token_split_bps'), n('annual_fee_cents'), s('currency'),
     s('term_start'), s('term_end'), s('renewal_at'), s('template_version'),
-    s('suspended_at'), s('suspended_note'), pushedAt,
+    s('suspended_at'), s('suspended_note'),
+    s('registered_address'), s('signatory_name'), s('signatory_title'),
+    n('term_years'), s('terminated_at'), pushedAt,
   ).run();
   return { applied: true, branch, as_of: pushedAt };
 }

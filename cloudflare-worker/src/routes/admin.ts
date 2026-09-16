@@ -1718,7 +1718,13 @@ async function resetExploringReview(env: Env, userId: number, tag: string): Prom
          assigned_at = NULL,
          updated_at = datetime('now')`
     ).bind(userId).run();
-  } catch (e) { console.error(`[admin/${tag}] exploring review reset failed`, (e as Error).message); }
+  // The tag is an ARGUMENT, not part of the format string (Semgrep 6114,
+  // `unsafe-formatstring`). The query was right that a template literal in a
+  // format-string position is the wrong shape, and wrong that this one is
+  // reachable: `tag` is one of exactly two call-site literals and never touches
+  // user input. Fixing it properly is still worth it — a CONSTANT prefix is
+  // greppable across both callers, which the interpolated one was not.
+  } catch (e) { console.error('[admin/exploring-review] reset failed', tag, (e as Error).message); }
 }
 
 /**
