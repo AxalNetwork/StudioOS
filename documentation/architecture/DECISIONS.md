@@ -9517,3 +9517,123 @@ that opened it; ambiguous and non-opening anchors are both hard failures.
 — a bare column and a `CURRENT_TIMESTAMP` comparison — both caught with the
 offending file and line named. No migration (264 stays free), no schema change,
 no `frontend/src` change, so `docs/` did not move.
+
+## D126 — three HQ rails were mis-mounted in production, and the branch tier gets one mount rather than eight
+
+**The defect, and it shipped.** `frontend/src/ui/WorkerRail.jsx:168-186`
+destructures twelve props and declares neither `surface` nor `title`. Three HQ
+pages — `pages/hq/ContentPage.jsx:94`, `PlatformPage.jsx:91` and
+`RevenuePage.jsx:157` — passed exactly those two, where React discards them, and
+omitted `workspace`, `role` and `coverage`. A parse of every `<WorkerRail>`
+opening tag under `frontend/src` puts the scale precisely: **50 mounts, and
+these three are the only ones missing `workspace`, and the only ones passing an
+undeclared prop.**
+
+Five consequences followed, each read off the line that causes it:
+
+| # | line | effect |
+| --- | --- | --- |
+| 1 | `WorkerRail.jsx:307` `ACCENT[role] \|\| ACCENT.founder` | founder violet on the oxblood tier |
+| 2 | `:312` `aria-label={\`Worker AI controls · ${workspace}\`}` | a screen reader announced **"undefined"**. The VISIBLE title at `:323` merely lost its name — JSX drops an undefined child — which is why nobody saw it |
+| 3 | `:154-155` `modelKeyFor(workspace)` | collapsed to the bare prefix, so **one** `localStorage` model preference was shared across Content, Platform and Revenue |
+| 4 | `:260` `canRun = coverage.length > 0` | the Coverage block printed "Not recorded" (`:390-392`) and the run button was permanently `disabled` (`:493`) under *"this page has not loaded a summary"* (`:499-503`) — **on three pages that each load live figures** (`api.hqContent`, `api.hqPlatform`, `api.hqRevenue` and four more). The sentence was false on all three and the rail's only action was dead |
+| 5 | `eadwynConfig.js` | `surface="hq_content"` named nothing: `ASSIST_SURFACES` has five keys and none of the three is among them. `WorkerRail` never reads the prop, hardcoding `const WORKSPACE_SURFACE = 'workspace'` (`:166`) |
+
+**Why CI never saw it, which is the part worth carrying.**
+`frontend/test/ui_assist_rail_and_sidebar.test.mjs:470` walks `pages/` and
+`workspaces/` for `<AssistLayout surface="…">` and validates each name against
+`ASSIST_SURFACES`. It never scans `<WorkerRail`. Its own header records the same
+miss one step earlier — it used to walk `pages/` only while every offender sat
+in `workspaces/`, so *"every workspace subpage in the product rendered an empty
+right column, in silence, for as long as the shell has existed"*. That widening
+fixed the **directory** and not the **component**, and this is what the gap cost
+the second time. The per-tier guards (`investor_shell.test.mjs:332-344`,
+`founder_shell.test.mjs:403`, `investor_fund_i6`, `investor_portfolio_i4`,
+`founder_validate_a2`) each pin their own pages, so a tier that never got one
+simply drifts. The new guard is tier-independent.
+
+**The guard is not the obvious rule, and the measurement is why.** *Every mount
+passes `workspace` and `role`* is wrong: **31 of the 50 rely on
+`role = 'founder'`**, and 28 of those are founder pages under `pages/founder/`
+and `workspaces/founder/`, where the default is correct. That rule would have
+demanded 28 edits to correct code to catch 3 defects.
+`frontend/test/branch_rail_mount.test.mjs` asserts three narrower things
+instead, and they touch nothing that was already right:
+
+- **(a) every mount passes `workspace`** — 47 already did.
+- **(b) no mount passes a prop `WorkerRail` does not declare**, with the allowed
+  set **parsed from the component's own destructured parameter list** rather
+  than typed into the guard. This is the root-cause rule: it catches `surface`
+  and `title`, it catches the next `coverge=` typo, and it needs no ledger to
+  curate — the lesson `check-timestamp-comparisons.mjs` (D125) was built on. It
+  is also the rule that fires where (a) passes, which is why both exist: the
+  mutation adding `titl="Content"` failed (b) alone.
+- **(c) a mount outside the founder tree passes `role` explicitly, and any
+  literal `role` is a key of `ACCENT`.** Nineteen mounts pass it today and all
+  nineteen comply, so this is zero edits and pure future cover:
+  `ACCENT[role] || ACCENT.founder` means a misspelt `branch-admin` fails exactly
+  as silently as a missing one. A **path** rule rather than a file allowlist, so
+  it cannot go stale.
+
+**What the guard cannot see, stated rather than implied.** Two shared workspaces
+pass `role={role}` because they serve several tiers, and a computed value is
+beyond a lexical check. Banning it would break two correct mounts and naming
+them would be an allowlist, so the guard's header says so and caps the count
+instead.
+
+**The branch tier mounts the rail exactly once.** `pages/branch/BranchZone.jsx`
+owns the frame all eight `/branch/*` routes render in — the two-column layout,
+the rail column, and the rail itself with `role="branch_admin"` (the steel
+accent has existed since D107, `shellConfig.js:73`). No new `ASSIST_SURFACES`
+entry: the workspace surface is the one every zone on every licence already
+shares, and `eadwynConfig.js:62-64` states the rule in the repo's own voice —
+*"config follows a mount, never the other way round."*
+
+Two shapes inside that are deliberate:
+
+- **The rail column reads `var(--fwr-track, 280px)`**, which is
+  `WorkspaceShell.jsx:245` verbatim and is the collapse mechanism:
+  `workerRail.css:298` sets `--fwr-track: 44px` on
+  `:root[data-worker-rail="collapsed"]`. The five HQ pages hardcode `280px` in a
+  Tailwind literal and therefore do **not** collapse. That is a real defect and
+  it is **not fixed here**: it affects five pages, two of which this change has
+  no other reason to touch, and fixing three of five would leave the tier
+  inconsistent. Recorded so it is not rediscovered as a surprise.
+- **A zone with data owns its frame; a zone without takes it from its route.**
+  Coverage is what un-disables the rail's one button, and only the page that
+  loaded something knows what it holds — so `BranchApprovals` wraps itself and
+  reports its escalation counts, while the seven `BranchZonePending` routes are
+  wrapped in `App.jsx`. Each of those seven wrappers goes away on the day PR 12
+  or PR 14 gives its zone a page.
+
+**`BranchZonePending` stays a card and must.** A draft made it own the frame,
+which put a **second** rail on `/branch/approvals` — that page renders the
+notice *inside itself* for the four local queues it has not built. That is the
+doubled-chrome failure this repo has fixed on Network, on Partner and on the
+Research zones, and it was caught while building rather than after.
+
+**The empty rail is a lie in one place and the truth in another**, which is the
+distinction this entry exists to fix rather than paper over. On the three HQ
+pages "Not recorded" and a disabled button sat over four live reads. On an
+unbuilt branch zone the identical default is exactly correct, because nothing
+has loaded. Coverage is therefore assembled per source and filtered, so a source
+that failed contributes no line and `coverageNote` says which — never a
+fabricated zero, and never an empty rail readable as an empty pipeline.
+
+**Refused, with the reason.** S12's cross-branch decline card cannot be honestly
+built: the rail has no free-text input, `services/aiRouter.ts` carries no branch
+awareness in 1223 lines, and a branch Worker has exactly one D1 binding — so a
+cross-branch question cannot be *asked*, and a card refusing one would be
+theatre about a wall that is already load-bearing. One always-visible sentence
+in the rail says the true thing, and it lives in the frame so no zone can ship
+without it. Also refused: the canvas's per-tier AI plan caps ($80 branch against
+$400 HQ). No per-licence AI ceiling exists — there is one env default, per user,
+identical everywhere — so a rail prop would be a number with nothing behind it.
+
+**The scope chip is omitted**, on the product owner's call. The territory badge
+already answers "whose data am I looking at" from the shell header (D107), and
+two chips answering one question a few hundred pixels apart is the doubled
+chrome above. Striking that answer adds a `{label, fixed}` prop and lands the
+seam #244 needs early.
+
+No migration (264 stays free), no worker change, no new `api.js` method.

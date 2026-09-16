@@ -25,6 +25,7 @@ import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, Unrecorded, Unreadable } from '../../ui';
 import BranchZonePending from './BranchZonePending';
+import BranchZone from './BranchZone';
 
 const UNAVAILABLE = Symbol('unavailable');
 
@@ -91,7 +92,32 @@ export default function BranchApprovals() {
   const ready = lane && lane !== UNAVAILABLE && lane.available;
   const items = ready ? (lane.items || []) : [];
 
+  // WHAT THE RAIL CAN HONESTLY REPORT (D126): what this page loaded. The count
+  // of raised escalations and how many still await an answer are both real
+  // reads; the four local queues are not loaded at all, so they contribute no
+  // line rather than a zero. A failed read contributes none either, and
+  // `coverageNote` says which — the rail must never read as "nothing raised".
+  const coverage = ready
+    ? [
+      `${items.length} ${items.length === 1 ? 'escalation' : 'escalations'} raised from this branch`,
+      `${items.filter((it) => !it.answer).length} awaiting an answer from HQ`,
+    ]
+    : [];
+
   return (
+    <BranchZone
+      workspace="Approvals"
+      stance="Read-only summary of the outbound lane"
+      coverage={coverage}
+      coverageNote={ready ? undefined
+        : (lane === UNAVAILABLE
+          ? 'The outbound lane could not be read, so there is nothing to read back — this is not a claim that nothing was raised.'
+          : 'Loading what this branch has raised…')}
+      unavailable={[
+        ['The four local queues', 'LP applications, referrals, cohort applications and spinout moderation are four separate consoles; the read model that makes them one board is PR 13.'],
+        ['A reply to HQ', 'An escalation carries one answer with an author and a time. There is no thread, so there is nothing for a reply to be added to.'],
+      ]}
+    >
     <div className="space-y-4" data-testid="branch-approvals-page">
       <header>
         <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
@@ -262,5 +288,6 @@ export default function BranchApprovals() {
         pr="PR 13"
       />
     </div>
+    </BranchZone>
   );
 }

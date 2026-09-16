@@ -90,10 +90,37 @@ export default function ContentPage() {
   const templates = ready ? data.templates : null;
   const laneItems = lane && lane !== UNAVAILABLE && lane.available ? (lane.items || []) : null;
 
+  // COVERAGE IS WHAT MAKES THE RAIL'S ONE ACTION WORK (D126). `canRun =
+  // coverage.length > 0` in WorkerRail, so a mount that passes none renders
+  // "Not recorded" and a permanently disabled button — which on this page was
+  // false, since the reads above all answer.
+  //
+  // ONE LINE PER READ THAT ANSWERED. A source that failed contributes no line,
+  // and `coverageNote` says so, because an empty rail must never be readable as
+  // an empty pipeline. A real zero from a read that succeeded is a figure and
+  // stays — `laneItems.length === 0` is the page's own "no branch has submitted
+  // anything", which is not the fabricated `|| 0` the repo bans.
+  const coverage = [
+    pipeline?.available && num(pipeline.in_pipeline) !== null
+      ? `${num(pipeline.in_pipeline)} articles in the editorial pipeline` : null,
+    pubs?.available && num(pubs.total) !== null
+      ? `${num(pubs.total)} publications in the second store` : null,
+    templates?.available && num(templates.templates) !== null
+      ? `${num(templates.templates)} templates · ${num(templates.versions)} versions` : null,
+    laneItems ? `${laneItems.length} content ${laneItems.length === 1 ? 'submission' : 'submissions'} from branches` : null,
+  ].filter(Boolean);
+
   const rail = (
     <WorkerRail
-      surface="hq_content"
-      title="Content"
+      workspace="Content"
+      role="super_admin"
+      stance="Read-only summary"
+      note="This rail summarises the editorial pipeline, the publications store and the branch localisation lane. It takes no action and decides no submission."
+      coverage={coverage}
+      coverageNote={coverage.length ? undefined
+        : (data === UNAVAILABLE || lane === UNAVAILABLE
+          ? 'Neither read answered, so there is nothing to read back — this is not a claim that the pipeline is empty.'
+          : 'Loading the content summary…')}
       unavailable={[
         ['One unified pipeline', 'Articles and publications are still two stores with two meanings of "published".'],
         // D112 — "Brand approval" and "Per-subsidiary attribution" came OFF
