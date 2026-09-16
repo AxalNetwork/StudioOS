@@ -8845,3 +8845,181 @@ offers `/pipeline` **for any role in `ROLES_WITH_SHELL`**. Trap 2 is asserted
 `legacyForked` row the filter stopped honouring would still look right in
 `shellConfig` and would arm the trap again. Five mutations, five caught,
 including both traps and the deletion of a door.
+
+---
+
+## D120 — HQ opens a support session on a branch, and the entrypoint that does it is the only authenticated one
+
+Plan F.5 listed `mintSupportSession` on `HqEntrypoint` alongside `health`,
+`overview` and the `apply*` pushes. Building it turned up why it cannot sit
+there on the same terms, and `rpc/index.ts`'s own header states the reason:
+**"An entrypoint is callable by any Worker in the account."**
+
+That is tolerable for what `HqEntrypoint` did before. Reads leak branch data to
+a Worker that already runs our code; `applyLicence` and `applyPromoCeiling`
+overwrite a copy with a copy. Opening an authenticated session **as an arbitrary
+user** is a different kind of thing, and putting it behind an entrypoint the
+codebase documents as callable by anything in the account would have made it a
+privilege-escalation primitive rather than a support tool.
+
+### The authentication leg, mirrored from the one that already exists
+
+The RPC surface was one-directional: a branch presents `RPC_SECRET` and HQ
+verifies it against `licence_deployments.rpc_secret_hash` (`hqOps.ts`,
+`authenticateBranch`); HQ presented nothing and the branch held no hash. So the
+reverse leg is the same shape reversed — `HQ_RPC_SECRET`, plaintext on HQ, its
+SHA-256 as `HQ_RPC_SECRET_HASH` on the branch, verified constant-time by
+`authenticateHq` in `branchOps.ts`. **A branch with no hash refuses**, the same
+default the other direction takes and for the same reason: a null means the leg
+was never provisioned, which is exactly when a default-open turns the control
+off on the deployments nobody has audited.
+
+**Both comparisons are now one implementation** (`rpc/secret.ts`). The part that
+must not drift between the directions is not the SHA-256, it is the
+normalisation and the three named refusals — `no_hash`, `no_secret`, `mismatch`
+— around it. `frontend/src/lib/README.md` states that rule in the SPA's voice
+and D117 enforced it there; this is the same rule one tier down.
+
+**HQ's secret is one value the operator sets once, not one generated per run.**
+`RPC_SECRET` is per deployment because it identifies one branch. HQ is one
+Worker with one identity, so every branch stores the hash of the same secret —
+and generating it inside `branch-provision.yml` would have rotated it on every
+provision, silently breaking the HQ→branch leg for every branch provisioned
+earlier. It is a repository secret (D.11); the workflow puts only its hash on the
+new branch.
+
+**The workflow does not put the plaintext on HQ, and the guard is why.** The
+first version did, and `branch_provision_workflow.test.mjs` refused it: no call
+in that workflow may read HQ's config, whose `[[routes]]` are the apex custom
+domains (L10). That rule has been narrowed exactly once, for
+`d1 execute studioos-db`, on the stated principle that the call "can neither
+create, deploy nor route" **and** that HQ's database row cannot be written any
+other way. A Worker secret can — by the person already creating the value. So
+the call was removed rather than the rule widened, and DEPLOY.md carries the one
+command. Narrowing a guard to admit a convenience is how a guard stops meaning
+what it says.
+
+### The three checks the branch cannot make, and the one that does not transfer
+
+`admin.ts`'s local support session requires `requireFactor(c,'totp')`,
+`requireStepUp(c)` and an admin role. Those are facts about an HQ operator's
+browser session; a branch cannot see a session on another host at all, because
+HQ's JWT is signed with a different secret (D.4). They are enforced at HQ in
+`admin_support_sessions.ts` **before** the binding is touched, and the branch's
+trust in that is what `HQ_RPC_SECRET` buys and nothing more. The route says so,
+because a reader who assumed the branch re-verified them would think those gates
+were belt-and-braces and could be relaxed. They are the only copy. The gate is
+`requireSuperAdmin` rather than `requireAdmin`: this reaches across a tenancy
+boundary into someone else's database, which local impersonation does not.
+
+The branch re-checks what it can — the reason at ten characters, the target
+exists and is active — and one more: **the target is not carrying a
+`super_admins` row.** That guard reads the table through `loadSuperAdminFlag`
+rather than asking `isSuperAdmin`, because on a branch `hydrateSuperAdmin`
+returns 0 unconditionally and never queries (D106). A holder-vs-holder check
+written the way `admin.ts` writes it would have been a branch that can never
+fire — 0 for every target, including the one case worth catching, which D106's
+own header names as the escalation the deployment-level refusal exists to
+survive.
+
+**The other half of `admin.ts`'s holder rule does not transfer, and saying so
+beats shipping a check that cannot fail.** "Only a Super Admin may impersonate a
+Super Admin" exists because a plain admin borrowing the franchisor's account is
+an escalation. Across this boundary there is nobody above HQ; supporting a
+branch's own administrator is the ordinary case.
+
+### Renamed, because it does not mint a session
+
+F.5 called it `mintSupportSession`. It is `openSupportSession`: it records an
+authorisation and returns a one-time code, and the JWT is created at **redeem**.
+Two things follow, both improvements. No bearer credential is ever stored at
+rest — `support_handoff_codes` (migration 262) holds a digest, a target, an
+actor name and a reason, and nothing in it authenticates anybody. And the
+30-minute clock starts when the operator actually begins rather than when HQ
+pressed a button and walked away.
+
+### The hand-off is a code, never a token
+
+HQ opens `https://<code>.axal.vc/support/session?code=…`; the branch's
+`POST /api/auth/support/redeem` swaps it for the session. A token in a URL sits
+in history, in the next request's `Referer`, and in anything that reads the
+address bar — and, unlike this code, would still work afterwards. The code is
+192 bits from the CSPRNG, single-use via one atomic
+`UPDATE … WHERE used_at IS NULL … RETURNING` (the `magic/verify` precedent), and
+five minutes old at most. All three failure modes answer with one message:
+telling "expired" from "never existed" tells an unauthenticated caller which
+codes have been issued.
+
+### `/support/session`, not `/support`, and the test is why
+
+`/support` was already a route — `SupportRedirect` sends it to `/help`,
+preserving `?topic=`. The first version registered a second `/support`, which
+React Router never reaches because it takes the first match. The hand-off link
+would have redirected to the help centre and dropped its code, **on every
+branch, with CI green**, since nothing else tested that path. The guard now pins
+both rows.
+
+### Two things are named rather than joined, and one clock is used rather than two
+
+**No `impersonated_by` claim, and no HQ id anywhere a JOIN could reach it.**
+`admin_escalations.ts` already states the rule for the other direction: HQ's
+user ids and a branch's are unrelated number spaces, so an id sent across names
+whoever holds it locally. Every consumer of the claim was checked rather than
+assumed — `pickAuthToken`, `selectJwt`'s audit blob, and `recoveryCoolOff`,
+which keys off the impersonated user and never reads it. None needs a resolvable
+id and none is improved by a wrong one. `impersonation_sessions.admin_user_id`
+is written as **0**: the column is `NOT NULL` with no foreign key, nobody in
+that database opened the session, and `AUTOINCREMENT` starts at 1 so 0 can never
+collide. The actor travels as a name.
+
+**The session is identified by `user_sessions.factor = 'hq_support'`, which is a
+gate rather than a label.** `requireFactor` reads that column by jti and fails
+closed, so a support session satisfies `requireFactor('totp')` nowhere — every
+branch route behind TOTP or a step-up stays shut to HQ. That property costs one
+column value because the mechanism already exists and is already read; a new JWT
+claim would have been a flag with no reader, which is what `recovery_pending`
+already is.
+
+**The expiry compares one clock in one format, and this was a real defect caught
+while the test was being written.** SQLite compares `TIMESTAMP` columns as TEXT.
+`new Date().toISOString()` gives `2026-09-16T06:55:57.859Z` and
+`CURRENT_TIMESTAMP` gives `2026-09-16 07:00:57`; the date halves match, so
+position 10 decides it and `'T'` (0x54) beats `' '` (0x20). An ISO string is
+therefore **always** greater, whatever time it carries — verified rather than
+reasoned about, with a value five minutes past still answering 1. A five-minute
+TTL written that way is a one-day TTL. Both sides now use `datetime()`.
+
+**The same shape exists today in `magic_link_tokens`** (`auth.ts` writes
+`expires_at` as ISO and `magic/verify` compares it against `CURRENT_TIMESTAMP`),
+so a magic link's 15-minute window also lasts until the UTC date rolls over.
+That is pre-existing and outside this change; it is recorded here so it is found
+rather than rediscovered, and tracked as its own task.
+
+### Precedence, which is why redeem behaves like a sign-in
+
+`pickAuthToken` lets a Bearer beat a cookie when the Bearer's `impersonated_by`
+equals the cookie's `user_id` — "a legitimate impersonation Bearer", true at HQ
+where both ids name the same human. Across this boundary it is a coincidence
+test. Had the ids differed, a branch user already signed in on that browser
+would have had their own cookie beat the support session: the session would
+silently not apply, and `selectJwt` would write a `cross_session_bearer_discarded`
+row — an audit signal whose purpose is to flag a cross-account leak — for a
+supported operation. Rather than special-case `pickAuthToken`, the redeem route
+leaves it nothing to arbitrate: `revokeStaleCrossIdentitySession` then
+`setAuthCookies`, exactly as every other sign-in path here does.
+
+### What is not in this change
+
+**D.6 move-by-re-invite is not here, and F.9 row 11 paired them.** It needs its
+own store for the destination's invitation and its own answer to how the person
+is notified, and putting an account-lifecycle feature behind the same review as
+a 400-line authentication change is what the per-PR convention exists to avoid.
+It is its own task and its own PR.
+
+**Verification.** `test:drift` exit 0; worker `tsc` exit 0; 15 mutations applied
+and 15 caught — one only after the ASSERTION was fixed rather than the code: the
+expiry test overwrote `expires_at` with a `datetime()` value before checking it,
+which forced the right format on to the row and made the test blind to the write
+side, so the exact bug it exists for walked through it. It now ages the row in
+whatever format the writer chose. The `/support` collision was caught by a guard
+and not by a reviewer.

@@ -29,6 +29,10 @@ import { PRE_VERDICT_STATUSES } from '../services/referralSubmissions';
 // HQ's board and the branch's lane disagree about which items are late — with
 // both screens confident.
 import { slaBand } from './hqOps';
+// ONE COMPARISON FOR BOTH DIRECTIONS (D120). See `secret.ts`'s header for why
+// the digest and the refusals are shared rather than written twice.
+import { sha256Hex, verifySecret } from './secret';
+import { createJWT, loadSuperAdminFlag } from '../auth';
 
 /** Every branch answer carries the code, because a binding does not (D.7). */
 export type BranchAnswer<T> = T & { branch: string; as_of: string };
@@ -548,5 +552,342 @@ export async function branchEscalations(
     // definitions of "past SLA" is how the two tiers come to disagree about
     // which items are late.
     items: (rows.results || []).map((r) => ({ ...r, sla: slaBand(r.due_at, now) })),
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * The cross-host support session (D120)                               *
+ * ------------------------------------------------------------------ */
+
+/**
+ * Verify that the caller really is HQ.
+ *
+ * THIS IS THE ONE AUTHENTICATED THING ON `HqEntrypoint`, AND IT HAD TO BE. Read
+ * `rpc/index.ts`'s header: *"An entrypoint is callable by any Worker in the
+ * account."* For `health`, `overview` and the `apply*` pushes that is tolerable
+ * — the worst a rogue Worker in our own account achieves is reading branch data
+ * or overwriting a licence copy with another licence copy. Opening a session as
+ * an arbitrary user is a different kind of thing entirely, so it does not get
+ * to rely on the same assumption.
+ *
+ * THE MIRROR IMAGE OF `authenticateBranch`, AND SET UP THE SAME WAY.
+ * `branch-provision.yml` generates `HQ_RPC_SECRET` once, puts the plaintext on
+ * HQ and the digest on the branch as `HQ_RPC_SECRET_HASH`. Both halves are
+ * written by the same run, which is the point: pushing the hash over
+ * `applyLicence` at runtime would mean using the unauthenticated channel to
+ * establish the authentication for it.
+ *
+ * A BRANCH WITH NO HASH REFUSES. Same default as the other direction and for
+ * the same reason — a null means nobody has provisioned this leg, which is
+ * exactly when a default-open turns the control off on the deployments nobody
+ * has audited.
+ *
+ * WHAT IT DOES NOT ESTABLISH, stated because the gap is the whole design: the
+ * secret proves the call came from HQ's Worker. It proves nothing about the
+ * person. `requireFactor(c,'totp')`, `requireStepUp(c)` and `requireAdmin(c)`
+ * are facts about an HQ operator's browser session, and a branch cannot see a
+ * session on another host at all. HQ's own route runs all three BEFORE it
+ * reaches the binding; the branch's trust in that is exactly what this secret
+ * buys, and nothing more.
+ */
+export async function authenticateHq(env: Env, secret: string): Promise<string> {
+  const code = requireBranch(env);
+  const verdict = await verifySecret(secret, env.HQ_RPC_SECRET_HASH);
+  if (verdict === 'no_hash') {
+    throw new Error(
+      `rpc: ${code} has no HQ_RPC_SECRET_HASH, so a call claiming to be HQ cannot be verified. `
+      + 'Re-run branch-provision.yml for this code, or set the hash from the HQ_RPC_SECRET the '
+      + 'provisioning run generated.',
+    );
+  }
+  if (verdict === 'no_secret') throw new Error('rpc: HQ presented no secret');
+  if (verdict !== 'ok') throw new Error('rpc: HQ presented the wrong secret');
+  return code;
+}
+
+/** Minutes a support session lasts, and the window to redeem the code. */
+export const SUPPORT_SESSION_MINUTES = 30;
+export const SUPPORT_CODE_TTL_MINUTES = 5;
+/** The one reason length, enforced at HQ and again here. */
+export const SUPPORT_REASON_MIN = 10;
+
+export type SupportSessionRequest = {
+  hq_actor_name: string;
+  /** HQ's own user id, carried as OPAQUE TEXT for HQ's audit trail. Never joined. */
+  hq_actor_ref?: string | null;
+  target_user_id: number;
+  reason: string;
+};
+
+export type SupportSessionOffer = {
+  code: string;
+  expires_at: string;
+  redeem_path: string;
+  target: { id: number; name: string | null; email: string | null; role: string };
+};
+
+/** 48 hex characters from the CSPRNG — the code IS the credential for its window. */
+function newHandoffCode(): string {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Authorise HQ to open a support session on this branch, and hand back a
+ * one-time code.
+ *
+ * NAMED FOR WHAT IT DOES. Plan F.5 called this `mintSupportSession`; it does
+ * not mint a session. The JWT is created at redeem (see `redeemSupportCode`),
+ * which buys two things worth the rename: no bearer credential is ever stored
+ * at rest, and the 30-minute clock starts when the operator actually begins
+ * rather than when HQ pressed a button and walked away.
+ *
+ * THE THREE RULES THE BRANCH CAN ACTUALLY CHECK, and they are checked here
+ * rather than trusted from HQ — not because HQ is suspected, but because a
+ * caller-side-only rule is a convention and this side is where the row gets
+ * written:
+ *   1. the reason, >= 10 characters, the same bar `admin.ts` sets locally;
+ *   2. the target exists on THIS branch and is active;
+ *   3. the target is not carrying a `super_admins` row.
+ *
+ * WHY (3) READS THE TABLE DIRECTLY INSTEAD OF ASKING `isSuperAdmin`. On a
+ * branch `hydrateSuperAdmin` returns 0 unconditionally and never queries
+ * (D106) — that one line is what closes HQ's console on a subsidiary. So a
+ * holder-vs-holder check written the way `admin.ts:1471` writes it would be a
+ * branch that can never fire: it would read 0 for every target, including the
+ * one case worth catching. `loadSuperAdminFlag` asks the table, so the guard is
+ * real. And the case IS worth catching: D106's own header says one
+ * `INSERT INTO super_admins` on a branch database is the escalation the
+ * deployment-level refusal exists to survive. A row there means something is
+ * wrong with this database; opening a session as that account is not the move.
+ *
+ * THE OTHER HALF OF `admin.ts`'s HOLDER RULE DOES NOT TRANSFER, and pretending
+ * it did would be the misleading kind of thoroughness. At HQ the rule is "only
+ * a Super Admin may impersonate a Super Admin", which exists because a plain
+ * admin borrowing the franchisor's account is an escalation. Across this
+ * boundary there is nobody above HQ to escalate to — supporting a branch's own
+ * administrator is the ordinary case, not a privilege grab.
+ */
+export async function openSupportSession(
+  env: Env, secret: string, req: SupportSessionRequest,
+): Promise<BranchAnswer<SupportSessionOffer>> {
+  const branch = await authenticateHq(env, secret);
+
+  const reason = String(req?.reason ?? '').trim().slice(0, 200);
+  if (reason.length < SUPPORT_REASON_MIN) {
+    throw new Error(
+      `rpc: a support session needs a reason of at least ${SUPPORT_REASON_MIN} characters, `
+      + 'recorded against the session on both sides.',
+    );
+  }
+  const actor = String(req?.hq_actor_name ?? '').trim().slice(0, 200);
+  if (!actor) throw new Error('rpc: a support session needs the name of the HQ operator opening it');
+
+  const targetId = Number(req?.target_user_id);
+  if (!Number.isInteger(targetId) || targetId <= 0) {
+    throw new Error('rpc: a support session needs the id of an account on this branch');
+  }
+  const target = await env.DB.prepare(
+    'SELECT id, name, email, role, is_active FROM users WHERE id = ?',
+  ).bind(targetId).first<{ id: number; name: string | null; email: string | null; role: string; is_active: number }>();
+  if (!target) throw new Error(`rpc: ${branch} holds no account with id ${targetId}`);
+  if (Number(target.is_active ?? 1) === 0) {
+    throw new Error(`rpc: account ${targetId} is deactivated on ${branch}, so a session cannot be opened as it`);
+  }
+
+  if (await loadSuperAdminFlag(env, targetId)) {
+    throw new Error(
+      `rpc: account ${targetId} carries a super_admins row on ${branch}. A branch database is `
+      + 'bootstrapped past migration 207 and should have none (D106), so this is a state to '
+      + 'investigate rather than a session to open.',
+    );
+  }
+
+  const code = newHandoffCode();
+  // THE EXPIRY IS COMPUTED BY SQLITE, NOT BY JAVASCRIPT, AND THIS IS A
+  // CORRECTNESS FIX RATHER THAN A STYLE CHOICE. `new Date().toISOString()`
+  // produces `2026-09-16T06:55:57.859Z`; `CURRENT_TIMESTAMP` produces
+  // `2026-09-16 07:00:57`. Compared as TEXT — which is all SQLite does — the
+  // date halves match and position 10 decides it: 'T' (0x54) beats ' ' (0x20),
+  // so an ISO string is GREATER than the current timestamp whatever time it
+  // carries. Verified rather than reasoned about: a value five minutes past
+  // still answered 1 for `e > CURRENT_TIMESTAMP`. A TTL written that way does
+  // not expire until the UTC date rolls over.
+  //
+  // So both sides come from one clock in one format: `datetime('now', …)` here
+  // and `expires_at > datetime('now')` at redeem. `RETURNING` hands back the
+  // value that was actually stored, so what HQ shows is what the branch will
+  // enforce rather than a second computation of the same intent.
+  const row = await env.DB.prepare(
+    `INSERT INTO support_handoff_codes
+       (code_hash, target_user_id, hq_actor_name, hq_actor_ref, reason, expires_at)
+     VALUES (?, ?, ?, ?, ?, datetime('now', ?))
+     RETURNING expires_at`,
+  ).bind(
+    await sha256Hex(code), targetId, actor,
+    req?.hq_actor_ref == null ? null : String(req.hq_actor_ref).slice(0, 64),
+    reason, `+${SUPPORT_CODE_TTL_MINUTES} minutes`,
+  ).first<{ expires_at: string }>();
+  const expiresAt = row?.expires_at ?? '';
+
+  // The branch's own audit row for the AUTHORISATION. The session itself gets
+  // its own row at redeem — the two are different events and an operator who
+  // asked for a code and never used it should be visible as exactly that.
+  try {
+    await env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
+    ).bind(
+      'hq_support_authorised',
+      JSON.stringify({ hq_actor_name: actor, reason, expires_at: expiresAt, branch }),
+      `hq:${actor}`.slice(0, 200),
+      targetId,
+    ).run();
+  } catch (e) {
+    console.warn('[rpc:openSupportSession] audit row failed', (e as Error).message);
+  }
+
+  return {
+    code,
+    expires_at: expiresAt,
+    // The PATH, not a URL. The branch knows its own hostname from APP_URL, but
+    // HQ is the side that has to open the browser and already holds the
+    // registry entry — so it builds the link, and there is one place that does.
+    //
+    // `/support/session`, NOT `/support`: the bare path is already the SPA's
+    // help-centre redirect, so a link there would lose the code to /help.
+    redeem_path: `/support/session?code=${code}`,
+    target: { id: target.id, name: target.name, email: target.email, role: target.role },
+    branch,
+    as_of: nowIso(),
+  };
+}
+
+export type RedeemedSupportSession = {
+  token: string;
+  jti: string;
+  expires_at: string;
+  reason: string;
+  hq_actor_name: string;
+  target: { id: number; name: string | null; email: string | null; role: string };
+};
+
+/**
+ * Swap a one-time code for a session, or refuse.
+ *
+ * THE CLAIM IS ONE ATOMIC STATEMENT, on the `magic/verify` precedent
+ * (`routes/auth.ts:1261`): the `UPDATE … WHERE used_at IS NULL AND expires_at >
+ * CURRENT_TIMESTAMP RETURNING …` both consumes the code and tells us whether we
+ * were the one who consumed it. A read-then-write would leave a window in which
+ * two redeems of the same code both pass, which for a session-minting endpoint
+ * is the whole control.
+ *
+ * `factor = 'hq_support'` IS A REAL GATE, NOT A LABEL. `requireFactor` reads
+ * `user_sessions.factor` by jti and fails closed (`auth.ts:708-730`), so a
+ * support session satisfies `requireFactor(c,'totp')` nowhere — every branch
+ * route behind TOTP or a step-up stays shut to HQ. That is the property worth
+ * having, and it costs one column value because the mechanism already exists.
+ *
+ * NO `impersonated_by` CLAIM, AND THIS IS DELIBERATE. `createJWT` would happily
+ * carry one, but the only id HQ could put there is an HQ user id, and
+ * `admin_escalations.ts:77-80` already states the rule for this boundary: the
+ * two id spaces are unrelated, so an id sent across names whoever holds it
+ * locally. Every consumer of the claim was checked rather than assumed —
+ * `pickAuthToken` (precedence, and the redeem route clears the jar so there is
+ * never a second candidate), `selectJwt`'s audit blob, and
+ * `recoveryCoolOff`, which keys off the impersonated user and never reads it.
+ * None of them needs a resolvable id, and none of them would be improved by a
+ * wrong one. The session's identity as a support session lives in
+ * `user_sessions.factor` and its `impersonation_sessions` row, both of which
+ * are local and both of which are read.
+ */
+export async function redeemSupportCode(
+  env: Env, code: string,
+): Promise<RedeemedSupportSession> {
+  const branch = requireBranch(env);
+  const presented = String(code ?? '').trim();
+  if (!presented) throw new Error('support: no code was presented');
+
+  const claimed = await env.DB.prepare(
+    // `datetime('now')`, matching how `expires_at` was written — see the note in
+    // `openSupportSession`. Comparing against `CURRENT_TIMESTAMP` would be the
+    // same string comparison with a different format on each side, and an
+    // expired code would read as live until the UTC date changed.
+    `UPDATE support_handoff_codes SET used_at = datetime('now')
+       WHERE code_hash = ? AND used_at IS NULL AND expires_at > datetime('now')
+       RETURNING target_user_id, hq_actor_name, reason`,
+  ).bind(await sha256Hex(presented)).first<{
+    target_user_id: number; hq_actor_name: string; reason: string;
+  }>();
+  // ONE MESSAGE FOR ALL THREE FAILURES — unknown, already used, expired. Telling
+  // them apart would tell an unauthenticated caller which codes have existed.
+  if (!claimed) throw new Error('support: this link is not valid. Ask HQ to start a new support session.');
+
+  const target = await env.DB.prepare(
+    'SELECT id, name, email, role, is_active FROM users WHERE id = ?',
+  ).bind(claimed.target_user_id).first<{
+    id: number; name: string | null; email: string | null; role: string; is_active: number;
+  }>();
+  // Re-checked at redeem, not only at authorisation: the account can be
+  // deactivated in the minutes between, and the code would still be unused.
+  if (!target || Number(target.is_active ?? 1) === 0) {
+    throw new Error('support: that account is no longer active on this branch.');
+  }
+
+  const jti = crypto.randomUUID();
+  const token = await createJWT(
+    env, target.id, String(target.email ?? ''), target.role, undefined, jti,
+    `${SUPPORT_SESSION_MINUTES}m`,
+  );
+  const expiresAt = new Date(Date.now() + SUPPORT_SESSION_MINUTES * 60_000).toISOString();
+
+  try {
+    await env.DB.prepare(
+      `INSERT INTO user_sessions (user_id, jti, factor, assurance_level) VALUES (?, ?, 'hq_support', 'hq_support')`,
+    ).bind(target.id, jti).run();
+  } catch (e) {
+    console.warn('[rpc:redeemSupportCode] session row failed', (e as Error).message);
+  }
+
+  try {
+    const { ensureCohortTimingSchema } = await import('../services/cohortTiming');
+    await ensureCohortTimingSchema(env);
+    await env.DB.prepare(
+      `INSERT INTO impersonation_sessions (admin_user_id, target_user_id, context) VALUES (?, ?, ?)`,
+    ).bind(
+      // ZERO, DELIBERATELY. The column is NOT NULL with no foreign key, and no
+      // user in THIS database opened this session. A real HQ id here would be
+      // joinable to a local `users` row and would name the wrong person with
+      // complete confidence; 0 matches nobody, because AUTOINCREMENT starts at
+      // 1. The actor travels as a name, in `context`, where it cannot be joined.
+      0, target.id,
+      `hq_support:${claimed.hq_actor_name}|${claimed.reason}`.slice(0, 500),
+    ).run();
+  } catch (e) {
+    console.warn('[rpc:redeemSupportCode] impersonation row failed', (e as Error).message);
+  }
+
+  try {
+    await env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
+    ).bind(
+      'hq_support_session_opened',
+      JSON.stringify({
+        hq_actor_name: claimed.hq_actor_name, reason: claimed.reason, branch, expires_at: expiresAt,
+      }),
+      `hq:${claimed.hq_actor_name}`.slice(0, 200),
+      target.id,
+    ).run();
+  } catch (e) {
+    console.warn('[rpc:redeemSupportCode] audit row failed', (e as Error).message);
+  }
+
+  return {
+    token,
+    jti,
+    expires_at: expiresAt,
+    reason: claimed.reason,
+    hq_actor_name: claimed.hq_actor_name,
+    target: { id: target.id, name: target.name, email: target.email, role: target.role },
   };
 }

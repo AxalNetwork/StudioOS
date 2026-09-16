@@ -211,6 +211,7 @@ const NetworkEffectsPage = lazy(() => import('./pages/NetworkEffectsPage'));
 const NetworkPage = lazy(() => import('./pages/NetworkPage'));
 const LegalCapitalPage = lazy(() => import('./pages/LegalCapitalPage'));
 const TermsPage = lazy(() => import('./pages/TermsPage'));
+const SupportRedeemPage = lazy(() => import('./pages/SupportRedeemPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
 const TeamPage = lazy(() => import('./pages/TeamPage'));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
@@ -2727,6 +2728,26 @@ function AppInner() {
           WITH the firm-side ask: a token nobody can answer is not a consent
           mechanism, it is a column that never gets set. */}
       <Route path="/attest/partner/:token" element={<PartnerAttestConsentPage />} />
+
+      {/* D120 — the branch landing for an HQ support session.
+
+          `/support/session`, NOT `/support`, AND THE DIFFERENCE IS THE WHOLE
+          ROUTE. `/support` is already taken: `SupportRedirect` at :2287 sends
+          it to /help, preserving `?topic=`. Registering a second `/support`
+          here would have been dead code — React Router takes the first match,
+          so the hand-off link would have redirected to the help centre and
+          dropped its code, on every branch, with CI green. Caught by
+          support_handoff_page.test.mjs before it shipped. The help shortcut is
+          untouched.
+
+          OUTSIDE RequireAuth by necessity, not by preference: the HQ operator
+          arriving here holds no session on this host and cannot, since HQ's JWT
+          is signed with a different secret (D.4). Wrapping it would redirect
+          them to /login to sign in as a branch account they do not have. The
+          page itself grants nothing — the one-time code does, and only through
+          POST /api/auth/support/redeem on the branch. `isPublicPath` lists the
+          same path for the same reason. */}
+      <Route path="/support/session" element={<SupportRedeemPage />} />
 
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/contact" element={<ContactPage />} />

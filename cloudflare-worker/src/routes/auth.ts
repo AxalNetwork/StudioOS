@@ -1339,6 +1339,88 @@ auth.get('/magic/verify', safe('magic-verify', 'Could not complete your sign-in 
   }
 }));
 
+// ───────────────────────────── D120 — the HQ support session hand-off ──
+// POST /api/auth/support/redeem  { code }
+//
+// The browser half of a cross-host support session. HQ authorised it over the
+// service binding (`HqEntrypoint.openSupportSession`, which verifies
+// HQ_RPC_SECRET); this swaps the one-time code for a session on THIS branch.
+//
+// UNAUTHENTICATED BY NECESSITY, AND THAT IS WHY THE CODE IS THE WAY IT IS. The
+// HQ operator holds no session here — HQ's JWT is signed with a different
+// secret and does not even decode on a branch (D.4). So the code is the only
+// credential, which is why it is 192 bits from the CSPRNG, single-use, valid
+// for five minutes, stored only as a digest, and refused with one message for
+// all three failure modes.
+//
+// IT CLEARS THE COOKIE JAR, AND THAT IS A CORRECTNESS FIX, NOT HYGIENE.
+// `pickAuthToken` (auth.ts:196) lets a Bearer beat a cookie when the Bearer's
+// `impersonated_by` equals the cookie's `user_id` — "a legitimate impersonation
+// Bearer", which is true at HQ where both ids name the same human. Across this
+// boundary the two id spaces are unrelated, so that equality is a coincidence
+// test: if the ids happened to differ, a branch user already signed in on this
+// browser would have their own cookie beat the support session, the session
+// would silently not take effect, and `selectJwt` would log a
+// `cross_session_bearer_discarded` row — an audit signal that exists to flag a
+// cross-account leak — for a supported operation. Rather than special-case
+// `pickAuthToken`, this leaves it nothing to arbitrate: revoke the other
+// identity's session and set this one's cookies, exactly as every other
+// sign-in path here does (`:626`, `:831`, `:1330`, auth_google, auth_sms,
+// auth_passkey).
+auth.post('/support/redeem', safe('support-redeem', 'Could not open the support session.', async (c) => {
+  const code = branchOf(c.env);
+  if (!code) {
+    // HQ has its own support session at /admin/accounts, with the operator's
+    // own TOTP and step-up in front of it. This endpoint exists for the case
+    // where the operator cannot have a session at all.
+    return c.json({
+      error: 'A support hand-off is redeemed on the branch it was opened for. This deployment is HQ.',
+      code: 'hq_only_surface',
+    }, 404);
+  }
+
+  const ip = (c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '').split(',')[0].trim().slice(0, 64);
+  const gate = rateGate(
+    c,
+    await checkRateLimit(c.env, `support-redeem-ip:${ip || 'unknown'}`, 10, 300),
+    'Too many attempts to open a support session from this address. Wait five minutes and try again.',
+  );
+  if (gate) return gate;
+
+  const parsed = await readJson(c);
+  if (!parsed.ok) return parsed.res;
+
+  const { redeemSupportCode } = await import('../rpc/branchOps');
+  let session;
+  try {
+    session = await redeemSupportCode(c.env, String(parsed.body?.code || ''));
+  } catch (e: any) {
+    const msg = String(e?.message || '');
+    if (/^support: /.test(msg)) {
+      return c.json({ error: msg.replace(/^support: /, ''), code: 'support_code_invalid' }, 400);
+    }
+    throw e;
+  }
+
+  await revokeStaleCrossIdentitySession(c, session.target.id);
+  const csrf = generateCsrfToken();
+  setAuthCookies(c, session.token, csrf);
+
+  return c.json({
+    token: session.token,
+    expires_at: session.expires_at,
+    // THE ACTOR'S NAME TRAVELS IN THE RESPONSE because the branch has no
+    // `realUser` row to build the banner from — the operator is a person in
+    // HQ's database, which this one cannot read. The SPA shows this string;
+    // there is nothing here to look up and nothing that could resolve to the
+    // wrong person.
+    actor_name: session.hq_actor_name,
+    reason: session.reason,
+    target: session.target,
+    branch: code,
+  });
+}));
+
 // ──────────────────────────────────────── BLOCK-AUTH-03 — step-up auth ──
 // Re-assert a RECENT TOTP for the current session. Stamps last_step_up_at on
 // the session row so requireStepUp() passes for the next ttl window. TOTP-only

@@ -172,7 +172,16 @@ export function isPublicPath(pathname) {
     // visitors when a background settings/me 401 fires.
     || currentPath === '/jobs'
     || currentPath.startsWith('/jobs/')
-    || currentPath.startsWith('/invite/');
+    || currentPath.startsWith('/invite/')
+    // D120 — the branch landing for an HQ support session. Reached by an HQ
+    // operator who has NO session on this host by construction: HQ's cookie is
+    // scoped to another host and its JWT is signed with another secret (D.4).
+    // A background settings/me 401 is therefore the expected state here, and
+    // bouncing them to /login would send them to sign in as a branch account
+    // they do not have — which is the whole reason the hand-off exists.
+    // EXACT, not a `/support/` prefix: bare `/support` is the help-centre
+    // redirect and everything else under it is unwritten.
+    || currentPath === '/support/session';
 }
 
 /**
@@ -568,6 +577,11 @@ export const api = {
   adminGetBestFitReport: (userId) => request(`/admin/best-fit/${userId}`),
   register: (data) => request('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
   login: (data) => request('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
+  // D120 — the branch half of an HQ support session. The code comes from the
+  // URL HQ opened; the TOKEN only ever comes back in this response body, never
+  // in a link. Branch Workers only: HQ answers 404 with `hq_only_surface`.
+  redeemSupportSession: (code) =>
+    request('/auth/support/redeem', { method: 'POST', body: JSON.stringify({ code }) }),
   // T6 — server-side logout: clears the httpOnly auth + CSRF cookies and
   // revokes the current user_sessions row. App.jsx calls this before wiping
   // localStorage so a stolen Bearer copy of the JWT can no longer be used.
