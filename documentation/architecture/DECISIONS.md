@@ -9996,3 +9996,105 @@ as D122 and D125.
 is the second branch-only surface) · `routes/branch_escalations.ts` ·
 `index.ts` · `frontend/src/lib/api.js` · `pages/branch/BranchApprovals.jsx` ·
 two new tests · **D130**. **No migration — 264 remains free.**
+
+---
+
+## D131 — S1 ships the three blocks that have a source, and names the three that do not
+
+**Date:** 2026-09-16 · **Task:** #232 (the remainder) · **Status:** shipped
+
+`/branch` rendered a stated notice promising all six of S1's blocks as PR 12's
+work. Three of the six have no source, and one of those three cannot get one
+without inventing data — so leaving the notice would have kept promising four
+things for as long as the page existed. This ships the three that are real and
+moves the rest into the rail's `unavailable` list, each with its own reason,
+where a reader meets a fact rather than a schedule.
+
+It is the **second** expired promise this programme has deleted in three PRs
+(D129 was `/branch/accounts`), and the branch README now carries the rule:
+when a `will=` promises a store, the PR that decides not to build it deletes
+the promise too.
+
+### What ships, and what each block reads
+
+| block | source |
+| --- | --- |
+| **Queue pressure** | `laneCounts` — the same `countSql` reads `backlogOf` sums. Ordered by the **oldest item**, not by count. |
+| **Programme clock** | `cycleWeekWindows` / `delawareYearMonth` for the open week, `company_week_status` for who is still pending. `runCohortTimingTick` is **not** gated on `hqCadences`, so a branch materialises its own cycles — checked in `index.ts`, not assumed. |
+| **Revenue share** | The **rate** from `branch_licence`, dated. The **amount** is `null` with the reason, and there is no sparkline. |
+
+### Ordering by the oldest item and ordering by count are different orders
+
+The canvas asks for the first and a naive read gives the second. A lane holding
+forty things opened this morning is not more urgent than one holding a single
+thing nobody has touched in a week. The test's fixture is built so the two
+orders **disagree** — four fresh referrals against one 200-hour moderation case
+— because a fixture where the busiest lane is also the oldest cannot tell which
+one shipped.
+
+An **unreadable** lane sorts above every measured one: "I could not look" is the
+thing an admin most needs to act on. It reports `null`, never `0`.
+
+### The obvious wiring would have been wrong, and this is the finding
+
+`approvalBoard` already returns a per-lane figure, so reading it would look
+right. But that one counts the rows a lane **returned**, which is
+`min(open, limit)` — a flooded lane would report exactly the cap, every time,
+looking like a measurement. `laneCounts` runs the unbounded count instead, and
+a test pins the difference by asking the board for a cap below the fixture.
+
+`backlogOf` now **sums `laneCounts`** rather than running the queries itself, so
+the total and the parts are one measurement rather than two that agree today —
+D129's argument for `seats_used_by_type`, applied to the second figure both
+tiers read. That is the fourth consolidation in five PRs: D127 one `GROUP BY
+role`, D128 one LIKE escaper, D130 one definition of open, D131 one count.
+
+### Every deadline carries the zone it is enforced in
+
+The cohort programme runs on `COHORT_TZ` — **America/New_York** — for every
+territory, and a branch admin reads the screen somewhere else. "Closes 23 Sep
+00:00" with no zone is six hours wrong for a French admin deciding whether their
+founders still have tonight. The server names the zone; the page prints it; and
+`inZone` takes the zone as a **required** argument, because a formatter that
+silently fell back to the reader's zone is the exact defect it exists to
+prevent. The week interval is half-open (week N's deadline **is** week N+1's
+unlock), so one instant a month does not report two weeks open.
+
+### The territory's own clock is deliberately not drawn
+
+S1 draws a local CET clock and this does not, and the reason is a measurement
+rather than a preference: `branch_licence.territory` is comma-separated ISO
+alpha-2 codes, and `frontend/src/lib/countries.js` — the platform's only country
+list — says in its own header **"NOT ISO CODES: these are display names"**. So
+nothing maps `FR` to a zone, and inventing a map would be a store built to
+decorate a greeting. The clock that actually governs is shown instead, beside
+the deadline it governs.
+
+### The revenue block shows a rate and refuses an amount
+
+The share is a licence term HQ pushed, so it is real and dated. The base it
+applies to is not totalled anywhere on a branch, and `branchRevenueSummary`
+already establishes that for all three streams: subscription charges live in
+Stripe with no amount in this database, a subsidiary charges no onward licence
+fee, and the AI figure is a **cost** rather than revenue. Multiplying a real
+rate by a missing base is how a page invents a number that looks audited, so no
+euro figure and no twelve-month sparkline are drawn.
+
+### An assertion that pinned a name, not a property
+
+`branch_approvals_board_d130.test.mjs` asserted `backlogOf` matched
+`/APPROVAL_SOURCES/`. Moving it onto `laneCounts` — the same list, read one
+level up — failed that guard, and the change was correct. The assertion now
+matches the **import from the shared module**, whichever shape the consumer
+takes from it, and was re-checked by removing the import entirely. Second time
+in three PRs a guard has pinned a spelling instead of the thing it guards
+(`branch_rail_mount.test.mjs` was the first).
+
+### Files
+
+`cloudflare-worker/src/services/branchHome.ts` (new) ·
+`services/approvalSources.ts` (`laneCounts`) · `routes/branch_home.ts` (new) ·
+`rpc/branchOps.ts` (`backlogOf` sums the lanes) · `index.ts` ·
+`frontend/src/lib/api.js` · `pages/branch/BranchHome.jsx` (new) · `App.jsx` ·
+`pages/branch/README.md` · two new tests, one re-pointed · **D131**.
+**No migration — 264 remains free.**

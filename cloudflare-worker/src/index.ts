@@ -170,6 +170,7 @@ import adminEscalations from './routes/admin_escalations';
 import adminSupportSessions from './routes/admin_support_sessions';
 import branchEscalationRoutes from './routes/branch_escalations';
 import branchApprovalRoutes from './routes/branch_approvals';
+import branchHomeRoutes from './routes/branch_home';
 import adminSuperAdmins from './routes/admin_super_admins';
 import adminHq from './routes/admin_hq';
 import adminRevenue from './routes/admin_revenue';
@@ -793,6 +794,9 @@ app.route('/api/branch', branchEscalationRoutes);
 // from the escalations lane because they are different concerns: one reads the
 // four queues this branch decides, the other is what it asked HQ.
 app.route('/api/branch', branchApprovalRoutes);
+// D131 — S1's digest. A third file on the same prefix because it composes what
+// the other two read rather than owning a store of its own.
+app.route('/api/branch', branchHomeRoutes);
 app.route('/api/admin/licences', adminLicences);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
 // catch-all for the same reason as the licence ledger above.

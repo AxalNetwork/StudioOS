@@ -160,7 +160,19 @@ test('one list of sources, read by both the board and the backlog count', () => 
   // The consolidation, asserted on the CONSUMER rather than on the new file:
   // a test that only checked `approvalSources.ts` exists would pass while
   // `backlogOf` kept its own copy.
-  assert.match(BRANCH_OPS, /APPROVAL_SOURCES/, 'backlogOf stopped reading the shared list');
+  //
+  // THE IMPORT IS ASSERTED, NOT THE IDENTIFIER, and the difference is a
+  // correct change that failed here once. The first draft pinned
+  // `APPROVAL_SOURCES` by name; D131 moved `backlogOf` onto `laneCounts` —
+  // the same list read one level up, so the total is the sum of the parts by
+  // construction — and a guard on the name called that a regression. What
+  // matters is that `branchOps` reads the shared module at all, whichever
+  // shape it takes from it.
+  assert.match(
+    BRANCH_OPS,
+    /import \{[^}]+\} from '\.\.\/services\/approvalSources'/,
+    'backlogOf stopped reading the shared list',
+  );
   assert.doesNotMatch(
     BRANCH_OPS,
     /FROM lp_applications WHERE status = 'pending'/,

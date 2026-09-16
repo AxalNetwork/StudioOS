@@ -290,3 +290,56 @@ export async function approvalBoard(env: Env, limit = 100, now = Date.now()): Pr
       : {}),
   };
 }
+
+/** One lane's true open count and the age of its oldest item. */
+export type LaneCount = {
+  key: ApprovalLaneKey;
+  label: string;
+  /**
+   * `null` means the lane could not be READ. It never means zero — a measured
+   * zero is `0`, and collapsing the two is how "nothing is waiting" comes to be
+   * printed over a queue nobody could open.
+   */
+  count: number | null;
+  /** The SQL stamp of the oldest open item, or null when the lane is empty. */
+  oldest_at: string | null;
+};
+
+/**
+ * Each lane's count and oldest item, from `countSql` — the SAME query
+ * `backlogOf` sums and the query the board's `limit` does NOT bound.
+ *
+ * WHY THIS IS NOT `approvalBoard().lanes`, WHICH LOOKS LIKE IT WOULD DO. That
+ * field counts the rows a lane RETURNED, so it is `min(open, limit)` — correct
+ * for "how many of these did you get", wrong for "how much is waiting". S1's
+ * queue-pressure block asks the second question, and reading the first would
+ * have shown a flooded lane as exactly the cap, every time, looking like a
+ * measurement.
+ *
+ * AND IT IS WHY `backlogOf` NOW SUMS THIS rather than running the queries
+ * again. The total is the sum of the parts BY CONSTRUCTION, so the tile on S1
+ * and the number on H1 cannot disagree the way D129's seat tiles could not
+ * disagree with their total: one read, two shapes. A second reader that asked
+ * the same question its own way is the exact drift D130 consolidated.
+ *
+ * PER-LANE ISOLATION, as everywhere in this file: one lane throwing leaves the
+ * others measured and marks itself unread. The CALLER decides what that means
+ * — the board keeps its rows, the backlog count refuses to be a total.
+ */
+export async function laneCounts(env: Env): Promise<LaneCount[]> {
+  const out: LaneCount[] = [];
+  for (const s of APPROVAL_SOURCES) {
+    try {
+      const row = await env.DB.prepare(s.countSql).first<{ n: number; oldest: string | null }>();
+      out.push({
+        key: s.key,
+        label: s.label,
+        count: Number(row?.n) || 0,
+        oldest_at: row?.oldest ?? null,
+      });
+    } catch {
+      out.push({ key: s.key, label: s.label, count: null, oldest_at: null });
+    }
+  }
+  return out;
+}

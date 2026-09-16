@@ -23,7 +23,7 @@
  */
 import type { Env } from '../types';
 import { branchOf, BRANCH_CODE_RE } from '../util/branch';
-import { APPROVAL_SOURCES } from '../services/approvalSources';
+import { laneCounts } from '../services/approvalSources';
 // ONE DEFINITION OF "PAST SLA", shared across the tier boundary. It is a pure
 // function of a date, so importing it costs nothing and restating it would let
 // HQ's board and the branch's lane disagree about which items are late — with
@@ -155,20 +155,19 @@ async function backlogOf(env: Env): Promise<{ backlog: BranchOverview['backlog']
   // smaller number presented as the total, which is worse than no number. So
   // the shared list supplies the predicate and each caller supplies its own
   // honesty rule.
+  // THE COUNT QUERIES RUN IN ONE PLACE (D131). `laneCounts` is those same
+  // `countSql` reads kept un-summed, because S1's queue-pressure block needs
+  // them per lane; summing its output here means the total and the parts are
+  // one measurement rather than two that agree today. That is D129's argument
+  // for `seats_used_by_type`, applied to the second figure both tiers read.
   let count = 0;
   let oldest: string | null = null;
   const unreadable: string[] = [];
-  for (const s of APPROVAL_SOURCES) {
-    try {
-      const row = await env.DB.prepare(
-        s.countSql,
-      ).first<{ n: number; oldest: string | null }>();
-      count += Number(row?.n) || 0;
-      const o = row?.oldest ?? null;
-      if (o && (oldest === null || o < oldest)) oldest = o;
-    } catch {
-      unreadable.push(s.label);
-    }
+  for (const lane of await laneCounts(env)) {
+    if (lane.count === null) { unreadable.push(lane.label); continue; }
+    count += lane.count;
+    const o = lane.oldest_at;
+    if (o && (oldest === null || o < oldest)) oldest = o;
   }
   if (unreadable.length) {
     return {
