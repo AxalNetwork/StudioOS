@@ -142,9 +142,42 @@ function railMounts() {
   return found;
 }
 
-const MOUNTS = railMounts();
+/**
+ * The attribute names a tag passes, at the TOP LEVEL of the element only.
+ *
+ * NOT A REGEX ASSEMBLED FROM THE PROP NAME. This was a RegExp constructed from
+ * `prop`, and Semgrep's `detect-non-literal-regexp` refused it — the third time
+ * that query has landed on this repo, and the third time the right answer has
+ * been to delete the constructed pattern rather than escape it better (#576
+ * replaced one assembled from a route with a bounded substring scan).
+ *
+ * It is also more precise, which is the part worth having. A `\s<prop>=`
+ * pattern matches inside a prop VALUE — `unavailable={[['Seat', 'a role= is
+ * not a seat']]}` would have read as passing `role`. Walking the tag and taking
+ * names only at brace depth 0 cannot.
+ */
+function attrNames(tag) {
+  const names = [];
+  let depth = 0;
+  let quote = null;
+  for (let j = 0; j < tag.length; j++) {
+    const c = tag[j];
+    if (quote) { if (c === quote && tag[j - 1] !== '\\') quote = null; continue; }
+    if (c === '"' || c === "'" || c === '`') { quote = c; continue; }
+    if (c === '{') { depth++; continue; }
+    if (c === '}') { depth--; continue; }
+    if (depth !== 0) continue;
+    const hit = /^\s([A-Za-z_$][\w$-]*)=/.exec(tag.slice(j));
+    if (!hit) continue;
+    names.push(hit[1]);
+    j += hit[0].length - 1;
+  }
+  return names;
+}
+
+const MOUNTS = railMounts().map((m) => ({ ...m, attrs: attrNames(m.tag) }));
 const at = (m) => `${m.rel}:${m.line}`;
-const passes = (m, prop) => new RegExp(`\\s${prop}=`).test(m.tag);
+const passes = (m, prop) => m.attrs.includes(prop);
 
 test('the scanner finds the mounts it is a rule about', () => {
   // An empty list would make every assertion below vacuously true, which is
@@ -182,24 +215,8 @@ test('no mount passes a prop WorkerRail does not declare', () => {
   const ALWAYS_OK = new Set(['key', 'ref']);
   const bad = [];
   for (const m of MOUNTS) {
-    // Attribute names at the top level of the tag: `name=` preceded by
-    // whitespace. Nested JSX inside a prop value would be inside `{}`, and the
-    // scanner above keeps the whole tag, so restrict to depth 0.
-    let depth = 0;
-    let quote = null;
-    for (let j = 0; j < m.tag.length; j++) {
-      const c = m.tag[j];
-      if (quote) { if (c === quote && m.tag[j - 1] !== '\\') quote = null; continue; }
-      if (c === '"' || c === "'" || c === '`') { quote = c; continue; }
-      if (c === '{') { depth++; continue; }
-      if (c === '}') { depth--; continue; }
-      if (depth !== 0) continue;
-      const rest = m.tag.slice(j);
-      const hit = /^\s([A-Za-z_$][\w$-]*)=/.exec(rest);
-      if (!hit) continue;
-      const name = hit[1];
+    for (const name of m.attrs) {
       if (!declared.has(name) && !ALWAYS_OK.has(name)) bad.push(`${at(m)}  ${name}=`);
-      j += hit[0].length - 1;
     }
   }
   assert.deepEqual(bad, [], 'these props are discarded by React — WorkerRail does not declare them');
@@ -308,7 +325,7 @@ test('the three HQ pages that were mis-mounted are fixed, each with real coverag
   ]) {
     const mount = MOUNTS.find((m) => m.rel === file);
     assert.ok(mount, `${file} no longer mounts a WorkerRail`);
-    assert.match(mount.tag, new RegExp(`workspace="${workspace}"`), `${file}: wrong or missing workspace`);
+    assert.ok(mount.tag.includes(`workspace="${workspace}"`), `${file}: wrong or missing workspace`);
     assert.match(mount.tag, /role="super_admin"/, `${file}: the HQ tier is oxblood, not founder violet`);
     assert.match(mount.tag, /coverage=\{coverage\}/, `${file}: without coverage the rail's only button stays disabled`);
     // And the coverage is assembled from the page's OWN reads rather than a
