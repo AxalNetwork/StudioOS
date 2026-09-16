@@ -479,10 +479,16 @@ export async function loadSuperAdminFlag(env: Env, userId: number): Promise<0 | 
  *
  * ON A BRANCH THE ANSWER IS ALWAYS 0, AND THE TABLE IS NEVER ASKED (D106).
  * This one line is what closes HQ's whole console on a subsidiary Worker, and
- * it is here rather than in a path list in `index.ts` because the 24
- * super-admin routes are reached through `requireSuperAdmin` → `isSuperAdmin`
+ * it is here rather than in a path list in `index.ts` because EVERY
+ * super-admin route is reached through `requireSuperAdmin` → `isSuperAdmin`
  * → this flag, and a list of paths is a thing that goes stale the next time a
  * route is added.
+ *
+ * THE COUNT USED TO BE WRITTEN HERE AND IT WENT STALE, which is the same
+ * failure one sentence up warns about. It said 24; when D132 came to cite it
+ * the real figure was 40, across eleven route files. A number in prose has no
+ * guard behind it, so it is gone rather than corrected — the property is that
+ * they all funnel through this flag, and that is what the sentence now says.
  *
  * WHY THE EMPTY TABLE WAS NOT ALREADY THE GATE. A branch database is
  * bootstrapped from the baseline with `BASELINE_CUTOFF = 219`, so migration

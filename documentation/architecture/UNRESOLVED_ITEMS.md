@@ -55,6 +55,39 @@ is worse than none — a licensee sees HQ's rows while the UI says the view is
 scoped. This is also why seat usage, accounts-per-subsidiary and revenue-per-
 subsidiary are reported as *unavailable with the reason* rather than as zero.
 
+**UPDATE 2026-09-16 (D132) — the gap has a measured counter-example now, and
+knowing where it is does not make it smaller.** Until D132 this item was stated
+as a schema fact ("no row carries a `licence_id`"). It also had a *reachable*
+instance, which is a different and more actionable thing: three routes on
+`/api/monitoring/analytics` — `/audit`, `/audit/export.csv` and
+`/exports/recent` — sat behind plain `requireAdmin` over `admin_audit_log a
+LEFT JOIN users u ON u.id = a.admin_user_id`, so **every admin read every other
+admin's export and view history, by name and email**, and the CSV served up to
+10,000 rows of it as a download. That was admin-over-admin visibility that was
+*symmetric* where the model says it is *hierarchical*, and D132 closed it by
+raising all three to `requireSuperAdmin`.
+
+**What that does NOT close, stated so the update is not mistaken for progress
+on this item.** D132 moved three specific routes. It did not add a scope, and
+`services/tenancyScope.ts:64` still reads `UNSCOPED_ROLES = new Set(['admin'])`
+— so on HQ, where every admin still lives, every other admin query returns
+every row. The closure for that is **physical, not row-level** (D.2): each
+subsidiary is its own Worker over its own D1, so "there is no global view
+underneath to leak" becomes literally true rather than enforced. That arrives
+when the first branch is *provisioned*, which is blocked on repository secrets
+only the owner can set (`BRANCH_SECRET_BUNDLE`, `HQ_RPC_SECRET`, a widened
+`CLOUDFLARE_API_TOKEN`), not on more code. **Within one branch there is
+deliberately no partition either** — `DECISIONS.md` D.2 records that as
+territory-scoping by construction.
+
+**So the useful reading of this item is now:** the schema gap is unchanged and
+still priced at "a programme across 151 route files"
+(`migrations/199_super_admin.sql:66-71`); what changed is that a specific
+reachable instance of it was found by audit and fixed, and the next such
+instance should be looked for the same way — by asking which reads join
+`admin_audit_log` or `users` without a scope, rather than by re-reading this
+paragraph.
+
 **Blocks:** #202 (queues + seat usage), #203 (Contracts · Subsidiary), #210
 (Support · Subsidiary), and U2 below.
 
