@@ -8700,3 +8700,86 @@ module must import the shared constant, and the shared module must define it as
 that sentence) and adds the check the original could not make: that `fmtCents`
 **answers** a null with it. Mutation-checked — making `fmtCents` return `'0'`
 fails the new assertion and would have passed the old one.
+
+## D118 — Investor deal-flow is one job on one URL family, and the port comes first
+
+`/deals/*` and the legacy `/pipeline/*` trio were **two complete
+implementations of investor deal-flow over two different backends**, with not
+one shared source between them:
+
+| family | pages | reads |
+| --- | --- | --- |
+| legacy | `/pipeline`, `/pipeline/screening`, `/pipeline/commit`, `/pipeline/transactions` | `api.pipelineActive` → `/pipeline/active` |
+| canonical | `/deals/pipeline`, `/deals/screening`, `/deals/commit`, `/deals/closing` | `listDeals`, `dealScreening`, `icCommitRoom`, `esignList` |
+
+**The product call: they are the same job, so `/deals/*` wins.** The legacy trio
+was never a pre-canvas placeholder — it is a live view with working filters — so
+redirecting it away is a real change, not a tidy-up, and the condition on the
+decision is that **anything it does that the zones do not is ported first.**
+
+### What the zones were actually missing, measured rather than assumed
+
+Two things, and the second turned out not to be missing at all.
+
+1. **Free-text search** was genuinely absent: `SearchInput` had zero importers
+   under `pages/investor/deals/`. A real addition, and this decision's work.
+
+2. **Counts on the chip row** were **already supported and simply unused.**
+   `zoneFilterBuilder`'s `withCount` has always substituted `{n}` from a
+   page-supplied `counts` map and has always **dropped** the clause rather than
+   printing a figure it was not given. So this is a wiring change — `{n}` in
+   `investorZoneFilters` labels, `counts` from the page — and it inherits the
+   honesty rule already written there rather than restating it.
+
+**The first pass of this change was going to add `FilterChips` beside the
+existing `ZoneToolbar` row.** That would have put two chip rows with different
+narrowings on one page, and duplicated a mechanism the repo already has. Reading
+the builder before writing the component is what caught it.
+
+### CommitZone is a room, not a list, and is left alone
+
+`CommitZone` is one deal's vote plus a decisions history. The legacy
+`PipelineCommitPage` was a filterable list of **commit-stage deals**, and its
+replacement is **`PipelineZone`'s stage chips** — `DEAL_STAGES` already carries
+`commit` and `dealStage()` already assigns it. Same for
+`PipelineTransactionsPage` against `ClosingZone`. Forcing a room into a table to
+make the port look symmetrical would have been the wrong shape, so the guard
+asserts the two facts that make the substitution true instead of skipping the
+zone silently.
+
+Search is likewise offered on **two of Screening's four views**. `Scored` and
+`Red flags` are per-deal lists; `Rubric` is six dimensions and `Pass reasons` is
+a five-entry taxonomy. A search box over a vocabulary reads as a failed search
+rather than a view without one.
+
+### What does NOT land here
+
+The redirects and the deletions. `/pipeline/screening`, `/pipeline/commit` and
+`/pipeline/transactions` keep working until the port has shipped, because
+retiring a working view before its replacement is complete is the failure this
+decision's ordering exists to prevent. Two traps are recorded for that change:
+
+- **`/pipeline` (the root) must not become an unconditional redirect.** It is
+  role-forked — partner gets `PartnerBucketRoutes`, investor and founder keep
+  `PipelineWorkspace` — and founder access there is deliberate.
+- **`legacyRedirects()` must never be mounted wholesale.** It is exported from
+  `shellConfig.js` and called by nothing, and **all 24 of its rows are live
+  mounted routes**. Mounting it would replace every one of them.
+
+### One existing guard was repointed, and it got stronger
+
+`investor_deals_id2.test.mjs` asserted `rows={rows.map` — "the instrument draws
+the narrowed set". There are now two narrowings, so it draws `visible`. Pinning
+only that would have been **weaker** than what was there, because a `visible`
+built from `scoredRows` satisfies it while silently ignoring the chip. It now
+pins the composition: search narrows the chip's output, never a raw list.
+Mutation-checked — that exact bypass fails it and would have passed the old one.
+
+### Two assertions were wrong before they were right
+
+A `data-testid` on the search **wrapper** meant deleting the control left an
+empty div carrying it, and the mutation escaped. The assertion now pins the
+element and its binding, which also catches a control rendered but not wired to
+the page's state. And a concatenated template literal in ClosingZone's filter
+bound `.toLowerCase().includes(q)` to the second literal only, so the expression
+returned a string and every row passed — caught on review before it ran.

@@ -141,7 +141,19 @@ test('every chip is live, matches the artboard, and narrows something', () => {
     assert.ok(narrowing.includes(`view === '${r.key}'`) || Z.includes(`useState('${r.key}')`),
       `the ${r.key} chip is never read where the rows are chosen, so it selects nothing`);
   }
-  assert.match(Z, /rows=\{rows\.map/, 'the instrument draws something other than the narrowed set');
+  // The instrument draws the narrowed set. There are now TWO narrowings — the
+  // chip and, on the two per-deal views, search — so what it draws is
+  // `visible`. Pinning only that would be weaker than what was here, because
+  // a `visible` built from `scoredRows` directly would satisfy it while
+  // silently ignoring the chip. So pin the composition: search narrows the
+  // chip's output, never the raw list.
+  assert.match(Z, /rows=\{visible\.map/, 'the instrument draws something other than the narrowed set');
+  const vAt = Z.indexOf('const visible = useMemo(');
+  assert.ok(vAt >= 0, 'the search narrowing is gone');
+  const search = Z.slice(vAt, Z.indexOf('}, [', vAt));
+  assert.match(search, /\brows\b/, 'search reads past the chip instead of narrowing what it chose');
+  assert.doesNotMatch(search, /\bscoredRows\b|\bflagRows\b/,
+    'search bypasses the chip by reaching for a raw list');
 });
 
 test('a sandbox run is excluded and the exclusion is said out loud', () => {

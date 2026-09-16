@@ -9,6 +9,7 @@ import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit'
 import {
   ZoneBody, NothingYet, StatedLimit,
 } from '../../advisor/expertise/kit';
+import { SearchInput } from '../../advisor/network/kit';
 import {
   DEAL_STAGE_LABEL, dealStage, dealMoneyExact,
   passReasonLabel, slaBand, slaPreset, DEFAULT_SLA,
@@ -107,6 +108,7 @@ export default function InvestorPipelineZone() {
   const navigate = useNavigate();
   const [state, setState] = useState({ loading: true, error: '', deals: null });
   const [view, setView] = useState('all');
+  const [query, setQuery] = useState('');
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: '' }));
@@ -170,13 +172,27 @@ export default function InvestorPipelineZone() {
    * `Mine` is not here because the whole page is already scoped to `mine` —
    * the filter table marks it `unbuilt` for that reason and the builder drops
    * it, so no chip claims a narrowing that would select everything.
+   *
+   * SEARCH NARROWS WHATEVER THE CHIP SELECTED, rather than sitting beside it.
+   * The two compose in one direction only: pick a chip, then type. Company and
+   * sector are the two fields the row actually shows, so they are the two it
+   * searches — searching a field the reader cannot see returns rows they
+   * cannot account for. Legacy `/pipeline/screening` had this and the zone did
+   * not, which is the half of D118 that was a real absence.
    */
-  const visible = useMemo(() => {
+  const chipped = useMemo(() => {
     if (view === 'passed') return passed;
     if (view === 'unassigned') return unassigned;
     if (view === 'stale') return amber;
     return live;
   }, [view, live, passed, unassigned, amber]);
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return chipped;
+    return chipped.filter((d) => `${d.project_name || ''} ${d.project_sector || ''}`
+      .toLowerCase().includes(q));
+  }, [chipped, query]);
 
   const rowActions = investorZoneActions('deals/pipeline', {
     view: {
@@ -198,9 +214,25 @@ export default function InvestorPipelineZone() {
       <ZoneToolbar
         className="mb-3"
         role="investor"
-        filters={investorZoneFilters('deals/pipeline', { value: view, onChange: setView })}
+        filters={investorZoneFilters('deals/pipeline', {
+          value: view,
+          onChange: setView,
+          // Counts come from the rows this page actually loaded. The builder
+          // DROPS a `{n}` clause rather than printing a zero it was not given
+          // (zoneFilterBuilder's withCount), so an unreadable board shows chips
+          // with no figures instead of chips claiming nothing is there.
+          counts: {
+            all: live.length,
+            unassigned: unassigned.length,
+            stale: amber.length,
+            passed: passed.length,
+          },
+        })}
         actions={rowActions}
       />
+      <div className="mb-3 flex" data-testid="pipeline-search">
+        <SearchInput value={query} onChange={setQuery} placeholder="Search company or sector" />
+      </div>
       <ZoneBody
         loading={state.loading}
         error={state.error}

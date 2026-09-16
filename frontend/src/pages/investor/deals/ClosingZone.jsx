@@ -7,6 +7,7 @@ import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
 import { ZoneBody, NothingYet, StatedLimit } from '../../advisor/expertise/kit';
+import { SearchInput } from '../../advisor/network/kit';
 import { dealStage } from '../../../lib/dealFlow';
 
 /**
@@ -96,6 +97,7 @@ export default function InvestorClosingZone() {
   const [deals, setDeals] = useState(null);
   const [envelopes, setEnvelopes] = useState(null);
   const [view, setView] = useState('close');
+  const [query, setQuery] = useState('');
 
   const load = useCallback(() => {
     setDeals(null);
@@ -180,10 +182,26 @@ export default function InvestorClosingZone() {
     return { signed, required, unrecorded };
   }, [rows]);
 
-  const visible = useMemo(() => {
+  const chipped = useMemo(() => {
     if (view === 'documents') return rows;
     return rows.filter((e) => e.status !== 'draft');
   }, [view, rows]);
+
+  /**
+   * SEARCH NARROWS WHAT THE CHIP CHOSE, over the two names the row shows: the
+   * document's title and the deal it belongs to. A closing row is an envelope,
+   * so "which deal is this" is the question the reader arrives with, and the
+   * deal name is not the envelope's own field — it is joined on. Searching it
+   * anyway is the point: the reader is looking for the deal, not the PDF.
+   */
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return chipped;
+    return chipped.filter((e) => {
+      const hay = `${e.document_title || ''} ${e.document_type || ''} ${e.deal?.project_name || ''}`;
+      return hay.toLowerCase().includes(q);
+    });
+  }, [chipped, query]);
 
   const rowActions = investorZoneActions('deals/closing', {
     view: {
@@ -206,9 +224,19 @@ export default function InvestorClosingZone() {
       <ZoneToolbar
         className="mb-3"
         role="investor"
-        filters={investorZoneFilters('deals/closing', { value: view, onChange: setView })}
+        filters={investorZoneFilters('deals/closing', {
+          value: view,
+          onChange: setView,
+          // The two live chips only. `Blocking` and `Wires` are unbuilt with a
+          // stated reason, and a count beside a refusal would read as a figure
+          // the store does not hold.
+          counts: { close: chipped.length, documents: rows.length },
+        })}
         actions={rowActions}
       />
+      <div className="mb-3 flex" data-testid="closing-search">
+        <SearchInput value={query} onChange={setQuery} placeholder="Search document or deal" />
+      </div>
       <ZoneBody
         loading={deals === null && envelopes === null}
         error={bothFailed ? 'Neither the deal record nor the signature archive could be read.' : ''}
