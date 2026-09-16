@@ -3,7 +3,7 @@
  */
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
-import { AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, stepUpRefusalBody } from '../util/authErrors';
+import { ADMIN_FROZEN, AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, adminFrozenBody, stepUpRefusalBody } from '../util/authErrors';
 
 export function role(u: { role: string }): string {
   return (u.role || '').toLowerCase();
@@ -127,6 +127,7 @@ export function mapError(c: Context<{ Bindings: Env }>, e: any) {
   // "type a fresh TOTP code and retry", and the SPA finds that out from `code`;
   // a bare `{detail: 'step_up_required'}` would be the right number and still a
   // dead end. Same object as `app.onError` builds, from the same function.
+  if (msg === ADMIN_FROZEN) return c.json(adminFrozenBody(e), 423);
   if (msg === STEP_UP_REQUIRED) return c.json(stepUpRefusalBody(e), 403);
 
   const status = AUTH_ERROR_STATUSES[msg] ?? 400;

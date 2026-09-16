@@ -271,7 +271,7 @@ import { writeCronRunHistory } from './util/cronHistory';
 import { branchOf, assertBranchAppUrl } from './util/branch';
 // D110 — one table of which thrown sentence is which status, shared with
 // `routes/_t13t14t15_helpers.ts`'s `mapError`. The two used to disagree.
-import { AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, stepUpRefusalBody } from './util/authErrors';
+import { ADMIN_FROZEN, AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, adminFrozenBody, stepUpRefusalBody } from './util/authErrors';
 import { enqueueReembedChunks } from './util/reembedSweep';
 import { rebuildUsersRoleCheckForInvestor, rebuildUsersRoleCheckForAdvisor } from './util/usersRoleRebuild';
 import { bindingKey } from './util/schemaBootstrap';
@@ -1085,6 +1085,10 @@ app.onError((err: any, c) => {
   const msg = (err?.message ?? '') as string;
   // BLOCK-AUTH-03 — step-up gate. Carries a machine-readable code + the TTL so
   // the SPA can prompt for a fresh TOTP, POST /api/auth/step-up, then retry.
+  // D135 — the frozen refusal carries the notice that caused it, for the same
+  // reason the step-up carries its TTL: the status alone leaves the holder with
+  // nothing to act on.
+  if (msg === ADMIN_FROZEN) return c.json(adminFrozenBody(err), 423);
   if (msg === STEP_UP_REQUIRED) {
     // D134 — the body comes from `util/authErrors.ts` so `mapError`, which 31
     // route files reach instead of this handler, answers with the same object.
@@ -1537,6 +1541,40 @@ export default {
             const s = await closeExpiredSupportSessions(env);
             if (s.closed) console.info(`[cron] support sessions closed=${s.closed}`);
           } catch (e) { console.error('[cron] support session sweep failed', e); }
+        }
+        // D135 — the compliance ladder's middle rung. A notice whose deadline
+        // has passed unanswered freezes the account it was addressed to.
+        //
+        // NO NEW CRON EXPRESSION. `* * * * *` already fires every minute and
+        // every block here gates on the WALL CLOCK, never on which expression
+        // fired, so this is one `if` and nothing in wrangler.toml — the same
+        // correction D106 recorded when a trim of the expression list was
+        // mistaken for a change in cadence.
+        //
+        // NOT GATED ON `hqCadences`, on the D122 precedent one block up and for
+        // its stated reason: `admin_notices` is HQ's table and a branch holds
+        // none, so the sweep's own predicate IS the tier discriminator and a
+        // better one — it selects rows by what they are, not by which
+        // deployment is asking. On a branch it matches nothing and costs an
+        // index probe.
+        //
+        // EVERY FIVE MINUTES, NOT EVERY MINUTE, because `froze_at` is stamped
+        // with the notice's own deadline rather than the sweep's clock: the
+        // cadence bounds how long an account keeps writing past its deadline,
+        // and does not affect what any row says.
+        //
+        // IT NEVER TERMINATES. The reversible rung is the clock's; ending an
+        // account stays a deliberate human act.
+        if (now.getUTCMinutes() % 5 === 0) {
+          try {
+            const { freezeOverdueNotices } = await import('./services/complianceLadder');
+            const f = await freezeOverdueNotices(env);
+            if (!f.readable) {
+              console.warn('[cron] compliance sweep could not read admin_notices');
+            } else if (f.froze || f.suspended) {
+              console.info(`[cron] compliance froze=${f.froze} suspended=${f.suspended} notified=${f.notified}`);
+            }
+          } catch (e) { console.error('[cron] compliance sweep failed', e); }
         }
         // The 04:50 UTC Refer & Earn payout auto-approval sweep was removed
         // with Stripe Connect in the referrals redesign. Referral rewards are

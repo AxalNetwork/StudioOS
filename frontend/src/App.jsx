@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES } from './sidebarConfig';
 import PaywallModal from './components/PaywallModal';
+import AdminFrozenBar from './components/AdminFrozenBar';
 import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
 // renders synchronously on first paint. It marks itself a no-auth-redirect
@@ -2903,6 +2904,11 @@ export default function App() {
             whole app is gone". */}
         <SafeMount name="SpinoutLabListener"><GlobalSpinoutLabListenerMount /></SafeMount>
         <SafeMount name="GlobalPaywallMount"><GlobalPaywallMount /></SafeMount>
+        {/* D136 — mounted here for the same reason the paywall is: the
+            compliance freeze refuses writes on every admin surface, so the
+            thing that explains the refusal cannot live on one page. It renders
+            nothing until a 423 arrives. */}
+        <SafeMount name="AdminFrozenBar"><AdminFrozenBar /></SafeMount>
         <SafeMount name="CookieConsent"><CookieConsent /></SafeMount>
       </SettingsProvider>
     </AuthProvider>
