@@ -74,6 +74,7 @@ export const BRANCH_SUSPENDED = 'Branch suspended by HQ';
  */
 export const BRANCH_ONLY = 'Branch only';
 
+
 /** The branch code this Worker is deployed for, lower-cased, or `null` on HQ. */
 export function branchOf(env: Pick<Env, 'BRANCH_CODE'> | undefined | null): string | null {
   const raw = String(env?.BRANCH_CODE ?? '').trim();
@@ -82,6 +83,22 @@ export function branchOf(env: Pick<Env, 'BRANCH_CODE'> | undefined | null): stri
   if (!BRANCH_CODE_RE.test(code)) {
     throw new Error(`BRANCH_CODE "${raw}" is not a branch code (expected ${BRANCH_CODE_RE})`);
   }
+  return code;
+}
+
+/**
+ * Refuse this request unless the Worker is a branch, and return the code.
+ *
+ * LIFTED OUT OF `routes/branch_escalations.ts` (D130) BECAUSE THE APPROVALS
+ * BOARD IS THE SECOND BRANCH-ONLY SURFACE, and a second hand-written copy is
+ * how one of them ends up throwing its own sentence — which `mapError` would
+ * answer 400 rather than 403, the exact defect D110 found across 31 route
+ * files. Throwing the SHARED constant is what makes `AUTH_ERROR_STATUSES` map
+ * it, so the thing worth sharing is the throw, not just the string.
+ */
+export function requireBranchTier(env: Pick<Env, 'BRANCH_CODE'>): string {
+  const code = branchOf(env);
+  if (!code) throw new Error(BRANCH_ONLY);
   return code;
 }
 

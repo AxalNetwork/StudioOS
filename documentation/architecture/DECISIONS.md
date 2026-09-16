@@ -9890,3 +9890,109 @@ different layout** — the five sources S3's board unions are the five counts S1
 orders by age. Building it here means writing that query twice and deleting one
 copy a PR later, which is the duplication this repo has now consolidated four
 times. S1 lands after #233.
+
+## D130 — the four approval queues become one board, over one definition of "open"
+
+**S3's own words are the specification.** *"Five queues that were five pages
+become five lanes, because an admin's actual question is never 'what is in the
+LP queue' — it is 'what is oldest and who is waiting.' Sorting by SLA age
+across all of them is only possible once they share a surface."* The value is
+the sort, and the sort is impossible until the four share a shape.
+
+### The finding that decided the shape
+
+`backlogOf` (`rpc/branchOps.ts`) **already declared all four sources**, with
+their real tables and their real status vocabularies — and its own docblock had
+already said what would come next: *"The per-queue split is S3's board, which
+PR 13 builds over a read model; duplicating a partial version of it here would
+be a second answer to the same question."*
+
+So the list **moved** to `services/approvalSources.ts` rather than being
+copied, and `backlogOf` now reads it. Two lists would have been two definitions
+of "open", disagreeing exactly where nobody would look: the number above the
+board would stop matching the rows in it, and each would look right on its own.
+It is the third consolidation in four PRs — D127 gave two readers of seats-used
+one `GROUP BY role`, D128 gave four callers one LIKE escaper, this gives two
+readers one predicate — and the test asserts the **consequence** (the count
+equals the rows, on a fixture spanning every status boundary) rather than the
+refactor.
+
+**What the shared list holds, and what it cost to learn.** `backlogOf`'s
+comment: *"Two of the four table names in the first draft of this function were
+wrong, which would not have failed — it would have reported the backlog as
+permanently unreadable, a plausible-looking answer that is never right."* Two
+traps in particular, both now pinned by name in the test:
+
+- **Cohort applications live in `cohort_applicants`** (migration 157), the
+  per-cycle decision row — **not** `spinout_applications` (155), which is the
+  submission form's own store.
+- **A moderation case awaiting a decision is `under_review`.** `'active'` is a
+  RESOLVED case, so counting it would put closed work on the board.
+- And `'draft'` is deliberately **not** reviewer backlog: a draft referral
+  belongs to the member still writing it, and counting it would put the branch
+  admin under pressure for work nobody has handed them.
+
+### The honesty rule differs between the two readers, deliberately
+
+A **count** missing a term is a smaller number presented as the total, so
+`backlogOf` still returns `null` for the whole thing when one lane fails. A
+**board** is different: the rows that could be read are real work somebody
+should see. So a failed lane keeps a `null` count, the reason names it, and the
+page says which lane it cannot vouch for. That is the `services/branches.ts`
+fan-out rule applied one level down — per-source isolation with the gap stated
+rather than averaged away.
+
+### THE BOARD READS; IT DOES NOT DECIDE
+
+Every decision still goes to that queue's own console, which owns the store's
+status vocabulary, its side effects and its emails. A board that also decided
+would be a fifth writer to four stores, each with rules it would have to
+restate — and restating a rule is how the copies drift. The payload carries
+`decides: false` and the test refuses a write verb on the route.
+
+### THE FINDING THAT CAME OUT OF WIRING THE ROWS
+
+**Spinout moderation has no console.** `/api/admin/spinout-moderation/:userId`
+exists on the Worker, `api.adminSpinoutModeration` and
+`adminSpinoutModerationDecide` exist in `lib/api.js`, and **nothing in
+`frontend/src` calls either.** So a moderation case is real work that reaches
+the backlog count, reaches this board, and has nowhere to be decided. The row
+says that instead of linking to a route that would 404 — which `sidebarConfig.js`
+names as worse than no link, because it looks shipped. The test measures the
+caller count rather than trusting this paragraph, and **fails with instructions**
+the day somebody builds the console.
+
+A near miss in the same class: the cohort panel is *rendered inside*
+`AdminSpinoutLab` rather than routed on its own, so a `/admin/cohort` link would
+have 404'd. Every console link is now asserted against `App.jsx`'s route list.
+
+### What does not ship, narrowed rather than deleted (the D111 pattern)
+
+The notice this replaces promised *"the read model that makes them one board"*,
+which PR 13 is — so that sentence had to go, and what replaced it in the rail's
+`unavailable` list is the smaller true thing:
+
+- **Assignment and history** need a store that does not exist. Migration 264 is
+  still free and is what `approval_assignments` / `approval_events` would use.
+- **An AI-drafted decision note with its cost.** The canvas draws the cost; no
+  per-branch AI cost figure exists, because the gateway metadata that would
+  produce one is not wired. Same refusal as S12's decline card and S1's digest
+  cost — an invented cost is worse than an absent one.
+
+### One timestamp trap, closed at the read model
+
+`created_at` is `datetime('now')` on all four — `YYYY-MM-DD HH:MM:SS`, no zone —
+and `Date.parse` reads that as **local**. On a Worker local is UTC so the bug
+hides; on a developer's machine every row would be hours out, and a board
+ordered by age cannot survive that. `ageHours` appends the `Z` rather than
+assuming it, and the test asserts the SQL form directly. Same ISO-vs-SQL class
+as D122 and D125.
+
+### Files
+
+`cloudflare-worker/src/services/approvalSources.ts` (new) ·
+`routes/branch_approvals.ts` (new) · `rpc/branchOps.ts` (reads the shared list) ·
+`util/branch.ts` (`requireBranchTier` lifted out of the escalations route, which
+is the second branch-only surface) · `routes/branch_escalations.ts` ·
+`index.ts` · `frontend/src/lib/api.js` · `pages/branch/BranchApprovals.jsx` ·
+two new tests · **D130**. **No migration — 264 remains free.**

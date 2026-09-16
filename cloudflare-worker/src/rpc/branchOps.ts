@@ -23,7 +23,7 @@
  */
 import type { Env } from '../types';
 import { branchOf, BRANCH_CODE_RE } from '../util/branch';
-import { PRE_VERDICT_STATUSES } from '../services/referralSubmissions';
+import { APPROVAL_SOURCES } from '../services/approvalSources';
 // ONE DEFINITION OF "PAST SLA", shared across the tier boundary. It is a pure
 // function of a date, so importing it costs nothing and restating it would let
 // HQ's board and the branch's lane disagree about which items are late — with
@@ -141,32 +141,28 @@ export async function branchHealth(env: Env): Promise<BranchAnswer<BranchHealth>
  * with a reason naming what could not be read.
  */
 async function backlogOf(env: Env): Promise<{ backlog: BranchOverview['backlog']; reason?: string }> {
-  // THE STATUS VOCABULARIES ARE THE ROUTES' OWN, read off each store rather
-  // than guessed: `lp_applications` and `cohort_applicants` default to
-  // 'pending', moderation cases awaiting a decision are 'under_review'
-  // ('active' is a resolved case, not an open one), and referrals have a whole
-  // set. Two of the four table names in the first draft of this function were
-  // wrong, which would not have failed — it would have reported the backlog as
-  // permanently unreadable, a plausible-looking answer that is never right.
+  // THE SOURCE LIST MOVED TO `services/approvalSources.ts` (D130) AND THIS
+  // READS IT. It used to be declared here, with its tables, its status
+  // vocabularies and the `PRE_VERDICT_STATUSES`-minus-`'draft'` rule written
+  // out — and the docblock above already said S3's board would need the same
+  // four. Two lists would have been two definitions of "open", disagreeing
+  // where nobody would look: the number above the board would stop matching
+  // the rows in it, and both would look right on their own.
   //
-  // Referrals reuse `PRE_VERDICT_STATUSES` rather than restating it, MINUS
-  // 'draft': a draft belongs to the member who is still writing it, and
-  // counting it as reviewer backlog would put the branch admin under pressure
-  // for work nobody has handed them.
-  const referralPending = [...PRE_VERDICT_STATUSES].filter((s) => s !== 'draft');
-  const referralIn = referralPending.map((s) => `'${s}'`).join(', ');
-  const SOURCES: Array<{ label: string; sql: string }> = [
-    { label: 'LP applications', sql: "SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM lp_applications WHERE status = 'pending'" },
-    { label: 'referrals', sql: `SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM referral_submissions WHERE status IN (${referralIn})` },
-    { label: 'cohort applications', sql: "SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM cohort_applicants WHERE status = 'pending'" },
-    { label: 'spinout moderation', sql: "SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM spinout_moderation_cases WHERE status = 'under_review'" },
-  ];
+  // The one thing that does NOT move is what each reader does with a failure.
+  // The board keeps the lanes it could read, because those rows are real work
+  // somebody should see. A backlog COUNT cannot: a sum missing a term is a
+  // smaller number presented as the total, which is worse than no number. So
+  // the shared list supplies the predicate and each caller supplies its own
+  // honesty rule.
   let count = 0;
   let oldest: string | null = null;
   const unreadable: string[] = [];
-  for (const s of SOURCES) {
+  for (const s of APPROVAL_SOURCES) {
     try {
-      const row = await env.DB.prepare(s.sql).first<{ n: number; oldest: string | null }>();
+      const row = await env.DB.prepare(
+        s.countSql,
+      ).first<{ n: number; oldest: string | null }>();
       count += Number(row?.n) || 0;
       const o = row?.oldest ?? null;
       if (o && (oldest === null || o < oldest)) oldest = o;

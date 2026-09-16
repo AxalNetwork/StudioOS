@@ -12,7 +12,7 @@ which names a sidebar and never a permission.
 | --- | --- |
 | `BranchZone.jsx` | The frame every `/branch/*` route renders in, and the branch tier's **one** Worker AI rail mount (D126). It owns the two-column layout, the rail column that collapses with the rail, and the sentence saying this rail reads one database. |
 | `BranchZonePending.jsx` | The stated absence on a row whose artboard is not built yet (D107): which artboard, what will be on it, which PR brings it. A **card**, not a page — `BranchApprovals` renders it inside itself. |
-| `BranchApprovals.jsx` | Canvas S3 at `/branch/approvals`, the outbound lane only (D112): raise an escalation to HQ, and read the one decision that comes back. The four local queues are PR 13 and say so. It wraps itself in `BranchZone` because it loads live data and only it knows what its rail can report. |
+| `BranchApprovals.jsx` | Canvas S3 at `/branch/approvals`: the work board over the four local queues, oldest first with SLA bands (D130), **and** the outbound To-HQ lane (D112). The board READS — every decision is still made in that queue's own console — and spinout moderation's row says it has no console, because none exists. Assignment, history and the AI decision note do not ship; the rail names each. |
 | `BranchAccounts.jsx` | Canvas S2 at `/branch/accounts`, plus the half of S8 that is true (D129): seat tiles with used, licensed and free per licence type; the members table searched over this deployment's own D1; the Exploring count. S8's seat **ledger** does not ship — D127 settled that seats used is a definition over `users.role`, so no seat has an id to assign or release. Wraps itself in `BranchZone`. |
 
 ## Rules
