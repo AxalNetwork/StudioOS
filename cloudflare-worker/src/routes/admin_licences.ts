@@ -99,13 +99,20 @@ async function logEvent(
 }
 
 /**
- * Seats used, which is deliberately unknowable here.
+ * Seats used, which is deliberately unknowable HERE and knowable on a branch.
  *
- * The canvas shows "% utilised" against seats licensed. Computing it needs
- * every account to name the licence it belongs to, and no account does —
- * that is the scoping half this ledger does not build. Returning null makes
- * the UI say so; returning 0 would read as "nobody has signed up", which is a
- * different and false claim.
+ * The canvas shows "% utilised" against seats licensed. Computing it at HQ
+ * needs every account to name the licence it belongs to, and no account does
+ * (U1) — that is the scoping half this ledger does not build. Returning null
+ * makes the UI say so; returning 0 would read as "nobody has signed up",
+ * which is a different and false claim.
+ *
+ * A BRANCH CAN COUNT ITS OWN, AND THAT IS NOT AN INCONSISTENCY (D127). Every
+ * user in a branch's D1 *is* that branch's, so `rpc/branchOps.ts` counts
+ * active accounts whose role is one a licence sells a seat for. HQ has no
+ * equivalent question to ask of its own table. The two tiers answer
+ * differently because the tiers differ, not because one of them is behind —
+ * and `seats_used_available: false` below still says so on this side.
  */
 function seatsUsed(): null { return null; }
 

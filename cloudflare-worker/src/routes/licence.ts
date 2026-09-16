@@ -11,13 +11,22 @@
  * WHAT IT WILL NOT SHOW, and why the endpoint says so instead of leaving a
  * hole for the UI to fill. Migration 187 built the licence LEDGER and was
  * explicit that it is not the tenancy SCOPE: no account, project, deal or
- * document carries a licence_id. So seats USED, accounts in territory, revenue
- * per subsidiary and the whole approval queue in the canvas cannot be computed
- * — not "are zero", cannot be computed. Every one of them would need
+ * document carries a licence_id. So accounts in territory, revenue per
+ * subsidiary and the whole approval queue in the canvas cannot be computed —
+ * not "are zero", cannot be computed. Every one of them would need
  * account→licence attribution.
  *
+ * SEATS USED IS THE ONE THAT CAME OFF THAT LIST (D127), and only on a branch.
+ * A branch does not need account→licence attribution to count its own
+ * accounts: every user in its database *is* its own. So on a branch this
+ * returns a number, counted from active accounts whose role is one a licence
+ * sells a seat for — a definition rather than a seat ledger, which
+ * `seats_used_basis` states in the payload. On HQ it stays null, because there
+ * the attribution really is what is missing.
+ *
  * The response therefore carries `derived_metrics_available: false` and a
- * reason, in the same spirit as the fund-analytics rule: an unmeasured number
+ * reason — a DIFFERENT reason per tier, since the same sentence cannot be true
+ * on both — in the same spirit as the fund-analytics rule: an unmeasured number
  * is unknown, and a surface that says so is worth more than one that shows a
  * plausible zero. Seats LICENSED is in the ledger and IS shown.
  *
@@ -30,6 +39,9 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { branchOf } from '../util/branch';
 import { hydrate, type LicenceRow } from './admin_licences';
+// The roles a licence sells a seat for. Imported rather than re-listed, so the
+// branch overview and this page cannot disagree about what a seat is (D127).
+import { SEAT_ROLES } from '../rpc/branchOps';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -109,6 +121,34 @@ async function branchLicencePayload(env: Env, code: string) {
     }
   } catch { seats = {}; }
 
+  // SEATS USED, COUNTED THE ONE WAY THIS TIER CAN (D127). Its own try/catch,
+  // because a failed count must not blank the licence summary beside it — the
+  // whole page exists to show terms, and an unreadable `users` table is a
+  // different and smaller problem. `null` on failure keeps the distinction the
+  // canvas draws between "unknown" and "zero".
+  //
+  // NO `IN (…)` AND NO INTERPOLATION. A first draft built the placeholder list
+  // with `${SEAT_ROLES.map(() => '?').join(', ')}`, which `check-sql-prepare`
+  // refused — correctly, even though that particular expression can only emit
+  // `?, ?, ?, ?`: the rule is that nothing reaches the query TEXT, and a rule
+  // with a "provably safe" exemption is one somebody widens later. Counting by
+  // role and summing in JS removes the question, and it has a better property
+  // besides — this is byte-for-byte the query `branchOverview` runs, so the
+  // two readers of this figure cannot drift into asking different things.
+  let seatsUsedHere: number | null = null;
+  try {
+    const seated = await env.DB.prepare(
+      'SELECT role, COUNT(*) AS n FROM users WHERE is_active = 1 GROUP BY role',
+    ).all<{ role: string; n: number }>();
+    let sum = 0;
+    for (const row of seated.results || []) {
+      if ((SEAT_ROLES as readonly string[]).includes(String(row.role))) sum += Number(row.n) || 0;
+    }
+    seatsUsedHere = sum;
+  } catch (e) {
+    console.warn('[licence] seats used unreadable', (e as Error).message);
+  }
+
   return {
     licence: {
       uid: row.licence_uid,
@@ -126,10 +166,17 @@ async function branchLicencePayload(env: Env, code: string) {
       territories,
       seats,
       seats_licensed: Object.values(seats).reduce((a, b) => a + b, 0),
-      // Deliberately not computed here even on a branch. Seats USED needs
-      // `seat_assignments`, which PR 5 builds; until then the reason below
-      // is the honest answer on both tiers.
-      seats_used: null,
+      // D127 — THIS IS NOW A NUMBER, and the comment it replaces was wrong on
+      // its own terms: it said "PR 5 builds `seat_assignments`", PR 5 shipped,
+      // and it built none. A branch can count its own seats because every user
+      // in this database *is* this branch's; what it counts is roles, which is
+      // a definition rather than a seat ledger — `seats_used_basis` below says
+      // so on the screen rather than leaving the number to be read as more
+      // than it is.
+      seats_used: seatsUsedHere,
+      seats_used_basis:
+        'Active accounts whose role is one a licence sells a seat for. Role is not a licensed seat: '
+        + 'no seat has an id, and none is assigned or released.',
       revenue_share_bps: row.revenue_share_bps,
       token_split_bps: row.token_split_bps,
       annual_fee_cents: row.annual_fee_cents,
@@ -160,13 +207,39 @@ async function branchLicencePayload(env: Env, code: string) {
  * Said once, in one place, so the callers cannot word it differently. Exported
  * for the HQ overview (routes/admin_hq.ts), which reports the same absence
  * platform-wide and must not develop a second phrasing of it.
+ *
+ * SEATS USED CAME OFF THIS LIST (D127) RATHER THAN THE LIST BEING DELETED.
+ * A branch counts its own seats now, so a payload carrying both a number and a
+ * sentence saying that number is "not shown" would contradict itself — which
+ * is what it did for the length of one commit, caught by
+ * `branch_licence_copy.test.ts`. What is still genuinely unavailable on BOTH
+ * tiers is narrower, and saying the narrower true thing is the point: the
+ * D111 pattern, where `budget_reason` survived in a smaller and still-true
+ * form rather than being dropped.
  */
 export const DERIVED_UNAVAILABLE = {
   derived_metrics_available: false,
   derived_metrics_reason:
-    'Seats used, accounts in territory and revenue per subsidiary all need every account to name '
-    + 'the licence it belongs to. No account carries one yet — migration 187 built the licence '
-    + 'ledger, not the tenancy scope — so these are not shown rather than shown as zero.',
+    'Accounts in territory and revenue per subsidiary need every account to name the licence it '
+    + 'belongs to. No account carries one yet — migration 187 built the licence ledger, not the '
+    + 'tenancy scope — so these are not shown rather than shown as zero.',
+} as const;
+
+/**
+ * The same absence on a BRANCH, where seats used is a figure and the rest is
+ * not (D127).
+ *
+ * A branch does not need the tenancy scope to count its own accounts — every
+ * user in its database is its own — so the sentence above is wrong there in
+ * the one direction that matters: it would tell a branch admin their seat
+ * figure is unavailable while the page beside it shows one.
+ */
+export const DERIVED_UNAVAILABLE_BRANCH = {
+  derived_metrics_available: false,
+  derived_metrics_reason:
+    'Seats used is shown, counted from active accounts by role. Revenue per subsidiary is not: the '
+    + 'reporting call that sends this branch\'s own billing figures to HQ is not built, so nothing '
+    + 'is shown rather than a zero.',
 } as const;
 
 /**
@@ -199,7 +272,7 @@ r.get('/mine', async (c) => {
   if (code) {
     const payload = await branchLicencePayload(c.env, code);
     if ('error' in payload) return c.json(payload, 404);
-    return c.json({ ...payload, ...DERIVED_UNAVAILABLE });
+    return c.json({ ...payload, ...DERIVED_UNAVAILABLE_BRANCH });
   }
 
   const row = await licenceForUser(c.env, user.id);
