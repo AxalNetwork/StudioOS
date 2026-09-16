@@ -945,7 +945,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               >
                 {branchFact.name || branchFact.code}
                 {(branchFact.territories || []).length > 0 && ` · ${(branchFact.territories || []).join(' · ')}`}
-                {' · SUBSIDIARY'}
+                {' · BRANCH'}
               </span>
             )}
             {(activeRole === 'founder' || activeRole === 'admin') && (
