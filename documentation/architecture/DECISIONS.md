@@ -9802,3 +9802,91 @@ accounts against a page of 100, and asserts `total !== results.length`.
 
 **No migration** — 264 remains free. No new `/api/*` path, so the drift gate has
 nothing to say; only the existing method's signature widened.
+
+## D129 — the branch tier's first real page, and the notice that outlived its own fact
+
+**S2 became buildable the moment D127 landed, and the screen standing in for it
+became false in the same commit.** `/branch/accounts` rendered a stated notice
+promising *"Seats USED needs the seat assignment store, which is why this is not
+a number that can be shown today."* D127 decided a branch counts its own seats
+from `users.role` and that no seat store ships, so that sentence was wrong by
+the time it was read. It is the **third** expired promise in this programme —
+`routes/licence.ts` and `rpc/branchOps.ts` each carried one saying PR 5 would
+build the store, and PR 5 shipped without it — which is what makes it a class
+rather than a slip.
+
+**It was never a production defect, and the entry says so rather than
+overselling it.** No branch has been provisioned (the first run is blocked on
+#192's token), so `/branch/accounts` has rendered for nobody. What it was is a
+promise sitting in the tree waiting for a reader, and the fix deletes the
+promise along with the notice.
+
+### What the page shows, and what it refuses to
+
+| element | where the number comes from |
+| --- | --- |
+| Four seat tiles — used, licensed, **free** | `seats_used_by_type` (new, D129) against `branch_licence.seats_json`. `free = licensed − used`, which is S8's arithmetic |
+| Members, searched | `GET /api/admin/users?q=&envelope=1` (D128). On a branch that route is territory-scoped **by construction** — this deployment's D1 holds this branch's accounts and no others — so the search adds no predicate. S0's first wall rule is literally true here, not enforced |
+| Exploring | the same envelope's `by_role.exploring` |
+| Request more seats | `branchEscalate({kind: 'seat_increase'})`, which D112's route already accepts |
+
+**The Members column is headed Role, not Seat.** The canvas draws Seat; D127
+recorded in advance that there is no seat id to put in it. A column headed Seat
+with a role underneath would be the exact lie this page exists not to tell, and
+the test asserts BOTH that the page says Role and that the artboard still says
+Seat — so the divergence is deliberate and stays visible rather than quietly
+becoming stale.
+
+**S8's seat ledger does not ship**, and that is D127's decision carried forward
+rather than a new one: no seat has an id, nobody is assigned or released, and a
+vacant seat cannot be drawn. It sits in the rail's `unavailable` list, where a
+reader meets it, instead of in a notice standing in for the whole screen.
+
+### The one thing the worker gained, and why it is not a second query
+
+`branchLicencePayload` already ran `SELECT role, COUNT(*) … GROUP BY role` and
+summed four of its rows. `seats_used_by_type` is **those rows un-summed** — not
+a second read. A second query could ask a subtly different question (a different
+`is_active` predicate, say) and the tiles would then disagree with the total
+beside them; the test asserts the parts sum to the whole precisely to pin that
+they come from one read. Every seat role gets a key including the zeroes,
+because SQLite returns no row for an empty group and a missing key would make
+the page choose between rendering nothing and inventing a zero. `null` stays
+reserved for the count having failed, which is a different claim and renders
+differently.
+
+### THE FINDING THAT CAME OUT OF WRITING THE PAGE, AND IT WIDENS D126'S GUARD
+
+D126 found three shipped HQ pages passing `WorkerRail` props it does not
+declare, and built a guard that parses the component's own destructure. **That
+guard covers one component.** Writing this page reproduced the identical defect
+on two others within an hour: four `<Unreadable>`/`<Unrecorded>` mounts passing
+`reason` and `what` that neither declares. `Unreadable` takes `{what, claim,
+onRetry}` and `Unrecorded` takes `{children, reason}`; React discarded the rest
+silently, so the honest state would have rendered **without its reason** — on
+the two components whose entire job is to be the honest state, which is the
+worst possible place for this class to live.
+
+Measured before fixing: **every one of the ~90 existing call sites in the tree
+is correct.** The offenders were all in the new file. So the guard starts clean,
+and what it buys is the next one — the same argument D126 made, one component
+wider.
+
+### Files
+
+`routes/licence.ts` (one field) · `pages/branch/BranchAccounts.jsx` (new) ·
+`App.jsx` · `pages/branch/README.md` · `frontend/test/branch_accounts_s2.test.mjs`
+(new) · `cloudflare-worker/test/branch_licence_copy.test.ts`. **No migration —
+264 remains free.** No new `/api/*` method, so the drift gate has nothing to say.
+
+### What is still not built, counted rather than left looking overlooked
+
+**S1 Home is NOT in this PR, and the reason is duplication rather than size.**
+Three of its six blocks are somebody else's work: the AI digest needs a
+`branch_briefs` store and a per-branch cost that AI Gateway metadata does not
+yet produce (D.10); "flagged by the rail" needs an anomaly producer that does
+not exist; and **queue pressure is #233's approvals read model wearing a
+different layout** — the five sources S3's board unions are the five counts S1
+orders by age. Building it here means writing that query twice and deleting one
+copy a PR later, which is the duplication this repo has now consolidated four
+times. S1 lands after #233.

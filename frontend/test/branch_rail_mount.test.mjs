@@ -302,16 +302,54 @@ test('all eight branch routes render through the frame', () => {
   assert.equal(routes.length, 8, `expected eight /branch/* routes, found ${routes.length}`);
   const bare = routes
     .filter(([, , el]) => !el.includes('<BranchZone '))
-    .map(([, path]) => path);
-  // `/branch/approvals` wraps itself: it loads live escalations, so only the
-  // page knows what its rail can report. Assert that it DOES, rather than
-  // exempting it — an exemption that never checks the alternative is how a
-  // route ends up with no rail and nobody notices.
-  assert.deepEqual(bare, ['/branch/approvals'],
-    'every /branch route takes the frame from App.jsx except approvals, which wraps itself');
-  const approvals = codeOnlyJsx(read('frontend/src/pages/branch/BranchApprovals.jsx'));
-  assert.match(approvals, /<BranchZone\s/, '/branch/approvals lost its own frame, so it now has no rail at all');
-  assert.match(approvals, /workspace="Approvals"/, 'the approvals rail must name its zone');
+    .map(([, path, el]) => ({ path, el }));
+
+  // EXACTLY ONE FRAME PER ROUTE, DERIVED RATHER THAN LISTED. A route either
+  // takes the frame from `App.jsx` or its page wraps itself — never neither
+  // (no rail at all, invisible, because a missing rail looks like a page that
+  // has none) and never both (two rails, which is the doubled-chrome failure
+  // this repo has fixed three times).
+  //
+  // THE LIST OF SELF-WRAPPERS IS NOT TYPED IN. It was, and it went stale on the
+  // very next PR: D129 gave `/branch/accounts` a page that loads live figures,
+  // so it wraps itself exactly as approvals does, and a hardcoded
+  // `['/branch/approvals']` failed a correct change. Every zone PR 12–14 builds
+  // will do the same. So the route's own element names the component, and the
+  // component is read — which also catches the case a list never could: a page
+  // that stops wrapping itself while the route still expects it to.
+  for (const { path, el } of bare) {
+    const named = /<([A-Z][A-Za-z0-9]*)\b/.exec(el);
+    assert.ok(named, `${path} renders no component, so it cannot have a rail`);
+    const file = `frontend/src/pages/branch/${named[1]}.jsx`;
+    let page;
+    try {
+      page = codeOnlyJsx(read(file));
+    } catch {
+      assert.fail(
+        `${path} takes no frame from App.jsx and ${named[1]} is not a page under pages/branch/, `
+        + 'so nothing mounts its rail',
+      );
+    }
+    assert.match(page, /<BranchZone\s/,
+      `${path} has no frame: the route does not wrap it and ${named[1]} does not wrap itself, so it has no rail at all`);
+    assert.match(page, /workspace="[^"]+"/,
+      `${named[1]}'s rail does not name its zone, so its aria-label and its model key are both wrong`);
+  }
+
+  // And the two that are self-wrapping today still are, named so that DELETING
+  // a page's frame fails here rather than passing the generic loop above by
+  // dropping out of `bare` entirely.
+  for (const [file, workspace] of [
+    ['frontend/src/pages/branch/BranchApprovals.jsx', 'Approvals'],
+    ['frontend/src/pages/branch/BranchAccounts.jsx', 'Accounts'],
+  ]) {
+    const page = codeOnlyJsx(read(file));
+    assert.match(page, /<BranchZone\s/, `${file} lost its own frame, so it now has no rail at all`);
+    // A literal `includes`, not a constructed RegExp: Semgrep's
+    // `detect-non-literal-regexp` flagged exactly that shape on #595, and a
+    // substring is what this actually needs.
+    assert.ok(page.includes(`workspace="${workspace}"`), `${file}'s rail must name its zone`);
+  }
 });
 
 test('the three HQ pages that were mis-mounted are fixed, each with real coverage', () => {

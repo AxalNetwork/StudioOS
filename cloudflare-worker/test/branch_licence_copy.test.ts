@@ -162,6 +162,82 @@ test('a branch with accounts counts only the roles a licence sells a seat for', 
     'admin and exploring hold no seat, and a deactivated account released theirs');
 });
 
+test('the per-type breakdown is the same rows un-summed, zeroes included', async () => {
+  // D129 — S2 draws one tile per licence type, so the page needs used-per-type
+  // beside licensed-per-type. Two properties matter and neither is implied by
+  // the total above:
+  //
+  //   1. THE PARTS SUM TO THE WHOLE. If the breakdown were built by a second
+  //      query it could ask a subtly different question — a different
+  //      `is_active` predicate, say — and the tiles would disagree with the
+  //      total sitting beside them. Asserting the sum is what pins that they
+  //      come from one read.
+  //   2. A ROLE WITH NO ACCOUNTS GETS A MEASURED ZERO. SQLite returns no row
+  //      for a group with no members, so a naive map omits the key entirely and
+  //      the page must then choose between rendering nothing and inventing a
+  //      zero. `advisor` below is that case, and `partner` is deliberately
+  //      absent from the seed too.
+  const seeded = db(`${PUSHED}
+    INSERT INTO users (id, email, name, role, is_active) VALUES
+      (201, 'f1@x.test', 'F1', 'founder',   1),
+      (202, 'f2@x.test', 'F2', 'founder',   1),
+      (203, 'i1@x.test', 'I1', 'investor',  1),
+      (204, 'x1@x.test', 'X1', 'admin',     1),
+      (205, 'f3@x.test', 'F3', 'founder',   0);`);
+  const { body } = await get({ ...FR, DB: makeD1(seeded) });
+  const byType = body.licence.seats_used_by_type;
+  assert.deepEqual(
+    byType,
+    { founder: 2, investor: 1, advisor: 0, partner: 0 },
+    'the breakdown must carry every seat role, with a measured zero where a role holds none',
+  );
+  assert.equal(
+    Object.values(byType as Record<string, number>).reduce((a, b) => a + b, 0),
+    body.licence.seats_used,
+    'the tiles and the total disagree, so they are not coming from one read',
+  );
+  assert.ok(
+    !('admin' in (byType as Record<string, number>)),
+    'a role that holds no seat reached the seat tiles',
+  );
+});
+
+test('an uncountable account table gives null, not four zeroes', async () => {
+  // The distinction the canvas draws between unknown and zero, at the one place
+  // it can collapse: `seats_used_by_type: {founder:0,…}` says the query ran and
+  // found nobody. `null` says it could not run. A page cannot tell those apart
+  // from the same value, and S2's tiles would render "0 of 200" for both.
+  //
+  // THE FAILURE IS AIMED AT THE QUERY, NOT THE TABLE. A first draft dropped
+  // `users` outright, which does not test this path at all: `requireAuth`
+  // hydrates the caller from that table, so the request never reaches the
+  // count and `body.licence` came back undefined. The assertion would have
+  // been measuring a 403. Failing the one statement is what exercises the
+  // try/catch this test is about.
+  const real = makeD1(db(PUSHED));
+  const failing = {
+    ...real,
+    prepare(sql: string) {
+      if (!sql.includes('GROUP BY role')) return real.prepare(sql);
+      const boom = () => { throw new Error('no such table: users'); };
+      const stub: any = {
+        bind: () => stub,
+        async first() { return boom(); },
+        async all() { return boom(); },
+        async run() { return boom(); },
+      };
+      return stub;
+    },
+  };
+  const { body } = await get({ ...FR, DB: failing });
+  assert.equal(body.licence.seats_used, null, 'an uncountable table reported a number');
+  assert.equal(body.licence.seats_used_by_type, null,
+    'an uncountable table reported a breakdown, which would render as four measured zeroes');
+  // And the licence terms beside it still render — the count has its own
+  // try/catch precisely so one failure does not blank the other.
+  assert.equal(body.licence.seats_licensed, 325, 'a failed count blanked the licence summary');
+});
+
 test('the copy uses HQ\'s field names, because the page that reads it is HQ\'s page', async () => {
   // D107 — this is a REGRESSION GUARD for a real defect, not a shape check.
   // `branch_licence` stores `legal_entity`; the HQ payload calls the same fact

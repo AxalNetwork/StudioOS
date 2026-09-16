@@ -13,6 +13,7 @@ which names a sidebar and never a permission.
 | `BranchZone.jsx` | The frame every `/branch/*` route renders in, and the branch tier's **one** Worker AI rail mount (D126). It owns the two-column layout, the rail column that collapses with the rail, and the sentence saying this rail reads one database. |
 | `BranchZonePending.jsx` | The stated absence on a row whose artboard is not built yet (D107): which artboard, what will be on it, which PR brings it. A **card**, not a page — `BranchApprovals` renders it inside itself. |
 | `BranchApprovals.jsx` | Canvas S3 at `/branch/approvals`, the outbound lane only (D112): raise an escalation to HQ, and read the one decision that comes back. The four local queues are PR 13 and say so. It wraps itself in `BranchZone` because it loads live data and only it knows what its rail can report. |
+| `BranchAccounts.jsx` | Canvas S2 at `/branch/accounts`, plus the half of S8 that is true (D129): seat tiles with used, licensed and free per licence type; the members table searched over this deployment's own D1; the Exploring count. S8's seat **ledger** does not ship — D127 settled that seats used is a definition over `users.role`, so no seat has an id to assign or release. Wraps itself in `BranchZone`. |
 
 ## Rules
 
@@ -32,3 +33,10 @@ which names a sidebar and never a permission.
   the rule: a row pointing at a route that does not exist looks shipped and
   404s. All eight branch rows have routes; the ones without artboards land on
   `BranchZonePending`.
+- **A notice states a fact about the platform, so it expires.** The
+  `/branch/accounts` notice said seats used could not be shown because the seat
+  store did not exist; D127 made that false and the notice outlived it by one
+  merge. `frontend/test/branch_accounts_s2.test.mjs` refuses the retired
+  sentence anywhere under `frontend/src`, the same way `founderZoneFilters.js`
+  refuses `NO_VERDICT_SNAPSHOT`. When a `will=` promises a store, the PR that
+  decides not to build it deletes the promise too.

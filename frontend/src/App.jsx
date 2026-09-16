@@ -172,6 +172,7 @@ const BranchApprovals = lazy(() => import('./pages/branch/BranchApprovals'));
 // Worker AI rail mount (D126). Lazy like its siblings so the rail and its price
 // lookup stay out of the entry bundle for the visitors who never see a branch.
 const BranchZone = lazy(() => import('./pages/branch/BranchZone'));
+const BranchAccounts = lazy(() => import('./pages/branch/BranchAccounts'));
 // The Super Admin's HQ-only surfaces (migrations 199/207). `hqOnly` below
 // renders the notice for an admin without the elevation.
 const SuperAdminOnlyNotice = lazy(() => import('./pages/hq/SuperAdminOnlyNotice'));
@@ -2081,7 +2082,13 @@ function AppInner() {
           weaker copy of the wall in the router would be the thing that looks
           like the guarantee without being it. */}
       <Route path="/branch" element={guard(['admin'], <BranchZone workspace="Home"><BranchZonePending artboard="S1 Home" title="The territory's operating digest" will="The local clock and greeting, the AI digest proposal with its cost, queue pressure ordered by the oldest item rather than by count, today's programme deadlines, revenue share month-to-date for this territory, and what the rail flagged inside it." pr="PR 12" /></BranchZone>)} />
-      <Route path="/branch/accounts" element={guard(['admin'], <BranchZone workspace="Accounts"><BranchZonePending artboard="S2 Accounts" title="Seats licensed, seats used, and who holds them" will="Seats per licence type against the seats HQ licensed, ambering at 88% with the request-more-seats escalation; the members table with seat id and state; and the Exploring board. Seats USED needs the seat assignment store, which is why this is not a number that can be shown today." pr="PR 12" /></BranchZone>)} />
+      {/* D129 — LIVE, and it wraps ITSELF in BranchZone because its rail
+          coverage is what it loaded. The notice this replaces said seats used
+          "is not a number that can be shown today", which D127 made false: a
+          branch counts its own seats from `users.role`. S8's seat LEDGER still
+          does not ship, and the page says so in the rail's unavailable list
+          rather than in a notice standing in for the whole screen. */}
+      <Route path="/branch/accounts" element={guard(['admin'], <BranchAccounts user={user} />)} />
       {/* D112 — the outbound HALF of S3 is live: the To-HQ lane and HQ's
           answers. The four local queues keep their stated notice inside the
           page, so the row is honest about which half is built rather than
