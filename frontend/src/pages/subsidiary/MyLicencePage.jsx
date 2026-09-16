@@ -1,5 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { Map, Users, Calendar, Percent, Building2, AlertTriangle, Loader2, History } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  Map, Users, Calendar, Percent, Building2, AlertTriangle, Bell, Loader2, History, Lock,
+} from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 
@@ -74,9 +76,236 @@ function Row({ label, value }) {
   );
 }
 
+/* ------------------------------------------------------------------ *
+ * D136 — the compliance ladder, from the addressee's end               *
+ * ------------------------------------------------------------------ */
+
+// `complianceLadder.ts:226` sends the freeze notification with
+// `link: '/admin/my-licence'`, so this page is the ladder's declared
+// destination — and until now it said nothing about it. A frozen administrator
+// met a 423 and a page describing their commercial terms.
+//
+// THE THREE STATES ARE THREE DIFFERENT CLAIMS and must not share a banner:
+//   `issued`   — you have been asked something, by a date. Nothing is frozen.
+//   `overdue`  — the date passed unanswered. Your account cannot write.
+//   `rejected` — HQ read your answer and did not accept it. Still frozen.
+// Rendering the first as a freeze would be a false alarm; rendering the second
+// as a reminder would be the opposite failure, and worse.
+const FREEZING = new Set(['overdue', 'rejected']);
+const ANSWERABLE = new Set(['issued', 'overdue']);
+
+const NOTICE_TONE = {
+  issued: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300',
+  overdue: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300',
+  responded: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+  accepted: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+  rejected: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300',
+  withdrawn: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+};
+
+const KIND_LABEL = {
+  renewal_terms: 'Renewal terms',
+  fees: 'Fees',
+  term_violation: 'A term of the agreement',
+  other: 'Your licence',
+};
+
+// NOT DISMISSIBLE, AND THAT IS THE POINT. `components/InfoStrip.jsx` and both
+// `*Banner*` components persist a dismissal to `localStorage`; a compliance
+// freeze a click makes disappear is not a freeze, and the one thing the reader
+// needs is the sentence that says what lifts it.
+//
+// IT IS ALSO NOT A FULL-PAGE EARLY RETURN. This page's four early returns all
+// mean "there is nothing to show". A frozen administrator has everything to
+// show — their territory, their terms, their seats — and exactly one thing they
+// have to do, so the banner sits above the page rather than replacing it.
+function NoticeBanner({ notices }) {
+  const frozen = notices.filter((n) => FREEZING.has(n.status));
+  const open = notices.filter((n) => n.status === 'issued');
+  if (frozen.length === 0 && open.length === 0) return null;
+
+  if (frozen.length > 0) {
+    const worst = frozen[frozen.length - 1];
+    return (
+      <div
+        data-testid="licence-frozen-banner"
+        className="rounded-lg border border-rose-300 bg-rose-50 p-3.5 text-sm text-rose-900 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200"
+      >
+        <div className="flex items-start gap-2">
+          <Lock size={15} className="mt-0.5 shrink-0" />
+          <div>
+            <p className="font-semibold">
+              Your account is frozen{frozen.length > 1 ? ` by ${frozen.length} notices` : ''}
+              {worst?.froze_at ? `, since ${fmtDate(worst.froze_at)}` : ''}.
+            </p>
+            {/* The same sentence the freeze notification and the email template
+                already carry (`services/complianceLadder.ts`), rather than a
+                third wording of one fact. */}
+            <p className="mt-0.5">
+              Writes are paused; reading is not. Answering the notice is what lifts it.
+            </p>
+            <p className="mt-1 text-[13px]">
+              {frozen.length > 1
+                ? 'Every one of them has to be answered.'
+                : `“${worst?.subject || 'A compliance notice'}” — the notice is below.`}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const next = open[open.length - 1];
+  return (
+    <div
+      data-testid="licence-notice-banner"
+      className="rounded-lg border border-amber-300 bg-amber-50 p-3.5 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+    >
+      <div className="flex items-start gap-2">
+        <Bell size={15} className="mt-0.5 shrink-0" />
+        <div>
+          <p className="font-semibold">
+            HQ is waiting on you{open.length > 1 ? ` about ${open.length} things` : ''}.
+          </p>
+          <p className="mt-0.5">
+            {open.length > 1
+              ? 'Each one has its own deadline.'
+              : `“${next?.subject || 'A compliance notice'}” — answer by ${fmtDate(next?.respond_by)}.`}{' '}
+            A deadline that passes unanswered freezes this account until you answer.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NoticeCard({ notice, onAnswered }) {
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const answerable = ANSWERABLE.has(notice.status);
+
+  async function submit() {
+    setBusy(true); setErr('');
+    try {
+      await api.myNoticeRespond(notice.uid, draft.trim());
+      setDraft('');
+      onAnswered();
+    } catch (e) {
+      reportError('MyLicencePage:noticeRespond', e);
+      setErr(e?.message || 'That did not go through. Nothing was recorded.');
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <li className="rounded-lg border border-gray-200 p-3.5 dark:border-gray-800">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{notice.subject}</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            {KIND_LABEL[notice.kind] || notice.kind} · issued {fmtDate(notice.created_at)}
+          </div>
+        </div>
+        <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${NOTICE_TONE[notice.status] || NOTICE_TONE.withdrawn}`}>
+          {String(notice.status || '').replace(/_/g, ' ')}
+        </span>
+      </div>
+
+      <p className="mt-2 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">{notice.body}</p>
+
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+        <span>Answer by {fmtDate(notice.respond_by)}</span>
+        {notice.froze_at && FREEZING.has(notice.status) && (
+          <span className="font-medium text-rose-700 dark:text-rose-300">
+            Frozen since {fmtDate(notice.froze_at)}
+          </span>
+        )}
+        {notice.responded_at && <span>You answered {fmtDate(notice.responded_at)}</span>}
+        {notice.reviewed_at && <span>HQ reviewed {fmtDate(notice.reviewed_at)}</span>}
+      </div>
+
+      {notice.response && (
+        <div className="mt-2 rounded-md bg-gray-50 p-2.5 dark:bg-gray-800/60">
+          <div className="text-[11px] font-medium text-gray-500 dark:text-gray-400">What you sent</div>
+          <p className="mt-0.5 whitespace-pre-wrap text-sm text-gray-800 dark:text-gray-200">{notice.response}</p>
+        </div>
+      )}
+      {notice.review_note && (
+        <div className="mt-2 rounded-md bg-gray-50 p-2.5 dark:bg-gray-800/60">
+          <div className="text-[11px] font-medium text-gray-500 dark:text-gray-400">HQ&apos;s note</div>
+          <p className="mt-0.5 whitespace-pre-wrap text-sm text-gray-800 dark:text-gray-200">{notice.review_note}</p>
+        </div>
+      )}
+
+      {answerable ? (
+        <div className="mt-3">
+          <textarea
+            rows={3} maxLength={5000} value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="What you have done about it, in at least 10 characters. HQ reads this."
+            className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900"
+          />
+          <button
+            type="button" disabled={busy || draft.trim().length < 10}
+            onClick={submit}
+            className="mt-2 inline-flex items-center gap-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {busy ? <Loader2 size={14} className="animate-spin" /> : 'Send this to HQ'}
+          </button>
+          {/* WHAT SENDING DOES, AND WHAT IT DOES NOT. The freeze lifts on the
+              answer rather than on HQ accepting it — holding it through a review
+              of unknown length would punish somebody for doing exactly what they
+              were asked. But an answer is not compliance: writing "paid it"
+              settles nothing until HQ has read it, and if they reject it the
+              account freezes again. Saying only the first half would be the more
+              flattering sentence and the false one. */}
+          <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">
+            Answering lifts the freeze straight away, so you can work while HQ reads it. It is not
+            the end of it: HQ accepts or rejects, and a rejection freezes the account again.
+            {notice.status === 'overdue' && ' Answering late is still answering — this is what lifts it.'}
+          </p>
+          {err && <p className="mt-2 text-sm text-rose-700 dark:text-rose-300">{err}</p>}
+        </div>
+      ) : notice.status === 'responded' ? (
+        <p className="mt-3 text-xs text-gray-600 dark:text-gray-400">
+          Answered and with HQ. Your account can write; HQ decides whether this is settled.
+        </p>
+      ) : null}
+    </li>
+  );
+}
+
 export default function MyLicencePage() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
+  // D136 — A SECOND, INDEPENDENT READ. The notices are not part of
+  // `GET /licence/mine` and their failure is not the licence's: a page that
+  // dropped the terms because the notice table could not be read would take the
+  // working half down with the broken one, and a frozen administrator needs
+  // both. `undefined` is loading, `null` is unreadable, `[]` is none — the same
+  // three states `AdminsEditor` draws, because an empty list and a failed read
+  // are different claims.
+  const [notices, setNotices] = useState(undefined);
+  const [noticesReason, setNoticesReason] = useState('');
+
+  const loadNotices = useCallback(() => {
+    api.myNotices()
+      .then((d) => {
+        if (d?.notices_available === false) {
+          setNotices(null);
+          setNoticesReason(d.notices_reason || 'Your notices could not be read.');
+          return;
+        }
+        setNotices(Array.isArray(d?.items) ? d.items : []);
+        setNoticesReason('');
+      })
+      .catch((e) => {
+        reportError('MyLicencePage:notices', e);
+        setNotices(null);
+        setNoticesReason(e?.message || 'Your notices could not be read.');
+      });
+  }, []);
+  useEffect(loadNotices, [loadNotices]);
 
   useEffect(() => {
     api.myLicence()
@@ -158,6 +387,12 @@ export default function MyLicencePage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-5 p-6">
+      {/* ABOVE THE BRAND NAME, DELIBERATELY. A frozen administrator's first
+          question is not which territory this is. The banner is the page's
+          first statement and the panels below it still render — a freeze stops
+          writes, not reading, and a page that replaced itself would be enforcing
+          something the server does not. */}
+      {Array.isArray(notices) && <NoticeBanner notices={notices} />}
       <header>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{l.brand_name}</h1>
@@ -250,6 +485,37 @@ export default function MyLicencePage() {
             {data.derived_metrics_reason}
           </p>
         )}
+      </Panel>
+
+      <Panel icon={Bell} title="Notices from HQ">
+        {notices === undefined && (
+          <p className="text-sm text-gray-500 dark:text-gray-400">Loading…</p>
+        )}
+        {/* An unreadable store is not an empty inbox — the same distinction the
+            two panels above already draw, on the surface where it matters most:
+            telling somebody whose account is frozen that they have no notices
+            would leave them with no route out of the freeze. */}
+        {notices === null && (
+          <p data-testid="licence-notices-unavailable" className="text-sm text-gray-500 dark:text-gray-400">
+            {noticesReason} This is not the same as having none — nothing was read.
+          </p>
+        )}
+        {Array.isArray(notices) && notices.length === 0 && (
+          <p className="text-sm italic text-gray-400 dark:text-gray-500">
+            HQ has sent you no notices.
+          </p>
+        )}
+        {Array.isArray(notices) && notices.length > 0 && (
+          <ul className="space-y-3">
+            {notices.map((n) => (
+              <NoticeCard key={n.uid} notice={n} onAnswered={loadNotices} />
+            ))}
+          </ul>
+        )}
+        <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+          HQ issues these; the deadline is theirs. What is yours is the answer — and answering is
+          what lifts a freeze, including after the deadline has passed.
+        </p>
       </Panel>
 
       <Panel icon={History} title="History">

@@ -491,6 +491,28 @@ export async function request(path, options = {}) {
           } catch { /* noop */ }
         }
       }
+      // D136 — the compliance freeze, announced wherever it is met. `requireAdmin`
+      // refuses every non-GET from a frozen admin account with 423 and
+      // `code: 'admin_frozen'` (`util/authErrors.ts`), and the body already
+      // carries the notice that caused it — the gate had the row in hand, so
+      // nothing here has to go and ask.
+      //
+      // WHY THIS EXISTS BESIDE THE BANNER ON /admin/my-licence. That page
+      // explains the state where it can be acted on; this explains it at the
+      // moment of the refusal, wherever the admin happened to be. Without it a
+      // frozen administrator's every click produces whatever generic error the
+      // page prints, which is the shape D107's branch-side 423 already shipped
+      // in and which `423` appearing nowhere in `frontend/src` measured.
+      //
+      // The throw below is unchanged, so every page's own catch still receives
+      // the structured error — the same contract the 402 branch above keeps.
+      if (res.status === 423 && err && err.code === 'admin_frozen' && typeof window !== 'undefined') {
+        try {
+          window.dispatchEvent(new CustomEvent('studioos:admin_frozen', {
+            detail: { notice: err.notice || null, message: msg },
+          }));
+        } catch { /* noop */ }
+      }
       // BLOCK-AUTH-03 — step-up gate. Prompt for a fresh TOTP via the global
       // modal, then retry the ORIGINAL request once. `__steppedUp` guards
       // against an infinite loop; we never intercept the step-up call itself.

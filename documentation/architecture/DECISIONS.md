@@ -10679,3 +10679,147 @@ template) · `frontend/src/lib/api.js` ·
 `cloudflare-worker/test/compliance_ladder_d135.test.ts` (new, 25) ·
 `frontend/test/licence_admins.test.mjs` (re-pointed, +1) · **D135**.
 **Migration 264 — the first new store in eight PRs.** Next free is **265**.
+
+## D136 — the ladder's two surfaces, and the door D135 did not build
+
+**Date:** 2026-09-16 · **Status:** accepted · **Supersedes:** nothing ·
+**Builds on:** D135 (the ladder's backend), D134 (open and close), D107 (the
+branch-side 423 and its banner), #204 (unreadable is not empty).
+
+### The finding this entry exists for
+
+D135 shipped the compliance ladder complete: migration 264, the freeze inside
+`requireAdmin`, the two-pass minute sweep, three routes for HQ, two for the
+addressee, and five methods in `frontend/src/lib/api.js`.
+
+**Every one of those five methods had zero callers.** `AdminLicences.jsx` had no
+case-insensitive match for "notice"; `MyLicencePage.jsx` called exactly one api
+method. So HQ could not issue a notice and a frozen administrator could not
+answer one — and that is worse than inert rather than merely incomplete, because
+the sweep runs every minute: a notice inserted by SQL would have frozen an
+account whose only screen said nothing about why, with no form anywhere to lift
+it. A ladder nobody can climb is a trap.
+
+This is the seventh time in this programme that a store or a route shipped
+without the surface that reaches it (`licence_admins` went five months, D134;
+`branch_benchmarks` still has neither writer nor reader, task #252). The pattern
+is not a scheduling accident — a backend PR is testable on its own and a surface
+PR is not, so the surface is the half that slips. Recording it here so the next
+split is made knowing which half tends to be left.
+
+### What lands
+
+**HQ issues and reviews, on a third unnumbered tab.** `NOTICES_STEP =
+STEPS.length + 3`, beside History (+1) and Administrators (+2) and deliberately
+NOT inside `STEPS`: the six-step issue flow is what it takes to create a
+licence, and a compliance notice is something that happens to one that has been
+running for months. Adding it there would renumber the canvas and say a licence
+cannot be issued without a notice. `NoticesEditor` copies `AdminsEditor`'s six
+idioms exactly — three-state `useState(undefined)`, a `useCallback` load keyed
+on the uid, `refresh`, `run(fn)`, a `can…` gate mirroring the server's own
+floors, and the closing step-up note.
+
+**Accept and Reject are disabled until the addressee has answered.** The server
+answers 409 `not_responded` every time otherwise, so this is D134's
+`still_an_admin` decision one route over: a UI that offers a button the server
+always refuses teaches the operator that its buttons are advisory.
+
+**The addressee is a `<select>` over this licence's own administrators**, not a
+free-text email box, because `POST /notices` resolves the address against
+`licence_admins` and 404s `not_an_administrator` for anybody else — a text field
+would be a field whose wrong answers are only discoverable by submitting.
+
+**The response window is a bounded count of DAYS, never a date picker.**
+`respond_by` is computed server-side as `datetime('now', '+N days')` so that the
+deadline and the sweep that reads it share one format and one clock. A date
+input would put the deadline in the browser's zone, which is the timestamp
+defect class this repo has now fixed four times.
+
+**One clock, and it counts up.** Per the owner's call there is no second
+deadline: the screen states "frozen since \<date\>, N days" and sorts worst-first
+(freezing statuses, then waiting-on-HQ, then waiting-on-them, then closed; oldest
+first inside a band). Terminating stays the deliberate act it already was, at the
+top of the page. A countdown would say the platform decides when an account has
+had long enough; it does not.
+
+**The addressee gets a banner above the page, not instead of it.** A freeze stops
+writes and not reading, so a page that replaced itself would enforce something
+the server does not — and the licence terms are exactly what somebody answering a
+notice about fees needs to look at. It is **not dismissible and persists
+nothing**: `components/InfoStrip.jsx` and both `*Banner*` components clear
+themselves through `localStorage`, which is right for content and wrong for a
+compliance freeze. And the three ladder states are three claims, not one:
+`issued` is a reminder with nothing frozen, `overdue` and `rejected` are a
+freeze. One banner for both would be a false alarm in one direction and a silent
+freeze in the other.
+
+**423 finally has a client-side identity.** `423` appeared NOWHERE in
+`frontend/src` before this — measured, not assumed — while
+`routes/branch_escalations.ts` had been citing "the frozen banner (D107)" as
+though one shipped. `api.js` now learns 423 the way it already knows 402 and
+`step_up_required`: a refusal carrying `code: 'admin_frozen'` fans out
+`studioos:admin_frozen`, and a bar mounted once beside `GlobalPaywallMount`
+names the notice and links to `/admin/my-licence`. Nothing is needed server-side
+— `adminFrozenBody` already puts the causing notice in the body, because the gate
+had the row in hand. **The throw is unchanged**, so every page's own catch still
+receives the structured error.
+
+**Why both the bar and the banner**, rather than one: the page explains the state
+where it can be acted on, the bar explains it at the moment of the refusal,
+wherever the administrator happened to be. Neither substitutes for the other, and
+both read the one sentence the worker already ships twice
+(`services/complianceLadder.ts` and the email template) rather than inventing a
+third wording — a test asserts all three agree.
+
+### The defect this PR found and fixed on the way
+
+**`daysTo` could not read the stamps the notice store writes.** It was
+`new Date(iso)`, correct for `territory_licences.renews_on` (a bare
+`YYYY-MM-DD`, UTC midnight by spec) and wrong for `admin_notices.respond_by` and
+`froze_at` (SQL `YYYY-MM-DD HH:MM:SS`): that shape is not in the spec's grammar,
+V8 accepts it and reads it as the **reader's local time**, and other engines
+return `NaN`. So "in 6 days" would have been wrong by the reader's UTC offset, on
+exactly the column a deadline is read from. `toUtcInstant` normalises it; the
+bare-date form is untouched.
+
+### Three lessons about the tests, because each cost a mutation
+
+1. **An assertion that cannot fail on the machines that run it is not a guard —
+   and CI runs UTC.** The first version of the `daysTo` test compared the two
+   parses on a UTC machine, where they are the same instant, so it passed with
+   the normalisation deleted. It now sets a non-UTC zone for the duration and
+   asserts the runtime honoured the change.
+2. **`Math.round` swallows a four-hour misread at every exact day multiple.** The
+   second version still passed, because 6.0 and 6.167 are both "6". It now sweeps
+   all 24 hours of the day and asserts that the SQL spelling and the explicit-Z
+   spelling of the same instant agree — a claim that needs no knowledge of the
+   offset.
+3. **Markup inside an unreachable branch satisfies a source scan.** Two
+   assertions passed with their gates replaced by `false`, because the element
+   was still in the file. Both now read backwards from the element to its own
+   gate and require the gate to consult the value — the property, not the
+   spelling.
+
+All three are the same failure from different sides, and it is the one this
+repo keeps re-learning: the version anybody writes first is the version that
+cannot fail.
+
+### Files
+
+`frontend/src/pages/admin/AdminLicences.jsx` (`NOTICES_STEP`, the tab,
+`NoticesEditor`, a notice tone map, `toUtcInstant`) ·
+`frontend/src/pages/subsidiary/MyLicencePage.jsx` (the second read, the banner,
+the notice list, the response form) · `frontend/src/lib/api.js` (the 423 branch)
+· `frontend/src/components/AdminFrozenBar.jsx` (new) · `frontend/src/App.jsx`
+(one mount) · `frontend/test/compliance_ladder_ui_d136.test.mjs` (new, 18) ·
+**D136**.
+
+**No new `/api/*` method** — all five existed, so `check-api-drift` has nothing
+to say. **No migration**: 264 shipped in D135 and **265 is still free**.
+
+### What this does NOT do
+
+HQ's suspend still reaches no branch: `applyLicence` has no caller (D137, task
+#259). It does not block this, because no branch has been provisioned and the
+whole ladder runs on HQ — but it must close before the first one is, or a frozen
+subsidiary keeps trading.
