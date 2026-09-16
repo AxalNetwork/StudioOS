@@ -135,16 +135,36 @@ async function branchLicencePayload(env: Env, code: string) {
   // role and summing in JS removes the question, and it has a better property
   // besides — this is byte-for-byte the query `branchOverview` runs, so the
   // two readers of this figure cannot drift into asking different things.
+  //
+  // THE BREAKDOWN IS THE SAME ROWS UN-SUMMED (D129). S2 draws one tile per
+  // licence type, so the page needs used-per-type beside licensed-per-type;
+  // deriving that from a total would mean a second query asking a subtly
+  // different question, which is the drift the paragraph above exists to
+  // prevent. `seats_used` stays the sum of exactly these entries, so the tiles
+  // and the total cannot disagree — asserted rather than assumed.
   let seatsUsedHere: number | null = null;
+  let seatsUsedByType: Record<string, number> | null = null;
   try {
     const seated = await env.DB.prepare(
       'SELECT role, COUNT(*) AS n FROM users WHERE is_active = 1 GROUP BY role',
     ).all<{ role: string; n: number }>();
+    // EVERY SEAT ROLE GETS A KEY, INCLUDING THE ZEROES. A role with no active
+    // account returns no row at all, and a map missing that key would make the
+    // page choose between rendering nothing and inventing a zero. Here the zero
+    // is measured: the query ran, the role has none. That is a different claim
+    // from `seats_used_by_type: null`, which is what an unreadable table gives.
+    const byType: Record<string, number> = {};
+    for (const role of SEAT_ROLES) byType[role] = 0;
     let sum = 0;
     for (const row of seated.results || []) {
-      if ((SEAT_ROLES as readonly string[]).includes(String(row.role))) sum += Number(row.n) || 0;
+      const role = String(row.role);
+      if (!(SEAT_ROLES as readonly string[]).includes(role)) continue;
+      const n = Number(row.n) || 0;
+      byType[role] = n;
+      sum += n;
     }
     seatsUsedHere = sum;
+    seatsUsedByType = byType;
   } catch (e) {
     console.warn('[licence] seats used unreadable', (e as Error).message);
   }
@@ -174,6 +194,9 @@ async function branchLicencePayload(env: Env, code: string) {
       // so on the screen rather than leaving the number to be read as more
       // than it is.
       seats_used: seatsUsedHere,
+      // D129 — what S2's four tiles read. `null` only when the count failed;
+      // a role with no account is a measured 0, not a missing key.
+      seats_used_by_type: seatsUsedByType,
       seats_used_basis:
         'Active accounts whose role is one a licence sells a seat for. Role is not a licensed seat: '
         + 'no seat has an id, and none is assigned or released.',
