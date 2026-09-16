@@ -20,6 +20,14 @@ import { Card } from '../../ui';
  * is unfalsifiable and survives forever. One that names the build is wrong
  * the moment that build lands, which is what makes it get removed.
  *
+ * THIS IS A CARD, NOT A PAGE, AND IT MUST STAY ONE (D126). `BranchApprovals`
+ * renders it *inside* itself for the four local queues it has not built, so a
+ * draft that made this component own the branch frame put a second Worker AI
+ * rail on `/branch/approvals` — the doubled-chrome failure this repo has fixed
+ * on Network, on Partner and on the Research zones. The frame is `BranchZone`
+ * and it is applied at the route, in `App.jsx`, where there is exactly one of
+ * it per page.
+ *
  * Every prop is required and there is no default: a zone that reached this
  * component without saying what it will show would be rendering the same
  * apology eight times, which is the failure `AdvisorPreviewNotice` was

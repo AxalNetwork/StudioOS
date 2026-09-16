@@ -188,7 +188,16 @@ test('the page is wired: api method, route, and a super-admin gate', () => {
 
 test('an unreadable summary says so without claiming the business earned nothing', () => {
   assert.match(SRC, /const UNAVAILABLE = Symbol\('unavailable'\)/, 'the failed-read state is gone');
-  const at = SRC.indexOf('data === UNAVAILABLE');
+  // ANCHOR ON THE RENDER BRANCH, NOT ON THE COMPARISON. This read
+  // `SRC.indexOf('data === UNAVAILABLE')` — the first occurrence anywhere in
+  // the file — on the assumption that the only thing testing that symbol was
+  // the JSX. It stopped being true the moment the page's AI rail grew a
+  // `coverageNote` that says the same thing in words (D126): the slice landed
+  // on a ternary two hundred lines above the markup and the assertion failed
+  // against correct code. `{data === UNAVAILABLE && (` names the branch that
+  // RENDERS, which is what this test is a rule about — the same fix
+  // `research_stores_scoping.test.ts` records making for `touching(...)[0]`.
+  const at = SRC.indexOf('{data === UNAVAILABLE && (');
   assert.ok(at >= 0, 'nothing renders when the summary cannot be read');
   const branch = SRC.slice(at, at + 420);
   assert.match(branch, /<Unreadable/, 'a failed read renders something other than Unreadable');

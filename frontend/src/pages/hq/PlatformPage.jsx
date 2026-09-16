@@ -87,10 +87,32 @@ export default function PlatformPage() {
   const integrations = ready ? data.integrations : null;
   const jobs = ready ? data.jobs : null;
 
+  // One line per read that answered (D126). `canRun = coverage.length > 0` in
+  // WorkerRail, so a mount passing none disables its own button and prints
+  // "Not recorded" over a page whose two reads both answer. A source that
+  // failed contributes no line and `coverageNote` says which — an empty rail
+  // must not be readable as "nothing is connected".
+  const depsReady = deps && deps !== UNAVAILABLE && deps.registry_available !== false;
+  const coverage = [
+    integrations?.available && num(integrations.total) !== null
+      ? `${num(integrations.total)} connections across ${integrations.providers.length} providers` : null,
+    jobs?.available && num(jobs.failing) !== null
+      ? `${num(jobs.failing)} failing jobs · ${num(jobs.stale)} silent over ${jobs.stale_after_hours}h` : null,
+    depsReady
+      ? `${(deps.deployments || []).length} branch ${(deps.deployments || []).length === 1 ? 'deployment' : 'deployments'} in the registry` : null,
+  ].filter(Boolean);
+
   const rail = (
     <WorkerRail
-      surface="hq_platform"
-      title="Platform"
+      workspace="Platform"
+      role="super_admin"
+      stance="Read-only summary"
+      note="This rail summarises connection counts, scheduled-job health and the branch deployment registry. It reads no key material and rolls nothing back."
+      coverage={coverage}
+      coverageNote={coverage.length ? undefined
+        : (data === UNAVAILABLE || deps === UNAVAILABLE
+          ? 'Neither read answered, so there is nothing to read back — this is not a claim that nothing is connected.'
+          : 'Loading the platform summary…')}
       unavailable={[
         ['Feature flags', 'No flag store exists; what is called flags is per-user settings.'],
         ['Key material', 'Never read by this page. Reveal and revoke live where they are audited.'],

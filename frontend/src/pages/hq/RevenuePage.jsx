@@ -153,10 +153,32 @@ export default function RevenuePage() {
   const ledger = statements && statements !== UNAVAILABLE && statements.available ? statements : null;
   const ceilingRows = ceilings && ceilings !== UNAVAILABLE && ceilings.available ? ceilings.items : null;
 
+  // One line per read that answered (D126). This page runs FOUR independent
+  // reads and each can fail alone, which is exactly why `coverage` is assembled
+  // per source rather than gated on `ready`: a Stripe outage must not empty the
+  // rail over three zones that read D1 perfectly well. `canRun =
+  // coverage.length > 0` in WorkerRail, so passing none disabled the button and
+  // printed "Not recorded" on a page with four live figures.
+  const coverage = [
+    fees?.available && num(fees.by_currency.length) !== null
+      ? `Licence fees in ${fees.by_currency.length} ${fees.by_currency.length === 1 ? 'currency' : 'currencies'}` : null,
+    token?.available && num(token.calls) !== null
+      ? `${num(token.calls)} AI calls this quarter, at cost` : null,
+    ledger ? `${ledger.items.length} branch ${ledger.items.length === 1 ? 'statement' : 'statements'} · period ${ledger.current_period}` : null,
+    ceilingRows ? `${ceilingRows.length} promo ${ceilingRows.length === 1 ? 'ceiling' : 'ceilings'} set` : null,
+    openDisputes === null ? null : `${openDisputes} open ${openDisputes === 1 ? 'dispute' : 'disputes'}`,
+  ].filter(Boolean);
+
   const rail = (
     <WorkerRail
-      surface="hq_revenue"
-      title="Revenue"
+      workspace="Revenue"
+      role="super_admin"
+      stance="Read-only summary"
+      note="This rail summarises licence fees, AI cost, branch statements, promo ceilings and open disputes. It enters no payment and settles no statement."
+      coverage={coverage}
+      coverageNote={coverage.length ? undefined
+        : (data === UNAVAILABLE ? 'The revenue summary could not be read, so there is nothing to read back — this is not a claim that no revenue was booked.'
+          : 'Loading the revenue summary…')}
       unavailable={[
         ['Subscription revenue', 'No local charge ledger; Stripe is read per customer.'],
         ['Token margin', 'The cost of a call is recorded, the price charged for it is not.'],

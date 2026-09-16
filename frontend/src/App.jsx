@@ -168,6 +168,10 @@ const SendForSignaturePage = lazy(() => import('./pages/legal/SendForSignaturePa
 const MyLicencePage = lazy(() => import('./pages/subsidiary/MyLicencePage'));
 const BranchZonePending = lazy(() => import('./pages/branch/BranchZonePending'));
 const BranchApprovals = lazy(() => import('./pages/branch/BranchApprovals'));
+// The frame every /branch/* route below renders in, and the branch tier's one
+// Worker AI rail mount (D126). Lazy like its siblings so the rail and its price
+// lookup stay out of the entry bundle for the visitors who never see a branch.
+const BranchZone = lazy(() => import('./pages/branch/BranchZone'));
 // The Super Admin's HQ-only surfaces (migrations 199/207). `hqOnly` below
 // renders the notice for an admin without the elevation.
 const SuperAdminOnlyNotice = lazy(() => import('./pages/hq/SuperAdminOnlyNotice'));
@@ -2076,18 +2080,24 @@ function AppInner() {
           Worker serving them, and on HQ they carry no data at all. A second,
           weaker copy of the wall in the router would be the thing that looks
           like the guarantee without being it. */}
-      <Route path="/branch" element={guard(['admin'], <BranchZonePending artboard="S1 Home" title="The territory's operating digest" will="The local clock and greeting, the AI digest proposal with its cost, queue pressure ordered by the oldest item rather than by count, today's programme deadlines, revenue share month-to-date for this territory, and what the rail flagged inside it." pr="PR 12" />)} />
-      <Route path="/branch/accounts" element={guard(['admin'], <BranchZonePending artboard="S2 Accounts" title="Seats licensed, seats used, and who holds them" will="Seats per licence type against the seats HQ licensed, ambering at 88% with the request-more-seats escalation; the members table with seat id and state; and the Exploring board. Seats USED needs the seat assignment store, which is why this is not a number that can be shown today." pr="PR 12" />)} />
+      <Route path="/branch" element={guard(['admin'], <BranchZone workspace="Home"><BranchZonePending artboard="S1 Home" title="The territory's operating digest" will="The local clock and greeting, the AI digest proposal with its cost, queue pressure ordered by the oldest item rather than by count, today's programme deadlines, revenue share month-to-date for this territory, and what the rail flagged inside it." pr="PR 12" /></BranchZone>)} />
+      <Route path="/branch/accounts" element={guard(['admin'], <BranchZone workspace="Accounts"><BranchZonePending artboard="S2 Accounts" title="Seats licensed, seats used, and who holds them" will="Seats per licence type against the seats HQ licensed, ambering at 88% with the request-more-seats escalation; the members table with seat id and state; and the Exploring board. Seats USED needs the seat assignment store, which is why this is not a number that can be shown today." pr="PR 12" /></BranchZone>)} />
       {/* D112 — the outbound HALF of S3 is live: the To-HQ lane and HQ's
           answers. The four local queues keep their stated notice inside the
           page, so the row is honest about which half is built rather than
           waiting for all five. */}
+      {/* Approvals wraps ITSELF in BranchZone, unlike the seven above, and the
+          asymmetry is the point: it loads live escalations, so only the page
+          knows what its rail can report. A zone with nothing loaded takes the
+          frame from its route here; a zone with data owns it, exactly as every
+          workspace page passes its own `rail` to WorkspaceShell. Each of these
+          seven loses its wrapper on the day PR 12 or PR 14 gives it a page. */}
       <Route path="/branch/approvals" element={guard(['admin'], <BranchApprovals />)} />
-      <Route path="/branch/programs" element={guard(['admin'], <BranchZonePending artboard="S4 Programs" title="Timing is yours, authoring is HQ's" will="The cohort calendar with dates you adjust, and assessment runs whose results are yours. Changing a question is a Content submission, which the Worker already refuses here and says so." pr="PR 14" />)} />
-      <Route path="/branch/community" element={guard(['admin'], <BranchZonePending artboard="S4 Community" title="Events, jobs, circles and profiles — entirely local" will="The community zones re-homed under this shell. Nothing in them is shared with another territory, and nothing in them is pushed from HQ." pr="PR 14" />)} />
-      <Route path="/branch/contracts" element={guard(['admin'], <BranchZonePending artboard="S5 Contracts" title="Instantiate, never author" will="Active contracts with the template version travelling on the row, HQ's master library read-only with its as-of stamp and archived versions visible but unusable, and pending signatures." pr="PR 14" />)} />
-      <Route path="/branch/insights" element={guard(['admin'], <BranchZonePending artboard="S6 Insights" title="Four stats and one tick against the median" will="Accounts, activation, programme throughput and revenue share for the quarter, plus a benchmark shown as a single tick against the anonymised platform median — never a ranked list of territories." pr="PR 14" />)} />
-      <Route path="/branch/settings" element={guard(['admin'], <BranchZonePending artboard="S6 Settings" title="Who owns each row" will="Subsidiary name and staff are yours; territory, brand kit and the licence summary are HQ's, each with an owner chip and, on HQ-owned rows, the request path. Your licence summary is already readable today under Your licence below." pr="PR 14" />)} />
+      <Route path="/branch/programs" element={guard(['admin'], <BranchZone workspace="Programs"><BranchZonePending artboard="S4 Programs" title="Timing is yours, authoring is HQ's" will="The cohort calendar with dates you adjust, and assessment runs whose results are yours. Changing a question is a Content submission, which the Worker already refuses here and says so." pr="PR 14" /></BranchZone>)} />
+      <Route path="/branch/community" element={guard(['admin'], <BranchZone workspace="Community"><BranchZonePending artboard="S4 Community" title="Events, jobs, circles and profiles — entirely local" will="The community zones re-homed under this shell. Nothing in them is shared with another territory, and nothing in them is pushed from HQ." pr="PR 14" /></BranchZone>)} />
+      <Route path="/branch/contracts" element={guard(['admin'], <BranchZone workspace="Contracts"><BranchZonePending artboard="S5 Contracts" title="Instantiate, never author" will="Active contracts with the template version travelling on the row, HQ's master library read-only with its as-of stamp and archived versions visible but unusable, and pending signatures." pr="PR 14" /></BranchZone>)} />
+      <Route path="/branch/insights" element={guard(['admin'], <BranchZone workspace="Insights"><BranchZonePending artboard="S6 Insights" title="Four stats and one tick against the median" will="Accounts, activation, programme throughput and revenue share for the quarter, plus a benchmark shown as a single tick against the anonymised platform median — never a ranked list of territories." pr="PR 14" /></BranchZone>)} />
+      <Route path="/branch/settings" element={guard(['admin'], <BranchZone workspace="Settings"><BranchZonePending artboard="S6 Settings" title="Who owns each row" will="Subsidiary name and staff are yours; territory, brand kit and the licence summary are HQ's, each with an owner chip and, on HQ-owned rows, the request path. Your licence summary is already readable today under Your licence below." pr="PR 14" /></BranchZone>)} />
       {/* The HQ shell's Contracts and Team rows. Both frame panels the Admin
           Console already has (Legal templates; the Users table) for the
           franchisor, with the holder console above the accounts. */}

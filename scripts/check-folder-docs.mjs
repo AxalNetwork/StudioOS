@@ -41,6 +41,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/components',         'shared presentational pieces'],
   ['frontend/src/ui',                 'the design-system primitives everything else composes'],
   ['frontend/src/pages/hq',           'the Super Admin tier — one page per HQ sidebar row, and which canvas each draws'],
+  ['frontend/src/pages/branch',       'the subsidiary tier — the frame its eight rows share, and the one AI rail mount in it'],
   ['frontend/src/lib',                'API client, formatting, and browser-side helpers'],
   ['frontend/src/hooks',              'shared React state'],
   ['frontend/src/workspaces',         'the shell every workspace subpage sits in, and the config that drives it'],
