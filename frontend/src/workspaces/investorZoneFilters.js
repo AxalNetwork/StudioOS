@@ -252,16 +252,16 @@ export const INVESTOR_ZONE_FILTERS = {
   // `rubric` shows the six dimensions the scorer writes, and `passes` is the
   // CHECKed pass taxonomy `GET /api/deals/pass-analytics` already served.
   'deals/screening': [
-    { canvas: 'Scored', key: 'scored' },
+    { canvas: 'Scored', key: 'scored', label: 'Scored {n}' },
     { canvas: 'Rubric', key: 'rubric' },
-    { canvas: 'Red flags', key: 'flags' },
+    { canvas: 'Red flags', key: 'flags', label: 'Red flags {n}' },
     { canvas: 'Pass reasons', key: 'passes' },
   ],
 
   'deals/closing': [
-    { canvas: 'This close', key: 'close' },
+    { canvas: 'This close', key: 'close', label: 'This close {n}' },
     { canvas: 'Blocking', unbuilt: 'a blocking item is a Commit condition, and no condition is stored on either side of that hand-off' },
-    { canvas: 'Documents', key: 'documents' },
+    { canvas: 'Documents', key: 'documents', label: 'Documents {n}' },
     { canvas: 'Wires', unbuilt: 'no transfer out to a company is recorded — capital_calls is an LP paying into the fund', hover: 'No transfer out to a company is recorded; what the fund records is capital coming in from an LP.' },
   ],
 
@@ -273,11 +273,11 @@ export const INVESTOR_ZONE_FILTERS = {
   ],
 
   'deals/pipeline': [
-    { canvas: 'All stages', key: 'all' },
+    { canvas: 'All stages', key: 'all', label: 'All stages {n}' },
     { canvas: 'Mine', unbuilt: ALREADY_MINE },
-    { canvas: 'Unassigned', key: 'unassigned' },
-    { canvas: 'Stale', key: 'stale' },
-    { canvas: 'Passed', key: 'passed' },
+    { canvas: 'Unassigned', key: 'unassigned', label: 'Unassigned {n}' },
+    { canvas: 'Stale', key: 'stale', label: 'Stale {n}' },
+    { canvas: 'Passed', key: 'passed', label: 'Passed {n}' },
   ],
 
   // ── Network ──────────────────────────────────────────────────────────────
