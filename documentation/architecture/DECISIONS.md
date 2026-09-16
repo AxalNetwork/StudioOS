@@ -9227,3 +9227,108 @@ local stub, the same shape as the #589 escape, and now anchors on the module
 specifier instead. Three further tests were briefly passing for the wrong reason,
 because the fixture passed the D1 shim as `env` rather than as `env.DB`, so the
 call was throwing into the unreadable path; the failing tests are what exposed it.
+
+## D123 — three new canvas exports land, and what two of them draw that the platform refuses
+
+**What arrived.** Three Claude Design exports, all decoded with
+`scripts/read-canvas.mjs` rather than described from a screenshot:
+
+| canvas | id | verdict |
+| --- | --- | --- |
+| `Admin · Subsidiary` | `dc92a281` | same id as the committed copy — replaces in place, S0–S6 → **S0–S13** |
+| `Admin · Super` | `c6bc9164` | same id as the committed copy — replaces in place, H1–H7 amended, **H8–H13** appended |
+| `Spin-Out Lab · Programme Brief` | `b585b5fd` | **new**, no twin in the corpus |
+
+`integrated/` 62 → 63; `backlog/` unchanged. The Programme Brief is the first
+canvas to arrive graded `UPGRADE` without graduating from `backlog/`, because
+its route (`/spinout-lab/brief`) was already live.
+
+**THE S0–S6 DIFF IS ONE BYTE, AND IT WAS MEASURED.** The Subsidiary canvas's own
+CHANGELOG claims "no other in-place change" across S1–S6. Rather than take that,
+the committed copy was diffed against the export over the whole range: exactly
+one difference, in S0, `SUBSIDIARY` → `BRANCH` on the territory badge. The claim
+is now checked rather than asserted, and the rename is its own commit (task
+#248) because every branch PR touches the shell and a one-word change buried in
+a page PR collides with all of them.
+
+**THE SUPER CANVAS MISCOUNTS ITSELF.** Its CHANGELOG says "H8–H14". The section
+ids are `changelog, h1…h13` — six artboards were appended, not seven. Recorded
+here rather than corrected in the canvas, because the canvas is the design
+source and an edit would make the repo copy diverge from the artifact.
+
+**TWO OF FIVE ASSETS PLACED; THREE BLOCKED ON A CREDENTIAL, AND NONE GUESSED.**
+`read-canvas` reported five manifest entries it had not rewritten, and refuses
+to substitute them on the stated principle that a canvas silently dropping an
+asset is worse than one that says which. Two were resolved:
+
+- `b7b8bd8c` is **byte-identical to `design/canvases/shared/doc-page.js`**
+  (sha `371bab66f42db6ce`, 37,185 bytes), so it became `./doc-page.js`. This is a
+  gap in the tool worth knowing: `read-canvas` rewrites the FIRST runtime script
+  to `./support.js` and leaves a second one as a raw uuid. The Programme Brief is
+  the first canvas in the corpus to load two.
+- `ad2f96f2`, the Axal VC logo (200×191, 7.7 KB), became
+  `./uploads/spinout-lab-brief-logo.png`.
+
+**The three remaining assets are 1536×1024 backgrounds — 694 KB, 743 KB and
+902 KB — and they cannot be committed from this environment.**
+`scripts/lfs-size-gate.mjs` requires any NEW png over 500 KB to be LFS-tracked;
+the repo's LFS is real and working (48 objects, the `attached_assets/*.docx`
+set). But pushing a new LFS object from this session returns
+`Post https://lfs.github.com/... /verify: Forbidden` — the credentials here can
+read LFS and cannot write it. So the three stay as the unresolved uuids
+`read-canvas` emitted, which is the tool's designed output and renders without
+them, and they are named here so the next person places them deliberately rather
+than rediscovering the gap:
+
+| uuid | size | where it sits |
+| --- | --- | --- |
+| `735a9718` | 694 KB | PAGE 1 header background |
+| `de4910a3` | 902 KB | PAGE 1 band background |
+| `23586f65` | 743 KB | PAGE 4 full-bleed background |
+
+**Three options when LFS write access exists**, in preference order: grant this
+environment LFS write and commit them as pointers (the rule should name the three
+paths individually, not `design/canvases/uploads/*.png` — that directory holds
+about forty committed PNGs as plain blobs and a wildcard would convert the next
+one anybody re-added); or recompress below 500 KB, which changes the bytes of a
+design source and makes the file no longer a faithful decode; or leave them
+unresolved, which is the current state and costs three decorative backgrounds.
+
+**TWO THINGS THE NEW CANVASES DRAW THAT THE PLATFORM HAS ALREADY REFUSED.**
+Neither is integrated here; both are recorded so neither is integrated by
+accident. A canvas is a proposal, not a specification.
+
+1. **The escalation answer as a thread.** S9 draws three turns and a
+   *"Reply to HQ…"* box, and S7's appeal note repeats the promise. Migration
+   261's header says the opposite in as many words: *ONE DECISION, NOT A
+   THREAD — dressing one column as a thread would promise a reply box that
+   writes nowhere.* The artboard also argues against itself: `s9Thread`'s middle
+   turn is HQ's, and `s9Decision` renders that same turn again as a separate
+   block. It draws the decision twice, which is the tell that what it holds is a
+   raise and a decision, not a conversation.
+2. **Per-track gates on the Programme Brief.** Page 2 gives each of three tracks
+   its own four gates. `frontend/src/lib/spinoutLab.js` states in its own voice
+   that `MILESTONES` is ONE list enforced identically for every founder, and
+   that *"Drawing four track-specific gate sets would tell a founder that week 2
+   asks something it does not ask."* Same design proposed twice, refused once.
+
+**AND SIX TOKENS, NOT SIXTY.** The Programme Brief contains roughly seventy
+`{ … }` occurrences. Six are backend values and the canvas says which by
+spelling them without inner spaces — `{brief.generated_at}`, `{brief.year}`,
+`{cohort.name}`, `{cohort.start_date}`, `{cohort.close_at}`, `{cohort.places}`
+— beside the comment *"Live values stay as fields — a generated PDF fills them
+from the platform, never from this file."* Everything spelled `{{ x.y }}` is a
+DCLogic binding resolving from the canvas's own fixtures; wiring those to an API
+would be building an endpoint for a rendering engine. Three of the six are
+already derived client-side by `openCohortCopy()`, and `cohort.places` has no
+store anywhere.
+
+**Verification.** `test:drift` exit 0, read as the exit code;
+`check-folder-docs`, `check-decision-ids` and `lfs-size-gate` exit 0; no
+`frontend/src` change, so `docs/` did not move. Two frontend tests failed on the
+first run and both were correct: adding a ROUTE_MAP row moves the corpus count
+110 → 111 and makes the generated `PROFILE_ROUTING.md` stale. Regenerated, and
+the pinned count moved with a note that it counts ROUTE_MAP **rows** — not the
+folder totals in `design/canvases/README.md`, which are a different number and
+always have been. Nothing here ships behaviour; it lands design sources and
+their ledger rows.

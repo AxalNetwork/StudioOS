@@ -5,7 +5,7 @@ The corpus the first integration pass worked from. Sorted by one question:
 
 | Folder | Count | Meaning |
 | --- | --- | --- |
-| `integrated/` | 62 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
+| `integrated/` | 63 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
 | `backlog/` | 25 | Graded `NEW` or `DEFERRED`. No route yet. |
 | `out-of-scope/` | 27 | Deliberately not being built. The `ROUTE_MAP.md` row says why. |
 | `shared/` | 6 | The dc-runtime bundle every canvas loads, plus two standalone pitch-deck exports. Generated — both code scanners ignore this tree. Every canvas asks for it as `src="./support.js"`, which resolves next to the canvas and **not** to this folder, so opening one straight from `integrated/` in a browser gets a blank page: copy `shared/support.js` beside it first. Nothing runs these at runtime, so the reference is nominal — it is a convention marking "the shared runtime, not an inlined 69KB copy", and `scripts/read-canvas.mjs` reproduces it when it decodes a new export. |
@@ -20,12 +20,16 @@ the intake queue, and 59 → 61 on 2026-09-12 when `Pages · Partner Network` an
 `Pages · Partner Research` graduated the same way (#155), and **61 → 62 on
 2026-09-15** when `Admin · Subsidiary` graduated because PR 5 gave it its eight
 routes (D107) — `backlog/` moved 26 → 25 in the same commit, which is the whole
-of the rule: a file that moves takes its number with it.
+of the rule: a file that moves takes its number with it. It went **62 → 63 on
+2026-09-16** when `Spin-Out Lab · Programme Brief` arrived (D123). That one did
+not move between folders, so `backlog/` did not change: it is a genuinely new
+canvas for a route that was already live (`/spinout-lab/brief`), which makes it
+an `UPGRADE` on arrival rather than a graduation.
 
 **The `107` below is stale and this pass did not fix it**, which is worth saying
 rather than leaving to be rediscovered. It is `54 + 26 + 27` — the sum as it
 stood when `integrated/` read 54 — so it has drifted every time that count moved
-and is now `62 + 25 + 27 = 114`. Correcting the number here would assert that
+and is now `63 + 25 + 27 = 115`. Correcting the number here would assert that
 `ROUTE_MAP.md` carries 114 rows, and that was not counted; the sentence below is
 the one making the claim, so the count belongs in the same pass that reads it.
 

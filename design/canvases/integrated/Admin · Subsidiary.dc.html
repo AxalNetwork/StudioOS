@@ -1,13 +1,12 @@
 <!DOCTYPE html>
-<html>
-<head>
+<html><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="./support.js"></script>
 </head>
 <body>
 <x-dc>
-<helmet data-dc-atomics>
+<helmet data-dc-atomics="">
   <meta name="design_doc_mode" content="canvas">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -45,6 +44,19 @@
   </style>
 </helmet>
 
+<!-- ══════════ CHANGELOG ══════════ -->
+<section class="ab" id="changelog" style="padding-bottom:26px">
+  <div class="ab-hd"><a class="ab-id" href="#changelog">CHANGELOG</a><span class="ab-nm">Amendments to S0–S6 · new artboards S7–S13</span><span class="ab-sub">every in-place change listed · ids stable</span></div>
+  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-width:1440px">
+    <sc-for list="{{ changelog }}" as="c" hint-placeholder-count="4">
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:10px;padding:11px 14px;display:flex;gap:11px;align-items:flex-start">
+        <span style="font:700 10px ui-monospace,Menlo,monospace;color:#334155;background:#e6ebf0;border:1px solid #cbd5e1;border-radius:4px;padding:2px 6px;flex:none;white-space:nowrap">{{ c.where }}</span>
+        <div style="font-size:12px;color:#3f3a49;line-height:1.55"><strong style="color:#18181b">{{ c.what }}</strong> — {{ c.why }}</div>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
 <!-- ══════════ S0 · TENANCY ══════════ -->
 <section class="ab" id="s0">
   <div class="ab-hd"><a class="ab-id" href="#s0">S0</a><span class="ab-nm">Subsidiary Admin — the tenancy wall, stated once</span><span class="ab-sub">steel · 8 rows</span></div>
@@ -61,7 +73,7 @@
             <div class="num" style="font-size:10.5px;opacity:.75;margin-top:2px">FR · BE · LU</div>
           </div>
         </div>
-        <span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">SUBSIDIARY</span>
+        <span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">BRANCH</span>
       </div>
       <div style="display:grid;gap:9px;margin-top:14px">
         <sc-for list="{{ wall }}" as="w" hint-placeholder-count="4">
@@ -518,8 +530,267 @@
     <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Insights" hint-size="100%,700px"></dc-import></div>
   </div>
 </section>
-</x-dc>
-<script type="text/x-dc" data-dc-script>
+
+
+<!-- ══════════ S7 · BADGE FROM THE DEPLOYMENT · SUSPENDED SHELL ══════════ -->
+<section class="ab" id="s7">
+  <div class="ab-hd"><a class="ab-id" href="#s7">S7</a><span class="ab-nm">The badge, fed by the deployment — and the shell when the licence is suspended</span><span class="ab-sub">Axal VC Iberia · AXL-004 · frozen since 18 Jul</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">The badge is not typed into the shell. Brand, country codes and the word BRANCH come from the deployment record and the licence copy HQ pushed, each with its time. When HQ suspends the licence, the branch keeps running on its own database — nothing is deleted — but its queues freeze, and the shell says which rows still read, which are locked, and that the way out is an escalation, not a setting.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navHome }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="terr">
+        <div style="display:flex;align-items:center;gap:11px"><span style="width:17px;height:17px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span>
+          <div><div style="font-size:13px;font-weight:800;letter-spacing:-.01em">{{ s7Brand }}</div><div class="num" style="font-size:10.5px;opacity:.75;margin-top:2px">{{ s7Codes }}</div></div></div>
+        <div style="display:flex;align-items:center;gap:8px"><span class="num" style="font-size:10px;opacity:.7">{{ s7BadgeSrc }}</span><span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">BRANCH</span></div>
+      </div>
+      <div style="background:#fef2f2;border-bottom:1px solid #fecaca;padding:10px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px">
+        <div style="font-size:12px;color:#b91c1c;line-height:1.5"><strong>Licence suspended.</strong> {{ s7Banner }}</div>
+        <span class="num" style="font-size:10.5px;color:#b91c1c;flex:none">{{ s7Since }}</span>
+      </div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Home · {{ s7Brand }}</h1>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1.1fr;gap:14px;margin-top:14px;align-items:start">
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Still readable</span><span class="zs">your database, untouched</span></div>
+            <sc-for list="{{ s7Read }}" as="r" hint-placeholder-count="4"><div style="padding:8px 0;border-top:1px solid #f4f3f7"><div style="font-size:12.5px;font-weight:700">{{ r.row }}</div><div style="font-size:11px;color:#615c6e;margin-top:3px;line-height:1.5">{{ r.note }}</div></div></sc-for>
+          </div>
+          <div class="c" style="padding:16px 18px;border-color:#fecaca">
+            <div class="zh"><span class="zt">Locked</span><span class="lock">frozen by HQ</span></div>
+            <sc-for list="{{ s7Locked }}" as="l" hint-placeholder-count="4"><div style="padding:8px 0;border-top:1px solid #f4f3f7"><div style="display:flex;align-items:center;gap:7px"><span style="font-size:12.5px;font-weight:700;color:#7c6f86">{{ l.row }}</span><span class="lock">locked</span></div><div style="font-size:11px;color:#615c6e;margin-top:3px;line-height:1.5">{{ l.note }}</div></div></sc-for>
+          </div>
+          <div class="c" style="padding:16px 18px;background:#f6f8fa">
+            <div class="zh"><span class="zt">Appeal</span><span class="zs">an escalation to HQ</span></div>
+            <sc-for list="{{ s7Appeal }}" as="a" hint-placeholder-count="4"><div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid #e6ebf0"><span class="lbl" style="font-size:8.5px;padding-top:2px">{{ a.label }}</span><span style="font-size:12px;text-align:right;{{ a.ink }}">{{ a.value }}</span></div></sc-for>
+            <div style="font-size:11px;color:#3f3a49;line-height:1.55;margin-top:10px">{{ s7AppealNote }}</div>
+            <div style="display:flex;gap:7px;margin-top:12px"><span class="acc">Open escalation · licence appeal</span></div>
+          </div>
+        </div>
+        <div class="c" style="padding:13px 18px;margin-top:12px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <span class="lbl">Badge sources</span>
+          <sc-for list="{{ s7Sources }}" as="s" hint-placeholder-count="3"><span class="tag num">{{ s }}</span></sc-for>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Home" hint-size="100%,600px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ S8 · SEAT ASSIGNMENT ══════════ -->
+<section class="ab" id="s8">
+  <div class="ab-hd"><a class="ab-id" href="#s8">S8</a><span class="ab-nm">Accounts — seat assignment, and the request path for more</span><span class="ab-sub">extends S2 · seats are a licence term</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">A seat is an id under a licence type, held by one account or by nobody. The branch assigns and releases within the count HQ licensed; the count itself is not on this screen as a field, because it is not the branch's to change. Running out is an escalation with a number in it, and the amber path says so before anyone goes looking for the input.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navAcc }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="terr"><div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">Axal VC France</span><span class="num" style="font-size:11px;opacity:.7">FR · BE · LU</span></div><span class="num" style="font-size:11px;opacity:.7">{{ s8Summary }}</span></div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Accounts · Seats</h1>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:14px">
+          <sc-for list="{{ s8Pools }}" as="p" hint-placeholder-count="4">
+            <div class="c" style="padding:13px 15px;{{ p.cardStyle }}"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span class="lbl" style="font-size:9px">{{ p.type }}</span><span class="num" style="font-size:10.5px;font-weight:700;color:{{ p.ink }}">{{ p.free }} free</span></div><div class="num" style="font-size:18px;font-weight:800;letter-spacing:-.02em;margin-top:6px;color:{{ p.ink }}">{{ p.used }}<span style="font-size:11px;color:#615c6e;font-weight:600"> of {{ p.lic }}</span></div><div style="height:4px;background:#ececf1;border-radius:999px;overflow:hidden;margin-top:8px"><div style="height:100%;width:{{ p.pct }}%;background:{{ p.ink }};border-radius:999px"></div></div></div>
+          </sc-for>
+        </div>
+        <div style="display:grid;grid-template-columns:1.35fr 1fr;gap:14px;margin-top:14px;align-items:start">
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Seat ledger</span><span class="zs">assign · release · a suspended account still holds its seat</span></div>
+            <div style="display:grid;grid-template-columns:.7fr 1.3fr .9fr .9fr .8fr;gap:10px"><span class="th">Seat</span><span class="th">Holder</span><span class="th">Licence</span><span class="th">State</span><span class="th"></span></div>
+            <sc-for list="{{ s8Rows }}" as="r" hint-placeholder-count="6">
+              <div style="display:grid;grid-template-columns:.7fr 1.3fr .9fr .9fr .8fr;gap:10px;align-items:center;{{ r.rowStyle }}"><span class="td" style="font-family:ui-monospace,Menlo,monospace;font-weight:700;color:#18181b">{{ r.seat }}</span><span class="td" style="font-weight:600;color:{{ r.holderInk }}">{{ r.holder }}</span><span class="td"><span style="{{ r.licStyle }}">{{ r.lic }}</span></span><span class="td"><span style="{{ r.pill }}">{{ r.state }}</span></span><span class="td" style="text-align:right"><span class="{{ r.actClass }}">{{ r.act }}</span></span></div>
+            </sc-for>
+          </div>
+          <div class="c" style="padding:16px 18px;border-color:#fde68a;background:#fffdf5">
+            <div class="zh"><span class="zt">Request more seats from HQ</span><span style="font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:2px 7px">Escalation</span></div>
+            <sc-for list="{{ s8Request }}" as="q" hint-placeholder-count="5"><div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid #f4f3f7"><span class="lbl" style="font-size:8.5px;padding-top:2px">{{ q.label }}</span><span style="font-size:12px;text-align:right;{{ q.ink }}">{{ q.value }}</span></div></sc-for>
+            <div style="font-size:11px;color:#3f3a49;line-height:1.55;margin-top:10px">{{ s8RequestNote }}</div>
+            <div style="display:flex;gap:7px;margin-top:12px"><span class="acc">Send to HQ</span><span class="dis">Not now</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Accounts" hint-size="100%,700px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ S9 · THE "TO HQ" ESCALATION DRAWER ══════════ -->
+<section class="ab" id="s9">
+  <div class="ab-hd"><a class="ab-id" href="#s9">S9</a><span class="ab-nm">Approvals — the "To HQ" drawer: kind, item, SLA, and the answer as a thread</span><span class="ab-sub">extends S3 · one drawer for every escalation</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">Four things go to HQ and nowhere else: a moderation call the branch will not make alone, content for brand approval, a seat increase, and anything else. They share one drawer so the answer always comes back the same way — as a thread, with HQ's decision and the person who made it — and the SLA on each is HQ's, stated so the branch knows when to expect a reply rather than when it is owed one.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navApp }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="terr"><div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">Axal VC France</span><span class="num" style="font-size:11px;opacity:.7">FR · BE · LU</span></div><span class="num" style="font-size:11px;opacity:.7">{{ s9Summary }}</span></div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Approvals · To HQ</h1>
+        <div style="display:grid;grid-template-columns:1fr 400px;gap:14px;margin-top:14px;align-items:start">
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Escalations</span><div style="display:flex;gap:5px;flex-wrap:wrap"><sc-for list="{{ s9Kinds }}" as="k" hint-placeholder-count="5"><span style="{{ k.style }}">{{ k.label }}</span></sc-for></div></div>
+            <div style="display:grid;gap:8px">
+              <sc-for list="{{ s9List }}" as="e" hint-placeholder-count="4">
+                <div style="{{ e.rowStyle }}">
+                  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+                    <div style="min-width:0"><div style="display:flex;align-items:center;gap:7px"><span class="tag">{{ e.kind }}</span><span style="font-size:12.5px;font-weight:700">{{ e.item }}</span></div><div style="font-size:11px;color:#615c6e;margin-top:4px">{{ e.meta }}</div></div>
+                    <span style="{{ e.pill }}">{{ e.state }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;gap:7px;margin-top:12px"><span class="acc">+ New escalation</span></div>
+          </div>
+
+          <div class="c" style="padding:0;overflow:hidden;border-color:#cbd5e1">
+            <div style="background:#334155;color:#fff;padding:11px 16px;display:flex;align-items:center;justify-content:space-between"><span style="font-size:12.5px;font-weight:800">To HQ</span><span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">{{ s9Ref }}</span></div>
+            <div style="padding:14px 16px">
+              <sc-for list="{{ s9Fields }}" as="f" hint-placeholder-count="4"><div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid #f4f3f7"><span class="lbl" style="font-size:8.5px;padding-top:2px">{{ f.label }}</span><span style="font-size:12px;text-align:right;{{ f.ink }}">{{ f.value }}</span></div></sc-for>
+              <div class="lbl" style="font-size:8.5px;margin-top:14px">Thread</div>
+              <div style="display:grid;gap:8px;margin-top:8px">
+                <sc-for list="{{ s9Thread }}" as="t" hint-placeholder-count="3">
+                  <div style="{{ t.style }}"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-size:11px;font-weight:800;color:{{ t.ink }}">{{ t.who }}</span><span class="num" style="font-size:10px;color:#615c6e">{{ t.when }}</span></div><div style="font-size:11.5px;color:#3f3a49;line-height:1.55;margin-top:4px">{{ t.text }}</div></div>
+                </sc-for>
+              </div>
+              <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:9px;padding:10px 12px;margin-top:10px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#047857">HQ decision</div><div style="font-size:12px;font-weight:700;margin-top:3px">{{ s9Decision }}</div><div style="font-size:11px;color:#3f3a49;margin-top:3px">{{ s9DecisionBy }}</div></div>
+              <div style="border:1px solid #e2e1e8;border-radius:8px;padding:8px 11px;font-size:12px;color:#9c96a8;margin-top:10px">Reply to HQ…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Approvals" hint-size="100%,760px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ S10 · TEMPLATE PICKER · HQ'S COPY ══════════ -->
+<section class="ab" id="s10">
+  <div class="ab-hd"><a class="ab-id" href="#s10">S10</a><span class="ab-nm">Contracts — the template picker is HQ's library, read-only, as of a time</span><span class="ab-sub">extends S5 · archived versions visible and unusable</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">The library on this branch is a copy HQ pushed, and it says when. Archived versions stay visible so an admin can see what a signed contract was instantiated from, but they cannot be picked. Trying to edit any of it gets one sentence, because the branch has exactly one way to change a template — and it is not on this page.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navCon }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="terr"><div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">Axal VC France</span><span class="num" style="font-size:11px;opacity:.7">FR · BE · LU</span></div><span class="num" style="font-size:11px;opacity:.7">{{ s10AsOf }}</span></div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Contracts · Templates</h1>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:8px"><span class="lock">Axal VC master library · read-only</span><span class="num" style="font-size:11.5px;color:#615c6e">{{ s10AsOf }}</span></div>
+        <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:14px;margin-top:14px;align-items:start">
+          <div class="c" style="padding:16px 18px">
+            <div style="display:grid;grid-template-columns:1.5fr .6fr .9fr .9fr .7fr;gap:10px"><span class="th">Template</span><span class="th">Version</span><span class="th">Layer</span><span class="th">State</span><span class="th"></span></div>
+            <sc-for list="{{ s10Rows }}" as="r" hint-placeholder-count="6">
+              <div style="display:grid;grid-template-columns:1.5fr .6fr .9fr .9fr .7fr;gap:10px;align-items:center;{{ r.rowStyle }}"><span class="td" style="font-weight:600;color:{{ r.ink }}">{{ r.name }}</span><span class="td" style="font-family:ui-monospace,Menlo,monospace">{{ r.ver }}</span><span class="td"><span class="tag">{{ r.layer }}</span></span><span class="td"><span style="{{ r.pill }}">{{ r.state }}</span></span><span class="td" style="text-align:right"><span class="{{ r.actClass }}">{{ r.act }}</span></span></div>
+            </sc-for>
+            <div style="font-size:11px;color:#615c6e;line-height:1.55;margin-top:10px">{{ s10Note }}</div>
+          </div>
+          <div class="c" style="padding:16px 18px;border-color:#cbd5e1;background:#f6f8fa">
+            <div class="zh"><span class="zt">You tried to edit "{{ s10EditDoc }}"</span></div>
+            <div style="font-size:14px;font-weight:800;letter-spacing:-.015em;line-height:1.35;color:#334155">Changing a template is a Content submission.</div>
+            <div style="font-size:11.5px;color:#3f3a49;line-height:1.6;margin-top:8px">{{ s10Refusal }}</div>
+            <div style="display:flex;gap:7px;margin-top:12px"><span class="acc">Submit a change to HQ · Content</span><span class="dis">Close</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Home" hint-size="100%,620px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ S11 · BENCHMARK TICK · SETTINGS OWNERS ══════════ -->
+<section class="ab" id="s11">
+  <div class="ab-hd"><a class="ab-id" href="#s11">S11</a><span class="ab-nm">Insights — one tick against the anonymised median · Settings — who owns each row</span><span class="ab-sub">extends S6 · two frames</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">The benchmark is a number HQ pushed, not a query the branch can run: "n branches · median · you", stamped with when HQ computed it, drawn as one tick so there is nothing to rank. In Settings every row carries its owner, and an HQ-owned row carries the request path instead of a disabled input — including the brand kit, which draws its Not-recorded state because HQ has no brand-kit store yet.</div>
+  <div class="frame" style="margin-bottom:16px">
+    <div class="side"><sc-for list="{{ navIns }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="terr"><div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">Axal VC France</span><span class="num" style="font-size:11px;opacity:.7">FR · BE · LU</span></div><span class="num" style="font-size:11px;opacity:.7">{{ s11AsOf }}</span></div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Insights · Benchmark</h1>
+        <div class="c" style="padding:16px 18px;margin-top:14px">
+          <div class="zh"><span class="zt">{{ s11Head }}</span><span class="lock">HQ copy · {{ s11AsOf }}</span></div>
+          <div style="display:grid;gap:14px">
+            <sc-for list="{{ s11Bench }}" as="b" hint-placeholder-count="4">
+              <div>
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span style="font-size:12.5px;font-weight:700">{{ b.metric }}</span><span class="num" style="font-size:11px;color:#615c6e">n {{ b.n }} · median {{ b.med }} · you <strong style="color:{{ b.ink }}">{{ b.you }}</strong></span></div>
+                <div style="position:relative;height:16px;margin-top:7px"><div style="position:absolute;left:0;right:0;top:7px;height:2px;background:#e5e7eb;border-radius:999px"></div><div style="position:absolute;top:2px;left:{{ b.medPct }}%;width:1px;height:12px;background:#9ca3af"></div><div style="position:absolute;top:3px;left:{{ b.youPct }}%;width:10px;height:10px;border-radius:50%;background:{{ b.ink }};border:2px solid #fff;box-shadow:0 0 0 1px {{ b.ink }};transform:translateX(-50%)"></div></div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:11px;color:#615c6e;line-height:1.55;margin-top:12px">{{ s11Note }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Insights" hint-size="100%,480px"></dc-import></div>
+  </div>
+
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navSet }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="terr"><div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">Axal VC France</span><span class="num" style="font-size:11px;opacity:.7">FR · BE · LU</span></div><span class="num" style="font-size:11px;opacity:.7">{{ s11OwnerCount }}</span></div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Settings</h1>
+        <div class="c" style="padding:16px 18px;margin-top:14px">
+          <div style="display:grid;grid-template-columns:1fr 1.6fr .5fr 1.1fr;gap:10px"><span class="th">Row</span><span class="th">Value</span><span class="th">Owner</span><span class="th">Change it</span></div>
+          <sc-for list="{{ s11Settings }}" as="s" hint-placeholder-count="5">
+            <div style="display:grid;grid-template-columns:1fr 1.6fr .5fr 1.1fr;gap:10px;align-items:center"><span class="td" style="font-weight:600;color:#18181b">{{ s.field }}</span><span class="td"><sc-if value="{{ s.nr }}"><span class="lock">Not recorded</span><span style="display:block;font-size:10.5px;color:#615c6e;margin-top:3px;line-height:1.45">{{ s.nr }}</span></sc-if><sc-if value="{{ s.value }}"><span>{{ s.value }}</span></sc-if></span><span class="td"><span style="{{ s.chip }}">{{ s.who }}</span></span><span class="td"><span class="{{ s.actClass }}">{{ s.act }}</span></span></div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;line-height:1.55;margin-top:10px">{{ s11SetNote }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Home" hint-size="100%,420px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ S12 · THE BRANCH AI RAIL ══════════ -->
+<section class="ab" id="s12">
+  <div class="ab-hd"><a class="ab-id" href="#s12">S12</a><span class="ab-nm">Branch AI rail — scope is the branch's name, and the decline card for a cross-branch question</span><span class="ab-sub">AdminRail with decline="true"</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">The chip reads "Axal VC France" with no caret, because there is nothing else it could read. Asked about another branch, the rail does not answer vaguely — it states that there is no cross-branch read behind it, and points at the one cross-branch figure the branch legitimately has: the median HQ pushed.</div>
+  <div style="display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap">
+    <div style="width:280px;flex:none"><div class="lbl" style="margin-bottom:8px">Accounts · a cross-branch question asked</div><div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 17px 24px"><dc-import name="AdminRail" tier="subsidiary" page="Accounts" decline="true" hint-size="100%,640px"></dc-import></div></div>
+    <div style="flex:1;min-width:320px;max-width:560px;display:grid;gap:12px">
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:16px 18px">
+        <div class="zh"><span class="zt">Search says what it searches</span></div>
+        <div style="background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:9px 13px;display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none;color:#615c6e" dangerouslySetInnerHTML="{{ searchIcon }}"></span><span style="font-size:13px;color:#615c6e;flex:1">Searching Axal VC France accounts</span><span class="lock">Territory-scoped</span></div>
+        <div style="font-size:11.5px;color:#3f3a49;line-height:1.55;margin-top:10px">{{ s12SearchNote }}</div>
+      </div>
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:16px 18px">
+        <div class="zh"><span class="zt">What the rail may and may not do here</span></div>
+        <sc-for list="{{ s12Rules }}" as="x" hint-placeholder-count="4"><div style="border-left:2px solid #475569;padding-left:11px;margin-top:10px"><div style="font-size:12.5px;font-weight:700">{{ x.rule }}</div><div style="font-size:11.5px;color:#3f3a49;margin-top:3px;line-height:1.55">{{ x.why }}</div></div></sc-for>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ S13 · HQ SUPPORT SESSION, AS THE BRANCH SEES IT ══════════ -->
+<section class="ab" id="s13">
+  <div class="ab-hd"><a class="ab-id" href="#s13">S13</a><span class="ab-nm">What the branch sees during an HQ support session — the banner and the audit line it leaves</span><span class="ab-sub">counterpart of H7's impersonation row</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">HQ's impersonation is the branch's support session, and the branch must see it while it happens: who, why, and how long is left. The branch cannot end it — the session is HQ's — but it can raise a concern, which is an escalation like any other. When it ends, the audit line is written twice: in HQ's Security log and in the branch's own, because the branch's database is the one that was read.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navAcc }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="terr"><div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">Axal VC France</span><span class="num" style="font-size:11px;opacity:.7">FR · BE · LU</span></div><span class="num" style="font-size:11px;opacity:.7">{{ accTotal }} accounts</span></div>
+      <div style="background:#881337;color:#fff;padding:10px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px">
+        <div style="display:flex;align-items:center;gap:10px;min-width:0"><span style="font-size:10px;font-weight:800;letter-spacing:.06em;background:rgba(255,255,255,.18);border-radius:4px;padding:2px 7px;flex:none">HQ SUPPORT SESSION</span><span style="font-size:12px;line-height:1.4">{{ s13Banner }}</span></div>
+        <div style="display:flex;align-items:center;gap:10px;flex:none"><span class="num" style="font-size:13px;font-weight:800;letter-spacing:-.01em">{{ s13Left }}</span><span style="font-size:11px;font-weight:700;text-decoration:underline">Raise a concern</span></div>
+      </div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Accounts</h1>
+        <div style="display:grid;grid-template-columns:1fr 1.2fr;gap:14px;margin-top:14px;align-items:start">
+          <div class="c" style="padding:16px 18px;border-color:#fbcfe0">
+            <div class="zh"><span class="zt">This session</span><span class="zs">HQ’s, not yours to end</span></div>
+            <sc-for list="{{ s13Fields }}" as="f" hint-placeholder-count="5"><div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid #f4f3f7"><span class="lbl" style="font-size:8.5px;padding-top:2px">{{ f.label }}</span><span style="font-size:12px;text-align:right;{{ f.ink }}">{{ f.value }}</span></div></sc-for>
+            <div style="font-size:11px;color:#3f3a49;line-height:1.55;margin-top:10px">{{ s13Note }}</div>
+          </div>
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">The audit line it leaves</span><span class="zs">written here and at HQ</span></div>
+            <sc-for list="{{ s13Audit }}" as="a" hint-placeholder-count="3">
+              <div style="display:grid;grid-template-columns:.9fr .9fr 1fr 1.6fr;gap:10px;align-items:center;{{ a.rowStyle }}"><span class="td num" style="font-family:ui-monospace,Menlo,monospace">{{ a.t }}</span><span class="td" style="font-weight:600;color:#18181b">{{ a.actor }}</span><span class="td" style="font-weight:700;color:{{ a.ink }}">{{ a.action }}</span><span class="td">{{ a.target }}</span></div>
+            </sc-for>
+            <div style="font-size:11px;color:#615c6e;line-height:1.55;margin-top:10px">{{ s13AuditNote }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Accounts" hint-size="100%,560px"></dc-import></div>
+  </div>
+</section></x-dc>
+<script type="text/x-dc" data-dc-script="">
 class Component extends DCLogic {
   ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
 
@@ -611,6 +882,190 @@ class Component extends DCLogic {
       globeIcon:I.globe, searchIcon:I.srch,
       navHome:nav('Home'), navAcc:nav('Accounts'), navApp:nav('Approvals'),
       navProg:nav('Programs'), navCon:nav('Contracts'), navIns:nav('Insights'),
+      navComm:nav('Community'), navSet:nav('Settings'),
+      // ── S11 · Benchmark as one tick; Settings rows with owners. The brand kit is the honest
+      // row: HQ has no store for it, so the value is Not recorded with the reason.
+      ...(() => {
+        const AS_OF = 'computed by HQ 12 Sep 09:10';
+        const N = 4;
+        const B = [
+          { metric:'Activation rate', you:'62%', med:'54%', youPct:62, medPct:54, better:true },
+          { metric:'Seat utilisation', you:'88%', med:'71%', youPct:88, medPct:71, better:true },
+          { metric:'Median approval age', you:'34h', med:'19h', youPct:71, medPct:40, better:false },
+          { metric:'Token spend per account', you:'€1.90', med:'€2.60', youPct:46, medPct:63, better:true }
+        ];
+        const yours = 'font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#334155;background:#f6f8fa;border:1px solid #cbd5e1;border-radius:4px;padding:2px 7px';
+        const hq = 'font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#881337;background:#fff5f7;border:1px solid #fbcfe0;border-radius:4px;padding:2px 7px';
+        const S = [
+          { field:'Subsidiary name', value:'Axal VC France SAS', who:'Yours', act:'Edit' },
+          { field:'Territory', value:'FR · BE · LU · licence copy as of 8 Sep 09:12', who:'HQ', act:'Request · escalation (other)' },
+          { field:'Staff & roles', value:'6 admins, 2 reviewers', who:'Yours', act:'Edit' },
+          { field:'Brand kit', value:null, nr:'HQ has no brand-kit store yet, so there is nothing to download. Ask for assets through Content; do not expect a file here.', who:'HQ', act:'Ask HQ · Content' },
+          { field:'Licence summary', value:'325 seats · renews 14 Mar 2027 · copy as of 8 Sep 09:12', who:'HQ', act:'Request seats · escalation' }
+        ];
+        return {
+          s11AsOf: AS_OF, s11Head: 'n ' + N + ' branches · anonymised median · you',
+          s11Bench: B.map(b => ({ metric:b.metric, n:String(N), you:b.you, med:b.med, youPct:String(b.youPct), medPct:String(b.medPct), ink: b.better ? '#047857' : '#b45309' })),
+          s11Note: 'One tick per metric. The median is the only other mark, and it was computed by HQ at the time shown — this branch has no read that could produce it, so it cannot be fresher than that stamp. There is no list to sort, because there is no list.',
+          s11OwnerCount: S.filter(s => s.who === 'HQ').length + ' of ' + S.length + ' rows HQ-owned',
+          s11Settings: S.map(s => ({ field:s.field, value:s.value, nr:s.nr || null, who:s.who, chip: s.who === 'HQ' ? hq : yours, act:s.act,
+            actClass: s.who === 'HQ' ? 'lock' : 'vm' })),
+          s11SetNote: 'HQ-owned rows show the request path instead of a disabled input: a greyed field invites a ticket asking to enable it; a chip saying HQ and a route saying "escalation" answers the question on the page.'
+        };
+      })(),
+
+      // ── S12 · rail rules; the rail itself is the shared component with decline="true".
+      s12SearchNote: 'The box names its scope before any result arrives. Results that come back are the branch database\u2019s; there is no result set from anywhere else that a filter could have hidden.',
+      s12Rules: [
+        { rule:'Scope is fixed', why:'The chip reads Axal VC France and has no caret. Nothing on this deployment can be pointed at another one.' },
+        { rule:'It declines with the reason', why:'"There is no cross-branch read behind this rail" is a statement about the architecture, not a policy — which is why it can be said plainly.' },
+        { rule:'It points at the copy it does have', why:'HQ pushes one anonymised median with a timestamp. The rail may cite that, and says when HQ computed it.' },
+        { rule:'Cost is stated before the run', why:'Same rail, same receipt: the estimate first, the spend afterwards, the branch\u2019s plan as the ceiling.' }
+      ],
+
+      // ── S13 · The branch's view of H7's impersonation row: same ticket, same clock.
+      s13Banner: 'T. Okafor (HQ) is viewing this branch as Guillaume Lauzier — "cap table export failure, ticket #4192" — started 09:12:55.',
+      s13Left: '21:14 left',
+      s13Fields: [
+        { label:'Who', value:'T. Okafor · Axal VC HQ', ink:'font-weight:600' },
+        { label:'As', value:'Guillaume Lauzier · Founder · F-041', ink:'font-weight:600' },
+        { label:'Why', value:'"cap table export failure, ticket #4192"', ink:'color:#615c6e' },
+        { label:'Limit', value:'30 minutes · hard · ends 09:42:55', ink:'color:#615c6e' },
+        { label:'You can', value:'Watch · raise a concern (escalation)', ink:'color:#615c6e' }
+      ],
+      s13Note: 'The countdown is HQ\u2019s clock, mirrored. An expired session ends whether or not the ticket is solved; a second one needs a second typed reason at HQ, and appears here as a second banner.',
+      s13Audit: [
+        { t:'09:12:55', actor:'HQ · T. Okafor', action:'support session start', ink:'#b91c1c', target:'as G. Lauzier · ticket #4192 · 30 min · reason typed at HQ', rowStyle:'background:#fffbfb' },
+        { t:'09:14:10', actor:'HQ · T. Okafor', action:'read', ink:'#615c6e', target:'Cap table export · Novacraft Labs · 3 rows', rowStyle:'' },
+        { t:'—', actor:'HQ · T. Okafor', action:'support session end', ink:'#615c6e', target:'written when it ends or expires — whichever comes first, recorded the same way', rowStyle:'opacity:.6' }
+      ],
+      s13AuditNote: 'Two copies of every line: HQ\u2019s Security log and this branch\u2019s own. The branch copy exists because the branch database is what was read, and a tenant should not have to ask HQ what was done to it.',
+
+      // ── S9 · Escalations. One drawer, four kinds; the SLA is HQ's and the decision names its
+      // author. The seat increase is the S8 request, so the two artboards describe one object.
+      ...(() => {
+        const K = { Moderation:['#fef2f2','#b91c1c','#fecaca'], 'Content · brand':['#f5f2ff','#6d28d9','#e6dcff'], 'Seat increase':['#fffbeb','#92400e','#fde68a'], Other:['#f4f4f6','#615c6e','#e4e4e8'] };
+        const ST = { Answered:['#ecfdf5','#047857','#a7f3d0'], 'With HQ':['#fffbeb','#92400e','#fde68a'], Draft:['#f4f4f6','#615c6e','#e4e4e8'] };
+        const pl = (c) => 'font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';flex:none;white-space:nowrap';
+        const LIST = [
+          { kind:'Moderation', item:'Job post · "guaranteed 3× on equity"', meta:'raised by C. Moreau · 12 Sep 09:05 · SLA 2 business days', state:'Answered', sel:true },
+          { kind:'Content · brand', item:'Founder onboarding guide · French', meta:'submitted 13 Sep 17:20 · SLA 5 business days', state:'With HQ' },
+          { kind:'Seat increase', item:'Founder seats +40 → 240', meta:'sent 14 Sep 11:20 · SLA 5 business days', state:'With HQ' },
+          { kind:'Other', item:'Territory question · Monaco founder', meta:'not yet sent', state:'Draft' }
+        ];
+        return {
+          s9Summary: LIST.filter(e => e.state === 'With HQ').length + ' with HQ · ' + LIST.filter(e => e.state === 'Answered').length + ' answered',
+          s9Kinds: ['All','Moderation','Content · brand','Seat increase','Other'].map((l, i) => ({ label:l,
+            style:'font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;' + (i === 0 ? 'background:#334155;color:#fff;border:1px solid #334155' : 'background:#fff;color:#4a4553;border:1px solid #e2e1e8') })),
+          s9List: LIST.map(e => ({ kind:e.kind, item:e.item, meta:e.meta, state:e.state, pill:pl(ST[e.state]),
+            rowStyle:'border:1px solid ' + (e.sel ? '#cbd5e1;background:#f6f8fa' : '#f0eff4;background:#fbfbfc') + ';border-radius:10px;padding:11px 13px' })),
+          s9Ref: 'ESC-FR-0142',
+          s9Fields: [
+            { label:'Kind', value:'Moderation', ink:'font-weight:600' },
+            { label:'Concerns', value:'Job post #2291 · Studio Vireo', ink:'font-weight:600' },
+            { label:'Raised by', value:'C. Moreau · 12 Sep 09:05', ink:'color:#615c6e' },
+            { label:'SLA', value:'2 business days · HQ\u2019s · met', ink:'color:#615c6e' }
+          ],
+          s9Thread: [
+            { who:'C. Moreau · Axal VC France', when:'12 Sep 09:05', ink:'#334155', text:'Post claims a guaranteed multiple on advisor equity. We would remove it, but the partner is on a retainer with two cohort companies — flagging rather than deciding alone.', style:'border:1px solid #cbd5e1;background:#f6f8fa;border-radius:9px;padding:9px 11px' },
+            { who:'S. Lindqvist · HQ', when:'12 Sep 10:30', ink:'#881337', text:'Remove the post; keep the partner. A guaranteed return is a brand claim we cannot host anywhere. Please tell the partner the rule, not the reviewer.', style:'border:1px solid #fbcfe0;background:#fff5f7;border-radius:9px;padding:9px 11px' },
+            { who:'C. Moreau · Axal VC France', when:'12 Sep 11:02', ink:'#334155', text:'Removed. Partner notified with the rule. Closing.', style:'border:1px solid #cbd5e1;background:#f6f8fa;border-radius:9px;padding:9px 11px' }
+          ],
+          s9Decision: 'Remove the post · keep the partner', s9DecisionBy: 'S. Lindqvist · HQ · 12 Sep 10:30 · recorded at HQ'
+        };
+      })(),
+
+      // ── S10 · Template library as HQ's copy. as-of is the push time; archived stays visible.
+      ...(() => {
+        const AS_OF = 'as of 8 Sep 2026 09:12 · pushed by HQ';
+        const ST = { Current:['#ecfdf5','#047857','#a7f3d0'], Archived:['#f4f4f6','#615c6e','#e4e4e8'] };
+        const pl = (c) => 'font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+        const ROWS = [
+          { name:'Advisory agreement', ver:'v2.1', layer:'GP', state:'Current' },
+          { name:'Advisory agreement', ver:'v2.0', layer:'GP', state:'Archived', used:'3 signed contracts' },
+          { name:'Partner services agreement', ver:'v1.4', layer:'GP', state:'Current' },
+          { name:'Investor NDA', ver:'v3.0', layer:'FUND', state:'Current' },
+          { name:'Investor NDA', ver:'v2.2', layer:'FUND', state:'Archived', used:'1 signed contract' },
+          { name:'3-Way NDA (Founder↔Investor↔Axal)', ver:'v1.1', layer:'PORTFOLIO', state:'Current' }
+        ];
+        return {
+          s10AsOf: AS_OF,
+          s10Rows: ROWS.map(r => ({ name:r.name + (r.used ? ' · ' + r.used : ''), ver:r.ver, layer:r.layer, state:r.state, pill:pl(ST[r.state]),
+            ink: r.state === 'Archived' ? '#7c6f86' : '#18181b', act: r.state === 'Archived' ? 'Unusable' : 'Instantiate',
+            actClass: r.state === 'Archived' ? 'dis' : 'vm', rowStyle: r.state === 'Archived' ? 'opacity:.7' : '' })),
+          s10Note: 'Archived rows stay so the version a signed contract was instantiated from can be opened and read. They cannot be picked: a new contract on an archived version is what the publish notification (H11) exists to prevent.',
+          s10EditDoc: 'Advisory agreement v2.1',
+          s10Refusal: 'This library is HQ\u2019s, copied to your branch ' + AS_OF.replace('as of ', 'at ') + '. Nothing here is editable from a branch. If a clause needs to change for your territory, submit it as content for brand approval — HQ publishes a version, and every branch on the older one is notified.'
+        };
+      })(),
+
+      // ── S7 · Iberia's shell while suspended. Everything below is a copy of what HQ pushed,
+      // stamped; nothing on the branch is deleted by a suspension.
+      s7Brand: 'Axal VC Iberia', s7Codes: 'ES · PT', s7BadgeSrc: 'deployment branch-iberia · licence copy as of 18 Jul 11:40',
+      s7Banner: 'Queues frozen by HQ since 18 Jul 2026. Reason as stated by HQ: payment default, 41 days. Your database is intact; nothing here is deleted.',
+      s7Since: '58 days',
+      s7Read: [
+        { row:'Accounts', note:'Every account and its seat, read-only. Nothing can be assigned or released.' },
+        { row:'Contracts', note:'Signed agreements and their envelopes. New instantiations refused with the reason.' },
+        { row:'Insights', note:'Your figures to the day of suspension. The HQ benchmark stops updating; its "as of" shows why.' },
+        { row:'Settings', note:'Staff and roles remain editable — the people who will lift this need to be able to sign in.' }
+      ],
+      s7Locked: [
+        { row:'Approvals', note:'Every queue frozen. Items keep their SLA age so nothing looks fresh when it unfreezes.' },
+        { row:'Programs', note:'Cohort admissions closed; the running cohort continues to its end date.' },
+        { row:'Community', note:'Events, jobs and circles cannot be published. Existing pages stay up.' },
+        { row:'Seat assignment', note:'Assign and release removed — not greyed — until the licence is active again.' }
+      ],
+      s7Appeal: [
+        { label:'Kind', value:'Other · licence appeal', ink:'font-weight:600' },
+        { label:'Concerns', value:'AXL-004 · suspension of 18 Jul', ink:'font-weight:600' },
+        { label:'Goes to', value:'HQ · Security', ink:'color:#615c6e' },
+        { label:'SLA', value:'5 business days · HQ\u2019s, not ours', ink:'color:#615c6e' }
+      ],
+      s7AppealNote: 'The answer comes back as a thread with HQ\u2019s decision and who made it — the same drawer as every other escalation (S9). There is no field on this branch that can change the licence state.',
+      s7Sources: ['brand · licence copy · 18 Jul 11:40', 'codes ES · PT · licence copy', 'BRANCH · deployment record', 'worker branch-iberia · v39'],
+
+      // ── S8 · Seats. Free is licensed minus used; the request path is an escalation with the
+      // number in it, and the licensed count is not a field anywhere on the branch.
+      ...(() => {
+        const L = { Founder:['#f5f2ff','#6d28d9','#e6dcff'], Investor:['#f5f5ff','#3730a3','#c7d2fe'], Advisor:['#f2fdf7','#047857','#a7f3d0'], Partner:['#fffbf2','#b45309','#fde68a'] };
+        const lic = (t) => 'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:'+L[t][0]+';color:'+L[t][1]+';border:1px solid '+L[t][2];
+        const F = SEATS[0];
+        const rows = [
+          { seat:'F-041', holder:'Guillaume Lauzier', lic:'Founder', state:'Active', act:'Release' },
+          { seat:'F-018', holder:'Marc Delacroix', lic:'Founder', state:'Suspended', act:'Release' },
+          { seat:'F-185', holder:'— vacant', lic:'Founder', state:'Free', act:'Assign' },
+          { seat:'I-047', holder:'Aurélie Chen', lic:'Investor', state:'Awaiting HQ', act:'Reserved' },
+          { seat:'A-012', holder:'Priyanka Raghunathan', lic:'Advisor', state:'Active', act:'Release' },
+          { seat:'P-006', holder:'Studio Vireo', lic:'Partner', state:'Active', act:'Release' }
+        ];
+        return {
+          s8Summary: accTotal + ' seats used of ' + SEATS.reduce((a, s) => a + s.lic, 0),
+          s8Pools: SEATS.map(s => { const p = Math.round(s.used / s.lic * 100), tightP = p >= 88;
+            return { type:s.type, used:String(s.used), lic:String(s.lic), free:String(s.lic - s.used), pct:String(p),
+              ink: tightP ? '#b45309' : '#334155', cardStyle: tightP ? 'border-color:#fde68a' : '' }; }),
+          s8Rows: rows.map(r => ({ seat:r.seat, holder:r.holder, lic:r.lic.replace('Investor','Investor'), licStyle:lic(r.lic), state:r.state,
+            pill: r.state === 'Free' ? 'font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;background:#f4f4f6;color:#615c6e;border:1px solid #e4e4e8' : pill(r.state),
+            holderInk: r.state === 'Free' ? '#9c96a8' : '#18181b', act:r.act,
+            actClass: r.act === 'Reserved' ? 'dis' : 'vm', rowStyle: r.state === 'Suspended' ? 'opacity:.75' : '' })),
+          s8Request: [
+            { label:'Licence type', value:F.type, ink:'font-weight:600' },
+            { label:'Licensed now', value:F.lic + ' · ' + F.used + ' used · ' + (F.lic - F.used) + ' free', ink:'font-weight:600' },
+            { label:'Requesting', value:'+40 → 240', ink:'font-weight:700;color:#92400e' },
+            { label:'Why', value:'"Cohort 4 admits 12; waitlist 31"', ink:'color:#615c6e' },
+            { label:'SLA', value:'5 business days · HQ decides', ink:'color:#615c6e' }
+          ],
+          s8RequestNote: 'This is an escalation, not a number to edit. If HQ agrees, the licence changes at HQ and this branch receives a new licence copy with its own "as of" — the pool tiles above update from that copy, never from this form.'
+        };
+      })(),
+
+      // ── CHANGELOG (top of canvas) ──
+      changelog: [
+        { where:'S0', what:'Badge reads BRANCH', why:'A branch is a deployment, not a division; the badge is fed by the deployment record (S7). Rows and wall unchanged.' },
+        { where:'S1–S6', what:'No other in-place change', why:'Every existing screen already read as its own database. The additions are appended so the ids stay stable.' },
+        { where:'S7–S13', what:'Appended, one per brief item', why:'S7 badge + suspended shell · S8 seat assignment · S9 To-HQ escalation drawer · S10 template picker as HQ copy · S11 benchmark tick + Settings owners · S12 branch rail · S13 HQ support session.' },
+        { where:'AdminRail', what:'Scope chip at top; decline card by prop', why:'The branch chip is its own name with no caret. Passing decline="true" renders the cross-branch refusal (S12).' }
+      ],
 
       // ── S0 ──
       wall: [
@@ -797,5 +1252,4 @@ class Component extends DCLogic {
   }
 }
 </script>
-</body>
-</html>
+</body></html>
