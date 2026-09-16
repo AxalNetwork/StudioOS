@@ -1,13 +1,12 @@
 <!DOCTYPE html>
-<html>
-<head>
+<html><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="./support.js"></script>
 </head>
 <body>
 <x-dc>
-<helmet data-dc-atomics>
+<helmet data-dc-atomics="">
   <meta name="design_doc_mode" content="canvas">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -47,6 +46,19 @@
     .step{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;padding:6px 11px;border-radius:999px;white-space:nowrap}
   </style>
 </helmet>
+
+<!-- ══════════ CHANGELOG ══════════ -->
+<section class="ab" id="changelog" style="padding-bottom:26px">
+  <div class="ab-hd"><a class="ab-id" href="#changelog">CHANGELOG</a><span class="ab-nm">Amendments to H1–H7 · new artboards H8–H14</span><span class="ab-sub">every in-place change listed · ids stable · new ids continue the series</span></div>
+  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-width:1440px">
+    <sc-for list="{{ changelog }}" as="c" hint-placeholder-count="4">
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:10px;padding:11px 14px;display:flex;gap:11px;align-items:flex-start">
+        <span class="mono" style="font-size:10px;font-weight:700;color:#881337;background:#fde8ee;border:1px solid #fbcfe0;border-radius:4px;padding:2px 6px;flex:none;white-space:nowrap">{{ c.where }}</span>
+        <div style="font-size:12px;color:#3f3a49;line-height:1.55"><strong style="color:#18181b">{{ c.what }}</strong> — {{ c.why }}</div>
+      </div>
+    </sc-for>
+  </div>
+</section>
 
 <!-- ══════════ H1 · HOME ══════════ -->
 <section class="ab" id="h1">
@@ -141,7 +153,7 @@
         <span class="num" style="font-size:11px;opacity:.72">{{ subCount }} licences · {{ countryCount }} of 27 EU countries held</span>
       </div>
       <div class="inner">
-        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Licenses</h1>
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Licences</h1>
         <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Every subsidiary agreement: territory, seats, fee structure, and the two splits that decide who earns what.</div>
 
         <div class="c" style="padding:16px 18px;margin-top:15px">
@@ -168,7 +180,11 @@
 
         <div style="display:grid;grid-template-columns:1.15fr 1fr;gap:14px;margin-top:14px">
           <div class="c" style="padding:16px 18px">
-            <div class="zh"><span class="zt">Territory coverage</span><span class="zs">Held, contested, white space</span></div>
+            <div class="zh"><span class="zt">Territory coverage</span>
+              <div style="display:flex;align-items:center;gap:9px"><span class="zs">27 cells · click a held cell to open its licence</span>
+                <div style="display:flex;gap:3px;background:#f0eff3;border-radius:7px;padding:2px"><sc-for list="{{ mapSort }}" as="s" hint-placeholder-count="2"><span style="{{ s.style }}">{{ s.label }}</span></sc-for></div>
+              </div>
+            </div>
             <div style="display:grid;grid-template-columns:repeat(9,1fr);gap:5px;margin-top:4px">
               <sc-for list="{{ mapCells }}" as="m" hint-placeholder-count="27">
                 <div style="{{ m.style }}">{{ m.code }}</div>
@@ -322,7 +338,7 @@
         <span class="num" style="font-size:11px;opacity:.72">{{ globalAccounts }} accounts platform-wide</span>
       </div>
       <div class="inner">
-        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Accounts</h1>
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Team</h1>
         <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Every user, every tenant. The tenant column is not optional — a cross-tenant table without it is a list of strangers.</div>
 
         <div style="background:#fff;border:1px solid #fbcfe0;border-radius:10px;padding:9px 13px;margin-top:14px;display:flex;align-items:center;gap:10px">
@@ -541,7 +557,7 @@
         <span style="font-size:11.5px;font-weight:700;background:#fff;color:#334155;border-radius:6px;padding:5px 11px">Return to HQ view</span>
       </div>
       <div class="inner">
-        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Governance</h1>
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Security</h1>
         <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">{{ govSub }}</div>
 
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px">
@@ -594,8 +610,381 @@
     <div class="rail"><dc-import name="AdminRail" tier="super" page="Governance" hint-size="100%,800px"></dc-import></div>
   </div>
 </section>
-</x-dc>
-<script type="text/x-dc" data-dc-script>
+
+
+<!-- ══════════ H8 · ISSUE FLOW · STEPS 5–6 ══════════ -->
+<section class="ab" id="h8">
+  <div class="ab-hd"><a class="ab-id" href="#h8">H8</a><span class="ab-nm">Issue a licence — Step 5 Contract, Step 6 Deploy</span><span class="ab-sub">extends H3 · a pending signature does not block</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">Activate used to be the last step. It is not: a branch is a contract and a deployment, and neither exists until these two run. The contract is the master template at a named version; the deployment is a worker, a database and a hostname that HQ reads over a private link — so the timeline has a failure state per step, and a failure names the credential HQ has not set.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navLic }}" as="n" hint-placeholder-count="12"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq">
+        <div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">All subsidiaries ▾</span></div>
+        <span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">AXAL VC HQ</span>
+      </div>
+      <div class="inner">
+        <div class="crumb"><span>Licences</span><span>‹</span><b style="color:#18181b">Issue new licence</b><span>‹</span><b style="color:#18181b">{{ h8Entity }}</b></div>
+        <h1 style="margin:8px 0 0;font-size:23px;font-weight:800;letter-spacing:-.025em">Contract, then deploy</h1>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">
+          <sc-for list="{{ h8Steps }}" as="s" hint-placeholder-count="6"><span class="step" style="{{ s.style }}">{{ s.n }} · {{ s.label }}</span></sc-for>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1.25fr;gap:14px;margin-top:14px">
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Step 5 · Contract</span><span class="zs">{{ h8ContractState }}</span></div>
+            <div style="display:grid;gap:0">
+              <sc-for list="{{ h8Contract }}" as="f" hint-placeholder-count="5">
+                <div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid #f4f3f7">
+                  <span class="lbl" style="font-size:8.5px;padding-top:2px">{{ f.label }}</span>
+                  <span style="font-size:12px;text-align:right;{{ f.ink }}">{{ f.value }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="background:#fff5f7;border:1px solid #fbcfe0;border-radius:9px;padding:10px 12px;margin-top:12px;font-size:11.5px;color:#3f3a49;line-height:1.55"><strong style="color:#881337">Rule.</strong> {{ h8Rule }}</div>
+            <div style="display:flex;gap:7px;margin-top:12px"><span class="gho">Resend for signature</span><span class="gho">Preview v3.2</span></div>
+          </div>
+
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Step 6 · Deploy</span><span class="mono zs">{{ h8Host }}</span></div>
+            <div class="lbl" style="font-size:8.5px">Residency</div>
+            <div style="display:grid;gap:7px;margin-top:7px">
+              <sc-for list="{{ h8Residency }}" as="r" hint-placeholder-count="3">
+                <div style="{{ r.style }}">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span style="font-size:12.5px;font-weight:700">{{ r.label }}</span><span style="font-size:10.5px;color:#615c6e">{{ r.note }}</span></div>
+                  <sc-if value="{{ r.hints }}"><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:7px"><sc-for list="{{ r.hints }}" as="h" hint-placeholder-count="6"><span class="mono" style="{{ h.style }}">{{ h.code }}</span></sc-for></div></sc-if>
+                </div>
+              </sc-for>
+            </div>
+            <div class="lbl" style="font-size:8.5px;margin-top:13px">Will be created</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px"><sc-for list="{{ h8Creates }}" as="w" hint-placeholder-count="5"><span class="tag mono">{{ w }}</span></sc-for></div>
+          </div>
+        </div>
+
+        <div class="c" style="padding:16px 18px;margin-top:14px">
+          <div class="zh"><span class="zt">Deploy status</span><span class="zs">{{ h8TimelineSub }}</span></div>
+          <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:8px">
+            <sc-for list="{{ h8Timeline }}" as="t" hint-placeholder-count="8">
+              <div style="{{ t.style }}">
+                <div style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:50%;background:{{ t.dot }};flex:none"></span><span style="font-size:11px;font-weight:700;line-height:1.3">{{ t.step }}</span></div>
+                <div class="mono num" style="font-size:10px;color:#615c6e;margin-top:6px">{{ t.time }}</div>
+                <div style="font-size:10px;color:{{ t.ink }};margin-top:3px;line-height:1.45">{{ t.note }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:12px;background:#fef2f2;border:1px solid #fecaca;border-radius:9px;padding:11px 13px;margin-top:12px">
+            <div style="flex:1;font-size:11.5px;color:#3f3a49;line-height:1.55"><strong style="color:#b91c1c">Deploy is waiting on HQ.</strong> {{ h8Missing }}</div>
+            <span class="acc" style="flex:none">Set credential in Platform</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Licenses" hint-size="100%,900px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ H9 · TEAM · GROUPED SEARCH + MOVE ══════════ -->
+<section class="ab" id="h9">
+  <div class="ab-hd"><a class="ab-id" href="#h9">H9</a><span class="ab-nm">Team — results grouped by branch, and "Move to another branch"</span><span class="ab-sub">extends H4 · one read per branch, one can fail</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">There is no global accounts table. HQ asks each branch over its private link and groups what comes back, so a search result is really four answers and a fifth for HQ-held accounts — and when one branch does not answer, its group says so instead of showing zero. A move is not a row edit: the account closes where it lives, is re-invited where it is going, and the records stay put.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navAcc }}" as="n" hint-placeholder-count="12"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq">
+        <div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">All subsidiaries ▾</span><span class="num" style="font-size:11px;opacity:.72">{{ h9ReadState }}</span></div>
+        <span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">AXAL VC HQ</span>
+      </div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Team</h1>
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:10px;padding:9px 13px;margin-top:12px;display:flex;align-items:center;gap:10px">
+          <span style="width:15px;height:15px;display:block;flex:none;color:#615c6e" dangerouslySetInnerHTML="{{ searchIcon }}"></span>
+          <span style="font-size:13px;color:#18181b;flex:1">{{ h9Query }}</span>
+          <span class="tag">Grouped by branch</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.35fr 1fr;gap:14px;margin-top:14px;align-items:start">
+          <div style="display:grid;gap:10px">
+            <sc-for list="{{ h9Groups }}" as="g" hint-placeholder-count="5">
+              <div class="c" style="{{ g.style }}">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-bottom:1px solid #f4f3f7">
+                  <div style="display:flex;align-items:center;gap:8px"><span style="font-size:12.5px;font-weight:800">{{ g.branch }}</span><span class="tag">{{ g.count }}</span></div>
+                  <span style="font-size:10.5px;color:{{ g.noteInk }}">{{ g.note }}</span>
+                </div>
+                <sc-if value="{{ g.rows }}">
+                  <div style="display:grid;grid-template-columns:1.2fr .9fr .8fr .9fr .7fr;gap:10px;padding:6px 14px 0"><span class="th">Name</span><span class="th">Branch</span><span class="th">Licence</span><span class="th">Trust</span><span class="th"></span></div>
+                  <sc-for list="{{ g.rows }}" as="a" hint-placeholder-count="2">
+                    <div style="display:grid;grid-template-columns:1.2fr .9fr .8fr .9fr .7fr;gap:10px;align-items:center;padding:0 14px">
+                      <span class="td" style="font-weight:600;color:#18181b">{{ a.who }}</span>
+                      <span class="td">{{ a.tenant }}</span>
+                      <span class="td"><span style="{{ a.licStyle }}">{{ a.lic }}</span></span>
+                      <span class="td"><span style="{{ a.trustPill }}">{{ a.trust }}</span></span>
+                      <span class="td" style="text-align:right"><span class="vm">Move…</span></span>
+                    </div>
+                  </sc-for>
+                </sc-if>
+                <sc-if value="{{ g.empty }}"><div style="padding:12px 14px;font-size:11.5px;color:#615c6e;line-height:1.55">{{ g.empty }}</div></sc-if>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:grid;gap:12px">
+            <div class="c" style="padding:16px 18px;border-color:#fbcfe0">
+              <div class="zh"><span class="zt">Move to another branch</span><span class="gov">Recorded in Security</span></div>
+              <div style="display:grid;gap:0">
+                <sc-for list="{{ h9Move }}" as="f" hint-placeholder-count="4">
+                  <div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid #f4f3f7"><span class="lbl" style="font-size:8.5px;padding-top:2px">{{ f.label }}</span><span style="font-size:12px;text-align:right;{{ f.ink }}">{{ f.value }}</span></div>
+                </sc-for>
+              </div>
+              <div style="background:#fbfbfc;border:1px solid #f0eff4;border-radius:9px;padding:11px 12px;margin-top:11px;font-size:11.5px;color:#3f3a49;line-height:1.6">{{ h9Confirm }}</div>
+              <div style="display:flex;gap:7px;margin-top:12px"><span class="acc">Move A. Chen</span><span class="dis">Cancel</span></div>
+            </div>
+            <div class="c" style="padding:14px 16px">
+              <div class="zh" style="margin-bottom:8px"><span class="zt" style="font-size:12.5px">Afterwards · history</span></div>
+              <sc-for list="{{ h9History }}" as="h" hint-placeholder-count="2">
+                <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid #f4f3f7">
+                  <span class="mono num" style="font-size:10px;color:#615c6e;flex:none;width:92px">{{ h.when }}</span>
+                  <div style="font-size:11.5px;color:#3f3a49;line-height:1.5"><strong style="color:#18181b">{{ h.what }}</strong> · {{ h.detail }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Home" hint-size="100%,860px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ H10 · REVENUE · STATEMENT LEDGER ══════════ -->
+<section class="ab" id="h10">
+  <div class="ab-hd"><a class="ab-id" href="#h10">H10</a><span class="ab-nm">Revenue — statements as a ledger, per branch and period</span><span class="ab-sub">extends H5 · reported by the branch, entered by HQ</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">A statement has two authors. The branch reports its gross by stream at period close, with the time it did so; HQ computes what is owed from the licence's revenue share and enters what was paid or disputed, with who and when. Token P&amp;L is a different kind of number — an estimate from gateway cost — and is labelled as one everywhere it appears.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navRev }}" as="n" hint-placeholder-count="12"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq">
+        <div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">All subsidiaries ▾</span></div>
+        <span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">AXAL VC HQ</span>
+      </div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Revenue · Statements</h1>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;align-items:center">
+          <div style="display:flex;gap:3px;background:#f0eff3;border-radius:7px;padding:2px"><sc-for list="{{ h10Branches }}" as="b" hint-placeholder-count="4"><span style="{{ b.style }}">{{ b.label }}</span></sc-for></div>
+          <div style="display:flex;gap:3px;background:#f0eff3;border-radius:7px;padding:2px"><sc-for list="{{ h10Periods }}" as="p" hint-placeholder-count="3"><span style="{{ p.style }}">{{ p.label }}</span></sc-for></div>
+          <span class="zs">{{ h10PeriodNote }}</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:14px;margin-top:14px;align-items:start">
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">{{ h10Title }}</span><span class="zs">{{ h10Reported }}</span></div>
+            <div style="display:grid;grid-template-columns:1.4fr .8fr .8fr;gap:10px"><span class="th">Stream · reported gross</span><span class="th" style="text-align:right">Gross</span><span class="th" style="text-align:right">× {{ h10SharePct }} owed</span></div>
+            <sc-for list="{{ h10Streams }}" as="s" hint-placeholder-count="3">
+              <div style="display:grid;grid-template-columns:1.4fr .8fr .8fr;gap:10px;align-items:center">
+                <span class="td" style="font-weight:600;color:#18181b">{{ s.name }}</span>
+                <span class="td num" style="text-align:right">{{ s.gross }}</span>
+                <span class="td num" style="text-align:right;color:#615c6e">{{ s.owed }}</span>
+              </div>
+            </sc-for>
+            <div style="display:grid;grid-template-columns:1.4fr .8fr .8fr;gap:10px;align-items:center;border-top:2px solid #18181b;margin-top:2px">
+              <span class="td" style="font-weight:800;color:#18181b;border-top:none">Owed to HQ</span><span class="td num" style="text-align:right;border-top:none;font-weight:700">{{ h10Gross }}</span><span class="td num" style="text-align:right;border-top:none;font-weight:800;color:#881337">{{ h10Owed }}</span>
+            </div>
+            <div class="lbl" style="font-size:8.5px;margin-top:14px">HQ-entered lines</div>
+            <sc-for list="{{ h10Lines }}" as="l" hint-placeholder-count="2">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid #f4f3f7">
+                <div style="min-width:0"><div style="display:flex;align-items:center;gap:7px"><span style="{{ l.pill }}">{{ l.kind }}</span><span class="mono num" style="font-size:10px;color:#615c6e">{{ l.when }}</span></div><div style="font-size:11.5px;color:#3f3a49;margin-top:4px;line-height:1.5">{{ l.note }}</div></div>
+                <span class="num" style="font-size:13px;font-weight:800;flex:none;color:{{ l.ink }}">{{ l.amount }}</span>
+              </div>
+            </sc-for>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fbfbfc;border:1px solid #f0eff4;border-radius:9px;padding:10px 12px;margin-top:10px">
+              <span style="font-size:12px;color:#3f3a49">{{ h10BalanceNote }}</span><span class="num" style="font-size:13px;font-weight:800">{{ h10Balance }}</span>
+            </div>
+          </div>
+
+          <div style="display:grid;gap:12px">
+            <div class="c" style="padding:16px 18px;border-color:#fde68a">
+              <div class="zh"><span class="zt">Token P&amp;L</span><span style="font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:2px 7px">Estimate from gateway cost</span></div>
+              <sc-for list="{{ h10Token }}" as="t" hint-placeholder-count="3">
+                <div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid #f4f3f7"><span style="font-size:12px;color:#3f3a49">{{ t.label }}</span><span class="num" style="font-size:12px;font-weight:700">{{ t.value }}</span></div>
+              </sc-for>
+              <div style="font-size:11px;color:#92400e;line-height:1.55;margin-top:10px">{{ h10TokenCaveat }}</div>
+            </div>
+            <div class="c" style="padding:16px 18px">
+              <div class="zh"><span class="zt">Promo ceilings</span><span class="zs">per licence · HQ sets, branch issues</span></div>
+              <div style="display:grid;grid-template-columns:1.1fr .8fr .8fr .8fr;gap:8px"><span class="th">Licence</span><span class="th" style="text-align:right">Ceiling</span><span class="th" style="text-align:right">Issued</span><span class="th" style="text-align:right">Remaining</span></div>
+              <sc-for list="{{ h10Promo }}" as="p" hint-placeholder-count="4">
+                <div style="display:grid;grid-template-columns:1.1fr .8fr .8fr .8fr;gap:8px;align-items:center;{{ p.rowStyle }}">
+                  <span class="td" style="font-weight:600;color:#18181b">{{ p.name }}<span style="display:block;font-size:10px;color:#615c6e;font-weight:400">{{ p.asOf }}</span></span>
+                  <span class="td num" style="text-align:right;text-decoration:underline dotted #b91c1c">{{ p.ceiling }}</span>
+                  <span class="td num" style="text-align:right">{{ p.issued }}</span>
+                  <span class="td num" style="text-align:right;font-weight:700;color:{{ p.ink }}">{{ p.remaining }}</span>
+                </div>
+              </sc-for>
+              <div style="font-size:11px;color:#615c6e;line-height:1.55;margin-top:10px">{{ h10PromoNote }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Revenue" hint-size="100%,880px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ H11 · CONTENT LOCALISATION + PLATFORM DEPLOYMENTS ══════════ -->
+<section class="ab" id="h11">
+  <div class="ab-hd"><a class="ab-id" href="#h11">H11</a><span class="ab-nm">Content — Localisation lane · Platform — Deployments</span><span class="ab-sub">extends H6 · two frames</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">Two additions to H6. A branch cannot edit a master template, so what it can do is submit — a translation, a local variant — and HQ's decision is a brand decision: approve or request changes. Publishing a new version says how many branches are on older ones before it happens. Below, the platform zone that did not exist: one row per branch deployment, with a rollback that asks why.</div>
+  <div class="frame" style="margin-bottom:16px">
+    <div class="side"><sc-for list="{{ navCon }}" as="n" hint-placeholder-count="12"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq"><div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">All subsidiaries ▾</span></div><span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">AXAL VC HQ</span></div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Content · Localisation</h1>
+        <div style="display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin-top:14px;align-items:start">
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Submitted to HQ</span><span class="zs">{{ h11LocalSub }}</span></div>
+            <div style="display:grid;gap:9px">
+              <sc-for list="{{ h11Local }}" as="l" hint-placeholder-count="3">
+                <div style="{{ l.rowStyle }}">
+                  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+                    <div style="min-width:0"><div style="font-size:12.5px;font-weight:700">{{ l.what }}</div><div style="font-size:11px;color:#615c6e;margin-top:3px">{{ l.meta }}</div></div>
+                    <span style="{{ l.pill }}">{{ l.state }}</span>
+                  </div>
+                  <sc-if value="{{ l.open }}"><div style="display:flex;gap:7px;margin-top:10px"><span class="acc">Approve · brand</span><span class="gho">Request changes</span><span class="dis">Open diff</span></div></sc-if>
+                  <sc-if value="{{ l.decision }}"><div style="font-size:11px;color:#3f3a49;margin-top:8px;line-height:1.5">{{ l.decision }}</div></sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div class="c" style="padding:16px 18px;border-color:#fbcfe0">
+            <div class="zh"><span class="zt">Publish {{ h11PubDoc }}</span><span class="gov">Recorded in Security</span></div>
+            <div style="font-size:12.5px;font-weight:700;line-height:1.4">Publishing {{ h11PubVersion }} notifies {{ h11PubN }} branches on older versions.</div>
+            <div style="display:grid;gap:6px;margin-top:11px">
+              <sc-for list="{{ h11PubList }}" as="b" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:8px"><span style="font-size:12px;font-weight:600">{{ b.name }}</span><span class="mono num" style="font-size:10.5px;color:{{ b.ink }}">{{ b.note }}</span></div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;line-height:1.55;margin-top:10px">{{ h11PubNote }}</div>
+            <div style="display:flex;gap:7px;margin-top:12px"><span class="acc">Publish {{ h11PubVersion }} · notify {{ h11PubN }}</span><span class="dis">Cancel</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Home" hint-size="100%,640px"></dc-import></div>
+  </div>
+
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navPlat }}" as="n" hint-placeholder-count="12"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq"><div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">All subsidiaries ▾</span><span class="num" style="font-size:11px;opacity:.72">{{ h11DeploySub }}</span></div><span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">AXAL VC HQ</span></div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Platform · Deployments</h1>
+        <div class="c" style="padding:16px 18px;margin-top:14px">
+          <div style="display:grid;grid-template-columns:1.1fr 1.1fr .9fr .5fr .8fr .8fr .6fr .7fr;gap:9px"><span class="th">Worker</span><span class="th">Hostname</span><span class="th">Residency</span><span class="th">Version</span><span class="th">Last deploy</span><span class="th">Health</span><span class="th">Rollout</span><span class="th"></span></div>
+          <sc-for list="{{ h11Deploys }}" as="d" hint-placeholder-count="5">
+            <div style="display:grid;grid-template-columns:1.1fr 1.1fr .9fr .5fr .8fr .8fr .6fr .7fr;gap:9px;align-items:center;{{ d.rowStyle }}">
+              <span class="td mono" style="font-weight:600;color:#18181b">{{ d.worker }}</span>
+              <span class="td mono">{{ d.host }}</span>
+              <span class="td">{{ d.res }}</span>
+              <span class="td mono num">{{ d.ver }}</span>
+              <span class="td num">{{ d.last }}</span>
+              <span class="td"><span style="{{ d.pill }}">{{ d.health }}</span></span>
+              <span class="td"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:4px;background:#ececf1;border-radius:999px;overflow:hidden"><div style="height:100%;width:{{ d.pct }}%;background:#881337;border-radius:999px"></div></div><span class="num" style="font-size:10.5px">{{ d.pct }}%</span></div></span>
+              <span class="td" style="text-align:right"><span class="{{ d.rbClass }}">Roll back</span></span>
+            </div>
+          </sc-for>
+        </div>
+        <div class="c" style="padding:14px 18px;margin-top:12px;border-color:#fecaca;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <div style="flex:1;min-width:280px"><div style="font-size:12.5px;font-weight:700">{{ h11RbTitle }}</div><div style="font-size:11px;color:#3f3a49;margin-top:4px;line-height:1.5">{{ h11RbBody }}</div></div>
+          <div style="flex:1;min-width:240px;border:1px solid #e2e1e8;border-radius:8px;padding:8px 11px;font-size:12px;color:#9c96a8">Reason — required, recorded</div>
+          <span class="danger">Roll back to {{ h11RbTo }}</span><span class="gov">Recorded in Security</span>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Home" hint-size="100%,560px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ H12 · VIEWING AS A BRANCH + GUARDRAILS BY BRANCH ══════════ -->
+<section class="ab" id="h12">
+  <div class="ab-hd"><a class="ab-id" href="#h12">H12</a><span class="ab-nm">"Viewing as Axal VC France" — Home and Team, read-only · Guardrail hits by branch</span><span class="ab-sub">extends H7 · three frames</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">The overlay is not a filter on an HQ table — it is one private-link read, of one branch, rendered with every action removed. Each figure carries the branch and the time it was read, so nothing on the screen can be mistaken for a platform total. Guardrail hits are counted per branch and foot to the Security totals, with the stale branch labelled as stale.</div>
+
+  <div class="frame" style="margin-bottom:16px">
+    <div class="side"><sc-for list="{{ navHome }}" as="n" hint-placeholder-count="12"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq" style="background:#334155"><div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ eyeIcon }}"></span><span style="font-size:12.5px;font-weight:700">Viewing as Axal VC France</span><span style="font-size:10px;font-weight:800;letter-spacing:.06em;background:rgba(255,255,255,.18);border-radius:4px;padding:2px 7px">READ-ONLY</span><span class="num" style="font-size:11px;opacity:.75">{{ h12ReadAt }}</span></div><span style="font-size:11.5px;font-weight:700;text-decoration:underline">Return to HQ view</span></div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Home · {{ h12Branch }}</h1>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:14px">
+          <sc-for list="{{ h12Totals }}" as="t" hint-placeholder-count="4">
+            <div class="c" style="padding:14px 16px;border-color:#cbd5e1"><div class="lbl" style="font-size:9.5px">{{ t.label }}</div><div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1">{{ t.value }}</div><div class="mono num" style="font-size:10px;color:#615c6e;margin-top:6px">{{ t.src }}</div></div>
+          </sc-for>
+        </div>
+        <div class="c" style="padding:14px 18px;margin-top:12px"><div class="zh" style="margin-bottom:8px"><span class="zt">Queues · as the branch sees them</span><span class="zs">no approve, decline or reassign — the controls are absent, not disabled</span></div>
+          <sc-for list="{{ h12Queues }}" as="q" hint-placeholder-count="3"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid #f4f3f7"><span style="font-size:12px;font-weight:600">{{ q.what }}</span><span class="num" style="font-size:11px;color:#615c6e">{{ q.meta }}</span></div></sc-for>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Home" hint-size="100%,460px"></dc-import></div>
+  </div>
+
+  <div class="frame" style="margin-bottom:16px">
+    <div class="side"><sc-for list="{{ navAcc }}" as="n" hint-placeholder-count="12"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq" style="background:#334155"><div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ eyeIcon }}"></span><span style="font-size:12.5px;font-weight:700">Viewing as Axal VC France</span><span style="font-size:10px;font-weight:800;letter-spacing:.06em;background:rgba(255,255,255,.18);border-radius:4px;padding:2px 7px">READ-ONLY</span></div><span style="font-size:11.5px;font-weight:700;text-decoration:underline">Return to HQ view</span></div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Team · {{ h12Branch }}</h1>
+        <div style="background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:9px 13px;margin-top:12px;display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none;color:#615c6e" dangerouslySetInnerHTML="{{ searchIcon }}"></span><span style="font-size:13px;color:#615c6e;flex:1">Searching Axal VC France accounts · as HQ, read-only</span><span class="tag">One group</span></div>
+        <div class="c" style="margin-top:12px">
+          <div style="display:grid;grid-template-columns:1.3fr .9fr .9fr;gap:10px;padding:8px 14px 0"><span class="th">Name</span><span class="th">Licence</span><span class="th">Trust</span></div>
+          <sc-for list="{{ h12Rows }}" as="a" hint-placeholder-count="2"><div style="display:grid;grid-template-columns:1.3fr .9fr .9fr;gap:10px;align-items:center;padding:0 14px"><span class="td" style="font-weight:600;color:#18181b">{{ a.who }}</span><span class="td"><span style="{{ a.licStyle }}">{{ a.lic }}</span></span><span class="td"><span style="{{ a.trustPill }}">{{ a.trust }}</span></span></div></sc-for>
+          <div style="padding:10px 14px;font-size:11px;color:#615c6e;border-top:1px solid #f4f3f7;line-height:1.5">{{ h12TeamNote }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Home" hint-size="100%,400px"></dc-import></div>
+  </div>
+
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navGov }}" as="n" hint-placeholder-count="12"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq"><div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">All subsidiaries ▾</span></div><span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">AXAL VC HQ</span></div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Security · Guardrail hits by branch</h1>
+        <div class="c" style="padding:16px 18px;margin-top:14px">
+          <div style="display:grid;grid-template-columns:1.1fr .7fr .7fr .9fr 1.5fr;gap:10px"><span class="th">Branch</span><span class="th" style="text-align:right">Blocked</span><span class="th" style="text-align:right">Flagged</span><span class="th" style="text-align:right">Passed on retry</span><span class="th">Source · read</span></div>
+          <sc-for list="{{ h12Guard }}" as="g" hint-placeholder-count="5">
+            <div style="display:grid;grid-template-columns:1.1fr .7fr .7fr .9fr 1.5fr;gap:10px;align-items:center;{{ g.rowStyle }}"><span class="td" style="font-weight:600;color:#18181b">{{ g.branch }}</span><span class="td num" style="text-align:right;color:{{ g.ink }}">{{ g.blocked }}</span><span class="td num" style="text-align:right">{{ g.flagged }}</span><span class="td num" style="text-align:right">{{ g.passed }}</span><span class="td mono" style="font-size:10.5px;color:#615c6e">{{ g.src }}</span></div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;line-height:1.55;margin-top:10px">{{ h12GuardNote }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Governance" hint-size="100%,420px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ H13 · THE HQ AI RAIL ══════════ -->
+<section class="ab" id="h13">
+  <div class="ab-hd"><a class="ab-id" href="#h13">H13</a><span class="ab-nm">HQ AI rail — scope chip and cost line</span><span class="ab-sub">AdminRail amended · two states</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">The scope chip moved to the top of the rail, because it is the first thing an answer depends on. HQ picks "All branches" — one private-link read per branch, an unreadable branch named in the answer — or one branch, which is what the viewing-as overlay passes. The cost line was already there: estimated before the run, with HQ's margin shown only on this tier.</div>
+  <div style="display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap">
+    <sc-for list="{{ h13Rails }}" as="r" hint-placeholder-count="2">
+      <div style="width:280px;flex:none">
+        <div class="lbl" style="margin-bottom:8px">{{ r.label }}</div>
+        <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 17px 24px"><dc-import name="AdminRail" tier="super" page="{{ r.page }}" scope="{{ r.scope }}" hint-size="100%,560px"></dc-import></div>
+        <div style="font-size:11px;color:#615c6e;line-height:1.55;margin-top:9px">{{ r.note }}</div>
+      </div>
+    </sc-for>
+    <div style="flex:1;min-width:320px;max-width:520px;background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:16px 18px">
+      <div class="zh"><span class="zt">What the scope changes</span></div>
+      <sc-for list="{{ h13Rules }}" as="x" hint-placeholder-count="4">
+        <div style="border-left:2px solid #881337;padding-left:11px;margin-top:10px"><div style="font-size:12.5px;font-weight:700">{{ x.rule }}</div><div style="font-size:11.5px;color:#3f3a49;margin-top:3px;line-height:1.55">{{ x.why }}</div></div>
+      </sc-for>
+    </div>
+  </div>
+</section></x-dc>
+<script type="text/x-dc" data-dc-script="">
 class Component extends DCLogic {
   ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
 
@@ -613,12 +1002,21 @@ class Component extends DCLogic {
       eye:  this.ic('<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.6"/>')
     };
     const OX = '#881337', OXF = '#9f1239', OXT = '#fff5f7', OXE = '#fbcfe0';
-    const ROWS = [['Home',I.home],['Licenses',I.lic],['Accounts',I.acc],['Revenue',I.rev],
-                  ['Content',I.con],['Governance',I.gov],['Platform',I.plat]];
-    const nav = (active) => ROWS.map(([label, icon]) => ({ label, icon,
+    // ══ The nav as it ships: one group "HQ", eleven rows. Team is the cross-tenant accounts
+    // screen (H4); Governance lives under Security (H7). The seven-row nav is not drawn. ══
+    I.funds = this.ic('<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>');
+    I.doc   = this.ic('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>');
+    I.life  = this.ic('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/><path d="m4.9 4.9 4.6 4.6M14.5 14.5l4.6 4.6M19.1 4.9l-4.6 4.6M9.5 14.5l-4.6 4.6"/>');
+    I.cog   = this.ic('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/>');
+    const ROWS = [['Home',I.home],['Licences',I.lic],['Funds',I.funds],['Contracts',I.doc],['Team',I.acc],
+                  ['Revenue',I.rev],['Content',I.con],['Platform',I.plat],['Support',I.life],
+                  ['Security',I.gov],['Settings',I.cog]];
+    const GROUP = { label:'HQ', icon:{ __html:'' },
+      style:'display:flex;align-items:center;gap:9px;padding:2px 15px 7px;font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#615c6e' };
+    const nav = (active) => [GROUP].concat(ROWS.map(([label, icon]) => ({ label, icon,
       style:'display:flex;align-items:center;gap:9px;padding:8px 15px;font-size:12.5px;'
         + (label === active ? 'font-weight:700;color:' + OX + ';background:' + OXT + ';box-shadow:inset 2px 0 0 ' + OX
-                            : 'font-weight:600;color:#4a4553') }));
+                            : 'font-weight:600;color:#4a4553') })));
 
     const eur = (n) => '€' + n.toLocaleString('en-US');
     const k = (n) => '€' + Math.round(n / 1000) + 'k';
@@ -713,8 +1111,221 @@ class Component extends DCLogic {
 
     return {
       globeIcon:I.globe, searchIcon:I.srch, eyeIcon:I.eye,
-      navHome:nav('Home'), navLic:nav('Licenses'), navAcc:nav('Accounts'),
-      navRev:nav('Revenue'), navCon:nav('Content'), navGov:nav('Governance'),
+      navHome:nav('Home'), navLic:nav('Licences'), navAcc:nav('Team'),
+      navRev:nav('Revenue'), navCon:nav('Content'), navGov:nav('Security'),
+      navPlat:nav('Platform'), navSup:nav('Support'),
+      // ── CHANGELOG (top of canvas) ──
+      changelog: [
+        { where:'H1–H7 · nav', what:'Sidebar is the eleven-row HQ group', why:'Home · Licences · Funds · Contracts · Team · Revenue · Content · Platform · Support · Security · Settings. Accounts is now Team; Governance lives under Security. The seven-row nav is not drawn anywhere.' },
+        { where:'H2', what:'Coverage grid: sort control and open-licence affordance', why:'Held-active, held-suspended and white space were already the three states; the sort and the click are the additions. Renewal pipeline already carried days and fee. Title spelt Licences.' },
+        { where:'H4 · H7', what:'Titles follow the nav rows', why:'H4 reads Team, H7 reads Security. Content unchanged.' },
+        { where:'H8–H14', what:'Appended, one per brief item', why:'H8 Contract + Deploy steps · H9 Team moves · H10 Statements ledger · H11 Localisation + Deployments · H12 Viewing-as overlay · H13 HQ rail. Every figure is a field; unreadable branches never poison the others.' }
+      ],
+      mapSort: ['By state','A–Z'].map((l, i) => ({ label:l, style:seg(i === 0) })),
+
+      // ── H13 · Rail states. scope is a prop on the shared AdminRail, so the overlay and the rail
+      // cannot disagree about which branch is being read.
+      h13Rails: [
+        { label:'All branches', page:'Home', scope:'', note:'One read per branch. An answer that aggregates says which branches answered; an unreadable one is named, never averaged in.' },
+        { label:'One branch · the overlay passes it', page:'Home', scope:'Axal VC France', note:'The chip is what the viewing-as banner set. Every figure the rail cites comes from that branch\u2019s read, stamped with its time.' }
+      ],
+      h13Rules: [
+        { rule:'Scope precedes the question', why:'The chip is chosen before typing, not inferred from the answer — so "how many overdue approvals?" has one meaning per scope.' },
+        { rule:'Cost is per scope', why:'All branches is up to four reads and four drafts; the estimate multiplies before the run, and the receipt afterwards shows the reads that actually happened.' },
+        { rule:'Unreadable is a word in the answer', why:'"Three of four branches answered; Nordics did not." A total that quietly drops a branch is the failure the architecture makes likely, so the rail is required to say it.' },
+        { rule:'Anything about a named branch is logged', why:'Cross-branch answers write to Security, the same as an impersonation — reading a branch is a privileged act even when it is only a question.' }
+      ],
+
+      // ── H12 · Viewing-as. Every figure is one branch's licence record stamped with the read
+      // time; guardrail counts per branch foot to the H7 totals (6 · 3 · 11), stale row labelled.
+      ...(() => {
+        const FR = LICENSES.find(l => l.id === 'AXL-001');
+        const READ = 'read 14 Sep 10:41:03';
+        const L = { Founder:['#f5f2ff','#6d28d9','#e6dcff'], Investor:['#f5f5ff','#3730a3','#c7d2fe'] };
+        const row = (who, lic, trust) => ({ who, lic, trust, trustPill:pill(trust),
+          licStyle:'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:'+L[lic][0]+';color:'+L[lic][1]+';border:1px solid '+L[lic][2] });
+        const G = [
+          { branch:'Axal VC France', b:4, f:2, p:7, src:'Advisor + Founder rails · llama-guard-3-8b · ' + READ, stale:false },
+          { branch:'Axal VC DACH', b:2, f:1, p:3, src:'Advisor rail · llama-guard-3-8b · read 10:41:03', stale:false },
+          { branch:'Axal VC Nordics', b:0, f:0, p:1, src:'unreadable today · counts as of 2 Sep 07:15', stale:true },
+          { branch:'Axal VC Iberia', b:0, f:0, p:0, src:'no traffic since suspension 18 Jul', stale:false }
+        ];
+        const sum = (k) => G.reduce((a, g) => a + g[k], 0);
+        return {
+          h12Branch: FR.name, h12ReadAt: READ,
+          h12Totals: [
+            { label:'Accounts', value:String(FR.accounts), src:FR.name + ' · ' + READ },
+            { label:'Seats used', value:Math.round(FR.accounts / FR.seats * 100) + '%', src:FR.accounts + ' of ' + FR.seats + ' · ' + READ },
+            { label:'MTD revenue', value:eur(FR.mtd), src:'reported by the branch · ' + READ },
+            { label:'Queue backlog', value:String(FR.backlog), src:'oldest ' + FR.oldest + 'h · ' + READ }
+          ],
+          h12Queues: [
+            { what:'LP application · A. Chen', meta:'approved by C. Moreau · 09:41' },
+            { what:'Cohort application · declined', meta:'C. Moreau · yesterday 14:19 · outside sector remit' },
+            { what:'Content submission · onboarding guide FR', meta:'sent to HQ 13 Sep 17:20 · awaiting brand approval' }
+          ],
+          h12Rows: [row('Guillaume Lauzier','Founder','Verified'), row('A. Chen','Investor','Verified')],
+          h12TeamNote: 'Two accounts, because that is what the branch returned — the HQ-held group and the other three branches are not on this screen at all. "Move…" is gone rather than greyed: an action that cannot run from this view is not drawn in it.',
+          h12Guard: G.concat([{ branch:'All branches', b:sum('b'), f:sum('f'), p:sum('p'), src:'foots to Security totals · includes one stale row', total:true }]).map(g => ({
+            branch:g.branch, blocked:String(g.b), flagged:String(g.f), passed:String(g.p), src:g.src,
+            ink: g.b ? '#b91c1c' : '#615c6e',
+            rowStyle: g.total ? 'border-top:2px solid #18181b;font-weight:700' : (g.stale ? 'background:#fffbeb' : '') })),
+          h12GuardNote: 'Nordics is unreadable today, so its row carries the counts from the last successful read and says so; the total includes them because omitting a branch would understate the platform, and the label is what keeps the total honest. Source names the rail and the screening model, not "AI".'
+        };
+      })(),
+
+      // ── H11 · Localisation lane, publish confirmation, deployments. N branches on older
+      // versions is counted from the version map, never typed.
+      ...(() => {
+        const P = { open:['#fffbeb','#92400e','#fde68a'], ok:['#ecfdf5','#047857','#a7f3d0'], chg:['#f4f4f6','#615c6e','#e4e4e8'] };
+        const pl = (t) => 'font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+P[t][0]+';color:'+P[t][1]+';border:1px solid '+P[t][2]+';flex:none;white-space:nowrap';
+        const LOCAL = [
+          { what:'Founder onboarding guide · French', meta:'Axal VC France · C. Moreau · submitted 13 Sep 17:20 · from master v4', state:'Awaiting brand approval', t:'open', open:true, decision:null },
+          { what:'Cohort 4 Demo Day announcement · German', meta:'Axal VC DACH · M. Weber · submitted 11 Sep 09:02', state:'Approved', t:'ok', open:false, decision:'Approved by S. Lindqvist 12 Sep 10:30 · "brand kit v9 respected".' },
+          { what:'LP briefing invitation · Swedish', meta:'Axal VC Nordics · submitted 9 Sep 14:11', state:'Changes requested', t:'chg', open:false, decision:'S. Lindqvist 10 Sep · "wordmark recoloured — use the v9 lockup unchanged". Awaiting resubmission.' }
+        ];
+        const VER = [['Axal VC France','v2.1'],['Axal VC DACH','v2.1'],['Axal VC Nordics','v2.0'],['Axal VC Iberia','v2.1']];
+        const NEW = 'v2.2';
+        const older = VER.filter(v => v[1] !== NEW);
+        const DEP = [
+          { worker:'branch-france', host:'france.axal.vc', res:'EU-guaranteed', ver:'v41', last:'12 Sep 09:10', health:'Healthy', t:'ok', pct:100 },
+          { worker:'branch-dach', host:'dach.axal.vc', res:'EU-guaranteed', ver:'v41', last:'12 Sep 09:12', health:'Healthy', t:'ok', pct:50 },
+          { worker:'branch-nordics', host:'nordics.axal.vc', res:'Region-hinted · WEUR', ver:'v40', last:'30 Aug 08:55', health:'Unreadable', t:'bad', pct:100 },
+          { worker:'branch-iberia', host:'iberia.axal.vc', res:'EU-guaranteed', ver:'v39', last:'18 Jul 11:40', health:'Suspended', t:'chg', pct:100 },
+          { worker:'branch-iberia-sur', host:'iberia-sur.axal.vc', res:'EU-guaranteed', ver:'—', last:'14 Sep 10:02 · failed', health:'Deploying', t:'open', pct:0 }
+        ];
+        const H = { ok:['#ecfdf5','#047857','#a7f3d0'], bad:['#fef2f2','#b91c1c','#fecaca'], chg:['#f4f4f6','#615c6e','#e4e4e8'], open:['#fffbeb','#92400e','#fde68a'] };
+        return {
+          h11LocalSub: LOCAL.filter(l => l.open).length + ' awaiting a brand decision',
+          h11Local: LOCAL.map(l => Object.assign({}, l, { pill:pl(l.t),
+            rowStyle:'border:1px solid ' + (l.open ? '#fde68a;background:#fffdf5' : '#f0eff4;background:#fbfbfc') + ';border-radius:10px;padding:12px 13px' })),
+          h11PubDoc: 'Advisory agreement', h11PubVersion: NEW, h11PubN: String(older.length),
+          h11PubList: VER.map(v => ({ name:v[0], note: v[1] + (v[0] === 'Axal VC Iberia' ? ' · notified, cannot instantiate while suspended' : ' → ' + NEW + ' on next instantiation'),
+            ink: v[0] === 'Axal VC Iberia' ? '#92400e' : '#615c6e' })),
+          h11PubNote: 'Existing contracts keep the version they were signed on. The notification tells each branch that new instantiations use ' + NEW + ' and that its library copy is "as of" the publish time.',
+          h11DeploySub: DEP.filter(d => d.t === 'ok').length + ' healthy · 1 unreadable · 1 suspended · 1 deploying',
+          h11Deploys: DEP.map(d => ({ worker:d.worker, host:d.host, res:d.res, ver:d.ver, last:d.last, health:d.health, pct:String(d.pct),
+            pill:'font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+H[d.t][0]+';color:'+H[d.t][1]+';border:1px solid '+H[d.t][2]+';white-space:nowrap',
+            rbClass: d.ver === '—' ? 'dis' : 'vm', rowStyle: d.t === 'bad' ? 'background:#fffbfb' : (d.t === 'chg' ? 'opacity:.7' : '') })),
+          h11RbTitle: 'Roll back branch-nordics · v40 → v39',
+          h11RbBody: 'Its health has been unreadable since 10:41; the last known-good version is v39, deployed 2 Aug. Rollback redeploys that worker version only — the database and its schema are untouched, so a rollback across a schema change is refused here rather than attempted.',
+          h11RbTo: 'v39'
+        };
+      })(),
+
+      // ── H10 · Statement ledger. Gross is reported by the branch; owed is gross × the licence's
+      // revenue share; paid and disputed are HQ-entered. Balance is arithmetic over those three.
+      ...(() => {
+        const FR = LICENSES.find(l => l.id === 'AXL-001');
+        const STR = [['Subscriptions', 64200], ['Programme fees', 22800], ['Perks & marketplace', 5100]];
+        const gross = STR.reduce((a, s) => a + s[1], 0);
+        const owed = Math.round(gross * FR.rev);
+        const paid = 30000, disputed = owed - paid;
+        const frTok = tokenSplit.find(t => t.name === FR.name);
+        const promo = [
+          { name:'AXL-001 · France', ceiling:12000, issued:7450, asOf:'reported 12 Sep 08:40', frozen:false },
+          { name:'AXL-002 · DACH', ceiling:9000, issued:3200, asOf:'reported 13 Sep 07:15', frozen:false },
+          { name:'AXL-003 · Nordics', ceiling:6000, issued:null, asOf:'no report since 2 Sep', frozen:false },
+          { name:'AXL-004 · Iberia', ceiling:5000, issued:4100, asOf:'frozen with the licence', frozen:true }
+        ];
+        return {
+          h10Branches: LICENSES.map((l, i) => ({ label:l.name.replace('Axal VC ', ''), style:seg(i === 0) })),
+          h10Periods: ['Q2 2026','Q3 2026','Q1 2026'].map((p, i) => ({ label:p, style:seg(i === 0) })),
+          h10PeriodNote: 'Q3 closes 30 Sep — the branch reports after close, so Q3 has no gross yet.',
+          h10Title: FR.name + ' · Q2 2026', h10Reported: 'Reported by the branch at 3 Jul 2026 08:52',
+          h10SharePct: Math.round(FR.rev * 100) + '%',
+          h10Streams: STR.map(([name, g]) => ({ name, gross:eur(g), owed:eur(Math.round(g * FR.rev)) })),
+          h10Gross: eur(gross), h10Owed: eur(owed),
+          h10Lines: [
+            { kind:'Paid', when:'received 28 Jul · entered by T. Okafor 29 Jul 10:15', amount:eur(paid), ink:'#047857', note:'Wire reference AXL-001-Q2 · matched to the owed line.',
+              pill:'font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:#ecfdf5;color:#047857;border:1px solid #a7f3d0' },
+            { kind:'Disputed', when:'raised 30 Jul · entered by T. Okafor 30 Jul 16:02', amount:eur(disputed), ink:'#b91c1c', note:'"Programme fees reported gross of two refunds." Awaiting a corrected report from the branch; the owed line does not change until it arrives.',
+              pill:'font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca' }
+          ],
+          h10Balance: eur(owed - paid - disputed) + ' outstanding · ' + eur(disputed) + ' in dispute',
+          h10BalanceNote: 'Owed − paid − disputed. Disputed is not forgiven; it is parked.',
+          h10Token: [
+            { label:'Gateway cost · metered by provider', value:eur(frTok.cost) },
+            { label:'Billed to accounts · estimate at ' + Math.round(FR.token * 100) + '% margin', value:'≈ ' + eur(frTok.cost + frTok.margin) },
+            { label:'HQ margin · estimate', value:'≈ ' + eur(frTok.margin) }
+          ],
+          h10TokenCaveat: 'Only the gateway cost is measured. What the branch actually billed its accounts arrives in its period report and is not in this figure — so this card cannot be reconciled against the statement on the left, and does not pretend to be.',
+          h10Promo: promo.map(p => ({ name:p.name, asOf:p.asOf, ceiling:eur(p.ceiling),
+            issued: p.issued === null ? 'Not recorded' : eur(p.issued),
+            remaining: p.frozen ? 'frozen' : (p.issued === null ? '—' : eur(p.ceiling - p.issued)),
+            ink: p.frozen ? '#615c6e' : (p.issued === null ? '#615c6e' : (p.ceiling - p.issued < p.ceiling * 0.25 ? '#b45309' : '#18181b')),
+            rowStyle: p.frozen ? 'opacity:.6' : '' })),
+          h10PromoNote: 'The ceiling is the only editable figure, and it is HQ\u2019s. Issued is what the branch last reported, with the time; Nordics has not reported since 2 Sep, so its remaining is unknown rather than assumed to be the whole ceiling.'
+        };
+      })(),
+
+      // ── H9 · Team, grouped. Each group is one branch's answer; Nordics did not answer and is
+      // rendered absent, not zero. Names are the canvas's existing people only.
+      h9Query: 'All accounts · 5 groups',
+      h9ReadState: '4 of 5 groups answered · Nordics unreadable',
+      h9Groups: (() => {
+        const L = { Founder:['#f5f2ff','#6d28d9','#e6dcff'], Investor:['#f5f5ff','#3730a3','#c7d2fe'], Advisor:['#f2fdf7','#047857','#a7f3d0'], Partner:['#fffbf2','#b45309','#fde68a'] };
+        const row = (who, tenant, lic, trust) => ({ who, tenant, lic, trust, trustPill:pill(trust),
+          licStyle:'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:'+L[lic][0]+';color:'+L[lic][1]+';border:1px solid '+L[lic][2] });
+        return [
+          { branch:'HQ-held', count:'1', note:'accounts with no branch', noteInk:'#615c6e', rows:[row('Elena Ruiz','HQ-held','Investor','Verified')], empty:null, style:'background:#fff5f7' },
+          { branch:'Axal VC France', count:'2', note:'read 14 Sep 10:41:03', noteInk:'#615c6e', rows:[row('Guillaume Lauzier','Axal VC France','Founder','Verified'), row('A. Chen','Axal VC France','Investor','Verified')], empty:null, style:'' },
+          { branch:'Axal VC DACH', count:'1', note:'read 14 Sep 10:41:03', noteInk:'#615c6e', rows:[row('K. Nilsson','Axal VC DACH','Founder','Verified')], empty:null, style:'' },
+          { branch:'Axal VC Nordics', count:'—', note:'unreadable · private link timed out 10:41:08', noteInk:'#b91c1c', rows:null,
+            empty:'Nordics did not answer. Its accounts are absent from this list, not counted as zero — the other four groups are complete. Retry reads this branch alone.', style:'border-color:#fecaca;border-style:dashed' },
+          { branch:'Axal VC Iberia', count:'1', note:'licence suspended · read-only', noteInk:'#92400e', rows:[row('Marc Delacroix','Axal VC Iberia','Founder','Suspended')], empty:null, style:'opacity:.8' }
+        ];
+      })(),
+      h9Move: [
+        { label:'Account', value:'A. Chen · Investor', ink:'font-weight:600' },
+        { label:'From', value:'Axal VC France · closes', ink:'font-weight:600' },
+        { label:'To', value:'Axal VC DACH · re-invited', ink:'font-weight:600' },
+        { label:'Reason', value:'"Relocated to Berlin · employer confirmed"', ink:'color:#615c6e' }
+      ],
+      h9Confirm: 'The account is closed on Axal VC France with the reason above, and re-invited on Axal VC DACH. Both branches are notified. Records stay where they were: France keeps its history, DACH starts a new record when the invitation is accepted. Nothing is copied between databases.',
+      h9History: [
+        { when:'14 Sep 11:02', what:'Moved · A. Chen', detail:'France → DACH · by T. Okafor · "relocated to Berlin, employer confirmed" · invitation pending' },
+        { when:'Yesterday 16:33', what:'Moved · K. Nilsson', detail:'Nordics → DACH · by T. Okafor · "relocated, employer confirmed" · accepted 17:10' }
+      ],
+
+      // ── H8 · Contract + Deploy. The failure is the 4th of 8 steps, and it names the credential.
+      h8Entity: 'Axal VC Iberia Sur SL',
+      h8Steps: [['Entity','done'],['Territory','done'],['Seats','done'],['Terms','done'],['Contract','sent'],['Deploy','active']].map(([label, st], i) => {
+        const M = { done:['#ecfdf5','#047857','#a7f3d0'], sent:['#fffbeb','#92400e','#fde68a'], active:['#fde8ee','#881337','#fbcfe0'] };
+        const c = M[st];
+        return { n:String(i + 1), label, style:'background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2] };
+      }),
+      h8ContractState: 'Sent · awaiting signature',
+      h8Contract: [
+        { label:'Template', value:'Subsidiary licence agreement · master', ink:'font-weight:600' },
+        { label:'Version', value:'v3.2 · published 2 Sep 2026', ink:'font-weight:600' },
+        { label:'Instantiated for', value:'Axal VC Iberia Sur SL', ink:'font-weight:600' },
+        { label:'Signatory', value:'Elena Ruiz de Vargas · Managing Director', ink:'color:#615c6e' },
+        { label:'Envelope', value:'Sent 14 Sep 09:12 · viewed 14 Sep 11:40 · not signed', ink:'color:#92400e' },
+        { label:'Countersign', value:'HQ · after signatory', ink:'color:#615c6e' }
+      ],
+      h8Rule: 'A pending signature does not block Deploy. The branch can exist before the paper is countersigned; the licence record shows both states side by side until they agree, and nothing routes accounts to the branch until it does.',
+      h8Host: 'iberia-sur.axal.vc',
+      h8Residency: [
+        { label:'EU-guaranteed', note:'Selected · data stays in EU jurisdiction', hints:null,
+          style:'border:1.5px solid #881337;background:#fff5f7;border-radius:9px;padding:10px 12px' },
+        { label:'Region-hinted', note:'A hint, not a guarantee', style:'border:1px solid #ececf1;background:#fbfbfc;border-radius:9px;padding:10px 12px',
+          hints:['WEUR','EEUR','ENAM','WNAM','APAC','OC'].map(code => ({ code, style:'font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:4px;background:#f4f4f6;color:#4a4553;border:1px solid #e8e8ec' })) },
+        { label:'In-country', note:'Not available · no ES-only region exists', hints:null,
+          style:'border:1px dashed #e2e1e8;background:#fff;border-radius:9px;padding:10px 12px;opacity:.6;cursor:not-allowed' }
+      ],
+      h8Creates: ['database · iberia-sur', 'worker · branch-iberia-sur', 'queue · iberia-sur-events', 'storage · iberia-sur-files', 'hostname · iberia-sur.axal.vc'],
+      h8TimelineSub: 'Requested 14 Sep 10:02:11 · 3 of 8 complete · 1 failed · 4 waiting',
+      h8Timeline: [
+        ['Requested','10:02:11','ok','by T. Okafor'], ['Database created','10:02:19','ok','EU-guaranteed'], ['Schema applied','10:02:23','ok','v41 · 118 tables'],
+        ['Secrets present','10:02:24','fail','BRANCH_SIGNING_KEY missing'], ['Principal seeded','—','wait','blocked by step 4'],
+        ['Worker live','—','wait',''], ['Hostname active','—','wait',''], ['Linked to HQ','—','wait','private link']
+      ].map(([step, time, st, note]) => {
+        const M = { ok:['#047857','#ecfdf5','#a7f3d0','#3f3a49'], fail:['#b91c1c','#fef2f2','#fecaca','#b91c1c'], wait:['#d4d2dc','#fbfbfc','#f0eff4','#615c6e'] };
+        const c = M[st];
+        return { step, time, note: note || 'waiting', dot:c[0], ink:c[3], style:'border:1px solid '+c[2]+';background:'+c[1]+';border-radius:9px;padding:10px 11px' };
+      }),
+      h8Missing: 'Step 4 needs BRANCH_SIGNING_KEY, an HQ credential that has not been set — the branch signs its reports to HQ with it. Steps 5–8 hold until it exists; nothing is retried automatically, and the four waiting steps will run in order once it is present.',
       subCount:String(subCount), countryCount:String(countryCount),
 
       // ── H1 ──
@@ -946,5 +1557,4 @@ class Component extends DCLogic {
   }
 }
 </script>
-</body>
-</html>
+</body></html>

@@ -54,7 +54,14 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // the page against. It is a bundled export, so it had to be decoded out of a
   // gzipped `__bundler/template` before it could sit in `design/incoming/`
   // like the rest.
-  assert.equal(recs.length, 110);
+  //
+  // 111 as of 2026-09-16 (D123). `Spin-Out Lab · Programme Brief` — a new
+  // canvas for a route that was already live, so it arrived graded UPGRADE
+  // rather than graduating out of `backlog/`. This number counts ROUTE_MAP
+  // ROWS, which is not the same as the folder totals in
+  // `design/canvases/README.md` (63 + 25 + 27); the two have never matched and
+  // conflating them is how a count starts drifting.
+  assert.equal(recs.length, 111);
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
     assert.ok(r.status.length > 0, `row "${r.canvas}" has no status`);

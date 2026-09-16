@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 110 canonical canvases at `design/canvases/`, listed
-130 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 111 canonical canvases at `design/canvases/`, listed
+131 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -188,7 +188,7 @@ it, where in their nav, and how do they get there.*
 | Trust Center | `/trust` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Trust Center v2 | `/trust` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 
-## Public (pre-login) — 8 canvases
+## Public (pre-login) — 9 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -198,6 +198,7 @@ it, where in their nav, and how do they get there.*
 | Events | `/events` · `/events/:slug` · `/my/events` · `/events/new` · `/events/:id/edit` · `/events/:id/manage` · `/invite/:token` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Pricing | `/pricing` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Spin-Out Lab · Intro | `/spinout-lab` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Spin-Out Lab · Programme Brief | `/spinout-lab/brief` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Spin-Out Lab-print | `/spinout-lab/brief` | — (no nav entry) | Full page (Spin-Out Lab — frozen) | Deep link / in-page action | OUT OF SCOPE | High |
 | Spin-Out Lab-print-1vkgcux | `/spinout-lab` | — (no nav entry) | Full page (Spin-Out Lab — frozen) | Deep link / in-page action | OUT OF SCOPE | High |
 
@@ -212,7 +213,7 @@ it, where in their nav, and how do they get there.*
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
 | High | 67 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 34 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| Medium | 35 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 29 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
