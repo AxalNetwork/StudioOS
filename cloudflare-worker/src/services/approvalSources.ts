@@ -83,12 +83,16 @@ export type ApprovalSource = {
  */
 const REFERRAL_OPEN = [...PRE_VERDICT_STATUSES].filter((s) => s !== 'draft');
 
-/**
- * Built once at module load. The `IN (…)` list is assembled from a constant
- * `Set` declared in this repo's own source — no request value reaches it — and
- * it is the same construction `backlogOf` already ships.
+/*
+ * THERE IS NO ASSEMBLED `IN (…)` STRING HERE, AND THE ABSENCE IS THE POINT.
+ * An earlier draft built one from `REFERRAL_OPEN` and spliced it into the
+ * query; `check-sql-prepare` refuses any `${}` inside a `DB.prepare()`
+ * template, so the statuses are spelled out in the literals below instead and
+ * `branch_approvals_d130.test.ts` parses both sides to hold them to each
+ * other. The builder outlived that change as dead code until
+ * CodeQL named it — a scrap of a mechanism that was replaced, still carrying a
+ * comment describing how the SQL was built, which it no longer is.
  */
-const REFERRAL_IN = REFERRAL_OPEN.map((s) => `'${s}'`).join(', ');
 
 export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
   {
