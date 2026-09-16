@@ -27,6 +27,7 @@ import { ensurePartnerDirectoryColumns } from '../services/partnerDirectorySchem
 // the user's actual tier even if the free cap shifts later.
 import { INVESTOR_QUOTAS } from '../middleware/requireInvestorTier';
 import { clampLimit } from '../util/pagination';
+import { likeNeedleLower } from '../util/likeSearch';
 
 const admin_partners = new Hono<{ Bindings: Env }>();
 
@@ -452,7 +453,9 @@ admin_partners.get('/directory', async (c) => {
   const params: unknown[] = [];
   let where = `1=1`;
   if (q) {
-    const like = `%${q.replace(/[%_]/g, (m) => `\\${m}`)}%`;
+    // `1`, not the helper's default: this search accepts a single character
+    // today and D128 is a de-duplication, not a behaviour change.
+    const like = likeNeedleLower(q, 1)!;
     where += ` AND (lower(name) LIKE ? ESCAPE '\\' OR lower(coalesce(company,'')) LIKE ? ESCAPE '\\' OR lower(email) LIKE ? ESCAPE '\\')`;
     params.push(like, like, like);
   }

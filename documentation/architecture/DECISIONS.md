@@ -9715,3 +9715,90 @@ instead of "this test cannot find the table"; and it read the first
 `seats_used_reason:`, which is the **type** declaration and carries no sentence,
 so it would have passed against a reason that still promised the store. A
 missing anchor must fail as a missing anchor.
+
+## D128 — nobody could search the account directory, and the tiles above it counted a page
+
+**Two defects, and the second was live on a shipped HQ screen.** The task was
+S0 wall rule 2 — a branch cannot search its own accounts. Read against the
+code, the gap is wider and is HQ's: `AdminPage.jsx`'s Users panel filtered by
+**role and nothing else**, so no one could look an account up by name or email
+on either tier. A branch merely made the absence visible.
+
+**And the tiles were lying.** `api.adminListUsers()` sent no `limit`, so
+`admin.ts` applied `clampLimit(undefined, 100, 200)` → **100**, ordered
+`created_at DESC`. The panel then computed
+`counts = { all: users.length, admin: users.filter(...).length, … }` and
+rendered each as a tile. Past a hundred accounts the **"All Users" tile read
+100 as though it were the total**, every role tile counted only the newest
+page, and there was no pagination control to reach the rest. A plausible number
+standing in for an unmeasured one is precisely what `<Unrecorded/>` exists to
+prevent.
+
+**Both ship together, on the product owner's call.** They touch one route and
+one panel, so one PR is one review of one component; splitting would have put
+two passes over the same two files back to back, and the second would have
+conflicted with the first on `docs/`. Recorded here so that an HQ correction
+shipping inside a branch-titled task is visible rather than discovered later.
+
+**What landed.**
+
+- **`util/likeSearch.ts`** — one escaper, and the de-duplication is the
+  justification rather than the new caller. The same four lines already existed
+  **three times, byte for byte**: `rpc/branchOps.ts`, `routes/admin_partners.ts`
+  and `routes/public.ts`. A fourth copy is what
+  `frontend/src/lib/README.md`'s rule forbids and what D117 enforced on the
+  other side of the tree — and D108's finding was that the escaping assertion
+  *could not fail* because it was written against one of the copies. One
+  implementation is what it owes a test.
+  `likeNeedle` returns **`null`** for a needle under two characters rather than
+  an empty pattern: `%%` matches every row, so a caller that fell through would
+  hand back the whole directory dressed as a search result. The two directory
+  searches keep their one-character minimum by passing it explicitly — this is
+  a de-duplication, not a narrowing.
+- **`GET /api/admin/users?q=`**, with the refusal server-side. A
+  one-character query answers **400 `query_too_short`** whatever the browser
+  does; the SPA gates at two characters so that 400 is not hit mid-typing. A
+  UI-only rule would be a convention, not a control — `admin.ts:1440`'s own
+  argument.
+- **`?envelope=1`**, which the route's existing comment had already
+  anticipated: *"a new `?envelope=1` mode can be added later without breaking
+  the UI."* The flat array is still the default because
+  `SuperAdminHolders.jsx` reads it, and a test pins that. The envelope carries
+  `results`, `total`, `by_role`, `showing`, `limit` and `searched`.
+- **The totals come from `SELECT role, COUNT(*) FROM users GROUP BY role`** —
+  the same query `rpc/branchOps.ts` runs and, since D127, the same one
+  `routes/licence.ts` runs. Three callers of one shape rather than a third
+  shape. The tiles read the totals; the table still reads a page and the
+  caption says so, which is what stops a tile of 341 sitting above a table of
+  100 in silence.
+- **The scope caption is branch-only.** `Searching {name} accounts` from
+  `/me.branch`, through `branchOfUser` — the same reader the territory badge
+  uses, so the two cannot disagree. On HQ it renders **nothing**: there is no
+  territory to name, and an empty chip would be the doubled chrome this repo
+  has deleted three times.
+
+**Two things the build corrected, recorded rather than quietly done.**
+
+1. **`ESCAPE '\'` inside a template literal cooks to `ESCAPE ''`.** The first
+   draft wrote a single backslash in the TypeScript source; a template literal
+   reads `\'` as an escaped quote, so the SQL reaching D1 declared an empty
+   escape character and SQLite answered *"ESCAPE expression must be a single
+   character"* — **every search would have 500'd in production**. The test
+   caught it, not review, which is the argument for the fixture running real
+   SQL rather than pinning query text.
+2. **`check-sql-unsafe.mjs` scanned comments, so it accused documentation.**
+   The route's new docblock explains why it does *not* use `sql.unsafe()`, and
+   the guard matched that prose and reported a non-literal argument. It now
+   skips comment lines — the two lines `check-timestamp-comparisons.mjs`
+   already carries for the same reason (D125). Without the fix the workaround
+   is to reword the comment, and a rule people route around stops being a rule.
+   Mutation-checked: a real `sql.unsafe(\`SELECT ${x}\`)` still fails it.
+
+**The mutation that matters, and why it is stated.** A fixture smaller than the
+page size **cannot tell a total from a page count** — they are equal there — so
+an assertion written against a handful of users passes against the broken code.
+That is exactly how this shipped. `admin_user_search_d128.test.ts` seeds 141
+accounts against a page of 100, and asserts `total !== results.length`.
+
+**No migration** — 264 remains free. No new `/api/*` path, so the drift gate has
+nothing to say; only the existing method's signature widened.

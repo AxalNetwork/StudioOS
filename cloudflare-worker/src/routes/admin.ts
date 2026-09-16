@@ -20,6 +20,7 @@ import { ensureExploringSchema } from '../services/exploringSchema';
 // unlocks from the shared milestone catalog (single source of truth).
 import { MILESTONES as SPINOUT_MILESTONES, unlockedFeaturesThrough } from '../services/spinoutLabCatalog';
 import { bindingKey } from '../util/schemaBootstrap';
+import { likeNeedle } from '../util/likeSearch';
 
 const admin = new Hono<{ Bindings: Env }>();
 
@@ -54,15 +55,82 @@ admin.get('/users', async (c) => {
   // workspace but a foot-gun once the directory grows.
   const limit = clampLimit(c.req.query('limit'), 100, 200);
   const offset = parseOffset(c.req.query('offset'));
+
+  // SEARCH (D128). Until now the only way to find an account was to scroll the
+  // newest hundred: the Admin Console's Users panel filters by ROLE and
+  // nothing else, so nobody could look a member up by name or email on either
+  // tier. That is also S0 wall rule 2 — "search says what it searches" — which
+  // a branch cannot honour without a route behind it.
+  //
+  // The escaping is `util/likeSearch`'s, not a fourth copy of the four lines
+  // that already existed in `rpc/branchOps.ts`, `admin_partners.ts` and
+  // `public.ts`.
+  const rawQ = c.req.query('q');
+  const asked = rawQ !== undefined && String(rawQ).trim().length > 0;
+  const like = asked ? likeNeedle(rawQ) : null;
+  // A ONE-CHARACTER QUERY IS REFUSED SERVER-SIDE, not merely discouraged in the
+  // UI. `likeNeedle` returns null there, and falling through would run the
+  // unfiltered list — a search that silently becomes "everyone" is the failure
+  // its docblock exists for. The SPA gates the call at two characters so this
+  // is not hit in normal use; the rule lives here because a UI-only rule is a
+  // convention, not a control.
+  if (asked && like === null) {
+    return c.json({ error: 'query_too_short', message: 'Type at least two characters to search.' }, 400);
+  }
+
   // Include `kyc_status` and `access_level` so the admin user table can
   // show who's been verified, who has a manual full-access grant, and who
   // has limited (browse-only, can't sign legal docs) access. The UI uses
   // these to decide which "Grant" buttons to render.
-  const rows = await sql`SELECT id, uid, email, name, role, is_active, email_verified, kyc_status, access_level, created_at FROM users ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
+  const rows = like === null
+    ? await sql`SELECT id, uid, email, name, role, is_active, email_verified, kyc_status, access_level, created_at FROM users ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`
+    // TWO SIBLING CALLS RATHER THAN ONE CONDITIONAL STATEMENT. `getSQL` is a
+    // template tag that turns `${}` into a bound `?`; a WHERE clause that
+    // appears only sometimes cannot be expressed in one call without building
+    // query text, and `sql.unsafe()` is what `check-sql-unsafe` guards. PR B
+    // just re-learned the cost of the alternative when `check-sql-prepare`
+    // refused an interpolation that could only ever emit placeholders.
+    : await sql`SELECT id, uid, email, name, role, is_active, email_verified, kyc_status, access_level, created_at FROM users WHERE name LIKE ${like} ESCAPE '\\' OR email LIKE ${like} ESCAPE '\\' ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
+
+  // THE ENVELOPE, AND WHY THE TOTALS ARE NOT OPTIONAL (D128). The panel's role
+  // tiles were computed in the browser as `users.filter(...).length` over
+  // whatever this route returned — which defaults to the newest 100 rows. Past
+  // a hundred accounts the "All Users" tile read 100 as though it were the
+  // total, and every role tile counted only that page. A plausible number
+  // standing in for an unmeasured one is what `<Unrecorded/>` exists to
+  // prevent, so the totals come from the table rather than from the page.
+  //
+  // This is the same `GROUP BY role` that `rpc/branchOps.ts` and
+  // `routes/licence.ts` run, which makes it three callers of one shape rather
+  // than a third shape.
+  const envelope = c.req.query('envelope') === '1';
+  if (!envelope) {
+    await sql.end();
+    // Back-compat, and it is load-bearing: `SuperAdminHolders.jsx` still reads
+    // this as a flat array. The envelope is opt-in for exactly that reason.
+    return c.json(rows);
+  }
+  const roleRows = await sql`SELECT role, COUNT(*) AS n FROM users GROUP BY role`;
   await sql.end();
-  // Back-compat: existing frontend reads this as a flat array. Keep that
-  // shape; a new ?envelope=1 mode can be added later without breaking the UI.
-  return c.json(rows);
+  const byRole: Record<string, number> = {};
+  let total = 0;
+  for (const r of roleRows as Array<{ role: string; n: number }>) {
+    const n = Number(r.n) || 0;
+    byRole[String(r.role)] = n;
+    total += n;
+  }
+  return c.json({
+    results: rows,
+    // Totals over the whole table, never over `results`.
+    total,
+    by_role: byRole,
+    // What the caller is actually looking at, so the page can say so rather
+    // than let a tile and a table disagree in silence.
+    showing: (rows as unknown[]).length,
+    limit,
+    offset,
+    searched: asked,
+  });
 });
 
 // GET /api/admin/users/:user_id/profile — comprehensive admin view of a user.
