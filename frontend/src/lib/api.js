@@ -3036,6 +3036,11 @@ export const api = {
   // every decision is still made in that queue's own console, and the payload
   // says so on `decides: false` rather than leaving the page to remember.
   branchApprovals: () => request('/branch/approvals'),
+  // D131 — S1's digest: queue pressure ordered by the oldest item, the
+  // programme clock with the zone it is enforced in, and the revenue-share
+  // rate. The three blocks S1 draws that have no source arrive as
+  // `unavailable`, each with its own reason, rather than as a silent gap.
+  branchHome: () => request('/branch/home'),
   branchEscalate: (data) =>
     request('/branch/escalations', { method: 'POST', body: JSON.stringify(data || {}) }),
   licenceCreate: (data) => request('/admin/licences', { method: 'POST', body: JSON.stringify(data || {}) }),

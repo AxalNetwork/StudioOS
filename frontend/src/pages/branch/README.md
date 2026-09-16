@@ -13,6 +13,7 @@ which names a sidebar and never a permission.
 | `BranchZone.jsx` | The frame every `/branch/*` route renders in, and the branch tier's **one** Worker AI rail mount (D126). It owns the two-column layout, the rail column that collapses with the rail, and the sentence saying this rail reads one database. |
 | `BranchZonePending.jsx` | The stated absence on a row whose artboard is not built yet (D107): which artboard, what will be on it, which PR brings it. A **card**, not a page — `BranchApprovals` renders it inside itself. |
 | `BranchApprovals.jsx` | Canvas S3 at `/branch/approvals`: the work board over the four local queues, oldest first with SLA bands (D130), **and** the outbound To-HQ lane (D112). The board READS — every decision is still made in that queue's own console — and spinout moderation's row says it has no console, because none exists. Assignment, history and the AI decision note do not ship; the rail names each. |
+| `BranchHome.jsx` | Canvas S1 at `/branch` (D131): queue pressure over the four local queues ordered by the **oldest item** rather than by count, the programme clock with the zone its deadlines are enforced in, and the revenue-share rate. The AI digest, the rail's anomaly flags and a local territory clock have no source; the rail names each with its reason. Wraps itself in `BranchZone`. |
 | `BranchAccounts.jsx` | Canvas S2 at `/branch/accounts`, plus the half of S8 that is true (D129): seat tiles with used, licensed and free per licence type; the members table searched over this deployment's own D1; the Exploring count. S8's seat **ledger** does not ship — D127 settled that seats used is a definition over `users.role`, so no seat has an id to assign or release. Wraps itself in `BranchZone`. |
 
 ## Rules
@@ -39,4 +40,13 @@ which names a sidebar and never a permission.
   merge. `frontend/test/branch_accounts_s2.test.mjs` refuses the retired
   sentence anywhere under `frontend/src`, the same way `founderZoneFilters.js`
   refuses `NO_VERDICT_SNAPSHOT`. When a `will=` promises a store, the PR that
-  decides not to build it deletes the promise too.
+  decides not to build it deletes the promise too. `/branch`'s notice promised
+  all six of S1's blocks; three of them have no source and one cannot get one,
+  so D131 shipped the three that are real and moved the rest into the rail with
+  their reasons, where a reader meets a fact instead of a schedule.
+- **A time a person is held to carries the zone it is enforced in.** The cohort
+  programme runs on `COHORT_TZ` — America/New_York — for every territory, and a
+  branch admin reads the screen somewhere else. `BranchHome`'s `inZone` takes
+  the zone as a **required** argument for that reason: a formatter that fell
+  back to the reader's zone would print the wrong hour rather than no hour, and
+  wrong is the only one of those a deadline cannot survive.

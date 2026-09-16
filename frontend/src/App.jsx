@@ -173,6 +173,7 @@ const BranchApprovals = lazy(() => import('./pages/branch/BranchApprovals'));
 // lookup stay out of the entry bundle for the visitors who never see a branch.
 const BranchZone = lazy(() => import('./pages/branch/BranchZone'));
 const BranchAccounts = lazy(() => import('./pages/branch/BranchAccounts'));
+const BranchHome = lazy(() => import('./pages/branch/BranchHome'));
 // The Super Admin's HQ-only surfaces (migrations 199/207). `hqOnly` below
 // renders the notice for an admin without the elevation.
 const SuperAdminOnlyNotice = lazy(() => import('./pages/hq/SuperAdminOnlyNotice'));
@@ -2081,7 +2082,7 @@ function AppInner() {
           Worker serving them, and on HQ they carry no data at all. A second,
           weaker copy of the wall in the router would be the thing that looks
           like the guarantee without being it. */}
-      <Route path="/branch" element={guard(['admin'], <BranchZone workspace="Home"><BranchZonePending artboard="S1 Home" title="The territory's operating digest" will="The local clock and greeting, the AI digest proposal with its cost, queue pressure ordered by the oldest item rather than by count, today's programme deadlines, revenue share month-to-date for this territory, and what the rail flagged inside it." pr="PR 12" /></BranchZone>)} />
+      <Route path="/branch" element={guard(['admin'], <BranchHome />)} />
       {/* D129 — LIVE, and it wraps ITSELF in BranchZone because its rail
           coverage is what it loaded. The notice this replaces said seats used
           "is not a number that can be shown today", which D127 made false: a
