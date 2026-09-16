@@ -9144,3 +9144,86 @@ finished when it is half of a feature.
 8 caught — two only after the assertion was fixed, and one only after the
 mutation was aimed correctly. Nothing here has run against a live branch, for the
 same reason D120 could not: none has been provisioned.
+
+## D122 — a cross-host support session's audit row could never close, and the sweep that closes it
+
+**The defect, and it shipped in D120.** `redeemSupportCode` writes the branch's
+`impersonation_sessions` row with `admin_user_id = 0`
+(`rpc/branchOps.ts:855-865`). That is deliberate and D120 argued for it: the
+column is NOT NULL with no foreign key, no user in *that* database opened the
+session, and a real HQ id there would be joinable to a local `users` row and
+would name the wrong person with complete confidence. The comment justifying it
+reads *"0 matches nobody, because AUTOINCREMENT starts at 1."*
+
+That sentence is also, word for word, why the row could never close. The repo's
+only `SET ended_at` is `routes/admin.ts:1578-1580`,
+`WHERE id = ? AND admin_user_id = ? AND ended_at IS NULL`, on
+`POST /api/admin/impersonate-sessions/:id/end` behind `requireAdmin`. Three
+conjuncts a branch row cannot satisfy: the route is mounted on HQ's router over
+HQ's database, `adminUser.id` is a branch id on a branch, and the bound id can
+never equal 0. There was no branch-side end route and no sweep;
+`SupportRedeemPage.jsx` has no exit handler at all.
+
+**What was actually wrong, stated precisely.** Access expired on time — the JWT
+is minted for `SUPPORT_SESSION_MINUTES` and `user_sessions.factor = 'hq_support'`
+is a gate `requireFactor` fails closed on. Nobody kept access they should not
+have. The damage was to the record, and it was visible: `admin_security.ts`
+renders a row past its limit as a red **`not closed`** card, and counts
+`ended_at IS NULL` as the **`Impersonations live`** stat that `SecurityPage.jsx`
+turns red when non-zero. So every branch support session ever opened incremented,
+permanently, the number HQ reads as live impersonations — falsifying the claim
+D120 exists to make, that a tenant need not ask HQ what was done to it.
+
+**The fix is a sweep, not a route.** An end route would have to be called by a
+browser the expiry has already signed out, which is the case that matters most.
+`util/supportSessionSweep.ts` stamps the row from the scheduled handler every
+five minutes.
+
+**`ended_at` is the computed expiry, not the sweep's clock.** It is
+`datetime(started_at, '+' || ? || ' minutes')` — the instant the token stopped
+working. Writing `datetime('now')` would record when we noticed rather than when
+it happened, and would make the cadence leak into the audit trail. Because
+`started_at` is `TEXT NOT NULL DEFAULT (datetime('now'))`, both sides are SQLite
+format and the ISO-vs-`CURRENT_TIMESTAMP` trap D120's own header documents has no
+purchase — provided no JS timestamp is ever introduced here.
+
+**It is NOT tier-gated, and that is the design.** The obvious shape was a
+branch-only cron block, which would have been the first in the file and would
+have forced a third category into the gating test. `admin_user_id = 0` is a value
+HQ can never write, so the predicate *is* the tier discriminator and a better
+one — it selects rows by what they are rather than by which deployment is
+asking. On HQ it matches nothing and rides the `ix_imp_admin(admin_user_id,
+started_at DESC)` prefix. A future HQ-side support-session writer is covered the
+day it exists.
+
+**Ordinary impersonations are excluded, and this is the reason the sweep is
+narrow.** `POST /api/admin/impersonate-sessions/:id/extend` grants a fresh
+30-minute window and writes only an `activity_logs` row — nothing about an
+extension reaches this table. So on HQ `started_at + 30 minutes` is **not** the
+expiry, and sweeping those rows would stamp a *false* end time where a null at
+least claims nothing. A branch session has no extend path, which is exactly what
+makes the arithmetic true there and only there.
+
+**No migration, and not for convenience.** `impersonation_sessions` has six
+columns and three identical definitions (migration 156, `schema_baseline.sql`,
+the runtime bootstrap in `services/cohortTiming.ts`). An `ended_reason` column
+would record whether the clock or a person ended it — and `SecurityPage.jsx`
+already ships the opposite position: *"A session that ran to its limit is
+recorded exactly like one ended early — the log does not distinguish diligence
+from the clock running out, and it should not."* That copy stays true, and stays.
+
+**What this does NOT fix, said plainly rather than left to be discovered.** HQ's
+own rows still orphan. The close there is best-effort three times over — a
+`.catch(() => {})` in `App.jsx`, a swallowing `try/catch` in `admin.ts`, and a
+session id read from `localStorage` — so closing the tab leaves `ended_at` null.
+Because of `/extend` that case is not computable from this table, and inventing
+an end time for it would be the error this entry just argued against.
+
+**Verification.** `test:drift` exit 0, read as the exit code; worker `tsc` exit
+0; no `frontend/src` change, so `docs/` did not move. **9 mutations applied, 9
+caught** — one only after the *assertion* was fixed: a scan anchored on the
+function name walked straight through a mutation that replaced the import with a
+local stub, the same shape as the #589 escape, and now anchors on the module
+specifier instead. Three further tests were briefly passing for the wrong reason,
+because the fixture passed the D1 shim as `env` rather than as `env.DB`, so the
+call was throwing into the unreadable path; the failing tests are what exposed it.

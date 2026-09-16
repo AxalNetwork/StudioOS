@@ -1514,6 +1514,22 @@ export default {
             }
           } catch (e) { console.error('[cron] trust expiry failed', e); }
         }
+        // D122 — close the audit row an HQ support session leaves on a branch.
+        // NOT gated on `hqCadences`, and that is the design rather than an
+        // oversight: `admin_user_id = 0` is a value HQ can never write, so the
+        // sweep's own predicate is the tier discriminator and a better one — it
+        // selects rows by what they are, not by which deployment is asking. On
+        // HQ it matches nothing and rides the ix_imp_admin prefix. Every five
+        // minutes bounds how long a spent session keeps inflating HQ's
+        // "Impersonations live" count; it does not affect what the row says,
+        // because `ended_at` is computed from `started_at`, not from now.
+        if (now.getUTCMinutes() % 5 === 0) {
+          try {
+            const { closeExpiredSupportSessions } = await import('./util/supportSessionSweep');
+            const s = await closeExpiredSupportSessions(env);
+            if (s.closed) console.info(`[cron] support sessions closed=${s.closed}`);
+          } catch (e) { console.error('[cron] support session sweep failed', e); }
+        }
         // The 04:50 UTC Refer & Earn payout auto-approval sweep was removed
         // with Stripe Connect in the referrals redesign. Referral rewards are
         // milestone labels reviewed by a human in the admin queue, so there is

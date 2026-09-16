@@ -19,6 +19,7 @@ belongs in `../services/`.
 | `useOfFunds.ts` | `normalizeUseOfFunds` — validates the split sums to 100. |
 | `cronHistory.ts` | Records scheduled-run outcomes. |
 | `reembedSweep.ts` | Re-embedding sweep for vector search. |
+| `supportSessionSweep.ts` | `closeExpiredSupportSessions` — stamps `ended_at` on the audit row an HQ support session leaves on a branch. Written because nothing could: the branch writes that row with `admin_user_id = 0` and the repo's only `SET ended_at` is an HQ route whose predicate binds an id AUTOINCREMENT guarantees is never 0, so every branch session read as an open impersonation for ever. The end time is `started_at + SUPPORT_SESSION_MINUTES`, the instant the token died, not whenever the sweep ran. Ordinary impersonations are excluded on purpose — they can be extended, so their expiry is not derivable from this table. |
 | `usersRoleRebuild.ts` | Role recomputation. |
 | `webauthn.ts` | Passkey primitives. |
 | `deadline.ts` | `withDeadline` — an await that cannot hang for ever, for the remote calls that take no `AbortSignal` (KV, D1). Throws `DeadlineExceeded` so a `catch` that already implements the failure policy covers a stall too. A `fetch` should use `AbortSignal.timeout` directly instead. |

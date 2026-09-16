@@ -202,4 +202,29 @@ test('the four platform-content cadences are gated on HQ in the scheduled handle
   assert.match(src, /if \(now\.getUTCHours\(\) === 4 && now\.getUTCMinutes\(\) === 35\)/, 'trust expiry stays per branch');
   assert.match(src, /if \(now\.getUTCHours\(\) === 4 && now\.getUTCMinutes\(\) === 40\)/, 'partner-deal expiry stays per branch');
   assert.match(src, /if \(now\.getUTCHours\(\) === 3 && now\.getUTCMinutes\(\) === 0\) \{\s*\n\s*await Jobs\.cleanup/, 'job cleanup stays per branch');
+
+  // D122 — the support-session sweep joins that second list, and the negative
+  // is the whole point. It looks like branch-only work, so the tempting "tidy"
+  // is to move it under `hqCadences` with the platform-content cadences. That
+  // would stop it running on the one tier whose rows it exists to close. It is
+  // safe everywhere because `admin_user_id = 0` is a value HQ can never write,
+  // so the predicate is the tier gate and the cron block needs none.
+  // Anchored on the IMPORT, not on the function name. A mutation that replaced
+  // the import with a local stub left the name in place and walked straight
+  // through an earlier version of this assertion — the same shape as the #589
+  // escape, where a scan matched a literal a `throw` had been inserted above.
+  // The module specifier is the thing that cannot be faked by a stub.
+  const sweep = src.indexOf("await import('./util/supportSessionSweep')");
+  assert.ok(sweep > 0, 'the support-session sweep is no longer wired into the cron');
+  assert.match(
+    src.slice(sweep, sweep + 200),
+    /closeExpiredSupportSessions\(env\)/,
+    'the sweep is imported but never called with env',
+  );
+  const block = src.slice(Math.max(0, sweep - 400), sweep);
+  assert.match(block, /if \(now\.getUTCMinutes\(\) % 5 === 0\) \{/, 'the sweep lost its cadence');
+  assert.ok(
+    !/hqCadences\s*&&[^\n]*\n[\s\S]{0,200}$/.test(block),
+    'the support-session sweep was gated on hqCadences — it would then never run on a branch',
+  );
 });
