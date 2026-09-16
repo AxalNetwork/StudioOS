@@ -1829,6 +1829,35 @@ admin.patch('/users/:userId/toggle-active', async (c) => {
   const rows = await sql`SELECT * FROM users WHERE id = ${userId}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'User not found' }, 404); }
   if (rows[0].id === adminUser.id) { await sql.end(); return c.json({ error: 'Cannot deactivate yourself' }, 400); }
+  // D132 — AN ADMIN TARGET IS THE SUPER ADMIN'S ALONE, and this closes a door
+  // the role route already shut. `/users/:userId/role` refuses to demote an
+  // existing admin with its own reason: *"prevents one admin from quietly
+  // silencing another."* Deactivating an admin silences them exactly as
+  // effectively, and this handler carried no admin-target guard at all — so
+  // the stated policy held on one route and was reachable on the next.
+  //
+  // The super admin keeps the power, because supervising and closing admin
+  // accounts is what the tier is for; a peer does not. `isSuperAdmin` reads the
+  // elevation `getCurrentUser` hydrates from the `super_admins` side table,
+  // which is the same check the role route's override uses.
+  //
+  // THE TARGET BEING AN ADMIN IS THE WHOLE TEST, AND ON A BRANCH THAT IS
+  // CURRENTLY A SET OF ONE. A subsidiary admin manages their own territory's
+  // MEMBERS — every account in that deployment's D1 — and this does not touch
+  // that: it refuses only an `admin`-role target. Provisioning seeds exactly one
+  // admin per branch (the licence principal, D.3) and there is no route that
+  // mints another — `/users/:userId/role` refuses `role === 'admin'` outright,
+  // SQL is the only path — so today this can refuse nothing a subsidiary
+  // legitimately needs. If per-branch admin STAFF ever ships (S6 draws
+  // "Staff & roles [Yours]"), this guard is the line to revisit: co-staff of one
+  // subsidiary are not the "another admin" the policy is about.
+  if (rows[0].role === 'admin' && !isSuperAdmin(adminUser as any)) {
+    await sql.end();
+    return c.json({
+      error: 'Only a super admin can deactivate an admin account.',
+      code: 'super_admin_required',
+    }, 403);
+  }
 
   const newActive = !rows[0].is_active;
   await sql`UPDATE users SET is_active = ${newActive} WHERE id = ${userId}`;

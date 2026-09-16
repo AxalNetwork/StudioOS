@@ -7524,9 +7524,12 @@ gate below is a no-op.
 ### The elevation is a property of the deployment, not a row
 
 `hydrateSuperAdmin` answers `0` whenever `branchOf(env)`, and does not query
-`super_admins` at all. That one line closes all 24 super-admin routes and the
+`super_admins` at all. That one line closes every super-admin route and the
 `/me` echo together, because every one of them reaches the flag through
-`requireSuperAdmin` → `isSuperAdmin`.
+`requireSuperAdmin` → `isSuperAdmin`. *(This sentence said "all 24" until D132;
+by then the figure was 40 across eleven route files. The count is gone rather
+than corrected — nothing guarded it, and the claim is about the funnel, not the
+tally.)*
 
 **What was already true, and why it was not a gate.** A branch database is
 bootstrapped from the baseline with `BASELINE_CUTOFF = 219`, so migration 207
@@ -10098,3 +10101,152 @@ in three PRs a guard has pinned a spelling instead of the thing it guards
 `frontend/src/lib/api.js` · `pages/branch/BranchHome.jsx` (new) · `App.jsx` ·
 `pages/branch/README.md` · two new tests, one re-pointed · **D131**.
 **No migration — 264 remains free.**
+
+---
+
+## D132 — one super admin, many subsidiary admins, and four powers that were only three
+
+**Date:** 2026-09-16 · **Task:** #232/#233 (the access-control half) · **Status:** shipped
+
+The tier model was stated by the product owner in five sentences and this entry
+records them verbatim, because everything below is a measurement against them
+rather than a design of my own:
+
+> *"HQ needs to be able to supervise all admins, but other admin profiles
+> should not be able to see other admin's data."*
+> *"HQ is basically the super admin profile."*
+> *"Only one super admin profile exists, many admin profiles exist as
+> subsidiaries."*
+> *"The super admin has the capacity to open, ban, close and supervise admin
+> accounts."*
+> *"Super admin controls the entire platform."*
+> *"Admins of subsidiaries should be able to manage their own accounts under
+> the supervision of the super admin profile."*
+
+| tier | who | count | reach |
+| --- | --- | --- | --- |
+| **Super admin = HQ** | Axal VC itself | **one** | everything, across every subsidiary — and supervising a subsidiary is a *supported operation*, not a leak |
+| **Admin = a subsidiary** | one per territory licence | **many** | their own territory's members, and nothing of any other subsidiary's |
+
+### Measured against the code, two of the four powers already held and two did not
+
+The audit was the deliverable here; the diff is small because most of it was
+already right, and saying which part was already right is what keeps the next
+audit from re-deciding it.
+
+| power | route | before |
+| --- | --- | --- |
+| **Open** | `PATCH /users/:userId/role` | ✅ already exclusive — the gate is `requireAdmin`, but the handler carries `isSuperAdmin` with its own reasoning: an admin *"cannot mint new admins to entrench access"*, and *"an existing admin cannot be demoted"* by a peer. Unchanged. |
+| **Ban / close** | `PATCH /users/:userId/toggle-active` | ❌ the only guard was `rows[0].id === adminUser.id` → *"Cannot deactivate yourself"*. **No holder check and no admin-target check**, so any admin could deactivate any other admin, the super-admin holder included. |
+| **Supervise** | `GET /monitoring/analytics/{audit, audit/export.csv, exports/recent}` | ❌ plain `requireAdmin` over `admin_audit_log a LEFT JOIN users u` |
+| **Supervise (session)** | `openSupportSession` | ✅ already super admin + TOTP + step-up, and it already refuses a target holding a `super_admins` row. Unchanged. |
+
+**I had assumed all four were unguarded and that was wrong**; verifying before
+building is what caught it, and the plan was corrected rather than the code
+being bent to match it. Deactivating an admin silences them exactly as
+effectively as demoting one, so the policy held on one route and was reachable
+on the next — that asymmetry, not a missing feature, is the defect D132 closes.
+
+### The third door, which the plan for this entry did not know about
+
+The plan named **two** monitoring routes. The file has **three**:
+`/audit/export.csv` runs the identical `admin_audit_log a LEFT JOIN users u`
+and returns up to **10,000 rows of it as a downloadable file**, names and
+emails included. Gating two of three would have closed the front door of a room
+with two, which is the exact shape of the thing being fixed. It turned up by
+reading the route file rather than the plan's summary of it, and the guard
+therefore asserts **the join** — a fourth route that reaches it fails the test
+instead of slipping past a hard-coded list of three.
+
+### A refusal is not a failure, and that needed a page change
+
+Raising a gate on a live surface changes what a plain admin sees, so the PR
+owns the second half of that. `AnalyticsTab`'s `RetryCard` would have rendered
+the new 403 as *"Couldn't load recent exports (403)"* — red ground, alert
+triangle, **Retry button** — saying three untrue things at once: that something
+broke, that it might be transient, and that pressing a button could help. A 403
+now renders through one `Refusal` component: neutral, the server's own
+sentence, no retry. `PlanAuditHistory` renders its own inline errors rather
+than `RetryCard`, so it learned the status too — otherwise the page would state
+the refusal in one place and cry failure in two others about the same rule.
+
+### The isolation half is physical, and it is not code that is missing
+
+*"Other admin profiles should not be able to see other admin's data"* is
+already the whole point of D.2: each subsidiary is its own Worker over its own
+D1, so **there is no global view underneath to leak** is literally true rather
+than enforced. What remains open is the *interim*: until a subsidiary is
+provisioned every admin lives on HQ's one database, where
+`tenancyScope.ts:64`'s `UNSCOPED_ROLES = new Set(['admin'])` gives each of them
+every row. That closes when branches are **deployed**, which waits on three
+repository secrets (`BRANCH_SECRET_BUNDLE`, `HQ_RPC_SECRET`, a widened
+`CLOUDFLARE_API_TOKEN`) and not on more pages. `UNRESOLVED_ITEMS.md` U1 now
+carries the measured counter-example beside the schema fact.
+
+Note that the super-admin elevation adds **routes, not rows**:
+`migrations/199_super_admin.sql` keeps `role='admin'` so all the existing role
+checks still pass, which is why both tiers sit in `UNSCOPED_ROLES` and why the
+fix here had to be a gate rather than a scope.
+
+### HQ's supervision is narrowed exactly once, and that is now asked of the gate
+
+D120 writes `user_sessions.factor = 'hq_support'` and its comment says the value
+*"is a real gate, not a label"* because `requireFactor` reads the column and
+fails closed. The test for it asserted the **string** was written — which would
+pass unchanged if `requireFactor` stopped reading the column, if `selectJwt`
+stopped resolving the jti, or if the session row stopped being found, every one
+of which opens every TOTP-gated branch route to HQ while the column still reads
+`hq_support`. `branch_isolation_invariants.test.ts` asks the gate instead, in
+both directions: the support session is refused by `requireFactor` and by
+`requireStepUp`, an ordinary TOTP session on the same branch is admitted, and
+supervision reaches **exactly the target's own role** — a founder target fails
+`requireAdmin`, the branch's own administrator passes it. **That second half is
+not decoration**: a narrowing done too enthusiastically would take away the
+supervision the owner's first sentence requires.
+
+That file deliberately pins **only** what is not pinned elsewhere.
+`branch_mode_gates.test.ts` already holds the `super_admins`-row deny, the
+unread table on a branch, and `requireSuperAdmin`'s "HQ only";
+`branch_cookies.test.ts` holds `branchOf`'s throw on a malformed code and the
+per-branch cookie names. A second copy of an assertion is a second thing to
+update, and the one that goes stale is whichever the next change misses.
+
+### Two mutations escaped, and the escape was the useful part
+
+Rewriting `createJWT(…, target.role, …)` to mint `'admin'` — and separately
+`'founder'` — changed nothing the tests could see. The reason is a fact about
+the codebase worth writing down: **`getCurrentUser` does `SELECT * FROM users
+WHERE id = payload.user_id` and hands back the ROW**, so the `role` claim in a
+token is never read for authorisation and a wrong one cannot grant reach. The
+branch's own `users` table decides. That is a stronger property than the test
+was written expecting; the mutations were re-aimed at what *can* break it (the
+token minted for a different id, and an over-narrowing that refuses an admin
+target), and both are caught.
+
+**20 mutations applied, 18 caught, 2 escaped and re-aimed.** Two others landed
+nowhere on their first attempt — a `perl` anchor spanning JSX lines matched
+nothing — and were re-run with exact anchors, because a mutation that edits no
+bytes is not evidence either.
+
+### A number in prose has no guard behind it
+
+`auth.ts`'s `hydrateSuperAdmin` docblock said `requireSuperAdmin` gates **24**
+routes. When D132 came to cite it the real figure was **40, across eleven route
+files** (42 across twelve after this PR). `DECISIONS.md` D106 carried the same
+stale 24. Both are now gone rather than corrected: the property is that every
+super-admin route funnels through that one flag, and that is what the sentence
+says. The same docblock already warned, one paragraph up, that a list of paths
+goes stale the next time a route is added — it was carrying a count that had
+done exactly that.
+
+### Files
+
+`cloudflare-worker/src/routes/admin.ts` (the `toggle-active` admin-target
+guard) · `routes/monitoring_analytics.ts` (three gates raised) · `auth.ts` (the
+stale count) · `frontend/src/pages/AnalyticsTab.jsx` (`Refusal`, and
+`PlanAuditHistory` reading the status) ·
+`cloudflare-worker/test/super_admin_exclusive_powers.test.ts` (new, 13) ·
+`cloudflare-worker/test/branch_isolation_invariants.test.ts` (new, 5) ·
+`frontend/test/analytics_refusal_d132.test.mjs` (new, 5) ·
+`UNRESOLVED_ITEMS.md` U1 · **D132**. **No migration — 264 remains free**, for
+the sixth consecutive PR.

@@ -1,6 +1,18 @@
 /**
  * Task #3 — Admin analytics endpoints, mounted at /api/monitoring/analytics.
- * Every route is admin-only via requireAdmin.
+ *
+ * Most routes are admin-only via `requireAdmin`. **Three are not**: `/audit`,
+ * `/audit/export.csv` and `/exports/recent` require the SUPER ADMIN (D132),
+ * because they read `admin_audit_log` joined to `users` — other admins'
+ * activity, by name and email. One super admin supervises many subsidiary
+ * admins; a subsidiary admin manages their own territory's members and never a
+ * peer's record.
+ *
+ * THE THREE ARE ONE QUERY IN THREE SHAPES, which is why they move together and
+ * why the count above is worth reading before adding a fourth: a route that
+ * reaches `admin_audit_log a LEFT JOIN users u` is a cross-admin read whatever
+ * it renders, and gating some of them is gating none of them. Keep new routes
+ * here on `requireAdmin` unless they cross that line too.
  *
  * Routes:
  *   GET  /overview?from=&to=
@@ -19,7 +31,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAdmin } from '../auth';
+import { requireAdmin, requireSuperAdmin } from '../auth';
 import {
   parseRange, BadRangeError, loadOverview, loadCohorts, loadUsers, loadUser,
   loadFinancial, loadTechnical,
@@ -220,7 +232,14 @@ function buildAuditWhere(opts: {
 // no extra filters. Defers entirely to the same handler logic by
 // pre-seeding query defaults so we never duplicate the audit SQL.
 r.get('/exports/recent', async (c) => {
-  await requireAdmin(c);
+  // D132 — SUPER ADMIN, because this reads OTHER ADMINS' activity. The rows are
+  // `admin_audit_log a LEFT JOIN users u ON u.id = a.admin_user_id`, so a plain
+  // admin was reading every other admin's export history by name and email.
+  // One super admin supervises many subsidiary admins; a subsidiary admin
+  // supervises their own territory's members and no peer. The super-admin-only
+  // equivalents already existed in `admin_security.ts` — this pair was a second
+  // door onto the same data with a weaker gate.
+  await requireSuperAdmin(c);
   await ensureSchema(c.env);
   const sql = getSQL(c.env);
   // Spec default for /exports/recent is the last 20 entries; /audit uses 25.
@@ -255,7 +274,9 @@ r.get('/exports/recent', async (c) => {
 });
 
 r.get('/audit', async (c) => {
-  await requireAdmin(c);
+  // D132 — super admin, for the reason given on `/exports/recent` above: this
+  // is the richer view of the same cross-admin join.
+  await requireSuperAdmin(c);
   await ensureSchema(c.env);
   const sql = getSQL(c.env);
   const limit = clampInt(c.req.query('limit'), 25, 1, 100);
@@ -316,7 +337,13 @@ r.get('/audit', async (c) => {
 // 'subscription_plan_update'. Hard-capped at 10k rows so a single bad request
 // can't pull the whole table; finance reviews are batched by date elsewhere.
 r.get('/audit/export.csv', async (c) => {
-  const admin = await requireAdmin(c);
+  // D132 — super admin, and THIS is the one the plan for D132 missed. It runs
+  // the identical `admin_audit_log a LEFT JOIN users u` as `/audit` and hands
+  // back up to 10,000 rows of it as a downloadable file, names and emails
+  // included. Gating `/audit` and leaving this one would have closed the front
+  // door of a room with two, which is the exact shape of the defect D132 is
+  // here to fix. Found by reading the file rather than the plan.
+  const admin = await requireSuperAdmin(c);
   await ensureSchema(c.env);
   const sql = getSQL(c.env);
   const planIdRaw = (c.req.query('plan_id') || '').toString().trim();
