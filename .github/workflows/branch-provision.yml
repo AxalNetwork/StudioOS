@@ -255,6 +255,7 @@ jobs:
       - name: Put the Worker secrets
         env:
           BRANCH_SECRET_BUNDLE: ${{ secrets.BRANCH_SECRET_BUNDLE }}
+          HQ_RPC_SECRET: ${{ secrets.HQ_RPC_SECRET }}
         run: |
           set -o pipefail
           put() { printf '%s' "$2" | npx --yes wrangler@4.131.0 secret put "$1" \
@@ -266,6 +267,36 @@ jobs:
           RPC_SECRET="$(openssl rand -base64 48)"
           put RPC_SECRET "$RPC_SECRET"
           echo "RPC_SECRET_SHA256=$(printf '%s' "$RPC_SECRET" | openssl dgst -sha256 -hex | awk '{print $2}')" >> "$GITHUB_ENV"
+
+          # ── the reverse leg: HQ→branch (D120) ────────────────────────────
+          # NOT GENERATED HERE, AND THAT IS THE WHOLE POINT. `RPC_SECRET` above
+          # is per deployment because it identifies ONE branch, so a fresh value
+          # per run is correct. HQ is one Worker with one identity, so its
+          # secret is one value that every branch stores the hash of — and
+          # generating it here would rotate it on every provision, silently
+          # breaking the HQ→branch leg for every branch provisioned earlier.
+          # It is a repository secret the operator sets once (D.11).
+          #
+          # ONLY THE HASH IS SET HERE. The plaintext belongs on HQ's Worker, and
+          # putting it from this job would mean a `wrangler secret put --config
+          # wrangler.toml`, which `branch_provision_workflow.test.mjs` refuses:
+          # no call in this workflow may read HQ's config, whose `[[routes]]`
+          # are the apex custom domains (L10). That guard has been narrowed once
+          # already, for `d1 execute studioos-db` — a write HQ's database needs
+          # and nothing else can do. This is not that case: the operator is
+          # already creating this value, so they set it on HQ once themselves
+          # (DEPLOY.md), and the guard stays as strict as it was. Convenience is
+          # not a reason to widen a rule about the apex domains.
+          #
+          # Read from a job env var and piped, never interpolated into a command
+          # line and never written to $GITHUB_ENV.
+          if [[ -z "${HQ_RPC_SECRET}" ]]; then
+            echo "::warning::HQ_RPC_SECRET is unset — HQ_RPC_SECRET_HASH was not set on this branch."
+            echo "::warning::HQ cannot open a support session on it until both are set (D.11, D120)."
+          else
+            put HQ_RPC_SECRET_HASH "$(printf '%s' "$HQ_RPC_SECRET" | openssl dgst -sha256 -hex | awk '{print $2}')"
+            echo "set HQ_RPC_SECRET_HASH on ${BRANCH} — the plaintext on HQ is set by hand, once"
+          fi
           if [[ -z "${BRANCH_SECRET_BUNDLE}" ]]; then
             echo "::warning::BRANCH_SECRET_BUNDLE is unset — SCORING_HMAC_SECRET and the KEKs were not set."
             echo "::warning::The Worker will answer 503 config_error until they are (D.11)."

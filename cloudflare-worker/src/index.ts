@@ -167,6 +167,7 @@ import adminLicences from './routes/admin_licences';
 import adminDeployments from './routes/admin_deployments';
 import adminStatements from './routes/admin_statements';
 import adminEscalations from './routes/admin_escalations';
+import adminSupportSessions from './routes/admin_support_sessions';
 import branchEscalationRoutes from './routes/branch_escalations';
 import adminSuperAdmins from './routes/admin_super_admins';
 import adminHq from './routes/admin_hq';
@@ -779,6 +780,10 @@ app.route('/api/admin', adminDeployments);
 // before the /api/admin catch-all, for the same reason.
 app.route('/api/admin', adminStatements);
 app.route('/api/admin', adminEscalations);
+// D120 — the cross-host support session. Mounted here with the rest of the
+// HQ→branch writes and BEFORE the `/api/admin` catch-all, so `/branches/:code/
+// support-session` reaches its own handler rather than admin.ts's fallback.
+app.route('/api/admin', adminSupportSessions);
 // The branch tier's own surface. Its own prefix rather than `/api/admin`,
 // because it is not an HQ console route and must not inherit the elevation
 // checks or the cool-off prefixes that apply there (D112).

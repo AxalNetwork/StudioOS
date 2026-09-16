@@ -27,7 +27,8 @@ import { WorkerEntrypoint } from 'cloudflare:workers';
 import type { Env } from '../types';
 import {
   branchHealth, branchOverview, branchSearchAccounts, applyLicenceCopy,
-  branchRevenueSummary, applyPromoCeiling, applyEscalationAnswer,
+  branchRevenueSummary, applyPromoCeiling, applyEscalationAnswer, openSupportSession,
+  type SupportSessionRequest,
 } from './branchOps';
 import {
   recordEscalation, licenceForBranch, reportUsage, promoCeilingForBranch,
@@ -51,6 +52,17 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
   }
 
   applyEscalationAnswer(a: EscalationAnswer) { return applyEscalationAnswer(this.env, a); }
+
+  // THE ONE METHOD ON THIS CLASS THAT TAKES A SECRET, and the header above says
+  // why that is not an inconsistency: everything else here is a read or an
+  // HQ-authored push, where "callable by any Worker in the account" costs at
+  // most a stale licence copy. This one opens a session as an arbitrary user,
+  // so it authenticates its caller (`authenticateHq`) instead of assuming it.
+  // The secret is first so a call that forgets it cannot be a call that happens
+  // to pass a target id into the secret's place.
+  openSupportSession(secret: string, req: SupportSessionRequest) {
+    return openSupportSession(this.env, secret, req);
+  }
 }
 
 /** Exported by HQ; called by a branch over its `HQ` binding. */

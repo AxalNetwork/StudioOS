@@ -29,6 +29,7 @@
 import type { Env } from '../types';
 import { branchOf, BRANCH_CODE_RE } from '../util/branch';
 import { PERIOD_RE } from '../services/statements';
+import { verifySecret } from './secret';
 
 /** The four things a branch cannot decide for itself (migration 259). */
 export const ESCALATION_KINDS = ['moderation', 'content', 'seat_increase', 'other'] as const;
@@ -262,20 +263,13 @@ export async function licenceForBranch(
  * branch provisioned before the hash was wired has a NULL there, and treating
  * null as "skip the check" would make the guard disappear on exactly the
  * deployments nobody has audited. The refusal names what to do.
+ *
+ * THE COMPARISON ITSELF MOVED TO `rpc/secret.ts` (D120) when PR 11 added the
+ * reverse leg. The digest, the constant-time compare and the three refusals are
+ * one implementation now, shared with `authenticateHq` in `branchOps.ts` —
+ * because the part that must not drift between the two directions is not the
+ * SHA-256, it is the normalisation and the refusals around it.
  */
-async function sha256Hex(s: string): Promise<string> {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-/** Length-independent, difference-independent compare over two hex digests. */
-function constantTimeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-
 export type BranchIdentity = { code: string; licence_uid: string };
 
 /**
@@ -305,18 +299,16 @@ export async function authenticateBranch(
   ).bind(code).first<{ code: string; licence_uid: string; rpc_secret_hash: string | null }>();
   if (!dep) throw new Error(`rpc: ${code} is not a provisioned branch`);
 
-  if (!dep.rpc_secret_hash) {
+  const verdict = await verifySecret(secret, dep.rpc_secret_hash);
+  if (verdict === 'no_hash') {
     throw new Error(
       `rpc: ${code} has no rpc_secret_hash on file, so a money-adjacent call from it cannot be `
       + 'verified. Re-run branch-provision.yml for this code, or set the hash from the secret '
       + 'the provisioning run generated.',
     );
   }
-  const presented = String(secret ?? '');
-  if (!presented) throw new Error(`rpc: ${code} presented no secret`);
-  if (!constantTimeEqual(await sha256Hex(presented), dep.rpc_secret_hash.trim().toLowerCase())) {
-    throw new Error(`rpc: ${code} presented the wrong secret`);
-  }
+  if (verdict === 'no_secret') throw new Error(`rpc: ${code} presented no secret`);
+  if (verdict !== 'ok') throw new Error(`rpc: ${code} presented the wrong secret`);
   return { code: dep.code, licence_uid: dep.licence_uid };
 }
 

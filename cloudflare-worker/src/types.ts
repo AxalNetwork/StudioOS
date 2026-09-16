@@ -58,6 +58,14 @@ export interface Env {
   BRANCH_CODE?: string;
   BRANCH_NAME?: string;
   BRANCH_TERRITORY?: string;
+  // The HQ→branch RPC leg (D120), the mirror of the branch's own RPC_SECRET.
+  // `branch-provision.yml` generates one value per deployment and splits it:
+  // the plaintext becomes a Worker secret on HQ, the SHA-256 becomes one on the
+  // branch. So exactly one of these is ever set on a given Worker, and a branch
+  // that holds no hash refuses every call claiming to be HQ rather than
+  // defaulting open — see `rpc/branchOps.ts`'s `authenticateHq`.
+  HQ_RPC_SECRET?: string;
+  HQ_RPC_SECRET_HASH?: string;
   GMAIL_CLIENT_ID?: string;
   GMAIL_CLIENT_SECRET?: string;
   GMAIL_REFRESH_TOKEN?: string;
