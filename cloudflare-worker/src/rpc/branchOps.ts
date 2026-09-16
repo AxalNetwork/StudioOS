@@ -814,7 +814,7 @@ export async function redeemSupportCode(
     // same string comparison with a different format on each side, and an
     // expired code would read as live until the UTC date changed.
     `UPDATE support_handoff_codes SET used_at = datetime('now')
-       WHERE code_hash = ? AND used_at IS NULL AND expires_at > datetime('now')
+       WHERE code_hash = ? AND used_at IS NULL AND datetime(expires_at) > datetime('now')
        RETURNING target_user_id, hq_actor_name, reason`,
   ).bind(await sha256Hex(presented)).first<{
     target_user_id: number; hq_actor_name: string; reason: string;

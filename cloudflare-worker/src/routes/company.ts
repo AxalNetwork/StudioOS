@@ -763,7 +763,7 @@ r.post('/company/invitations/accept', async (c) => {
     // Expiry is checked in SQL so both sides are the same `datetime()` format,
     // and stamped when found so the list stops calling it pending.
     const exp = await c.env.DB.prepare(
-      `SELECT CASE WHEN expires_at < datetime('now') THEN 1 ELSE 0 END AS expired
+      `SELECT CASE WHEN datetime(expires_at) < datetime('now') THEN 1 ELSE 0 END AS expired
          FROM company_invitations WHERE id = ?`,
     ).bind(inv.id).first<{ expired: number }>();
     if (Number(exp?.expired) === 1) {
