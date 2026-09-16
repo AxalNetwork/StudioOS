@@ -39,7 +39,7 @@
 // under them is the thing this file refuses.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Loader2, AlertCircle, Check, X, Globe, Users, FileText, Ban, RotateCw,
+  Loader2, AlertCircle, Check, X, Globe, Users, FileText, Ban, RotateCw, ShieldOff, UserPlus,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { coverageCells, renewalPipeline } from '../../lib/licenceCoverage';
@@ -67,6 +67,11 @@ const STATUS_TONE = {
 // provenance, not a step anybody performs.
 const STEPS = ['Entity', 'Territory', 'Seats', 'Terms', 'Contract', 'Deploy'];
 const HISTORY_STEP = STEPS.length + 1;
+// D134 — also unnumbered, and for the same reason History is: appointing an
+// administrator is not a step of the issue flow. A licence can be issued,
+// activated and deployed with nobody named on it, and an administrator can be
+// changed years later without any of the six steps running again.
+const ADMINS_STEP = STEPS.length + 2;
 
 // Residency, exactly as Cloudflare offers it (A.4, D.1). `eu` is the only
 // guarantee on D1; a hint is a hint, and there is no in-country option outside
@@ -654,6 +659,175 @@ function DeployStep({ licence }) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Administrators — the door admin accounts are opened and closed by    *
+ * ------------------------------------------------------------------ */
+
+// D134 — `licence_admins` has existed since migration 190 and had no UI at all:
+// its three api.js methods had zero callers, so naming a subsidiary's
+// administrator meant SQL. This is the section, and it is deliberately the
+// whole lifecycle rather than a list — appoint, demote, detach — because the
+// three only make sense read together.
+//
+// THE TWO-STEP CLOSE IS ON SCREEN RATHER THAN IN A 409. Detach refuses while
+// the account still holds the admin role, so the button says so and stays
+// disabled until the demote has happened. A UI that offered both and let the
+// server pick would teach the operator that one of its buttons is a lie.
+//
+// A FAILED READ IS NOT AN EMPTY LIST. `items === null` after a failure renders
+// the server's own sentence; "no administrators" is a claim about the licence
+// and must never be produced by a request that did not arrive.
+function AdminsEditor({ licence, onSaved }) {
+  const [items, setItems] = useState(undefined);
+  const [loadErr, setLoadErr] = useState(null);
+  const [form, setForm] = useState({ email: '', admin_role: 'principal', reason: '' });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const load = useCallback(() => {
+    setLoadErr(null);
+    api.licenceAdmins(licence.uid)
+      .then((d) => setItems(Array.isArray(d?.items) ? d.items : []))
+      .catch((e) => {
+        reportError('AdminLicences:licenceAdmins', e);
+        setItems(null);
+        setLoadErr(e?.message || 'The administrator list could not be read.');
+      });
+  }, [licence.uid]);
+  useEffect(load, [load]);
+
+  const refresh = () => { load(); onSaved?.(); };
+
+  async function run(fn) {
+    setBusy(true); setErr(null);
+    try { await fn(); refresh(); }
+    catch (e) { reportError('AdminLicences:adminAction', e); setErr(e?.message || 'That did not go through.'); }
+    finally { setBusy(false); }
+  }
+
+  const canAppoint = form.email.trim().length > 0 && form.reason.trim().length >= 10;
+
+  return (
+    <div data-testid="licence-admins">
+      <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Administrators</h3>
+      <p className="mt-1 text-[11px] text-gray-500">
+        Appointing someone here makes the account an admin and binds it to this licence in one
+        step, so no administrator exists without a territory behind them. Closing one is two
+        steps, in this order: demote, then detach.
+      </p>
+
+      {items === undefined && <p className="mt-3 text-sm text-gray-500">Loading…</p>}
+      {items === null && (
+        <p data-testid="licence-admins-unreadable" className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
+          {loadErr} This is not the same as having none — nothing was read.
+        </p>
+      )}
+      {Array.isArray(items) && items.length === 0 && (
+        <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">
+          Nobody administers this licence yet.
+        </p>
+      )}
+      {Array.isArray(items) && items.length > 0 && (
+        <ul className="mt-3 space-y-2">
+          {items.map((a) => {
+            const isAdmin = String(a.role || '').toLowerCase() === 'admin';
+            const active = Number(a.is_active ?? 0) === 1;
+            return (
+              <li key={a.user_id} className="rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      {a.name || a.email}
+                    </div>
+                    <div className="text-xs text-gray-500">{a.email} · {a.admin_role}</div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {isAdmin
+                      ? <Chip tone={active ? STATUS_TONE.active : STATUS_TONE.suspended}>
+                          {active ? 'admin' : 'admin · deactivated'}
+                        </Chip>
+                      : <Chip tone={STATUS_TONE.draft}>no longer an admin — detach</Chip>}
+                    <button
+                      type="button" disabled={busy || !isAdmin}
+                      onClick={() => {
+                        const reason = window.prompt('Why is this administrator being removed? At least 10 characters, and it is recorded.');
+                        if (reason) run(() => api.adminDemoteAdmin(a.user_id, reason));
+                      }}
+                      className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-40"
+                    >
+                      <ShieldOff size={12} /> Demote
+                    </button>
+                    <button
+                      type="button" disabled={busy || isAdmin}
+                      onClick={() => run(() => api.licenceAdminRemove(licence.uid, a.user_id))}
+                      className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300"
+                    >
+                      <X size={12} /> Detach
+                    </button>
+                  </div>
+                </div>
+                {isAdmin && (
+                  <p className="mt-2 text-[11px] text-gray-500">
+                    Detach is available once this account is no longer an admin — unbinding first
+                    would leave an administrator with no licence behind them.
+                  </p>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      <div className="mt-4 rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Appoint an administrator</div>
+        <p className="mt-1 text-[11px] text-gray-500">
+          The address must already have an account — appointing one nobody holds would create an
+          administrator who cannot sign in.
+        </p>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          <input
+            type="email" placeholder="name@example.com" value={form.email}
+            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            className="rounded-md border border-gray-300 px-2 py-1 text-sm dark:border-gray-700"
+          />
+          <select
+            value={form.admin_role}
+            onChange={(e) => setForm((f) => ({ ...f, admin_role: e.target.value }))}
+            className="rounded-md border border-gray-300 px-2 py-1 text-sm dark:border-gray-700"
+          >
+            <option value="principal">Principal</option>
+            <option value="delegate">Delegate</option>
+          </select>
+        </div>
+        <textarea
+          rows={2} placeholder="Why this account, in at least 10 characters. It is recorded."
+          value={form.reason}
+          onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
+          className="mt-2 w-full rounded-md border border-gray-300 px-2 py-1 text-sm dark:border-gray-700"
+        />
+        <button
+          type="button" disabled={busy || !canAppoint}
+          onClick={() => run(async () => {
+            await api.licenceAdminAdd(licence.uid, {
+              email: form.email.trim(), admin_role: form.admin_role, reason: form.reason.trim(),
+            });
+            setForm({ email: '', admin_role: 'principal', reason: '' });
+          })}
+          className="mt-2 inline-flex items-center gap-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+        >
+          {busy ? <Loader2 size={14} className="animate-spin" /> : <><UserPlus size={14} /> Appoint</>}
+        </button>
+      </div>
+
+      {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
+      <p className="mt-3 text-[11px] text-gray-500">
+        Every act here needs a recent TOTP step-up as well as the Super Admin elevation, so a
+        403 can mean "step up and try again" rather than "you may not".
+      </p>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
  * Detail                                                              *
  * ------------------------------------------------------------------ */
 
@@ -783,8 +957,17 @@ function Detail({ uid, held, onChanged }) {
             {i + 1}. {label}
           </button>
         ))}
-        {/* Unnumbered, because it is not a step of the issue flow — it is the
-            append-only record of what the flow did. */}
+        {/* Unnumbered, because neither is a step of the issue flow — one is the
+            append-only record of what the flow did, and the other is who runs
+            the subsidiary afterwards. */}
+        <button
+          type="button" onClick={() => setStep(ADMINS_STEP)}
+          className={`-mb-px border-b-2 px-3 py-2 text-xs ${
+            step === ADMINS_STEP ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          Administrators
+        </button>
         <button
           type="button" onClick={() => setStep(HISTORY_STEP)}
           className={`-mb-px border-b-2 px-3 py-2 text-xs ${
@@ -809,6 +992,7 @@ function Detail({ uid, held, onChanged }) {
         {step === 4 && <TermsEditor licence={d} onSaved={refresh} />}
         {step === 5 && <ContractStep licence={d} onSaved={refresh} />}
         {step === 6 && <DeployStep licence={d} />}
+        {step === ADMINS_STEP && <AdminsEditor licence={d} onSaved={refresh} />}
         {step === HISTORY_STEP && (
           <div>
             <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">History</h3>

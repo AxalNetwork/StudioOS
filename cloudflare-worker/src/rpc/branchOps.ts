@@ -1027,6 +1027,26 @@ export async function moveAccountOut(
     );
   }
 
+  // D133 — AN ADMINISTRATOR IS NOT MOVED, THEY ARE UNBOUND, and the refusal
+  // lives HERE rather than only on the HQ route. Today the only thing stopping
+  // this is `admin_support_sessions.ts`'s `requireSuperAdmin`, which is a
+  // property of one caller rather than of the operation: an entrypoint is
+  // "callable by any Worker in the account" (`rpc/index.ts`), so a control that
+  // exists only at the route is a control the RPC does not have.
+  //
+  // AND IT IS THE WRONG TOOL EVEN FOR THE SUPER ADMIN. Deactivating a branch's
+  // administrator would leave `licence_admins` pointing at a dormant account
+  // and the subsidiary with nobody able to sign in — the licence-side unbind is
+  // what handles that, deliberately and with the demote step in front of it.
+  // `openSupportSession` already refuses an elevated target for the sibling
+  // reason; this is the same refusal one tier down.
+  if (String(target.role).toLowerCase() === 'admin') {
+    throw new Error(
+      `rpc: account ${targetId} administers ${branch}. An administrator is unbound from their `
+      + 'licence at HQ, not moved out as an ordinary account.',
+    );
+  }
+
   await env.DB.prepare('UPDATE users SET is_active = 0 WHERE id = ?').bind(targetId).run();
 
   // TWO ROWS, the shape `admin.ts:1770-1771` already uses: one for what the

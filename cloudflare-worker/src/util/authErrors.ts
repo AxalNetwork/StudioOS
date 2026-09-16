@@ -21,6 +21,10 @@
  */
 import { BRANCH_ONLY, BRANCH_SUSPENDED, HQ_AUTHORING_ONLY, HQ_ONLY } from './branch';
 
+/** The sentence `requireStepUp` throws. A constant so the two readers below
+ *  cannot drift from it the way a typed-in copy would. */
+export const STEP_UP_REQUIRED = 'step_up_required';
+
 export const AUTH_ERROR_STATUSES: Record<string, 401 | 403 | 423> = {
   Unauthorized: 401,
   'Admin required': 403,
@@ -47,4 +51,35 @@ export const AUTH_ERROR_STATUSES: Record<string, 401 | 403 | 423> = {
   Forbidden: 403,
   'KYC required': 403,
   'TOTP required': 403,
+  // D134 — `step_up_required` was in this table nowhere and in `app.onError`
+  // as a special case above the lookup, so the two readers disagreed exactly
+  // as they did over `Super admin required` before D110 moved the table here.
+  // The consequence was live the moment a route that catches its own throws
+  // sat behind a step-up: `mapError` fell through to its 400 default, and the
+  // SPA cannot tell a refusal from a malformed request at 400 — least of all
+  // one whose remedy is "type a fresh TOTP code and try again".
+  [STEP_UP_REQUIRED]: 403,
 };
+
+/**
+ * The step-up refusal's BODY, shaped once, because the status alone is not the
+ * whole answer here: the SPA prompts for a fresh TOTP off `code`, calls
+ * `POST /api/auth/step-up`, and retries — so a 403 without the code is a dead
+ * end wearing the right number. `app.onError` built this object inline and
+ * `mapError` could not, which is why it is a function rather than a second
+ * entry in the table above.
+ *
+ * The TTL comes off the thrown error (`requireStepUp` attaches `ttlMinutes`),
+ * falling back to the default so a caller that rethrows a bare Error still
+ * gets a usable number rather than `undefined`.
+ */
+export function stepUpRefusalBody(err: unknown): {
+  detail: string; code: string; ttl_minutes: number;
+} {
+  const ttl = Number((err as { ttlMinutes?: unknown } | null)?.ttlMinutes);
+  return {
+    detail: 'Recent re-authentication required',
+    code: STEP_UP_REQUIRED,
+    ttl_minutes: Number.isFinite(ttl) && ttl > 0 ? ttl : 15,
+  };
+}

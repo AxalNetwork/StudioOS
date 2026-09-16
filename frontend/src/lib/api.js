@@ -1877,11 +1877,22 @@ export const api = {
   // The territory licence the caller administers, or 404. Migration 190 —
   // licence_admins is what makes "which licence is this admin's?" answerable.
   myLicence: () => request('/licence/mine'),
+  // D134 — these three are how an admin account is opened and closed. `add`
+  // promotes and binds in one audited step and needs `{ email, admin_role,
+  // reason }`; `remove` refuses with 409 `still_an_admin` until the account has
+  // been demoted, which is `adminDemoteAdmin` below. All three sit behind the
+  // super admin's write bar, so a 403 here can mean step-up rather than refusal.
   licenceAdmins: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}/admins`),
   licenceAdminAdd: (uid, data) =>
     request(`/admin/licences/${encodeURIComponent(uid)}/admins`, { method: 'POST', body: JSON.stringify(data) }),
   licenceAdminRemove: (uid, userId) =>
     request(`/admin/licences/${encodeURIComponent(uid)}/admins/${userId}`, { method: 'DELETE' }),
+  // Removing the admin role is deliberately NOT a role edit: `adminUpdateRole`
+  // refuses an admin target with `admin_demotion_disabled` and still does. The
+  // account lands in `exploring`, the platform's holding state, and keeps its
+  // licence binding until it is detached separately.
+  adminDemoteAdmin: (userId, reason) =>
+    request(`/admin/users/${userId}/demote-admin`, { method: 'POST', body: JSON.stringify({ reason }) }),
   // Task #14 — forward signed PDF to legal partner(s).
   adminForwardContract: (id, data) =>
     request(`/legal/esign/${id}/forward`, { method: 'POST', body: JSON.stringify(data) }),
@@ -1943,7 +1954,12 @@ export const api = {
   // writes also need a TOTP session with a recent step-up, the bar
   // impersonation sets (routes/admin_super_admins.ts).
   superAdmins: () => request('/admin/super-admins'),
-  superAdminGrant: (userId) => request(`/admin/super-admins/${userId}`, { method: 'POST' }),
+  // D133 — `transfer` is the holder handing the platform on. The elevation is
+  // capped at one, and with one holder revoke refuses three ways, so without
+  // this flag the grant would be permanently unreachable rather than merely
+  // guarded. The server does both writes in one batch.
+  superAdminGrant: (userId, { transfer = false } = {}) =>
+    request(`/admin/super-admins/${userId}${transfer ? '?transfer=1' : ''}`, { method: 'POST' }),
   superAdminRevoke: (userId) => request(`/admin/super-admins/${userId}`, { method: 'DELETE' }),
   // Task #7 — admin-managed OAuth client credentials per provider.
   adminListIntegrationKeys: () => request('/admin/integration-keys'),
