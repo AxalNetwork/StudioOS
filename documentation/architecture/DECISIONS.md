@@ -10356,3 +10356,156 @@ programme, after `branch_rail_mount`, `branch_approvals_board_d130` and the
 `cloudflare-worker/test/admin_over_admin_d133.test.ts` (new, 15) ·
 `frontend/test/super_admin_one_holder_d133.test.mjs` (new, 5) · **D133**.
 **No migration — 264 remains free**, for the seventh consecutive PR.
+
+---
+
+## D134 — opening and closing an admin account, through the licence
+
+**Date:** 2026-09-16 · **Task:** #256 · **Status:** shipped
+
+The owner's model is one super admin who can *"open, ban, close and supervise
+admin accounts"*, with *"many admin profiles … as subsidiaries"*. D132 gave
+**ban**, D133 gave **supervise**. Measured against the code rather than against
+the plan, **open** and **close** had no route at all:
+
+| power | before D134 |
+| --- | --- |
+| **open** | `PATCH /admin/users/:userId/role` refuses `role === 'admin'` with `admin_promotion_disabled`, for everyone including the holder — and its super-admin override is validated deliberately **above** that guard so it can never reach it. `POST /admin/licences/:uid/admins` wrote the `licence_admins` binding and **left `users.role` alone**. The only path was SQL against production, or `branch-provision.yml`'s single seeded principal — a GitHub Actions permission, not an elevation. |
+| **close** | The same route refuses demotion with `admin_demotion_disabled`, on the same terms. SQL again. |
+
+So the table that answers *"which licence does this administrator run?"* could
+name an account that was not an administrator, and an administrator could exist
+with nothing naming the territory behind them. Both halves now have a door.
+
+### Open is ONE act; close is TWO, and the asymmetry is the design
+
+`POST /:uid/admins` writes the binding **and** `users.role = 'admin'` in one
+`DB.batch`. Neither write alone is a state anybody wants: a binding without the
+role is an administrator who cannot administer, and the role without a binding is
+the unscoped admin the whole door exists to prevent. One statement, so neither
+can be left behind by a failure somebody would have to notice and repair by hand.
+
+`DELETE /:uid/admins/:userId` refuses with **409 `still_an_admin`** while the
+target holds the role, and the refusal names the demote route rather than stating
+a policy — a 409 that does not say which door is next is a dead end. The order is
+therefore **demote → detach**, and between the two the account is a non-admin
+still holding a binding. That transient state is on the screen rather than
+inferred: `GET /:uid/admins` now returns `u.role` and `u.is_active`, and the row
+reads *"no longer an admin — detach"*.
+
+### The demote is its own route, not a hole in the role route
+
+`POST /admin/users/:userId/demote-admin`. The alternative — opening
+`admin_demotion_disabled` for the holder — was rejected on the role route's own
+terms: its override exists to be narrow, is validated above both admin guards for
+exactly that reason, and a test pins the ordering. Loosening it would also put
+the power on a route gated by plain `requireAdmin`. The new route takes the
+**write bar** instead, which is strictly higher and is what the rest of this
+power already carries.
+
+**The destination is `exploring`, not a role the caller picks.** Nobody has
+decided what a former administrator is, and offering founder/investor/advisor in
+a dropdown would put that decision where nobody thought about it. `exploring` is
+the platform's own holding state, it is where every signup lands, and it routes
+the account back through `/admin/exploring`, where assigning a real role needs a
+signed binding agreement. The honest answer and the one with a gate behind it.
+
+Two refusals, each a way to lock the platform out of itself: **yourself**
+(the elevation sits on the `admin` role, so self-demotion would leave a
+`super_admins` row pointing at a non-admin, which `holders()` filters out — the
+platform would read as having no super admin), and **the elevation holder**,
+which names the revoke step.
+
+### A third refusal was written, and it was dead
+
+The first draft carried a `last_admin` floor mirroring `last_super_admin`:
+refuse when `COUNT(*) WHERE role='admin' AND is_active=1 AND id != target`
+reaches zero. **The test written to drive it could not.** The count can never be
+zero: the caller has passed `requireSuperAdmin` (role `admin`) through
+`getCurrentUser` (which refuses an inactive account with 401) and cannot be the
+target. At least one active admin — the caller — always survives, by
+construction. The floor holds; the check that claimed to hold it could not fail,
+and a conjunct that cannot be false is not a guard. It is gone, with the reason
+in the handler, and the test now pins the property it rested on: a deactivated
+super admin is refused at **authentication**, not there.
+
+This is the second such removal in two PRs — D133 struck `held[0].id === actor.id`
+for the same reason. Both were found by writing the failing case first.
+
+### One write bar, in `auth.ts`
+
+`requireWriteBar` — TOTP-minted session, recent step-up, then the elevation — was
+module-private in `routes/admin_super_admins.ts`. D134 gives the same bar to
+appointing and detaching an administrator and to demoting one, in two more files.
+Three hand-written copies of a three-line gate is how two of them come to check
+only two of the three, so it is now `requireSuperAdminWriteBar` in `auth.ts`,
+beside the gates it composes. Reads keep `requireSuperAdmin` alone on purpose: a
+step-up on every list trains the holder to type a TOTP code without reading why.
+
+`super_admin.test.ts:223` asserted the bar's three checks **out of the router
+file**, so the move failed a correct change. It is re-pointed at what that router
+actually owns — no `requireAdmin`, both writes through the shared bar, no local
+copy — and the bar's contents are pinned once, beside the definition. **The fifth
+guard in this programme to pin a location or a spelling rather than a property**,
+after `branch_rail_mount`, `branch_approvals_board_d130`, the `flushSurface`
+quartet and D133's `superAdminGrant` line.
+
+### A live defect this PR landed on, and fixed: `step_up_required` was 400
+
+`AUTH_ERROR_STATUSES` carried `'TOTP required': 403` and **no `step_up_required`
+entry**; `app.onError` handled it as a special case *above* the lookup. So the
+**31 route files that catch their own throws and call `mapError`** — never
+reaching that handler — answered a step-up refusal with **400 Bad Request**,
+carrying neither the `code` the SPA prompts off nor the TTL it shows.
+
+That is D110's finding one key over, and D110's own comment predicted it: *"not a
+message and a key drifting apart, but two tables of keys."* D134 is the PR that
+first routes a step-up gate through `mapError` — `admin_licences.ts` catches its
+own throws — so without the fix the new write bar's most common refusal would
+have shipped as a status the SPA cannot act on. The body is now built by
+`stepUpRefusalBody()` in `util/authErrors.ts` and both readers call it.
+
+### The first UI `licence_admins` has ever had
+
+Migration 190 shipped the table in May; `api.licenceAdmins`, `licenceAdminAdd`
+and `licenceAdminRemove` shipped with its routes and had **zero callers**, so
+naming a subsidiary's administrator meant SQL. The Administrators section sits
+beside History on the licence detail — **unnumbered, because appointing an
+administrator is not a step of the six-step issue flow**: a licence can be issued,
+activated and deployed with nobody on it, and an administrator can change years
+later without any of the six running again.
+
+Detach is **disabled** while the account holds the role rather than offered and
+refused, because a UI that let the server pick teaches the operator that one of
+its two buttons is a lie. A failed read renders the server's sentence and
+explicitly is not an empty list: *"nobody administers this licence"* is a claim
+about the business and must never be produced by a request that did not arrive.
+
+### Two stale sentences retired
+
+Both refusals said the role *"can only be granted / changed via direct database
+SQL (security policy)"*. True when written; false the moment this PR shipped. Each
+now names the route that does the job — the same rule this programme has applied
+to a notice that outlived its fact in D129, D131 and D132.
+
+### What this does NOT do, stated so it is not read as an oversight
+
+- **A demote has no UI outside a licence.** An admin who holds no `licence_admins`
+  row can be demoted only by calling the route. That surface is D138's, whose
+  subject is the admin accounts themselves.
+- **Terminate is not this.** Demote + detach leaves the account active and its
+  audit intact. Deactivation is D132's `toggle-active`; the compliance ladder that
+  decides *when* is D135.
+
+### Files
+
+`auth.ts` (the shared write bar) · `util/authErrors.ts` + `index.ts` +
+`routes/_t13t14t15_helpers.ts` (the `step_up_required` fix) ·
+`routes/admin_licences.ts` (appoint, list, detach) · `routes/admin.ts` (demote,
+the extracted `resetExploringReview`, the two corrected sentences) ·
+`routes/admin_super_admins.ts` (uses the shared bar) · `frontend/src/lib/api.js` ·
+`frontend/src/pages/admin/AdminLicences.jsx` ·
+`cloudflare-worker/test/licence_admin_lifecycle_d134.test.ts` (new, 19) ·
+`frontend/test/licence_admins_ui_d134.test.mjs` (new, 7) ·
+`cloudflare-worker/test/super_admin.test.ts` (re-pointed) · **D134**.
+**No migration — 264 remains free**, for the eighth consecutive PR.

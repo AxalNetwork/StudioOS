@@ -15,6 +15,11 @@
  * (`routes/admin.ts` POST /impersonate): a TOTP-minted session, a RECENT
  * step-up, then the elevation. Reads need the elevation alone.
  *
+ * That bar was written here and now lives in `auth.ts` as
+ * `requireSuperAdminWriteBar` (D134), because promoting and demoting an admin
+ * want the same three checks in the same order and a third hand-written copy
+ * is how one of them comes to check only two.
+ *
  *   GET    /            every holder
  *   POST   /:userId     grant — the target must already be an admin, because
  *                       the Super Admin is an elevation on admin, not a role
@@ -36,7 +41,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireFactor, requireStepUp, requireSuperAdmin } from '../auth';
+import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -79,13 +84,6 @@ async function audit(env: Env, actorId: number, action: string, target: HolderRo
   ).bind(actorId, action, JSON.stringify({ target_user_id: target.id, target_email: target.email })).run();
 }
 
-/** The write bar, in the order impersonation checks it. */
-async function requireWriteBar(c: Parameters<typeof requireSuperAdmin>[0]) {
-  await requireFactor(c, 'totp');
-  await requireStepUp(c);
-  return await requireSuperAdmin(c);
-}
-
 function parseUserId(raw: string): number | null {
   const n = Number.parseInt(raw, 10);
   return Number.isFinite(n) && n > 0 ? n : null;
@@ -97,7 +95,7 @@ r.get('/', async (c) => {
 });
 
 r.post('/:userId', async (c) => {
-  const actor = await requireWriteBar(c);
+  const actor = await requireSuperAdminWriteBar(c);
   const id = parseUserId(c.req.param('userId'));
   if (id === null) return c.json({ error: 'Invalid user id' }, 400);
   const target = await userById(c.env, id);
@@ -141,7 +139,7 @@ r.post('/:userId', async (c) => {
     // second-holder hole wearing a different name.
     // THE CALLER IS NECESSARILY THE HOLDER HERE, so this does not re-check it.
     // A first draft read `held[0].id === actor.id` and a mutation could not kill
-    // it: `requireWriteBar` has already proved the caller is a super admin, and
+    // it: the write bar has already proved the caller is a super admin, and
     // reaching this line proves `held.length === 1`, so the one active holder IS
     // the caller. A database that predates this ceiling and carries TWO holders
     // fails the length test and gets the 409 — which is the right answer, since
@@ -181,7 +179,7 @@ r.post('/:userId', async (c) => {
 });
 
 r.delete('/:userId', async (c) => {
-  const actor = await requireWriteBar(c);
+  const actor = await requireSuperAdminWriteBar(c);
   const id = parseUserId(c.req.param('userId'));
   if (id === null) return c.json({ error: 'Invalid user id' }, 400);
   if (id === actor.id) {

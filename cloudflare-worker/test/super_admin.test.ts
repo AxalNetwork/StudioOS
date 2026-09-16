@@ -220,17 +220,30 @@ test('migration 207 narrows the elevation to the one named account, after 199', 
     '199 is not edited to carry the decision; 207 is the decision');
 });
 
-test('the holder console gates every write behind TOTP, step-up and the elevation', () => {
+test('the holder console gates every write behind the shared write bar', () => {
+  // RE-POINTED IN D134, AND THE REASON IS WORTH KEEPING. This used to read the
+  // bar's three checks out of THIS file, because the bar was declared here. It
+  // now lives in `auth.ts` — promoting an admin through a licence and demoting
+  // one want the same three checks in the same order, and a third hand-written
+  // copy is how one of them comes to check only two. A guard that pins WHERE a
+  // helper is declared fails a correct move; this pins what this router does,
+  // which is the claim it actually owns.
+  //
+  // The bar's CONTENTS and their order are pinned once, in
+  // `licence_admin_lifecycle_d134.test.ts`, beside the definition. Asserting
+  // them here as well would be two tests of one fact that can be changed apart.
   const src = read(ROUTER);
   assert.doesNotMatch(src, /\brequireAdmin\b/, 'a plain admin gate here is a franchisee minting franchisors');
-  assert.match(src, /requireFactor\(c, 'totp'\)/);
-  assert.match(src, /requireStepUp\(c\)/);
-  assert.match(src, /requireSuperAdmin\(c\)/);
-  // The bar is one function, so a new write cannot forget one of the three.
-  const bar = src.slice(src.indexOf('async function requireWriteBar'), src.indexOf('function parseUserId'));
-  assert.ok(bar.indexOf("requireFactor(c, 'totp')") < bar.indexOf('requireStepUp(c)'), 'factor before step-up');
-  assert.ok(bar.indexOf('requireStepUp(c)') < bar.indexOf('requireSuperAdmin(c)'), 'step-up before the elevation');
-  assert.equal((src.match(/await requireWriteBar\(c\)/g) || []).length, 2, 'both writes use the bar');
+  assert.match(src, /import \{[^}]*requireSuperAdminWriteBar[^}]*\} from '\.\.\/auth'/,
+    'the bar is not the shared one — a local copy can drift from it silently');
+  assert.doesNotMatch(src, /^async function requireWriteBar/m,
+    'this router declared its own bar again');
+  assert.equal((src.match(/await requireSuperAdminWriteBar\(c\)/g) || []).length, 2,
+    'both writes use the bar');
+  // Reads take the elevation alone, deliberately: a step-up on every list
+  // trains the holder to type a TOTP code without reading why.
+  assert.match(src, /r\.get\('\/', async \(c\) => \{\s*await requireSuperAdmin\(c\);/,
+    'the holder list stopped taking the elevation, or started taking the write bar');
 });
 
 test('the holder console never empties the set, never elevates a non-admin, never self-revokes', () => {

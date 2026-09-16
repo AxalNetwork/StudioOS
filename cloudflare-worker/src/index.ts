@@ -271,7 +271,7 @@ import { writeCronRunHistory } from './util/cronHistory';
 import { branchOf, assertBranchAppUrl } from './util/branch';
 // D110 — one table of which thrown sentence is which status, shared with
 // `routes/_t13t14t15_helpers.ts`'s `mapError`. The two used to disagree.
-import { AUTH_ERROR_STATUSES } from './util/authErrors';
+import { AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, stepUpRefusalBody } from './util/authErrors';
 import { enqueueReembedChunks } from './util/reembedSweep';
 import { rebuildUsersRoleCheckForInvestor, rebuildUsersRoleCheckForAdvisor } from './util/usersRoleRebuild';
 import { bindingKey } from './util/schemaBootstrap';
@@ -1085,11 +1085,10 @@ app.onError((err: any, c) => {
   const msg = (err?.message ?? '') as string;
   // BLOCK-AUTH-03 — step-up gate. Carries a machine-readable code + the TTL so
   // the SPA can prompt for a fresh TOTP, POST /api/auth/step-up, then retry.
-  if (msg === 'step_up_required') {
-    return c.json(
-      { detail: 'Recent re-authentication required', code: 'step_up_required', ttl_minutes: err?.ttlMinutes ?? 15 },
-      403,
-    );
+  if (msg === STEP_UP_REQUIRED) {
+    // D134 — the body comes from `util/authErrors.ts` so `mapError`, which 31
+    // route files reach instead of this handler, answers with the same object.
+    return c.json(stepUpRefusalBody(err), 403);
   }
   const mapped = AUTH_ERROR_STATUSES[msg];
   if (mapped) return c.json({ detail: msg }, mapped);

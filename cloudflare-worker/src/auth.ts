@@ -798,6 +798,40 @@ export async function requireStepUp(
 }
 
 /**
+ * The write bar for a super-admin act that changes who holds power: a
+ * TOTP-MINTED session, a RECENT step-up, then the elevation — the order
+ * `routes/admin.ts`'s `POST /impersonate` checks them in, which is the route
+ * that set this bar in the first place.
+ *
+ * WHY IT IS HERE AND NOT IN THE ROUTER THAT FIRST NEEDED IT. It was written
+ * privately inside `routes/admin_super_admins.ts` when granting the elevation
+ * was the only act that wanted it. D134 gives the same bar to promoting an
+ * account to admin and to demoting one, in two more files — and three copies
+ * of a three-line gate is how two of them come to check only two of the three.
+ * `frontend/src/lib/README.md` states the rule for the SPA and it is the same
+ * rule here: if a helper appears in two places, put it in one.
+ *
+ * WHAT EACH STEP BUYS, because a reader who does not know will eventually
+ * "simplify" one away:
+ *  - `requireFactor(c, 'totp')` is a fact about how the session was MINTED. A
+ *    session that authenticated by SMS, magic link or Google can never satisfy
+ *    it, whatever the holder does afterwards.
+ *  - `requireStepUp(c)` is a fact about WHEN. A TOTP session left open on a
+ *    desk for a day is not a person at a keyboard; the step-up is.
+ *  - `requireSuperAdmin(c)` is a fact about WHO, and it is last because the
+ *    other two are cheap and this one is the answer people quote.
+ *
+ * IT IS NOT A REPLACEMENT FOR `requireSuperAdmin` ON READS. Reading the
+ * franchising ledger needs the elevation and nothing more; a step-up on every
+ * list would train the holder to type a TOTP code without reading why.
+ */
+export async function requireSuperAdminWriteBar(c: Context<{ Bindings: Env }>): Promise<User> {
+  await requireFactor(c, 'totp');
+  await requireStepUp(c);
+  return await requireSuperAdmin(c);
+}
+
+/**
  * NICE-AUTH-04 — sign-out-everywhere primitive. Bumps users.jwt_min_iat so
  * every JWT issued at or before now is rejected on its next request (see the
  * minIat check in getCurrentUser). Returns the new epoch-seconds floor. Shared
