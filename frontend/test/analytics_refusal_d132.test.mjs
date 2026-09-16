@@ -43,6 +43,8 @@ const TAB = codeOnly(read('frontend/src/pages/AnalyticsTab.jsx'));
 const MON = read('cloudflare-worker/src/routes/monitoring_analytics.ts');
 
 const SENTENCE = 'Super admin required';
+/** `Refusal`'s own words when the server sent none. Read from the page below. */
+const FALLBACK = 'This is not yours to read.';
 
 test('a 403 renders as a stated refusal: the reason, no alarm, no retry', () => {
   const html = renderToStaticMarkup(
@@ -77,9 +79,16 @@ test('every other status keeps the failure card, retry and all', () => {
 test('Refusal says something even when the server sent no sentence', () => {
   // A 403 with an empty body must not render an empty grey box. Whatever else
   // is unknown, "this is not yours to read" is true.
+  //
+  // ASSERT THE SENTENCE, DO NOT STRIP THE TAGS. The first version of this read
+  // `html.replace(/<[^>]*>/g, '').trim().length > 0` — incomplete HTML tag
+  // filtering, which CodeQL rates high and is right to: `<[^>]*>` does not
+  // survive a `>` inside an attribute value. It was also the weaker claim, since
+  // any leftover text would satisfy it. Naming the fallback is both safer and
+  // stricter, and it needs no regex at all.
   const html = renderToStaticMarkup(React.createElement(Refusal, { message: '' }));
-  assert.ok(html.replace(/<[^>]*>/g, '').trim().length > 0,
-    'a refusal with no server message rendered nothing at all');
+  assert.ok(html.includes(FALLBACK),
+    'a refusal with no server message rendered nothing the reader can act on');
 });
 
 test('the plan-change history routes its own 403 through the same component', () => {
@@ -91,11 +100,15 @@ test('the plan-change history routes its own 403 through the same component', ()
     'PlanAuditHistory never captured the status, so it cannot tell 403 from 500');
   assert.match(TAB, /const \[exportErrStatus, setExportErrStatus\] = useState\(null\)/,
     'the CSV export never captured the status');
+  // NO REGEX IS BUILT FROM DATA. The flag is compared as the literal text it is
+  // and the window is bounded to its own fork, so a NEIGHBOURING 403 branch
+  // cannot satisfy it — the same correction #576 made when a guard assembled a
+  // pattern out of a loop variable.
   for (const [name, flag] of [['the list', 'errStatus'], ['the CSV export', 'exportErrStatus']]) {
-    assert.match(
-      TAB, new RegExp(`${flag} === 403[\\s\\S]{0,120}<Refusal `),
-      `${name}'s 403 does not reach Refusal`,
-    );
+    const at = TAB.indexOf(`${flag} === 403`);
+    assert.ok(at > 0, `${name} has no 403 fork at all`);
+    assert.ok(TAB.slice(at, at + 120).includes('<Refusal '),
+      `${name}'s 403 does not reach Refusal`);
   }
 });
 
