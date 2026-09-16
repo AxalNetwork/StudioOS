@@ -295,7 +295,7 @@ async function execTool(
       // bare `location` column, so this select threw and the catch below turned
       // every answer into "no upcoming meetings".
       const rows = await env.DB.prepare(
-        "SELECT title, start_at, end_at, location_kind, location_uri FROM calendar_events WHERE user_id = ? AND start_at >= datetime('now') ORDER BY start_at ASC LIMIT 5"
+        "SELECT title, start_at, end_at, location_kind, location_uri FROM calendar_events WHERE user_id = ? AND datetime(start_at) >= datetime('now') ORDER BY start_at ASC LIMIT 5"
       ).bind(user.id).all<{ title: string; start_at: string; end_at: string; location_kind: string | null; location_uri: string | null }>().catch(() => ({ results: [] as Array<{ title: string; start_at: string; end_at: string; location_kind: string | null; location_uri: string | null }> }));
       return { items: rows.results || [] };
     }

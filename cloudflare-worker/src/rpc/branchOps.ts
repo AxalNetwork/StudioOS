@@ -390,7 +390,7 @@ export async function branchRevenueSummary(
   try {
     const q = await env.DB.prepare(
       `SELECT COALESCE(SUM(est_cost_usd), 0) AS cost, COUNT(*) AS calls
-         FROM ai_usage_logs WHERE created_at >= ? AND created_at < ?`,
+         FROM ai_usage_logs WHERE datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?)`,
     ).bind(...bounds).first<{ cost: number; calls: number }>();
     const costCents = Math.round((Number(q?.cost) || 0) * 100);
     streams.push({

@@ -142,7 +142,7 @@ export async function claimShareToken(
             used_at = CASE WHEN view_count + 1 >= view_limit THEN datetime('now') ELSE used_at END
       WHERE token_hash = ?
         AND view_count < view_limit
-        AND expires_at > datetime('now')`,
+        AND datetime(expires_at) > datetime('now')`,
   ).bind(tokenHash).run();
   if ((res as { meta?: { changes?: number } }).meta?.changes === 1) return { ok: true };
   const row = await env.DB.prepare(

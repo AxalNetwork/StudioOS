@@ -82,7 +82,7 @@ export async function captureAndResolveAttribution(
          FROM referral_attributions
         WHERE user_id = ?
           AND referrer_user_id != ?
-          AND expires_at > CURRENT_TIMESTAMP
+          AND datetime(expires_at) > datetime('now')
         LIMIT 1`,
     ).bind(buyerUserId, buyerUserId).first<{ referral_code: string; referrer_user_id: number }>();
     if (!row) return null;

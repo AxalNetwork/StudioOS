@@ -66,8 +66,8 @@ eventsPublic.get('/events', async (c) => {
   // stays on the upcoming tab instead of vanishing at its start time.
   if (!from && !to) {
     where.push(includePast
-      ? `COALESCE(ends_at, starts_at) < datetime('now')`
-      : `COALESCE(ends_at, starts_at) >= datetime('now')`);
+      ? `datetime(COALESCE(ends_at, starts_at)) < datetime('now')`
+      : `datetime(COALESCE(ends_at, starts_at)) >= datetime('now')`);
   }
   if (q) { where.push('(title LIKE ? OR summary LIKE ?)'); binds.push(`%${q}%`, `%${q}%`); }
 
@@ -82,7 +82,7 @@ eventsPublic.get('/events', async (c) => {
 // ── GET /events.ics — public calendar feed ─────────────────────────────────
 eventsPublic.get('/events.ics', async (c) => {
   const rows = await c.env.DB.prepare(
-    `SELECT * FROM events WHERE ${FEED_PREDICATE} AND starts_at >= datetime('now','-1 day')
+    `SELECT * FROM events WHERE ${FEED_PREDICATE} AND datetime(starts_at) >= datetime('now','-1 day')
        ORDER BY starts_at ASC LIMIT 200`,
   ).all();
   const ics = buildEventsIcs(rows.results || []);
