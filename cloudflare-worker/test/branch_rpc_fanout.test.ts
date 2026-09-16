@@ -233,7 +233,12 @@ test('the backlog sums the four queues, and one unreadable queue voids the total
   partial.exec('DROP TABLE cohort_applicants');
   const p = await branchOverview({ ...FR, DB: makeD1(partial) } as any);
   assert.equal(p.backlog, null);
-  assert.match(p.backlog_reason!, /cohort applications/);
+  // CASE-INSENSITIVE, AND THAT IS NOT A LOOSENING. The lane's name now comes
+  // from the shared `APPROVAL_SOURCES` label (D130), which is title-case
+  // because it also heads a lane on S3's board; this reason interpolates it
+  // mid-sentence. What the assertion is about is WHICH lane is named — it
+  // still fails if the reason names the wrong one, or names none.
+  assert.match(p.backlog_reason!, /cohort applications/i);
   assert.match(p.backlog_reason!, /smaller than the truth/);
 });
 

@@ -50,12 +50,30 @@ test('the artboard draws a To-HQ lane, and the page is it', () => {
   }
 });
 
-test('the page ships HALF of S3 and says which half', () => {
-  // The four local queues need PR 13's read model. A page that drew five lanes
-  // with four empty would be worse than one that names the gap.
-  assert.match(SRC, /BranchZonePending/, 'the unbuilt half of the board lost its stated notice');
-  assert.match(PAGE, /PR 13/, 'the notice does not name the build that brings the board');
-  assert.match(PAGE, /four local queues/i, 'the page does not say which half is missing');
+test('the page ships the board AND the lane, and still names what is missing', () => {
+  // RE-POINTED, NOT RELAXED (D130). This read `match(SRC, /BranchZonePending/)`
+  // with the reason "the four local queues need PR 13's read model" — and PR 13
+  // built it, so the notice had to go and this assertion had to move with it.
+  // Loosening it to "a notice OR a board" would have been the
+  // assertion-that-cannot-fail this programme keeps catching: it would pass on
+  // a page that shipped neither.
+  //
+  // The property it guarded is unchanged and still the point: the page is
+  // explicit about what it does not have. What it does not have is now
+  // narrower, so the assertion names the narrower things.
+  assert.match(SRC, /branch-board-rows/, 'the work board is gone');
+  assert.doesNotMatch(SRC, /BranchZonePending/,
+    'the notice came back — the board it stood in for now exists, so the notice would be false');
+  // SRC, NOT PAGE: `codeOnly` strips comments, and the distinction is the
+  // point. The page's docblock says "D130 IS PR 13" — history, and true. What
+  // must never come back is RENDERED copy promising the board as future work,
+  // which is what a reader would act on.
+  assert.doesNotMatch(SRC, /PR 13/,
+    'the page renders PR 13 as future work; PR 13 IS this page');
+  // The three things that genuinely still have no store, each with its reason.
+  assert.match(PAGE, /Assignment and history/, 'the assignment gap lost its statement');
+  assert.match(PAGE, /AI-drafted decision note/, 'the AI-note gap lost its statement');
+  assert.match(PAGE, /no thread/, 'the single-decision shape lost its statement');
 });
 
 test('there is no reply box — the answer is one decision and the page says so', () => {

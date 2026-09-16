@@ -3032,6 +3032,10 @@ export const api = {
   // The BRANCH side, under its own prefix. Live only on a branch Worker; on HQ
   // these answer 403 because HQ has no HQ to escalate to.
   branchEscalations: () => request('/branch/escalations'),
+  // D130 — the four local queues as one list, oldest first. The board READS;
+  // every decision is still made in that queue's own console, and the payload
+  // says so on `decides: false` rather than leaving the page to remember.
+  branchApprovals: () => request('/branch/approvals'),
   branchEscalate: (data) =>
     request('/branch/escalations', { method: 'POST', body: JSON.stringify(data || {}) }),
   licenceCreate: (data) => request('/admin/licences', { method: 'POST', body: JSON.stringify(data || {}) }),

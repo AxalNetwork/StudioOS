@@ -169,6 +169,7 @@ import adminStatements from './routes/admin_statements';
 import adminEscalations from './routes/admin_escalations';
 import adminSupportSessions from './routes/admin_support_sessions';
 import branchEscalationRoutes from './routes/branch_escalations';
+import branchApprovalRoutes from './routes/branch_approvals';
 import adminSuperAdmins from './routes/admin_super_admins';
 import adminHq from './routes/admin_hq';
 import adminRevenue from './routes/admin_revenue';
@@ -788,6 +789,10 @@ app.route('/api/admin', adminSupportSessions);
 // because it is not an HQ console route and must not inherit the elevation
 // checks or the cool-off prefixes that apply there (D112).
 app.route('/api/branch', branchEscalationRoutes);
+// D130 — the approvals board, same prefix and same tier gate. A separate file
+// from the escalations lane because they are different concerns: one reads the
+// four queues this branch decides, the other is what it asked HQ.
+app.route('/api/branch', branchApprovalRoutes);
 app.route('/api/admin/licences', adminLicences);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
 // catch-all for the same reason as the licence ledger above.
