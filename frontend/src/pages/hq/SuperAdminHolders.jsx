@@ -28,7 +28,7 @@ function messageOf(e) {
   return FRIENDLY[msg] || msg;
 }
 
-export default function SuperAdminHolders() {
+export default function SuperAdminHolders({ onChanged }) {
   const [holders, setHolders] = useState(null);   // null = not loaded yet
   const [admins, setAdmins] = useState([]);
   const [error, setError] = useState(null);
@@ -38,10 +38,24 @@ export default function SuperAdminHolders() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [h, u] = await Promise.all([api.superAdmins(), api.adminListUsers()]);
+      // D138 — THE PICKER USED TO BE FED A PAGE, WHICH IS A FUNCTIONAL BUG AND
+      // NOT A DISPLAY ONE. This was `api.adminListUsers()` with no arguments —
+      // `ORDER BY created_at DESC LIMIT 100` — filtered to `role === 'admin'`
+      // in the browser. Admins are among the OLDEST accounts, so past a hundred
+      // rows an admin is not in the list at all, and the `<select>` below reads
+      // "No other admin to hand it to" about a database that has several. You
+      // cannot grant the elevation to somebody who is not in the list.
+      //
+      // `api.hqAdmins()` filters on role SERVER-SIDE with no LIMIT, which is
+      // sound because the query has a predicate: admins are one per licence
+      // plus HQ, not a directory.
+      const [h, u] = await Promise.all([api.superAdmins(), api.hqAdmins()]);
       setHolders(Array.isArray(h?.holders) ? h.holders : []);
-      const list = Array.isArray(u) ? u : (Array.isArray(u?.users) ? u.users : []);
-      setAdmins(list.filter((x) => String(x?.role).toLowerCase() === 'admin'));
+      // The Team payload names the account `user_id`; the grant route and the
+      // holder list both key on `id`, so the shape is normalised here rather
+      // than at four render sites.
+      const list = Array.isArray(u?.items) ? u.items : [];
+      setAdmins(list.map((x) => ({ id: x.user_id, name: x.name, email: x.email })));
     } catch (e) {
       reportError('super-admin-holders', e);
       setError(messageOf(e));
@@ -53,7 +67,13 @@ export default function SuperAdminHolders() {
   const run = async (fn) => {
     setBusy(true);
     setError(null);
-    try { await fn(); await load(); } catch (e) { setError(messageOf(e)); } finally { setBusy(false); }
+    try {
+      await fn();
+      await load();
+      // The Team table above renders the super-admin badge from the same
+      // elevation, so it is told rather than left stale until a reload.
+      onChanged?.();
+    } catch (e) { setError(messageOf(e)); } finally { setBusy(false); }
   };
 
   const holderIds = new Set((holders || []).map((h) => h.id));

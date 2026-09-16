@@ -2997,6 +2997,17 @@ export const api = {
   // HQ · Home. One payload for the franchisor's overview; the page's tenant
   // switcher narrows it client-side and sends nothing back (routes/admin_hq.ts).
   hqOverview: () => request('/admin/hq/overview'),
+  // D138 — H9 · Team. Every administrator, filtered SERVER-SIDE on role with no
+  // LIMIT, with the licence each holds, their rung on the compliance ladder and
+  // the super-admin badge. `q` is not a filter on that list — it is what HQ
+  // ASKS EACH BRANCH, because a branch's accounts live on the branch's own
+  // database and cannot be listed from here (D.2). The returned roster is
+  // complete, so the page narrows it in the browser; that is honest here and was
+  // the defect in `SuperAdminHolders`, where the browser filtered a PAGE.
+  hqAdmins: (q) => {
+    const s = String(q || '').trim();
+    return request(`/admin/hq/admins${s ? `?q=${encodeURIComponent(s)}` : ''}`);
+  },
   // HQ · Revenue (canvas H5). D1 only — open disputes come from Stripe
   // through adminBillingListDisputes, read separately so an outage there
   // costs one zone rather than the page.

@@ -6,6 +6,7 @@ The API client, formatters and helpers. Nothing here renders.
 | --- | --- |
 | `absence.js` | `NOT_RECORDED`, `text`, `titleCase` — how a string says the store has nothing. The string-level half of `../ui/Honesty.jsx`'s rule. `titleCase` deliberately takes no fallback: one that did re-cased its own sentence and shipped "Stage Not Recorded". |
 | `api.js` | **The only way the SPA talks to the worker.** Every endpoint the frontend uses is a method here. |
+| `notices.js` | `FREEZING_STATUSES`, `NOTICE_KINDS`, `noticeKindLabel`, `RUNGS`/`rungRank`/`noticeRank`, `toUtcInstant`/`daysTo` — the compliance ladder's vocabulary, shared by HQ's licence detail, the addressee's own page and HQ's Team table. The two pages' `NOTICE_TONE` maps deliberately did NOT move: same hues, two visual treatments, and Tailwind cannot build a class name at runtime. |
 | `branchHost.js` | `branchCodeFromHost`, `csrfCookieNameFor` — the SPA's half of D104: which CSRF cookie this page mirrors, decided from the hostname so it agrees with the Worker's `BRANCH_CODE` without a request. |
 | `url.js` | `safeExternalUrl` and link handling — user-supplied URLs pass through it. |
 | `seo.js` | `usePageMeta`, for title/description/OG on public routes. |

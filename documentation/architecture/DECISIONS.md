@@ -10939,3 +10939,152 @@ frozen-branch banner D107 is cited for remains unbuilt; that is S7/S13's, with
 the three false "the banner shipped" claims to correct. And `publishTemplate`,
 `applyBenchmarks`, `templates()`, `governanceFeed` and the partner pair are
 still unbuilt producers — `applyLicence` was the first of six to get a caller.
+
+## D138 — the supervision surface, and a picker that was reading a page
+
+**The owner's sentence is "HQ needs to be able to supervise all admins."** Five
+merged decisions built every power it implies — D134 opens an account through a
+licence, D135 freezes one and gives the freeze a reason and a clock, D136 builds
+the two screens that work a notice, D137 pushes the decision to a branch — and
+until this one **there was no screen anywhere whose subject was the
+administrators.** Supervising meant opening one licence at a time:
+`/admin/licences` → a licence → its Administrators tab → its Notices tab. "Who
+is frozen right now" could not be asked, only assembled, and the ladder has been
+live in production since 2026-09-16 20:10Z.
+
+So `GET /api/admin/hq/admins` and `pages/hq/HqTeamTable.jsx`, mounted on
+`/admin/accounts` between the holder console and the Admin Console's directory.
+It is the canvas's **H9**, which closes #243 and #260 as one screen rather than
+two.
+
+### The defect it carries, and it is functional rather than cosmetic
+
+`SuperAdminHolders.jsx:41` called `api.adminListUsers()` **with no arguments** —
+`ORDER BY created_at DESC LIMIT 100` — and filtered that PAGE to
+`role === 'admin'` in the browser. Admins are among the **oldest** accounts, so
+past a hundred rows an admin is not in the list at all, and the `<select>` reads
+*"No other admin to hand it to"* about a database that has several. In a
+**picker**, absence is not a display problem: the elevation cannot be granted.
+
+The new route filters on role **server-side with no LIMIT**, which is sound
+because the query has a predicate — admins are one per licence plus HQ, not a
+directory. It is the shape `routes/users.ts` already runs for `?role=`.
+
+**The test for that needed a fixture nobody would write by accident.** A LIMIT on
+a role-filtered query is invisible until there are **more than a hundred
+admins**: the first fixture seeded 120 *founders*, and the mutation that added
+`LIMIT 100` passed, because the predicate excluded them before the limit was
+reached. The fixture now seeds 120 admins plus five founders, so the predicate
+and the limit fail differently and each has its own assertion. An assertion that
+cannot fail on the machines that run it is not a guard.
+
+### What the screen reads, and the one thing it refuses to infer
+
+Four reads, each with its own failure state: the roster (`users WHERE role`), the
+licence and `admin_role` (`licence_admins ⋈ territory_licences`, read
+user→licence for the first time — D134's route reads licence→users, one licence
+at a time, which is the walk this replaces), the rung
+(`admin_notices GROUP BY user_id, status`, riding
+`idx_admin_notices_user(user_id, status)` which migration 264 already created and
+no route had read for a third party), and the elevation (`super_admins`). Plus
+`users.last_active_at`, written by `middleware/lastActive.ts` and **absent from
+every list payload until now**, so "when was this admin last here" had no answer
+anywhere.
+
+**An unreadable `admin_notices` reports `ladder_readable: false` with its reason
+and NO rung at all — never four rungs of "clear".** `auth.ts`'s own freeze gate
+states the rule in the same words: being under notice is a claim somebody MADE,
+and inferring its absence from a failed read is how a screen comes to say the
+opposite of the truth. It is also the D133 lesson twice over — two fixtures
+narrower than the schema once had seven tests reporting "HQ has not pushed this
+branch its licence" about a row sitting in front of them.
+
+**The deadline and the freeze stamp are the EARLIEST of an admin's open notices,
+not the newest**, because what a supervisor needs is the oldest unanswered thing;
+taking the latest would make a long-frozen account look freshly frozen. That
+choice was also unreachable by the first test: `GROUP BY user_id, status` already
+reduces same-status rows with `MIN()`, so two `overdue` notices arrive as one
+group and the per-admin reduction never saw two candidates. The fixture now uses
+two different statuses.
+
+### The groups are H9's own model
+
+> *"There is no global accounts table. HQ asks each branch over its private link
+> and groups what comes back, so a search result is really four answers and a
+> fifth for HQ-held accounts — and when one branch does not answer, its group
+> says so instead of showing zero."*
+
+So the HQ-held roster is complete and always returned, and `q` is what HQ **asks
+the branches** — through `fanOut(env, 'searchAccounts', [q, 20])`, which already
+existed with its three states (`ok` / `unreadable` / `not_deployed`). With no
+branch provisioned `branches` is `[]`, every admin is HQ-held, and the Branch
+column says so: a fact about where the row lives, not a placeholder.
+
+The browser narrows the roster as you type. **That is honest here and was the bug
+there:** filtering a complete list narrows it; filtering a page hides rows.
+
+### What is NOT drawn, measured rather than deferred
+
+**H9's "Move to another branch".** Its route exists —
+`POST /api/admin/branches/:code/accounts/:userId/move` (D.6, `admin_support_sessions.ts:191`)
+— and it requires a **source** branch code and a **destination** branch code,
+each a live `BRANCH_*` binding, refusing when they are equal. With no branch
+provisioned there is neither end, so the control could only ever refuse. D134
+already named that mistake on this tier: *a UI that offered both and let the
+server pick teaches the operator that one of its buttons is a lie.* The page says
+what a move is and that it needs two provisioned branches. It rejoins #243 when
+the first branch exists.
+
+### One definition of what freezes — the sixth consolidation
+
+D136 shipped its two surfaces on one day and each declared its own copy of the
+freezing set, the notice kinds and the worst-first ordering; this screen would
+have been the third. `frontend/src/lib/notices.js` now holds them once, on the
+rule `lib/README.md` already states. The ordering is expressed **once and read
+two ways**: `RUNGS` is the precedence, `rungRank` keys it by rung (the Team table
+sorts admins), `noticeRank` keys it by status through `rungOfStatus` (the licence
+detail sorts notices) — so the two screens cannot come to disagree about which
+state is urgent, and the file does not hold two lists meaning the same thing.
+
+**The two `NOTICE_TONE` maps deliberately did not move.** Their hue assignment
+agrees in all six statuses, but one is a bordered chip in HQ's light console and
+the other a dark-mode-aware pill, and **Tailwind cannot build a class name at
+runtime** — the JIT pass scans source for literals, so `bg-${hue}-50` emits
+nothing. Merging them would mean changing one page's appearance or shipping
+classes the build purges. That is D117's `money` lesson verbatim, stated in the
+new file's header rather than left for whoever tries next.
+
+D127 one `GROUP BY role`, D128 one LIKE escaper, D130 one definition of open,
+D131 one count, D132 one zone formatter, D138 one definition of what freezes.
+
+### Two findings recorded rather than changed
+
+1. **`admin.ts:113` is the only `GROUP BY role` of five without
+   `WHERE is_active = 1`** (`rpc/branchOps.ts:202`, `admin_hq.ts:60`,
+   `market_intel.ts:963` and `licence.ts:157` all have it). **It stays as it is.**
+   The four others count seats used and platform health, where active is the
+   right denominator; `admin.ts:113` totals a **directory** whose list below it
+   is likewise unfiltered and carries a state column. A tile counting active
+   above a list showing deactivated rows would be the tile-vs-table disagreement
+   D128 was written to end. Changing a live tile on a pattern-match rather than a
+   reading is what this note prevents.
+2. **`admin.ts`'s back-compat comment named a reader that stops reading.** It
+   said the flat array was *"load-bearing: `SuperAdminHolders.jsx` still reads
+   this as a flat array"*. It does not any more, and it was the last flat caller
+   in the SPA. The **behaviour stays** — removing a response shape is a breaking
+   change for anything outside this repo — and the **comment is corrected**,
+   because a comment naming a reader that no longer exists is the same class of
+   stale claim as D129's seat store and D131's six blocks. A guard now asserts no
+   caller under `frontend/src` reads the flat form.
+
+**No migration. 266 stays free.** `check-api-drift` is satisfied by the one new
+method carrying its route in the same commit.
+
+### And a lesson from the harness, not the code
+
+One mutation reported "not applied — anchor not unique" twice, and the second
+time it was because the *harness patch itself* had landed nowhere: a two-space
+indent against a one-space source, with the write still succeeding and printing
+"fixed". A harness edit that silently changes nothing is the same failure as a
+mutation that lands somewhere other than where it was aimed, one level up. The
+edit is now asserted to have changed the file before it is trusted.

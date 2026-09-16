@@ -45,6 +45,9 @@ import {
 import { api } from '../../lib/api';
 import { coverageCells, renewalPipeline } from '../../lib/licenceCoverage';
 import { reportError } from '../../lib/log';
+import {
+  FREEZING_STATUSES, NOTICE_KINDS, noticeKindLabel, noticeRank, daysTo,
+} from '../../lib/notices';
 
 const SEAT_TYPES = [
   { k: 'founder', label: 'Founder' },
@@ -96,39 +99,17 @@ const NOTICE_TONE = {
   withdrawn: 'bg-gray-100 text-gray-500 border-gray-200',
 };
 
-// Mirrors migration 264's CHECK and `services/complianceLadder.ts`'s
-// NOTICE_KINDS. The labels are `KIND_LABELS` in `routes/admin_licences.ts`,
-// which is what the addressee's mail says — the same words on both sides, so HQ
-// picks the thing the recipient will read.
-const NOTICE_KINDS = [
-  ['renewal_terms', 'Renewal terms'],
-  ['fees', 'Fees'],
-  ['term_violation', 'A term of the agreement'],
-  ['other', 'Your licence'],
-];
-const noticeKindLabel = (k) => NOTICE_KINDS.find(([v]) => v === k)?.[1] || k || 'Not recorded';
-
-// `FREEZING_STATUSES` in `cloudflare-worker/src/util/authErrors.ts`, whose own
-// comment says why there is exactly one definition of it server-side. This is
-// the SPA's read of the same fact, and it is used for presentation only — the
-// gate is the server's, and a screen that disagreed would only be wrong on
-// screen. `issued` is deliberately absent: a notice inside its window has been
-// delivered and nothing is frozen yet.
-const FREEZING_NOTICE_STATUSES = new Set(['overdue', 'rejected']);
+// D138 — `NOTICE_KINDS`, `noticeKindLabel` and the freezing set were declared
+// here AND in `MyLicencePage.jsx` when D136 shipped both surfaces on one day.
+// They live in `lib/notices.js` now, on the rule `lib/README.md` already
+// states: "If a helper appears in two places, put it here once rather than a
+// third time." `NOTICE_TONE` below deliberately did NOT move — see that file's
+// header for why two tone maps are two visual treatments and not one fact.
 
 // MIN/MAX/DEFAULT_RESPOND_DAYS in `services/complianceLadder.ts`. The server
 // clamps to this range whatever arrives, so the input's bounds are the same
 // numbers rather than a looser set the server would silently correct.
 const RESPOND_DAYS = { min: 1, max: 90, def: 14 };
-
-// Worst first. Frozen outranks waiting-on-HQ outranks waiting-on-them outranks
-// closed, because that is the order in which somebody has to do something.
-const noticeRank = (status) => {
-  if (FREEZING_NOTICE_STATUSES.has(status)) return 0;
-  if (status === 'responded') return 1;
-  if (status === 'issued') return 2;
-  return 3;
-};
 
 // Residency, exactly as Cloudflare offers it (A.4, D.1). `eu` is the only
 // guarantee on D1; a hint is a hint, and there is no in-country option outside
@@ -178,39 +159,11 @@ const fee = (cents, currency) => (cents === null || cents === undefined
   ? null
   : `${currency || ''} ${(Math.round(Number(cents)) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`.trim());
 
-// D136 — TWO STAMP FORMATS REACH THIS, and only one of them used to parse.
-// `territory_licences.renews_on` is a bare `YYYY-MM-DD`, which `Date` parses as
-// UTC midnight by spec. `admin_notices.respond_by` and `froze_at` are SQL
-// `YYYY-MM-DD HH:MM:SS` — written by `datetime('now', '+N days')` and swept
-// against `datetime('now')`, so they are UTC — and that shape is NOT in the
-// spec's grammar: V8 accepts it and reads it as the READER'S LOCAL time, other
-// engines return NaN. Either way "in 6 days" would be wrong by the reader's
-// offset, or blank, on exactly the column a deadline is read from.
-//
-// So the space becomes a `T` and a `Z` is appended, which is what the writer
-// meant. The bare-date form is untouched and keeps parsing as it always did.
-//
-// Exported for its test and for no other reason: a date normaliser is exactly
-// the thing a source scan cannot check, because both the right and the wrong
-// version are one `new Date(...)` call. `MarkHistory` (#516) is the precedent —
-// export what is already pure rather than assert its spelling.
-export function toUtcInstant(v) {
-  const s = String(v ?? '').trim();
-  if (!s) return null;
-  // Already carries a zone (`Z` or ±HH:MM) — leave it exactly as it is.
-  if (/(?:Z|[+-]\d{2}:?\d{2})$/.test(s)) return s;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s; // bare date: UTC midnight by spec
-  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(s)) return `${s.replace(' ', 'T')}Z`;
-  return s;
-}
-
-export function daysTo(iso) {
-  const norm = toUtcInstant(iso);
-  if (!norm) return null;
-  const d = new Date(norm);
-  if (Number.isNaN(d.getTime())) return null;
-  return Math.round((d.getTime() - Date.now()) / 86400000);
-}
+// D138 — `toUtcInstant` and `daysTo` moved to `lib/notices.js`. They were
+// exported from this PAGE for their test, and `HqTeamTable.jsx` needs the same
+// normalisation: `admin_notices` stamps are SQL `YYYY-MM-DD HH:MM:SS`, which
+// V8 reads as the READER'S LOCAL time and other engines reject. Importing one
+// page's export from another page is what `lib/README.md` exists to prevent.
 
 function Chip({ children, tone }) {
   return (
@@ -1049,7 +1002,7 @@ function NoticesEditor({ licence, onSaved }) {
         <ul className="mt-3 space-y-2">
           {sorted.map((n) => {
             const reviewable = n.status === 'responded';
-            const frozenDays = FREEZING_NOTICE_STATUSES.has(n.status) ? daysTo(n.froze_at) : null;
+            const frozenDays = FREEZING_STATUSES.has(n.status) ? daysTo(n.froze_at) : null;
             const due = daysTo(n.respond_by);
             return (
               <li key={n.uid} className="rounded-lg border border-gray-200 p-3 dark:border-gray-800">

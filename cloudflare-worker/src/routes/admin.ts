@@ -106,8 +106,19 @@ admin.get('/users', async (c) => {
   const envelope = c.req.query('envelope') === '1';
   if (!envelope) {
     await sql.end();
-    // Back-compat, and it is load-bearing: `SuperAdminHolders.jsx` still reads
-    // this as a flat array. The envelope is opt-in for exactly that reason.
+    // BACK-COMPAT. The envelope stays opt-in because removing a response shape
+    // is a breaking change for anything outside this repo, and because every
+    // caller that wants the totals already asks for them.
+    //
+    // D138 CORRECTION: this comment used to say the flat array was "load-
+    // bearing: `SuperAdminHolders.jsx` still reads this as a flat array." It
+    // does not any more — it was the last flat caller in the SPA, and it moved
+    // to `GET /admin/hq/admins` because reading a PAGE was the bug: it filtered
+    // the newest hundred accounts to `role === 'admin'` in the browser, and
+    // admins are among the oldest accounts, so its grant picker silently
+    // omitted them. A comment naming a reader that no longer reads is the same
+    // class of stale claim as a notice that outlived its fact, so it is
+    // corrected here rather than left to be cited by the next surface.
     return c.json(rows);
   }
   const roleRows = await sql`SELECT role, COUNT(*) AS n FROM users GROUP BY role`;

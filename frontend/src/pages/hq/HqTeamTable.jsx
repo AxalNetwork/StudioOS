@@ -1,0 +1,359 @@
+import React, { useCallback, useEffect, useState } from 'react';
+import { Users, ShieldCheck, Search, Loader2 } from 'lucide-react';
+import { api } from '../../lib/api';
+import { reportError } from '../../lib/log';
+import { Card, Unrecorded, Unreadable } from '../../ui';
+import { daysTo, rungRank } from '../../lib/notices';
+
+/**
+ * HQ · Team — the first screen whose SUBJECT is the administrators (H9, D138).
+ *
+ * WHAT IT IS FOR. Until this shipped, supervising an admin meant opening one
+ * licence at a time — /admin/licences → a licence → Administrators → Notices —
+ * so "who is frozen right now" could not be asked, only assembled. Every power
+ * the question implies already existed (D134 opens an account, D135 freezes it,
+ * D136 works the notice, D137 pushes the decision to a branch); what was
+ * missing was somewhere to see them all standing next to each other.
+ *
+ * THE GROUPS ARE H9'S OWN MODEL, and its copy states why: "There is no global
+ * accounts table. HQ asks each branch over its private link and groups what
+ * comes back … and when one branch does not answer, its group says so instead
+ * of showing zero." So the HQ-held group is complete and always present, and
+ * the search box is what HQ ASKS THE BRANCHES. With no branch provisioned there
+ * is one group, every administrator is HQ-held, and that is a fact about where
+ * the row lives rather than a placeholder.
+ *
+ * THE FILTER NARROWS A COMPLETE LIST, WHICH IS THE WHOLE POINT. The roster
+ * comes from a query with a predicate and no LIMIT, so narrowing it in the
+ * browser hides nothing. `SuperAdminHolders` used to filter a PAGE — the newest
+ * hundred accounts — to `role === 'admin'`, and admins are among the oldest
+ * accounts, so it silently dropped them. Filtering a complete list narrows it;
+ * filtering a page hides rows.
+ *
+ * WHAT IS NOT DRAWN, and it is measured rather than deferred. H9 also draws
+ * "Move to another branch". Its route exists — D.6 shipped
+ * `POST /api/admin/branches/:code/accounts/:userId/move` — and it requires a
+ * SOURCE branch code and a DESTINATION branch code, each a live binding, and
+ * refuses when they are equal. With no branch provisioned there is neither end,
+ * so the control could only ever refuse. D134 already named that mistake on
+ * this tier: a UI that offers a button and lets the server pick teaches the
+ * operator that one of its buttons is a lie. The sentence below says what a
+ * move is and what it needs instead.
+ */
+
+const RUNG = {
+  frozen: {
+    label: 'Frozen',
+    tone: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900',
+  },
+  awaiting_review: {
+    label: 'Answered — HQ to review',
+    tone: 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900',
+  },
+  notified: {
+    label: 'Under notice',
+    tone: 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-900',
+  },
+  clear: {
+    label: 'Clear',
+    tone: 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700',
+  },
+};
+
+const LICENCE_TONE = {
+  active: 'text-green-700 dark:text-green-400',
+  suspended: 'text-rose-700 dark:text-rose-400',
+  terminated: 'text-gray-500 dark:text-gray-400',
+};
+
+function Chip({ children, tone }) {
+  return (
+    <span className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-medium ${tone || RUNG.clear.tone}`}>
+      {children}
+    </span>
+  );
+}
+
+/**
+ * "frozen 6 days" / "answer due in 3 days" / "3 days overdue".
+ *
+ * `daysTo` is the shared normaliser (`lib/notices.js`): `admin_notices` stamps
+ * are SQL `YYYY-MM-DD HH:MM:SS`, which V8 parses as the READER'S LOCAL time and
+ * other engines reject, so a raw `new Date()` here would be wrong by the
+ * reader's UTC offset or blank.
+ */
+function rungDetail(row) {
+  if (row.rung === 'frozen' && row.froze_at) {
+    const d = daysTo(row.froze_at);
+    return d === null ? null : `frozen ${Math.abs(d)} ${Math.abs(d) === 1 ? 'day' : 'days'}`;
+  }
+  if (row.rung === 'notified' && row.respond_by) {
+    const d = daysTo(row.respond_by);
+    if (d === null) return null;
+    if (d < 0) return `${Math.abs(d)} ${Math.abs(d) === 1 ? 'day' : 'days'} overdue`;
+    return `answer due in ${d} ${d === 1 ? 'day' : 'days'}`;
+  }
+  return null;
+}
+
+function AdminRow({ row, ladderReadable, licencesReadable }) {
+  const rung = RUNG[row.rung] || RUNG.clear;
+  const detail = rungDetail(row);
+  return (
+    <tr className="border-t border-axal-hairline align-top" data-testid="hq-team-row">
+      <td className="py-2 pr-3">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[13px] font-semibold text-axal-ink">{row.name || row.email}</span>
+          {/* U11 — `axal-oxblood` is NOT a declared token, and Tailwind v4 emits
+              nothing for one it does not know, without warning. HQ's accent is
+              written as the arbitrary value its sibling pages use (`HqHomePage`,
+              `SecurityPage`), which is the spelling that actually paints. */}
+          {Number(row.super_admin) === 1 && (
+            <span
+              className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[.06em] text-[#881337] dark:bg-rose-950/40 dark:text-rose-200"
+              data-testid="hq-team-super-admin"
+              title="Holds the Super Admin elevation"
+            >
+              <ShieldCheck size={10} /> Super admin
+            </span>
+          )}
+        </div>
+        <div className="truncate text-[11.5px] text-axal-faint">{row.email}</div>
+      </td>
+      <td className="py-2 pr-3 text-[12px] text-axal-muted" data-testid="hq-team-branch">
+        {row.branch || 'HQ-held'}
+      </td>
+      <td className="py-2 pr-3 text-[12px]">
+        {!licencesReadable ? (
+          <Unrecorded reason="The licence ledger could not be read, so which licence this administrator holds is unknown rather than none.">
+            Unknown
+          </Unrecorded>
+        ) : row.licence ? (
+          <>
+            <div className={LICENCE_TONE[row.licence.status] || 'text-axal-ink'}>
+              {row.licence.licence_ref || row.licence.uid}
+              {row.licence.status ? ` · ${row.licence.status}` : ''}
+            </div>
+            <div className="text-[11.5px] text-axal-faint">
+              {row.licence.brand_name || '—'} · {row.licence.admin_role}
+            </div>
+          </>
+        ) : (
+          <Unrecorded reason="This account holds no licence binding. Every admin minted through POST /api/admin/licences/:uid/admins is licence-bound; one without a binding predates that door.">
+            No licence
+          </Unrecorded>
+        )}
+      </td>
+      <td className="py-2 pr-3 text-[12px]" data-testid="hq-team-rung">
+        {ladderReadable ? (
+          <>
+            <Chip tone={rung.tone}>{rung.label}</Chip>
+            {detail && <div className="mt-0.5 text-[11.5px] text-axal-faint">{detail}</div>}
+            {Number(row.open_notices) > 0 && (
+              <div className="text-[11.5px] text-axal-faint">
+                {row.open_notices} open {Number(row.open_notices) === 1 ? 'notice' : 'notices'}
+              </div>
+            )}
+          </>
+        ) : (
+          <Unrecorded>—</Unrecorded>
+        )}
+      </td>
+      <td className="py-2 pr-3 text-[12px] text-axal-muted">
+        {Number(row.is_active) === 1 ? 'Active' : 'Deactivated'}
+      </td>
+      <td className="py-2 text-[12px] text-axal-muted" data-testid="hq-team-last-active">
+        {row.last_active_at ? String(row.last_active_at).slice(0, 10) : (
+          <Unrecorded reason="This account has not made an authenticated request since the last-active stamp was added.">
+            Never
+          </Unrecorded>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+export default function HqTeamTable({ reloadKey = 0 }) {
+  const [data, setData] = useState(undefined); // undefined = loading, null = unreadable
+  const [error, setError] = useState(null);
+  const [typed, setTyped] = useState('');
+  const [asked, setAsked] = useState('');
+
+  // The 250ms / two-character debounce `AdminPage` already uses, for the same
+  // reason: each keystroke would otherwise ask every branch over its own link.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const next = typed.trim();
+      setAsked(next.length >= 2 ? next : '');
+    }, 250);
+    return () => clearTimeout(t);
+  }, [typed]);
+
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      const res = await api.hqAdmins(asked);
+      setData(res && typeof res === 'object' ? res : null);
+    } catch (e) {
+      reportError('HqTeamTable:load', e);
+      setData(null);
+      setError(String(e?.message || e || 'Request failed'));
+    }
+  }, [asked]);
+
+  useEffect(() => { load(); }, [load, reloadKey]);
+
+  if (data === undefined) {
+    return (
+      <Card className="p-5" data-testid="hq-team">
+        <p className="text-[12px] text-axal-faint"><Loader2 size={13} className="inline animate-spin" /> Loading the team…</p>
+      </Card>
+    );
+  }
+
+  if (data === null) {
+    return (
+      <Card className="p-5" data-testid="hq-team">
+        <Unreadable
+          what="The administrator roster"
+          claim={`This is not a claim that there are none — it is a read that failed. ${error || ''}`.trim()}
+          onRetry={load}
+        />
+      </Card>
+    );
+  }
+
+  const ladderReadable = data.ladder_readable !== false;
+  const licencesReadable = data.licences_available !== false;
+  const needle = typed.trim().toLowerCase();
+  const rows = (Array.isArray(data.items) ? data.items : [])
+    .filter((row) => !needle
+      || String(row.name || '').toLowerCase().includes(needle)
+      || String(row.email || '').toLowerCase().includes(needle))
+    // Worst first, then by name — the ordering `lib/notices.js` holds once for
+    // this screen and the licence detail's notice list both.
+    .sort((a, b) => rungRank(a.rung) - rungRank(b.rung)
+      || String(a.name || a.email).localeCompare(String(b.name || b.email)));
+
+  const branches = Array.isArray(data.branches) ? data.branches : [];
+
+  return (
+    <Card className="p-5" data-testid="hq-team">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+            <Users size={13} /> Team
+          </div>
+          <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
+            Every administrator, the licence each holds, and where each stands on the compliance
+            ladder. Grouped by branch: there is no global accounts table, so HQ holds its own and
+            asks each branch over its private link.
+          </p>
+        </div>
+        <label className="flex items-center gap-1.5 rounded-md border border-axal-hairline px-2 py-1.5">
+          <Search size={13} className="text-axal-faint" />
+          <input
+            type="search"
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder="Filter admins · ask branches"
+            aria-label="Filter administrators and search branches"
+            data-testid="hq-team-search"
+            className="w-56 bg-transparent text-[12.5px] text-axal-ink outline-none"
+          />
+        </label>
+      </div>
+
+      {!ladderReadable && (
+        <p className="mt-3" data-testid="hq-team-ladder-unreadable">
+          <Unreadable what="The compliance ladder" claim={data.ladder_reason || 'No rung is shown for any administrator.'} onRetry={load} />
+        </p>
+      )}
+
+      <div className="mt-4 flex items-baseline gap-2" data-testid="hq-team-group-hq">
+        <span className="text-[11px] font-extrabold uppercase tracking-[.08em] text-axal-ink">Axal VC HQ</span>
+        <span className="text-[11.5px] text-axal-faint">
+          HQ-held · {data.total} {Number(data.total) === 1 ? 'administrator' : 'administrators'}
+          {typeof data.active === 'number' ? `, ${data.active} active` : ''}
+          {needle ? ` · showing ${rows.length}` : ''}
+        </span>
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="mt-2 text-[12px] text-axal-faint">
+          {needle
+            ? 'No administrator here matches that.'
+            : 'No account on this database holds the admin role.'}
+        </p>
+      ) : (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">
+                <th className="pb-1 pr-3">Name</th>
+                <th className="pb-1 pr-3">Branch</th>
+                <th className="pb-1 pr-3">Licence</th>
+                <th className="pb-1 pr-3">Compliance</th>
+                <th className="pb-1 pr-3">State</th>
+                <th className="pb-1">Last active</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <AdminRow key={row.user_id} row={row} ladderReadable={ladderReadable} licencesReadable={licencesReadable} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {branches.map((b) => (
+        <div key={b.code} className="mt-4 border-t border-axal-hairline pt-3" data-testid="hq-team-group-branch">
+          <div className="flex items-baseline gap-2">
+            <span className="text-[11px] font-extrabold uppercase tracking-[.08em] text-axal-ink">{b.code}</span>
+            <span className="text-[11.5px] text-axal-faint">
+              {b.status === 'ok' && `${(b.data?.results || []).length} matched${b.data?.truncated ? ' (more exist)' : ''}${b.as_of ? ` · as of ${String(b.as_of).slice(0, 19).replace('T', ' ')}` : ''}`}
+              {b.status === 'not_deployed' && 'Not deployed'}
+              {b.status === 'unreadable' && 'Could not be read'}
+            </span>
+          </div>
+          {b.status === 'unreadable' && (
+            <Unreadable what={`Branch ${b.code}`} claim={b.reason || 'It did not answer, which is not the same as it being down.'} onRetry={load} />
+          )}
+          {b.status === 'not_deployed' && (
+            <p className="mt-1 text-[12px] text-axal-faint">{b.reason}</p>
+          )}
+          {b.status === 'ok' && !data.searched && (
+            <p className="mt-1 text-[12px] text-axal-faint">
+              Type at least two characters to ask this branch. Its accounts live on its own
+              database, so HQ cannot list them from here.
+            </p>
+          )}
+          {b.status === 'ok' && data.searched && (b.data?.results || []).length === 0 && (
+            <p className="mt-1 text-[12px] text-axal-faint">Nothing on this branch matched.</p>
+          )}
+          {b.status === 'ok' && (b.data?.results || []).length > 0 && (
+            <ul className="mt-1 divide-y divide-axal-hairline">
+              {(b.data.results || []).map((hit) => (
+                <li key={hit.id} className="flex items-center justify-between gap-3 py-1.5 text-[12px]">
+                  <span className="truncate text-axal-ink">{hit.name || hit.email}</span>
+                  <span className="shrink-0 text-[11.5px] text-axal-faint">{hit.role} · {Number(hit.is_active) === 1 ? 'active' : 'deactivated'}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
+
+      <p className="mt-4 text-[11px] leading-relaxed text-axal-faint">
+        {branches.length === 0
+          ? 'No branch is provisioned, so every account on the platform is HQ-held and this is the whole team.'
+          : `Of ${data.branches_coverage?.total ?? branches.length} branches, ${data.branches_coverage?.answered ?? 0} answered.`}
+        {' '}
+        Moving an account between branches closes it where it lives and re-invites it where it is
+        going — records stay put. It needs two provisioned branches to move between, so there is no
+        control for it here yet rather than one that could only refuse.
+      </p>
+    </Card>
+  );
+}

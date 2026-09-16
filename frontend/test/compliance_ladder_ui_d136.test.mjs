@@ -32,6 +32,11 @@ const HQ = codeOnly(HQ_RAW);
 const MINE_RAW = read('frontend/src/pages/subsidiary/MyLicencePage.jsx');
 const MINE = codeOnly(MINE_RAW);
 const API = codeOnly(read('frontend/src/lib/api.js'));
+// D138 — the ladder's shared vocabulary moved out of the two pages into one
+// module. These assertions follow it rather than being deleted: what they pin
+// is the FACT (which statuses freeze, that the two tiers agree with the
+// worker), and the fact did not move, only its address.
+const NOTICES = codeOnly(read('frontend/src/lib/notices.js'));
 const BAR_RAW = read('frontend/src/components/AdminFrozenBar.jsx');
 const BAR = codeOnly(BAR_RAW);
 const APP = codeOnly(read('frontend/src/App.jsx'));
@@ -149,7 +154,9 @@ test('the addressee\'s three ladder states are three different claims', () => {
   // `issued` is a reminder and nothing is frozen; `overdue` and `rejected` are a
   // freeze. One banner for both would be a false alarm in one direction and a
   // silent freeze in the other.
-  assert.match(MINE, /const FREEZING = new Set\(\['overdue', 'rejected'\]\);/);
+  assert.match(NOTICES, /FREEZING_STATUSES = new Set\(\['overdue', 'rejected'\]\);/);
+  assert.match(MINE, /import \{[^}]*FREEZING_STATUSES[^}]*\} from '\.\.\/\.\.\/lib\/notices'/,
+    'MyLicencePage stopped reading the shared freezing set');
   assert.match(MINE, /const ANSWERABLE = new Set\(\['issued', 'overdue'\]\);/);
   assert.ok(MINE_RAW.includes('data-testid="licence-frozen-banner"'), 'no frozen banner');
   assert.ok(MINE_RAW.includes('data-testid="licence-notice-banner"'),
@@ -165,11 +172,17 @@ test('the SPA agrees with the worker about which statuses freeze', () => {
   assert.ok(decl, 'FREEZING_STATUSES moved — re-point this guard rather than deleting it');
   const server = decl.split(',').map((s) => s.trim().replace(/^'|'$/g, '')).filter(Boolean).sort();
   assert.deepEqual(server, ['overdue', 'rejected'], 'the worker\'s freezing set changed');
-  const spaMine = MINE.match(/const FREEZING = new Set\(\[([^\]]*)\]\)/)?.[1] || '';
-  const spaHq = HQ.match(/const FREEZING_NOTICE_STATUSES = new Set\(\[([^\]]*)\]\)/)?.[1] || '';
-  for (const [name, raw] of [['MyLicencePage', spaMine], ['AdminLicences', spaHq]]) {
-    const got = raw.split(',').map((s) => s.trim().replace(/^'|'$/g, '')).filter(Boolean).sort();
-    assert.deepEqual(got, server, `${name} disagrees with the worker about what freezes`);
+  // D138 — there is now ONE SPA definition instead of two, so this asserts both
+  // that it agrees with the worker AND that neither page has grown its own copy
+  // back. That second half is new and is the stronger guard: before, two copies
+  // could drift from each other and this test only caught each drifting from
+  // the worker.
+  const spa = NOTICES.match(/FREEZING_STATUSES = new Set\(\[([^\]]*)\]\)/)?.[1] || '';
+  const got = spa.split(',').map((s) => s.trim().replace(/^'|'$/g, '')).filter(Boolean).sort();
+  assert.deepEqual(got, server, 'lib/notices.js disagrees with the worker about what freezes');
+  for (const [name, code] of [['MyLicencePage', MINE], ['AdminLicences', HQ]]) {
+    assert.ok(!/=\s*new Set\(\[\s*'(overdue|rejected)'/.test(code),
+      `${name} declares its own freezing set again — there is one, in lib/notices.js`);
   }
 });
 
@@ -251,14 +264,19 @@ test('there is one clock on HQ\'s screen and it counts up, not down', () => {
   // the value: it comes from the freeze STAMP, and only for a status that
   // actually freezes.
   const frozenAssign = body.match(/const frozenDays = [^;]*;/)?.[0] || '';
-  assert.match(frozenAssign, /FREEZING_NOTICE_STATUSES/,
+  assert.match(frozenAssign, /FREEZING_STATUSES/,
     'how long an account has been frozen is computed for statuses that do not freeze it');
   assert.match(frozenAssign, /froze_at/,
     'how long an account has been frozen is not computed from froze_at');
   assert.match(body, /noticeRank\(a\.status\) - noticeRank\(b\.status\)/,
     'the list is not sorted worst-first');
-  assert.match(HQ, /const noticeRank = \(status\) => \{[\s\S]*?FREEZING_NOTICE_STATUSES\.has\(status\)\) return 0;/,
+  // D138 — `noticeRank` moved to `lib/notices.js`, where it is derived from one
+  // rung ordering that `HqTeamTable` sorts admins by and this list sorts notices
+  // by. The property is unchanged: a freezing status sorts first.
+  assert.match(NOTICES, /rungOfStatus = \(status\) => \{[\s\S]*?FREEZING_STATUSES\.has\(status\)\) return 'frozen';/,
     'the freezing statuses do not sort first');
+  assert.match(NOTICES, /RUNGS = \['frozen',/,
+    'frozen is no longer the worst rung');
   // Terminating stays the deliberate act it already was, at the top of the page.
   assert.ok(!body.includes('api.licenceTerminate'),
     'terminating was folded into the notices tab, which makes it a step of a sequence');
@@ -350,7 +368,7 @@ test('toUtcInstant reads both stamp formats the server writes', async () => {
   // by spec) and wrong for `respond_by` (SQL `YYYY-MM-DD HH:MM:SS`, which V8
   // reads as the READER'S LOCAL TIME and other engines reject). A source scan
   // cannot tell the two versions apart — both are one `new Date(...)`.
-  const { toUtcInstant } = await import('../src/pages/admin/AdminLicences.jsx');
+  const { toUtcInstant } = await import('../src/lib/notices.js');
 
   // The SQL form, which `datetime('now', '+N days')` writes and the sweep
   // compares against `datetime('now')` — so it is UTC, and must parse as UTC.
@@ -377,7 +395,7 @@ test('toUtcInstant reads both stamp formats the server writes', async () => {
 });
 
 test('daysTo counts from the normalised instant, not the reader\'s zone', async () => {
-  const { daysTo, toUtcInstant } = await import('../src/pages/admin/AdminLicences.jsx');
+  const { daysTo, toUtcInstant } = await import('../src/lib/notices.js');
   assert.equal(typeof toUtcInstant, 'function');
   assert.equal(daysTo(null), null);
   assert.equal(daysTo('not a date'), null);
