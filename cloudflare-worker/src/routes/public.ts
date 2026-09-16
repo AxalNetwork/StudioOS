@@ -16,6 +16,7 @@ import { ensureProfileExpansionSchema } from '../services/profileExpansion';
 import { ensureFollowsSchema } from './follows';
 import { kvGetJSON, kvPutJSON, createL1 } from '../kv';
 import { bindingKey } from '../util/schemaBootstrap';
+import { likeNeedleLower } from '../util/likeSearch';
 
 const publicRoutes = new Hono<{ Bindings: Env }>();
 
@@ -401,7 +402,9 @@ publicRoutes.get('/partners', async (c) => {
   const params: any[] = [];
   let where = `status = 'active' AND directory_listed = 1`;
   if (q) {
-    const like = `%${q.replace(/[%_]/g, (m) => `\\${m}`)}%`;
+    // `1`, not the helper's default: this search accepts a single character
+    // today and D128 is a de-duplication, not a behaviour change.
+    const like = likeNeedleLower(q, 1)!;
     where += ` AND (lower(name) LIKE ? ESCAPE '\\' OR lower(coalesce(company, '')) LIKE ? ESCAPE '\\' OR lower(coalesce(specialization, '')) LIKE ? ESCAPE '\\')`;
     params.push(like, like, like);
   }

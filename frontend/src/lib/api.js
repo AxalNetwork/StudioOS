@@ -1672,7 +1672,21 @@ export const api = {
   activitySummary: () => request('/activity/summary'),
   activitySyncGithub: () => request('/activity/sync-github', { method: 'POST' }),
 
-  adminListUsers: () => request('/admin/users'),
+  // D128 — `q` searches name and email; `envelope: 1` adds the per-role TOTALS
+  // over the whole table. Called with no argument this is byte-for-byte the
+  // old request and still answers a flat array, which is what
+  // `SuperAdminHolders.jsx` reads. The envelope exists because the Users
+  // panel's role tiles were counting the returned PAGE and rendering it as the
+  // total — past 100 accounts, "All Users" read 100.
+  adminListUsers: (opts = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.q) qs.set('q', String(opts.q));
+    if (opts.envelope) qs.set('envelope', '1');
+    if (opts.limit) qs.set('limit', String(opts.limit));
+    if (opts.offset) qs.set('offset', String(opts.offset));
+    const s = qs.toString();
+    return request(`/admin/users${s ? `?${s}` : ''}`);
+  },
   adminListContracts: (params = {}) => {
     const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && v !== null)).toString();
     return request(`/admin/contracts${q ? `?${q}` : ''}`);

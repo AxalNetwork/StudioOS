@@ -9,6 +9,11 @@ import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useAuth } from '../hooks/useAuthSync';
+import { Unrecorded } from '../ui';
+// D128 — the scope caption is fed from `/me.branch` through the same reader
+// the territory badge uses, so the two cannot disagree about which
+// deployment this is.
+import { branchOfUser } from '../lib/shellRole';
 import TrustScoreBadge from '../components/TrustScoreBadge';
 // Task #1 — embedded as a tab inside Admin Console so admins land on
 // the network roster via /admin?tab=network-profiles. The standalone
@@ -567,25 +572,71 @@ export default function AdminPage({ onImpersonate, section = null }) {
   const [kycRejectReason, setKycRejectReason] = useState('');
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  // D128 — the free-text account search, and the TOTALS the tiles read.
+  // `userQuery` is what the box holds; `userSearch` is what has actually been
+  // asked for, debounced. `totals` is null until the first envelope answers —
+  // never 0, because "not read yet" and "none" are different things and the
+  // tiles must not show a zero for the first.
+  const [userQuery, setUserQuery] = useState('');
+  const [userSearch, setUserSearch] = useState('');
+  const [totals, setTotals] = useState(null);
+  const [userPage, setUserPage] = useState({ showing: 0, limit: 0, searched: false });
   const [openProfile, setOpenProfile] = useState(null);
   const [openUser, setOpenUser] = useState(null);
 
   useEffect(() => { loadAll(); }, []);
   useEffect(() => { loadKyc(kycFilter); }, [kycFilter]);
+  // THE BOX IS GATED AT TWO CHARACTERS, matching the route's own refusal
+  // (`query_too_short`). The server is the control — a one-character query is
+  // refused there whatever the browser does — and this is what keeps a 400 off
+  // the screen while somebody is still typing the first letter.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const next = userQuery.trim();
+      setUserSearch(next.length >= 2 ? next : '');
+    }, 250);
+    return () => clearTimeout(t);
+  }, [userQuery]);
+  useEffect(() => { loadUsers(userSearch); }, [userSearch]);
+
+  // The users half on its own, so typing does not re-fetch profiles, the KYC
+  // queue and every trust score with each keystroke.
+  const loadUsers = async (q = '') => {
+    try {
+      const res = await api.adminListUsers({ envelope: 1, ...(q ? { q } : {}) });
+      const rows = res?.results || [];
+      setUsers(rows);
+      setTotals({ total: Number(res?.total) || 0, by_role: res?.by_role || {} });
+      setUserPage({
+        showing: Number(res?.showing) || rows.length,
+        limit: Number(res?.limit) || 0,
+        searched: Boolean(res?.searched),
+      });
+    } catch (e) {
+      reportError('AdminPage:loadUsers', e);
+    }
+  };
 
   const loadAll = async () => {
     setLoading(true);
     try {
       const [u, p] = await Promise.all([
-        api.adminListUsers(),
+        api.adminListUsers({ envelope: 1 }),
         api.adminListProfiles().catch(() => []),
       ]);
-      setUsers(u);
+      const rows = u?.results || [];
+      setUsers(rows);
+      setTotals({ total: Number(u?.total) || 0, by_role: u?.by_role || {} });
+      setUserPage({
+        showing: Number(u?.showing) || rows.length,
+        limit: Number(u?.limit) || 0,
+        searched: false,
+      });
       setProfiles(p);
       // Task #40 — fan-in trust scores in one call. Best-effort: if it
       // fails (network blip, 403 mid-role-change), each row's
       // UserTrustCell falls back to the per-user GET.
-      const ids = (u || []).map(row => row.id).filter(Boolean);
+      const ids = rows.map(row => row.id).filter(Boolean);
       if (ids.length > 0) {
         try {
           const res = await api.trustScoreBatch(ids);
@@ -742,17 +793,26 @@ export default function AdminPage({ onImpersonate, section = null }) {
   };
 
   const filtered = filter === 'all' ? users : users.filter(u => u.role === filter);
-  const counts = {
-    all: users.length,
-    admin: users.filter(u => u.role === 'admin').length,
-    founder: users.filter(u => u.role === 'founder').length,
-    partner: users.filter(u => u.role === 'partner').length,
-    investor: users.filter(u => u.role === 'investor').length,
-    advisor: users.filter(u => u.role === 'advisor').length,
-    // Task #9 follow-up — new signups land here pending admin review, so
-    // this is often the largest bucket now; surface it as its own filter.
-    exploring: users.filter(u => u.role === 'exploring').length,
-  };
+  // THE TILES COUNT THE TABLE, NOT THE PAGE (D128). They used to read
+  // `users.filter(...).length` over whatever `/admin/users` returned — which
+  // defaults to the newest 100 rows — so past a hundred accounts the "All
+  // Users" tile showed 100 as though it were the total and every role tile
+  // counted one page. `null` while the read is in flight, because a zero there
+  // would be the same lie one beat earlier.
+  //
+  // Task #9 follow-up — new signups land in `exploring` pending admin review,
+  // so it is often the largest bucket; it keeps its own filter.
+  // S0 WALL RULE 2 — "search says what it searches". On a branch there is one
+  // territory and the caption names it; on HQ there is no territory to name, so
+  // there is no caption rather than a vague one. `null` renders nothing at all:
+  // an empty chip would be the doubled-chrome this repo keeps deleting.
+  const accountScope = branchOfUser(viewer)
+    ? `Searching ${viewer.branch.name || viewer.branch.code} accounts`
+    : null;
+  const ROLE_TILES = ['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'];
+  const counts = totals
+    ? { all: totals.total, ...Object.fromEntries(ROLE_TILES.map(r => [r, Number(totals.by_role?.[r]) || 0])) }
+    : null;
   const pendingProfiles = profiles.filter(p => p.admin_status === 'pending').length;
 
   if (loading) return <div className="text-gray-600 text-center py-20">Loading admin console...</div>;
@@ -795,17 +855,53 @@ export default function AdminPage({ onImpersonate, section = null }) {
 
       {tab === 'users' && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-            {Object.entries(counts).map(([role, count]) => (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3" data-testid="admin-user-tiles">
+            {Object.entries(counts || { all: null, admin: null, founder: null, partner: null, investor: null, advisor: null, exploring: null }).map(([role, count]) => (
               <button key={role} onClick={() => setFilter(role)}
                 className={`px-4 py-3 rounded-xl text-sm font-medium transition-all ${
                   filter === role ? 'bg-violet-600 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-700 hover:border-violet-300'
                 }`}>
-                <div className="text-lg font-bold">{count}</div>
+                <div className="text-lg font-bold">{count === null ? <Unrecorded /> : count}</div>
                 <div className="capitalize">{role === 'all' ? 'All Users' : role === 'exploring' ? 'Exploring' : `${role}s`}</div>
               </button>
             ))}
           </div>
+
+          {/* SEARCH, AND A CAPTION THAT SAYS WHAT IS ON SCREEN (D128).
+              Until this, the only way to find an account was to scroll the
+              newest hundred — the panel filtered by role and nothing else, on
+              both tiers. S0's second wall rule is that a search says WHAT it
+              searches, which is why the branch caption names the territory and
+              HQ's does not: on HQ there is no territory to name. */}
+          <div className="mb-6 flex flex-wrap items-center gap-3">
+            <label className="relative flex-1 min-w-[16rem]">
+              <span className="sr-only">Search accounts by name or email</span>
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="search"
+                value={userQuery}
+                onChange={(e) => setUserQuery(e.target.value)}
+                placeholder="Search by name or email"
+                data-testid="admin-user-search"
+                className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm dark:border-gray-800 dark:bg-gray-900"
+              />
+            </label>
+            {accountScope && (
+              <span className="text-[12px] text-gray-500 dark:text-gray-400" data-testid="admin-user-scope">
+                {accountScope}
+              </span>
+            )}
+          </div>
+
+          <p className="mb-3 text-[12px] text-gray-500 dark:text-gray-400" data-testid="admin-user-showing">
+            {userPage.searched
+              ? `${userPage.showing} ${userPage.showing === 1 ? 'account matches' : 'accounts match'} “${userSearch}”${userPage.limit && userPage.showing >= userPage.limit ? ` — the first ${userPage.limit}; narrow the search to see the rest` : ''}`
+              : counts === null
+                ? 'Reading the directory…'
+                : userPage.limit && counts.all > userPage.limit
+                  ? `Showing the newest ${userPage.showing} of ${counts.all} accounts. The tiles above count every account; this table is one page. Search to reach the rest.`
+                  : `Showing all ${counts.all} ${counts.all === 1 ? 'account' : 'accounts'}.`}
+          </p>
 
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
             {filtered.length === 0 ? (

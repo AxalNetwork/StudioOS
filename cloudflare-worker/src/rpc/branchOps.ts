@@ -33,6 +33,7 @@ import { slaBand } from './hqOps';
 // the digest and the refusals are shared rather than written twice.
 import { sha256Hex, verifySecret } from './secret';
 import { createJWT, loadSuperAdminFlag } from '../auth';
+import { likeNeedle } from '../util/likeSearch';
 
 /** Every branch answer carries the code, because a binding does not (D.7). */
 export type BranchAnswer<T> = T & { branch: string; as_of: string };
@@ -266,12 +267,15 @@ export async function branchSearchAccounts(
   env: Env, q: string, limit = 20,
 ): Promise<BranchAnswer<{ results: BranchAccountHit[]; truncated: boolean }>> {
   const branch = requireBranch(env);
-  const needle = String(q ?? '').trim();
   const cap = Math.max(1, Math.min(50, Number(limit) || 20));
-  if (needle.length < 2) {
+  // The escaping lives in `util/likeSearch` (D128) — it was written identically
+  // here, in `admin_partners.ts` and in `public.ts`, and `/admin/users` would
+  // have been the fourth. `null` is the "too short to search on" answer, which
+  // must be branched on rather than passed along: `%%` matches every row.
+  const like = likeNeedle(q);
+  if (like === null) {
     return { results: [], truncated: false, branch, as_of: nowIso() };
   }
-  const like = `%${needle.replace(/[%_]/g, (m) => `\\${m}`)}%`;
   const rows = await env.DB.prepare(
     `SELECT id, name, email, role, is_active, created_at
        FROM users
