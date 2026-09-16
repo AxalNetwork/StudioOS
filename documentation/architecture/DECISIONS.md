@@ -10823,3 +10823,119 @@ HQ's suspend still reaches no branch: `applyLicence` has no caller (D137, task
 #259). It does not block this, because no branch has been provisioned and the
 whole ladder runs on HQ — but it must close before the first one is, or a frozen
 subsidiary keeps trading.
+
+## D137 — the licence push pipe, connected before a branch exists
+
+**Date:** 2026-09-16 · **Status:** accepted · **Builds on:** D111 (a push is
+reported, never thrown), D107 (the branch's licence copy), D135/D136 (the
+compliance ladder), migration 257 (the first field the copy omitted).
+
+### The defect
+
+**`applyLicence` had no caller.** The `HqEntrypoint` method whose entire job is
+to hand a branch its licence appeared in `cloudflare-worker/src` exactly twice —
+its definition and its one-line delegation — plus three tests. Nothing in
+`frontend/src`, `scripts` or `.github` called it either, and symmetrically
+`BranchEntrypoint.licence()` had no branch-side caller; `fanOut` was only ever
+invoked with `'overview'` and `'health'`.
+
+So `POST /api/admin/licences/:uid/suspend` changed four columns in HQ's ledger
+and **changed nothing on the subsidiary**. D135 turned that from latent into
+urgent: the compliance sweep now suspends a licence on a clock, every minute,
+so without this an account HQ believes is frozen belongs to a branch that goes
+on trading — and nobody would be looking, because the freeze looked done at HQ.
+
+It is still true that no branch has been provisioned, so nothing is broken in
+production today. That is precisely why it is fixed now: after the first
+provisioning it would be a live incident rather than a gap.
+
+### The push is reported, never thrown
+
+`routes/admin_escalations.ts:94-116` states the rule for D111's escalation
+answer and this is its fourth instance. HQ's ledger is the record; the branch
+is a second, fallible thing. A 502 for an unreachable branch would ask an
+operator to re-suspend something already suspended, and the retry would find it
+done. So each transition keeps its own write, its own `licence_events` row, its
+own notification and its own 200, and carries `pushed: {ok, reason?, code?}`
+beside the outcome.
+
+**One helper, five callers** — `services/licencePush.ts`. Four licence
+transitions plus the sweep's own suspend. Copying D111's twelve lines five
+times is how five call sites come to disagree about what "landed" means; this
+repo has now made that consolidation for `likeNeedle`, the absence helpers, one
+`GROUP BY role`, one definition of open and one zone formatter.
+
+**Three refusal states, three sentences**, because they need different actions:
+no deployment row (nothing to push to, and no licence has one yet), a
+deployment with no service binding (provisioning ran, HQ has not been
+redeployed), and a branch that threw or refused (its own message survives).
+
+**The sweep counts `pushed` separately from `suspended`.** Folding them would
+report a freeze as complete when only half of it happened.
+
+### The eight fields, and why it was not six
+
+The plan said "six mis-renamed fields". Measured, it was **eight broken fields
+in two classes**, and the distinction is the work:
+
+`MyLicencePage` reads HQ's vocabulary — `LicenceRow`'s columns, which `hydrate`
+spreads verbatim. The branch payload emitted the **table's** names instead:
+`term_start`, `renewal_at` and `suspended_note` where the page reads
+`starts_on`, `renews_on` and `status_note`. And five more the copy **never
+stored at all**: `registered_address`, `signatory_name`, `signatory_title`,
+`term_years`, `terminated_at`.
+
+So on a branch the Entity panel printed "Not recorded" four times about facts HQ
+holds, the term and renewal date were blank, a terminated licence never showed
+when it ended — and `status_note`, the sentence saying **why** a licence was
+suspended, was blank on the page a suspended administrator is sent to.
+
+`licence.ts:174-181` already carried the rule: *"THE KEYS ARE HQ'S, NOT THE
+TABLE'S … a copy that renamed its own fields would render blank on exactly the
+tier it was built for — which is what it did until this line."* It was applied
+to `legal_entity` and stopped. This finishes it.
+
+**Migration 265** adds the five, additively, on `257_branch_licence_ref.sql`'s
+shape — same table, same operation, for the same reason. 257's header already
+argues why a new migration beats editing an applied one *"even when the table it
+corrects is empty in every database that exists, because the rule is what makes
+that emptiness something we can stop having to check."*
+
+**`term_end` is pushed as NULL rather than derived.** The copy has the column
+and HQ has no such fact: it holds a duration (`term_years`) beside `starts_on`.
+Computing an end date would be the copy asserting something HQ never said.
+
+### The guard is derived, not typed
+
+`branch_licence_copy.test.ts` asserted four key names, typed in — which is how
+the other eight survived. It now parses **every `l.<key>` the page reads** out
+of `MyLicencePage.jsx` and requires the payload to supply each, and refuses the
+table's own spellings alongside them. The next field added to the page fails
+here rather than rendering blank on a tier nobody has run yet.
+
+### Two fixtures were narrower than the schema
+
+`branch_licence_copy` and `branch_rpc_fanout` both hardcode `branch_licence`'s
+DDL, and neither had 265's columns — so the SELECT threw and the payload
+degraded to `licence_not_pushed`, i.e. six tests reported "HQ has not pushed
+this branch its licence" about a row sitting in front of them. The D133 lesson,
+twice: a fixture narrower than the schema does not fail honestly.
+
+### Files
+
+`cloudflare-worker/sql/migrations/265_branch_licence_entity.sql` (new) ·
+`services/licencePush.ts` (new) · `services/complianceLadder.ts` (the sweep
+pushes, and counts it apart) · `routes/admin_licences.ts` (five transitions) ·
+`routes/licence.ts` (the payload speaks HQ's vocabulary) ·
+`rpc/branchOps.ts` (`applyLicenceCopy` binds the five) ·
+`test/licence_push_d137.test.ts` (new, 12) · two fixtures widened · **D137**.
+
+**Migration 265 used; next free is 266.** No new `/api/*` method.
+
+### What this does NOT do
+
+The branch-side 423 still has no machine-readable `code` of its own, so the
+frozen-branch banner D107 is cited for remains unbuilt; that is S7/S13's, with
+the three false "the banner shipped" claims to correct. And `publishTemplate`,
+`applyBenchmarks`, `templates()`, `governanceFeed` and the partner pair are
+still unbuilt producers — `applyLicence` was the first of six to get a caller.

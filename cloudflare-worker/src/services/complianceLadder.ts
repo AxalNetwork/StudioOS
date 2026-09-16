@@ -43,6 +43,7 @@
  */
 import type { Env } from '../types';
 import { FREEZING_STATUSES } from '../util/authErrors';
+import { pushLicenceToBranch } from './licencePush';
 
 /** What a notice can be about. Mirrors migration 264's CHECK. */
 export const NOTICE_KINDS = ['renewal_terms', 'fees', 'term_violation', 'other'] as const;
@@ -64,6 +65,14 @@ export interface SweepResult {
   froze: number;
   /** Licences this pass moved from `active` to `suspended`. */
   suspended: number;
+  /**
+   * Suspensions that reached their branch. Counted SEPARATELY from `suspended`
+   * (D137/D111): HQ's ledger is the record and the push is a second, fallible
+   * thing, so folding them into one number would report a freeze as complete
+   * when only half of it happened. On HQ with no branch provisioned this is
+   * always 0, which is correct rather than a failure.
+   */
+  pushed: number;
   /** Addressees told. Best-effort; a failure here never blocks the flip. */
   notified: number;
   /**
@@ -173,7 +182,7 @@ export async function freezeOverdueNotices(
   env: Env,
   deps: { notify?: (env: Env, args: any) => Promise<unknown> } = {},
 ): Promise<SweepResult> {
-  const out: SweepResult = { due: 0, froze: 0, suspended: 0, notified: 0, readable: true };
+  const out: SweepResult = { due: 0, froze: 0, suspended: 0, pushed: 0, notified: 0, readable: true };
 
   let due: DueRow[] = [];
   try {
@@ -284,6 +293,22 @@ export async function freezeOverdueNotices(
         l.id, JSON.stringify({ notice_uid: l.uid, automatic: true }), note,
         l.issued_by_user_id ?? null, stamp,
       ).run();
+
+      // D137 — AND THE BRANCH IS TOLD. This is the suspend that most needed
+      // it: HQ's four routes are a person deciding, and this one is a clock,
+      // so without the push an account freezes at HQ on a timer while the
+      // subsidiary it belongs to goes on trading with nobody having noticed.
+      //
+      // Reported, never thrown, exactly as the routes do — but here the report
+      // goes to the cron log rather than to a caller, because there is no
+      // caller. A failed push leaves the suspension recorded and is picked up
+      // by the next transition, which pushes the licence's CURRENT state
+      // rather than a queued delta.
+      const push = await pushLicenceToBranch(env, l.id, stamp);
+      if (push.ok) out.pushed += 1;
+      else if (push.code) {
+        console.warn('[compliance] licence suspend not pushed to', push.code, '—', push.reason);
+      }
     } catch (e) {
       console.error('[compliance] licence suspend failed', (e as Error).message);
     }

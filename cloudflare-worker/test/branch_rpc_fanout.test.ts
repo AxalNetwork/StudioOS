@@ -54,6 +54,8 @@ const BRANCH_SCHEMA = `
     status TEXT NOT NULL DEFAULT 'active', seats_json TEXT, revenue_share_bps INTEGER,
     token_split_bps INTEGER, annual_fee_cents INTEGER, currency TEXT, term_start TEXT, term_end TEXT,
     renewal_at TEXT, template_version TEXT, suspended_at TEXT, suspended_note TEXT,
+    registered_address TEXT, signatory_name TEXT, signatory_title TEXT,
+    term_years INTEGER, terminated_at TEXT,
     pushed_at TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')));
   CREATE TABLE lp_applications (id INTEGER PRIMARY KEY, status TEXT, created_at TEXT);
   CREATE TABLE referral_submissions (id INTEGER PRIMARY KEY, status TEXT, created_at TEXT);

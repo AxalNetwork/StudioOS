@@ -64,6 +64,12 @@ type BranchLicenceRow = {
   template_version: string | null;
   suspended_at: string | null;
   suspended_note: string | null;
+  // Migration 265 — the five `MyLicencePage` reads and the copy never carried.
+  registered_address: string | null;
+  signatory_name: string | null;
+  signatory_title: string | null;
+  term_years: number | null;
+  terminated_at: string | null;
   pushed_at: string;
 };
 
@@ -87,7 +93,9 @@ async function branchLicencePayload(env: Env, code: string) {
     row = await env.DB.prepare(
       `SELECT licence_uid, licence_ref, legal_entity, brand_name, territory, status, seats_json,
               revenue_share_bps, token_split_bps, annual_fee_cents, currency, term_start, term_end,
-              renewal_at, template_version, suspended_at, suspended_note, pushed_at
+              renewal_at, template_version, suspended_at, suspended_note,
+              registered_address, signatory_name, signatory_title, term_years, terminated_at,
+              pushed_at
          FROM branch_licence WHERE id = 1`,
     ).first<BranchLicenceRow>();
   } catch (e) {
@@ -204,12 +212,28 @@ async function branchLicencePayload(env: Env, code: string) {
       token_split_bps: row.token_split_bps,
       annual_fee_cents: row.annual_fee_cents,
       currency: row.currency,
-      term_start: row.term_start,
-      term_end: row.term_end,
-      renewal_at: row.renewal_at,
-      template_version: row.template_version,
+      // D137 — THE REST OF THE RENAME THE COMMENT ABOVE STARTED. That comment
+      // was applied to `legal_entity` alone and stopped, so seven more fields
+      // went on being emitted under the TABLE's names while `MyLicencePage`
+      // read HQ's. Every one of them rendered blank on exactly the tier the
+      // copy exists for — including `status_note`, which is the sentence
+      // saying WHY a licence was suspended, on the page a suspended
+      // administrator goes to find out.
+      //
+      // The mapping is `LicenceRow` (routes/admin_licences.ts), which is what
+      // `hydrate` spreads verbatim into HQ's payload, so the two tiers now
+      // answer with one vocabulary. A test asserts that set-equality rather
+      // than this comment.
+      starts_on: row.term_start,
+      renews_on: row.renewal_at,
+      status_note: row.suspended_note,
+      term_years: row.term_years,
+      registered_address: row.registered_address,
+      signatory_name: row.signatory_name,
+      signatory_title: row.signatory_title,
       suspended_at: row.suspended_at,
-      suspended_note: row.suspended_note,
+      terminated_at: row.terminated_at,
+      template_version: row.template_version,
       admin_role: 'principal',
     },
     // NOT an empty history. `licence_events` is HQ's append-only trail and is
