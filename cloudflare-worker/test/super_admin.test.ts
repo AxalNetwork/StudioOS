@@ -299,8 +299,35 @@ test('force re-auth is behind the impersonation bar, needs a reason, and is audi
 });
 
 test('the SPA reaches the console through api.js', () => {
+  // THIS PINNED A SPELLING AND A LEGITIMATE CHANGE FAILED IT — the fourth time
+  // in this programme (`branch_rail_mount`, `branch_approvals_board_d130`, the
+  // `flushSurface` quartet). D133 gave `superAdminGrant` an options argument so
+  // a holder can hand the platform on, and the old regex matched the exact
+  // single-parameter source line, so it refused a signature change that broke
+  // nothing it was written to protect.
+  //
+  // What it was written to protect is that each method exists and reaches its
+  // OWN path and verb, so that is what it now asserts — bounded to each
+  // method's own body so a neighbour's `request(...)` cannot satisfy it.
   const api = read('frontend/src/lib/api.js');
-  assert.match(api, /superAdmins: \(\) => request\('\/admin\/super-admins'\)/);
-  assert.match(api, /superAdminGrant: \(userId\) => request\(`\/admin\/super-admins\/\$\{userId\}`, \{ method: 'POST' \}\)/);
-  assert.match(api, /superAdminRevoke: \(userId\) => request\(`\/admin\/super-admins\/\$\{userId\}`, \{ method: 'DELETE' \}\)/);
+  for (const [name, verb] of [
+    ['superAdmins', null], ['superAdminGrant', 'POST'], ['superAdminRevoke', 'DELETE'],
+  ] as [string, string | null][]) {
+    const at = api.indexOf(`${name}:`);
+    assert.ok(at > 0, `${name} no longer reaches the console`);
+    // BOUNDED AT THE NEXT METHOD, NOT AT A CHARACTER COUNT. A first draft took
+    // 300 characters and a mutation walked straight through it: the window ran
+    // past `superAdminGrant` into `superAdminRevoke`, whose own URL satisfied
+    // the path assertion. That is the one failure mode a substring scan has,
+    // and it is the second time in two days it has had to be closed.
+    const rest = api.slice(at);
+    const nextKey = rest.slice(1).search(/\n {2}[A-Za-z_$][\w$]*:/);
+    const body = nextKey > 0 ? rest.slice(0, nextKey + 1) : rest;
+    assert.ok(body.includes('/admin/super-admins'),
+      `${name} no longer calls the super-admin route`);
+    if (verb) {
+      assert.ok(body.includes(`method: '${verb}'`), `${name} stopped using ${verb}`);
+      assert.ok(/\$\{userId\}/.test(body), `${name} stopped naming the target`);
+    }
+  }
 });

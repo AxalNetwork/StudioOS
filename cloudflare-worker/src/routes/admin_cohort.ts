@@ -15,7 +15,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin, requireBranchNotSuspended } from '../auth';
+import { requireAdmin, requireSuperAdmin, requireBranchNotSuspended } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import {
   ensureCohortTimingSchema,
@@ -196,7 +196,17 @@ r.post('/override', async (c) => {
 });
 
 r.get('/impersonation-audit', async (c) => {
-  await requireAdmin(c);
+  // D133 — SUPER ADMIN. This is `impersonation_sessions` joined to `users`
+  // TWICE, for the actor's name and the target's name and email: every admin's
+  // support-session history, readable by every other admin. It is the same
+  // query shape D132 raised on `/monitoring/analytics/{audit, audit/export.csv,
+  // exports/recent}` and it was missed there, one file over, because that pass
+  // went looking in `monitoring_analytics.ts` rather than for the join.
+  //
+  // The rule D132 wrote for its own file is the one being applied here: a route
+  // that reaches another admin's activity is a cross-admin read whatever it
+  // renders, and gating some of them is gating none of them.
+  await requireSuperAdmin(c);
   await ensureCohortTimingSchema(c.env);
   const rows = await c.env.DB.prepare(
     `SELECT i.*, a.name AS admin_name, t.name AS target_name, t.email AS target_email

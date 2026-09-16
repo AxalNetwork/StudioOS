@@ -158,6 +158,28 @@ admin.get('/users/:user_id/profile', async (c) => {
   ).bind(userId).first();
   if (!userRow) return c.json({ error: 'User not found' }, 404);
 
+  // D133 — AN ADMIN'S DRAWER IS THE SUPER ADMIN'S TO OPEN, and this is the
+  // heaviest of the reads D132 left behind. The payload below is not a summary:
+  // it carries the target's last 100 `activity_logs` rows, matched on
+  // `user_id OR actor`, so pointed at a peer it returns that admin's own
+  // ACTOR-side feed — every `user_toggled`, `role_changed` and
+  // `admin_impersonate` they wrote. D132's own header states the rule this
+  // applies: a route that reads another admin's activity is a cross-admin read
+  // whatever it renders, and gating some of them is gating none of them.
+  //
+  // READING YOUR OWN DRAWER IS NOT A CROSS-ADMIN READ, so the self case passes
+  // ahead of the check rather than being carved out of it.
+  if (
+    userRow.id !== adminUser.id
+    && String(userRow.role).toLowerCase() === 'admin'
+    && !isSuperAdmin(adminUser as any)
+  ) {
+    return c.json({
+      error: "Only a super admin can open another admin's record.",
+      code: 'super_admin_required',
+    }, 403);
+  }
+
   // ----- Activity logs (D1, last 100) -----
   const activityRes: any = await c.env.DB.prepare(
     `SELECT id, action, details, actor, created_at
@@ -1546,6 +1568,25 @@ admin.post('/impersonate/:userId', async (c) => {
     return c.json({
       error: 'Only a Super Admin can impersonate a Super Admin.',
       code: 'cannot_impersonate_super_admin',
+    }, 403);
+  }
+  // D133 — AND AN ADMIN TARGET IS THE SUPER ADMIN'S ALONE, for the same reason
+  // one line up, one tier down. The guard above refuses a HOLDER target because
+  // the minted token carries the target's identity; every word of that argument
+  // applies to a plain admin too, and taking over a peer's session is strictly
+  // worse than reading their record — which D132 had already closed on three
+  // audit routes while this one stayed open.
+  //
+  // THE TWO GUARDS ARE KEPT APART RATHER THAN MERGED. A holder is also
+  // `role === 'admin'`, so this check alone would refuse both; what it would
+  // lose is the sentence above, which tells an operator exactly which line they
+  // crossed. Specific first, general second — the shape `toggle-active` uses
+  // for its self-check.
+  if (String(target.role).toLowerCase() === 'admin' && !isSuperAdmin(adminUser as any)) {
+    await sql.end();
+    return c.json({
+      error: 'Only a super admin can open a support session as another admin.',
+      code: 'super_admin_required',
     }, 403);
   }
   // Thirty minutes, not the ordinary 24 hours. See IMPERSONATION_EXPIRY_MINUTES.

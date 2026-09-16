@@ -1943,7 +1943,12 @@ export const api = {
   // writes also need a TOTP session with a recent step-up, the bar
   // impersonation sets (routes/admin_super_admins.ts).
   superAdmins: () => request('/admin/super-admins'),
-  superAdminGrant: (userId) => request(`/admin/super-admins/${userId}`, { method: 'POST' }),
+  // D133 — `transfer` is the holder handing the platform on. The elevation is
+  // capped at one, and with one holder revoke refuses three ways, so without
+  // this flag the grant would be permanently unreachable rather than merely
+  // guarded. The server does both writes in one batch.
+  superAdminGrant: (userId, { transfer = false } = {}) =>
+    request(`/admin/super-admins/${userId}${transfer ? '?transfer=1' : ''}`, { method: 'POST' }),
   superAdminRevoke: (userId) => request(`/admin/super-admins/${userId}`, { method: 'DELETE' }),
   // Task #7 — admin-managed OAuth client credentials per provider.
   adminListIntegrationKeys: () => request('/admin/integration-keys'),

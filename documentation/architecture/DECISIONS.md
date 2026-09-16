@@ -10250,3 +10250,109 @@ stale count) · `frontend/src/pages/AnalyticsTab.jsx` (`Refusal`, and
 `frontend/test/analytics_refusal_d132.test.mjs` (new, 5) ·
 `UNRESOLVED_ITEMS.md` U1 · **D132**. **No migration — 264 remains free**, for
 the sixth consecutive PR.
+
+---
+
+## D133 — the admin-over-admin reach D132 left behind, and a cap that was only a sentence
+
+**Date:** 2026-09-16 · **Task:** #255 · **Status:** shipped
+
+D132 raised three cross-admin reads to the super admin and wrote the rule that
+decides the rest, in `monitoring_analytics.ts`'s own header: *"a route that
+reaches `admin_audit_log a LEFT JOIN users u` is a cross-admin read whatever it
+renders, and gating some of them is gating none of them."* It then applied that
+rule **inside one file**. Auditing the platform against the owner's words rather
+than against D132's own plan found four surfaces outside it that were the same
+claim, and one invariant that was never an invariant at all.
+
+### The four, sharpest first
+
+| surface | what it was | now |
+| --- | --- | --- |
+| `POST /admin/impersonate/:userId` | the only target check was `isSuperAdmin(target) && !isSuperAdmin(caller)`, so **a plain admin could take over a peer's session** — strictly worse than reading their record, one route from the `toggle-active` hole D132 fixed | an **admin** target needs the super admin; the holder-vs-holder refusal keeps its own sentence above it |
+| `GET /admin/users/:user_id/profile` | no role check on the target at all. It returns the target's **last 100 `activity_logs`** matched on `user_id OR actor`, so pointed at a peer it is that admin's own **actor-side** feed: every `user_toggled`, `role_changed`, `admin_impersonate` they wrote | an admin target needs the super admin; **reading your own drawer is not a cross-admin read**, so the self case passes ahead of the check |
+| `GET /admin/cohort/impersonation-audit` | `impersonation_sessions` joined to `users` twice, for actor and target names and emails — byte-for-byte D132's shape, one file over | `requireSuperAdmin` |
+| `moveAccountOut` | deactivates by id with **no role check**; only the HQ route's `requireSuperAdmin` stood in the way, and `rpc/index.ts` says an entrypoint is *"callable by any Worker in the account"* | refuses an admin target **inside the RPC**, because a control that lives only at one caller is a control the function does not have |
+
+The last one also refuses the super admin, deliberately: deactivating a branch's
+administrator would leave `licence_admins` pointing at a dormant account and the
+subsidiary with nobody able to sign in. Unbinding at HQ is the tool for that, and
+D134 is where it lands.
+
+### "Only one super admin exists" was a migration that had already run
+
+Migration 207's `DELETE` is a one-shot. `super_admins`' only constraint is
+`user_id PRIMARY KEY` — which says an admin holds the elevation **at most once**,
+not that **at most one admin holds it**. `POST /super-admins/:userId` counted
+nothing. The UI said *"One holder **by decision**"* and offered *"Every admin
+already holds it"* as an empty state, a string that only makes sense if many are
+expected. A holder could elevate a second, a third, an nth.
+
+The ceiling now sits beside the floor `DELETE /:userId` already had
+(`last_super_admin`) — the same rule read from the other end, in one file so
+neither can be changed without the other.
+
+### THE CEILING WAS A WALL, AND A MUTATION IS WHAT SAID SO
+
+With exactly one holder, revoke refuses **three ways**: `cannot_revoke_self` for
+the holder's own row, `last_super_admin` for the only row, and there is nobody
+else to ask. So "revoke first, then grant" is not a path that exists, and a bare
+ceiling would have frozen the elevation on whoever held it, **permanently**.
+
+The test that should have caught this passed for the wrong reason: it revoked
+the holder's row and then asserted a grant was *not refused with 409* — but a
+caller with no elevation is stopped by `requireWriteBar` with **403**, and 403 is
+not 409. It asserted nothing. Only the mutation `> 0` → `>= 0` exposed it.
+
+The fix is an explicit, atomic transfer: the holder names a successor with
+`?transfer=1`, and the grant and the revoke go in one `DB.batch`, so the set
+moves from `{holder}` to `{successor}` without ever being two or empty. The page
+follows — with a holder present the control says **Transfer**, because a Grant
+button that reliably 409s is the bare refusal D132 was written about.
+
+### A conjunct that cannot be false is not a guard
+
+The transfer branch's first draft also required `held[0].id === actor.id`, and
+no mutation could kill it: `requireWriteBar` has already proved the caller is a
+super admin, and reaching that line proves `held.length === 1`, so the one active
+holder **is** the caller. A database predating this ceiling that carries two
+holders fails the length test and gets the 409 — the right answer, since it
+should be reduced to one first. The conjunct is gone rather than decorative, and
+the test that covered it now names the control that actually refuses a
+non-holder: the write bar, asserted as **403** rather than as "not 200".
+
+### Mutations
+
+**18 aimed, 16 caught, and both escapes changed something real.** The first
+(`> 0` → `>= 0` on the ceiling) exposed the wall described above and the dead
+conjunct beside it. The second pointed `superAdminGrant` at a different path and
+still passed, because the guard's 300-character window ran past it into
+`superAdminRevoke`, whose own URL satisfied the assertion — the single failure
+mode a bounded substring scan has, now bounded at the next method instead.
+
+**Two more landed somewhere other than where they were aimed and were re-run
+rather than counted:** one left the original `requireSuperAdmin` in place beside
+the injected `requireAdmin`, so the guard never came off; the other swapped in a
+symbol `admin_super_admins.ts` does not import, failing on an unresolved
+reference rather than on the loosened gate. Neither is evidence, and the tally
+says so.
+
+### A fifth guard that pinned a spelling
+
+`super_admin.test.ts`'s api.js check matched `superAdminGrant`'s exact
+single-parameter source line, so giving it the options argument a transfer needs
+failed a test that protects nothing about that signature. Re-pointed at the
+property — each method exists, reaches its own path, and uses its own verb —
+which is what it was written for. That is the fourth such case in this
+programme, after `branch_rail_mount`, `branch_approvals_board_d130` and the
+`flushSurface` quartet.
+
+### Files
+
+`routes/admin.ts` (impersonate + profile drawer) · `routes/admin_cohort.ts` ·
+`routes/admin_super_admins.ts` (the ceiling and the transfer) ·
+`rpc/branchOps.ts` (`moveAccountOut`) · `frontend/src/lib/api.js` ·
+`frontend/src/pages/hq/SuperAdminHolders.jsx` ·
+`cloudflare-worker/test/admin_over_admin_d133.test.ts` (new, 15) ·
+`frontend/test/super_admin_one_holder_d133.test.mjs` (new, 5) · **D133**.
+**No migration — 264 remains free**, for the seventh consecutive PR.
