@@ -9023,3 +9023,124 @@ which forced the right format on to the row and made the test blind to the write
 side, so the exact bug it exists for walked through it. It now ages the row in
 whatever format the writer chose. The `/support` collision was caught by a guard
 and not by a reviewer.
+
+---
+
+## D121 — Moving an account between branches is a re-invite, and both halves are reported separately
+
+D.6's wording is exact and worth keeping in front of the reader, because the
+temptation is to build something else:
+
+> HQ deactivates the account where it lives with a reason and an audit row,
+> invites the same email on the destination, and both tenants are notified.
+> Projects, deals and documents **stay where they were**, readable by HQ.
+
+This is F.9 row 11's second half. The first (D120, the cross-host support
+session) shipped separately: an account-lifecycle feature behind the same review
+as a 400-line authentication change is what the per-PR convention exists to
+avoid, and the split is recorded here rather than left looking like a scope cut.
+
+### Why it is not a record migration, said once so nobody rebuilds it as one
+
+Two branches are two Workers over two databases that cannot see each other
+(D.2). A true migration means copying rows across that boundary and rewriting
+every reference on both sides, and a half-done one — some rows moved, some left,
+foreign keys pointing into a database that is not bound — is worse than none.
+So the account is closed where it lives and invited on the destination, and the
+route says so **in its own response** (`records_note`), not only in this file:
+an operator who assumed otherwise would tell the person something false about
+where their work went. The person's own audit row says it too.
+
+### The two halves cannot be one transaction, so they are two facts
+
+There is no transaction across two Workers. The order is deliberate and the
+other order is worse:
+
+- **Close first.** Someone briefly with no home is a visible, recoverable,
+  honest state: HQ sees `invited.ok = false` with the reason, and the retry is
+  `inviteAccount` alone.
+- **Invite first** would leave an invitation on the destination for an account
+  still live on the source if the deactivation then failed — two active homes
+  for one person, which the tenancy model has no way to represent.
+
+And the response reports them separately, never folded into one success. This is
+the third time the same shape has been correct — D111's promo ceiling, D112's
+escalation answer, now this — and the reason is the same each time: collapsing
+them makes an unreachable far side look like an action that never happened, so
+an operator repeats it. Here repeating it is refused, correctly, by the
+already-inactive guard, which would leave them with two refusals and no way to
+finish. **Both bindings are resolved before either is called**, so a destination
+that is not bound is a clean refusal rather than half a move.
+
+### Both methods authenticate, because both are privileged
+
+`moveAccountOut` closes an account and `inviteAccount` creates an invitation to
+one. Each is at least as privileged as `openSupportSession`, so each takes
+`HQ_RPC_SECRET` first and calls `authenticateHq` (D120). An unauthenticated
+`HqEntrypoint` method that deactivates accounts would be exactly the hole D120
+closed, reopened one PR later. HQ's route runs D120's full gate stack —
+`requireFactor('totp')`, `requireStepUp`, `requireSuperAdmin` — for the same
+reason it does there: those are facts about an operator's browser session that
+no branch can check.
+
+### It is not `toggle-active`, and the difference is the reason
+
+`admin.ts`'s existing deactivation already writes the right **two** audit rows —
+one for what the operator did, one addressed to the person it happened to — and
+that shape is reused. But it carries no reason, and D.6 requires one: moving an
+account moves which subsidiary earns revenue share on it, which is why the
+canvas calls it "a money action wearing a directory action's clothes".
+
+The person's row also **names the destination**. An account told only that it
+was deactivated has been told something true and useless — worse, misleading,
+because it reads as a suspension.
+
+### `email_sent` is a fact, not an assumption
+
+Every sender in `services/email.ts` returns `false` when the Gmail credentials
+are unset rather than throwing, and a freshly provisioned branch has none. So
+the invitation row records what the mailer actually did. `company_invitations`
+(migration 236) had already written the rule this follows:
+
+> *"an invitation nobody was told about is a different thing from one that is
+> merely unanswered — the page says which."*
+
+**And the link is handed back when the message did not leave.** The first
+version told the operator to "pass the link on by hand" and never showed it to
+them — guidance that cannot be followed. The link now travels on that path only:
+to an authenticated super-admin, over the private binding, when the person
+cannot otherwise be reached. On the happy path it is omitted, because then it is
+already in the one place it belongs.
+
+### Two things the mutation pass changed in the code, not the tests
+
+1. **The raw token was the same shape as its own digest.** Two UUIDs with the
+   dashes stripped are exactly 64 hex characters, so storing the credential
+   instead of its hash looked perfectly correct in the table *and* passed an
+   assertion checking the column's shape. The token is prefixed `invt_` now, so
+   the two are distinguishable at a glance and in an assertion. The assertion
+   additionally verifies the stored value **is** the digest of the token that
+   was issued, which it can only do because the link comes back.
+2. **A source scan could not see a `throw` placed above the text it matched.**
+   The assertion that the invitation is reported rather than thrown matched the
+   reporting literal, and a `throw e;` inserted before it left that literal in
+   place. It reads the catch block as a whole now.
+
+A third mutation appeared to escape and had not: a `perl` substitution whose
+anchor was not unique replaced the same lines in `openSupportSession` instead of
+`moveAccountOut`, so the pass proved nothing. **A mutation that lands somewhere
+other than where it was aimed is not evidence**, and checking that it applied
+where intended is part of applying it.
+
+### What is deliberately not here
+
+**The HQ screen.** H4 draws "Move to another branch" as a modal; this is the
+worker half only, and the route has no SPA caller yet — the same state D120's
+support-session route is in. Both are drawn in the canvas and neither is wired
+to a button, which is worth saying because a route with no caller reads as
+finished when it is half of a feature.
+
+**Verification.** `test:drift` exit 0; worker `tsc` exit 0; 8 mutations applied,
+8 caught — two only after the assertion was fixed, and one only after the
+mutation was aimed correctly. Nothing here has run against a live branch, for the
+same reason D120 could not: none has been provisioned.
