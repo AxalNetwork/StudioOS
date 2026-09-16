@@ -8783,3 +8783,65 @@ element and its binding, which also catches a control rendered but not wired to
 the page's state. And a concatenated template literal in ClosingZone's filter
 bound `.toLowerCase().includes(q)` to the second literal only, so the expression
 returned a string and every row passed — caught on review before it ran.
+
+## D119 — The three legacy investor pipeline paths retire, and the two traps in retiring them
+
+D118 called `/deals/*` and the legacy `/pipeline/*` trio the same job and ported
+what the trio had that the zones did not. This is the other half:
+`/pipeline/screening`, `/pipeline/commit` and `/pipeline/transactions` become
+redirects to `/deals/screening`, `/deals/commit` and `/deals/closing`, and
+`PipelineScreeningPage.jsx`, `PipelineCommitPage.jsx` and
+`PipelineTransactionsPage.jsx` are deleted — each was imported by
+`PipelineWorkspace` alone, so they became dead the moment the routes moved.
+
+The redirects carry **no guard of their own**. The destination guards itself, so
+an unentitled visitor is refused there rather than at a URL that no longer has a
+page behind it.
+
+### Trap 1 — `/pipeline`, the root, must not redirect
+
+It is **role-forked** in `App.jsx`: partner gets `PartnerBucketRoutes`, investor
+and founder keep `PipelineWorkspace`, and founder access there is deliberate per
+the route's own comment. **Only the investor arm was superseded.** An
+unconditional redirect would take the founder's board and the partner's bucket
+root with it — a change to two licences nobody asked for, made while retiring a
+third's pages.
+
+### Trap 2 — `legacyRedirects()` must never be mounted wholesale
+
+It is exported from `shellConfig.js` and **called by nothing**, and every one of
+its rows named a path `App.jsx` still mounts as a live route. Mounting the set
+would have replaced each of those pages with a redirect to its successor.
+
+The dangerous row was `/pipeline`'s own. Deleting the marker would have disarmed
+it and lost the provenance — this zone *did* supersede that board for investors
+— so the row keeps its `legacy` and gains **`legacyForked: true`**, and the
+function skips it. The flag names the condition rather than the exception: a
+legacy path whose route forks on role and only one arm was superseded.
+
+### The tab bar kept its doors
+
+`PipelineWorkspace`'s own header already recorded the fact that decided this:
+**its tab bar is the only inbound link an investor has** to those surfaces,
+because the investor shell collapsed the former sidebar rows into one "Deals"
+row landing on `/pipeline`. Deleting the three tabs alongside the three pages
+would have removed the door with the room. They now point at `/deals/*` and join
+the two rows that were already cross-route doors, so the distinction that file
+drew between "tabs this workspace renders" and "doors" covers every row.
+
+Founder still sees the Board tab only. `/deals/*` is admin + partner + investor,
+and a tab a founder cannot follow would be a door into a refusal.
+
+With the three sub-paths gone, `/pipeline` is the only route that renders the
+workspace, so the pathname-derived `active` state was removed rather than left
+as a branch nothing can reach.
+
+### What is guarded
+
+`frontend/test/investor_pipeline_retirement.test.mjs` pins both traps directly —
+the root keeps its fork and never redirects, and `legacyRedirects()` never
+offers `/pipeline` **for any role in `ROLES_WITH_SHELL`**. Trap 2 is asserted
+*through the function* rather than by reading the config, because a
+`legacyForked` row the filter stopped honouring would still look right in
+`shellConfig` and would arm the trap again. Five mutations, five caught,
+including both traps and the deletion of a door.

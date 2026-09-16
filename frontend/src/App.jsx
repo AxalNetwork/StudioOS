@@ -2569,12 +2569,19 @@ function AppInner() {
       <Route path="/partner/operations/portfolio" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
       <Route path="/partner/operations/engagements" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
       <Route path="/partner/operations/performance" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
-      {/* Task #5 — investor lifecycle sections now live. Pipeline stages render
-          the tabbed PipelineWorkspace; portfolio/funds analytics render as tabs
-          within their existing workspaces. Investor-scoped (admin can view). */}
-      <Route path="/pipeline/screening" element={guard(['admin', 'investor'], investorWorkspace('deals', <PipelineWorkspace />))} />
-      <Route path="/pipeline/commit" element={guard(['admin', 'investor'], investorWorkspace('deals', <PipelineWorkspace />))} />
-      <Route path="/pipeline/transactions" element={guard(['admin', 'investor'], investorWorkspace('deals', <PipelineWorkspace />))} />
+      {/* D118/D119 — the three investor Deals sub-paths retire to `/deals/*`,
+          which is now their equal: #586 ported the search and the counted
+          chips they had and the zones did not. The destination guards itself,
+          so these carry no guard of their own — an unentitled visitor is
+          refused there rather than at a URL that no longer has a page.
+
+          `/pipeline` (the ROOT, above) deliberately does NOT redirect. It is
+          role-forked — partner gets PartnerBucketRoutes, investor and founder
+          keep PipelineWorkspace — so an unconditional redirect would take the
+          founder's board and the partner's bucket root with it. */}
+      <Route path="/pipeline/screening" element={<Navigate to="/deals/screening" replace />} />
+      <Route path="/pipeline/commit" element={<Navigate to="/deals/commit" replace />} />
+      <Route path="/pipeline/transactions" element={<Navigate to="/deals/closing" replace />} />
       <Route path="/portfolio/performance" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/portfolio/growth" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/portfolio/value-add" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />

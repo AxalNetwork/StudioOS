@@ -223,7 +223,16 @@ export const SHELLS = {
       { kind: 'link', label: 'Home', to: '/studio' },
       { kind: 'bucket', label: 'Deals', prefix: '/deals', tagline: 'Find and close investments',
         zones: [
-          { slug: 'pipeline', label: 'Pipeline', archetype: A.WORK_BOARD, legacy: '/pipeline' },
+          // `/pipeline` IS NOT RETIRING, AND THAT IS WHY IT CARRIES THE FLAG.
+          // The other three legacy paths here are now real redirects (D119).
+          // This one must never become one: `/pipeline` is role-forked in
+          // App.jsx — partner gets PartnerBucketRoutes, investor and founder
+          // keep PipelineWorkspace — so redirecting it would take the founder's
+          // board and the partner's bucket root with it. The provenance is
+          // worth keeping (this zone did supersede that board for investors),
+          // so it stays recorded and `legacyRedirects` is taught to skip it
+          // rather than the fact being deleted.
+          { slug: 'pipeline', label: 'Pipeline', archetype: A.WORK_BOARD, legacy: '/pipeline', legacyForked: true },
           { slug: 'screening', label: 'Screening', archetype: A.ANALYTICS, legacy: '/pipeline/screening' },
           { slug: 'commit', label: 'Commit', archetype: A.LEDGER, legacy: '/pipeline/commit' },
           // The route said "transactions"; InvestorDealsWorkspace's own nav has
@@ -455,11 +464,25 @@ export function allZoneRoutes(role) {
   return bucketsFor(role).flatMap((b) => b.zones.map((z) => zonePath(b, z)));
 }
 
-/** Legacy → canonical, for the redirects that keep old inbound links alive. */
+/**
+ * Legacy → canonical, for the redirects that keep old inbound links alive.
+ *
+ * THIS IS NOT A LIST TO MOUNT WHOLESALE, AND THAT IS THE WHOLE WARNING. It is
+ * exported and called by nothing, and on 2026-09-16 every one of its rows
+ * named a path that App.jsx **still mounts as a live route**. Mounting the set
+ * would have replaced each of those pages with a redirect to itself's
+ * successor — which is why D119 moved exactly three paths by hand and left the
+ * rest alone.
+ *
+ * `legacyForked` excludes a path that is NOT retiring because the route forks
+ * on role and only one arm was superseded — `/pipeline` is the case it was
+ * written for. A `?` in the path excludes a tab deep-link, which is a query on
+ * a page rather than a page of its own.
+ */
 export function legacyRedirects(role) {
   return bucketsFor(role).flatMap((b) =>
     b.zones
-      .filter((z) => z.legacy && !z.legacy.includes('?'))
+      .filter((z) => z.legacy && !z.legacyForked && !z.legacy.includes('?'))
       .map((z) => ({ from: z.legacy, to: zonePath(b, z) })));
 }
 
