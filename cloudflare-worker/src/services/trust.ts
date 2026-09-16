@@ -430,7 +430,7 @@ export async function expireDueArtifacts(
           SET status = 'expired', updated_at = CURRENT_TIMESTAMP
         WHERE status = 'satisfied'
           AND expires_at IS NOT NULL
-          AND expires_at < CURRENT_TIMESTAMP`,
+          AND datetime(expires_at) < datetime('now')`,
     ).run();
     oblig = (r?.meta?.changes ?? r?.changes ?? 0) as number;
   } catch (e) { console.error('[trust] expire obligations failed', e); }
@@ -440,7 +440,7 @@ export async function expireDueArtifacts(
           SET status = 'expired', updated_at = CURRENT_TIMESTAMP
         WHERE status = 'active'
           AND valid_until IS NOT NULL
-          AND valid_until < CURRENT_TIMESTAMP`,
+          AND datetime(valid_until) < datetime('now')`,
     ).run();
     nda = (r?.meta?.changes ?? r?.changes ?? 0) as number;
   } catch (e) { console.error('[trust] expire NDAs failed', e); }

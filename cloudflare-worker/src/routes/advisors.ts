@@ -2970,7 +2970,7 @@ async function engagementClientUser(env: Env, m: AdvisorRow, v: unknown): Promis
           OR EXISTS (SELECT 1 FROM advisor_client_grants g
                       WHERE g.advisor_user_id = ? AND g.granted_by_user_id = u.id
                         AND g.status = 'active'
-                        AND (g.expires_at IS NULL OR g.expires_at > datetime('now'))))`
+                        AND (g.expires_at IS NULL OR datetime(g.expires_at) > datetime('now'))))`
   ).bind(n, m.id, m.user_id ?? -1).first<{ id: number }>();
   return u ? Number(u.id) : null;
 }

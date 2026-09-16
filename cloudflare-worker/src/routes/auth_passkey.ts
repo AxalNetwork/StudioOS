@@ -71,7 +71,7 @@ async function storeChallenge(env: Env, challenge: string, userId: number | null
 async function claimChallenge(env: Env, challenge: string, kind: 'registration' | 'authentication') {
   return env.DB.prepare(
     `UPDATE webauthn_challenges SET used_at = CURRENT_TIMESTAMP
-       WHERE challenge = ? AND kind = ? AND used_at IS NULL AND expires_at > CURRENT_TIMESTAMP
+       WHERE challenge = ? AND kind = ? AND used_at IS NULL AND datetime(expires_at) > datetime('now')
        RETURNING challenge, user_id`,
   ).bind(challenge, kind).first<{ challenge: string; user_id: number | null }>();
 }

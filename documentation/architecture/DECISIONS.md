@@ -9332,3 +9332,103 @@ the pinned count moved with a note that it counts ROUTE_MAP **rows** — not the
 folder totals in `design/canvases/README.md`, which are a different number and
 always have been. Nothing here ships behaviour; it lands design sources and
 their ledger rows.
+
+## D124 — an expiry gate compares `datetime(column)`, because normalising the other side fixes nothing
+
+**The defect.** SQLite has no date type. A timestamp is TEXT and a comparison is
+a lexicographic string compare, so two formats that look alike do not compare
+alike: `new Date(...).toISOString()` gives `2026-09-16T10:41:47.120Z` and
+`CURRENT_TIMESTAMP` gives `2026-09-16 10:56:47`. Position 10 decides it — `'T'`
+(0x54) beats `' '` (0x20) — so while the DATE halves match, an ISO string is
+always the greater one. A TTL written that way does not expire until the UTC
+date rolls over, up to ~24 hours late.
+
+**The fix that looks right and is not.** Rewriting the comparison to
+`expires_at > datetime('now')` is the obvious move, and it is what D120's own
+comment prescribes. Measured with `node:sqlite` rather than reasoned about, for
+a value that expired fifteen minutes ago:
+
+| comparison | result |
+| --- | --- |
+| `expires_at > CURRENT_TIMESTAMP` | **1** — reads as live |
+| `expires_at > datetime('now')` | **1** — the same bug |
+| `datetime(expires_at) > datetime('now')` | 0 |
+
+D120 is sound because it *also* changed the writer to `datetime('now', ?)`, so
+both sides were already SQL-format. Applying half of that idiom to a column
+whose writers were untouched leaves every row already in the database broken.
+Only normalising the stored value fixes existing rows, and it keeps working for
+any writer added later — which matters most where the writer is a passthrough of
+the caller's JSON and cannot be relied on at all.
+
+**Five idioms for one job.** The audit found the repo already carried three
+correct forms and two broken ones. `services/partnerDeals.ts:570` had
+`datetime(expires_at) <= datetime('now')` — the form adopted here — so this
+decision picks an idiom the repo already had rather than inventing one.
+`rpc/branchOps.ts:722-731` writes SQL-format and compares plainly (D120).
+`routes/decks.ts:1184` normalises the ISO on write with
+`.replace('T', ' ').slice(0, 19)`. The two broken forms are the bare column
+against `CURRENT_TIMESTAMP` and against `datetime('now')`.
+
+**What this PR changes: thirteen access-control comparisons.** Each decides
+whether a door is open, so being wrong means a door that should be shut is not:
+
+| gate | table | was |
+| --- | --- | --- |
+| `routes/auth.ts:1263` | `magic_link_tokens` | a 15-minute sign-in link kept redeeming |
+| `routes/auth_passkey.ts:74` | `webauthn_challenges` | a 5-minute ceremony nonce stayed claimable |
+| `routes/advisor_grants.ts:76,380`, `routes/advisors.ts:2973` | `advisor_client_grants` | an expired advisor grant still opened the founder's brief |
+| `routes/data_room.ts:92,146`, `routes/research.ts:3550` | `data_room_grants` | an expired grant still listed and downloaded files |
+| `routes/data_room.ts:109,256`, `routes/market_intel.ts:840` | `pairwise_ndas` | an ended NDA still gated the data room open and un-masked identities |
+| `services/trust.ts:433,443` | `legal_obligations`, `pairwise_ndas` | the daily sweep never flipped them |
+
+**Severity, stated so it is neither over- nor under-sold.** The two auth tokens
+are single-use — the claim is an atomic `UPDATE … WHERE used_at IS NULL` — so
+this is not a replay and not an auth bypass. It widens an exposure window that
+already requires holding the token: an emailed link that leaks, sits in a
+forwarded thread, or is read from a shared machine hours later still signs the
+attacker in. The two grant columns are worse in a different way: their only
+writer is an **unvalidated passthrough of the caller's JSON**
+(`advisor_grants.ts:165`, `data_room.ts:492`), and the shipped SPA sends no
+`expires_at` at all, so every row the product writes today is NULL and
+short-circuits. They are therefore not live-broken — they are an API contract
+that produces the defect the first time anyone sends the field. Normalising the
+read is what makes the writer's format stop mattering.
+
+**Writers are deliberately NOT changed.** It would make stored data tidier and
+it would not make anything more correct, because the read now normalises
+whatever it finds. Leaving the writers alone keeps a security-sensitive diff to
+one mechanical shape, and it means a writer added later in any format is still
+read correctly — the more robust property, and the one a passthrough column
+needs.
+
+**What this does not fix, named rather than left to be rediscovered.** The audit
+covered 33 comparison sites: 17 broken, 6 uncertain, 10 already correct. This
+records the thirteen that gate access. The rest are money and display figures
+and follow separately, among them `services/referralAttribution.ts:85` and
+`services/featureUnlocks.ts:98,113`; and one that runs the *other* direction —
+`rpc/branchOps.ts:391-394` compares a SQL-format `ai_usage_logs.created_at`
+against bounds `quarterBounds` builds with `.toISOString()`, so the branch's
+quarterly AI cost silently drops every row dated on the quarter's first day
+(measured: 3 rows in, 1 row out). That figure feeds HQ's statements under D.8,
+and it is in the same file whose comment 300 lines later explains this exact
+trap.
+
+**The guard is owed and is not here.** This class has now recurred across five
+idioms and D120 already wrote the explanation down, so a lexical check — a
+timestamp column in a comparison is always wrapped — belongs in `test:guards`.
+It ships with the remaining sites, because a guard that has to allowlist twenty
+unfixed sites decays into a ledger nobody reads.
+
+**Verification.** `test:drift` exit 0, read as the exit code. New
+`cloudflare-worker/test/expiry_gate_datetime_d124.test.ts` runs the **real SQL
+sliced out of each route file** against `node:sqlite` — a copy of a predicate in
+a test only proves the copy is right — and the slicer refuses an anchor that
+matches more than one place, which caught two anchors in the first draft that
+were silently testing different statements. The expired fixture is pinned to
+`date('now') || 'T00:00:00.000Z'` rather than "a minute ago", because a
+relative fixture run near 00:00 UTC lands on yesterday's date, where the broken
+predicate is accidentally right — the test would have passed against unfixed
+code for one minute a day. **7 mutations, 7 caught**, four of them the
+*plausible* half-fix rather than a full revert. No migration, no schema change,
+no `frontend/src` change, so `docs/` did not move.

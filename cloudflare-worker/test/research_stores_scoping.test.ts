@@ -119,7 +119,10 @@ test('the diligence read is scoped to the caller as the grantee', () => {
   assert.ok(stmt, 'no prepared statement in /diligence reads data_room_grants');
   assert.match(stmt, /g\.investor_user_id = \?/);
   assert.match(stmt, /g\.status = 'active'/);
-  assert.match(stmt, /expires_at IS NULL OR g\.expires_at > datetime\('now'\)/);
+  // The COLUMN is normalised, not just the clock (D124) — see
+  // `cloudflare-worker/test/expiry_gate_datetime_d124.test.ts`, which proves
+  // this gate closes against a real database rather than pinning its text.
+  assert.match(stmt, /expires_at IS NULL OR datetime\(g\.expires_at\) > datetime\('now'\)/);
 });
 
 test('diligence counts withheld files and never names them', () => {

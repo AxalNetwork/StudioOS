@@ -837,7 +837,7 @@ async function disclosedIdentities(env: Env, viewerId: number, targetUserIds: nu
       `SELECT party_a_user_id AS a, party_b_user_id AS b
          FROM pairwise_ndas
          WHERE status='active'
-           AND (valid_until IS NULL OR valid_until > datetime('now'))
+           AND (valid_until IS NULL OR datetime(valid_until) > datetime('now'))
            AND ((party_a_user_id = ? AND party_b_user_id IN (${placeholders}))
              OR (party_b_user_id = ? AND party_a_user_id IN (${placeholders})))`,
     ).bind(viewerId, ...targetUserIds, viewerId, ...targetUserIds)

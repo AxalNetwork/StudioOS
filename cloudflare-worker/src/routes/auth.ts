@@ -1260,7 +1260,7 @@ auth.get('/magic/verify', safe('magic-verify', 'Could not complete your sign-in 
   try {
     claimed = await c.env.DB.prepare(
       `UPDATE magic_link_tokens SET used_at = CURRENT_TIMESTAMP
-         WHERE token_hash = ? AND used_at IS NULL AND expires_at > CURRENT_TIMESTAMP
+         WHERE token_hash = ? AND used_at IS NULL AND datetime(expires_at) > datetime('now')
          RETURNING email`,
     ).bind(tokenHash).first() as { email: string } | null;
   } catch (e) {
