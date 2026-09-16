@@ -237,13 +237,53 @@ test('the backlog sums the four queues, and one unreadable queue voids the total
   assert.match(p.backlog_reason!, /smaller than the truth/);
 });
 
-test('seats used and revenue are null with reasons, never zero', async () => {
+test('revenue is null with a reason, never zero', async () => {
+  // SPLIT FROM SEATS (D127), not loosened. This test used to assert
+  // `seats_used === null` and `!== 0` together with revenue, on the shared
+  // premise that neither could be known. Seats can be now — a branch counts
+  // its own — so the two facts came apart and are asserted apart. The
+  // assertion this must NEVER become is
+  // `o.seats_used === null || typeof o.seats_used === 'number'`, which is the
+  // assertion-that-cannot-fail this programme keeps catching.
   const o = await branchOverview({ ...FR, DB: makeD1(branchDb()) } as any);
-  assert.equal(o.seats_used, null);
-  assert.notEqual(o.seats_used as unknown, 0);
-  assert.match(o.seats_used_reason, /seat_assignments/);
   assert.equal(o.revenue_mtd_cents, null);
   assert.ok(o.revenue_reason.length > 0);
+});
+
+test('seats used counts the roles a licence sells a seat for, and nothing else', async () => {
+  // A correct EMPTY branch now returns 0, which the old shape forbade
+  // outright. Zero here is a figure, not a fabrication: the read succeeded and
+  // the answer is that nobody holds a seat.
+  const empty = await branchOverview({ ...FR, DB: makeD1(branchDb()) } as any);
+  assert.equal(empty.seats_used, 0);
+
+  const db = branchDb(`
+    INSERT INTO users (id, role, is_active) VALUES
+      (1, 'founder',   1),
+      (2, 'investor',  1),
+      (3, 'advisor',   1),
+      (4, 'partner',   1),
+      (5, 'admin',     1),
+      (6, 'exploring', 1),
+      (7, 'founder',   0);
+  `);
+  const o = await branchOverview({ ...FR, DB: makeD1(db) } as any);
+  // Four seat roles counted; `admin` and `exploring` hold no seat, which is
+  // exactly what S2's Exploring board describes, and the deactivated founder
+  // released theirs.
+  assert.equal(o.seats_used, 4);
+  assert.equal(o.accounts.total, 6, 'the deactivated account is out of both figures');
+});
+
+test('the seats-used reason states that a role is not a licensed seat', async () => {
+  // The honesty point, asserted rather than left to a comment: this figure is
+  // a DEFINITION, and the screen that shows it must say so. S8's seat ledger
+  // does not ship, so nothing may imply a seat has an id.
+  const o = await branchOverview({ ...FR, DB: makeD1(branchDb()) } as any);
+  assert.match(o.seats_used_reason, /Role is not the same thing as a licensed seat/);
+  assert.match(o.seats_used_reason, /no seat has an id/);
+  assert.doesNotMatch(o.seats_used_reason, /seat_assignments/,
+    'the reason still names a store that is not coming');
 });
 
 test('suspended comes from the pushed licence copy, in both directions', async () => {

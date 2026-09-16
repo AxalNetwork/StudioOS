@@ -49,7 +49,13 @@ export type BranchHealth = {
 
 export type BranchOverview = {
   accounts: { total: number; by_role: Record<string, number> };
-  seats_used: null;
+  /**
+   * A number on a branch, null on HQ, and the difference is structural rather
+   * than a gap to close (D127). A branch can count its own seats because every
+   * user in that D1 *is* the branch's; HQ cannot, because no account names a
+   * licence (U1). The union is what forces every consumer to handle both.
+   */
+  seats_used: number | null;
   seats_used_reason: string;
   backlog: { count: number; oldest_at: string | null } | null;
   backlog_reason?: string;
@@ -179,6 +185,18 @@ async function backlogOf(env: Env): Promise<{ backlog: BranchOverview['backlog']
 }
 
 /**
+ * The `users.role` values a licence sells a seat for (D127).
+ *
+ * KEPT IN STEP WITH THE LEDGER BY A TEST, NOT BY CARE.
+ * `licence_seats.seat_type` (migration 187) is the contract's own vocabulary,
+ * and `branch_seats_from_role.test.ts` parses that CHECK constraint out of the
+ * baseline and asserts it equals this list. A fifth seat type added to the
+ * ledger without being added here would silently under-count every branch's
+ * seats — a figure HQ reads next to what it sold.
+ */
+export const SEAT_ROLES = ['founder', 'investor', 'advisor', 'partner'] as const;
+
+/**
  * The per-branch figures HQ's Home draws in one card (H1).
  */
 export async function branchOverview(env: Env): Promise<BranchAnswer<BranchOverview>> {
@@ -198,13 +216,27 @@ export async function branchOverview(env: Env): Promise<BranchAnswer<BranchOverv
   const { backlog, reason } = await backlogOf(env);
   const licence = await licenceCopy(env);
 
+  // SEATS USED IS A SUM OF FOUR NUMBERS ALREADY IN HAND (D127), and the
+  // definition is the product owner's rather than a measurement: a seat is a
+  // consequence of `users.role`. `licence_seats.seat_type` admits exactly
+  // `founder`, `investor`, `advisor`, `partner` (migration 187), and
+  // `users.role` admits those four plus `admin` and `exploring` — the two that
+  // hold no seat, which is precisely what S2's Exploring board describes. So
+  // the seat-holding roles are the intersection, and `SEAT_ROLES` below is
+  // checked against the migration by a test rather than trusted.
+  //
+  // `WHERE is_active = 1` above answers the question by construction: a
+  // deactivated account does not hold a seat.
+  const seatsUsed = SEAT_ROLES.reduce((sum, role) => sum + (byRole[role] || 0), 0);
+
   return {
     accounts: { total, by_role: byRole },
-    // Both of these are the honest answer, not a placeholder to fill in later.
-    seats_used: null,
+    seats_used: seatsUsed,
     seats_used_reason:
-      'Seats used needs `seat_assignments`, which says who holds which seat id. No such store exists '
-      + 'yet on either tier, so this is unknown rather than zero.',
+      'Seats used is the count of active accounts whose role is one a licence sells a seat for '
+      + `(${SEAT_ROLES.join(', ')}). Role is not the same thing as a licensed seat: there is no seat `
+      + 'ledger, so no seat has an id, nobody is assigned or released, and a vacant seat cannot be '
+      + 'shown. This is a definition, and it is the one this figure means.',
     backlog,
     ...(reason ? { backlog_reason: reason } : {}),
     revenue_mtd_cents: null,

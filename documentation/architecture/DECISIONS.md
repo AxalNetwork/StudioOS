@@ -9637,3 +9637,81 @@ chrome above. Striking that answer adds a `{label, fixed}` prop and lands the
 seam #244 needs early.
 
 No migration (264 stays free), no worker change, no new `api.js` method.
+
+## D127 — a seat is a consequence of `users.role`, and that is a definition rather than a measurement
+
+**What the branch could not say.** `rpc/branchOps.ts` returned
+`seats_used: null` with a reason that read *"Seats used needs
+`seat_assignments`, which says who holds which seat id. No such store exists
+yet on either tier"*. That sentence was a promise, and it had already expired:
+`routes/licence.ts` carried a comment saying PR 5 would build the store, PR 5
+shipped, and it built none. S2's seat tiles, S8's seat ledger, the amber
+"request more seats" path and HQ's utilisation figure were all waiting on it.
+
+**The answer was already in hand.** `branchOverview` runs
+`SELECT role, COUNT(*) AS n FROM users WHERE is_active = 1 GROUP BY role`
+before it does anything else. `licence_seats.seat_type` (migration 187) admits
+exactly `founder`, `investor`, `advisor`, `partner`; `users.role` admits those
+four **plus `admin` and `exploring`** — the two that hold no seat, which is
+precisely what S2's Exploring board describes. So seats used is the sum of four
+numbers already fetched, and `WHERE is_active = 1` answers by construction the
+question the research left open: a deactivated account does not hold a seat.
+
+**No migration.** 264 stays free. The alternative was migration 264, a
+`seat_assignments` table with a partial unique index on
+`user_id WHERE state = 'held'`, and assign/release routes — a real PR rather
+than a small one.
+
+**THIS IS A DEFINITION, AND IT IS RECORDED AS ONE.** Role is not the same thing
+as a licensed seat. Counting roles as seats is a choice about what the figure
+means, not a measurement of a thing that exists, so the reason string says so on
+the screen rather than presenting the number as more than it is. Two
+consequences follow and belong in the same entry:
+
+- **S8's seat ledger does not ship.** No seat has an id, nobody is assigned or
+  released, and a vacant seat cannot be drawn.
+- **S2's Members "Seat" column has no id to show.** If that column ships at all
+  it is headed **Role**, and the page says that a role is not a licensed seat.
+
+**The two tiers answer differently, and that is structural.** A branch can count
+its own seats because every user in that D1 *is* the branch's. HQ cannot,
+because no account names a licence (U1) — so `routes/admin_licences.ts`'s
+`seatsUsed(): null` and `seats_used_available: false` are still correct, and its
+docblock now says why the branch differs rather than leaving the asymmetry to
+read as one tier being behind. `BranchOverview.seats_used` widens from the
+literal `null` to `number | null`, which is what forces every consumer to handle
+both.
+
+**What keeps the definition honest** is `branch_seats_from_role.test.ts`, and
+the drift it exists for is concrete. `licence_seats.seat_type` is the vocabulary
+a licence is **sold** in. Add a fifth to the ledger — `service_partner`, which
+the Super Admin canvas already names as a licence type — without extending
+`SEAT_ROLES`, and every branch under-reports its seats against what HQ sold it.
+Nothing would fail: the sum is still a sum and the page still renders. So the
+test parses the CHECK constraint out of migration 187 and asserts it equals
+`SEAT_ROLES`, parses `users.role`'s CHECK out of the baseline and asserts every
+seat role is a value a user can actually hold, and pins the excluded set as
+**exactly** `admin` and `exploring` — not merely "shorter", which passes however
+the difference is made up. A new role fails that assertion and somebody decides
+which side it is on, which is the point.
+
+**The test that had to be re-pointed, not relaxed.**
+`branch_rpc_fanout.test.ts` asserted `seats_used === null`,
+`assert.notEqual(seats_used, 0)` and a reason matching `/seat_assignments/`, all
+in one test shared with revenue. A correct **empty** branch now returns `0` —
+exactly what the second assertion forbade — and zero there is a figure rather
+than a fabrication, because the read succeeded. The test is split: revenue keeps
+its own null-with-a-reason assertion, and seats get three of their own (an empty
+branch is 0; six accounts across six roles with one deactivated is 4; and the
+reason states that a role is not a licensed seat). The assertion this must never
+become is `seats_used === null || typeof seats_used === 'number'`, which is the
+assertion-that-cannot-fail this programme keeps catching.
+
+**Two anchors in the new test were wrong before they were right**, and both are
+the same class the previous commit fixed in `hq_revenue_h5.test.mjs`: it looked
+for `CREATE TABLE IF NOT EXISTS users`, which the baseline does not contain, so
+`indexOf` returned -1 and `slice(-1)` reported "the CHECK constraint moved"
+instead of "this test cannot find the table"; and it read the first
+`seats_used_reason:`, which is the **type** declaration and carries no sentence,
+so it would have passed against a reason that still promised the store. A
+missing anchor must fail as a missing anchor.

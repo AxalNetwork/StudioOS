@@ -115,9 +115,51 @@ test('a branch serves the pushed copy, with the stamp that says how old it is', 
   // stray space or a lower-case code in the push does not reach the screen.
   assert.deepEqual(body.licence.territories, ['FR', 'BE', 'LU']);
   assert.equal(body.licence.seats_licensed, 325, 'seats licensed is the sum of the pushed per-type grants');
-  assert.equal(body.licence.seats_used, null, 'seats USED still has no store — it must not read as zero');
-  assert.equal(body.derived_metrics_available, false, 'the derived-metrics reason is the same on both tiers');
+  // D127 — SEATS USED IS A NUMBER HERE NOW, and this assertion moved rather
+  // than loosened. It read `=== null` with the reason "seats USED still has no
+  // store", which was true when the only way to know was `seat_assignments`.
+  // A branch counts its own instead: this fixture seeds no users, so 0 is the
+  // right answer and it is a FIGURE — the read succeeded — not the fabricated
+  // zero the old line was guarding against. That distinction is the whole
+  // point, so it is asserted with a seeded branch below rather than left to
+  // this empty one.
+  assert.equal(body.licence.seats_used, 0, 'a branch counts its own seats; an empty one holds none');
+  assert.match(String(body.licence.seats_used_basis), /Role is not a licensed seat/,
+    'the number must carry what it means, or it reads as a seat ledger');
+  assert.equal(body.derived_metrics_available, false);
   assert.ok(String(body.derived_metrics_reason).length > 0);
+  // AND THE PAYLOAD MUST NOT CONTRADICT ITSELF. The shared reason said seats
+  // used was "not shown" while the field beside it carried a number — for the
+  // length of one commit, which this caught.
+  //
+  // THIS ASSERTION WAS DECORATION FIRST, and the mutation check is what found
+  // it. Written as `doesNotMatch(/Seats used[^.]*not shown/)`, it could no
+  // longer fail: the same commit had already narrowed the SHARED constant to
+  // drop that clause, so reverting this route to it changed nothing the
+  // pattern could see. What actually distinguishes the two sentences is that
+  // the branch one says the figure IS shown, so that is what is asserted —
+  // and reverting to the shared constant now fails, as it must.
+  assert.match(String(body.derived_metrics_reason), /Seats used is shown/,
+    'the branch reason must say the figure is there, or it is HQ\'s sentence on the wrong tier');
+  assert.doesNotMatch(String(body.derived_metrics_reason), /Seats used[^.]*not shown/,
+    'the branch payload says seats used is unavailable while showing it');
+});
+
+test('a branch with accounts counts only the roles a licence sells a seat for', async () => {
+  // The empty case above cannot tell a correct count from a hardcoded zero.
+  // This one can: six active accounts across six roles, one deactivated.
+  const seeded = db(`${PUSHED}
+    INSERT INTO users (id, email, name, role, is_active) VALUES
+      (101, 'f@x.test', 'F', 'founder',   1),
+      (102, 'i@x.test', 'I', 'investor',  1),
+      (103, 'a@x.test', 'A', 'advisor',   1),
+      (104, 'p@x.test', 'P', 'partner',   1),
+      (105, 'd@x.test', 'D', 'admin',     1),
+      (106, 'e@x.test', 'E', 'exploring', 1),
+      (107, 'g@x.test', 'G', 'founder',   0);`);
+  const { body } = await get({ ...FR, DB: makeD1(seeded) });
+  assert.equal(body.licence.seats_used, 4,
+    'admin and exploring hold no seat, and a deactivated account released theirs');
 });
 
 test('the copy uses HQ\'s field names, because the page that reads it is HQ\'s page', async () => {
