@@ -3547,7 +3547,7 @@ research.get('/diligence', async (c) => {
        FROM data_room_grants g
        JOIN projects p ON p.id = g.project_id
       WHERE g.investor_user_id = ? AND g.status = 'active'
-        AND (g.expires_at IS NULL OR g.expires_at > datetime('now'))
+        AND (g.expires_at IS NULL OR datetime(g.expires_at) > datetime('now'))
       ORDER BY g.created_at DESC LIMIT 200`
   ).bind(user.id, user.id).all<any>();
 

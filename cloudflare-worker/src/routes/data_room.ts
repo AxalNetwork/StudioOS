@@ -89,7 +89,7 @@ async function activeGrant(env: Env, projectId: number, userId: number): Promise
   const row = await env.DB.prepare(
     `SELECT * FROM data_room_grants
       WHERE project_id = ? AND investor_user_id = ? AND status = 'active'
-        AND (expires_at IS NULL OR expires_at > datetime('now'))`,
+        AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))`,
   ).bind(projectId, userId).first<GrantRow>();
   return row || null;
 }
@@ -106,7 +106,7 @@ async function ndaActive(env: Env, founderUserId: number, investorUserId: number
   const row = await env.DB.prepare(
     `SELECT 1 FROM pairwise_ndas
       WHERE party_a_user_id = ? AND party_b_user_id = ? AND status = 'active'
-        AND (valid_until IS NULL OR valid_until > datetime('now'))`,
+        AND (valid_until IS NULL OR datetime(valid_until) > datetime('now'))`,
   ).bind(founderUserId, investorUserId).first();
   return !!row;
 }
@@ -143,7 +143,7 @@ r.get('/shared', async (c) => {
          FROM data_room_grants g
          JOIN projects p ON p.id = g.project_id
         WHERE g.investor_user_id = ? AND g.status = 'active'
-          AND (g.expires_at IS NULL OR g.expires_at > datetime('now'))
+          AND (g.expires_at IS NULL OR datetime(g.expires_at) > datetime('now'))
         ORDER BY g.created_at DESC`,
     ).bind(user.id).all<any>();
     return c.json({ items: rows.results || [] });
@@ -253,7 +253,7 @@ r.get('/:projectUid', async (c) => {
                  WHERE n.party_a_user_id = g.granted_by_user_id
                    AND n.party_b_user_id = g.investor_user_id
                    AND n.status = 'active'
-                   AND (n.valid_until IS NULL OR n.valid_until > datetime('now'))
+                   AND (n.valid_until IS NULL OR datetime(n.valid_until) > datetime('now'))
               ) AS nda_signed
          FROM data_room_grants g
          JOIN users u ON u.id = g.investor_user_id

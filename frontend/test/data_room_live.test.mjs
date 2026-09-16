@@ -36,7 +36,16 @@ test('the NDA gate reads pairwise_ndas, not a second NDA notion', () => {
   assert.match(w, /party_a_user_id = \? AND party_b_user_id = \?/);
   assert.ok(!/party_b_user_id = \? AND party_a_user_id = \?/.test(w),
     'the reversed ordering must not be accepted');
-  assert.match(w, /valid_until IS NULL OR valid_until > datetime\('now'\)/,
+  // THE COLUMN IS NORMALISED, NOT JUST THE CLOCK (D124). This read
+  // `valid_until > datetime('now')` until 2026-09-16, and that form does not
+  // do what it says: `valid_until` is written as a JS ISO string
+  // (`services/trust.ts:349-355`), SQLite compares timestamps as TEXT, and an
+  // ISO string beats a space-separated one at position 10 — so a lapsed NDA
+  // read as live until the UTC date rolled over. Wrapping only the right-hand
+  // side is the plausible fix and changes nothing; the stored value is what
+  // has to be normalised. `cloudflare-worker/test/expiry_gate_datetime_d124.test.ts`
+  // owns the general rule and proves this gate closes against a real database.
+  assert.match(w, /valid_until IS NULL OR datetime\(valid_until\) > datetime\('now'\)/,
     'a lapsed NDA must not open a file');
 });
 
