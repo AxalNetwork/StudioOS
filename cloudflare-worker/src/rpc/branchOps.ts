@@ -22,7 +22,7 @@
  * `DERIVED_UNAVAILABLE` states for the licence page.
  */
 import type { Env } from '../types';
-import { branchOf } from '../util/branch';
+import { branchOf, BRANCH_CODE_RE } from '../util/branch';
 import { PRE_VERDICT_STATUSES } from '../services/referralSubmissions';
 // ONE DEFINITION OF "PAST SLA", shared across the tier boundary. It is a pure
 // function of a date, so importing it costs nothing and restating it would let
@@ -889,5 +889,271 @@ export async function redeemSupportCode(
     reason: claimed.reason,
     hq_actor_name: claimed.hq_actor_name,
     target: { id: target.id, name: target.name, email: target.email, role: target.role },
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * D.6 — moving an account between branches (D121)                     *
+ * ------------------------------------------------------------------ */
+
+/**
+ * WHAT A "MOVE" IS HERE, AND WHAT IT DELIBERATELY IS NOT. D.6 chose re-invite
+ * over record migration: the account is closed where it lives and invited on
+ * the destination, and **projects, deals and documents stay where they were**,
+ * readable by HQ. The two databases cannot see each other (D.2), so a true
+ * migration means copying rows across a boundary and rewriting every reference
+ * on both sides. A half-done one — some rows moved, some left, foreign keys
+ * pointing into a database that is not bound — is worse than none, and that is
+ * the reason the decision reads the way it does rather than a limitation being
+ * worked around.
+ *
+ * SO THE TWO HALVES ARE INDEPENDENT, and the route reports them separately
+ * (the D111 precedent `admin_escalations.ts` follows for the same reason). The
+ * source deactivation is a completed fact whether or not the destination is
+ * reachable; collapsing them into one outcome would make an unreachable
+ * destination look like a move that never happened, and an operator would do it
+ * again — against an account that is already closed.
+ *
+ * BOTH METHODS AUTHENTICATE. One deactivates an account and the other creates
+ * an invitation to one; each is at least as privileged as `openSupportSession`.
+ * An unauthenticated `HqEntrypoint` method that deactivates accounts would be
+ * exactly the hole D120 closed, reopened one PR later.
+ */
+
+/** How long a moved-account invitation stays open. */
+export const INVITATION_TTL_DAYS = 14;
+/** The one reason length, shared with the support session (D120). */
+export const MOVE_REASON_MIN = SUPPORT_REASON_MIN;
+
+const newInvitationUid = () => `inv_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`;
+
+export type MoveOutRequest = {
+  hq_actor_name: string;
+  target_user_id: number;
+  reason: string;
+  /** The branch the account is moving TO, for the target's own audit line. */
+  destination_code: string;
+};
+
+export type MoveOutResult = BranchAnswer<{
+  moved_out: true;
+  target: { id: number; name: string | null; email: string | null; role: string };
+}>;
+
+/**
+ * Close an account on this branch because it is moving to another one.
+ *
+ * NOT `toggle-active`. `admin.ts`'s existing deactivation writes the right two
+ * audit rows — one for the actor, one addressed to the person — but carries no
+ * reason, and D.6 requires one. The reason is the field that makes the record
+ * answer the question it exists to answer; the same argument `admin.ts` makes
+ * for the support session's own reason, which is why this does not simply call
+ * through to it.
+ *
+ * AND THE PERSON IS TOLD WHERE THEY ARE GOING. An account told only that it was
+ * deactivated has been told something true and useless — worse, something
+ * misleading, because it reads as a suspension. Their row names the destination.
+ */
+export async function moveAccountOut(
+  env: Env, secret: string, req: MoveOutRequest,
+): Promise<MoveOutResult> {
+  const branch = await authenticateHq(env, secret);
+
+  const reason = String(req?.reason ?? '').trim().slice(0, 300);
+  if (reason.length < MOVE_REASON_MIN) {
+    throw new Error(
+      `rpc: moving an account needs a reason of at least ${MOVE_REASON_MIN} characters, `
+      + 'recorded on both sides.',
+    );
+  }
+  const actor = String(req?.hq_actor_name ?? '').trim().slice(0, 200);
+  if (!actor) throw new Error('rpc: moving an account needs the name of the HQ operator doing it');
+
+  const destination = String(req?.destination_code ?? '').trim().toLowerCase();
+  if (!BRANCH_CODE_RE.test(destination)) {
+    throw new Error('rpc: a move needs a valid destination branch code');
+  }
+  if (destination === branch) {
+    throw new Error(`rpc: ${branch} is already where this account lives, so there is nothing to move`);
+  }
+
+  const targetId = Number(req?.target_user_id);
+  if (!Number.isInteger(targetId) || targetId <= 0) {
+    throw new Error('rpc: a move needs the id of an account on this branch');
+  }
+  const target = await env.DB.prepare(
+    'SELECT id, name, email, role, is_active FROM users WHERE id = ?',
+  ).bind(targetId).first<{ id: number; name: string | null; email: string | null; role: string; is_active: number }>();
+  if (!target) throw new Error(`rpc: ${branch} holds no account with id ${targetId}`);
+  // ALREADY INACTIVE IS A REFUSAL, NOT A NO-OP. A second move of the same
+  // account would write a second invitation on the destination and a second
+  // pair of audit rows, for a person who left the first time — so the state is
+  // reported rather than silently re-applied.
+  if (Number(target.is_active ?? 1) === 0) {
+    throw new Error(
+      `rpc: account ${targetId} is already deactivated on ${branch}. If a previous move did not `
+      + 'finish, invite them on the destination rather than moving them out again.',
+    );
+  }
+
+  await env.DB.prepare('UPDATE users SET is_active = 0 WHERE id = ?').bind(targetId).run();
+
+  // TWO ROWS, the shape `admin.ts:1770-1771` already uses: one for what the
+  // operator did, one addressed to the person it happened to.
+  const detail = `Moved to ${destination} by ${actor}: ${reason}`;
+  try {
+    await env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
+    ).bind('hq_account_moved_out', detail, `hq:${actor}`.slice(0, 200), targetId).run();
+    await env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
+    ).bind(
+      'account_status_changed',
+      `Your account here was closed because it is moving to ${destination}. `
+      + 'Your projects, deals and documents stay with this branch.',
+      `hq:${actor}`.slice(0, 200), targetId,
+    ).run();
+  } catch (e) {
+    console.warn('[rpc:moveAccountOut] audit rows failed', (e as Error).message);
+  }
+
+  return {
+    moved_out: true,
+    target: { id: target.id, name: target.name, email: target.email, role: target.role },
+    branch,
+    as_of: nowIso(),
+  };
+}
+
+export type InviteRequest = {
+  hq_actor_name: string;
+  email: string;
+  name?: string | null;
+  role?: string | null;
+  /** Where they are arriving from, so the destination sees a move, not an application. */
+  moved_from_code?: string | null;
+  reason?: string | null;
+};
+
+export type InviteResult = BranchAnswer<{
+  uid: string;
+  email: string;
+  expires_at: string;
+  /** What the mailer actually did. See migration 263 and `company_invitations`. */
+  email_sent: boolean;
+  email_reason?: string;
+  /**
+   * The invitation link, AND ONLY WHEN THE MESSAGE DID NOT LEAVE.
+   *
+   * Telling an operator to "pass the link on by hand" while never showing it
+   * to them is a dead end dressed as guidance — the first version of this did
+   * exactly that. So the link travels, narrowly: to an authenticated
+   * super-admin, over the private binding, only on the path where the person
+   * cannot otherwise be reached. On the happy path it is omitted entirely,
+   * because then it is in the one place it belongs, which is their inbox.
+   */
+  invite_link?: string;
+}>;
+
+/**
+ * Invite an email onto this branch (migration 263).
+ *
+ * `email_sent` IS REPORTED, NEVER ASSUMED. Every sender in `services/email.ts`
+ * returns `false` when the Gmail credentials are unset rather than throwing, and
+ * a branch that has not had its mail configured is a real and likely state
+ * during provisioning. An invitation nobody was told about is a different thing
+ * from one that is merely unanswered — migration 236 says exactly that, and HQ
+ * needs to see which so it can pass the link on by hand.
+ */
+export async function inviteAccount(
+  env: Env, secret: string, req: InviteRequest,
+): Promise<InviteResult> {
+  const branch = await authenticateHq(env, secret);
+
+  const actor = String(req?.hq_actor_name ?? '').trim().slice(0, 200);
+  if (!actor) throw new Error('rpc: an invitation needs the name of the HQ operator sending it');
+
+  // Normalised HERE as well as at the caller, because this is the side that
+  // writes the row the unique index and the accept-time match both read.
+  const email = String(req?.email ?? '').trim().toLowerCase().slice(0, 320);
+  if (!email || !/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(email)) {
+    throw new Error('rpc: an invitation needs a valid email address');
+  }
+
+  const existing = await env.DB.prepare(
+    'SELECT id FROM users WHERE email = ? AND is_active = 1',
+  ).bind(email).first<{ id: number }>();
+  if (existing) {
+    throw new Error(`rpc: ${email} already has an active account on ${branch}`);
+  }
+
+  // PREFIXED SO IT CANNOT BE MISTAKEN FOR ITS OWN DIGEST. Two UUIDs with the
+  // dashes stripped are exactly 64 hex characters — the same shape a SHA-256
+  // hex digest has — so a bug that stored the raw token instead of the hash
+  // would look completely correct in the table AND pass any assertion that
+  // checked the column's shape. That is not hypothetical: the first version
+  // of this code was mutated to store the raw token and the test could not
+  // tell. The prefix makes the two distinguishable at a glance and in an
+  // assertion, and costs nothing.
+  const rawToken = `invt_${crypto.randomUUID()}${crypto.randomUUID()}`.replace(/-/g, '');
+  const uid = newInvitationUid();
+  const row = await env.DB.prepare(
+    `INSERT INTO branch_invitations
+       (uid, email, name, role, token_hash, moved_from_code, reason, invited_by_name, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', ?))
+     RETURNING expires_at`,
+  ).bind(
+    uid, email,
+    req?.name == null ? null : String(req.name).slice(0, 200),
+    String(req?.role ?? 'exploring').slice(0, 40),
+    await sha256Hex(rawToken),
+    req?.moved_from_code == null ? null : String(req.moved_from_code).trim().toLowerCase().slice(0, 32),
+    req?.reason == null ? null : String(req.reason).slice(0, 300),
+    actor,
+    `+${INVITATION_TTL_DAYS} days`,
+  ).first<{ expires_at: string }>();
+
+  const base = String(env.APP_URL || '').replace(/\/+$/, '');
+  const link = `${base}/invite/${rawToken}`;
+
+  let sent = false;
+  let emailReason: string | undefined;
+  try {
+    const { sendCompanyInvitationEmail } = await import('../services/email');
+    sent = await sendCompanyInvitationEmail(
+      env, email, String(env.BRANCH_NAME || branch), actor, link,
+    );
+    if (!sent) {
+      emailReason = 'This branch has no mail sender configured, so the invitation exists and '
+        + 'nobody has been told about it. Pass the link on by hand, or set the mail credentials.';
+    }
+  } catch (e) {
+    emailReason = `The invitation was stored and the message failed to send: ${(e as Error).message}`;
+    console.warn('[rpc:inviteAccount] send failed', (e as Error).message);
+  }
+
+  try {
+    await env.DB.prepare('UPDATE branch_invitations SET email_sent = ?, updated_at = ? WHERE uid = ?')
+      .bind(sent ? 1 : 0, nowIso(), uid).run();
+    await env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, NULL)`,
+    ).bind(
+      'hq_account_invited',
+      JSON.stringify({ uid, branch, moved_from: req?.moved_from_code ?? null, email_sent: sent }),
+      `hq:${actor}`.slice(0, 200),
+    ).run();
+  } catch (e) {
+    console.warn('[rpc:inviteAccount] post-send write failed', (e as Error).message);
+  }
+
+  return {
+    uid,
+    email,
+    expires_at: row?.expires_at ?? '',
+    email_sent: sent,
+    ...(emailReason ? { email_reason: emailReason } : {}),
+    ...(sent ? {} : { invite_link: link }),
+    branch,
+    as_of: nowIso(),
   };
 }

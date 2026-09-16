@@ -28,7 +28,8 @@ import type { Env } from '../types';
 import {
   branchHealth, branchOverview, branchSearchAccounts, applyLicenceCopy,
   branchRevenueSummary, applyPromoCeiling, applyEscalationAnswer, openSupportSession,
-  type SupportSessionRequest,
+  moveAccountOut, inviteAccount,
+  type SupportSessionRequest, type MoveOutRequest, type InviteRequest,
 } from './branchOps';
 import {
   recordEscalation, licenceForBranch, reportUsage, promoCeilingForBranch,
@@ -62,6 +63,18 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
   // to pass a target id into the secret's place.
   openSupportSession(secret: string, req: SupportSessionRequest) {
     return openSupportSession(this.env, secret, req);
+  }
+
+  // D.6 (D121) — the two halves of a cross-branch move. Both take the secret
+  // for the same reason `openSupportSession` does: one closes an account and
+  // the other creates an invitation to one, so neither can rely on "the
+  // account is ours" the way a read or a licence push can.
+  moveAccountOut(secret: string, req: MoveOutRequest) {
+    return moveAccountOut(this.env, secret, req);
+  }
+
+  inviteAccount(secret: string, req: InviteRequest) {
+    return inviteAccount(this.env, secret, req);
   }
 }
 

@@ -43,7 +43,7 @@ import { hashEmail } from '../util/hashEmail';
 import { mapError } from './_t13t14t15_helpers';
 import { branchBindings } from '../services/branches';
 import { BRANCH_CODE_RE } from '../util/branch';
-import { SUPPORT_REASON_MIN } from '../rpc/branchOps';
+import { SUPPORT_REASON_MIN, MOVE_REASON_MIN } from '../rpc/branchOps';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -153,6 +153,173 @@ r.post('/branches/:code/support-session', async (c) => {
       // most, so a URL that leaks into history or a Referer is worth nothing
       // by the time anyone reads it.
       open_url: `https://${code}.axal.vc${offer?.redeem_path ?? ''}`,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * POST /api/admin/branches/:code/accounts/:userId/move   { destination_code, reason }
+ *
+ * D.6 — moving an account to another branch (D121). The same gate stack as the
+ * support session above, for the same reason: this reaches across a tenancy
+ * boundary into two databases HQ's own console cannot read.
+ *
+ * THE TWO LEGS ARE REPORTED SEPARATELY AND THAT IS THE WHOLE SHAPE OF THIS
+ * HANDLER. Closing the account on the source and inviting it on the destination
+ * are two writes to two databases with no transaction between them — there
+ * cannot be one, because they are different Workers (D.2). So:
+ *
+ *   - the source deactivation is performed first and reported as its own fact;
+ *   - the destination invitation rides beside it in `invited`, never folded
+ *     into the response's success.
+ *
+ * Collapsing them would make an unreachable destination look like a move that
+ * never happened, and an operator would run it again — against an account that
+ * is already closed, which `moveAccountOut` then correctly refuses, leaving
+ * them with two refusals and no way to finish. This is D111's rule for the
+ * promo ceiling and D112's for the escalation answer, and it is the third time
+ * the same shape has been the right one.
+ *
+ * THE ORDER IS DELIBERATE, and the other order is worse. Inviting first would
+ * leave an invitation on the destination for an account still live on the
+ * source if the deactivation then failed — two active homes for one person,
+ * which is exactly the state the tenancy model has no way to represent.
+ * Closing first can leave someone with no home until the invitation lands, and
+ * that state is visible, recoverable and honest: HQ sees `invited.ok = false`
+ * with the reason, and the retry is `inviteAccount` alone.
+ */
+r.post('/branches/:code/accounts/:userId/move', async (c) => {
+  try {
+    await requireFactor(c, 'totp');
+    await requireStepUp(c);
+    const admin = await requireSuperAdmin(c);
+
+    const from = str(c.req.param('code'), 32).toLowerCase();
+    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    const to = str(body?.destination_code, 32).toLowerCase();
+    if (!BRANCH_CODE_RE.test(from) || !BRANCH_CODE_RE.test(to)) {
+      return c.json({ error: 'bad_code', message: 'Both branch codes must be valid.' }, 400);
+    }
+    if (from === to) {
+      return c.json({
+        error: 'same_branch',
+        message: 'That account already lives on that branch, so there is nothing to move.',
+      }, 400);
+    }
+
+    const reason = str(body?.reason, 300);
+    if (reason.length < MOVE_REASON_MIN) {
+      return c.json({
+        error: 'move_reason_required',
+        message: `A reason of at least ${MOVE_REASON_MIN} characters is required to move an account. `
+          + 'Moving an account moves which subsidiary earns revenue share on it.',
+      }, 400);
+    }
+
+    const userId = Number(c.req.param('userId'));
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return c.json({ error: 'bad_target', message: 'Name the account to move.' }, 400);
+    }
+
+    if (!c.env.HQ_RPC_SECRET) {
+      return c.json({
+        error: 'hq_rpc_secret_unset',
+        message: 'HQ_RPC_SECRET is not set on this Worker, so neither branch can tell this call '
+          + 'from any other Worker in the account. Set it, then try again.',
+      }, 409);
+    }
+
+    const bindings = branchBindings(c.env);
+    const source = bindings.find((x) => x.code === from);
+    const destination = bindings.find((x) => x.code === to);
+    // BOTH BINDINGS ARE CHECKED BEFORE EITHER IS CALLED. Closing an account on
+    // the source when the destination is not even bound would be a move that
+    // could not possibly complete — a refusal is better than half of it.
+    if (!source || !destination) {
+      const missing = [!source ? from : null, !destination ? to : null].filter(Boolean).join(' and ');
+      return c.json({
+        error: 'branch_not_bound',
+        message: `No branch Worker is bound for ${missing}, so this move cannot complete. `
+          + 'A branch gets its binding when HQ redeploys after provisioning.',
+      }, 409);
+    }
+
+    const actorName = str((admin as { name?: string }).name, 200) || 'Axal VC HQ';
+
+    let movedOut;
+    try {
+      movedOut = await (source.stub as any).moveAccountOut(c.env.HQ_RPC_SECRET, {
+        hq_actor_name: actorName,
+        target_user_id: userId,
+        reason,
+        destination_code: to,
+      });
+    } catch (e) {
+      // NOTHING HAS HAPPENED YET when this throws, so it is a clean refusal
+      // rather than a partial move — the branch validates before it writes.
+      return c.json({
+        error: 'source_refused',
+        message: String((e as Error).message || e).replace(/^rpc: /, '').slice(0, 400),
+      }, 409);
+    }
+
+    // THE SECOND LEG, REPORTED AND NEVER THROWN. See the header.
+    let invited: { ok: boolean; uid?: string; email_sent?: boolean; reason?: string };
+    try {
+      const inv = await (destination.stub as any).inviteAccount(c.env.HQ_RPC_SECRET, {
+        hq_actor_name: actorName,
+        email: movedOut?.target?.email ?? '',
+        name: movedOut?.target?.name ?? null,
+        role: movedOut?.target?.role ?? 'exploring',
+        moved_from_code: from,
+        reason,
+      });
+      invited = {
+        ok: true,
+        uid: inv?.uid,
+        // NOT the same thing as `ok`. The invitation existing and the person
+        // being told about it are two facts, and migration 236 already draws
+        // that line: a branch with no mail sender records an invitation nobody
+        // has heard of, and HQ has to see that to pass the link on by hand.
+        email_sent: Boolean(inv?.email_sent),
+        ...(inv?.email_reason ? { reason: inv.email_reason } : {}),
+      };
+    } catch (e) {
+      invited = {
+        ok: false,
+        reason: `The account was closed on ${from} and the invitation on ${to} did not land: `
+          + `${String((e as Error).message || e).replace(/^rpc: /, '')}. `
+          + `Retry the invitation alone — moving them out again would be refused, correctly.`,
+      };
+    }
+
+    try {
+      await c.env.DB.prepare(
+        `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
+      ).bind(
+        'hq_account_moved',
+        JSON.stringify({
+          from, to, target_user_id: userId, reason,
+          invited_ok: invited.ok, email_sent: invited.email_sent ?? false,
+        }),
+        await hashEmail(admin.email),
+        admin.id,
+      ).run();
+    } catch (e) {
+      console.warn('[admin:move] audit row failed', (e as Error).message);
+    }
+
+    return c.json({
+      from,
+      to,
+      moved_out: true,
+      target: movedOut?.target ?? null,
+      invited,
+      // STATED IN THE RESPONSE, not only in the docs: D.6 is a re-invite, not a
+      // record migration, and an operator who assumed otherwise would tell the
+      // person something false about where their work went.
+      records_note: `Projects, deals and documents stay with ${from} and are readable by HQ. `
+        + 'This is a re-invite, not a record migration.',
     });
   } catch (e) { return mapError(c, e); }
 });
