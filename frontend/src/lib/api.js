@@ -3133,6 +3133,12 @@ export const api = {
   // does not travel (the document bodies, and an archived-version state HQ's own
   // library cannot produce) so the page never has to remember the reason.
   branchTemplates: () => request('/branch/templates'),
+  // D148 — this territory's own figures, and the anonymised median HQ pushed.
+  // Two kinds of number on one payload and they are not interchangeable: the
+  // stats are facts about this branch, the benchmark is a COPY with HQ's
+  // `pushed_at` and its own `n_branches`. `unavailable` names the three stats
+  // S6 draws that have no branch-side source.
+  branchInsights: () => request('/branch/insights'),
   branchEscalate: (data) =>
     request('/branch/escalations', { method: 'POST', body: JSON.stringify(data || {}) }),
   licenceCreate: (data) => request('/admin/licences', { method: 'POST', body: JSON.stringify(data || {}) }),

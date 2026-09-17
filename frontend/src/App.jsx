@@ -181,6 +181,7 @@ const BranchHome = lazy(() => import('./pages/branch/BranchHome'));
 const BranchPrograms = lazy(() => import('./pages/branch/BranchPrograms'));
 const BranchCommunity = lazy(() => import('./pages/branch/BranchCommunity'));
 const BranchContracts = lazy(() => import('./pages/branch/BranchContracts'));
+const BranchInsights = lazy(() => import('./pages/branch/BranchInsights'));
 // The Super Admin's HQ-only surfaces (migrations 199/207). `hqOnly` below
 // renders the notice for an admin without the elevation.
 const SuperAdminOnlyNotice = lazy(() => import('./pages/hq/SuperAdminOnlyNotice'));
@@ -2140,7 +2141,7 @@ function AppInner() {
       <Route path="/branch/programs" element={guard(['admin'], <BranchPrograms />)} />
       <Route path="/branch/community" element={guard(['admin'], <BranchCommunity />)} />
       <Route path="/branch/contracts" element={guard(['admin'], <BranchContracts />)} />
-      <Route path="/branch/insights" element={guard(['admin'], <BranchZone workspace="Insights"><BranchZonePending artboard="S6 Insights" title="Four stats and one tick against the median" will="Accounts, activation, programme throughput and revenue share for the quarter, plus a benchmark shown as a single tick against the anonymised platform median — never a ranked list of territories." pr="PR 14" /></BranchZone>)} />
+      <Route path="/branch/insights" element={guard(['admin'], <BranchInsights />)} />
       <Route path="/branch/settings" element={guard(['admin'], <BranchZone workspace="Settings"><BranchZonePending artboard="S6 Settings" title="Who owns each row" will="Subsidiary name and staff are yours; territory, brand kit and the licence summary are HQ's, each with an owner chip and, on HQ-owned rows, the request path. Your licence summary is already readable today under Your licence below." pr="PR 14" /></BranchZone>)} />
       {/* The HQ shell's Contracts and Team rows. Both frame panels the Admin
           Console already has (Legal templates; the Users table) for the

@@ -27,7 +27,8 @@ import { WorkerEntrypoint } from 'cloudflare:workers';
 import type { Env } from '../types';
 import {
   branchHealth, branchOverview, branchSearchAccounts, applyLicenceCopy,
-  branchRevenueSummary, applyPromoCeiling, applyEscalationAnswer, applyTemplateCopy, openSupportSession,
+  branchRevenueSummary, applyPromoCeiling, applyEscalationAnswer, applyTemplateCopy,
+  applyBenchmarks, openSupportSession,
   moveAccountOut, inviteAccount,
   type SupportSessionRequest, type MoveOutRequest, type InviteRequest,
 } from './branchOps';
@@ -65,6 +66,14 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
   // copy of documents HQ wrote.
   publishTemplate(p: { templates: Array<Record<string, unknown>>; pushed_at: string }) {
     return applyTemplateCopy(this.env, p);
+  }
+
+  // D148 — the anonymised platform median. Same category as the two pushes
+  // above: HQ-authored, no secret. What travels is a SET of metrics, so a
+  // metric HQ withheld below its k-threshold disappears from the branch rather
+  // than lingering at its last value.
+  applyBenchmarks(p: { rows: Array<Record<string, unknown>>; period: string; pushed_at: string }) {
+    return applyBenchmarks(this.env, p);
   }
 
   // THE ONE METHOD ON THIS CLASS THAT TAKES A SECRET, and the header above says
