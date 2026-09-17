@@ -15,6 +15,8 @@ which names a sidebar and never a permission.
 | `BranchApprovals.jsx` | Canvas S3 at `/branch/approvals`: the work board over the four local queues, oldest first with SLA bands (D130), **and** the outbound To-HQ lane (D112). The board READS — every decision is still made in that queue's own console — and spinout moderation's row says it has no console, because none exists. Assignment, history and the AI decision note do not ship; the rail names each. |
 | `BranchHome.jsx` | Canvas S1 at `/branch` (D131): queue pressure over the four local queues ordered by the **oldest item** rather than by count, the programme clock with the zone its deadlines are enforced in, and the revenue-share rate. The AI digest, the rail's anomaly flags and a local territory clock have no source; the rail names each with its reason. Wraps itself in `BranchZone`. |
 | `BranchAccounts.jsx` | Canvas S2 at `/branch/accounts`, plus the half of S8 that is true (D129): seat tiles with used, licensed and free per licence type; the members table searched over this deployment's own D1; the Exploring count. S8's seat **ledger** does not ship — D127 settled that seats used is a definition over `users.role`, so no seat has an id to assign or release. Wraps itself in `BranchZone`. |
+| `BranchPrograms.jsx` | Canvas S4 at `/branch/programs` (D140): the cohort calendar as the platform **derives** it, what this territory decides about a company's week, and the assessment games running under it. It draws no date control, because there is no `UPDATE week_windows` anywhere and every `UPDATE cohort_cycles` touches status rather than `start_at`/`end_at` — the calendar is read here, not set. Individual assessment runs are not listed: the worker has no `GET /sessions` and no `GET /results`. Wraps itself in `BranchZone`. |
+| `BranchCommunity.jsx` | Canvas S4's second half at `/branch/community` (D140): an **index** over four consoles that already exist and are already branch-reachable — events, the job board, circles and network profiles carry zero `requireHqAuthoring` between them. Each card says what its console can actually do, because three of the four are narrower than their names: jobs is moderation only, events cannot author an event, and network profiles is **not a member directory**. It fetches nothing, so no count here can disagree with the console one click away. |
 
 ## Rules
 
@@ -28,8 +30,8 @@ which names a sidebar and never a permission.
   rail; a literal cannot follow it and leaves a hole.
 - **A zone with data owns its frame; a zone without takes it from the route.**
   Coverage is what un-disables the rail's one button, and only the page that
-  loaded something knows what it holds. Each of the seven wrappers in `App.jsx`
-  goes away on the day its zone gets a page.
+  loaded something knows what it holds. Each of the remaining wrappers in `App.jsx`
+  goes away on the day its zone gets a page — two of the seven went with D140.
 - **A row is added with its route, never before it.** `sidebarConfig.js` states
   the rule: a row pointing at a route that does not exist looks shipped and
   404s. All eight branch rows have routes; the ones without artboards land on
@@ -46,7 +48,10 @@ which names a sidebar and never a permission.
   their reasons, where a reader meets a fact instead of a schedule.
 - **A time a person is held to carries the zone it is enforced in.** The cohort
   programme runs on `COHORT_TZ` — America/New_York — for every territory, and a
-  branch admin reads the screen somewhere else. `BranchHome`'s `inZone` takes
-  the zone as a **required** argument for that reason: a formatter that fell
-  back to the reader's zone would print the wrong hour rather than no hour, and
-  wrong is the only one of those a deadline cannot survive.
+  branch admin reads the screen somewhere else. `../../lib/zoneTime.js`'s `inZone`
+  takes the zone as a **required** argument for that reason: a formatter that
+  fell back to the reader's zone would print the wrong hour rather than no
+  hour, and wrong is the only one of those a deadline cannot survive. It was
+  written on `BranchHome` and moved to `lib/` in D140 when S4's calendar became
+  its second caller — importing one page's export from another page is what
+  `../../lib/README.md`'s rule forbids.

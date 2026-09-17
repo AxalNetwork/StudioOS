@@ -314,14 +314,12 @@ const EXEMPT = [
     why: 'AdminPage.jsx:14 records that this standalone route stays wired for direct '
        + 'deep links; the roster itself is reached at /admin?tab=network-profiles.',
   },
-  {
-    path: '/admin/spinout-lab',
-    kind: 'same-component-elsewhere',
-    host: '/admin',
-    tab: 'lab-applications',
-    why: 'the Lab console is a tab of the Admin Console; the standalone mount exists '
-       + 'for deep links (AdminSpinoutLab.jsx:5).',
-  },
+  // `/admin/spinout-lab`'s entry was DELETED IN D140, by this guard's own rule:
+  // `BranchPrograms` links to it as the console where grace and override are
+  // actually decided, so the route has a real door and an exemption claiming it
+  // has none would be the stale entry this file refuses. The route is unchanged
+  // — what changed is that something now points at it, which is the outcome the
+  // guard wants rather than a reason to keep the entry.
 ];
 
 /**

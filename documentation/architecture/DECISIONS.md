@@ -11248,3 +11248,134 @@ and neither needed a line changed: the rung they render is derived from
 before this decision existed. The test asserts the lift **through**
 `FREEZING_STATUSES` itself rather than restating the four strings, so the two
 cannot drift apart.
+
+---
+
+## D140 — branch S4: a calendar nobody can move, an index of four consoles, and the third promise that outlived its fact
+
+`/branch/programs` and `/branch/community` were the last two branch artboards
+blocked on nothing — S5 and S6 wait on `publishTemplate` and `applyBenchmarks`,
+which F.5 listed and nobody built. So S4 shipped on its own, and researching it
+before building it is what shaped it, because **the notice it replaces promised
+two things and neither survived measurement.**
+
+### The promise, and why it is deleted rather than reworded
+
+`/branch/programs` rendered: *"The cohort calendar with **dates you adjust**, and
+assessment runs whose results are yours."*
+
+**No route anywhere lets an admin move a cycle or a week.** Measured across the
+whole worker rather than taken from the plan file: there is **no
+`UPDATE week_windows` at all**, and every `UPDATE cohort_cycles` touches
+`status`, `app_status`, `force_proceed` or `applications_open_at/close_at` —
+**never `start_at`/`end_at`**. The four week windows are pure month arithmetic
+(`cycleWeekWindows(year, month)`), and both rows are written by
+`INSERT OR IGNORE`, so re-materialising a cycle cannot move one either.
+
+A date picker here would be the `still_an_admin` mistake D134 already named on
+the tier above: *a UI that offered a button and let the server pick teaches the
+operator that one of its buttons is a lie.* So the page draws no date control,
+no form, and says on the calendar itself — where a reader meets the dates rather
+than in a footnote — that they are derived and read here rather than set.
+
+**This is the third promise in this programme to outlive its fact**, after
+D129's seat store and D131's six S1 blocks. The rule the branch README states is
+applied again and the sentence is **deleted at source**, with a scan refusing it
+anywhere under `frontend/src` — the `NO_VERDICT_SNAPSHOT` precedent.
+
+### What a branch genuinely controls is the outcome, not the calendar
+
+Per company, per week: `grace` (1–168h, reason mandatory) and `override`, both
+audited through `applyWeekDecision` into `company_week_status` and
+`stage_transition_log`. That is a real and defensible reading of *"timing is
+yours"* — it is simply not a date picker, and the page says which it is.
+
+**And it links to those two writes rather than re-implementing them.** They
+already have a working console — `AdminCohortTiming`, a **tab** of
+`/admin/spinout-lab` rather than a route of its own — and two audited writes
+drawn twice is how two surfaces come to disagree about what was decided.
+
+### Assessment ships as analytics, not as runs
+
+`admin_assessment.ts` has **23 routes and 17 of them are behind
+`requireHqAuthoring`** (D106): authoring is HQ's, and offering a branch admin a
+button that 403s is the same lie as the date picker. The page draws none, and
+says so.
+
+What it cannot draw is the artboard's *"assessment runs"*: there is **no
+`GET /sessions` and no `GET /results`** in that file, and the one session-shaped
+route, `POST /sessions/:id/rescore`, needs a `public_id` no console surfaces. So
+a table of runs would have nothing to read. The gap is named on the page rather
+than only in the rail, and **the test reads the absence out of the worker** — the
+day somebody ships a list route, the assertion fails and the page gets its table
+instead of the claim going quietly stale.
+
+### Community is an index, not four new screens
+
+All four consoles are real, working and **already branch-reachable**:
+`admin_events.ts` (9 routes), `admin_jobs.ts` (5), `admin_circles.ts` (8) and
+`admin_network_profiles.ts` (6) carry **zero** `requireHqAuthoring` between
+them, and each has a live SPA route. What did not exist is the page the sidebar's
+Community row points at.
+
+**Each card says what its console actually does, because three of the four are
+narrower than their names** and a reader who assumes otherwise goes looking for a
+control that is not there:
+
+- **Events** — moderation and analytics. Members write the events; the console
+  approves, rejects, unpublishes, features, cancels and sets capacity. It does
+  not author one.
+- **Job board** — **moderation only.** Five routes, and there is no admin create,
+  edit or delete.
+- **Circles** — full CRUD. The one community surface a branch authors outright.
+- **Network profiles** — CRUD, photo and reorder, and **not a member
+  directory.** The only public route over that table is `network_public.ts`'s
+  single photo-blob proxy, and the only other reader in the whole worker is
+  `services/decks/axalSpinoutDemoDay.ts`. There is no member-facing list
+  endpoint at all; what the table feeds is the Demo Day deck's Mentors & Network
+  slide. The card says that rather than letting the name imply otherwise.
+
+**The page fetches nothing, deliberately.** Four counts would each be a second
+read of a console's own list, and a count here disagreeing with the table one
+click away is the tile-vs-table defect D128 was written to end. The cards link;
+the consoles count.
+
+### One zone formatter — the fifth consolidation
+
+`inZone` was written on `BranchHome` for S1's week deadline (D131) and S4's
+calendar is its second caller. `lib/README.md` already states the rule — *"If a
+helper appears in two places, put it here once rather than a third time"* — so it
+moved to **`frontend/src/lib/zoneTime.js`** with `dateInZone` beside it, and
+`BranchHome` imports what it used to declare. The existing S1 test was
+**re-pointed rather than deleted**: its assertions pin the zone as a *required*
+argument and are worth the same wherever the function lives.
+
+It is deliberately **not** merged with `lib/spinoutLab.js`'s date helpers, which
+bake `COHORT_TZ` in. Those format a programme date for a founder who is *on* the
+programme clock; this one formats an instant for a reader who is not and must be
+told which clock it is. Two behaviours under one name is D117's `money` trap, so
+the split is stated rather than left for whoever tries next.
+
+**And the zone itself is read, never retyped.** `lib/spinoutLab.js` already
+exports `COHORT_TZ` and the worker declares its own in
+`services/cohortTiming.ts`; the two cannot import each other, so the test pins
+them equal. A rename on one side now fails the build instead of going unnoticed.
+
+D127 one `GROUP BY role`, D128 one LIKE escaper, D130 one definition of open,
+D131 one count, D132 one zone formatter *(planned and not taken — this is where
+it actually landed)*, D138 one definition of what freezes, **D140 one zone
+formatter.**
+
+### The defect the new guard caught before it shipped
+
+`cycleLabel(null, 10)` returned **`'October null'`**. The guard was
+`Number.isFinite(Number(year))` — and `Number(null)` is `0`, which *is* finite,
+so a missing year walked straight through and would have rendered on screen. The
+empty values are rejected before the numeric check now. Worth recording because
+it is the same shape as every other assertion-that-cannot-fail in this file: the
+test was written first, and it failed on the first run for the right reason.
+
+**No new `/api/*` method, no worker route, no migration — 267 stays free.** Every
+read this PR needs already exists and is already branch-reachable on plain
+`requireAdmin`, so `check-api-drift` has nothing to say. `frontend/src` moves, so
+`docs/` is rebuilt.

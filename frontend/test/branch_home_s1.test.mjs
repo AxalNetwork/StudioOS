@@ -27,7 +27,12 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { pctFromBps, inZone } from '../src/pages/branch/BranchHome.jsx';
+import { pctFromBps } from '../src/pages/branch/BranchHome.jsx';
+// D140 — `inZone` moved to `lib/zoneTime.js` when S4's cohort calendar became
+// its second caller. Re-pointed rather than deleted: these assertions are the
+// ones that pin the zone as a REQUIRED argument, and they are worth the same
+// wherever the function lives. The page still uses it, asserted below.
+import { inZone } from '../src/lib/zoneTime.js';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 

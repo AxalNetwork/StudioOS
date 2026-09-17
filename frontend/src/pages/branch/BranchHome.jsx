@@ -28,6 +28,11 @@
  * their founders still have tonight. The server names the zone; the page prints
  * it and formats in it.
  *
+ * `inZone` MOVED TO `lib/zoneTime.js` IN D140 and is imported rather than
+ * declared. S4's cohort calendar is its second caller, and importing one
+ * page's export from another page is what `lib/README.md`'s rule forbids.
+ * Nothing about the behaviour changed — the zone stays a required argument.
+ *
  * THE REVENUE BLOCK SHOWS A RATE AND REFUSES AN AMOUNT. The share is a licence
  * term HQ pushed, so it is real and dated. The base it applies to is not
  * totalled anywhere on a branch — `branchRevenueSummary` establishes that for
@@ -40,6 +45,7 @@ import { Link } from 'react-router-dom';
 import { Clock, Gauge, PieChart } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
+import { inZone } from '../../lib/zoneTime';
 import { Card, Unrecorded, Unreadable } from '../../ui';
 import BranchZone from './BranchZone';
 
@@ -68,26 +74,6 @@ export function pctFromBps(bps) {
   return Number(bps) / 100;
 }
 
-/**
- * An instant, in the zone it is ENFORCED in, with that zone named.
- *
- * The zone is a required argument rather than a default, because the whole
- * point of this helper is that a caller cannot forget to say which clock a
- * deadline is on. A formatter that silently fell back to the reader's zone
- * would produce exactly the wrong hour it exists to prevent.
- */
-export function inZone(iso, zone) {
-  if (!iso || !zone) return null;
-  const ms = Date.parse(iso);
-  if (!Number.isFinite(ms)) return null;
-  try {
-    return new Intl.DateTimeFormat('en-GB', {
-      timeZone: zone, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
-    }).format(new Date(ms));
-  } catch {
-    return null;
-  }
-}
 
 export default function BranchHome() {
   const [home, setHome] = useState(null);   // null = loading, UNAVAILABLE = failed

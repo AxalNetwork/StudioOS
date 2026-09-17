@@ -12,6 +12,7 @@ The API client, formatters and helpers. Nothing here renders.
 | `seo.js` | `usePageMeta`, for title/description/OG on public routes. |
 | `log.js` | `reportError`, the client error channel. |
 | `statusOverall.js` | The single roll-up rule for platform health, shared by `/status` and the Help Center. |
+| `zoneTime.js` | `inZone`, `dateInZone` — an instant rendered in the zone it is **enforced** in, with that zone named. The zone is a required argument, never a default: the Spin-Out Lab programme runs on America/New_York for every territory and a branch admin does not, so a formatter that fell back to the reader's zone would print the wrong hour. Deliberately not merged with `spinoutLab.js`'s date helpers, which bake the zone in for a reader who is on that clock. |
 
 ## Subfolders
 
