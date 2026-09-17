@@ -1,5 +1,6 @@
 import React from 'react';
 import { WorkerRail } from '../../ui';
+import { branchLabel } from '../../lib/shellRole';
 
 /**
  * The frame every `/branch/*` route renders in — and the branch tier's ONE
@@ -30,6 +31,19 @@ import { WorkerRail } from '../../ui';
  * load-bearing. One always-visible sentence says the true thing instead, and it
  * sits here so no zone can ship without it.
  *
+ * D151 — THAT SENTENCE NOW NAMES THE BRANCH, which is S12's rule 1. The canvas
+ * draws it as a chip reading "Axal VC France" with no caret, and the chip is
+ * NOT what ships. Two measurements decided that: the territory badge
+ * (`App.jsx`) already names the branch on every branch screen, so a chip would
+ * be a second copy of one string on one screen; and D150 refused H13's HQ chip
+ * on the grounds that its options cannot differ, so a branch chip would be
+ * contrasting with nothing. What the chip's information content actually is —
+ * *this one, and it does not open* — was already this sentence. What the
+ * sentence lacked was the name.
+ *
+ * `branchLabel` returns null off a branch or on an older `/me`, and the
+ * sentence stays true either way rather than rendering "reads null's database".
+ *
  * NOT `WorkspaceShell`. That shell draws a bucket crumb, a zone pill row and a
  * scope line defaulted from `ActiveCompanyContext` — all three inert or wrong
  * on a branch (`bucketsFor('branch_admin')` is `[]`, and the active company is
@@ -39,12 +53,19 @@ import { WorkerRail } from '../../ui';
  */
 export default function BranchZone({
   workspace,
+  user,
   stance = 'Read-only summary',
   coverage = [],
   coverageNote,
   unavailable = [],
   children,
 }) {
+  const label = branchLabel(user);
+  const note = label
+    ? `This rail reads ${label}'s database and no other. There is no cross-branch read behind it, `
+      + 'so a question about another territory is one it cannot ask rather than one it declines.'
+    : 'This rail reads this deployment\'s database and no other. There is no cross-branch read behind it, '
+      + 'so a question about another territory is one it cannot ask rather than one it declines.';
   return (
     <div
       className="lg:grid lg:items-start lg:gap-6"
@@ -58,7 +79,7 @@ export default function BranchZone({
             workspace={workspace}
             role="branch_admin"
             stance={stance}
-            note="This rail reads this deployment's database and no other. There is no cross-branch read behind it, so a question about another territory is one it cannot ask rather than one it declines."
+            note={note}
             coverage={coverage}
             coverageNote={coverageNote}
             unavailable={unavailable}

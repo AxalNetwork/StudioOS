@@ -85,11 +85,25 @@ export const COMMUNITY_CONSOLES = [
   },
 ];
 
-export default function BranchCommunity() {
+export default function BranchCommunity({ user }) {
   return (
     <BranchZone
       workspace="Community"
-      coverageNote="These four consoles read and write this deployment's own database. Nothing in them is shared with another territory and nothing in them is pushed from HQ."
+      user={user}
+      // D151 — THIS IS THE ONE ZONE WHERE THE RAIL'S "nothing to read back"
+      // IS TRUE, AND IT SAYS WHY RATHER THAN BEING GIVEN COVERAGE TO FIX IT.
+      // Three branch zones passed the rail nothing; two of them had loaded a
+      // summary and were simply not telling it. This one genuinely has not,
+      // deliberately — see the header above: four counts here would each be a
+      // second read of a console's own list, and a count disagreeing with the
+      // console one click away is the tile-vs-table defect D128 ended.
+      // Fabricating coverage so the rail's button lights up would reintroduce
+      // that defect one layer higher, which is why the absence is explained
+      // instead of filled.
+      coverageNote={'These four consoles read and write this deployment\'s own database. Nothing in them '
+        + 'is shared with another territory and nothing in them is pushed from HQ. This page holds no '
+        + 'figures of its own to read back — each console counts its own rows, so a count here could '
+        + 'disagree with the one a click away.'}
     >
       <header data-testid="branch-community-header">
         <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">

@@ -75,7 +75,7 @@ export function pctFromBps(bps) {
 }
 
 
-export default function BranchHome() {
+export default function BranchHome({ user }) {
   const [home, setHome] = useState(null);   // null = loading, UNAVAILABLE = failed
 
   const load = useCallback(() => {
@@ -110,6 +110,7 @@ export default function BranchHome() {
   return (
     <BranchZone
       workspace="Home"
+      user={user}
       stance="Read-only digest"
       coverage={coverage}
       coverageNote={coverage.length

@@ -31,6 +31,22 @@ import BranchZone from './BranchZone';
  * one. Three read states, not two — unreadable, published-nothing, published —
  * because an empty list standing in for all three is the defect D107 fixed on
  * the licence copy and D147 fixed on the template copy.
+ *
+ * D151 — TWO THINGS THIS PAGE HAD AND THREW AWAY, and they are the same shape.
+ *
+ * 1. **`pushed_at`.** Every benchmark row carries it (`branch_insights.ts`
+ *    selects it), and this file contained ZERO occurrences of it. The median is
+ *    a copy HQ computed and PUSHED, so a reader could not tell this morning's
+ *    from last quarter's — the defect D147 and D149 both landed on, and
+ *    precisely what S12's rule 3 names: *"The rail may cite that, and says when
+ *    HQ computed it."* Seventh instance of a producer with no reader (#252,
+ *    D142, D149, D150).
+ * 2. **The rail.** `<BranchZone workspace="Insights">` passed no `coverage`, and
+ *    `WorkerRail`'s only button is disabled when `coverage` is empty, under the
+ *    sentence *"this page has not loaded a summary"* — false on a page that had
+ *    loaded stats, a benchmark and a server-written `unavailable` list. That
+ *    list was rendered as its own card and never forwarded to the rail's block
+ *    for it.
  */
 
 /** Where this branch's own value sits between 0 and twice the median. */
@@ -55,7 +71,7 @@ function ownValue(stats, key) {
   return null;
 }
 
-export default function BranchInsights() {
+export default function BranchInsights({ user }) {
   const [data, setData] = useState(undefined);
   const [failed, setFailed] = useState(false);
 
@@ -75,8 +91,46 @@ export default function BranchInsights() {
   const stats = data?.stats;
   const benchmarks = data?.benchmarks || [];
 
+  // THE RAIL'S COVERAGE, BUILT PER SOURCE AND FILTERED — the shape
+  // `branch_rail_mount.test.mjs` already requires of the three HQ pages D126
+  // fixed, applied to the branch tier it left out. A read that failed
+  // contributes NO line rather than a zero, so the rail summarises what is
+  // actually on the page.
+  const coverage = [
+    stats && Number.isFinite(Number(stats.accounts))
+      ? `${stats.accounts} account${Number(stats.accounts) === 1 ? '' : 's'} in this territory`
+      : null,
+    stats && Number.isFinite(Number(stats.seats_used))
+      ? `${stats.seats_used} seat${Number(stats.seats_used) === 1 ? '' : 's'} used, counted from roles`
+      : null,
+    // S12 RULE 3 — "it points at the copy it does have", and the rule's own
+    // second half is the stamp: HQ computed this median at a moment, and a
+    // pushed copy without its age is the defect D147 and D149 both landed on.
+    // `n_branches` travels with it because migration 256's k-threshold is why
+    // the row exists at all: below it HQ withholds the row rather than
+    // publishing a median that is one branch's own figure.
+    benchmarks.length
+      ? `${benchmarks.length} benchmark${benchmarks.length === 1 ? '' : 's'} HQ published over `
+        + `${benchmarks[0].n_branches} branches, computed ${benchmarks[0].pushed_at}`
+      : null,
+  ].filter(Boolean);
+
   return (
-    <BranchZone workspace="Insights">
+    <BranchZone
+      workspace="Insights"
+      user={user}
+      stance="Read-only summary of this territory's own figures"
+      coverage={coverage}
+      coverageNote={coverage.length ? undefined
+        : (failed
+          ? 'The insights read did not complete, so there is nothing to read back — this is not a claim that the territory measures nothing.'
+          : 'Loading this territory\'s figures…')}
+      // FORWARDED FROM THE PAYLOAD, NOT TYPED HERE. The same list the card
+      // below renders: the day one of these gains a source the rail shrinks by
+      // itself rather than going stale, which is the rule that card already
+      // follows and the rail did not.
+      unavailable={(data?.unavailable || []).map((u) => [u.stat, u.reason])}
+    >
       <header className="mb-4">
         <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Insights</h1>
         <p className="text-sm text-gray-600 mt-1 dark:text-gray-400">
@@ -149,8 +203,15 @@ export default function BranchInsights() {
                   <li key={b.metric_key}>
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="text-xs font-medium text-gray-900 dark:text-gray-100">{b.label}</span>
+                      {/* D151 — THE PUSH STAMP, which this row carried and did
+                          not draw. The median is HQ's copy, not this
+                          database's own arithmetic, so without it a reader
+                          cannot tell this quarter's from last year's. S12's
+                          rule 3 names it: the rail "says when HQ computed
+                          it", and the page it summarises must say the same. */}
                       <span className="text-[11px] text-gray-500 tabular-nums dark:text-gray-400">
                         median {b.median_value} · {b.n_branches} branches · {b.period}
+                        {b.pushed_at ? ` · HQ computed ${b.pushed_at}` : ''}
                       </span>
                     </div>
                     <div className="relative mt-1.5 h-2 rounded-full bg-gray-100 dark:bg-gray-800">

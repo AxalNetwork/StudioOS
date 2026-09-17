@@ -71,7 +71,13 @@ test('both S4 routes render a page rather than a stated notice', () => {
     const at = APP.indexOf(`path="${path}"`);
     assert.ok(at > 0, `${path} is no longer a registered route`);
     const el = APP.slice(at, at + 160);
-    assert.ok(el.includes(`<${page} />`), `${path} does not render ${page}`);
+    // D151 — THE COMPONENT, NOT THE PROP-LESS SPELLING. `<${page} />` failed
+    // the moment the route passed a prop, which does not change which page it
+    // renders. The character after the name is checked so `<BranchPrograms`
+    // cannot be satisfied by a longer identifier that starts the same way.
+    const open = el.indexOf(`<${page}`);
+    assert.ok(open >= 0 && /[\s/>]/.test(el[open + page.length + 1] || ''),
+      `${path} does not render ${page}`);
     assert.ok(!el.includes('BranchZonePending'),
       `${path} still renders the notice the page was built to replace`);
   }

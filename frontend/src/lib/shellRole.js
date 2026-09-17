@@ -43,6 +43,31 @@ export function branchOfUser(user) {
   return code ? code : null;
 }
 
+/**
+ * What to CALL this branch on screen — its brand name, or its code, or null.
+ *
+ * WHY THIS IS HERE RATHER THAN IN A PAGE. `BranchAccounts.jsx` derived it for
+ * the S0 sentence "Searching Axal VC France accounts" and `BranchZone` needs
+ * the same string for S12's scope rule, which would have been the second copy.
+ * `frontend/src/lib/README.md` states the rule this obeys — "If a helper
+ * appears in two places, put it here once rather than a third time" — and it
+ * lives beside `branchOfUser` because both answer a question about the same
+ * `/me.branch` object. D127 one `GROUP BY role`, D128 one LIKE escaper, D130
+ * one definition of open, D131 one count, D138 one definition of what freezes,
+ * D140 one zone formatter, D142 one freeze list, D144 one notification row,
+ * D149 one bps formatter, **D151 one name for the branch.**
+ *
+ * NULL RATHER THAN A PLACEHOLDER, because the two callers write different
+ * sentences around the absence and neither wants "Unknown branch" dropped into
+ * the middle of one. A fallback is a human-written sentence (D117's split), so
+ * it stays at the call site.
+ */
+export function branchLabel(user) {
+  const name = String(user?.branch?.name ?? '').trim();
+  if (name) return name;
+  return branchOfUser(user);
+}
+
 export function shellRoleFor(role, user, hqView = true) {
   // D107 — the branch arm, and it is checked FIRST because the two facts
   // cannot both be true: D106 makes `hydrateSuperAdmin` return 0 on a branch

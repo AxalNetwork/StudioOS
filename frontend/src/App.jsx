@@ -2119,7 +2119,7 @@ function AppInner() {
           Worker serving them, and on HQ they carry no data at all. A second,
           weaker copy of the wall in the router would be the thing that looks
           like the guarantee without being it. */}
-      <Route path="/branch" element={guard(['admin'], <BranchHome />)} />
+      <Route path="/branch" element={guard(['admin'], <BranchHome user={user} />)} />
       {/* D129 — LIVE, and it wraps ITSELF in BranchZone because its rail
           coverage is what it loaded. The notice this replaces said seats used
           "is not a number that can be shown today", which D127 made false: a
@@ -2137,11 +2137,11 @@ function AppInner() {
           frame from its route here; a zone with data owns it, exactly as every
           workspace page passes its own `rail` to WorkspaceShell. Each of these
           seven loses its wrapper on the day PR 12 or PR 14 gives it a page. */}
-      <Route path="/branch/approvals" element={guard(['admin'], <BranchApprovals />)} />
-      <Route path="/branch/programs" element={guard(['admin'], <BranchPrograms />)} />
-      <Route path="/branch/community" element={guard(['admin'], <BranchCommunity />)} />
-      <Route path="/branch/contracts" element={guard(['admin'], <BranchContracts />)} />
-      <Route path="/branch/insights" element={guard(['admin'], <BranchInsights />)} />
+      <Route path="/branch/approvals" element={guard(['admin'], <BranchApprovals user={user} />)} />
+      <Route path="/branch/programs" element={guard(['admin'], <BranchPrograms user={user} />)} />
+      <Route path="/branch/community" element={guard(['admin'], <BranchCommunity user={user} />)} />
+      <Route path="/branch/contracts" element={guard(['admin'], <BranchContracts user={user} />)} />
+      <Route path="/branch/insights" element={guard(['admin'], <BranchInsights user={user} />)} />
       <Route path="/branch/settings" element={guard(['admin'], <BranchZone workspace="Settings"><BranchZonePending artboard="S6 Settings" title="Who owns each row" will="Subsidiary name and staff are yours; territory, brand kit and the licence summary are HQ's, each with an owner chip and, on HQ-owned rows, the request path. Your licence summary is already readable today under Your licence below." pr="PR 14" /></BranchZone>)} />
       {/* The HQ shell's Contracts and Team rows. Both frame panels the Admin
           Console already has (Legal templates; the Users table) for the
