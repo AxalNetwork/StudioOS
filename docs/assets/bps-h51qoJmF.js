@@ -1,0 +1,1 @@
+var e=e=>`${(e/100).toFixed(2).replace(/\.?0+$/,``)}%`;function t(t){if(typeof t==`number`)return Number.isFinite(t)?e(t):null;if(typeof t!=`string`||t.trim()===``)return null;let n=Number(t);return Number.isFinite(n)?e(n):null}export{t};

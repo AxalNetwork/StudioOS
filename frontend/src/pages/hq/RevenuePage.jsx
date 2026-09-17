@@ -30,6 +30,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Coins } from 'lucide-react';
 import { api } from '../../lib/api';
+import { bpsPercent } from '../../lib/bps';
 import { reportError } from '../../lib/log';
 import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 
@@ -319,8 +320,25 @@ export default function RevenuePage() {
                         <div className="truncate text-[12px] font-bold">
                           {s.brand_name || s.licence_ref || s.licence_uid}
                         </div>
+                        {/* THE RATE THE OWED FIGURE WAS COMPUTED FROM, beside
+                            it (H10, D149). `owed` is `gross × revenue_share`
+                            drawn server-side by `drawStatement`, and it read as
+                            a bare number with no way to check it — an operator
+                            disputing a statement had to go and look the licence
+                            up. `revenue_share_bps` is already ON the row
+                            (`admin_statements.ts` writes it beside the owed
+                            cents precisely so the statement records the rate it
+                            was drawn at), so this renders a fact the payload
+                            carried and nothing showed.
+
+                            A LICENCE WHOSE RATE IS ABSENT PRINTS NO RATE rather
+                            than "0%" — `bpsPercent` returns null and the clause
+                            drops, the same rule `zoneFilterBuilder`'s counts
+                            follow. A zero here would say HQ is owed nothing. */}
                         <div className="mt-0.5 text-[10.5px] tabular-nums text-axal-faint">
-                          {s.period} · owed {money(s.owed_cents, s.currency)} · paid {money(s.paid_cents, s.currency)}
+                          {s.period} · owed {money(s.owed_cents, s.currency)}
+                          {bpsPercent(s.revenue_share_bps) && ` (× ${bpsPercent(s.revenue_share_bps)})`}
+                          {' · paid '}{money(s.paid_cents, s.currency)}
                           {s.disputed_cents > 0 && ` · ${money(s.disputed_cents, s.currency)} disputed`}
                         </div>
                         {/* A FLOOR IS NOT A TOTAL, and it is said on the row

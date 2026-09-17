@@ -32,6 +32,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { EU_27, EU_CODES, coverageCells, renewalPipeline, sortCells } from '../src/lib/licenceCoverage.js';
+import { DEPLOY_TIMELINE, deployProgress } from '../src/lib/deployTimeline.js';
 import { codeOnly } from './_codeOnly.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -338,15 +339,111 @@ test('the branch code is refused rather than corrected, on the same charset as t
 });
 
 test('the timeline shows the steps still ahead, not only the one reached', () => {
-  const m = PAGE.match(/const DEPLOY_TIMELINE = \[([\s\S]*?)\];/);
-  assert.ok(m, 'the timeline is a literal list, in provisioning order');
-  const keys = [...m[1].matchAll(/\['([a-z_]+)',/g)].map((x) => x[1]);
+  // D149 MOVED THE LIST TO `lib/deployTimeline.js` AND THIS TEST FOLLOWED IT,
+  // assertions unchanged — which is what proves the move was a move. It is read
+  // as the exported value rather than sliced out of source text, because it is
+  // now a value a test can hold.
+  const keys = DEPLOY_TIMELINE.map(([k]) => k);
   assert.deepEqual(keys, [
     'requested', 'database_created', 'schema_applied', 'secrets_present',
     'principal_seeded', 'worker_live', 'hostname_active', 'linked',
   ]);
   assert.ok(!keys.includes('failed'), 'failed is a status, not a stage on the way');
   assert.match(PAGE, /data-testid="deploy-timeline"/);
+  // And the page must read the one list rather than keeping a second copy of
+  // the eight steps beside it.
+  assert.match(PAGE, /from '\.\.\/\.\.\/lib\/deployTimeline'/);
+  assert.ok(
+    !/const DEPLOY_TIMELINE = \[/.test(PAGE),
+    'the eight steps are declared once, in lib/deployTimeline.js',
+  );
+});
+
+/* ── H8 · the deploy timeline's three states (D149) ─────────────────── */
+
+test('a RUNNING deployment and a FAILED one no longer render alike', () => {
+  // THE ASSERTION THE WHOLE FIX TURNS ON, and it needs both cases: the defect
+  // was that they rendered IDENTICALLY, so a fixture holding only the failed
+  // one could not see it. Before D149 the render was `at >= 0 && i <= at`, so
+  // `failed` (at === -1) drew eight empty circles and `requested` drew one
+  // check and seven — different, yes, but a failure AFTER step 3 and a run
+  // still ON step 4 both drew three checks and five circles, and a failure
+  // drew what "not started" would draw.
+  const running = deployProgress('schema_applied');
+  const failed = deployProgress('failed');
+
+  assert.notDeepEqual(running.states, failed.states);
+  assert.notEqual(running.summary, failed.summary);
+
+  // Running: the steps behind are done, the steps ahead are waiting, and
+  // nothing claims to know about a step it cannot see.
+  assert.deepEqual(running.states, ['ok', 'ok', 'ok', 'wait', 'wait', 'wait', 'wait', 'wait']);
+  assert.equal(running.failed, false);
+  assert.equal(running.done, 3);
+
+  // Failed: every step is `unknown`, and NOT `fail`. `status` was overwritten,
+  // so which step it failed at is gone — but the row exists, so claiming all
+  // eight failed would be a second false statement in place of the first.
+  assert.deepEqual(failed.states, Array(8).fill('unknown'));
+  assert.ok(!failed.states.includes('fail'), 'no step may be marked failed: none is recorded as such');
+  assert.equal(failed.failed, true);
+  assert.equal(failed.done, 0);
+
+  // The two states a binary render collapsed: a failure after step 3 against a
+  // run still working on step 4.
+  assert.notDeepEqual(deployProgress('failed').states, deployProgress('secrets_present').states);
+});
+
+test('every one of the eight steps derives its own state, and the last one completes', () => {
+  // Walked end to end rather than sampled, because an off-by-one at either end
+  // is the mistake this shape invites: `requested` must complete exactly one
+  // step and `linked` must complete all eight with nothing left waiting.
+  for (const [i, [key]] of DEPLOY_TIMELINE.entries()) {
+    const p = deployProgress(key);
+    assert.equal(p.done, i + 1, `${key} completes ${i + 1} steps`);
+    assert.equal(p.states[i], 'ok', `${key} marks its own step done`);
+    if (i + 1 < p.total) assert.equal(p.states[i + 1], 'wait', `${key} leaves the next step waiting`);
+    assert.equal(p.states.filter((x) => x === 'ok').length, i + 1);
+  }
+  assert.equal(deployProgress('linked').states.filter((x) => x === 'wait').length, 0);
+  assert.equal(deployProgress('requested').done, 1);
+});
+
+test('the summary counts what the marks show, and says so when it cannot', () => {
+  // A summary derived separately from the marks is how the two come to
+  // disagree, so it is asserted against them rather than against a literal.
+  for (const status of [...DEPLOY_TIMELINE.map(([k]) => k), 'failed']) {
+    const p = deployProgress(status);
+    assert.equal(p.done, p.states.filter((x) => x === 'ok').length, `${status}: the count matches the marks`);
+  }
+  assert.equal(deployProgress('worker_live').summary, '6 of 8 complete · 2 waiting');
+  // The failed summary must SAY the step is unrecorded rather than print a
+  // count that implies nothing happened. "0 of 8 complete" would be the same
+  // lie the blank timeline told.
+  const failed = deployProgress('failed').summary;
+  assert.match(failed, /not recorded/);
+  assert.ok(!/^0 of 8 complete/.test(failed), 'a failure is not a deployment that never started');
+  assert.match(PAGE, /data-testid="deploy-summary"/);
+});
+
+test('the page draws three distinct marks and states what the store cannot carry', () => {
+  // The derivation is proved above; this is the wiring, which a scan CAN see.
+  for (const state of ['ok', 'wait', 'unknown']) {
+    assert.ok(
+      new RegExp(`state === '${state}'`).test(PAGE),
+      `the timeline must draw its own mark for ${state}`,
+    );
+  }
+  assert.match(PAGE, /data-state=\{state\}/);
+  assert.match(PAGE, /states\[i\]/);
+  // Per-step times and per-step notes are NOT derivable from one status and
+  // one note, so the page says so instead of inventing seven timestamps from
+  // `requested_at` — the D140/D147 rule.
+  assert.match(PAGE, /data-testid="deploy-timeline-bound"/);
+  assert.match(PAGE, /No step carries a time or a note of its own/);
+  // And the one note there is gets named as the deployment's, not a step's.
+  assert.match(PAGE, /data-testid="deploy-status-note"/);
+  assert.match(PAGE, /Why it stopped/);
 });
 
 /* ── H6 · Platform → Deployments ───────────────────────────────────── */

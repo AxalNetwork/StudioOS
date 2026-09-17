@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { bpsPercent } from '../../lib/bps';
 import { FROZEN, STILL_READABLE, FREEZE_RULE } from '../../lib/branchFreeze';
 import { reportError } from '../../lib/log';
 import { FREEZING_STATUSES, noticeKindLabel } from '../../lib/notices';
@@ -41,7 +42,14 @@ const fmtMoney = (cents, currency) => {
   } catch { return `${(Number(cents) / 100).toLocaleString()} ${currency || ''}`.trim(); }
 };
 // Basis points, not a float — see migration 187. 3500 → "35%".
-const fmtBps = (bps) => (bps == null ? 'Not recorded' : `${(Number(bps) / 100).toFixed(2).replace(/\.?0+$/, '')}%`);
+//
+// THE ARITHMETIC MOVED TO `lib/bps.js` AND THE SENTENCE DID NOT (D149). The
+// shared formatter returns `null` for an absent value and never a phrase,
+// because the three pages that had their own copy disagreed about what absence
+// should read as — and 'Not recorded' is this page's copy, chosen to match the
+// eight other absences around it. Folding it into the helper would have
+// flattened that choice; the split is D117's, one layer down.
+const fmtBps = (bps) => bpsPercent(bps) ?? 'Not recorded';
 const fmtDate = (v) => (v ? String(v).slice(0, 10) : 'Not recorded');
 
 const STATUS_TONE = {

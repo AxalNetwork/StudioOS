@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useActiveCompany } from '../contexts/ActiveCompanyContext';
 import { api } from '../lib/api';
+import { bpsPercent } from '../lib/bps';
 import { safeReadJSON } from '../lib/storage';
 
 // ---------- Who may edit -----------------------------------------------------
@@ -918,7 +919,10 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
                     const next = raw === '' ? null : Number(raw);
                     if (next === (m.carry_bps ?? null)) return;
                     run(() => api.updateCompanyMember(uid, m.user_id, { carry_bps: next }),
-                        next === null ? 'Carry cleared' : `Carry set to ${(next / 100).toFixed(2)}%`);
+                        // D149: one bps formatter. This one did not trim, so
+                        // a carry of 150 read "1.50%" where every other rate on
+                        // the platform reads "1.5%".
+                        next === null ? 'Carry cleared' : `Carry set to ${bpsPercent(next)}`);
                   }}
                   disabled={busy || !canChange}
                   aria-label={`Carry in basis points for ${m.name || m.email}`}

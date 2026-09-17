@@ -12305,3 +12305,141 @@ so `docs/` is rebuilt through the root build.
 chips per row are a different artboard from a benchmark, and the licence summary
 they would frame is already readable at `/admin/my-licence`. Filed as the
 remainder of #234.
+
+---
+
+## D149 — three HQ figures that did not show their own state (#242)
+
+**Date:** 2026-09-17 · **Scope:** `frontend/src` only. No migration, no worker
+change, no new `/api/*` method — every field rendered here was already on a
+payload the page fetched.
+
+#242 is "audit H8, H10 and H11 against their new artboards". Its scope came
+from the canvas's own changelog rather than the task title, which is the third
+time running that has corrected a task, and the audit split it into work of
+very different sizes. This takes the part that is render-level and honest
+today; the rest is filed below with its measurement.
+
+### 1 · H8 — a failed deployment rendered exactly like one nobody had started
+
+`AdminLicences.jsx`'s deploy timeline had the canvas's eight steps with
+matching labels and drew them `const done = at >= 0 && i <= at` — a check or an
+empty circle. Two states for three, and `failed` is **not one of the eight
+steps** (migration 258's vocabulary is `requested … linked` plus `failed`), so
+`at` was **-1** and every one of the eight steps rendered blank. A deployment
+that failed was byte for byte a deployment that had not begun; and a run still
+working on step 4 was byte for byte one that failed after step 3.
+
+Two different states drawn the same way is this programme's recurring defect —
+D107's empty-vs-absent licence copy, D128's tile-vs-table, D147's
+never-pushed-vs-pushed-empty — and it is the fourth time.
+
+**What is drawn is bounded by what the store holds, which was measured rather
+than assumed.** `licence_deployments` carries ONE `status` and ONE
+`status_note`, with no per-step history. So:
+
+| the canvas draws | shipped |
+| --- | --- |
+| a per-step state | ✅ `ok` behind the step reached, `wait` ahead of it |
+| the summary *"N of 8 complete · M waiting"* | ✅ from the same |
+| a per-step **note** | ✅ for the deployment, labelled as the deployment's |
+| a per-step **time** | ❌ **stated, not drawn** |
+| which step a failure happened at | ❌ **stated, not drawn** |
+
+The two ❌ rows are said on the page — the D140/D147 rule. Deriving seven
+timestamps from the one `requested_at` is the class of figure this file exists
+to refuse.
+
+**A failed step reads `unknown`, never `fail`, and the word matters.** `status`
+was overwritten with `'failed'`, so the progress it had reached is gone. Marking
+all eight `fail` would claim the request was never even made, while the row
+saying it was is right there — replacing one false statement with another.
+
+### 2 · H10 — `owed` rendered without the rate it was computed from
+
+H10 is otherwise shipped, and in one place better than the canvas: where the
+canvas draws a bare `{{ p.issued }}` the promo table renders `<Unrecorded/>`
+with its own reason. The one gap is the canvas's `× {{ h10SharePct }} owed`
+column. `owed` is `gross × revenue share`, computed server-side by
+`drawStatement`, and it rendered as a bare number — so an operator disputing a
+statement had to open the licence to check it. **The rate was already on the
+row**: `admin_statements.ts` declares and writes `revenue_share_bps` precisely
+so a statement records the rate it was drawn at rather than the rate the licence
+carries today.
+
+A licence with no rate recorded prints **no rate**, not `× 0%` — the clause
+drops, `zoneFilterBuilder`'s rule one surface over. `× 0%` beside an owed figure
+says HQ is owed nothing.
+
+### 3 · The consolidation that forced, and the count was wrong by half
+
+Rendering that rate needed bps → percent, **which already existed six times**.
+The task filed three; three is what a scan keyed on one body finds, and the
+other three had each written their own format:
+
+| site | name | drift |
+| --- | --- | --- |
+| `pages/admin/AdminLicences.jsx` | `pct` | — |
+| `pages/subsidiary/MyLicencePage.jsx` | `fmtBps` | — |
+| `pages/NeedsBoardPage.jsx` | inline | — |
+| `pages/CompanySettingsPage.jsx` | inline | no trim: 150 bps read **"1.50%"** |
+| `pages/IntroductionsPanel.jsx` | `feePct` | `toFixed(bps % 100 ? 2 : 0)`: 3550 read **"35.50%"** |
+| `pages/NetworkEffectsPage.jsx` | inline | `toFixed(0)`, which **rounds a rate** |
+
+So one 3550 rendered "35.5%" on three surfaces and "35.50%" on a fourth. The
+last is latent only — `COMPOUNDING_BPS` is `[10000, 5000, 2500]`, every value a
+whole percent — but a formatter that rounds a rate is one non-round value from
+misreporting one. `frontend/src/lib/bps.js` is now the one definition; D127 one
+`GROUP BY role`, D128 one LIKE escaper, D130 one definition of open, D131 one
+count, D138 one definition of what freezes, D140 one zone formatter, D142 one
+freeze list, D144 one notification row, and this is the **ninth**.
+
+**It splits the way D117 split `text` and `titleCase`**: the helper returns
+`null` for an absent value and does arithmetic only, and each page keeps its own
+absent copy — `'Not recorded'` on `MyLicencePage` to match the eight absences
+around it, `'no rate recorded'` on `IntroductionsPanel` beside its own "no
+economics attached". **A fallback is a human-written sentence.**
+
+**AND THE MOVE IS ALSO A CORRECTION.** None of the six guarded the empty
+string: `Number('')`, `Number('   ')` and `Number([])` are all **0** and all
+finite, so a `Number.isFinite` test alone renders a value nobody recorded as
+**"0%"** — on a revenue share, the statement that a branch owes nothing. The
+first draft of the guard listed the empty string by name and `[]` walked
+straight through, which is why the rule is the **type** and not the value.
+
+**Two strings change, and they are named rather than absorbed:** a carry of 150
+bps now reads "1.5%" where the toast said "1.50%", and a referral fee of 3550
+reads "35.5%" where the panel said "35.50%". Whole percents are unchanged
+everywhere, so the other four surfaces render exactly what they rendered.
+
+### The derivation was lifted so the fix could be tested at all
+
+`DEPLOY_TIMELINE` and the new `deployProgress` live in
+`frontend/src/lib/deployTimeline.js`, on `sortCells`'s precedent (D146): which
+steps a status implies is a fact about migration 258's vocabulary, not about a
+layout. It is also the only way the central assertion can exist — **a source
+scan over the page can see that three markers are written and cannot see that a
+running deployment and a failed one now differ**, which is the entire defect.
+`hq_licences_h2h3.test.mjs` follows the list to its new home with its
+assertions unchanged, which is what proves the move was a move.
+
+### Filed rather than folded in, each with its measurement
+
+- **H11's publish confirmation** — *"Publishing v3.2 notifies N branches on
+  older versions."* D147 built the push this would count; the **pre**-publish
+  count needs a branch-side `templateVersions()` on `HqEntrypoint` that does not
+  exist. That is a producer, not a render.
+- **H11's rollout percentage and Roll back.** Measured: **zero** occurrences of
+  `Roll back`, `rollout` or `Open diff` in `frontend/src`, and no rollback route
+  in the worker. It is a Cloudflare versions-API operation — F.8 item 5's
+  gradual deployments — blocked on the widened `CLOUDFLARE_API_TOKEN`. Drawing a
+  Roll back button that cannot roll back is the `still_an_admin` mistake D134
+  named.
+- **H8's "link to Platform" beside the credential block.** The block itself was
+  already shipped and is better than the canvas draws it: the Deploy button
+  disables on the server's `dispatch_available` and renders the server's own
+  `dispatch_reason`, rather than offering a control that 409s. The link is not
+  added, because the credential is a Worker secret set outside the app entirely
+  — a link to Platform would suggest the fix lives there.
+
+**No migration — 269 is still free.**

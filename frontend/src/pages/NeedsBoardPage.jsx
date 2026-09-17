@@ -6,6 +6,7 @@ import {
   Play, Package, Star, Receipt, XCircle,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { bpsPercent } from '../lib/bps';
 import ZoneActions from '../workspaces/ZoneActions';
 import { useEscapeClose } from '../components/useEscapeClose';
 
@@ -770,7 +771,7 @@ function InvoiceDocument({ engagementId, isPartner, onChanged }) {
         <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Subtotal</span><span className="text-gray-900 dark:text-gray-100">{fmt(inv.subtotal_cents)}</span></div>
         {Number(inv.tax_rate_bps) > 0 && (
           <div className="flex justify-between">
-            <span className="text-gray-600 dark:text-gray-400">Tax ({(Number(inv.tax_rate_bps) / 100).toFixed(2).replace(/\.?0+$/, '')}%)</span>
+            <span className="text-gray-600 dark:text-gray-400">Tax ({bpsPercent(inv.tax_rate_bps)})</span>
             <span className="text-gray-900 dark:text-gray-100">{fmt(inv.tax_cents)}</span>
           </div>
         )}

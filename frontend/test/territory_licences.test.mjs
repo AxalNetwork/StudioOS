@@ -140,7 +140,19 @@ test('the page converts entered currency to cents and shows bps as a percentage'
   const s = read(PAGE);
   assert.match(s, /Math\.round\(Number\(f\.annual_fee\) \* 100\)/, 'entered units → integer cents');
   assert.ok(!/parseFloat\(/.test(s), 'no float parsing of money');
-  assert.match(s, /Number\(bps\) \/ 100/, 'bps → percent happens in exactly one place');
+  // D149 MOVED THE PROPERTY AND THIS ASSERTION FOLLOWED IT, INVERTED. It used
+  // to read `Number(bps) / 100` here under the comment "bps → percent happens
+  // in exactly one place" — which was true of this file and false of the tree:
+  // the same arithmetic was written SIX times, three of them in a different
+  // format. So the page must now NOT contain it, and the one-place property is
+  // asserted across all of `frontend/src` by `bps_single_definition.test.mjs`.
+  // A guard scoped to the file a helper happens to live in cannot see the copy
+  // in the next file, which is how six of them accumulated.
+  assert.match(s, /import \{ bpsPercent as pct \} from '\.\.\/\.\.\/lib\/bps'/);
+  assert.ok(
+    !/\/ 100\)\.toFixed\(/.test(s),
+    'bps → percent is lib/bps.js\'s, not a copy in this page',
+  );
 });
 
 /* ---------------------------------------------------------------- *
