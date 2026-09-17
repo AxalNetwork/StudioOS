@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Bell, CheckCheck, Settings as SettingsIcon, BellRing, BellOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
+import NotificationList from './NotificationList';
 import {
   isPushSupported,
   getPushState,
@@ -15,25 +16,12 @@ import {
 // Real-time push rides the existing pipeline overview WebSocket via the
 // `notification` event-type filtered by user_id.
 
-function timeAgo(iso) {
-  if (!iso) return '';
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return '';
-  const s = Math.max(1, Math.floor((Date.now() - t) / 1000));
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h`;
-  const d = Math.floor(h / 24);
-  return `${d}d`;
-}
-
 export default function NotificationBell({ userId }) {
   const [count, setCount] = useState(0);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [unreadable, setUnreadable] = useState(false);
   const navigate = useNavigate();
   const popRef = useRef(null);
   const wsRef = useRef(null);
@@ -78,8 +66,13 @@ export default function NotificationBell({ userId }) {
     try {
       const r = await api.listNotifications();
       setItems(r?.notifications || []);
+      setUnreadable(false);
     } catch {
+      // A FAILED READ IS NOT AN EMPTY INBOX. This used to fall through to `[]`,
+      // which renders "You're all caught up" — a claim about the store that
+      // nothing measured. The list says which of the two it is.
       setItems([]);
+      setUnreadable(true);
     } finally {
       setLoading(false);
     }
@@ -216,25 +209,22 @@ export default function NotificationBell({ userId }) {
             </div>
           )}
           <div className="overflow-y-auto flex-1">
-            {loading && <div className="px-4 py-6 text-sm text-gray-500 text-center">Loading…</div>}
-            {!loading && items.length === 0 && (
-              <div className="px-4 py-8 text-sm text-gray-500 text-center">You're all caught up.</div>
-            )}
-            {!loading && items.map((n) => (
-              <button key={n.id} onClick={() => onItemClick(n)}
-                className={`w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 ${n.read_at ? '' : 'bg-violet-50/40'}`}>
-                <div className="flex items-start gap-2">
-                  {!n.read_at && <span className="mt-1.5 w-2 h-2 rounded-full bg-violet-600 flex-shrink-0" />}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-900 truncate dark:text-gray-100">{n.title}</div>
-                    {n.body && <div className="text-xs text-gray-600 mt-0.5 line-clamp-2">{n.body}</div>}
-                    <div className="text-[10px] text-gray-400 mt-1 uppercase tracking-wide">
-                      {n.type} · {timeAgo(n.created_at)} ago
-                    </div>
-                  </div>
-                </div>
-              </button>
-            ))}
+            <NotificationList
+              items={items}
+              loading={loading}
+              unreadable={unreadable}
+              onItemClick={onItemClick}
+            />
+          </div>
+          {/* The dropdown has no URL, so this is how someone reaches the page
+              that does — the same page `notify.ts` links to from email. */}
+          <div className="px-4 py-2 border-t border-gray-100 dark:border-gray-800">
+            <button
+              onClick={() => { setOpen(false); navigate('/inbox'); }}
+              className="w-full text-center text-xs font-medium text-violet-700 hover:underline dark:text-violet-300"
+            >
+              See all notifications
+            </button>
           </div>
         </div>
       )}

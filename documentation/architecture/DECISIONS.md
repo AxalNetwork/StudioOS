@@ -11845,3 +11845,64 @@ entry does not claim an incident.
 **Migration 267 is used, against D142's "267 stays free" — which was true when
 D142 was written.** No new `/api/*` method, so `check-api-drift` has nothing to
 say. No `frontend/src` change, so `docs/` does not move.
+
+## D144 — the inbox had everything except an address
+
+**Context.** `services/notify.ts` builds `${root}/inbox` into every notification
+email it sends, under a comment describing *"the in-app inbox at `/inbox`"*.
+`App.jsx` registered **zero** `/inbox` routes. So every notification email
+carried a link to a 404 — filed as a dead CTA in D139's list of eight, and
+deferred there as its own concern.
+
+**Re-measured, the filing was wrong about what was missing.** The in-app inbox
+is built and has been mounted in the shell all along:
+`components/NotificationBell.jsx` reads `api.listNotifications()`, renders the
+rows, marks one or all read, and navigates per row. Every worker route behind it
+exists — `routes/notifications.ts` mounted at `/api/notifications`, with `GET /`,
+`/unread-count`, `/mark-read`, `/read-all`, `/:id/read` and `DELETE /:id` — and
+both `api.js` methods exist and are consumed.
+
+**What was missing is a URL.** A dropdown does not have one, and an email CTA
+needs one. That is the entire gap, and it is why D144 is a **page**: no
+migration, no new `/api/*` method, nothing for `check-api-drift`, and no edit to
+`notify.ts` — the link it already writes becomes true the moment the route
+exists.
+
+### The consolidation is the point, not the page
+
+The obvious way to build the page is to write the rows again. That is the thing
+to avoid, and `frontend/src/lib/README.md` already states the rule: *"If a
+helper appears in two places, put it here once rather than a third time."* Two
+renderings drift, and what they would drift about is **what a person believes
+they were told**.
+
+So `components/NotificationList.jsx` is the rows, **lifted out of the bell
+rather than copied**, and both the bell and `/inbox` render it. Deliberately
+with no `variant` prop: the dropdown is narrow and the page is wide, the same
+row reads correctly in both, and giving the page its own row shape would re-open
+exactly the gap the component closes. The test asserts neither caller declares a
+row of its own.
+
+Eighth consolidation on this argument — D127 one `GROUP BY role`, D128 one LIKE
+escaper, D130 one definition of open, D131 one count, D138 one definition of
+what freezes, D140 one zone formatter, D142 one freeze list, D144 one
+notification row.
+
+### A second defect, found while lifting
+
+`NotificationBell`'s load had `catch { setItems([]); }`, and an empty list
+renders *"You're all caught up."* So a failed read told the reader their inbox
+was empty — a claim about the store that nothing measured, and the same
+honest-absence rule this repo applies everywhere else. The list now renders
+three distinct states — loading, unreadable, empty — and **both** callers
+distinguish them. The page also offers a retry; the bell re-reads on next open.
+
+**The bell gains a link to the page.** A surface reachable only from an email is
+one that gets built and then never found.
+
+**Route roles include `exploring`**, which is not an oversight: an application
+decision arrives as a notification, and the person waiting on one holds no other
+role.
+
+**No migration — 267 was used by D143 and 268 is free.** No new `/api/*` method.
+`frontend/src` moves, so `docs/` is rebuilt.

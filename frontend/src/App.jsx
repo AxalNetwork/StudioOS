@@ -262,6 +262,9 @@ const ICDecisionsPage = lazy(() => import('./pages/ICDecisionsPage'));
 const ICDecisionPage = lazy(() => import('./pages/ICDecisionPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const HelpCenterPage = lazy(() => import('./pages/HelpCenterPage'));
+// D144 — `/inbox`, the address `services/notify.ts` has been putting in mail
+// since before any route answered it.
+const InboxPage = lazy(() => import('./pages/InboxPage'));
 const OnboardingPersonaPage = lazy(() => import('./pages/OnboardingPersonaPage'));
 const AcademyLessonPage = lazy(() => import('./pages/AcademyLessonPage'));
 const OnboardingFounderPage = lazy(() => import('./pages/OnboardingFounderPage'));
@@ -2326,6 +2329,9 @@ function AppInner() {
         `/tickets`, `/tickets/<id>`, `/help/<id>`, `/docs`, `/docs/admin/*`.
       */}
       <Route path="/help" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <HelpCenterPage />)} />
+      {/* Every role, `exploring` included: an application decision is a
+          notification, and the person waiting on one holds no other role. */}
+      <Route path="/inbox" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <InboxPage />)} />
       <Route path="/help/tickets" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
       <Route path="/help/tickets/:id" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
       <Route path="/help/admin/*" element={<AdminDocsPathGuard />} />
