@@ -1581,6 +1581,38 @@ export default {
             }
           } catch (e) { console.error('[cron] compliance sweep failed', e); }
         }
+        // D143 — a breached HQ SLA tells somebody. `hq_escalations.due_at` has
+        // been written since migration 259 and read by nothing: `slaBand()`
+        // derives the badge on every read, and a subsidiary that escalated
+        // something and heard nothing was waiting on an answer no clock chased.
+        //
+        // NOT GATED ON `hqCadences`, on the D122 precedent two blocks up and for
+        // its stated reason: `hq_escalations` is HQ's table and a branch holds
+        // none of its rows, so the sweep's own predicate IS the tier
+        // discriminator and a better one — it selects rows by what they are, not
+        // by which deployment is asking.
+        //
+        // EVERY FIFTEEN MINUTES, AND UNLIKE THE LADDER ABOVE THE CADENCE IS
+        // VISIBLE. `froze_at` carries the notice's own deadline, so that sweep's
+        // interval bounds nothing a row says; here the act being recorded is the
+        // NOTIFICATION, so the interval IS the worst case for how late HQ hears.
+        // Fifteen minutes against an SLA measured in hours (`SLA_HOURS`,
+        // rpc/hqOps.ts) is slack of about a percent, at a fifth of the cost of
+        // the every-minute shape.
+        //
+        // IT NEVER ANSWERS AN ESCALATION — it reports that a deadline passed.
+        // Answering stays a deliberate act on PATCH /api/admin/escalations/:uid.
+        if (now.getUTCMinutes() % 15 === 0) {
+          try {
+            const { reportBreachedEscalations } = await import('./services/hqEscalationSla');
+            const s = await reportBreachedEscalations(env);
+            if (!s.readable) {
+              console.warn('[cron] hq SLA sweep could not read hq_escalations');
+            } else if (s.reported) {
+              console.info(`[cron] hq SLA breached=${s.breached} reported=${s.reported} notified=${s.notified}`);
+            }
+          } catch (e) { console.error('[cron] hq SLA sweep failed', e); }
+        }
         // The 04:50 UTC Refer & Earn payout auto-approval sweep was removed
         // with Stripe Connect in the referrals redesign. Referral rewards are
         // milestone labels reviewed by a human in the admin queue, so there is
