@@ -25,6 +25,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { bpsPercent } from '../src/lib/bps.js';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = raw('frontend/src/pages/hq/RevenuePage.jsx');
@@ -128,6 +129,41 @@ test('an owed figure is never one number across currencies, and an incomplete on
   // A FLOOR IS NOT A TOTAL, said on the row that carries the figure.
   assert.match(SRC, /!s\.complete/, 'an incomplete statement renders identically to a complete one');
   assert.match(PAGE, /floor, not a total/, 'the page does not say an incomplete owed figure is a floor');
+});
+
+/* ── H10 · the rate the owed figure was computed from (D149) ────────── */
+
+test('an owed figure renders beside the rate it was derived from', () => {
+  // WHY THIS IS A DEFECT AND NOT A MISSING NICETY. `owed` is `gross × revenue
+  // share`, computed server-side by `drawStatement`, and the row rendered it as
+  // a bare number — so an operator disputing a statement had no way to check it
+  // without opening the licence. The canvas draws the rate in the column header
+  // (`× {{ h10SharePct }} owed`) for exactly that reason.
+  //
+  // AND THE RATE WAS ALREADY ON THE PAYLOAD. `admin_statements.ts` declares
+  // `revenue_share_bps` on the row and writes it, because the statement records
+  // the rate it was drawn at rather than the rate the licence carries today —
+  // which is the whole point of copying it onto the row. So this renders a
+  // field the page already fetched and threw away.
+  assert.match(SRC, /bpsPercent\(s\.revenue_share_bps\)/);
+  assert.match(SRC, /owed \{money\(s\.owed_cents, s\.currency\)\}/);
+  const STATEMENTS = raw('cloudflare-worker/src/routes/admin_statements.ts');
+  assert.match(STATEMENTS, /revenue_share_bps/, 'the rate must be on the row the page reads');
+});
+
+test('a statement with no rate recorded prints no rate, never 0%', () => {
+  // The clause DROPS rather than defaulting — `zoneFilterBuilder`'s rule for
+  // counts, one surface over. "× 0%" beside an owed figure says HQ is owed
+  // nothing, which is a claim about money that nothing measured; the D141 trap
+  // and the reason `bpsPercent` returns null.
+  assert.match(SRC, /\{bpsPercent\(s\.revenue_share_bps\) && /);
+  assert.ok(
+    !/revenue_share_bps \|\| 0/.test(SRC),
+    'an absent rate is absent, not zero',
+  );
+  // Proven against the helper rather than described, in both directions.
+  assert.equal(bpsPercent(null), null);
+  assert.equal(bpsPercent(3500), '35%');
 });
 
 test('an unreported issued figure renders Unrecorded, never a zero or a full ceiling', () => {

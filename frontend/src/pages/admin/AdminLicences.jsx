@@ -43,7 +43,9 @@ import {
   Send, ShieldOff, UserPlus,
 } from 'lucide-react';
 import { api } from '../../lib/api';
+import { bpsPercent as pct } from '../../lib/bps';
 import { coverageCells, renewalPipeline, sortCells } from '../../lib/licenceCoverage';
+import { DEPLOY_TIMELINE, deployProgress } from '../../lib/deployTimeline';
 import { reportError } from '../../lib/log';
 import {
   FREEZING_STATUSES, NOTICE_KINDS, noticeKindLabel, noticeRank, daysTo,
@@ -133,27 +135,20 @@ const DO_JURISDICTIONS = [
   { v: 'us', label: 'US' },
 ];
 
-// What provisioning reports, in the order it happens (migration 258). Kept as
-// a list rather than inferred from the row so a deployment sitting at
-// `schema_applied` shows the four steps still ahead of it.
-const DEPLOY_TIMELINE = [
-  ['requested', 'Requested'],
-  ['database_created', 'Database created'],
-  ['schema_applied', 'Schema applied'],
-  ['secrets_present', 'Secrets present'],
-  ['principal_seeded', 'Principal seeded'],
-  ['worker_live', 'Worker live'],
-  ['hostname_active', 'Hostname active'],
-  ['linked', 'Linked to HQ'],
-];
-
 const BRANCH_CODE_RE = /^[a-z][a-z0-9-]{1,15}$/;
 
 const n0 = (n) => Number(n || 0).toLocaleString();
 
-// Basis points in, percent out. 3500 → "35%". Integer bps is the stored form
-// precisely so this is the only place a fraction is ever computed.
-const pct = (bps) => (bps === null || bps === undefined ? null : `${(Number(bps) / 100).toFixed(2).replace(/\.?0+$/, '')}%`);
+// Basis points in, percent out — now `lib/bps.js`, imported above as `pct` so
+// no call site in this file changes.
+//
+// THE COMMENT THIS REPLACES SAID "this is the only place a fraction is ever
+// computed", AND IT WAS ALREADY FALSE when it was written: `MyLicencePage`
+// declared the same body as `fmtBps`, `NeedsBoardPage` had it inline on a tax
+// rate, and HQ's Revenue page was about to be the fourth. That is the same
+// class of stale claim D129 and D131 each deleted — a sentence that describes
+// an intention rather than the tree. It is true now because there IS one
+// definition, and `frontend/test/bps_single_definition.test.mjs` keeps it true.
 
 const fee = (cents, currency) => (cents === null || cents === undefined
   ? null
@@ -568,13 +563,20 @@ function DeployStep({ licence }) {
   }
 
   if (mine) {
-    const at = DEPLOY_TIMELINE.findIndex(([k]) => k === mine.status);
+    // THREE STATES, BECAUSE TWO WERE THE DEFECT — the derivation and the whole
+    // argument for it are `lib/deployTimeline.js`'s, so that a test can put a
+    // RUNNING deployment and a FAILED one through it and see them differ. A
+    // scan of this file could only ever see that three markers are written,
+    // which is not the thing that was broken.
+    const { failed, done, total, states, summary } = deployProgress(mine.status);
     return (
       <div data-testid="licence-deploy-step" className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <Globe size={14} className="text-gray-500" />
           <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{mine.hostname}</span>
-          <Chip tone={mine.status === 'failed'
+          {/* One definition of failed, shared with the timeline below, so the
+              chip and the marks can never disagree about the same row. */}
+          <Chip tone={failed
             ? 'bg-red-50 text-red-700 border-red-200'
             : 'bg-indigo-50 text-indigo-700 border-indigo-200'}>{mine.status.replace(/_/g, ' ')}</Chip>
           {/* The live read is its own chip, never folded into the status: a
@@ -584,23 +586,56 @@ function DeployStep({ licence }) {
             ? 'bg-green-50 text-green-700 border-green-200'
             : 'bg-gray-100 text-gray-600 border-gray-200'}>{mine.live_state.replace(/_/g, ' ')}</Chip>
         </div>
-        {mine.status_note && <p className="text-sm text-red-700">{mine.status_note}</p>}
+        {mine.status_note && (
+          <div
+            data-testid="deploy-status-note"
+            className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+          >
+            {/* The heading says whose sentence this is. The note is written by
+                the route that stopped (admin_deployments.ts names the missing
+                credential and the 403 scope apart, rather than calling both
+                "not configured"), so it is repeated here and never restated —
+                a second copy of a server sentence is the thing the credential
+                block below already refuses. */}
+            <span className="block text-[11px] font-medium uppercase tracking-wide">
+              {failed ? 'Why it stopped' : 'Reported by provisioning'}
+            </span>
+            <span className="mt-1 block">{mine.status_note}</span>
+          </div>
+        )}
         {mine.live_state !== 'ok' && mine.live_reason && (
           <p className="text-xs text-gray-600 dark:text-gray-400">{mine.live_reason}</p>
         )}
-        <ol data-testid="deploy-timeline" className="space-y-1 text-sm">
+        <p data-testid="deploy-summary" className="text-sm text-gray-700 dark:text-gray-300">
+          {summary}
+        </p>
+        <ol data-testid="deploy-timeline" data-done={done} data-total={total} className="space-y-1 text-sm">
           {DEPLOY_TIMELINE.map(([key, label], i) => {
-            const done = at >= 0 && i <= at;
+            const state = states[i];
             return (
-              <li key={key} className="flex items-center gap-2">
-                {done
-                  ? <Check size={13} className="shrink-0 text-green-600" />
-                  : <span className="inline-block h-[13px] w-[13px] shrink-0 rounded-full border border-gray-300 dark:border-gray-700" />}
-                <span className={done ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500'}>{label}</span>
+              <li key={key} data-state={state} className="flex items-center gap-2">
+                {state === 'ok' && <Check size={13} className="shrink-0 text-green-600" />}
+                {state === 'wait' && (
+                  <span className="inline-block h-[13px] w-[13px] shrink-0 rounded-full border border-gray-300 dark:border-gray-700" />
+                )}
+                {/* Dashed, not a cross: the mark means "not recorded", and a
+                    cross would say this step ran and failed, which is a claim
+                    the row cannot support for any particular step. */}
+                {state === 'unknown' && (
+                  <span className="inline-block h-[13px] w-[13px] shrink-0 rounded-full border border-dashed border-amber-500" />
+                )}
+                <span className={state === 'ok' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500'}>
+                  {label}
+                </span>
               </li>
             );
           })}
         </ol>
+        <p data-testid="deploy-timeline-bound" className="text-[11px] text-gray-500">
+          No step carries a time or a note of its own: the deployment row holds one status and one
+          note for the whole request, so the note above belongs to the deployment rather than to any
+          step of it.
+        </p>
         <p className="text-[11px] text-gray-500">
           Residency requested: {mine.residency_requested || 'none'}. Granted:{' '}
           {mine.residency_granted || 'not yet reported by provisioning'}.
