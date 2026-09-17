@@ -31,7 +31,7 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { EU_27, EU_CODES, coverageCells, renewalPipeline } from '../src/lib/licenceCoverage.js';
+import { EU_27, EU_CODES, coverageCells, renewalPipeline, sortCells } from '../src/lib/licenceCoverage.js';
 import { codeOnly } from './_codeOnly.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -144,6 +144,104 @@ test('a licence with no renewal date, and a terminated one, are not in the pipel
   assert.deepEqual(renewalPipeline([lic({ status: 'terminated' })], today), []);
   // The other direction: a suspended licence still renews, and its row stays.
   assert.equal(renewalPipeline([lic({ status: 'suspended' })], today).length, 1);
+});
+
+/* ── H2 · the sort and the click (D146) ────────────────────────────── */
+
+// Two licences whose codes and states disagree about order, so a test cannot
+// pass by accident: DE is held-active and sorts LAST alphabetically of the
+// three named here; AT is free and sorts FIRST.
+const sorted = () => coverageCells([
+  lic({ uid: 'lic_de', licence_ref: 'AXL-002', territories: ['DE'] }),
+  lic({ uid: 'lic_es', licence_ref: 'AXL-004', territories: ['ES'], status: 'suspended' }),
+]).cells;
+
+test("'az' is the identity — coverageCells already emits alphabetical order", () => {
+  const cells = sorted();
+  assert.deepEqual(sortCells(cells, 'az').map((c) => c.code), [...EU_CODES]);
+  // An unknown mode reads as A–Z rather than throwing: this is a display
+  // control, and a grid that renders nothing because a key was misspelt is
+  // worse than a grid in the order it already had.
+  assert.deepEqual(sortCells(cells, 'nonsense').map((c) => c.code), [...EU_CODES]);
+  assert.deepEqual(sortCells(cells).map((c) => c.code), [...EU_CODES]);
+});
+
+test("'state' groups held-active, then held-suspended, then white space", () => {
+  const out = sortCells(sorted(), 'state');
+  assert.deepEqual(
+    out.map((c) => c.state).filter((s, i, a) => s !== a[i - 1]),
+    ['held_active', 'held_suspended', 'free'],
+    'each state appears in exactly one contiguous run, worst-available-last',
+  );
+  // The specific rows, so a rank flip cannot pass by still producing three runs.
+  assert.equal(out[0].code, 'DE', 'the only held-active country leads');
+  assert.equal(out[1].code, 'ES', 'the suspended one follows — it still holds its territory');
+  assert.equal(out[2].code, 'AT', 'white space begins, A–Z within the group');
+  assert.equal(out.length, 27, 'sorting never drops or invents a cell');
+});
+
+test('the sort is stable, so the two orders agree wherever state does not decide', () => {
+  // Within one state the order must still be the A–Z the other option gives.
+  const free = sortCells(sorted(), 'state').filter((c) => c.state === 'free').map((c) => c.code);
+  assert.deepEqual(free, [...free].sort(), 'A–Z survives inside each group');
+});
+
+test('sortCells does not mutate its input', () => {
+  // coverageCells returns a fresh array today, so an in-place sort would
+  // happen to work — and would break the day a caller memoises the cells.
+  const cells = sorted();
+  const before = cells.map((c) => c.code);
+  sortCells(cells, 'state');
+  assert.deepEqual(cells.map((c) => c.code), before);
+});
+
+test('a held cell opens its licence and white space is not a button', () => {
+  // The grid renders through the sorted list, not the raw cells.
+  assert.match(PAGE, /sortCells\(cells, sort\)/);
+  assert.match(PAGE, /ordered\.map\(/);
+  assert.ok(!/\{cells\.map\(/.test(PAGE), 'the unsorted cells must not be what renders');
+
+  // A held cell is the same <button onClick> idiom the licence rows use, and
+  // it opens by uid — the selector the rows already set.
+  assert.match(PAGE, /onClick=\{\(\) => onOpen\?\.\(c\.licence\.uid\)\}/);
+  // …and the call site hands it the very same setter, so a click on a country
+  // and a click on its row cannot land in two different places.
+  assert.match(PAGE, /<Coverage items=\{items\} onOpen=\{setSel\} \/>/);
+
+  // WHITE SPACE STAYS A DIV. A button that refuses is the `still_an_admin`
+  // mistake D134 named. The ternary is keyed on `c.licence`, which is null for
+  // exactly the free cells.
+  assert.match(PAGE, /return c\.licence \? \(/);
+
+  // The control itself: two options, `aria-pressed` carrying the choice.
+  assert.match(PAGE, /data-testid="hq-coverage-sort"/);
+  assert.match(PAGE, /aria-pressed=\{sort === s\.key\}/);
+  assert.match(PAGE, /\{ key: 'state', label: 'By state' \}/);
+  assert.match(PAGE, /\{ key: 'az', label: 'A–Z' \}/);
+  // "By state" ships selected, because the canvas draws that segment chosen.
+  assert.match(PAGE, /useState\('state'\)/);
+});
+
+test('the HQ sidebar comment counts the rows its own guard counts', () => {
+  const CFG = read('frontend/src/sidebarConfig.js');
+  // The array has shipped eleven rows since D138; the prose above it said
+  // eight until D146, omitting Revenue, Content and Platform — the three
+  // rows whose own comments sit a few lines below it.
+  assert.ok(!/has eight rows/.test(CFG), 'the eight-row claim is gone');
+  assert.ok(!/All eight resolve today/.test(CFG), 'and so is its follow-on');
+  assert.match(CFG, /ELEVEN rows/);
+  assert.match(CFG, /All eleven resolve today/);
+  // NAMED, NOT COUNTED. A number on its own goes stale exactly the way the
+  // last one did, so the comment must list the rows — and the three it used to
+  // omit are asserted against the comment's own sentence rather than anywhere
+  // in the file, or a mention in an unrelated line three hundred lines down
+  // would satisfy it.
+  const sentence = CFG.match(/The approved canvas has ELEVEN rows[^.]*\./)?.[0] ?? '';
+  assert.ok(sentence, 'the eleven-row sentence exists to be read');
+  for (const row of ['Home', 'Licences', 'Funds', 'Contracts', 'Team',
+    'Revenue', 'Content', 'Platform', 'Support', 'Security', 'Settings']) {
+    assert.ok(sentence.includes(row), `${row} is named in the comment, not just implied by a count`);
+  }
 });
 
 /* ── H2 · the page renders both zones ──────────────────────────────── */

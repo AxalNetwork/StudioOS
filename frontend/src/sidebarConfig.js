@@ -80,12 +80,21 @@ export const SIDEBAR_GROUPS = {
   // laid over the top, and `shellRoleFor` (lib/shellRole.js) picks it when the
   // flag is set and the holder has not switched to the plain Admin view.
   //
-  // ROWS ARE ADDED AS THEIR PAGES LAND. The approved canvas has eight rows —
-  // Home, Licences, Funds, Contracts, Team, Support, Security, Settings. A row
+  // ROWS ARE ADDED AS THEIR PAGES LAND. The approved canvas has ELEVEN rows —
+  // Home, Licences, Funds, Contracts, Team, Revenue, Content, Platform,
+  // Support, Security, Settings — and its own changelog says so: "Sidebar is
+  // the eleven-row HQ group … The seven-row nav is not drawn anywhere." A row
   // pointing at a route that does not exist is worse than a missing row: it
-  // looks shipped and 404s. All eight resolve today, and
+  // looks shipped and 404s. All eleven resolve today, and
   // `super_admin_shell.test.mjs` fails if a row is added whose route is not
   // registered in App.jsx.
+  //
+  // This sentence said EIGHT until D146, and omitted Revenue, Content and
+  // Platform — the three rows whose own comments sit a few lines below it. The
+  // array was never wrong; the prose describing it was, and the test three
+  // files away is literally named "all eleven rows are present, in canvas
+  // order". A comment a guard already contradicts is the cheapest kind of
+  // false claim to leave lying around, and the most misleading to read.
   //
   // Two rows deliberately do not point where their labels first suggest:
   //   Team  → /admin/accounts, the cross-tenant accounts table with the holder

@@ -90,6 +90,50 @@ export function coverageCells(licences) {
 }
 
 /**
+ * Worst-available-first, for the `state` sort. Held-active, then
+ * held-suspended, then white space — the canvas's own order, and the order its
+ * legend reads in.
+ *
+ * WHY HELD BEFORE FREE, when this file's header says the white space is the
+ * point. Because grouping is what makes the white space visible AT ALL: in code
+ * order the free cells are scattered through 27 tiles and you have to count
+ * them. Sorted, they are one contiguous block you can see the size of without
+ * reading a single label. The two ideas agree.
+ */
+const STATE_RANK = Object.freeze({ held_active: 0, held_suspended: 1, free: 2 });
+
+/**
+ * The coverage grid in one of its two orders (D146).
+ *
+ * WHY THIS IS HERE AND NOT IN THE PAGE. `Coverage` renders the grid; what order
+ * the grid is in is a fact about coverage, and this file already owns the other
+ * two (which cells exist, and what each one's state is). A comparator in the
+ * component would be the third place that has to know what `held_suspended`
+ * means.
+ *
+ * IT NEVER MUTATES ITS INPUT. `coverageCells()` returns a fresh array today, so
+ * an in-place `.sort()` would happen to work — and would break silently the day
+ * a caller memoises the cells and renders them twice. The copy costs 27
+ * elements.
+ *
+ * A–Z IS THE IDENTITY, NOT A SECOND SORT ORDER. `coverageCells()` already emits
+ * `EU_CODES` order, which is alphabetical by code, so `'az'` returns the cells
+ * as they came rather than re-deriving an order that is already true. That is
+ * what makes the two options agree by construction wherever state does not
+ * decide — `'state'` breaks its ties by leaving the incoming order alone, which
+ * `Array.prototype.sort` guarantees because it is stable.
+ *
+ * AN UNKNOWN MODE READS AS A–Z rather than throwing: this is a display control,
+ * and a grid that renders nothing because a sort key was misspelt is worse than
+ * a grid in the order it already had.
+ */
+export function sortCells(cells, mode) {
+  const list = [...(cells || [])];
+  if (mode !== 'state') return list;
+  return list.sort((a, b) => (STATE_RANK[a.state] ?? 9) - (STATE_RANK[b.state] ?? 9));
+}
+
+/**
  * The renewal pipeline: every licence with a renewal date, soonest first.
  *
  * `days` IS DERIVED ON READ from a date the caller passes, never stored — the
