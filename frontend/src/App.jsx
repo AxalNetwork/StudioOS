@@ -175,6 +175,8 @@ const BranchApprovals = lazy(() => import('./pages/branch/BranchApprovals'));
 const BranchZone = lazy(() => import('./pages/branch/BranchZone'));
 const BranchAccounts = lazy(() => import('./pages/branch/BranchAccounts'));
 const BranchHome = lazy(() => import('./pages/branch/BranchHome'));
+const BranchPrograms = lazy(() => import('./pages/branch/BranchPrograms'));
+const BranchCommunity = lazy(() => import('./pages/branch/BranchCommunity'));
 // The Super Admin's HQ-only surfaces (migrations 199/207). `hqOnly` below
 // renders the notice for an admin without the elevation.
 const SuperAdminOnlyNotice = lazy(() => import('./pages/hq/SuperAdminOnlyNotice'));
@@ -2102,8 +2104,8 @@ function AppInner() {
           workspace page passes its own `rail` to WorkspaceShell. Each of these
           seven loses its wrapper on the day PR 12 or PR 14 gives it a page. */}
       <Route path="/branch/approvals" element={guard(['admin'], <BranchApprovals />)} />
-      <Route path="/branch/programs" element={guard(['admin'], <BranchZone workspace="Programs"><BranchZonePending artboard="S4 Programs" title="Timing is yours, authoring is HQ's" will="The cohort calendar with dates you adjust, and assessment runs whose results are yours. Changing a question is a Content submission, which the Worker already refuses here and says so." pr="PR 14" /></BranchZone>)} />
-      <Route path="/branch/community" element={guard(['admin'], <BranchZone workspace="Community"><BranchZonePending artboard="S4 Community" title="Events, jobs, circles and profiles — entirely local" will="The community zones re-homed under this shell. Nothing in them is shared with another territory, and nothing in them is pushed from HQ." pr="PR 14" /></BranchZone>)} />
+      <Route path="/branch/programs" element={guard(['admin'], <BranchPrograms />)} />
+      <Route path="/branch/community" element={guard(['admin'], <BranchCommunity />)} />
       <Route path="/branch/contracts" element={guard(['admin'], <BranchZone workspace="Contracts"><BranchZonePending artboard="S5 Contracts" title="Instantiate, never author" will="Active contracts with the template version travelling on the row, HQ's master library read-only with its as-of stamp and archived versions visible but unusable, and pending signatures." pr="PR 14" /></BranchZone>)} />
       <Route path="/branch/insights" element={guard(['admin'], <BranchZone workspace="Insights"><BranchZonePending artboard="S6 Insights" title="Four stats and one tick against the median" will="Accounts, activation, programme throughput and revenue share for the quarter, plus a benchmark shown as a single tick against the anonymised platform median — never a ranked list of territories." pr="PR 14" /></BranchZone>)} />
       <Route path="/branch/settings" element={guard(['admin'], <BranchZone workspace="Settings"><BranchZonePending artboard="S6 Settings" title="Who owns each row" will="Subsidiary name and staff are yours; territory, brand kit and the licence summary are HQ's, each with an owner chip and, on HQ-owned rows, the request path. Your licence summary is already readable today under Your licence below." pr="PR 14" /></BranchZone>)} />
