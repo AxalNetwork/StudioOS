@@ -40,9 +40,12 @@ import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
  * does carry belong to Y2's own zones, which are not the log.
  *
  * WHAT H7 DRAWS AND THIS PAGE DOES NOT: the "Viewing as: Axal VC France ·
- * Return to HQ view" overlay. It is a tenant-scoped read-only view, and
- * tenant scope is U1. The reason comes from the payload rather than from
- * here so there is one copy of it.
+ * Return to HQ view" overlay. It is a tenant-scoped read-only view, and it is
+ * UNBUILT rather than blocked — D150 corrected the reason, which used to cite
+ * U1. U1 is about HQ's own rows; HQ has been able to read a branch since D108,
+ * so what is missing is shell state that routes a page through one branch
+ * (#235). The reason comes from the payload rather than from here so there is
+ * one copy of it.
  */
 const UNAVAILABLE = Symbol('unavailable');
 
@@ -224,7 +227,7 @@ export default function HqSecurityPage() {
         ['Sanctions screening', 'Not run on the platform.'],
         ['Backup and restore-drill status', 'Not recorded where the platform can read it.'],
         ['Per-tenant anything', 'No account names its licence yet (U1) — except a licence event, which is about one.'],
-        ['The "Return to HQ view" overlay', 'There is no tenant-scoped view to return from; that is the same U1.'],
+        ['The "Return to HQ view" overlay', 'Not built. HQ can read a branch (D108); what is missing is shell state that routes a page\'s reads through one branch and says so.'],
       ]}
       data-testid="hq-security-rail"
     />

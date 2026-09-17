@@ -474,3 +474,58 @@ test('HQ Home fans out and carries its denominator', () => {
     'the old escalations refusal is superseded by migration 259 and must be deleted',
   );
 });
+
+/* ── D150 · the licence a branch reads for ────────────────────────────── */
+
+test('withRegistry stamps the licence on a branch that ANSWERED, not only on one it invents', () => {
+  // THE BUG THIS EXISTS FOR, and it is a one-word one: the loop used to
+  // `continue` on any code it had already seen, so a branch that came back
+  // from `fanOut` — the case a caller most wants to join to its licence —
+  // never received `licence_uid` at all. HQ's health cards could therefore
+  // render a branch's figures and not say whose they were, which is why they
+  // rendered none.
+  const answered = withRegistry(
+    [{ code: 'fr', binding: 'BRANCH_FR', status: 'ok' as const, data: { n: 1 }, as_of: 'x' }],
+    [{ code: 'fr', hostname: 'fr.axal.vc', status: 'worker_live', licence_uid: 'lic_fr' }],
+  );
+  assert.equal(answered.length, 1);
+  assert.equal(answered[0].status, 'ok', 'a branch that answered must stay answered');
+  assert.deepEqual(answered[0].data, { n: 1 }, 'stamping a licence must not disturb the payload');
+  assert.equal(answered[0].licence_uid, 'lic_fr', 'an answering branch must carry its licence');
+});
+
+test('a provisioned-but-unbound branch carries its licence too, and stays not_deployed', () => {
+  const merged = withRegistry<{ n: number }>(
+    [],
+    [{ code: 'dach', hostname: 'dach.axal.vc', status: 'requested', licence_uid: 'lic_dach' }],
+  );
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].status, 'not_deployed');
+  assert.equal(merged[0].licence_uid, 'lic_dach');
+  assert.ok(merged[0].reason, 'the state must still explain itself');
+});
+
+test('a branch the registry does not know keeps a null licence rather than borrowing one', () => {
+  // The order provisioning creates things in makes this reachable: a binding
+  // can exist before HQ holds a row for it. Guessing here would attach one
+  // territory's figures to another territory's contract, which is the single
+  // worst thing this join can do.
+  const orphan = withRegistry(
+    [{ code: 'test', binding: 'BRANCH_TEST', status: 'ok' as const, data: { n: 2 } }],
+    [{ code: 'fr', hostname: 'fr.axal.vc', status: 'worker_live', licence_uid: 'lic_fr' }],
+  );
+  const t = orphan.find((r) => r.code === 'test');
+  assert.ok(t, 'the unknown branch must not be dropped');
+  assert.ok(!t.licence_uid, 'an unregistered branch must not be given a licence');
+  // …and the registered one still gets its own.
+  assert.equal(orphan.find((r) => r.code === 'fr')?.licence_uid, 'lic_fr');
+});
+
+test('the overview projects the licence, or the join has nothing to join on', () => {
+  const src = readFileSync('cloudflare-worker/src/routes/admin_hq.ts', 'utf8');
+  assert.match(
+    src,
+    /SELECT code, hostname, status, licence_uid FROM licence_deployments/,
+    'deployedBranches must project licence_uid (migration 258 declares it UNIQUE)',
+  );
+});

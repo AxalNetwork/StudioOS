@@ -604,10 +604,21 @@ r.get('/governance', async (c) => {
     guardrails: absent(NO_AI_SAFETY_STORE),
     // H7's chrome: "Viewing as: Axal VC France · Return to HQ view".
     tenant_view_available: false,
+    // D150 — THE LAST CLAUSE WAS WRONG AND IS CORRECTED RATHER THAN REWORDED.
+    // It said seeing a subsidiary as its own admins see it "needs every row to
+    // name its licence, which is U1". U1 is a fact about HQ's OWN database. A
+    // branch is a separate Worker over a separate D1 (D.2), so nothing there
+    // needs to name a licence — which is exactly why D108's fan-out can read a
+    // branch's accounts, seats and backlog at all, and why H1's health cards
+    // now render them. What is missing is the OVERLAY: shell state that routes
+    // every read on a page through one branch and says so. That is #235, and
+    // it is unbuilt rather than blocked.
     tenant_view_reason:
-      'There is no tenant-scoped view to return from. The two "view as" modes that exist are a ROLE switch '
+      'There is no tenant-scoped view to return from yet. The two "view as" modes that exist are a ROLE switch '
       + '(an admin browsing as a founder) and a support session against ONE account, each with its own exit. '
-      + 'Seeing a whole subsidiary as its own admins see it needs every row to name its licence, which is U1.',
+      + 'Seeing a whole subsidiary as its own admins see it means routing a page\'s reads through one branch '
+      + 'and saying so in the chrome; HQ can already read a branch, so this is a view that has not been built '
+      + 'rather than one the data forbids.',
   });
 });
 

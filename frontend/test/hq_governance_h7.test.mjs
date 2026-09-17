@@ -163,7 +163,19 @@ test('the "Return to HQ view" overlay is not drawn, and the page says why', () =
     'a "Return to HQ view" control appeared with no tenant scope behind it');
   // But the absence is explained, from the payload rather than from a copy.
   assert.match(ROUTE, /tenant_view_available: false/);
-  assert.match(ROUTE, /tenant_view_reason:[\s\S]{0,500}U1/);
+  // D150 — THE FOURTH GUARD IN THIS PR THAT WAS PINNING A STALE REASON, and
+  // the assertion follows the property rather than the word. It required the
+  // sentence to cite **U1**, which was wrong: U1 is a fact about HQ's own
+  // database, and HQ has been able to read a branch since D108 — so seeing a
+  // subsidiary as its own admins see it is a view nobody has BUILT (#235),
+  // not one the data forbids. Pinning "U1" made the correct sentence fail.
+  //
+  // What is pinned now is what the sentence must establish: the two view-as
+  // modes that DO exist are named, and the absence is attributed to the view
+  // rather than to the data.
+  assert.match(ROUTE, /tenant_view_reason:[\s\S]{0,600}ROLE switch/);
+  assert.match(ROUTE, /tenant_view_reason:[\s\S]{0,600}has not been built/);
+  assert.doesNotMatch(ROUTE, /tenant_view_reason:[\s\S]{0,600}which is U1/);
   assert.match(P, /\{feed\.tenant_view_reason\}/, 'the page hardcodes the explanation instead of reading it');
 });
 

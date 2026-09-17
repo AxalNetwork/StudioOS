@@ -12443,3 +12443,138 @@ assertions unchanged, which is what proves the move was a move.
   — a link to Platform would suggest the fix lives there.
 
 **No migration — 269 is still free.**
+
+---
+
+## D150 — HQ Home refused figures the server was already sending it (#244)
+
+**Date:** 2026-09-17 · **Scope:** one SELECT and two type widenings in the
+worker, plus `frontend/src`. No migration — **269 stays free** — and no new
+`/api/*` method: both fields have been on the payload since D108.
+
+#244 reads "HQ H13: the AI rail's scope chip, its cost line and its four
+rules". Researching it before building — the fifth time running that has
+corrected a task — found that three of those four parts cannot be built, and
+that a sharper defect sits underneath on a shipped HQ screen.
+
+### The defect
+
+`GET /api/admin/hq/overview` computes and returns **`branches`** (the fan-out
+over every `BRANCH_*` binding, each entry in one of D108's three states) and
+**`branches_coverage`** (`{total, answered, complete, unreadable[]}`).
+**`HqHomePage` read neither.** Its "Subsidiary health" zone was drawn from the
+licence ledger alone, so **Accounts** and **MTD · backlog** rendered
+`<Unrecorded/>` under a footnote saying they *"need every account to name its
+licence; none does yet"*.
+
+**That reason was never the blocker for a branch.** U1 is a fact about HQ's own
+database. A branch is a separate Worker over a separate D1 (D.2), so every
+account there is that branch's **by construction** — which is exactly why
+`branchOverview` can count them, why D148 could publish medians of them, and
+why they were already on the wire. The page was refusing figures the server was
+sending it.
+
+**Three independent facts, not one reading:** the page contained zero
+references to `branches` outside comments; `hq_home.test.mjs` contained zero;
+and D108's own plan named two guards — `branch_rpc_fanout.test.ts` **and**
+`hq_home_branches_h1.test.mjs`. The worker one exists. **The frontend one never
+did.** The producer shipped and was tested; the consumer was not built, and
+nothing was watching the gap.
+
+Same class as **#252**, **D142** and **D149**. **Sixth instance.**
+
+### What the fix needed that did not exist
+
+A branch entry **could not be joined to a licence**. `deployedBranches` selected
+`code, hostname, status` and not `licence_uid`, though migration 258 declares it
+`UNIQUE`; `BranchResult` and `withRegistry`'s registry type carried none either.
+So `licence_uid` is projected and threaded through — and `withRegistry` had a
+one-word bug on the way: it `continue`d on any code it had already seen, so a
+branch that **answered** never received the licence at all. The case a caller
+most wants to join was the one the loop skipped.
+
+**An unregistered branch keeps a null licence rather than borrowing one.** A
+binding can exist before HQ holds a row for it, and guessing would attach one
+territory's figures to another's contract — the worst thing this join can do.
+
+### The three states are three sentences
+
+`ok` shows figures **with the time the branch answered**; `unreadable` is
+`<Unrecorded/>` with a reason and is **never a zero** — a silence read as zero
+shrinks a total and makes the platform look worse the flakier its network is
+(D148's lesson, one surface up); a licence with no branch has not been
+deployed. Where the branch supplies its own reason (`seats_used_reason`,
+`backlog_reason`) that sentence wins, because the server writes a better one
+than the page can.
+
+### H13 rule 3, which is the one rule of four that is real today
+
+*"Unreadable is a word in the answer."* The rail summarises the coverage lines
+beside it — `workspace_explain` runs over exactly those and deliberately not the
+rows — so a line that omits an unanswered branch yields an answer that totals
+over the rest in silence. `coverage()` already returns the unreadable branch
+**codes**, so the line names them. With none deployed it says so instead of
+counting zero: the D129 / D131 / D140 / D147 / D148 pattern for a sixth time.
+
+### Three reasons that had outlived their blockers
+
+Twelve of the fifteen `unavailable` rows across the five HQ rails are accurate.
+Three were not, and are corrected rather than reworded:
+
+- *"Revenue per subsidiary — that call is not built"* — **false**; D111 built
+  `reportUsage` and `revenueSummary`. What is missing is that no branch has
+  **reported** one.
+- *"Seat utilisation — needs `seat_assignments`"* — half stale. D127 decided
+  **against** that store and counts seats from `users.role`. What has no store
+  is *which seat id* a person holds, so that is what the row now says.
+- Security's *"no tenant-scoped view to return from; that is the same U1"* —
+  wrong reason. The overlay is **unbuilt (#235)**, not blocked. Corrected in the
+  payload, which is the one copy both surfaces render.
+
+### The guards that were enforcing the refusal — THREE of them, and that is the number worth recording
+
+`hq_home.test.mjs` **asserted** that Accounts and MTD · backlog render
+`<Unrecorded/>`, and its header said *"None is computable"*. `hq_governance_h7.test.mjs`
+required the overlay's reason to match `/U1/`. `admin_governance.test.ts` required
+the same of the payload. All three failed on the fix, correctly, and each had to
+follow its property rather than its wording.
+
+**A guard that pins a refusal has to be re-aimed the day the refusal stops being
+true, or it becomes the thing preventing the fix.** With D149's
+`territory_licences.test.mjs` and `hq_licences_h2h3.test.mjs` that is **five
+instances across two PRs**, which is enough to call it a class rather than a
+coincidence: this programme deletes false claims for a living, and every false
+claim it has shipped had a test holding it in place.
+
+Three of this PR's own assertions were wrong first, and the mutation run is what
+said so rather than review:
+
+- a cell window of a fixed 420 characters **failed on correct code** the moment a
+  cell grew a comment — D147's fixed-window trap, bounded by the next `<dt>` now;
+- a negative scan forbidding the U1 sentence **failed on the comment recording
+  why the sentence was removed** — *a lexical scan cannot tell a rule from its
+  violation*, which is D148's `rank` scan exactly. It asserts what the footnote
+  must **say** instead;
+- and the re-aimed `hq_home.test.mjs` first asked only that the word `live`
+  appear somewhere in each cell. A mutation replacing the gate with a constant
+  `false` — the page hard-wired back to refusing, which is the whole defect —
+  **passed it**, because `live?.…` survives in the fallback. It pins `{live &&`
+  now. *An assertion that cannot fail on the defect it was written for is not a
+  guard*, and the only reason this one was caught is that the mutation was aimed
+  at it deliberately.
+
+### Not built, each with its measurement
+
+- **H13's scope chip as a control.** The page decides what it fetched before the
+  rail runs, so both options produce the same read. A picker whose options
+  cannot differ is the `still_an_admin` mistake D134 named and D138 refused for
+  H9's Move modal.
+- **Rule 2's per-scope cost multiplier** — one run, one price.
+- **Rule 4's audit row** — the rail reads no branch, so logging it as a
+  privileged branch read would write a **false** audit entry.
+- **H13's "HQ margin, shown only on this tier"** — `ai_usage_logs.est_cost_usd`
+  is a cost with no price beside it, and `admin_revenue.ts` already ships that
+  refusal on H5. **Third time this canvas figure has had to be refused.**
+- The canvas's *"What the scope changes"* panel is an **artboard explanation**
+  beside two rail previews, not a UI element: the four rules govern behaviour
+  and are not copy to render.
