@@ -1863,6 +1863,14 @@ export const api = {
     request(`/admin/contracts/templates/store/${encodeURIComponent(slug)}`, { method: 'PUT', body: JSON.stringify(payload) }),
   adminTemplateStoreDelete: (slug) =>
     request(`/admin/contracts/templates/store/${encodeURIComponent(slug)}`, { method: 'DELETE' }),
+  // D147 — push the library to every branch. THE WHOLE LIBRARY, not one
+  // template: a per-template push can add and update but can never say "this
+  // one is gone", so a withdrawn template would stay offerable on every branch
+  // forever. The response carries one row per branch in the fan-out's three
+  // states, and `branches: []` when none is bound — which is the true answer
+  // today, not an error.
+  adminTemplatesPublish: () =>
+    request('/admin/contracts/templates/publish', { method: 'POST' }),
   // Task #9 — IRS-style forms catalog + on-the-fly PDF preview/download.
   adminListForms: () => request('/admin/forms'),
   // Returns { blob, url } for the rendered form PDF. The caller owns the
@@ -3120,6 +3128,11 @@ export const api = {
   // rate. The three blocks S1 draws that have no source arrive as
   // `unavailable`, each with its own reason, rather than as a silent gap.
   branchHome: () => request('/branch/home'),
+  // D147 — HQ's master contract library as this branch holds it. A COPY: the
+  // payload carries HQ's `pushed_at`, and `not_carried` names what deliberately
+  // does not travel (the document bodies, and an archived-version state HQ's own
+  // library cannot produce) so the page never has to remember the reason.
+  branchTemplates: () => request('/branch/templates'),
   branchEscalate: (data) =>
     request('/branch/escalations', { method: 'POST', body: JSON.stringify(data || {}) }),
   licenceCreate: (data) => request('/admin/licences', { method: 'POST', body: JSON.stringify(data || {}) }),

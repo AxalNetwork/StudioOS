@@ -171,6 +171,7 @@ import adminSupportSessions from './routes/admin_support_sessions';
 import branchEscalationRoutes from './routes/branch_escalations';
 import branchApprovalRoutes from './routes/branch_approvals';
 import branchHomeRoutes from './routes/branch_home';
+import branchTemplateRoutes from './routes/branch_templates';
 import adminSuperAdmins from './routes/admin_super_admins';
 import adminHq from './routes/admin_hq';
 import adminRevenue from './routes/admin_revenue';
@@ -798,6 +799,11 @@ app.route('/api/branch', branchApprovalRoutes);
 // D131 — S1's digest. A third file on the same prefix because it composes what
 // the other two read rather than owning a store of its own.
 app.route('/api/branch', branchHomeRoutes);
+
+// S5 + S10 (D147) — HQ's master contract library as this branch holds it.
+// Same mount as the other three branch reads; `requireBranchTier` inside
+// refuses it on HQ, where the library itself lives.
+app.route('/api/branch', branchTemplateRoutes);
 app.route('/api/admin/licences', adminLicences);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
 // catch-all for the same reason as the licence ledger above.

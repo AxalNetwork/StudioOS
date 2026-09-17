@@ -12069,3 +12069,132 @@ now spells it Licences, and so does the comment.
 **No migration — 268 is free.** No new `/api/*` method, so `check-api-drift` has
 nothing to say. `frontend/src` moves, so `docs/` is rebuilt through the root
 build.
+
+## D147
+
+**HQ's master template library reaches a branch, and the branch says what the
+copy is** — `publishTemplate`, the first of the two producers F.5 specified and
+nobody built (#234's S5/S10 half; migration 268).
+
+### What was actually missing, and two filed claims that did not survive measurement
+
+`publishTemplate` had **zero occurrences** in `cloudflare-worker/src`. So
+`/branch/contracts` rendered a notice naming three things and the tier had no
+way to produce any of them. That much was right.
+
+**The second "live defect" behind this task is STRUCK — it was a
+mis-attribution.** The filed note said *"`GET /api/legal/templates` does not read
+the template store at all; it maps a hardcoded in-module `TEMPLATES` constant."*
+True, and not a defect: `routes/legal.ts`'s `TEMPLATES` is the founder
+**incorporation-kit** generator — `layer`, `content`, `fillContent`,
+`JURISDICTION_TEMPLATES` — a different family from `legal_templates`, HQ's master
+**contract** library. And the generation path already prefers the D1 store:
+`getActiveTemplateBody(env, tkey)` first, the inline body only as the documented
+fallback. Nothing there is wrong.
+
+**The first defect is real and far narrower than filed.** `templates_reason` in
+`admin_licences.ts` says *"HQ has authored no master templates yet."* Its route
+is `requireSuperAdmin`, which on a branch answers **"HQ only"** (D106), so a
+branch never reads that sentence; and on HQ migration 085 seeds **66** rows (the
+note said 67), so `listTemplates()` is never empty and the reason never fires. It
+is dead copy, and it is reworded here rather than sold as the motivation.
+
+### The store: a `branch_*` copy, not columns on `legal_templates`
+
+A branch **already has** `legal_templates` and `legal_template_versions` — both
+are in `schema_baseline.sql`, so a bootstrapped branch gets them empty, and
+`services/legalTemplateStore.ts` carries a lazy `CREATE TABLE IF NOT EXISTS` on
+top. What it lacks is a `pushed_at`. Adding `source` and `pushed_at` to
+`legal_templates` would have meant editing a migration **and** a runtime
+bootstrap in lockstep — the `metrics_snapshots` collision (#183, #202), one table
+with two definitions that disagree depending on which ran first — and it would
+have put HQ's copy in the table a branch is refused write access to, so
+`requireHqAuthoring` would be the only thing separating the two.
+
+So migration **268** adds `branch_templates` and `branch_templates_sync`, on the
+rule migration 256 already set: *a pushed copy lives in its own `branch_*` table
+with its own `pushed_at`* — `branch_licence`, `branch_promo_ceiling`,
+`branch_benchmarks`, and now this.
+
+### Three things the copy deliberately does NOT carry, each with its measurement
+
+1. **`body_md`.** Nothing on a branch renders or instantiates a template body:
+   S5's picker shows the library, and `licence_contracts` (migration 259) is
+   HQ's table behind `requireSuperAdmin`. A body column with no reader is the
+   store-built-so-a-page-looks-complete mistake this programme has deleted four
+   times (D129's seat store, D131's six blocks, D140's adjustable dates, D141's
+   invented bindings). When instantiation lands it is one additive `ALTER`.
+2. **`is_active`.** S10 draws archived versions as *"visible and unusable"*, and
+   **HQ cannot produce that state**: `listTemplates` filters `is_active = 1`, so
+   HQ's own library shows only active templates, and the contract route's own
+   comment says *"the current version is the only one HQ is offering today."* A
+   column here could only ever hold 1, and the page branch rendering a 0 would
+   be code production never reaches. `version` carries the true statement.
+3. **A version history.** Pushing every historical row so a picker could grey
+   them out would model a choice HQ refuses to make.
+
+### The write is a reload, and the two forms tried before it were both wrong
+
+A library is a **set**, so a push that only inserted and updated could never say
+*this one is gone* — a template HQ withdrew would stay offerable on every branch
+forever. Two SQL forms for that withdrawal were written and discarded:
+
+- `DELETE … WHERE slug NOT IN (…)` builds its placeholder list with `${…}`,
+  which lands in the query **text** where no binding protects it.
+  `check-sql-prepare` refused it, correctly.
+- `DELETE … WHERE updated_at < ?` against this push's own stamp **looks** exact
+  and is not: two pushes inside the same millisecond share a stamp, the
+  comparison is false for every row, and nothing is withdrawn. The test that
+  found it was **flaky rather than failing**, which is worse than either — a
+  silently inert sweep that passes most runs.
+
+So the write is a reload — `DELETE`, then insert what HQ sent, then the sync row
+— in one `DB.batch`, which runs as a single transaction: the `DELETE` only takes
+effect if every `INSERT` after it does, so a push that fails part-way leaves the
+previous library standing rather than an empty picker. The withdrawn count is a
+set difference computed in JS, because a before/after total is wrong the moment
+a push both adds and withdraws.
+
+### `branch_templates_sync` exists so two absences are two sentences
+
+An empty `branch_templates` means either *HQ pushed a library and it was empty*
+or *HQ has never pushed*, and only the first is a statement about HQ. The sync
+row is written in the same batch as the library, so its presence **is** the fact
+that a push happened. D107's `licence_not_pushed` is the precedent: an empty copy
+and an absent copy are two claims, not one. The route renders three states —
+unreadable, never pushed, pushed-and-empty — and the test asserts the ordering,
+because a never-pushed branch tested *after* the empty-list branch can never be
+reached.
+
+### The HQ half is in this PR, or the producer has no caller
+
+`POST /api/admin/contracts/templates/publish` (`requireHqAuthoring`) reads
+`listTemplates(env)` and fans out through `services/branches.ts`, **reported and
+never thrown** — D111's rule, the shape an escalation answer and a licence
+transition already use: HQ's library is HQ's whether or not a branch answered,
+and a 502 for one unreachable branch would tell an operator that a push to the
+other three did not happen. `AdminTemplates.jsx` gains the control. A producer
+whose only caller is a test is the defect being fixed, one level up.
+
+**Zero branches is a real answer.** `fanOut` over an env with no `BRANCH_*`
+binding returns `[]`, and the route answers `branches: []` with its own
+`branches_reason` — supplied by the **server** so the page cannot drift from it,
+and the test refuses a second copy of that sentence in the SPA.
+
+### No authoring control on the branch page, and the refusal is stated
+
+D.9 puts authoring at HQ; `requireHqAuthoring` already enforces it server-side.
+A greyed pencil here would be the `still_an_admin` mistake D134 named — a control
+that exists to be rejected teaches the operator that some of its buttons are
+lies. The page says what changing a template actually is: a Content submission.
+
+### Still not shipped, and named rather than drawn
+
+**S5's Active contracts and Pending signature.** `licence_contracts` is HQ's
+table and every route over it is super-admin-only, so a branch has no contracts
+read of its own. The block states that with its reason instead of rendering an
+empty ledger under a heading that implies rows are coming.
+
+**Migration 268** is used; **269 is free.** One new `/api/*` method each side,
+both with their routes in the same commit. `frontend/src` moves, so `docs/` is
+rebuilt through the root build.
