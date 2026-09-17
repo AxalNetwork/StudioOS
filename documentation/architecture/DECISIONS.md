@@ -11379,3 +11379,221 @@ test was written first, and it failed on the first run for the right reason.
 read this PR needs already exists and is already branch-reachable on plain
 `requireAdmin`, so `check-api-drift` has nothing to say. `frontend/src` moves, so
 `docs/` is rebuilt.
+
+## D141 — the Programme Brief: seventy-six bindings, six of which the platform can answer
+
+**The ask, in the owner's words:** *integrate the new PROGRAMME BRIEF at
+`https://axal.vc/spinout-lab/brief`, PDF-exportable, using the artifact,
+**plugged to a backend that auto-updates every `{}` bracket element***.
+
+**The mechanism is right and the scope is not, and this entry says so rather
+than quietly building the smaller thing.** The design artifact is a Claude
+Design canvas whose payload is a `<script type="text/x-dc">` model, and the
+first thing it settles is the notation. It carries **two**, doing two different
+jobs:
+
+| notation | count | what it is |
+| --- | --- | --- |
+| `{{ binding }}` | **76** unique | the canvas rendering its OWN data — tracks, tools, gates, jurisdictions |
+| `{dotted.path}` | **6** | the platform fields, which is what the `{}` ask names |
+
+The six, verbatim from the canvas's `renderVals()`: `{brief.generated_at}`,
+`{brief.year}`, `{cohort.name}`, `{cohort.close_at}`, `{cohort.start_date}`,
+`{cohort.places}`. Task #239's title said "the six `{}` tokens" and was exact.
+The canvas states the split itself, in its own header:
+
+> *"One source: the same TOOLS / TRACKS / JURS the public page renders, so the
+> brief cannot describe a programme the page does not. **Live values stay as
+> fields — a generated PDF fills them from the platform, never from this
+> file.**"*
+
+So the seventy-six sort into three groups with three different homes, and
+choosing a store for the third would have been a mistake this programme has now
+made and deleted twice:
+
+| group | roughly | home |
+| --- | --- | --- |
+| measured, and changes on its own | 6 | **`GET /api/spinout-lab/brief`** — new, public, no store |
+| already one shared SPA source the Lab pages read | ~20 | `lib/spinoutLabArsenal.js`, read rather than copied |
+| the programme's own prose and diagrams | ~50 | **`lib/spinoutBrief.js`** — content in git, reviewed in a diff |
+
+**Giving the third group a D1 table would be D129's seat store and D140's
+adjustable dates a third time** — a store built so a page could look dynamic,
+holding values nobody measures and nobody edits. It is content. It changes by
+someone editing it, and a reviewer reads the change.
+
+### What the brief was, and why "finish it" was the wrong framing
+
+`/spinout-lab/brief` already existed: four landscape slides
+(`SpinoutLabBriefPage.jsx`, 195 lines) with print CSS, a Save-as-PDF button and
+a live stats read through `useSpinoutStats`. What it did **not** have was any of
+the artifact's structure — no tracks, no gates, no arsenal, no jurisdictions, no
+terms — and no route of its own. So this is a rebuild against the canvas, not a
+completion.
+
+*(A correction on the record: an earlier note in this session called the page
+"fully static — no `api.` call, no state." That was wrong. It read live data
+through the `useSpinoutStats` **hook**, which a grep for `api.`/`useState`
+does not see. The rebuild changes what it reads, not whether it read.)*
+
+### The route — six fields, no store, no migration
+
+`GET /api/spinout-lab/brief` on `spinout_lab.ts`, public the way `/stats` and
+`/cohort` already are (auth here is per-handler; a route is public by not
+calling `requireAuth`). **Five of the six read no table at all** —
+`resolveApplicationTarget` and `monthLabel` are wall-clock arithmetic in
+`COHORT_TZ` — and the sixth, `places`, comes through the shared
+`getCohortSizeSettings`, whose product default IS the operative number until an
+operator overrides it. The fixture therefore creates **no cohort tables**, so
+anyone who later "improves" the route by reading a cycle row fails the test
+rather than emptying the brief on a database that has not run those migrations.
+
+`COHORT_TZ` is imported from `cohortTiming`, which **declares** it;
+`cohortApplications` imports the constant without re-exporting it, so
+destructuring it there is `undefined`. That was caught by the worker typecheck,
+not by reading.
+
+**The route names the zone beside the instants**, and the page formats every
+date with the zone the route sent rather than one it assumes. A reader anywhere
+is told that 23:59 is Delaware's. That is `lib/zoneTime.js`'s third caller, and
+its required-zone argument is exactly this case.
+
+### Nothing on the page may be typed that is derivable
+
+The arsenal's heading reads *"Nineteen working tools. Count them."* — an
+invitation to check. It is `numberWordCap(TOOL_COUNT)`, and the test asserts
+both halves: the rendered heading spells the count `LAB_TOOLS` actually holds,
+**and** the word does not appear as a literal anywhere in the page source. Same
+for `LAB_TRACKS.length` and for the twenty-eight days, which are `COHORT_WEEKS
+× 7`. The brief has already carried a frozen number once — *"Cohort 4 · closes
+August 1, 2026"*, past by the time anyone read it — and this is the one page a
+founder prints and forwards to an investor.
+
+### The nine mini-charts ship labelled as examples, or they do not ship
+
+The canvas gives nine of the nineteen tools a small chart, and every figure in
+them is invented for the design: `'9 interviews · 6 need-to-have'`, `'$2.4B ·
+$340M · $34M · cited'`, `'$1.5M target · 30% committed'`. The canvas's own
+comment calls them *"a simplified reading of their real screen … so a founder
+who later opens the tool recognises the picture"* — the SHAPE, not a
+measurement. And the brief is public: it is read by exactly the person who has
+no account, so there is no founder's data that could go there even in
+principle. Unlabelled, a chart with a figure under it reads as measured, which
+would make these the most convincing wrong thing on the page. Every one renders
+under `EXAMPLE_LABEL`, and the test counts labels against charts.
+
+### Two absences, not one
+
+A failed read and a month with no open cohort are different facts, and the page
+says which. `resolveApplicationTarget` reports `ok: false` between a close and
+the next month's opening; the brief then has no cohort to name and says so,
+rather than naming the wrong one. `places` is answered on both paths and keeps
+rendering. The test asserts that a failed read does **not** claim to know that
+no cohort is open — it knows nothing.
+
+### The finding that earned its own assertion
+
+The SPA computes the cohort window **itself** — `resolveOpenCohort`
+(`lib/spinoutLab.js`), which is what the marketing hero and the Lab intro quote
+— while this brief's route answers from `resolveApplicationTarget`
+(`services/cohortApplications.ts`). Two independent implementations of one rule
+(seven days before the 1st, 23:59:59 Delaware) in two languages. Compared across
+48 probes spanning mid-month, either side of a close, and DST boundaries:
+**they agree on every one**. So this is latent drift, not a live defect — and
+the day they disagree, two pages on the same site quote different deadlines for
+the same cohort. `spinout_brief_d141.test.mjs` pins them equal, importing both
+real implementations rather than restating either. The frontend test loader
+resolves the worker's TypeScript, which is what makes a cross-language
+behavioural assertion possible here at all.
+
+### PDF export is print CSS, by the owner's call
+
+`window.print()` plus `@page { size: letter portrait; margin: 0 }` and a page
+break per section. No new dependency, no worker route, works offline, and the
+artefact the founder saves is the page they were reading. Cloudflare Browser
+Rendering is already a binding if a byte-identical server PDF is ever wanted;
+that is filed, not built.
+
+**The document is white in both themes, deliberately.** Only the chrome around
+it follows the reader's theme. A dark-mode page that prints white is two
+different documents under one URL, and this one is a document.
+
+`check-dark-mode` was right to flag the first draft's seven `bg-white` cards,
+and the answer is not its exemption pragma. The document already declared its
+own palette as constants and painted its page ground with an inline colour;
+`bg-white` was the one part of it reaching for a theme-aware utility, which is
+the wrong MECHANISM rather than a forgotten pair. `PAPER` joins the palette,
+the guard has nothing left to pair, and no exemption has to be trusted. The
+toolbar keeps its `dark:` variants because it is app chrome. Both halves are
+asserted — the document may carry no theme-aware class, and every light surface
+in the chrome must still carry its dark counterpart. The second of those was
+written weakly first (it only checked that *some* `dark:` survived in the
+chrome) and passed a mutation that stripped the pair off the Back link; it now
+reads each class string.
+
+### One thing kept against the canvas: the track record
+
+The artifact draws no outcomes block, and the brief it replaced had one —
+`companiesLabel(companies)` and `raised`, read from the public
+`/spinout-lab/stats` the marketing hero reads. **Those two figures are
+measured**, they are the load-bearing fact for the investor this brief gets
+forwarded to, and dropping a true number because a layout omitted it is the
+wrong trade. It moves to page 4 and keeps the one hook, so the brief and the
+hero cannot quote different track records on the same day — which is why
+`useSpinoutStats` was lifted into `lib/` in the first place. The third figure,
+"28 days", is `COHORT_WEEKS × 7` rather than a literal.
+
+That block also produced the one mutation that escaped the first battery:
+`spinout_brief_live_data.test.mjs` asserts the page *reads* the hook, which is a
+source scan an empty render survives intact. Deleting the block passed both
+files until a render assertion existed. **A guard that reads the source cannot
+see a component that stopped drawing.**
+
+### The guard that had to be re-aimed rather than deleted
+
+`spinout_brief_live_data.test.mjs` predates this and lost four assertions to the
+rebuild. Two were restored by keeping the track record. The other two pinned
+`openCohortCopy()` and its interpolations — a mechanism the page correctly no
+longer has, since it reads the cohort from the route. Their RULE survives and is
+now enforced harder: "the brief and the hero cannot quote different dates" used
+to rest on a shared call and now rests on the parity assertion above, comparing
+two implementations on their output. What stays in the old file is the property
+that belongs to that page — it must not compute a second cohort of its own, and
+an absent one must not become a date. This is the D129/D131/D140 rule applied to
+a guard rather than to a promise: the fact moved, so the assertion moves with
+it rather than being reworded around the gap.
+
+### `BriefDocument` is exported, and that is the testing decision
+
+`renderToStaticMarkup` never runs an effect, so a component that fetched its own
+data could only ever be asserted in its loading state — and the loading state is
+not the one that has to be right. The document is therefore pure and
+prop-driven, the wrapper does the one fetch, and both states are rendered and
+read: six fields filled, and six stating their own absence. That is #516's
+`MarkHistory` precedent applied to a whole page.
+
+**The unsurvivable failure, asserted directly:** no `{{`, no `{cohort.`, no
+`{brief.` may reach the rendered output in any of the three states. A binding
+printed as text in a document somebody is being asked to rely on is the one
+thing this page cannot come back from, and it is a property of the OUTPUT that
+no source scan can see.
+
+### One shared name kept, two collisions named
+
+`spinoutBrief.js` declares no tool and no track — it carries the prose and the
+brief reads `spinoutLabArsenal.js` for the rest, so the brief cannot describe a
+programme the product does not have. The guard for that refuses the arsenal's
+**shape** (`blurb:`, `route:`, `leads:`, `who:`, `group:`) rather than trusting
+names, because a name can collide by coincidence and a key cannot — and the two
+real collisions are named rather than waved past: "Office hours" is a support
+row on page 4 as well as a tool card on page 3, and "Form" is both a track and
+the name of the third gate on that track. A collision that disappears fails the
+test as a stale entry, on `check-inline-project-pickers`'s shape.
+
+`LAB_TRACKS` gained a `brief:` short form beside its longer `who:` — one source
+read two ways, the D138 `RUNGS`/`rungRank` shape — because the screen's sentence
+wraps to a ragged list in a print column. Two lists of the same three tracks is
+what `lib/README.md`'s rule forbids.
+
+**One new `/api/*` method with its route in the same commit; no migration — 267
+stays free.** `frontend/src` moves, so `docs/` is rebuilt.

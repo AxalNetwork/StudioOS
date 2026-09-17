@@ -12,6 +12,7 @@ The API client, formatters and helpers. Nothing here renders.
 | `seo.js` | `usePageMeta`, for title/description/OG on public routes. |
 | `log.js` | `reportError`, the client error channel. |
 | `statusOverall.js` | The single roll-up rule for platform health, shared by `/status` and the Help Center. |
+| `spinoutBrief.js` | The Programme Brief's CONTENT (D141) — `WEEKS`, `TRACK_GATES`, `TERMS`, `JURISDICTIONS`, `DELIVERABLES`, `COMMUNITY`, `SUPPORT`, `FIT`/`NOT_FIT`, the nine `TOOL_EXAMPLE_READS` with the `EXAMPLE_LABEL` they may not be drawn without, and `numberWord`/`numberWordCap` so the brief's spelled-out counts are derived rather than typed. The programme describing itself: prose somebody wrote, changed by editing it, reviewed in a diff. It declares **no tools and no tracks** — those are `spinoutLabArsenal.js`'s, and the brief reads them so it cannot describe a programme the product does not have. |
 | `zoneTime.js` | `inZone`, `dateInZone` — an instant rendered in the zone it is **enforced** in, with that zone named. The zone is a required argument, never a default: the Spin-Out Lab programme runs on America/New_York for every territory and a branch admin does not, so a formatter that fell back to the reader's zone would print the wrong hour. Deliberately not merged with `spinoutLab.js`'s date helpers, which bake the zone in for a reader who is on that clock. |
 
 ## Subfolders

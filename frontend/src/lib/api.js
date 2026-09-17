@@ -4893,6 +4893,12 @@ export const spinoutLab = {
   cohort: () => request('/spinout-lab/cohort'),
   // Public — real hero stats (companies built, total raised by graduates).
   stats: () => request('/spinout-lab/stats'),
+  // Public — the six live values the Programme Brief prints, and only those
+  // (D141). The brief's tracks, tools, gates and jurisdictions are the
+  // programme's own description and come from `lib/spinoutBrief.js` and
+  // `lib/spinoutLabArsenal.js`; a route serving those too would be a store
+  // invented so a page could look dynamic.
+  brief: () => request('/spinout-lab/brief'),
   // Signed in only — which cohort companies cleared which gate, and when.
   // Deliberately gate-level and not milestone-level: `week` is already public
   // on /cohort, so this adds a timestamp to a transition whose state is
