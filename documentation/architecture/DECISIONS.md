@@ -11088,3 +11088,163 @@ indent against a one-space source, with the write still succeeding and printing
 "fixed". A harness edit that silently changes nothing is the same failure as a
 mutation that lands somewhere other than where it was aimed, one level up. The
 edit is now asserted to have changed the file before it is trusted.
+
+---
+
+## D139 — the licence ledger's own integrity: an event its constraint rejects, three transitions with no state machine, and a freeze that outlived its licence
+
+**#261 was filed as "eight licence-area defects the ladder audits turned up".**
+This repo's own rule is that an audit finding is true as of its date and is not a
+live bug until re-checked, so all eight were re-measured against `bb0e768c2`
+before anything was written. **Six are live and two are struck**, and the six are
+not one concern — this decision carries only the ones that are the *licence
+ledger's own integrity*. The rest are filed with their measurements.
+
+### The sharpest one, and it is worse than it was filed
+
+`admin_licences.ts` calls `logEvent(c.env, licence.id, 'contract_instantiated', …)`
+when HQ instantiates a licence agreement. Migration 187's `licence_events` CHECK
+admits **nine** values and that is not one of them — 187 predates licence
+contracts, which arrived in 259.
+
+`logEvent` is a **bare `await` with no try/catch**, and it sits **after** the
+contract INSERT and **before** the `201`. So on real D1, in order: the previous
+contract is superseded, the new contract row lands, the event raises on the
+CHECK, and `mapError` answers **400**. The operator is told *Bad Request* about a
+contract that **was created**, and pressing the button again supersedes that one
+and writes another — every retry silently stacks a superseded draft.
+
+**It has never fired, and saying so is part of the fix.** Read-only against
+production `studioos-db`, aggregates only: `licence_events` **0 rows**,
+`territory_licences` **0**, `licence_contracts` **0**. No licence has ever been
+issued, so no contract has ever been instantiated and the 400 has harmed nobody.
+This is **latent, not live**, and the PR does not claim an incident. What the
+emptiness changes is the **cost**: migration 266's rebuild copies zero rows,
+which makes now the cheapest moment this will ever have. Migration 257's header
+already wrote the argument one table over — the rule holds *"even when the table
+it corrects is empty in every database that exists, because the rule is what
+makes that emptiness something we can stop having to check."*
+
+### Why a rebuild, and why not the three cheaper answers
+
+SQLite cannot `ALTER` a CHECK. The only supported way to widen one is the
+documented rebuild — create the table anew with the corrected constraint, copy,
+drop, rename — which is a departure from this repo's additive-only habit and is
+stated in **266**'s header rather than discovered. The table is append-only,
+nothing carries a foreign key **at** it, and its one index is recreated by name.
+
+- **Not "drop the CHECK".** It is the thing that would have caught this.
+- **Not "rename the event" to one of the nine.** `terms_changed` and `activated`
+  are smaller acts than instantiating the agreement, and the trail is what the
+  table exists for. **The constraint is wrong, not the write.**
+- **Not "wrap `logEvent` in a try/catch".** That converts a loud 400 into a
+  silently missing audit row, which is the worse of the two.
+
+### The fixture was the blind spot, and it is now read off disk
+
+`licence_contract_instantiate.test.ts` recreated `licence_events` with
+`event TEXT NOT NULL` and **no CHECK**, then asserted the row — so the suite was
+green against a table production does not have. That is the same class as an
+assertion that cannot fail, and `compliance_ladder_d135.test.ts` had already
+stated the rule it kept: *"The CHECK is migration 187's, copied rather than
+relaxed."* The fixture now slices the CREATE out of **266**, falling back to 187
+if 266 is ever removed, so it cannot silently lose the constraint again.
+
+**Proved both ways rather than asserted.** With 266 present the suite is 14/14;
+with 266 withheld, three contract tests **fail** — which is the demonstration
+that the fixture, not the assertion, was what hid the defect. And relaxing the
+fixture back makes them pass **even without 266**, which is the same fact from
+the other side.
+
+### The state machine, which existed only in prose
+
+Migration 187 wrote the semantics down in its own comments —
+
+```
+active      — trading
+suspended   — not trading, STILL HOLDS ITS TERRITORY
+terminated  — over; territory released
+```
+
+— and **nothing enforced them**. Measured: `suspend` 0 status guards, `renew` 0,
+`terminate` 0, `reinstate` **1**. So a **terminated** licence — one whose
+territory has been released and may already have been granted to somebody else —
+could be suspended or renewed, and a renewal would push a date onto a licence
+that is over.
+
+`transitionRefusal()` is one helper carrying the rule once, and the three
+transitions each answer **409 `bad_transition`** on `reinstate`'s own refusal
+shape rather than inventing a second one.
+
+**Re-suspending an already-suspended licence is refused too, and the ladder is
+what made that real.** The UPDATE overwrites `suspended_at`, which HQ's Team
+table (D138) and the addressee's own page (D136) both read as *"frozen since"*.
+Silently restarting the clock an administrator is measured against is worse than
+refusing, so the refusal names the alternative: reinstate first, or edit the
+note.
+
+### The freeze that outlived its licence
+
+Terminate deletes `licence_territories` and updates `territory_licences`, and
+nothing else. Since **D135 shipped the freeze** that leaves a live contradiction
+the original filing predates: `auth.ts`'s gate reads `admin_notices` by
+`user_id` and **never consults the licence's status**, so a terminated licence's
+open notices go on freezing its administrators forever — over a licence that no
+longer exists to comply with, where answering the notice cannot help because
+there is nothing left to comply *with*.
+
+That half is not a product call, it is the ladder contradicting itself, and
+migration 264 already has the word for a notice HQ is no longer pressing:
+**`withdrawn`**. Terminate now withdraws the licence's `issued`, `overdue`,
+`responded` and `rejected` notices. `accepted` and `withdrawn` are **left
+alone** — they are already closed, and rewriting a closed row would lose which
+way it closed.
+
+**It runs outside the `DB.batch`, and that is deliberate.** A database that has
+not applied 264 has no `admin_notices` table; inside the batch its absence would
+fail the termination itself. So it is **reported rather than thrown**, the D111
+precedent this file has now applied four times: the termination is recorded
+whatever happens, and `notices_withdrawn: {ok, count} | {ok: false, reason}` is
+its own field beside `pushed`. A withdrawal that fails says so in a sentence
+naming the consequence — *an administrator frozen by one may still be frozen* —
+rather than letting a completed termination look like a failure.
+
+### The two struck, with their measurements
+
+1. **`renewalSweep` binds ISO against a bare `expires_at`** — filed as the
+   bound-parameter timestamp defect. **Not a defect.** `trust.ts:1174-1181` binds
+   ISO on **both** sides against a column written as ISO, which is consistent,
+   and this plan file already said so in an earlier pass: *"the companion sweep
+   700 lines away reads the same column correctly."* What is real is that **no
+   lexical guard can see it** — that is `check-timestamp-comparisons`'s blind
+   spot and it belongs to **#253**, not here.
+2. **`licence_contracts` has four statuses and only `draft` is reachable** —
+   **not a defect, an unbuilt feature already recorded as one.** `ROUTE_MAP.md`
+   row 41: *"Still not shipped: sending a contract for signature (`status` and
+   `envelope_uid` exist and nothing writes them)."* Honest absence.
+
+### Filed rather than folded in, each with its measurement
+
+- **`hq_escalations.due_at` has an SLA band and no cron.** Written at
+  `rpc/hqOps.ts:90`, no reader in `index.ts`. A breached HQ SLA changes a badge
+  colour and notifies nobody. Its own task.
+- **`/inbox` is a dead CTA.** `notify.ts:480` builds `${root}/inbox`; `App.jsx`
+  registers **zero** `path="/inbox*"`. Either a route or a different link — a
+  product call about where a notification should land.
+- **`notifications` is both a view and a runtime table.** Migration 053 creates
+  the back-compat VIEW; `services/notifications.ts:29` a
+  `CREATE TABLE IF NOT EXISTS`. Which wins depends on which ran last on a given
+  D1 — a schema-collision question, and the `metrics_snapshots` precedent (#183,
+  #202) says it is its own piece of work.
+- **What terminate should deprovision beyond the notices** — admins keeping
+  `role='admin'`, the deployment row, seats, contracts. A product call, and
+  D134's demote/detach primitives are what it would compose.
+
+### One `frontend/src` file did not move, so `docs/` did not either
+
+D139 is worker-and-SQL only. The freeze it lifts is felt on two shipped screens
+and neither needed a line changed: the rung they render is derived from
+`admin_notices.status`, and `withdrawn` was already outside `FREEZING_STATUSES`
+before this decision existed. The test asserts the lift **through**
+`FREEZING_STATUSES` itself rather than restating the four strings, so the two
+cannot drift apart.

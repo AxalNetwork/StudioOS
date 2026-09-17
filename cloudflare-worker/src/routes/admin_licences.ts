@@ -117,6 +117,40 @@ async function logEvent(
 }
 
 /**
+ * The licence's own state machine, which until D139 existed only in prose.
+ *
+ * Migration 187 wrote the semantics down and nothing enforced them:
+ *
+ *   active      — trading
+ *   suspended   — not trading, STILL HOLDS ITS TERRITORY
+ *   terminated  — over; territory released
+ *
+ * `reinstate` was the only transition that checked, and its refusal is the
+ * shape copied here. The other three accepted ANY status, so a **terminated**
+ * licence — one whose territory has been released and given to somebody else —
+ * could be suspended or renewed, and a renewal would push a date onto a licence
+ * that is over. Nothing has exercised it: production holds zero licences. It is
+ * latent, and it is cheap exactly while that is true.
+ *
+ * Re-suspending an already-suspended licence is refused too, and for a reason
+ * the ladder made real: the UPDATE would overwrite `suspended_at`, which is
+ * what HQ's Team table and the addressee's own page read as "frozen since".
+ * Silently restarting that clock is worse than refusing to.
+ */
+function transitionRefusal(
+  status: string | null | undefined, verb: 'suspend' | 'renew' | 'terminate',
+): string | null {
+  const now = String(status || '');
+  if (now === 'terminated') {
+    return `This licence is terminated — it is over and its territory has been released, so it cannot be ${verb === 'renew' ? 'renewed' : `${verb}d`}.`;
+  }
+  if (verb === 'suspend' && now === 'suspended') {
+    return 'This licence is already suspended. Suspending it again would restart the "suspended since" clock its administrators are measured against; reinstate it first, or edit the note on the licence.';
+  }
+  return null;
+}
+
+/**
  * Seats used, which is deliberately unknowable HERE and knowable on a branch.
  *
  * The canvas shows "% utilised" against seats licensed. Computing it at HQ
@@ -434,6 +468,9 @@ r.post('/:uid/suspend', async (c) => {
     const admin = await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
+    // D139 — the state machine, on `reinstate`'s own 409 shape.
+    const refusal = transitionRefusal(licence.status, 'suspend');
+    if (refusal) return c.json({ error: 'bad_transition', message: refusal }, 409);
     const note = str(c.req.query('note') || (await c.req.json().catch(() => ({} as any)))?.note, 1000);
     if (!note) return c.json({ error: 'a suspension must record why' }, 400);
     // Territory rows are untouched on purpose: a suspended licence still holds
@@ -488,6 +525,9 @@ r.post('/:uid/renew', async (c) => {
     const admin = await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
+    // D139 — the state machine, on `reinstate`'s own 409 shape.
+    const refusal = transitionRefusal(licence.status, 'renew');
+    if (refusal) return c.json({ error: 'bad_transition', message: refusal }, 409);
     const b = await c.req.json().catch(() => ({} as any));
     // An explicit date wins. Otherwise push out by the term, from the CURRENT
     // renewal date rather than from today, so a late renewal does not silently
@@ -514,6 +554,9 @@ r.post('/:uid/terminate', async (c) => {
     const admin = await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
+    // D139 — the state machine, on `reinstate`'s own 409 shape.
+    const refusal = transitionRefusal(licence.status, 'terminate');
+    if (refusal) return c.json({ error: 'bad_transition', message: refusal }, 409);
     const note = str((await c.req.json().catch(() => ({} as any)))?.note, 1000);
     if (!note) return c.json({ error: 'a termination must record why' }, 400);
     const released = await c.env.DB.prepare(
@@ -528,6 +571,40 @@ r.post('/:uid/terminate', async (c) => {
       ).bind(note, nowIso(), nowIso(), licence.id),
     ]);
     await logEvent(c.env, licence.id, 'terminated', admin.id, { released: codes }, note);
+
+    // D139 — THE LADDER WOULD OTHERWISE GO ON FREEZING PEOPLE OVER A LICENCE
+    // THAT NO LONGER EXISTS. `auth.ts`'s compliance gate reads `admin_notices`
+    // by `user_id` and never consults the licence's status, so an `overdue` or
+    // `rejected` notice keeps an administrator's account frozen after HQ has
+    // terminated the very licence the notice is about — and answering it cannot
+    // help, because there is nothing left to comply with. Migration 264 already
+    // has the word for a notice HQ is no longer pressing: `withdrawn`.
+    //
+    // OUTSIDE THE BATCH, ON PURPOSE. A database that has not applied 264 has no
+    // `admin_notices` table and no notices to withdraw; putting this in the
+    // batch would make its absence fail the termination itself. So it is
+    // reported the way `pushed` is (the D111 precedent): the termination is
+    // recorded whatever happens here, and what happened here is its own field.
+    //
+    // `accepted` and `withdrawn` are left alone — they are already closed, and
+    // rewriting a closed row would lose which way it closed.
+    let noticesWithdrawn: { ok: boolean; count?: number; reason?: string };
+    try {
+      const res = await c.env.DB.prepare(
+        `UPDATE admin_notices
+            SET status = 'withdrawn', updated_at = ?
+          WHERE licence_id = ? AND status IN ('issued', 'overdue', 'responded', 'rejected')`,
+      ).bind(nowIso(), licence.id).run();
+      noticesWithdrawn = { ok: true, count: Number(res?.meta?.changes) || 0 };
+    } catch (e) {
+      noticesWithdrawn = {
+        ok: false,
+        reason: 'The compliance notices against this licence could not be withdrawn, so an '
+          + 'administrator frozen by one may still be frozen. The termination itself is recorded: '
+          + (e as Error).message,
+      };
+    }
+
     // Told LAST, after the batch, because a notification about a termination
     // that then failed to apply is worse than a late one. The administrators
     // are still bound at this point — D134's detach is a separate act — so the
@@ -541,7 +618,10 @@ r.post('/:uid/terminate', async (c) => {
     // Pushed AFTER the territory release, so the copy the branch receives
     // reports the same empty territory the ledger now holds.
     const pushed = await pushLicenceToBranch(c.env, licence.id);
-    return c.json({ ok: true, status: 'terminated', released: codes, pushed });
+    return c.json({
+      ok: true, status: 'terminated', released: codes, pushed,
+      notices_withdrawn: noticesWithdrawn,
+    });
   } catch (e) { return mapError(c, e); }
 });
 
