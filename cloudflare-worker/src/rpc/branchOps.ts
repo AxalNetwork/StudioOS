@@ -586,6 +586,67 @@ export async function applyTemplateCopy(
   return { ok: true, stored: rows.length, withdrawn };
 }
 
+
+/**
+ * Store the anonymised benchmarks HQ pushed, as a dated copy (migration 256,
+ * D148).
+ *
+ * MIGRATION 256 CREATED THIS TABLE AND NOTHING EVER WROTE TO IT (#252). The
+ * shape is `applyTemplateCopy`'s above and for the same reason: a benchmark set
+ * is a SET, so a push that only upserted could never retire a metric HQ stopped
+ * publishing — and a metric HQ withheld because it fell below the k-threshold
+ * is exactly the one that must disappear from the screen rather than linger at
+ * its last value. The write is a reload of THIS PERIOD, in one `DB.batch`.
+ *
+ * SCOPED TO THE PERIOD, NOT THE WHOLE TABLE. `branch_benchmarks` is keyed on
+ * `metric_key` alone (migration 256), so a period is a property of the row
+ * rather than part of its identity: HQ publishes one period at a time and the
+ * table holds the latest. Deleting only this period's rows would therefore
+ * leave last quarter's medians standing beside this quarter's under the same
+ * keys — which is not a thing the primary key allows. So the reload clears the
+ * table and writes what HQ sent, and `period` is what the screen prints beside
+ * the tick.
+ *
+ * `pushed_at` IS HQ'S STAMP, never this database's write time — migration 256's
+ * own rule, so a median's age is the age of the computation and not of the row.
+ */
+export async function applyBenchmarks(
+  env: Env,
+  p: { rows: Array<Record<string, unknown>>; period: string; pushed_at: string },
+): Promise<{ ok: true; stored: number }> {
+  if (!branchOf(env)) throw new Error('applyBenchmarks is only live on a branch');
+
+  const pushedAt = String(p?.pushed_at || new Date().toISOString());
+  const now = new Date().toISOString();
+  const period = String(p?.period || '');
+
+  const rows = (Array.isArray(p?.rows) ? p.rows : [])
+    .map((r) => ({
+      metric_key: String((r as any)?.metric_key || '').trim().slice(0, 80),
+      label: String((r as any)?.label || '').trim().slice(0, 200),
+      median_value: Number((r as any)?.median_value),
+      unit: String((r as any)?.unit || '').trim().slice(0, 40),
+      n_branches: Math.trunc(Number((r as any)?.n_branches) || 0),
+      period: String((r as any)?.period || period).trim().slice(0, 20),
+    }))
+    // A ROW WITHOUT ITS `n` IS DROPPED, not stored with a zero. The count is
+    // what lets the screen say "of N branches" instead of implying a population
+    // it does not know — migration 256 says so in as many words — so a median
+    // that arrives without one is not publishable at all.
+    .filter((r) => r.metric_key && Number.isFinite(r.median_value) && r.n_branches > 0);
+
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM branch_benchmarks'),
+    ...rows.map((r) => env.DB.prepare(
+      `INSERT INTO branch_benchmarks
+         (metric_key, label, median_value, unit, n_branches, period, pushed_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(r.metric_key, r.label, r.median_value, r.unit, r.n_branches, r.period, pushedAt, now)),
+  ]);
+
+  return { ok: true, stored: rows.length };
+}
+
 /* ------------------------------------------------------------------ *
  * The branch's own escalation lane (D112)                             *
  * ------------------------------------------------------------------ */

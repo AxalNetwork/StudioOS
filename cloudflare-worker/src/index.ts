@@ -172,6 +172,7 @@ import branchEscalationRoutes from './routes/branch_escalations';
 import branchApprovalRoutes from './routes/branch_approvals';
 import branchHomeRoutes from './routes/branch_home';
 import branchTemplateRoutes from './routes/branch_templates';
+import branchInsightsRoutes from './routes/branch_insights';
 import adminSuperAdmins from './routes/admin_super_admins';
 import adminHq from './routes/admin_hq';
 import adminRevenue from './routes/admin_revenue';
@@ -804,6 +805,9 @@ app.route('/api/branch', branchHomeRoutes);
 // Same mount as the other three branch reads; `requireBranchTier` inside
 // refuses it on HQ, where the library itself lives.
 app.route('/api/branch', branchTemplateRoutes);
+
+// S6 (D148) — this territory's own stats, and the anonymised median HQ pushed.
+app.route('/api/branch', branchInsightsRoutes);
 app.route('/api/admin/licences', adminLicences);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
 // catch-all for the same reason as the licence ledger above.
@@ -1618,6 +1622,39 @@ export default {
               console.info(`[cron] hq SLA breached=${s.breached} reported=${s.reported} notified=${s.notified}`);
             }
           } catch (e) { console.error('[cron] hq SLA sweep failed', e); }
+        }
+        // D148 — the anonymised platform median, computed at HQ and pushed to
+        // every branch. `branch_benchmarks` was created by migration 256 and
+        // had no writer at all (#252); this is it.
+        //
+        // GATED ON `hqCadences`, WHICH IS THE OPPOSITE CALL FROM THE THREE
+        // BLOCKS ABOVE, and the reason is the direction of the work. Those
+        // sweeps act on THIS deployment's own rows, so their WHERE clause is
+        // the tier discriminator. This one fans out to every branch, and a
+        // branch has no branches — `publishBenchmarks` refuses on one outright
+        // rather than quietly fanning out to nothing, so the gate and the
+        // function agree instead of one covering for the other.
+        //
+        // DAILY, AND THE CADENCE BOUNDS NOTHING A ROW SAYS. Every published row
+        // carries its own `period` and HQ's `pushed_at`, so a branch reading a
+        // day-old median knows it is a day old. The alternative — an hourly
+        // recompute of a quarterly figure — would be N remote calls an hour to
+        // move a number that moves in weeks.
+        //
+        // IT PUBLISHES NOTHING BELOW THREE ANSWERING BRANCHES, by construction
+        // rather than by this block's choice: `MIN_BRANCHES` lives with the
+        // argument for it. With no branch provisioned the fan-out returns an
+        // empty list and this costs one scan of `env` a day.
+        if (hqCadences && now.getUTCHours() === 4 && now.getUTCMinutes() === 55) {
+          try {
+            const { publishBenchmarks, currentPeriod } = await import('./services/branchBenchmarks');
+            const r = await publishBenchmarks(env, currentPeriod(now));
+            if (r.withheld_reason) {
+              console.info(`[cron] benchmarks withheld (${r.answered}/${r.total} answered): ${r.withheld_reason}`);
+            } else {
+              console.info(`[cron] benchmarks period=${r.period} published=${r.published} answered=${r.answered}/${r.total}`);
+            }
+          } catch (e) { console.error('[cron] benchmark publish failed', e); }
         }
         // The 04:50 UTC Refer & Earn payout auto-approval sweep was removed
         // with Stripe Connect in the referrals redesign. Referral rewards are

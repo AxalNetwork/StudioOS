@@ -12198,3 +12198,110 @@ empty ledger under a heading that implies rows are coming.
 **Migration 268** is used; **269 is free.** One new `/api/*` method each side,
 both with their routes in the same commit. `frontend/src` moves, so `docs/` is
 rebuilt through the root build.
+
+## D148
+
+**What HQ can honestly publish a median of, and the branch's one tick** —
+`applyBenchmarks`, the second producer F.5 specified and nobody built. Closes
+**#252**: `branch_benchmarks` was created by migration 256 and had neither a
+writer nor a reader.
+
+### The threshold is three, and the reason is arithmetic rather than policy
+
+Migration 256's header says HQ *"withholds the row entirely below its own
+k-threshold"* and does not say what k is. It has to be **3**:
+
+| n | why it is not enough |
+| --- | --- |
+| 1 | the median **is** that branch's figure, published under a name that hides whose it is — the "never another branch's figure" the same header forbids |
+| 2 | the median is the mean of the two, so a branch that knows its own number subtracts it and reads the other's **exactly** |
+| 3 | the smallest n at which no single branch is recoverable from the median plus its own value |
+
+`MIN_BRANCHES` is one exported constant carrying that argument in its own
+header, and the test reads it rather than restating it. The threshold is applied
+**per metric**, not once per fan-out: a branch can answer and still have no
+readable backlog, and a median over two of three branches is exactly as
+recoverable as a median over two of two.
+
+### What can honestly be medianed — measured, not chosen from the canvas
+
+S6 draws four stats. Read against `branchOverview()` — the only cross-branch
+call returning comparable per-branch numbers — exactly **three** of its fields
+are measurements and one is not:
+
+| field | publishable? |
+| --- | --- |
+| `accounts.total` | ✅ a count of active accounts |
+| `seats_used` | ✅ a count, with its own stated basis (D127) |
+| `backlog[].count` | ✅ the four local queues (D130) |
+| `revenue_mtd_cents` | ❌ **`null` by construction**, with its own reason — and `branchRevenueSummary` agrees: every stream it returns is `available: false` |
+
+Activation and programme throughput have no branch-side read anywhere. So
+**three of S6's four drawn stats cannot be benchmarked**, and the page states
+that instead of deriving them. Revenue is the interesting one: the *rate* is on
+the pushed licence and the *amount* is not knowable on a branch — subscription
+charges live in the Stripe API and a subsidiary charges no onward licence fee —
+so a rate times a number nobody has is not a figure.
+
+### An unreadable branch is excluded from n, never counted as a zero
+
+`fanOut` returns three states and the middle one gets forgotten: `unreadable` is
+not a claim that the branch is down. A branch that did not answer contributes
+**nothing** — not a zero, which would drag every median toward the floor and
+make the platform look worse the flakier its network is. `n_branches` is the
+count that **answered**, and it travels with the median so the screen says "of
+N". The test seeds four branches with one throwing and asserts the median is 20
+rather than 15, so counting a silence as a zero fails.
+
+### The write is a reload, for the reason D147's was
+
+A benchmark set is a **set**: a push that only upserted could never retire a
+metric HQ stopped publishing — and a metric withheld *because it fell below k*
+is precisely the one that must disappear rather than linger at its last value, a
+median the screen would go on asserting after HQ stopped standing behind it.
+
+### The cron is gated on `hqCadences`, which is the opposite call from its neighbours
+
+D122, D135 and D143 each deliberately **refused** that gate, because those
+sweeps act on **this deployment's own rows** and their `WHERE` clause is the
+better tier discriminator. This one is the other direction: it **fans out**, and
+a branch has no branches. The gate and the function agree rather than one
+covering for the other — `publishBenchmarks` refuses on a branch outright. Daily
+at 04:55 UTC on the existing `* * * * *`, **no new cron expression**: every
+published row carries its own `period` and HQ's `pushed_at`, so the cadence
+bounds nothing a row says, and an hourly recompute of a quarterly figure would
+be N remote calls an hour to move a number that moves in weeks.
+
+### With zero branches this publishes nothing, and that is the deliverable
+
+The fan-out returns `[]`, `withheld_reason` says why in the branch's own terms,
+and the cron logs *withheld* rather than a success with zero rows. The branch
+page renders the absence with the same argument. That is the D129 / D131 / D140
+/ D147 pattern for a fifth time: ship the truth and state what is missing,
+rather than a tick against a median of one.
+
+### One defect the tests found rather than review
+
+`median()` sorting with the default comparator — `[9, 10, 11].sort()` is
+`[10, 11, 9]` and the median comes back **11**. It only shows up once a value
+crosses a digit boundary, which is exactly the class that survives a small
+fixture, so the comparator is explicit and the fixture crosses one.
+
+### Two assertions were re-aimed rather than the code changed
+
+A banned-word scan for `rank` **failed on correct code**: it forbids the page's
+own sentence *"never a ranked list"* — the refusal itself. A lexical scan cannot
+tell a rule from its violation, so the assertion is structural now: `BenchmarkRow`
+carries no field naming a branch, so a ranked list is **unrepresentable** rather
+than merely absent. The route-window assertion took a fixed 400 characters and
+reached into the next route's notice; it is bounded by the next `<Route` now,
+and asserts the window actually contains its own element.
+
+**No migration — `branch_benchmarks` is migration 256's and 269 stays free.**
+One new `/api/*` method with its route in the same commit. `frontend/src` moves,
+so `docs/` is rebuilt through the root build.
+
+**Still not shipped: S11 Settings.** `/branch/settings` keeps its notice. Owner
+chips per row are a different artboard from a benchmark, and the licence summary
+they would frame is already readable at `/admin/my-licence`. Filed as the
+remainder of #234.
