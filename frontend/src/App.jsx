@@ -29,6 +29,9 @@ import {
 import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES } from './sidebarConfig';
 import PaywallModal from './components/PaywallModal';
 import AdminFrozenBar from './components/AdminFrozenBar';
+import BranchSuspendedBar from './components/BranchSuspendedBar';
+import HqSupportSessionBar from './components/HqSupportSessionBar';
+import { clearSupportSession } from './lib/supportSession';
 import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
 // renders synchronously on first paint. It marks itself a no-auth-redirect
@@ -886,6 +889,16 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     <ActiveCompanyContext.Provider value={{ company: activeCompany, setCompany: setActiveCompany, companies: companyList, setCompanies: setCompanyList }}>
     <ViewModeContext.Provider value={viewModeContextValue}>
       <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
+        {/* D142 / S13 — ABOVE `PortalSwitcher`, and the order is the point.
+            `isImpersonating` is `!!realUser`, which an HQ support session never
+            sets (the operator is a row in HQ's database this deployment cannot
+            read). So supporting a branch ADMIN mounted the ordinary purple
+            "Admin Mode" bar with a working View-as picker — an HQ-driven
+            session dressed as the admin's own — and supporting anyone else
+            rendered nothing at all. This renders first, so that bar can never
+            be the only chrome on a session the viewer did not start. It draws
+            nothing when there is no live support session. */}
+        <SafeMount name="HqSupportSessionBar"><HqSupportSessionBar /></SafeMount>
         {isAdmin && (
           <PortalSwitcher
             viewMode={viewMode}
@@ -955,6 +968,15 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 {branchFact.name || branchFact.code}
                 {(branchFact.territories || []).length > 0 && ` · ${(branchFact.territories || []).join(' · ')}`}
                 {' · BRANCH'}
+                {/* D142 — `/me.branch` has carried `status` and `as_of` since
+                    D106 and the badge read NEITHER, so a suspended branch's
+                    badge was byte-identical to an active one. The word only
+                    appears when the state is not active: a badge that said
+                    "ACTIVE" on every branch would be noise, and the one state
+                    worth interrupting someone over is the one that changes what
+                    they can do. */}
+                {branchFact.status && branchFact.status !== 'active'
+                  && ` · ${String(branchFact.status).toUpperCase()}`}
               </span>
             )}
             {(activeRole === 'founder' || activeRole === 'admin') && (
@@ -1586,6 +1608,13 @@ function AppInner() {
     localStorage.removeItem('realUser');
     localStorage.removeItem('realToken');
     localStorage.removeItem('viewMode');
+    // D142 — the HQ support-session payload, which this did not clear. It was
+    // written by `SupportRedeemPage`, read by nothing, and removed by nothing,
+    // so it outlived both the thirty-minute session and sign-out on that
+    // browser: the next ordinary session on the same machine would have been
+    // told HQ was inside the account. `lib/supportSession.js` owns the key so
+    // the purge and the reader cannot be renamed apart.
+    clearSupportSession();
     clearHqView();
     // The active company is a per-BROWSER memory (localStorage), not a
     // per-account one. Left in place, the next account to sign in on this
@@ -2911,6 +2940,11 @@ export default function App() {
             thing that explains the refusal cannot live on one page. It renders
             nothing until a 423 arrives. */}
         <SafeMount name="AdminFrozenBar"><AdminFrozenBar /></SafeMount>
+        {/* D142 — the branch twin, mounted for the same reason: the suspension
+            refuses writes across the whole branch shell, so the thing that
+            explains the refusal cannot live on one page. Renders nothing until
+            a 423 carrying `code: 'branch_suspended'` arrives. */}
+        <SafeMount name="BranchSuspendedBar"><BranchSuspendedBar /></SafeMount>
         <SafeMount name="CookieConsent"><CookieConsent /></SafeMount>
       </SettingsProvider>
     </AuthProvider>
