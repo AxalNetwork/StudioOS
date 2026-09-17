@@ -11743,3 +11743,105 @@ only about the session it is in.
 
 **No migration — 267 stays free.** No new `/api/*` method, so `check-api-drift`
 has nothing to say. `frontend/src` moves, so `docs/` is rebuilt.
+
+## D143 — a breached HQ SLA tells somebody, and the guard learns the column it was missing
+
+**Context.** `hq_escalations` (migration 259) is how a branch asks HQ for
+something it cannot decide alone — moderation, brand approval on localised
+content, a seat increase. Every row carries a `due_at` computed from the kind's
+SLA band (`SLA_HOURS`, `rpc/hqOps.ts`), and `slaBand()` derives `ok` /
+`due_soon` / `past` from it on every read, so S3 and H1 both draw the band and
+both draw it correctly.
+
+**Nothing acted on it.** `due_at` had no reader anywhere in the scheduled
+handler. A subsidiary that escalated something and heard nothing was waiting on
+an answer no clock was chasing: the badge turned red and the silence was the
+whole feature. Filed as one of the eight licence-area defects in D139 and
+deferred there as its own concern, which is what this is.
+
+**The decision: a breach notifies HQ.** A sweep in `services/`, on the existing
+`* * * * *` trigger at a fifteen-minute cadence, through `notify()` with
+`category: 'compliance'` — the category `notify.ts` and `TemplateCategory` have
+both carried since D135, so this needed no new plumbing. It never answers an
+escalation; it reports that a deadline passed, and answering stays a deliberate
+act on `PATCH /api/admin/escalations/:uid`. That split is the same one that makes
+the compliance ladder's automatic half safe to run on a clock.
+
+### The finding that shaped it, which is not the one in the task title
+
+`hq_escalations` carries **two timestamp formats in one row.** `created_at` and
+`updated_at` default to `datetime('now')` — SQLite's `YYYY-MM-DD HH:MM:SS` —
+while `due_at` is written from JavaScript as ISO-8601
+(`new Date(...).toISOString()`, `rpc/hqOps.ts`). So the obvious predicate,
+`due_at <= CURRENT_TIMESTAMP`, compares two different text shapes. It does not
+fail: `T` (0x54) sorts after a space (0x20), so an ISO stamp compares GREATER
+than a SQL one naming a later instant, and the sweep silently skips every breach
+until the UTC **date** rolls over and the date prefix starts deciding. That is
+the bound-parameter defect class that has bitten the magic link, the support
+code and two trust sweeps.
+
+**And the guard could not see it.** `scripts/check-timestamp-comparisons.mjs`
+watches a fixed `TTL_COLUMN` list with no allowlist by design — a column outside
+it is a column nobody is watching. `respond_by` is on that list because D135
+obeyed the guard's own header when it created the column
+(*"Adding the name here and the column there in one commit is what keeps that
+true"*). **`due_at` was not**, so the guard watched every deadline column except
+this one, on precisely the sweep it exists for. D143 adds it, in the same change
+that gives the column its first reader.
+
+The sweep itself wraps **both** sides — `datetime(due_at) <= datetime('now')` —
+which normalises either stored format to one, so the comparison is correct
+whichever way a row was written. The guard's negative lookbehind blesses exactly
+that shape, and `complianceLadder.ts` already uses it one table over.
+
+### Two things that read like mistakes and are not
+
+**The claim is a column, not a state flip.** Every minute-cadence sweep in this
+repo is idempotent by construction — the WHERE matches only rows in the
+pre-transition state — and reserves a ledger row for side effects that are not a
+state flip. Sending mail *is* such a side effect, and here there is no flip to
+hang it on: a breached escalation is still `open` afterwards, because a breach
+does not answer it. Adding a `breached` status would have been worse, not
+better: it would drop the row out of `openEscalations()`, which reads
+`status = 'open'`, so a breach would have hidden the very thing it was reporting.
+Migration 267's `sla_breach_notified_at IS NULL` is the claim, and the
+conditional UPDATE is what makes owning it atomic.
+
+**It stamps the sweep's own clock, and that honours the D122 rule rather than
+breaking it.** `complianceLadder.ts` states the rule for `froze_at`: stamp the
+computed deadline, never the sweep's clock, because the account stopped being
+able to write at `respond_by` and recording the sweep's clock would make the
+audit late in the direction that flatters the operator. Here the act being
+recorded is the **notification**, which genuinely happened when the sweep ran,
+and the breach's own moment already has a column — `due_at`. Both stamps say
+when their own event happened, which is the rule, not an exception to it.
+
+A consequence worth stating: **the cadence is visible here in a way it is not in
+the ladder.** D135 can run every five minutes and say the interval affects
+nothing a row says. This sweep's whole output is a message, so the interval *is*
+the worst case for how late HQ hears — fifteen minutes against an SLA measured
+in hours, which is slack of about a percent.
+
+**A send that fails does not un-claim the row.** Re-claiming would re-warn on
+every subsequent pass, turning one unreachable mailbox into an unbounded stream.
+The failure is logged and the row stays reported.
+
+**Not gated on `hqCadences`**, on the D122 precedent and for its stated reason: a
+branch holds none of this table's rows, so the predicate is the tier
+discriminator and a better one — it selects rows by what they are, not by which
+deployment is asking.
+
+### Measured before writing
+
+Read-only against production `studioos-db`, aggregates only: `hq_escalations`
+holds **0 rows**, 0 of them open, 0 with a `due_at`. So migration 267's `ALTER`
+copies nothing, which is both why it is safe and why now is the cheapest moment
+it will ever have. The ledger carries 269 rows against 269 migration files on
+disk — nothing pending, nothing orphaned. Zero branches are provisioned, so no
+escalation has ever been raised and the silence has harmed nobody; this is a
+**latent** defect that fires on the first real use of a shipped surface, and the
+entry does not claim an incident.
+
+**Migration 267 is used, against D142's "267 stays free" — which was true when
+D142 was written.** No new `/api/*` method, so `check-api-drift` has nothing to
+say. No `frontend/src` change, so `docs/` does not move.
