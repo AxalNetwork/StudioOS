@@ -549,6 +549,144 @@ r.post('/:uid/renew', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+/**
+ * What a termination does to the people who administered the licence (D145).
+ *
+ * WHAT WAS LEFT BEHIND. Terminate released the territory, set the status and —
+ * since D139 — withdrew the licence's open compliance notices. It never touched
+ * `users.role`, `licence_admins` or `is_active`, so afterwards the licence's
+ * administrators still held `role = 'admin'` over a licence that no longer
+ * exists: an unscoped admin, which is exactly the state D134's door was built
+ * to make unreachable, arriving through the back.
+ *
+ * DEMOTE THEN DETACH, NEVER THE REVERSE, and that order is not a preference.
+ * `DELETE /:uid/admins/:userId` refuses while the account still holds the role
+ * precisely because detaching first leaves an admin bound to nothing. This
+ * composes the two in the order D134 already enforces between them.
+ *
+ * ONE FLOOR, NOT TWO. A `super_admins` holder is skipped: the elevation sits ON
+ * the admin role, so demoting its holder would leave it pointing at a
+ * non-admin — the same reason `POST /users/:userId/demote-admin` refuses that
+ * target. A "never demote the last active admin" floor was considered and NOT
+ * added, because `admin.ts` already retired its own for the reason that applies
+ * here unchanged: the caller has just passed `requireSuperAdmin`, is an active
+ * admin, and cannot be one of this licence's administrators being demoted — so
+ * at least one active admin always survives, by construction. A conjunct that
+ * cannot be false is not a guard.
+ *
+ * TRUST OBLIGATIONS FOLLOW THE ROLE; THE EXPLORING REVIEW DOES NOT. Re-seeding
+ * with `pruneStaleForRole` waives the admin-only obligations rather than
+ * deleting them, so the audit survives — the same call the demote route makes.
+ * `resetExploringReview` is deliberately NOT made: it is module-private to
+ * `routes/admin.ts`, and more to the point these accounts are being
+ * DEACTIVATED, so they are in no review queue to reset. Reactivating one is a
+ * deliberate act that goes through the role route and its own bookkeeping.
+ *
+ * REPORTED, NEVER THROWN — D139's shape, on D111's precedent. A recorded
+ * termination must not be undone by a failure in the cleanup after it, and a
+ * partial result is returned per account with its reason rather than collapsed
+ * into one boolean.
+ */
+export async function deprovisionLicenceAdmins(
+  env: Env,
+  licenceId: number,
+  actor: { id: number; name?: string | null; email: string },
+  note: string,
+): Promise<{
+  ok: boolean;
+  demoted: number;
+  detached: number;
+  deactivated: number;
+  skipped: { user_id: number; reason: string }[];
+  reason?: string;
+}> {
+  const out = { ok: true, demoted: 0, detached: 0, deactivated: 0, skipped: [] as { user_id: number; reason: string }[] };
+  let admins: { user_id: number; email: string; name: string | null; role: string }[] = [];
+  try {
+    const res = await env.DB.prepare(
+      `SELECT la.user_id, u.email, u.name, u.role
+         FROM licence_admins la JOIN users u ON u.id = la.user_id
+        WHERE la.licence_id = ?`,
+    ).bind(licenceId).all<{ user_id: number; email: string; name: string | null; role: string }>();
+    admins = res.results ?? [];
+  } catch (e) {
+    return {
+      ...out,
+      ok: false,
+      reason: 'The licence\'s administrators could not be read, so none were deprovisioned and any '
+        + 'of them may still hold the admin role. The termination itself is recorded: ' + (e as Error).message,
+    };
+  }
+  if (!admins.length) return out;
+
+  // The elevation holders, read once. Same lookup `routes/licence.ts` uses.
+  let holders: Set<number>;
+  try {
+    const res = await env.DB.prepare('SELECT user_id FROM super_admins').all<{ user_id: number }>();
+    holders = new Set((res.results || []).map((h) => Number(h.user_id)));
+  } catch (e) {
+    // UNREADABLE MEANS SKIP EVERYTHING, not demote everything. Failing closed
+    // here costs a manual cleanup; failing open could strip the elevation's
+    // holder of the role it sits on.
+    return {
+      ...out,
+      ok: false,
+      reason: 'The Super Admin holders could not be read, so no administrator was demoted — '
+        + 'demoting the holder would leave the elevation pointing at a non-admin. '
+        + 'The termination itself is recorded: ' + (e as Error).message,
+    };
+  }
+
+  for (const a of admins) {
+    if (holders.has(Number(a.user_id))) {
+      out.skipped.push({
+        user_id: a.user_id,
+        reason: 'Holds the Super Admin elevation, which sits on the admin role — revoke or transfer it first.',
+      });
+      continue;
+    }
+    try {
+      await env.DB.batch([
+        env.DB.prepare("UPDATE users SET role = 'exploring', is_active = 0 WHERE id = ?").bind(a.user_id),
+        env.DB.prepare('DELETE FROM licence_admins WHERE licence_id = ? AND user_id = ?').bind(licenceId, a.user_id),
+      ]);
+      out.demoted += 1;
+      out.detached += 1;
+      out.deactivated += 1;
+    } catch (e) {
+      out.ok = false;
+      out.skipped.push({ user_id: a.user_id, reason: `Could not be deprovisioned: ${(e as Error).message}` });
+      continue;
+    }
+    // Best-effort from here: the role is already revoked, and neither of these
+    // failing leaves the account holding a power it should not have.
+    try {
+      const { seedObligations } = await import('../services/trust');
+      await seedObligations(env, a.user_id, 'exploring', { pruneStaleForRole: true });
+    } catch (e) { console.error('[licence/terminate] trust re-seed failed', (e as Error).message); }
+    try {
+      const actorHash = await hashEmail(actor.email);
+      const targetHash = await hashEmail(a.email);
+      await env.DB.batch([
+        // `role_changed` / `your_role_changed`, not a new action name: both are
+        // already in admin_security.ts's audit allowlist and ActivityPage's
+        // label map, and a distinct action would be invisible in every reader.
+        env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?,?,?,?)')
+          .bind('role_changed',
+            `Super admin ${actor.name || actor.email} demoted ${a.name || a.email} from ${a.role} to exploring `
+            + `and deactivated the account: the licence they administered was terminated. Reason: ${note}`,
+            actorHash, actor.id),
+        env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?,?,?,?)')
+          .bind('your_role_changed',
+            `Your administrator role was removed and your account deactivated because the licence you `
+            + `administered was terminated. Reason: ${note}`,
+            targetHash, a.user_id),
+      ]);
+    } catch (e) { console.error('[licence/terminate] activity log failed', (e as Error).message); }
+  }
+  return out;
+}
+
 r.post('/:uid/terminate', async (c) => {
   try {
     const admin = await requireSuperAdmin(c);
@@ -615,12 +753,21 @@ r.post('/:uid/terminate', async (c) => {
       body: `${note} ${codes.length ? `The ${codes.length === 1 ? 'territory' : `${codes.length} territories`} it held ${codes.length === 1 ? 'has' : 'have'} been released.` : ''}`.trim(),
       payload: { licence_uid: licence.uid, released: codes },
     });
+    // D145 — AFTER the notification, and that ordering is load-bearing. The
+    // comment above says the administrators are still bound at that point so
+    // the lookup finds them; deprovisioning first would send the "your licence
+    // has been terminated" mail to nobody. Reported as its own field, never
+    // thrown, exactly as `notices_withdrawn` above.
+    const adminsDeprovisioned = await deprovisionLicenceAdmins(
+      c.env, licence.id, { id: admin.id, name: (admin as any).name, email: admin.email }, note,
+    );
     // Pushed AFTER the territory release, so the copy the branch receives
     // reports the same empty territory the ledger now holds.
     const pushed = await pushLicenceToBranch(c.env, licence.id);
     return c.json({
       ok: true, status: 'terminated', released: codes, pushed,
       notices_withdrawn: noticesWithdrawn,
+      admins_deprovisioned: adminsDeprovisioned,
     });
   } catch (e) { return mapError(c, e); }
 });

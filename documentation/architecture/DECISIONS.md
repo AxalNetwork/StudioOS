@@ -11906,3 +11906,82 @@ role.
 
 **No migration — 267 was used by D143 and 268 is free.** No new `/api/*` method.
 `frontend/src` moves, so `docs/` is rebuilt.
+
+## D145 — terminating a licence now deprovisions the people who administered it
+
+**Context.** `POST /api/admin/licences/:uid/terminate` released the territory,
+set `status = 'terminated'`, recorded the event, and — since D139 — withdrew the
+licence's open compliance notices so the ladder stopped freezing administrators
+over a licence that no longer existed. It never touched `users.role`,
+`licence_admins` or `is_active`.
+
+So after a termination its administrators still held `role = 'admin'`, bound to
+a licence that had been ended. **That is the unscoped admin D134's door was
+built to make unreachable, arriving through the back** — D134 made promotion
+licence-bound by construction precisely so no path could produce one.
+
+**The decision: revoke and unbind, keep the record.** Per administrator, in one
+batch: `role = 'exploring'`, `is_active = 0`, and the `licence_admins` row
+deleted. The account, the audit and the licence's history all survive —
+"terminated" here has always meant role revocation and deactivation, never
+deletion, because no account of any role can be deleted anywhere in this
+codebase and the audit depends on the rows staying.
+
+### Three things the code decided differently from the plan
+
+**1. One floor, not two — and `admin.ts` had already argued why.** The plan
+named two: never demote a `super_admins` holder, and never demote the last
+active admin. The first is real and is enforced: the elevation sits **on** the
+admin role, so demoting its holder leaves it pointing at a non-admin, which is
+the same reason `POST /users/:userId/demote-admin` refuses that target.
+
+The second was **not** added, and the demote route's own header already
+explains it — it retired exactly that check for exactly this reason: *"the count
+can never be zero, because the caller has just passed `requireSuperAdmin` …
+So at least one active admin — the caller — always survives, by construction.
+The floor holds; the check that claimed to hold it was dead, and a conjunct that
+cannot be false is not a guard."* The terminating actor is a super admin, is
+active, and cannot be one of the licence's administrators being demoted. Adding
+the floor here would have been re-introducing the dead conjunct one file over.
+
+**2. The order is `notify` → `deprovision`, and that is load-bearing.** The
+existing comment above `notifyLicenceAdmins` says the administrators are still
+bound at that point *"so the lookup still finds them"*. Deprovisioning first
+would send the "your licence has been terminated" mail to nobody, because the
+bindings are how the recipients are found.
+
+**3. An unreadable `super_admins` demotes NOBODY — it fails closed.** The
+asymmetry is deliberate. Failing open would risk stripping the elevation's
+holder of the role it sits on, which is not recoverable through the API; failing
+closed costs a manual cleanup. The termination itself is recorded either way and
+the reason says so.
+
+### What it deliberately does not carry over from the demote route
+
+`seedObligations(..., { pruneStaleForRole: true })` **is** called, so the
+admin-only trust obligations are waived rather than deleted and the audit
+survives — the same call the demote route makes. `resetExploringReview` is
+**not**: it is module-private to `routes/admin.ts`, and more to the point these
+accounts are being deactivated, so they are in no review queue to reset.
+Reactivating one is a deliberate act that goes through the role route and its
+own bookkeeping.
+
+**No extraction of the demote route's body.** Sharing one definition was
+weighed — it is the pattern this repo has taken eight times — and rejected here
+because `resetExploringReview` is private to a live, carefully-documented route,
+and moving it would widen a licence fix into a refactor of the admin lifecycle.
+What is shared instead is the *value that matters*: both paths write
+`role = 'exploring'`, and both write `role_changed` / `your_role_changed` rather
+than a new action name, because a distinct action would be invisible in
+`admin_security.ts`'s allowlist and `ActivityPage`'s label map until three
+sweeps had been done.
+
+**Reported, never thrown** — D139's shape on D111's precedent, returned as
+`admins_deprovisioned` beside `notices_withdrawn`, per account with its reason.
+A recorded termination must not be undone by a failure in the cleanup after it.
+
+**No new `licence_events` value**, and a test pins that: widening migration
+187's CHECK needs a migration, which is what D139 learned the expensive way.
+
+**No migration — 268 is free.** No new `/api/*` method. No `frontend/src`
+change, so `docs/` does not move.
