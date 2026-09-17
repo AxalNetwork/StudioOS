@@ -670,7 +670,38 @@ export async function requireBranchNotSuspended(c: Context<{ Bindings: Env }>): 
     console.warn('[branch] branch_licence unreadable on a write gate', (e as Error).message);
     return;
   }
-  if (status === 'suspended') throw new Error(BRANCH_SUSPENDED);
+  if (status !== 'suspended') return;
+
+  // D142 — THE REASON IS READ SEPARATELY, AND CANNOT UNFREEZE THE BRANCH.
+  //
+  // The first draft selected `status, suspended_at, suspended_note` together,
+  // which reads as tidier and is a hole: on any database whose `branch_licence`
+  // is narrower than migration 256 the widened SELECT throws `no such column`,
+  // the catch above treats that as "unreadable, so not suspended", and a branch
+  // HQ suspended goes on trading. A unit fixture caught it — the freeze test
+  // went 200 where it had been 423 — which is the D133 lesson arriving from the
+  // other side: there, fixtures narrower than the schema made a present row
+  // read as absent; here, one made an enforced freeze read as lifted.
+  //
+  // So the decision is made on `status` alone, exactly as it was before this
+  // change, and the reason is decoration fetched afterwards. A copy that cannot
+  // say WHY it is suspended is still suspended, and the shell renders a stated
+  // absence rather than a lifted freeze.
+  let since: string | null = null;
+  let reason: string | null = null;
+  try {
+    const row = await c.env.DB.prepare(
+      'SELECT suspended_at, suspended_note FROM branch_licence WHERE id = 1',
+    ).first<{ suspended_at: string | null; suspended_note: string | null }>();
+    since = row?.suspended_at ?? null;
+    reason = row?.suspended_note ?? null;
+  } catch (e) {
+    console.warn('[branch] suspension reason unreadable; the freeze still holds', (e as Error).message);
+  }
+  // The message stays the sentence `AUTH_ERROR_STATUSES` keys on, so every
+  // existing reader is unchanged; what is new is the two fields hung off it,
+  // which `branchSuspendedBody` turns into the `code` the shell keys on.
+  throw Object.assign(new Error(BRANCH_SUSPENDED), { since, reason });
 }
 
 /**

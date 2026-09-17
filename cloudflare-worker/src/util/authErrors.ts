@@ -35,6 +35,26 @@ export const STEP_UP_REQUIRED = 'step_up_required';
 export const ADMIN_FROZEN = 'admin_frozen';
 
 /**
+ * D142 — the MACHINE-READABLE half of `BRANCH_SUSPENDED`, and the reason it is
+ * a second constant rather than the thrown sentence itself.
+ *
+ * `ADMIN_FROZEN` above gets to be both, because the sentence it throws is
+ * already a slug. `BRANCH_SUSPENDED` (`util/branch.ts`) is a sentence written
+ * for a person — *"Branch suspended by HQ"* — and shipping that as `code` would
+ * make every client key on prose that anyone is entitled to reword. So the
+ * throw keeps its sentence and the body carries this.
+ *
+ * WHY IT DID NOT EXIST UNTIL NOW, WHICH IS THE DEFECT. D107 gave the branch
+ * gate its 423 through `AUTH_ERROR_STATUSES` alone, so a frozen branch's write
+ * shipped as `423 {detail}` and **nothing else** — while `api.js` keys strictly
+ * on `code === 'admin_frozen'`. The branch 423 therefore fell through to
+ * whatever generic error the page happened to print, and three places in the
+ * repo said the frozen-branch banner had shipped. It had not, and it could not
+ * have: there was nothing on the wire to key it on.
+ */
+export const BRANCH_SUSPENDED_CODE = 'branch_suspended';
+
+/**
  * Which `admin_notices.status` values hold an account frozen, and therefore
  * which ones a licence's reinstatement has to be clear of (D135).
  *
@@ -131,6 +151,40 @@ export function adminFrozenBody(err: unknown): {
     detail: 'This account is frozen until an outstanding compliance notice is answered.',
     code: ADMIN_FROZEN,
     notice,
+  };
+}
+
+/**
+ * D142 — the branch freeze's body, the twin of `adminFrozenBody` above, and
+ * shaped by the same argument: a 423 that does not say WHY or SINCE WHEN is the
+ * right number and still a dead end.
+ *
+ * WHAT IT CARRIES AND WHY EACH IS THERE. `since` is the licence copy's
+ * `suspended_at` and `reason` is its `suspended_note` — HQ's own words, pushed
+ * with the licence (migration 256), not this worker's paraphrase of them. The
+ * branch admin reading the refusal is being asked to act on a decision somebody
+ * else made, so the sentence they act on has to be that person's.
+ *
+ * BOTH ARE NULLABLE, AND NULL IS NOT AN ERROR. `suspended_note` is optional on
+ * the ledger and a copy pushed before HQ typed one carries none; rendering a
+ * stated absence is the shell's job, and inventing a reason here to avoid it
+ * would be the worst kind of helpful.
+ *
+ * THE WAY OUT IS NOT IN THIS BODY, deliberately. The appeal is an escalation
+ * (`POST /api/branch/escalations`, kind `other`), that route is NOT
+ * suspension-gated, and its own header says why: gating it would freeze the one
+ * door out of the freeze. The shell links to it; the refusal does not need to.
+ */
+export function branchSuspendedBody(err: unknown): {
+  detail: string; code: string; since: string | null; reason: string | null;
+} {
+  const e = err as { since?: unknown; reason?: unknown } | null;
+  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  return {
+    detail: BRANCH_SUSPENDED,
+    code: BRANCH_SUSPENDED_CODE,
+    since: str(e?.since),
+    reason: str(e?.reason),
   };
 }
 

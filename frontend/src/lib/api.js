@@ -513,6 +513,20 @@ export async function request(path, options = {}) {
           }));
         } catch { /* noop */ }
       }
+      // D142 — THE BRANCH TWIN, and the reason it did not exist until now is
+      // the whole defect. `requireBranchNotSuspended` threw a bare Error, so
+      // its 423 shipped as `{detail}` alone and this strict `code` check could
+      // never have matched it — which is why `423` appearing nowhere in
+      // `frontend/src` was measurable at all, and why three places in the repo
+      // claimed a frozen-branch banner had shipped when nothing could key one.
+      // `since` and `reason` are HQ's own, pushed with the licence copy.
+      if (res.status === 423 && err && err.code === 'branch_suspended' && typeof window !== 'undefined') {
+        try {
+          window.dispatchEvent(new CustomEvent('studioos:branch_suspended', {
+            detail: { since: err.since || null, reason: err.reason || null, message: msg },
+          }));
+        } catch { /* noop */ }
+      }
       // BLOCK-AUTH-03 — step-up gate. Prompt for a fresh TOTP via the global
       // modal, then retry the ORIGINAL request once. `__steppedUp` guards
       // against an infinite loop; we never intercept the step-up call itself.

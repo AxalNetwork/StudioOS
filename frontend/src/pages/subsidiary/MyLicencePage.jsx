@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   Map, Users, Calendar, Percent, Building2, AlertTriangle, Bell, Loader2, History, Lock,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { FROZEN, STILL_READABLE, FREEZE_RULE } from '../../lib/branchFreeze';
 import { reportError } from '../../lib/log';
 import { FREEZING_STATUSES, noticeKindLabel } from '../../lib/notices';
 
@@ -424,6 +426,69 @@ export default function MyLicencePage() {
           </p>
         )}
       </header>
+
+      {/* D142 / S7 — WHAT A SUSPENSION ACTUALLY DOES, on the page that holds
+          the licence it was done to. The shell bar announces a refusal at the
+          moment it happens; this is the state, and the split is the one
+          `AdminFrozenBar` already draws between a bar and this page.
+
+          THE TWO LISTS COME FROM `lib/branchFreeze.js`, NOT FROM COPY TYPED
+          HERE. The Locked column is a claim about what the SERVER refuses, and
+          a hand-written version of it is a second copy of a rule that lives in
+          `requireBranchNotSuspended`'s call sites. `branch_shell_s7_s13` asserts
+          the files named there are exactly the files that call the gate, so a
+          sixth gate with no row — or a row naming a file with no gate — fails
+          the build rather than quietly mis-describing the product. */}
+      {l.status === 'suspended' && (
+        <section
+          data-testid="branch-suspended-detail"
+          className="rounded-xl border border-rose-200 bg-rose-50/60 p-4 dark:border-rose-900 dark:bg-rose-950/30"
+        >
+          <h2 className="text-sm font-bold text-rose-900 dark:text-rose-200">
+            Queues frozen by HQ{l.suspended_at ? ` since ${fmtDate(l.suspended_at)}` : ''}.
+          </h2>
+          <p className="mt-1 text-[13px] text-rose-900/90 dark:text-rose-200/90">
+            Your database is intact and nothing here is deleted. {FREEZE_RULE}
+          </p>
+          <div className="mt-3 grid gap-4 md:grid-cols-2">
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                Still readable · your database, untouched
+              </div>
+              <ul className="mt-1.5 space-y-1.5">
+                {STILL_READABLE.map((r) => (
+                  <li key={r.row} className="text-[12.5px] text-gray-700 dark:text-gray-300">
+                    <span className="font-semibold">{r.row}</span> — {r.note}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-rose-700 dark:text-rose-300">
+                Locked · frozen by HQ
+              </div>
+              <ul className="mt-1.5 space-y-1.5" data-testid="branch-locked-rows">
+                {FROZEN.map((r) => (
+                  <li key={r.row} className="text-[12.5px] text-gray-700 dark:text-gray-300">
+                    <span className="font-semibold">{r.row}</span> — {r.note}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          {/* THE ONE DOOR OUT, and it is deliberately not gated by the freeze:
+              `routes/branch_escalations.ts` says so in its own header, because
+              gating the appeal would freeze the way out of the freeze. */}
+          <p className="mt-3 text-[12.5px] text-rose-900 dark:text-rose-200">
+            There is no field on this branch that can change the licence status. The way out is an
+            appeal to HQ, which is an escalation like any other —{' '}
+            <Link to="/branch/approvals" className="font-semibold underline underline-offset-2">
+              open one
+            </Link>
+            .
+          </p>
+        </section>
+      )}
 
       <div className="grid gap-5 md:grid-cols-2">
         <Panel icon={Map} title="Territories held">

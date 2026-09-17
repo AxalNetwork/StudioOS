@@ -271,7 +271,8 @@ import { writeCronRunHistory } from './util/cronHistory';
 import { branchOf, assertBranchAppUrl } from './util/branch';
 // D110 — one table of which thrown sentence is which status, shared with
 // `routes/_t13t14t15_helpers.ts`'s `mapError`. The two used to disagree.
-import { ADMIN_FROZEN, AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, adminFrozenBody, stepUpRefusalBody } from './util/authErrors';
+import { ADMIN_FROZEN, AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, adminFrozenBody, branchSuspendedBody, stepUpRefusalBody } from './util/authErrors';
+import { BRANCH_SUSPENDED } from './util/branch';
 import { enqueueReembedChunks } from './util/reembedSweep';
 import { rebuildUsersRoleCheckForInvestor, rebuildUsersRoleCheckForAdvisor } from './util/usersRoleRebuild';
 import { bindingKey } from './util/schemaBootstrap';
@@ -1089,6 +1090,10 @@ app.onError((err: any, c) => {
   // reason the step-up carries its TTL: the status alone leaves the holder with
   // nothing to act on.
   if (msg === ADMIN_FROZEN) return c.json(adminFrozenBody(err), 423);
+  // D142 — the branch twin. Without this line the gate's 423 fell through to
+  // the table below and shipped as `{detail}` alone, which no client can key
+  // on; `api.js` keys strictly on `code`.
+  if (msg === BRANCH_SUSPENDED) return c.json(branchSuspendedBody(err), 423);
   if (msg === STEP_UP_REQUIRED) {
     // D134 — the body comes from `util/authErrors.ts` so `mapError`, which 31
     // route files reach instead of this handler, answers with the same object.

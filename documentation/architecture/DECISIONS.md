@@ -11597,3 +11597,149 @@ what `lib/README.md`'s rule forbids.
 
 **One new `/api/*` method with its route in the same commit; no migration — 267
 stays free.** `frontend/src` moves, so `docs/` is rebuilt.
+
+## D142 — the branch's own view of being frozen, and of being watched (S7, S13)
+
+**Every power around this was already built and the branch could not be told
+about any of it.** HQ can suspend a licence (D135), the suspension reaches the
+branch (D137), the branch can escalate (D112) — and a suspended branch's badge
+was byte-identical to an active one, a frozen write surfaced as a generic page
+error, and while HQ was inside a branch admin's account the branch rendered its
+ordinary purple *"Admin Mode"* bar with a working View-as picker.
+
+### The 423 was anonymous on the wire, and nothing could be built on it
+
+`requireBranchNotSuspended` threw `new Error(BRANCH_SUSPENDED)` — a sentence
+written for a person — which shipped as `423 {"detail": …}` and nothing else.
+Its HQ twin `adminFrozenBody` sends `{detail, code:'admin_frozen', notice}`, and
+`frontend/src/lib/api.js` keys **strictly** on that `code`. So the branch 423
+reached no handler.
+
+**That is why three places in this repo could claim the frozen-branch banner had
+shipped.** It had not, and it could not have: there was nothing on the wire to
+key one on. `branchSuspendedBody` is the twin now, carrying
+`code: 'branch_suspended'` plus HQ's own `suspended_at` and `suspended_note` —
+HQ's words rather than this worker's paraphrase, because the admin reading the
+refusal is being asked to act on somebody else's decision. Both production error
+paths route through it (`app.onError` and `mapError`, the two D110 and D134
+exist to keep in step), and a test pins that rather than trusting it.
+
+### What a suspension actually freezes — the artboard drew four rows and one was enforced
+
+Re-counted against the code: `requireBranchNotSuspended` had exactly **four**
+call sites, all Approvals-or-admissions. Mapped against S7's Locked column:
+
+| S7 draws as locked | before | after |
+| --- | --- | --- |
+| **Approvals** | ✅ three lanes | unchanged |
+| **Programs** — *"admissions closed; the running cohort continues"* | ✅ `admin_cohort.ts`'s gate is on `/applications/:id/decide`, admissions exactly | unchanged — the running cohort's week decisions stay open, which is what the canvas asks for |
+| **Community** — *"cannot be published"* | ❌ **zero** gates | **gated** |
+| **Seat assignment** | ❌ nothing to gate | **recorded, not drawn** |
+
+**The rule for Community, because it is three files and fifteen handlers.** A
+suspended branch may not put anything **new** under the brand, and may still
+take things **down**. So `approve`, `publish`, `feature` and the two circle
+writes that can set `published` are refused; `reject`, `unpublish`, `cancel`,
+`delete` and a capacity edit are not. Freezing a takedown would trap a frozen
+branch with content under its own brand it cannot remove — worse than the freeze
+it implements — and the canvas asks for exactly this split. Asserted from both
+sides: the seven that must refuse, and the eight that must not.
+
+**Seat assignment locks a control that was never built, and this corrects a
+claim the task list still carried.** `seat_assignments` has **no migration**
+(zero hits in `cloudflare-worker/sql/`, absent from the baseline), **no route**
+and **no `api.js` method**; its only trace in the worker is a comment at
+`routes/licence.ts` recording that the store was promised and never delivered.
+D127 and D129 chose a different design — seats-used is counted from `users.role`
+and `seats_used_basis` says so on screen. Drawing a freeze on it would be the
+same false claim this programme has deleted three times (D129's seat store,
+D131's six S1 blocks, D140's adjustable dates), so it lives in
+`lib/branchFreeze.js`'s `NOT_BUILT` with its measurement, and a test fails the
+day a migration creates the table — at which point the row can be drawn for
+real.
+
+### One list, read by the screen and asserted against the server
+
+`lib/branchFreeze.js` names, per locked row, the route **files** that enforce
+it. `branch_shell_s7_s13.test.mjs` reads the worker and asserts the named set
+and the enforcing set are identical: a sixth gate with no row fails, and a row
+whose file stopped gating fails. Without it the screen drifts from the product
+silently — and here that is worse than a stale promise, because a branch would
+be told a write is frozen when it is not.
+
+That is the seventh consolidation on this argument: D127 one `GROUP BY role`,
+D128 one LIKE escaper, D130 one definition of open, D131 one count, D138 one
+definition of what freezes an ADMIN, D140 one zone formatter, D142 one
+definition of what freezes a BRANCH.
+
+### A defect this change introduced, and the fixture that caught it
+
+The first draft selected `status, suspended_at, suspended_note` in one
+statement, which reads as tidier. On any database whose `branch_licence` is
+narrower than migration 256 that throws `no such column`, the gate's existing
+catch reads it as *"unreadable, so not suspended"*, and **a branch HQ suspended
+goes on trading.** The freeze test went 200 where it had been 423.
+
+The decision is made on `status` alone now, exactly as before, and the reason is
+fetched afterwards in its own try: **a copy that cannot say why it is suspended
+is still suspended.** This is D133's lesson arriving from the other side —
+there, fixtures narrower than the schema made a present row read as absent; here
+one made an enforced freeze read as lifted.
+
+**Two stand-ins were narrower than the thing they stood in for**, and both are
+widened: the fixture's `branch_licence` was two columns, and the test app's
+`onError` hand-built `{detail}` under a comment promising it could not drift
+from production — it had, the moment the refusal grew a `code`. It calls the
+real body builder now. The structural test also walked only the **first** gate
+per file, which was fine while every file had one; events and circles now have
+two and four.
+
+### S13 — the payload written, never read, and never cleared
+
+`SupportRedeemPage` has written `localStorage.supportSession` since D120 under a
+comment saying it is *"stored for the banner"*. That key occurred **exactly
+once** in all of `frontend/src` — the setter. No reader, and nothing removed it:
+`clearSession` purged five keys and left this one, so the blob outlived the
+thirty-minute session **and** outlived sign-out on that browser. A banner built
+on it naively would have told the branch user's *next ordinary session* that HQ
+was inside their account.
+
+`lib/supportSession.js` owns the key, expires the payload against its own
+`expires_at`, clears it on the way past, and is what `clearSession` calls — so
+the purge and the reader cannot be renamed apart.
+
+**And what rendered before was worse than nothing for an admin target.**
+`isImpersonating = !!realUser`, which a support session never sets (the operator
+is a row in HQ's database this deployment cannot read), so supporting a branch
+**admin** mounted `PortalSwitcher`'s ordinary purple bar with a working View-as
+picker — an HQ-driven session dressed as the admin's own — and supporting anyone
+else rendered nothing. `HqSupportSessionBar` mounts **above** `PortalSwitcher`,
+and the test asserts the order, so that bar can never be the only chrome on a
+session the viewer did not start. It has **no dismiss control at all**, unlike
+the frozen bars: it describes something still happening, not a refusal that
+already finished.
+
+### The false claims, re-counted rather than trusted
+
+An earlier pass recorded "six false claims plus two tests". Re-measured against
+this tree there is **one** genuinely false attribution —
+`branch_escalations.ts` credited *PR 5* with shipping the banner, which it
+never did — and it is corrected. The others (`branch_approvals.ts`,
+`util/branch.ts`, `BranchApprovals.jsx`, and the two test comments) were
+forward-looking sentences about what the banner tells a branch to do, and D142
+makes them true rather than needing deletion. **The count is what the code says,
+not what a previous note remembered.**
+
+### Not built, and stated rather than left looking overlooked
+
+S13's *"audit line it leaves"* panel. Every reader of `impersonation_sessions`
+is an HQ route (`admin.ts`, `admin_cohort.ts`, `admin_security.ts`); there is no
+branch-side read of the branch's own rows, and D122 made those rows close
+correctly but gave nobody on the branch a way to see them. The canvas's
+justification is exactly right — *"the branch database is what was read, and a
+tenant should not have to ask HQ what was done to it"* — so it is filed as its
+own route rather than faked from the client's own stored payload, which knows
+only about the session it is in.
+
+**No migration — 267 stays free.** No new `/api/*` method, so `check-api-drift`
+has nothing to say. `frontend/src` moves, so `docs/` is rebuilt.
