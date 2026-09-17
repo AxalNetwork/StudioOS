@@ -501,6 +501,91 @@ export async function applyPromoCeiling(
   return { ok: true };
 }
 
+/**
+ * Store the master template library HQ pushed, as a dated copy (migration 268,
+ * D147).
+ *
+ * THE WHOLE LIBRARY IS ONE PUSH, AND THAT IS WHAT MAKES WITHDRAWAL POSSIBLE.
+ * `applyPromoCeiling` above upserts one row and can stop there because there is
+ * only ever one. A library is a SET, so a push that only ever inserted and
+ * updated would leave a template HQ archived-and-removed on the branch forever,
+ * and the branch would go on offering a document HQ has withdrawn. So the write
+ * is a reload — empty, then insert what HQ sent — in one `DB.batch`, which runs
+ * as a single transaction: the DELETE only takes effect if every INSERT after
+ * it does, so a push that fails part-way leaves the previous library standing
+ * rather than an empty picker.
+ *
+ * AN EMPTY PUSH IS A REAL PUSH. HQ sending zero templates means HQ's library is
+ * empty, which is a true statement about HQ and must reach the branch; the row
+ * this writes into `branch_templates_sync` is what lets the page tell "HQ has
+ * nothing" apart from "HQ has never pushed". Those are different sentences and
+ * only one of them is about HQ.
+ *
+ * `pushed_at` IS HQ'S STAMP, never this database's write time — migration 256's
+ * rule, so an "as of" never gets younger than the fact it reports.
+ */
+export async function applyTemplateCopy(
+  env: Env,
+  p: { templates: Array<Record<string, unknown>>; pushed_at: string },
+): Promise<{ ok: true; stored: number; withdrawn: number }> {
+  if (!branchOf(env)) throw new Error('publishTemplate is only live on a branch');
+
+  const pushedAt = String(p?.pushed_at || new Date().toISOString());
+  const now = new Date().toISOString();
+
+  // Coerced at the boundary, the way every other apply* here does it: the
+  // caller is another Worker in the same account, which makes it trusted for
+  // authorisation and not for arithmetic.
+  const rows = (Array.isArray(p?.templates) ? p.templates : [])
+    .map((t) => ({
+      slug: String((t as any)?.slug || '').trim().slice(0, 120),
+      title: String((t as any)?.title || '').trim().slice(0, 300),
+      category: String((t as any)?.category || '').trim().slice(0, 40) || null,
+      version: Math.max(1, Math.trunc(Number((t as any)?.version) || 1)),
+    }))
+    .filter((t) => t.slug && t.title);
+
+  // WHAT FELL OUT OF THE PUSH, COMPUTED AS A SET DIFFERENCE IN JS.
+  //
+  // Two SQL forms were tried first and both are wrong here. `DELETE … WHERE
+  // slug NOT IN (…)` builds its placeholder list with `${…}`, which lands in
+  // the query TEXT where no binding protects it — `check-sql-prepare` refuses
+  // it, correctly. And `DELETE … WHERE updated_at < ?` against this push's own
+  // stamp looks exact and is not: two pushes inside the same millisecond share
+  // a stamp, the comparison is false for every row, and NOTHING is withdrawn.
+  // That is a silently inert sweep, and the test that caught it was flaky
+  // rather than failing — which is worse than either.
+  //
+  // So the write is a reload — empty the table, insert what HQ sent — and the
+  // count is arithmetic on two sets. `DB.batch` runs its statements in one
+  // transaction, so a push that fails part-way rolls back rather than leaving
+  // the picker empty; the DELETE can only take effect if every INSERT after it
+  // does too.
+  const existing = await env.DB.prepare('SELECT slug FROM branch_templates').all<{ slug: string }>();
+  const incoming = new Set(rows.map((t) => t.slug));
+  const withdrawn = (existing.results || []).filter((r) => !incoming.has(String(r.slug))).length;
+
+  const statements = [
+    env.DB.prepare('DELETE FROM branch_templates'),
+    ...rows.map((t) => env.DB.prepare(
+      `INSERT INTO branch_templates (slug, title, category, version, pushed_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).bind(t.slug, t.title, t.category, t.version, pushedAt, now)),
+    // The sync row, so "HQ pushed an empty library" is distinguishable from
+    // "HQ has never pushed". In the SAME batch as the library: a stamp that
+    // survived a failed library write would date a library that is not there.
+    env.DB.prepare(
+      `INSERT INTO branch_templates_sync (id, pushed_at, count, updated_at)
+       VALUES (1, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         pushed_at = excluded.pushed_at, count = excluded.count, updated_at = excluded.updated_at`,
+    ).bind(pushedAt, rows.length, now),
+  ];
+
+  await env.DB.batch(statements);
+  return { ok: true, stored: rows.length, withdrawn };
+}
+
 /* ------------------------------------------------------------------ *
  * The branch's own escalation lane (D112)                             *
  * ------------------------------------------------------------------ */

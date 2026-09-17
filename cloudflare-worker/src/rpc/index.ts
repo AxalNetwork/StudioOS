@@ -27,7 +27,7 @@ import { WorkerEntrypoint } from 'cloudflare:workers';
 import type { Env } from '../types';
 import {
   branchHealth, branchOverview, branchSearchAccounts, applyLicenceCopy,
-  branchRevenueSummary, applyPromoCeiling, applyEscalationAnswer, openSupportSession,
+  branchRevenueSummary, applyPromoCeiling, applyEscalationAnswer, applyTemplateCopy, openSupportSession,
   moveAccountOut, inviteAccount,
   type SupportSessionRequest, type MoveOutRequest, type InviteRequest,
 } from './branchOps';
@@ -53,6 +53,19 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
   }
 
   applyEscalationAnswer(a: EscalationAnswer) { return applyEscalationAnswer(this.env, a); }
+
+  // D147 — HQ's master contract library, pushed whole. THE WHOLE LIBRARY AND
+  // NOT ONE TEMPLATE, because a library is a set: a per-template push can add
+  // and update but can never say "this one is gone", so a template HQ withdrew
+  // would stay offerable on every branch forever. F.5 named this
+  // `publishTemplate` and the name is kept; what travels is the set.
+  //
+  // No secret, for the reason the class header gives: this is an HQ-authored
+  // push, where "callable by any Worker in the account" costs at most a stale
+  // copy of documents HQ wrote.
+  publishTemplate(p: { templates: Array<Record<string, unknown>>; pushed_at: string }) {
+    return applyTemplateCopy(this.env, p);
+  }
 
   // THE ONE METHOD ON THIS CLASS THAT TAKES A SECRET, and the header above says
   // why that is not an inconsistency: everything else here is a read or an
