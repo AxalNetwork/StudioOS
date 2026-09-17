@@ -1081,8 +1081,116 @@ export interface AiUsageReport {
   refusals: Array<{ refusal: string; count: number }>;
 }
 
-export async function loadAiUsageReport(env: Env, days = 7): Promise<AiUsageReport> {
+/**
+ * What the platform records about its own AI guardrails, in one place.
+ *
+ * WHY THIS IS A FUNCTION AND NOT INLINE (D152). The llama-guard rollup was
+ * written inside `loadAiUsageReport` and served only `/api/monitoring/ai-usage`,
+ * so HQ's Security page — which draws an "AI safety" zone and an H7 guardrail
+ * panel — had no way to read it and rendered a refusal instead. Giving
+ * `admin_security.ts` its own copy of this SQL is the drift this repo has
+ * consolidated eleven times (D127 one `GROUP BY role`, D128 one LIKE escaper,
+ * D130 one definition of open, D131 one count, D138 one definition of what
+ * freezes, D140 one zone formatter, D142 one freeze list, D144 one notification
+ * row, D149 one bps formatter, D151 one name for the branch). **Twelfth.**
+ *
+ * TWO STORES, BECAUSE THEY COUNT DIFFERENT THINGS AND BOTH ARE REAL.
+ *
+ *   · `ai_usage_logs.safety_score` (migration 040) is written by `recordUsage`
+ *     on EVERY router call, so `task = 'safety'` rows are every guard
+ *     EVALUATION and its verdict. That is the safe/unsafe rate.
+ *   · `advisor_turn_audit` (migration 043) is written by `writeTurnAudit` from
+ *     seventeen call sites in `routes/advisor.ts`, and records what the guard
+ *     caused: `refusal_reason = 'safety_block'` is a turn that was BLOCKED, and
+ *     `shadow_flagged = 1` is an output the screen FLAGGED. A verdict and a
+ *     consequence are not the same number, and reporting one as the other is
+ *     how a safety figure comes to mean nothing.
+ *
+ * EACH READ FAILS ON ITS OWN. `advisor_turn_audit` is lazily bootstrapped
+ * (`ensureAuditSchema`), so its absence is a state a caller can actually meet —
+ * and an absent table read as "zero hits" is the #204 defect this programme has
+ * fixed repeatedly. `evaluated` and `enforcement` therefore carry their own
+ * `available` flag rather than collapsing to zeros.
+ */
+export type GuardrailCounters = {
+  window_days: number;
+  since: string;
+  /**
+   * llama-guard verdicts over `ai_usage_logs` where task = 'safety'.
+   *
+   * `safe_rate` is **null when nothing was evaluated**, not 0. A rate over an
+   * empty denominator is undefined, and rendering it as 0 would put "0% safe"
+   * on a security page for a window in which the guard never ran — the worst
+   * direction for this particular figure to be wrong in. (`loadAiUsageReport`
+   * keeps its own zero-defaulted copy: `AiUsageTab` has shipped with that
+   * shape and changing what its tiles mean is not this function's business.)
+   */
+  verdicts:
+    | { available: true; evaluated: number; safe_count: number; unsafe_count: number; safe_rate: number | null }
+    | { available: false; reason: string };
+  /** What the guard CAUSED, over `advisor_turn_audit`. */
+  enforcement:
+    | { available: true; blocked: number; flagged: number }
+    | { available: false; reason: string };
+};
+
+export async function loadGuardrailCounters(env: Env, days = 7): Promise<GuardrailCounters> {
   await ensureLogSchema(env);
+  const win = Math.max(1, Math.min(90, Math.round(days)));
+  const since = new Date(Date.now() - win * 86400_000).toISOString().slice(0, 19).replace('T', ' ');
+
+  const safety = await env.DB.prepare(
+    `SELECT
+        SUM(CASE WHEN safety_score IS NOT NULL THEN 1 ELSE 0 END) AS evaluated,
+        SUM(CASE WHEN safety_score >= 0.5 THEN 1 ELSE 0 END) AS safe_count,
+        SUM(CASE WHEN safety_score IS NOT NULL AND safety_score < 0.5 THEN 1 ELSE 0 END) AS unsafe_count
+       FROM ai_usage_logs WHERE created_at >= ? AND task = 'safety'`,
+  ).bind(since).first<{ evaluated: number; safe_count: number; unsafe_count: number }>()
+    .catch(() => undefined);
+
+  // `blocked` keys on the documented refusal value, not on `safety_score < 0.5`:
+  // a low score is the guard's opinion, and a block is what the route did with
+  // it. `flagged` rides `idx_advisor_turn_audit_flagged(shadow_flagged, created_at DESC)`.
+  const enforcement = await env.DB.prepare(
+    `SELECT
+        SUM(CASE WHEN refusal_reason = 'safety_block' THEN 1 ELSE 0 END) AS blocked,
+        SUM(CASE WHEN shadow_flagged = 1 THEN 1 ELSE 0 END) AS flagged
+       FROM advisor_turn_audit WHERE created_at >= ?`,
+  ).bind(since).first<{ blocked: number; flagged: number }>()
+    .catch(() => undefined);
+
+  const evaluated = Number(safety?.evaluated || 0);
+  return {
+    window_days: win,
+    since,
+    verdicts: safety === undefined
+      ? {
+        available: false,
+        reason: 'The guard-verdict rollup over `ai_usage_logs` did not complete, which is not the '
+          + 'same as no guarded call having run.',
+      }
+      : {
+        available: true,
+        evaluated,
+        safe_count: Number(safety?.safe_count || 0),
+        unsafe_count: Number(safety?.unsafe_count || 0),
+        safe_rate: evaluated > 0 ? Number(safety?.safe_count || 0) / evaluated : null,
+      },
+    enforcement: enforcement === undefined
+      ? {
+        available: false,
+        reason: '`advisor_turn_audit` could not be read on this database (migration 043). That is '
+          + 'not the same as no turn having been blocked or flagged.',
+      }
+      : {
+        available: true,
+        blocked: Number(enforcement?.blocked || 0),
+        flagged: Number(enforcement?.flagged || 0),
+      },
+  };
+}
+
+export async function loadAiUsageReport(env: Env, days = 7): Promise<AiUsageReport> {
   const win = Math.max(1, Math.min(90, Math.round(days)));
   const since = new Date(Date.now() - win * 86400_000).toISOString().slice(0, 19).replace('T', ' ');
 
@@ -1163,13 +1271,14 @@ export async function loadAiUsageReport(env: Env, days = 7): Promise<AiUsageRepo
       ORDER BY total_cost DESC`,
   ).bind(since).all<{ model: string; calls: number; total_cost: number; fb: number }>().catch(() => ({ results: [] as Array<{ model: string; calls: number; total_cost: number; fb: number }> }));
 
-  const safety = await env.DB.prepare(
-    `SELECT
-        SUM(CASE WHEN safety_score IS NOT NULL THEN 1 ELSE 0 END) AS evaluated,
-        SUM(CASE WHEN safety_score >= 0.5 THEN 1 ELSE 0 END) AS safe_count,
-        SUM(CASE WHEN safety_score IS NOT NULL AND safety_score < 0.5 THEN 1 ELSE 0 END) AS unsafe_count
-       FROM ai_usage_logs WHERE created_at >= ? AND task = 'safety'`,
-  ).bind(since).first<{ evaluated: number; safe_count: number; unsafe_count: number }>().catch(() => null);
+  // D152 — ONE DEFINITION OF THE ROLLUP, and this is now its caller rather than
+  // a second copy of the SQL. `safety` keeps the shape this endpoint has always
+  // returned, including zeros when the read fails: `AiUsageTab` is a shipped
+  // page and changing what its tiles mean is not this PR's concern. The RICHER
+  // form, which distinguishes "nothing was evaluated" from "the read did not
+  // complete", is what the new HQ surface consumes.
+  const counters = await loadGuardrailCounters(env, win);
+  const safety = counters.verdicts.available ? counters.verdicts : null;
 
   const calls = Number(totals?.calls || 0);
   return {

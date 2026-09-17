@@ -33,6 +33,7 @@ import { resolve } from 'node:path';
 import { SignJWT } from 'jose';
 
 import security from '../src/routes/admin_security.ts';
+import { codeOnly } from './_codeOnly.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const SUPER = 701;
@@ -410,8 +411,27 @@ test('filters_json that is not JSON does not take the request down', async () =>
 test('the two panels H7 draws with no store behind them say so', async () => {
   const db = freshDb();
   const r = await call(db, SUPER);
-  assert.equal(r.body.guardrails.available, false);
-  assert.match(r.body.guardrails.reason, /No guardrail-hit/);
+  // D152 RE-AIMED THE GUARDRAIL HALF, AND IT IS THE SIXTH TIME THIS CLASS HAS
+  // COME UP. The assertion was `guardrails.available === false` plus
+  // `/No guardrail-hit/` on its reason — so the guard pinning the refusal was
+  // the thing standing in the way of correcting it, exactly as D150 found one
+  // line below. The refusal was false: `ai_usage_logs.safety_score` is written
+  // on every router call and `advisor_turn_audit` carries the block and the
+  // flag, and both were already rolled up and rendered on `AiUsageTab`.
+  //
+  // What is asserted now is the property that replaced it: this endpoint
+  // POINTS at the counters rather than carrying a second copy of them, because
+  // both payloads land on one page. Both directions — the positive alone would
+  // pass on a field that also carried the figures.
+  assert.equal(r.body.guardrails.counters_on, '/api/admin/security/overview');
+  assert.equal(r.body.guardrails.field, 'ai_safety');
+  assert.ok(
+    !('verdicts' in r.body.guardrails) && !('enforcement' in r.body.guardrails),
+    '/governance carries a second copy of the counters — one page would render the same rollup twice',
+  );
+  // And the narrowed absences travel with the pointer, so a reader of this
+  // endpoint alone is not told a narrower truth than a reader of the other.
+  assert.ok(Array.isArray(r.body.guardrails.not_counted) && r.body.guardrails.not_counted.length > 0);
   assert.equal(r.body.tenant_view_available, false, 'the "Return to HQ view" overlay is claimed to exist');
   // D150 RE-AIMED THIS ASSERTION, AND THE RE-AIM IS THE POINT. It used to
   // require the reason to cite U1 — so the guard pinning the refusal was the
@@ -425,16 +445,47 @@ test('the two panels H7 draws with no store behind them say so', async () => {
   assert.doesNotMatch(r.body.tenant_view_reason, /U1/, 'U1 does not block a per-branch read');
 });
 
-test('the guardrail sentence is one constant, not two literals that can drift', async () => {
-  const src = readFileSync(
+test('the guardrail rollup is one definition, and the sentence it replaced cannot come back', async () => {
+  const raw = readFileSync(
     resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_security.ts'), 'utf8',
   );
-  const sentence = 'No guardrail-hit, flagged-output or token-anomaly counter is stored for the AI rails.';
+  // CODE, NOT COMMENTS, AND THE DISTINCTION IS THE WHOLE TEST. D152's header
+  // QUOTES the sentence it deleted, because a correction that does not say what
+  // it corrected is not a record. A raw scan would therefore fail the file that
+  // did the work — the mistake D148 made with `rank` and D150 made with U1.
+  const src = codeOnly(raw);
+  assert.match(raw, /No guardrail-hit, flagged-output or token-anomaly/,
+    'the header stopped recording which sentence D152 corrected');
+  assert.doesNotMatch(src, /No guardrail-hit, flagged-output or token-anomaly/,
+    'the three-clause refusal is rendered again — two of its clauses are false');
+
+  // ONE list of what is still uncounted: declared once, read by both zones.
   assert.equal(
-    src.split(sentence).length - 1, 1,
-    'the AI-safety sentence is written twice — /overview and /governance must share one constant',
+    src.split('AI_SAFETY_NOT_COUNTED').length - 1, 3,
+    'the not-counted list is declared once and read by /overview and /governance — three mentions, no more',
   );
-  assert.equal(src.split('absent(NO_AI_SAFETY_STORE)').length - 1, 2);
+  // ONE window, so the two zones cannot count different days.
+  assert.equal(
+    src.split('AI_SAFETY_WINDOW_DAYS').length - 1, 3,
+    'the AI-safety window is one constant read by the block and the pointer',
+  );
+  // ONE reader of the rollup in this file. A second call would be a second
+  // pair of D1 reads AND a second figure that can disagree with the first.
+  assert.equal(
+    (src.match(/loadGuardrailCounters\(/g) || []).length, 1,
+    'the rollup is called twice in one route file — one figure, one call',
+  );
+  // And the SQL itself is not here: this file reads the service, it does not
+  // restate it. That is the consolidation D152 exists for.
+  //
+  // THE SHAPE, NOT THE WORD, AND THE FIRST DRAFT OF THIS GOT IT WRONG. Banning
+  // the bare table names failed on correct code: the "by branch" reason NAMES
+  // both tables to explain why the counters are platform-wide, which is the
+  // refusal describing itself — the third time this programme has written a
+  // scan that forbids its own explanation. A query has to reach a table
+  // through FROM or JOIN, and no sentence about a table does that.
+  assert.doesNotMatch(src, /\b(FROM|JOIN)\s+(ai_usage_logs|advisor_turn_audit)\b/i,
+    'admin_security.ts queries the AI tables directly — that is the second copy of the rollup');
 });
 
 test('each IN-list has exactly as many placeholders as the array that fills it', () => {

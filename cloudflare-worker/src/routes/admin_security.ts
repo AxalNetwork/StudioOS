@@ -16,14 +16,17 @@
  * newest first — the existing /monitoring/audit read allows two actions only);
  * impersonation sessions, live and recent; active sessions and MFA coverage
  * among admins; the KYC queue by status; data-subject deletion requests with
- * the statutory clock.
+ * the statutory clock; and — since D152 — the AI guardrail counters, which
+ * this page denied for months while `AiUsageTab` rendered them one click away.
  *
  * WHAT IS NOT, AND IS NAMED RATHER THAN SAMPLED. A `security_events` ledger
  * (failed sign-ins, step-ups, permission grants, exports as one feed) — the
- * canvas calls it "the one real backend build" and it is not built; AI-safety
- * counters; a sanctions screen; backup and restore-drill status. Each comes
- * back `{ available: false, reason }` so the page says so in the zone the
- * canvas draws for it, instead of rendering the canvas's sample rows.
+ * canvas calls it "the one real backend build" and it is not built; a
+ * sanctions screen; backup and restore-drill status. Each comes back
+ * `{ available: false, reason }` so the page says so in the zone the canvas
+ * draws for it, instead of rendering the canvas's sample rows. The AI-safety
+ * zone is now the mixed case the D111 pattern produces: real figures beside a
+ * named list of what those figures still cannot say.
  *
  * FORCE RE-AUTH. `users.jwt_min_iat` is how sign-out-everywhere already works
  * per account (routes/settings.ts POST /sessions/revoke-all). Platform-wide
@@ -38,6 +41,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { IMPERSONATION_EXPIRY_MINUTES, requireFactor, requireStepUp, requireSuperAdmin } from '../auth';
+import { loadGuardrailCounters } from '../services/aiRouter';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -51,11 +55,75 @@ type Absent = { available: false; reason: string };
 const absent = (reason: string): Absent => ({ available: false, reason });
 
 /**
- * One sentence, two zones. `/overview` says it in the AI-safety zone and
- * `/governance` says it in H7's guardrail panel; two literals would drift the
- * day one of them is reworded, so there is one.
+ * D152 — THE SENTENCE WAS WRONG ON TWO OF ITS THREE CLAUSES, AND IT IS
+ * NARROWED RATHER THAN DELETED (the D111 pattern).
+ *
+ * It read: *"No guardrail-hit, flagged-output or token-anomaly counter is
+ * stored for the AI rails."* Measured against the code:
+ *
+ *   · **guardrail-hit — FALSE.** `ai_usage_logs.safety_score` (migration 040)
+ *     is written by `recordUsage` on every router call, and `task = 'safety'`
+ *     rows are llama-guard's verdicts. They were already rolled up and already
+ *     on screen — `AiUsageTab` renders them as "Guardrail safety (llama-guard)"
+ *     — so this page denied a store the platform was showing one click away.
+ *   · **flagged-output — FALSE.** `advisor_turn_audit.shadow_flagged`
+ *     (migration 043) with its own index, written from seventeen call sites.
+ *   · **token-anomaly — TRUE, and it is the only clause that survives.** The
+ *     phrase occurs nowhere in the repo except this constant.
+ *
+ * So the zones now carry FIGURES from `loadGuardrailCounters` plus this,
+ * which is what is still genuinely uncounted. One list, two zones — the same
+ * argument the old comment made for one sentence, and for the same reason:
+ * two literals drift the day one of them is reworded.
  */
-const NO_AI_SAFETY_STORE = 'No guardrail-hit, flagged-output or token-anomaly counter is stored for the AI rails.';
+const AI_SAFETY_NOT_COUNTED: Array<{ what: string; reason: string }> = [
+  {
+    what: 'Token anomalies',
+    reason: 'Nothing watches per-account token consumption for a spike. Spend is capped per user per day and '
+      + 'per month, and a cap being hit is recorded as a refusal — but a refusal is a limit reached, not an '
+      + 'anomaly detected.',
+  },
+  {
+    what: 'Which guardrail rule fired',
+    reason: 'The guard returns the violated category on every hit and the 422 body sends it to the caller, but '
+      + 'no store has a column for it: `writeTurnAudit` records the score, the refusal and the flag, and drops '
+      + 'the category. So the counters here say how often the guard fired and never which rule.',
+  },
+  {
+    what: 'Guardrail counters by branch',
+    reason: 'Neither `ai_usage_logs` nor `advisor_turn_audit` carries a branch, tenant or licence column, and no '
+      + 'branch RPC returns safety counters — so these figures are platform-wide. Splitting them four ways today '
+      + 'would label one deployment\'s numbers as four.',
+  },
+];
+
+/**
+ * The window both zones count over. One constant for the same reason the list
+ * above is one list, and 7 days because that is what `loadAiUsageReport`
+ * defaults to — so this page and `AiUsageTab` are counting the same days
+ * rather than two figures that disagree for a reason nobody can see.
+ */
+const AI_SAFETY_WINDOW_DAYS = 7;
+
+/**
+ * The AI-safety block, built once and served to `/overview` as `ai_safety` and
+ * to `/governance` as `guardrails`. `verdicts` and `enforcement` each carry
+ * their own availability, because they come from different tables and
+ * `advisor_turn_audit` is lazily bootstrapped — an unreadable table read as
+ * "zero hits" is the #204 defect, and on a safety counter it is the worst
+ * possible direction to be wrong in.
+ */
+async function aiSafetyBlock(env: Env) {
+  const counters = await loadGuardrailCounters(env, AI_SAFETY_WINDOW_DAYS);
+  return {
+    available: true,
+    window_days: counters.window_days,
+    since: counters.since,
+    verdicts: counters.verdicts,
+    enforcement: counters.enforcement,
+    not_counted: AI_SAFETY_NOT_COUNTED,
+  };
+}
 
 /** SQLite's `datetime('now')` is 'YYYY-MM-DD HH:MM:SS' (UTC, no zone). */
 function parseSqlTs(s: string | null | undefined): number {
@@ -150,7 +218,7 @@ r.get('/overview', async (c) => {
       'No security_events ledger exists. Failed sign-ins, step-ups, permission grants and exports are not '
       + 'collected into one feed; the admin action audit below is the only trail, and it records admin actions only.',
     ),
-    ai_safety: absent(NO_AI_SAFETY_STORE),
+    ai_safety: await aiSafetyBlock(env),
     sanctions: absent('No sanctions screening runs on the platform; KYC status is the only trust fact recorded.'),
     backup_dr: absent('No backup, restore-drill or failover record is kept where the platform can read it.'),
   });
@@ -599,9 +667,27 @@ r.get('/governance', async (c) => {
       impersonations: accessImpersonations,
       exports: accessExports,
     },
-    // H7 draws a guardrail-hit panel. There is nothing behind it, and the
-    // sentence is literally the one /overview uses — one constant, two zones.
-    guardrails: absent(NO_AI_SAFETY_STORE),
+    // H7 draws a guardrail-hit panel, and D152 gave it figures — served ONCE,
+    // by /overview as `ai_safety`, with this field pointing at them.
+    //
+    // WHY A POINTER AND NOT A SECOND COPY OF THE BLOCK. Both payloads land on
+    // the same page: `SecurityPage` fetches /overview and /governance together,
+    // and the page's own header records that H7 was reconciled INTO this
+    // surface rather than drawn beside it — so H7's guardrail panel IS the
+    // AI-safety zone. Serving the counters here too would put two renders of
+    // one rollup on one screen (the tile-vs-table disagreement D128 ended) and
+    // spend a second pair of D1 reads per governance load on a field nothing
+    // reads. This is the shape `audit` at the top of /overview already uses:
+    // the figure in one place, a pointer to it in the other.
+    guardrails: {
+      counters_on: '/api/admin/security/overview',
+      field: 'ai_safety',
+      window_days: AI_SAFETY_WINDOW_DAYS,
+      // What the counters still cannot say, from the same list they carry, so
+      // a reader of this endpoint alone is not told a narrower truth than a
+      // reader of the other one.
+      not_counted: AI_SAFETY_NOT_COUNTED,
+    },
     // H7's chrome: "Viewing as: Axal VC France · Return to HQ view".
     tenant_view_available: false,
     // D150 — THE LAST CLAUSE WAS WRONG AND IS CORRECTED RATHER THAN REWORDED.
