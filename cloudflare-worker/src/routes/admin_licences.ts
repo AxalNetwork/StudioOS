@@ -620,7 +620,7 @@ export async function deprovisionLicenceAdmins(
   if (!admins.length) return out;
 
   // The elevation holders, read once. Same lookup `routes/licence.ts` uses.
-  let holders = new Set<number>();
+  let holders: Set<number>;
   try {
     const res = await env.DB.prepare('SELECT user_id FROM super_admins').all<{ user_id: number }>();
     holders = new Set((res.results || []).map((h) => Number(h.user_id)));
