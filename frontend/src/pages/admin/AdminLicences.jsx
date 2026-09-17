@@ -1,6 +1,6 @@
 // Territory licences — the HQ ledger for the subsidiary model.
 //
-// Design handoff: Admin · Super.dc.html, "Licenses" nav row and the five-step
+// Design handoff: Admin · Super.dc.html, "Licences" nav row and the five-step
 // issue flow (Entity → Territory → Seats → Terms → Activate). Recreated
 // natively in the admin shell like AdminLpApplications and AdminExploring,
 // rather than ported as a standalone page, so it inherits auth, nav and dark
@@ -43,7 +43,7 @@ import {
   Send, ShieldOff, UserPlus,
 } from 'lucide-react';
 import { api } from '../../lib/api';
-import { coverageCells, renewalPipeline } from '../../lib/licenceCoverage';
+import { coverageCells, renewalPipeline, sortCells } from '../../lib/licenceCoverage';
 import { reportError } from '../../lib/log';
 import {
   FREEZING_STATUSES, NOTICE_KINDS, noticeKindLabel, noticeRank, daysTo,
@@ -1393,9 +1393,24 @@ function Detail({ uid, held, onChanged }) {
  * UNIQUE index exists to prevent. Free is the third, and it is the reason the
  * grid is 27 cells rather than a list of holders.
  */
-function Coverage({ items }) {
+/**
+ * SORT MODES, and why `state` is the one that ships selected (D146). The canvas
+ * draws the control with the first segment styled as chosen, and that is the
+ * segment labelled "By state" — so this changes the order the grid opens in,
+ * which is a visible change and is meant to be. Grouping is what makes the
+ * white space countable at a glance; A–Z is one click away and is the order
+ * `coverageCells()` already emits.
+ */
+const COVERAGE_SORTS = [
+  { key: 'state', label: 'By state' },
+  { key: 'az', label: 'A–Z' },
+];
+
+function Coverage({ items, onOpen }) {
   const { cells, held_active: active, held_suspended: suspended, free, outside_eu: outside } =
     useMemo(() => coverageCells(items), [items]);
+  const [sort, setSort] = useState('state');
+  const ordered = useMemo(() => sortCells(cells, sort), [cells, sort]);
   const pipeline = useMemo(() => renewalPipeline(items), [items]);
 
   const tone = {
@@ -1413,21 +1428,68 @@ function Coverage({ items }) {
             {active} held · {suspended} suspended · {free} white space
           </span>
         </div>
-        <div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(64px,1fr))] gap-1.5">
-          {cells.map((c) => (
-            <div
-              key={c.code}
-              title={c.licence ? `${c.name} — ${c.licence.licence_ref} (${c.licence.status})` : `${c.name} — available`}
-              data-testid={`coverage-${c.code}`}
-              data-state={c.state}
-              className={`rounded-md border px-1.5 py-1 text-center ${tone[c.state]}`}
+        {/* The sort control, on SecurityPage's HQ filter-chip shape: same tier,
+            same oxblood accent, `aria-pressed` carrying the state so the choice
+            is readable to a screen reader and not only to the eye. */}
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5" data-testid="hq-coverage-sort">
+          {COVERAGE_SORTS.map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => setSort(s.key)}
+              aria-pressed={sort === s.key}
+              className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${
+                sort === s.key
+                  ? 'border-rose-200 bg-rose-50 text-[#881337] dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200'
+                  : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400'
+              }`}
             >
-              <div className="text-[12px] font-bold tabular-nums">{c.code}</div>
-              <div className="truncate text-[9.5px] leading-tight">
-                {c.licence ? c.licence.licence_ref : '—'}
-              </div>
-            </div>
+              {s.label}
+            </button>
           ))}
+        </div>
+        <div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(64px,1fr))] gap-1.5">
+          {ordered.map((c) => {
+            const cls = `rounded-md border px-1.5 py-1 text-center ${tone[c.state]}`;
+            const label = c.licence
+              ? `${c.name} — ${c.licence.licence_ref} (${c.licence.status})`
+              : `${c.name} — available`;
+            const body = (
+              <>
+                <div className="text-[12px] font-bold tabular-nums">{c.code}</div>
+                <div className="truncate text-[9.5px] leading-tight">
+                  {c.licence ? c.licence.licence_ref : '—'}
+                </div>
+              </>
+            );
+            // A HELD CELL OPENS ITS LICENCE; WHITE SPACE STAYS A DIV. There is
+            // nothing to open behind a country nobody holds, and a button that
+            // refuses is the `still_an_admin` mistake D134 named — it teaches
+            // the operator that some of this grid's controls are a lie.
+            return c.licence ? (
+              <button
+                key={c.code}
+                type="button"
+                onClick={() => onOpen?.(c.licence.uid)}
+                title={label}
+                data-testid={`coverage-${c.code}`}
+                data-state={c.state}
+                className={`${cls} hover:brightness-95`}
+              >
+                {body}
+              </button>
+            ) : (
+              <div
+                key={c.code}
+                title={label}
+                data-testid={`coverage-${c.code}`}
+                data-state={c.state}
+                className={cls}
+              >
+                {body}
+              </div>
+            );
+          })}
         </div>
         <p className="mt-2.5 text-[11.5px] leading-relaxed text-gray-500">
           A suspended licence still holds its countries — releasing them is a termination, not a
@@ -1522,7 +1584,9 @@ export default function AdminLicences() {
         </button>
       </div>
 
-      <Coverage items={items} />
+      {/* `setSel` is the same selector the licence rows below use, so a click on
+          a held country and a click on its row land in exactly one place. */}
+      <Coverage items={items} onOpen={setSel} />
 
       {data.seats_used_available === false && (
         <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 dark:border-gray-800 dark:text-gray-300">

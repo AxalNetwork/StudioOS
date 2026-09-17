@@ -11985,3 +11985,87 @@ A recorded termination must not be undone by a failure in the cleanup after it.
 
 **No migration — 268 is free.** No new `/api/*` method. No `frontend/src`
 change, so `docs/` does not move.
+
+## D146 — the coverage grid gets its sort and its click, and a comment stops contradicting its own guard
+
+**Task #241. The title is wider than the work, and the canvas said so before I
+did.** `#241` reads "the nav naming and H2's coverage-grid sort and open-licence
+click". `design/canvases/integrated/Admin · Super.dc.html` carries its own
+changelog, and it settles the scope better than the task title:
+
+> `{ where:'H2', what:'Coverage grid: sort control and open-licence affordance',`
+> `why:'Held-active, held-suspended and white space were already the three`
+> `states; **the sort and the click are the additions.** Renewal pipeline`
+> `already carried days and fee.' }`
+
+So H2's three states and its renewal pipeline shipped in D110 and are untouched
+here. Two things were missing, and the third item — the nav — turned out not to
+be about the nav at all.
+
+### 1 · The grid had no sort
+
+`coverageCells()` emits the 27 cells in `EU_CODES` order and `Coverage` rendered
+them straight through. The canvas draws a two-option control, `mapSort:
+['By state','A–Z']`.
+
+`sortCells(cells, mode)` is a **pure exported helper in
+`lib/licenceCoverage.js`**, not a comparator in the component, because what
+order the grid is in is a fact about coverage and that file already owns the
+other two — which cells exist, and what state each one is in. A comparator in
+`Coverage` would have been the third place that has to know what
+`held_suspended` means.
+
+**`'az'` is the identity, not a second sort.** `coverageCells()` already emits
+alphabetical order, so `'az'` returns the cells as they came rather than
+re-deriving an order that is already true — and `'state'` breaks its ties by
+leaving that incoming order alone, which `Array.prototype.sort` guarantees
+because it is stable. That is what makes the two options agree by construction
+wherever state does not decide, instead of by two comparators that have to be
+kept in step.
+
+**"By state" ships selected, and that changes what the grid opens as.** The
+canvas styles the first segment as chosen and the first segment is "By state",
+so this is a visible change and is meant to be. It also serves the zone's own
+stated purpose: `licenceCoverage.js`'s header says the white space is the point,
+and in code order the free cells are scattered through 27 tiles and have to be
+counted — grouped, they are one block whose size reads at a glance. *Strike it
+and the initial state goes back to `'az'`: one word.*
+
+### 2 · Clicking a held cell did nothing
+
+Every cell was a plain `<div>` with a `title`. **No data change was needed** —
+`coverageCells()` already puts `licence: { uid, … }` on every held cell — and the
+mechanism already existed one screen down, where the licence rows are
+`<button type="button" onClick={() => setSel(l.uid)}>`. `Coverage` closes at 1470
+and `AdminLicences` opens at 1472, so the call site is inside the component that
+declares `setSel`; `onOpen={setSel}` needed no lifting and no context. A click on
+a held country and a click on its row now land in exactly one place.
+
+**Free cells stay `<div>`.** There is nothing to open behind a country nobody
+holds, and a button that refuses is the `still_an_admin` mistake D134 named — it
+teaches the operator that some of this grid's controls are a lie.
+
+### 3 · The nav rows were right; the sentence above them was not
+
+This is the item the task title misdescribes, and it is worth stating because
+the repo had the answer on both sides already. `sidebarConfig.js` shipped
+**eleven** HQ rows. The comment directly above them said *"The approved canvas
+has eight rows … All eight resolve today"*, omitting Revenue, Content and
+Platform — **the three rows whose own explanatory comments sit a few lines
+below it**. And `super_admin_shell.test.mjs` has a test literally named *"all
+eleven rows are present, in canvas order"* that `deepEqual`s all eleven.
+
+So a guard said eleven, a comment said eight, and they described one array in
+one repo. The array was never wrong. **A comment that a guard already
+contradicts is the cheapest kind of false claim to leave lying around and the
+most misleading to read** — the same class this programme deleted in D129's seat
+store, D131's six blocks and D140's adjustable dates, one layer down. The
+comment now names all eleven, and the guard asserts the *sentence* contains each
+one, so a future count cannot go stale the way this one did without failing.
+
+`AdminLicences.jsx:3` also cited the canvas's `"Licenses"` nav row; the canvas
+now spells it Licences, and so does the comment.
+
+**No migration — 268 is free.** No new `/api/*` method, so `check-api-drift` has
+nothing to say. `frontend/src` moves, so `docs/` is rebuilt through the root
+build.
