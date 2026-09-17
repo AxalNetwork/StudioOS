@@ -98,7 +98,7 @@ const VIEWS = [
   ['past', 'Past SLA'],
 ];
 
-export default function BranchApprovals() {
+export default function BranchApprovals({ user }) {
   const [lane, setLane] = useState(null);           // null = loading, UNAVAILABLE = failed
   const [board, setBoard] = useState(null);         // D130 — the four local queues
   const [view, setView] = useState('all');
@@ -179,6 +179,7 @@ export default function BranchApprovals() {
   return (
     <BranchZone
       workspace="Approvals"
+      user={user}
       stance="Read-only summary of the board and the outbound lane"
       coverage={coverage}
       coverageNote={coverage.length ? undefined

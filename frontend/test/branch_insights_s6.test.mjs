@@ -43,9 +43,13 @@ const WORKER_SERVICE = raw('cloudflare-worker/src/services/branchBenchmarks.ts')
 const WORKER_INDEX = raw('cloudflare-worker/src/index.ts');
 
 test('the route renders the page, and the pending notice is gone from it', () => {
+  // D151 — THE PROP-LESS SPELLING WAS THE ASSERTION, and the route gaining
+  // `user` (so the frame can name its branch) failed a guard about which
+  // component it mounts — a fact the prop does not change. Pinned to the
+  // guard and the component now, with the props left open.
   assert.match(
     APP,
-    /path="\/branch\/insights" element=\{guard\(\['admin'\], <BranchInsights \/>\)\}/,
+    /path="\/branch\/insights" element=\{guard\(\['admin'\], <BranchInsights[\s/]/,
   );
   // The window is bounded by the NEXT `<Route`, not a character count:
   // `/branch/settings` legitimately still renders a notice one line down.
@@ -53,7 +57,9 @@ test('the route renders the page, and the pending notice is gone from it', () =>
   assert.ok(at > 0);
   const next = APP.indexOf('<Route', at);
   const element = APP.slice(at, next > at ? next : at + 200);
-  assert.ok(element.includes('<BranchInsights />'), 'the window must contain this route\'s element');
+  // Props left open here too — the window's job is to prove the element is
+  // this route's and not the next one's, which the component name does.
+  assert.ok(element.includes('<BranchInsights'), 'the window must contain this route\'s element');
   assert.ok(!element.includes('BranchZonePending'), 'the insights route must not still render the notice');
 });
 
@@ -106,8 +112,21 @@ test('NO BENCHMARK and AN UNREADABLE ONE are different sentences, in that order'
   assert.match(PAGE, /data\?\.benchmarks_available === false/);
   assert.match(PAGE, /claim=\{data\.benchmarks_reason\}/, 'the unreadable case renders the SERVER\'s reason');
   assert.match(PAGE, /reason=\{data\?\.benchmarks_empty_reason\}/, 'and so does the published-nothing case');
+  // BOUNDED TO THE CARD, NOT MEASURED ACROSS THE WHOLE FILE (D151). This
+  // compared two indices in the entire source, so ANY earlier mention of
+  // `benchmarks.length` — the rail's coverage line, for one — inverted it and
+  // failed on correct code while the render's order was untouched. Same
+  // unbounded-window trap D147 hit with a 400-char route slice and D150 with a
+  // 420-char cell; the fix is the same, bound on the structure. The property
+  // is unchanged and still worth pinning: inside the benchmark card the
+  // unreadable branch must be tested first, or it can never be reached.
+  const cardAt = PAGE.indexOf('data-testid="branch-benchmarks"');
+  assert.ok(cardAt > 0, 'the benchmark card must exist for its order to mean anything');
+  const card = PAGE.slice(cardAt, PAGE.indexOf('</Card>', cardAt));
+  assert.ok(card.includes('benchmarks_available === false') && card.includes('!benchmarks.length'),
+    'both states must live in the card whose order is being asserted');
   assert.ok(
-    PAGE.indexOf('benchmarks_available === false') < PAGE.indexOf('benchmarks.length'),
+    card.indexOf('benchmarks_available === false') < card.indexOf('!benchmarks.length'),
     'unreadable must be tested before the empty list, or it can never be reached',
   );
 });

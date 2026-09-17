@@ -12578,3 +12578,109 @@ said so rather than review:
 - The canvas's *"What the scope changes"* panel is an **artboard explanation**
   beside two rail previews, not a UI element: the four rules govern behaviour
   and are not copy to render.
+
+## D151 — three branch zones told the rail nothing, and the guard that names the rule watched the other tier (#246)
+
+**Date:** 2026-09-17 · **Scope:** `frontend/src` only. No migration — **269 stays
+free** — no worker change, and no new `/api/*` method: every field was already on
+a payload the page already fetched.
+
+#246 is "branch S12: the AI rail scoped to one branch, and the cross-branch
+decline card". Measured before building — the sixth time running that has
+corrected a task — **half of S12 had already shipped**, and the half that had
+not was a defect rather than a missing drawing.
+
+| S12 element | state before this |
+| --- | --- |
+| *"Searching Axal VC France accounts"* | ✅ D129 |
+| The decline card | ✅ **refused with a measurement** (D126): the rail has no free-text input, `aiRouter.ts` carries no branch awareness, and a branch Worker has one D1 binding — the question cannot be **asked**, so a card refusing it is theatre about a wall that is already load-bearing |
+| Rule 4, cost before the run | ✅ the rail's own meter |
+| Rule 1, *"scope is fixed"* | ◐ the sentence said *"this deployment"* and never named it |
+| Rule 3, *"it points at the copy it does have"* | ❌ |
+
+### The defect
+
+`WorkerRail`'s `canRun = coverage.length > 0`. With no coverage it renders
+**"Not recorded"** and disables its only button under *"Nothing to read back yet
+— this page has not loaded a summary."*
+
+**Three of the seven branch zones passed no coverage**, and on two of them that
+sentence was **false**: `/branch/insights` had loaded its stats, a benchmark and
+a server-written `unavailable` list; `/branch/contracts` had loaded HQ's library
+and its push stamp. (`/branch/community` fetches nothing **deliberately** — D140
+refused four counts there for D128's reason — so there the sentence is true.)
+
+**The rule was already in the repo, watching one tier.**
+`branch_rail_mount.test.mjs` pins three HQ pages with the message *"without
+coverage the rail's only button stays disabled"* — and **D126 is the PR that both
+fixed those three and mounted the branch rail.** It fixed the tier it was
+auditing and left the tier it was building.
+
+### `pushed_at` was read zero times in the SPA
+
+S12 rule 3: *"HQ pushes one anonymised median with a timestamp. The rail may
+cite that, **and says when HQ computed it**."* D148 shipped
+`branch_benchmarks.pushed_at`, `branch_insights.ts` selects it, and
+`BranchInsights.jsx` contained **no occurrence of it** — a pushed copy drawn
+without its age, which is the defect D147 and D149 both landed on. **Seventh
+instance of a producer with no reader** (#252, D142, D149, D150).
+
+Same page, same shape a second time: it rendered the server's `unavailable` list
+as its own card and never forwarded it to the rail's block for exactly that.
+
+### The judgement call: a sentence, not a chip
+
+The canvas draws the scope as a caret-less chip reading the branch's name. **It
+ships as the rail's own sentence instead**, for two measured reasons: the
+territory badge already names the branch on every branch screen, so a chip is a
+second copy of one string on one screen; and **D150 refused H13's HQ chip**, so a
+branch chip would contrast with nothing. The chip's information content — *this
+one, and it does not open* — was already the note. What the note lacked was the
+name. *Strike this and the alternative is a `scope` prop on `WorkerRail`.*
+
+`branchLabel(user)` lands in `lib/shellRole.js` beside `branchOfUser`, because
+`BranchAccounts` already derived it for the S0 search sentence and the frame
+would have been the second copy. **Tenth consolidation** (D127, D128, D130,
+D131, D138, D140, D142, D144, D149).
+
+### Six guards were pinned to a spelling, and one of them was this PR's own
+
+Passing `user={user}` to seven routes failed **six** pre-existing assertions that
+matched `<BranchHome />`, `<BranchInsights />`, `<BranchApprovals />` and so on —
+the prop-less spelling — while asserting a fact the prop does not change: which
+component the route mounts. A seventh pinned the rail's note as a literal, and an
+eighth compared `indexOf('benchmarks_available === false')` against
+`indexOf('benchmarks.length')` **across the whole file**, so the new rail
+coverage line inverted it while the render's order was untouched — the unbounded
+window D147 hit with a 400-char route slice and D150 with a 420-char cell.
+
+**And the new guard made the same mistake before it was run.** Its first draft
+required `[…].filter(Boolean)` — one zone's idiom — and failed three pages whose
+coverage was already correct, because the branch tier builds coverage four
+legitimate ways. It asserts the property now: coverage is built in the component
+and gated on its reads, so a failed one drops its line. Two more of this PR's own
+assertions were wrong first: a phrase matched across a string concatenation the
+source wraps, and an apostrophe that is backslash-escaped in a single-quoted
+literal. *An assertion about prose has to be written against how the source
+stores it.*
+
+### One mutation escaped, and it is the guard's limit rather than its failure
+
+`const coverage = ['literal'] || […]` passed the new gated-on-reads assertion:
+the `||` short-circuits past the gating at runtime while **leaving it in the
+file**, and the assertion reads source. Re-aimed at the shape it actually
+claims — the whole construction replaced by a constant array — it is caught.
+So the guard enforces its property and the first mutation landed somewhere
+other than where it was aimed, which is not evidence either way; the real
+limit is that **a source-reading guard cannot see evaluation**, the class D141
+recorded as *"a guard that reads the source cannot see a component that stopped
+drawing"*. That limit is written into the test beside the assertion rather than
+left for the next reader to find. **18 mutations, 18 caught** once M3 is aimed
+at its own claim.
+
+### What the code corrected after the plan
+
+The plan said Contracts' coverage would count archived templates. **There is no
+archived state**: D147 dropped `is_active` from the push on its own rule, and the
+payload's `not_carried` says so in the server's words. The line is gone and the
+rail forwards `not_carried` rather than typing a second copy of it.

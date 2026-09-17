@@ -101,7 +101,7 @@ export function statusesByWeek(rows) {
   return out;
 }
 
-export default function BranchPrograms() {
+export default function BranchPrograms({ user }) {
   const [timeline, setTimeline] = useState(null);
   const [games, setGames] = useState(null);
 
@@ -159,6 +159,7 @@ export default function BranchPrograms() {
   return (
     <BranchZone
       workspace="Programs"
+      user={user}
       coverage={coverage}
       coverageNote="Counts are this deployment's own. Nothing here is read from another territory."
       unavailable={unavailable}

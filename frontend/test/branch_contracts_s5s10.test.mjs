@@ -45,9 +45,11 @@ const WORKER_ROUTE = raw('cloudflare-worker/src/routes/branch_templates.ts');
 const WORKER_HQ = raw('cloudflare-worker/src/routes/admin_contracts.ts');
 
 test('the route renders the page, and the pending notice is gone from it', () => {
+  // D151 — props left open; see the twin note in branch_insights_s6. What is
+  // pinned is the gate and the component, not the absence of a prop.
   assert.match(
     APP,
-    /path="\/branch\/contracts" element=\{guard\(\['admin'\], <BranchContracts \/>\)\}/,
+    /path="\/branch\/contracts" element=\{guard\(\['admin'\], <BranchContracts[\s/]/,
     '/branch/contracts must mount the real page',
   );
   // THE NOTICE MUST BE GONE FROM THIS ROUTE SPECIFICALLY, not merely rarer in
@@ -69,7 +71,9 @@ test('the route renders the page, and the pending notice is gone from it', () =>
     'the contracts route must not still render the pending notice',
   );
   assert.ok(
-    element.includes('<BranchContracts />'),
+    // Props left open (D151): the window proves the element is this route's
+    // and not the next one's, which the component name does on its own.
+    element.includes('<BranchContracts'),
     'and the window must actually contain this route\'s element, or it is measuring nothing',
   );
 });

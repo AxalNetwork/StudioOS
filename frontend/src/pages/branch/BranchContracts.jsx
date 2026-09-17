@@ -49,7 +49,7 @@ function ageOf(iso) {
   return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
-export default function BranchContracts() {
+export default function BranchContracts({ user }) {
   const [data, setData] = useState(undefined); // undefined = loading
   const [failed, setFailed] = useState(false);
 
@@ -73,8 +73,48 @@ export default function BranchContracts() {
   const pushedAt = data?.pushed_at || null;
   const age = ageOf(pushedAt);
 
+  // D151 — THE RAIL WAS TOLD NOTHING, so `WorkerRail` rendered "Not recorded"
+  // and disabled its only button under "this page has not loaded a summary" —
+  // on a page that had loaded HQ's library and its push stamp. Built per source
+  // and filtered, so a failed read drops its line rather than printing a zero.
+  //
+  // NEVER-PUSHED IS A LINE, NOT A GAP. An empty library and a library HQ has
+  // never sent are different facts (the reason `branch_templates_sync` exists
+  // at all, D147), so the state the branch is in gets a sentence either way and
+  // the rail can say which.
+  const coverage = [
+    items.length
+      ? `${items.length} master template${items.length === 1 ? '' : 's'} in HQ's copy`
+      : (data && data.available !== false && data.never_pushed_reason
+        ? 'HQ has never pushed this branch a template library'
+        : null),
+    items.length && pushedAt ? `HQ last sent it ${age}` : null,
+    // NO ARCHIVED COUNT, and the reason is on the payload rather than a
+    // judgement made here: D147 dropped `is_active` from the push on its own
+    // rule — HQ's library shows only active templates and its contract route
+    // offers only the current version, so there is no archived-and-unusable
+    // state for a branch to mirror and a column that could only hold 1 is the
+    // D129 mistake. `not_carried` says exactly that, and the rail renders it
+    // below rather than this line inventing a zero.
+  ].filter(Boolean);
+
   return (
-    <BranchZone workspace="Contracts">
+    <BranchZone
+      workspace="Contracts"
+      user={user}
+      stance="Read-only view of HQ's library"
+      coverage={coverage}
+      coverageNote={coverage.length ? undefined
+        : (failed
+          ? 'The library read did not complete, so there is nothing to read back — this is not a claim that HQ has sent nothing.'
+          : 'Loading HQ\'s template library…')}
+      // FORWARDED FROM THE PAYLOAD, NOT TYPED HERE. `not_carried` is the
+      // server's own list of what the push deliberately omits, each with its
+      // reason, and the card below already renders it — so the rail reads the
+      // same source rather than growing a second copy that can disagree with
+      // it. The day the push carries a body, both shrink together.
+      unavailable={(data?.not_carried || []).map((n) => [n.field, n.reason])}
+    >
       <header className="mb-4">
         <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Contracts</h1>
         <p className="text-sm text-gray-600 mt-1 dark:text-gray-400">
