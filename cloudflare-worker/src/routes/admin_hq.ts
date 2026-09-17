@@ -70,11 +70,17 @@ const BRANCH_SEARCH_LIMIT = 20;
  * `not_deployed` rows are missing, and an empty registry produces none. Two
  * callers since D138 (`/overview` and `/admins`), which is why it is a function.
  */
-async function deployedBranches(env: Env): Promise<Array<{ code: string; hostname: string; status: string }>> {
+async function deployedBranches(env: Env): Promise<Array<{
+  code: string; hostname: string; status: string; licence_uid: string | null;
+}>> {
   try {
+    // D150 — `licence_uid` is selected because it is the only key that joins a
+    // branch's read to the licence it trades under. Without it H1's health
+    // cards could render a fan-out figure and not say whose it was, which is
+    // why they rendered none at all.
     const dep = await env.DB.prepare(
-      'SELECT code, hostname, status FROM licence_deployments ORDER BY code',
-    ).all<{ code: string; hostname: string; status: string }>();
+      'SELECT code, hostname, status, licence_uid FROM licence_deployments ORDER BY code',
+    ).all<{ code: string; hostname: string; status: string; licence_uid: string | null }>();
     return dep.results || [];
   } catch {
     return [];

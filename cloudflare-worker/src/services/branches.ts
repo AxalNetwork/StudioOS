@@ -58,6 +58,19 @@ export type BranchResult<T> = {
   data?: T;
   as_of?: string;
   reason?: string;
+  /**
+   * The licence this deployment belongs to, when HQ holds a row saying so
+   * (D150). It is the ONLY key a caller can join a branch read to a licence on:
+   * a binding knows its code and nothing else, and `licence_deployments` is
+   * where the two meet (`licence_uid TEXT NOT NULL UNIQUE`, migration 258).
+   *
+   * Optional and nullable because it comes from the REGISTRY rather than from
+   * the branch. A binding that answers with no deployment row behind it — the
+   * order provisioning creates them in — is a real state, and a card keyed on
+   * this simply does not find it. Inventing a licence for such a branch would
+   * attach one territory's figures to another's contract.
+   */
+  licence_uid?: string | null;
 };
 
 type BranchStub = Record<string, (...args: unknown[]) => Promise<unknown>>;
@@ -174,16 +187,29 @@ export function coverage<T>(results: BranchResult<T>[]): {
  */
 export function withRegistry<T>(
   results: BranchResult<T>[],
-  registry: Array<{ code: string; hostname?: string | null; status?: string | null }>,
+  registry: Array<{
+    code: string; hostname?: string | null; status?: string | null; licence_uid?: string | null;
+  }>,
 ): BranchResult<T>[] {
   const seen = new Map(results.map((r) => [r.code, r]));
   for (const row of registry || []) {
     const code = String(row?.code || '').toLowerCase();
-    if (!code || seen.has(code)) continue;
+    if (!code) continue;
+    // D150 — THE LICENCE IS STAMPED ON EVERY ROW THE REGISTRY KNOWS, not only
+    // on the ones it invents. A branch that ANSWERED is the case a caller most
+    // wants to join to its licence, and it arrives from `fanOut` carrying only
+    // its code; skipping it here is what left HQ's health cards unable to say
+    // whose figures they were.
+    const existing = seen.get(code);
+    if (existing) {
+      if (row?.licence_uid) existing.licence_uid = String(row.licence_uid);
+      continue;
+    }
     seen.set(code, {
       code,
       binding: `${BRANCH_BINDING_PREFIX}${code.toUpperCase().replace(/-/g, '_')}`,
       status: 'not_deployed',
+      licence_uid: row?.licence_uid ? String(row.licence_uid) : null,
       reason:
         'HQ holds a deployment row for this branch but this Worker has no service binding to it yet. '
         + 'The binding is committed to wrangler.toml at provisioning and arrives with HQ\'s next deploy.',

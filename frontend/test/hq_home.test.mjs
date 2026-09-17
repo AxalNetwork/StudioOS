@@ -53,17 +53,71 @@ test('every per-subsidiary figure renders Not recorded, and nothing renders an i
   // satisfy itself on whichever occurrence happened to work. EVERY definition
   // term with this label is checked, so a second card cannot appear with a
   // number in it.
-  for (const label of ['Accounts', 'MTD · backlog']) {
+  // D150 — THIS ASSERTION USED TO PIN THE DEFECT, and re-aiming it is the
+  // point rather than a side effect. It required `Accounts` and `MTD · backlog`
+  // to render `<Unrecorded />` on every card, under a footnote blaming U1 —
+  // and U1 is a fact about HQ's OWN database, never the blocker for a branch.
+  // A branch is a separate Worker over a separate D1 (D.2), so every account
+  // there is that branch's by construction; `branchOverview` counts them, and
+  // `/admin/hq/overview` has been SENDING them since D108 while this page read
+  // neither `branches` nor `branches_coverage`.
+  //
+  // So the guard enforcing the refusal was the thing standing in front of the
+  // fix. **A guard that pins a refusal has to be re-aimed the day the refusal
+  // stops being true** — the third instance in two PRs, after
+  // `territory_licences.test.mjs` and `hq_licences_h2h3.test.mjs` in D149.
+  //
+  // What is pinned now is the property that actually matters: a figure is
+  // rendered only from a branch that ANSWERED, and every other state carries a
+  // reason instead of a number.
+  for (const label of ['Accounts', 'Seats used', 'Backlog']) {
     const term = `>${label}</dt>`;
     let at = PAGE.indexOf(term);
     assert.ok(at > 0, `${label} must be a definition term on the subsidiary card`);
     for (; at !== -1; at = PAGE.indexOf(term, at + 1)) {
+      // BOUNDED BY THE NEXT DEFINITION TERM, NOT BY A CHARACTER COUNT. The
+      // first draft took a fixed 420 and failed on correct code the moment a
+      // cell grew a comment — the same fixed-window trap D147 hit (a 400-char
+      // slice reaching into the next route) and D148 fixed by bounding on the
+      // next `<Route`. A window that can run past its own cell can also be
+      // SATISFIED by the next one, which is the quieter half of the bug.
+      const nextDt = PAGE.indexOf('<dt', at + term.length);
+      const cell = PAGE.slice(at, nextDt === -1 ? PAGE.indexOf('</dl>', at) : nextDt);
+      assert.ok(cell.includes('</dd>'), `${label}: the window must contain its own value cell`);
+      // THE GATE ITSELF, NOT THE WORD. The first draft asked only that `live`
+      // appear somewhere in the cell — which a mutation replacing the gate with
+      // a constant `false` satisfies, because `live?.…` survives in the
+      // fallback. That is an assertion that cannot fail on the defect it was
+      // written for: a cell hard-wired to refuse is exactly the pre-D150
+      // behaviour. What is pinned is that the figure is produced UNDER `live`.
       assert.ok(
-        PAGE.slice(at, at + term.length + 120).includes('<Unrecorded />'),
-        `${label} per licence must be Not recorded`,
+        cell.includes('{live &&'),
+        `${label} must render its figure under \`live &&\` — a branch that answered, and no other condition`,
+      );
+      assert.ok(
+        cell.includes('<Unrecorded reason='),
+        `${label} must carry a REASON when the branch did not answer, never a bare dash`,
+      );
+      assert.ok(
+        !/\|\| 0\b/.test(cell),
+        `${label} must never default an absent branch figure to zero`,
       );
     }
   }
+  // THE FOOTNOTE IS ASSERTED POSITIVELY, AND THE FIRST DRAFT WAS NOT.
+  // It scanned the whole page for "need every account to name its licence" and
+  // forbade it — which failed on correct code, because the comment RECORDING
+  // why that sentence was removed quotes it. **A lexical scan cannot tell a
+  // rule from its violation**: the same mistake D148's banned-word scan for
+  // `rank` made against the page's own sentence "never a ranked list", and it
+  // is caught here for the second time.
+  //
+  // So the property is stated as what the footnote must SAY. A page that
+  // reverted would fail this, and a page that explains its own history does
+  // not.
+  assert.match(PAGE, /come from each branch&apos;s own read over its own database/);
+  assert.match(PAGE, /stamped with the time it\s+answered/);
+  assert.match(PAGE, /a branch that did not answer says so rather than reading as a zero/);
   // A tile renders Not recorded for any null value, so MTD revenue — which
   // has no source at all — is passed as null rather than as a number.
   assert.match(PAGE, /label="MTD revenue" value=\{null\}/);
@@ -138,8 +192,17 @@ test('the rail names what is not connected instead of implying it is', () => {
   // What is still genuinely unsourced stays named, so the rail does not
   // quietly become empty.
   assert.match(PAGE, /\['Revenue per subsidiary', '[^']+'\]/);
-  assert.match(PAGE, /\['Seat utilisation', '[^']+'\]/);
+  // D150 — THE ROW WAS RENAMED BECAUSE WHAT IS UNAVAILABLE CHANGED. It read
+  // "Seat utilisation — needs seat_assignments", and D127 had already decided
+  // AGAINST that store: seats used is counted from `users.role` and arrives
+  // with each branch's read, which H1's cards now render. What has no store is
+  // naming the individual seat, so that is what the row says.
+  assert.doesNotMatch(PAGE, /\['Seat utilisation',/);
+  assert.match(PAGE, /\['Which seat id a member holds', '[^']+'\]/);
   assert.match(PAGE, /\['Token P&L per subsidiary', '[^']+'\]/);
+  // And the other reason that had outlived its blocker: D111 built the call
+  // this once said did not exist.
+  assert.doesNotMatch(PAGE, /that call is not built/);
 });
 
 test('D112 — the escalations list is no longer a queue nobody can clear', () => {

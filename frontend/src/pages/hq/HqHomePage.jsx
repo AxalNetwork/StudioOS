@@ -20,13 +20,19 @@ import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
  * this page but nothing else while looking global would be the half-applied
  * scope UNRESOLVED_ITEMS U1 warns about, so it says so beside the control.
  *
- * ABSENT IS NOT ZERO. Accounts, revenue and queue depth PER SUBSIDIARY, seat
- * utilisation render `<Unrecorded />` with the reason
- * the payload gives. A figure the payload lacks renders the same way — `num`
- * returns null for a missing value rather than defaulting it, which is the
- * difference between "0 accounts" and "not recorded". A failed request
- * renders as unreadable, never as an empty platform — `InvestorFundLanding`
- * is the in-repo precedent.
+ * ABSENT IS NOT ZERO, AND WHICH KIND OF ABSENT MATTERS (D150). The per-branch
+ * figures — accounts, seats used, backlog — come from `branches`, the fan-out
+ * this page is sent and did not read until D150. Each carries one of three
+ * states, and they render differently on purpose: a branch that ANSWERED shows
+ * its figures with the time it answered; one that did not is `<Unrecorded/>`
+ * with the reason, never a zero; a licence with no branch at all has not been
+ * deployed. Revenue per subsidiary stays unrecorded because no branch has
+ * reported one, which is a different sentence from the call not existing — it
+ * does (D111). A figure the payload lacks renders the same way: `num` returns
+ * null for a missing value rather than defaulting it, which is the difference
+ * between "0 accounts" and "not recorded". A failed request renders as
+ * unreadable, never as an empty platform — `InvestorFundLanding` is the
+ * in-repo precedent.
  */
 const UNAVAILABLE = Symbol('unavailable');
 
@@ -56,6 +62,26 @@ const day = (v) => (v ? String(v).slice(0, 10) : null);
 // a missing figure is Not recorded, not zero.
 const num = (v) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Number(v).toLocaleString());
 const plural = (count, one, many) => (count === 1 ? one : many);
+
+/**
+ * Why a branch figure is absent, in the branch's own words where it has them.
+ *
+ * THE THREE STATES ARE THREE DIFFERENT SENTENCES (D150), which is the whole
+ * reason `fanOut` returns a status rather than a nullable payload. Collapsing
+ * them would put "we could not reach this branch" and "this licence has no
+ * branch" behind one dash, and only the second is a fact about the licence.
+ *
+ * `unreadable` deliberately does NOT say the branch is down — `services/
+ * branches.ts` makes that point where the state is defined, and a deadline
+ * this Worker set is at least as likely an explanation as anything at the far
+ * end.
+ */
+const branchReason = (b, what) => {
+  if (!b) return `No branch is deployed for this licence, so there is no ${what} to read.`;
+  if (b.status === 'not_deployed') return b.reason || `This licence has no branch binding yet, so its ${what} cannot be read.`;
+  if (b.status === 'unreadable') return b.reason || `This branch did not answer in time, so its ${what} is unknown rather than zero.`;
+  return `The branch answered without a ${what}.`;
+};
 
 function Pill({ status }) {
   const tone = STATUS_TONE[status] || STATUS_TONE.draft;
@@ -102,6 +128,46 @@ export default function HqHomePage() {
   const queue = ready ? data.queue : null;
   const accountsTotal = ready ? num(data.accounts?.total) : null;
 
+  // D150 — THE FAN-OUT THIS PAGE WAS ALREADY BEING SENT. `/admin/hq/overview`
+  // has returned `branches` and `branches_coverage` since D108 and this page
+  // read NEITHER: the health cards below were drawn from the licence ledger
+  // alone, so Accounts and backlog rendered Unrecorded under a footnote
+  // blaming U1 — a blocker that does not apply to a branch at all. A branch is
+  // physically isolated (D.2), so every account in its database IS the
+  // branch's; that is exactly why `branchOverview` can count them and why
+  // D148 could publish medians of them. The page was refusing figures the
+  // server was sending it.
+  //
+  // Same shape as #252 (a table with no writer and no reader), D142
+  // (`/me.branch`'s status and as_of, shipped and consumed by nothing) and
+  // D149 (`revenue_share_bps`, on the row and thrown away).
+  const branches = ready ? data.branches || [] : [];
+  const branchCoverage = ready ? data.branches_coverage || null : null;
+  // Keyed on `licence_uid`, which is the ONLY join between the two (migration
+  // 258). A branch with no deployment row behind it is absent from this map
+  // rather than guessed at — attaching one territory's figures to another's
+  // contract is the one error this lookup must not make.
+  const branchByLicence = useMemo(() => {
+    const m = new Map();
+    for (const b of branches) if (b?.licence_uid) m.set(b.licence_uid, b);
+    return m;
+  }, [branches]);
+
+  // The sentence H13 rule 3 requires, derived rather than typed. Three states,
+  // and the middle one is the whole point: a branch that did not answer is
+  // NAMED, because a total that quietly drops one is worse than no total.
+  const branchLine = (() => {
+    const c = branchCoverage;
+    if (!c || !num(c.total)) {
+      return 'No branch is deployed, so every figure above is HQ\'s own database.';
+    }
+    const unread = Array.isArray(c.unreadable) ? c.unreadable : [];
+    const base = `${c.answered} of ${c.total} ${plural(c.total, 'branch', 'branches')} answered`;
+    return unread.length
+      ? `${base} — ${unread.join(', ')} did not, so any total here excludes ${plural(unread.length, 'it', 'them')}`
+      : `${base}, so branch figures here are complete`;
+  })();
+
   const rail = (
     <WorkerRail
       workspace="HQ"
@@ -112,6 +178,13 @@ export default function HqHomePage() {
         `${licences.length} ${plural(licences.length, 'licence', 'licences')} on the ledger`,
         `${countries.length} of 27 EU countries held`,
         accountsTotal === null ? 'Active accounts: not recorded' : `${accountsTotal} active accounts platform-wide`,
+        // H13 RULE 3 — "unreadable is a word in the answer" (D150). The rail
+        // summarises the lines below it, so a line that omits an unanswered
+        // branch produces an answer that silently totals over the rest. That
+        // is the failure this architecture makes likely and the reason the
+        // canvas states the rule. `branches_coverage.unreadable` is a list of
+        // branch CODES, so the sentence names them rather than counting them.
+        branchLine,
       ] : []}
       coverageNote={ready ? undefined : (data === UNAVAILABLE ? 'The overview could not be read.' : 'Loading the overview…')}
       unavailable={[
@@ -122,8 +195,22 @@ export default function HqHomePage() {
         // both lines are GONE rather than reworded: a stale "not connected"
         // note that still reads plausibly is what the next surface cites.
         // What remains is what genuinely has no source.
-        ['Revenue per subsidiary', 'A branch reports its own billing to HQ; that call is not built, so no branch sends a figure.'],
-        ['Seat utilisation', 'Needs seat_assignments — who holds which seat id. No such store exists on either tier.'],
+        // D150 — TWO OF THESE THREE HAD OUTLIVED THEIR BLOCKERS, which is the
+        // sixth time this programme has deleted a reason rather than reworded
+        // it (D129's seat store, D131's six blocks, D140's adjustable dates,
+        // D147's templates_reason, D149's "only place a fraction is computed").
+        // A stale reason that still reads plausibly is what the next surface
+        // cites, so each is replaced by what is actually missing now.
+        //
+        //   · "Revenue per subsidiary — that call is not built" was FALSE:
+        //     D111 built `reportUsage` and `revenueSummary`. What is missing is
+        //     that no branch has REPORTED one, which is a different sentence.
+        //   · "Seat utilisation — needs seat_assignments" was half stale: D127
+        //     decided AGAINST that store and counts seats from `users.role`,
+        //     which the fan-out returns. What has no store is which seat id a
+        //     person holds.
+        ['Revenue per subsidiary', 'The reporting call exists (a branch sends its own figure through reportUsage); no branch has sent one yet, so there is nothing to show rather than nothing to read it with.'],
+        ['Which seat id a member holds', 'Seats USED is counted from roles and arrives with each branch read. Naming the individual seat needs a seat-assignment store, which nothing writes on either tier.'],
         ['Token P&L per subsidiary', 'Needs per-branch metadata on every model call; nothing meters AI spend per tenant yet.'],
       ]}
       data-testid="hq-home-rail"
@@ -216,8 +303,16 @@ export default function HqHomePage() {
           )}
           {ready && shown.length > 0 && (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" data-testid="hq-subsidiary-cards">
-              {shown.map((l) => (
-                <div key={l.uid} className={`rounded-xl border p-3 ${l.status === 'suspended' ? 'border-amber-200 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20' : 'border-axal-hairline bg-axal-ground'}`}>
+              {shown.map((l) => {
+                // D150 — the branch read for THIS licence, or nothing. Three
+                // states, and they must render differently: `ok` carries
+                // figures with the time they were read, `unreadable` is not a
+                // claim the branch is down and is certainly not a zero, and a
+                // licence with no branch at all has not been deployed.
+                const b = branchByLicence.get(l.uid) || null;
+                const live = b && b.status === 'ok' ? b.data || null : null;
+                return (
+                <div key={l.uid} data-branch-state={b ? b.status : 'none'} className={`rounded-xl border p-3 ${l.status === 'suspended' ? 'border-amber-200 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20' : 'border-axal-hairline bg-axal-ground'}`}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-[12.5px] font-extrabold tracking-tight">{l.brand_name}</span>
                     <Pill status={l.status} />
@@ -226,18 +321,61 @@ export default function HqHomePage() {
                   <dl className="mt-3 grid grid-cols-2 gap-2 border-t border-axal-hairline pt-2 text-[11px]">
                     <div><dt className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Seats licensed</dt><dd className="mt-0.5 font-bold tabular-nums">{num(l.seats_licensed) ?? <Unrecorded />}</dd></div>
                     <div><dt className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Renews</dt><dd className="mt-0.5 font-bold tabular-nums">{day(l.renews_on) || <Unrecorded />}</dd></div>
-                    <div><dt className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Accounts</dt><dd className="mt-0.5"><Unrecorded /></dd></div>
-                    <div><dt className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">MTD · backlog</dt><dd className="mt-0.5"><Unrecorded /></dd></div>
+                    <div>
+                      <dt className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Accounts</dt>
+                      <dd className="mt-0.5 font-bold tabular-nums">
+                        {live && num(live.accounts?.total) !== null
+                          ? num(live.accounts.total)
+                          : <Unrecorded reason={branchReason(b, 'account')} />}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Seats used</dt>
+                      <dd className="mt-0.5 font-bold tabular-nums">
+                        {/* `seats_used` is a number on a branch and null on HQ,
+                            and `seats_used_reason` travels with it — the union
+                            branchOps.ts:51-66 declares precisely so every
+                            consumer has to handle both. */}
+                        {live && num(live.seats_used) !== null
+                          ? num(live.seats_used)
+                          : <Unrecorded reason={live?.seats_used_reason || branchReason(b, 'seat count')} />}
+                      </dd>
+                    </div>
+                    <div className="col-span-2">
+                      <dt className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Backlog</dt>
+                      <dd className="mt-0.5 font-bold tabular-nums">
+                        {live && live.backlog && num(live.backlog.count) !== null
+                          ? `${num(live.backlog.count)} open`
+                          : <Unrecorded reason={live?.backlog_reason || branchReason(b, 'backlog')} />}
+                      </dd>
+                    </div>
                   </dl>
+                  {/* WHEN the figures above were read, never omitted: a pushed
+                      or fanned-out number without its stamp is the defect D147
+                      and D149 both landed on. */}
+                  {b && b.status === 'ok' && b.as_of && (
+                    <p className="mt-2 text-[10px] text-axal-faint">Read {b.as_of}</p>
+                  )}
+                  {b && b.status !== 'ok' && b.reason && (
+                    <p className="mt-2 text-[10px] text-axal-faint">{b.reason}</p>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
           {!ready && data !== UNAVAILABLE && <p className="text-[12px] text-axal-faint">Loading the ledger…</p>}
           <p className="mt-3 text-[11.5px] leading-relaxed text-axal-faint">
-            Status, territory, seats licensed and renewal date are the ledger&apos;s own. Accounts, revenue and backlog per
-            subsidiary need every account to name its licence; none does yet, so they are not recorded here rather than
-            shown as zero.
+            {/* D150 — THE FOOTNOTE THAT WAS WRONG. It said accounts, revenue
+                and backlog "need every account to name its licence; none does
+                yet" — U1, which is a fact about HQ's OWN database and has
+                never been the blocker for a branch. A branch is its own Worker
+                over its own D1 (D.2), so every account there is that branch's
+                by construction, which is why its read can count them. */}
+            Status, territory, seats licensed and renewal date are the ledger&apos;s own. Accounts, seats used
+            and backlog come from each branch&apos;s own read over its own database, stamped with the time it
+            answered — and a branch that did not answer says so rather than reading as a zero. Revenue stays
+            unrecorded: the reporting call exists, and no branch has sent a figure through it yet.
           </p>
         </Card>
 

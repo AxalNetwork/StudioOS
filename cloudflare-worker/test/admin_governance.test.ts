@@ -413,7 +413,16 @@ test('the two panels H7 draws with no store behind them say so', async () => {
   assert.equal(r.body.guardrails.available, false);
   assert.match(r.body.guardrails.reason, /No guardrail-hit/);
   assert.equal(r.body.tenant_view_available, false, 'the "Return to HQ view" overlay is claimed to exist');
-  assert.match(r.body.tenant_view_reason, /U1/);
+  // D150 RE-AIMED THIS ASSERTION, AND THE RE-AIM IS THE POINT. It used to
+  // require the reason to cite U1 — so the guard pinning the refusal was the
+  // thing standing in the way of correcting it. U1 is a fact about HQ's own
+  // database; a branch is a separate Worker over a separate D1, which is why
+  // D108's fan-out reads a branch's accounts at all. What is asserted now is
+  // the property that is still true: the overlay is UNBUILT (#235), and the
+  // reason must not blame the data instead. Both directions, because the
+  // positive alone passes on a reason that says both things.
+  assert.match(r.body.tenant_view_reason, /has not been built/);
+  assert.doesNotMatch(r.body.tenant_view_reason, /U1/, 'U1 does not block a per-branch read');
 });
 
 test('the guardrail sentence is one constant, not two literals that can drift', async () => {
