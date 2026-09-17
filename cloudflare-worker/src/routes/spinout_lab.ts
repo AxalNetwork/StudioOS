@@ -705,6 +705,62 @@ spinoutLab.get('/stats', async (c) => {
   }
 });
 
+// GET /brief — PUBLIC (deliberately no requireAuth, the `/stats` precedent
+// above): the six live values the Programme Brief prints. The brief is a
+// marketing page a prospective founder reads before they have an account, so a
+// gated route here would leave every figure on it blank for exactly the reader
+// it is written for.
+//
+// WHY THE PAYLOAD IS SHAPED LIKE THIS. The brief's design names each live value
+// as a dotted token — `{cohort.close_at}`, `{brief.year}` — and there are
+// exactly six. The response mirrors those paths one for one, so the page has no
+// mapping layer to get wrong and a test can assert that every token the design
+// declares resolves to a key the route sends.
+//
+// FIVE OF THE SIX ARE PURE ARITHMETIC AND CANNOT FAIL. `resolveApplicationTarget`
+// derives the cohort a new application lands in from the wall clock in
+// `COHORT_TZ` and nothing else — no table is read — so the brief's dates are
+// correct on a database that has never run the cohort migrations. Only `places`
+// touches D1, through the shared `getCohortSizeSettings`, which falls back to
+// the product default; that default IS the operative number when nobody has
+// overridden it, so returning it is the true answer rather than a stand-in.
+//
+// NOTHING ELSE ON THE BRIEF COMES FROM HERE. The tracks, the tools, the gates,
+// the jurisdictions and the deliverables are the programme's own description,
+// held in the SPA beside the pages that already render them. A route that also
+// served those would be a store invented so a page could look dynamic, holding
+// values nobody measures and nobody edits.
+spinoutLab.get('/brief', async (c) => {
+  const nowMs = Date.now();
+  const { resolveApplicationTarget, monthLabel, getCohortSizeSettings } =
+    await import('../services/cohortApplications');
+  // From `cohortTiming`, which DECLARES it — `cohortApplications` imports the
+  // constant but does not re-export it, so destructuring it there is undefined.
+  const { COHORT_TZ } = await import('../services/cohortTiming');
+  const t = resolveApplicationTarget(nowMs);
+  // `resolveApplicationTarget` reports `ok: false` when no window is open —
+  // between a close and the next month's opening. The brief then has no cohort
+  // to name, and says so rather than naming the wrong one.
+  const cohortOpen = t.ok;
+  const { max } = await getCohortSizeSettings(c.env);
+  return c.json({
+    brief: {
+      generated_at: new Date(nowMs).toISOString(),
+      year: new Date(nowMs).toISOString().slice(0, 4),
+    },
+    cohort: cohortOpen ? {
+      name: monthLabel(t.year, t.month),
+      start_date: new Date(t.window.startMs).toISOString(),
+      close_at: new Date(t.window.closeMs).toISOString(),
+      places: max,
+    } : { name: null, start_date: null, close_at: null, places: max },
+    // The zone every date above is enforced in. Named rather than assumed: a
+    // reader outside America/New_York is told which midnight the deadline is.
+    zone: COHORT_TZ,
+    applications_open: cohortOpen,
+  });
+});
+
 spinoutLab.get('/cohort', async (c) => {
   const parseTs = (s: string | null | undefined): number | null => {
     if (!s) return null;
