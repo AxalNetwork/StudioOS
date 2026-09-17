@@ -13,7 +13,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin } from '../auth';
+import { requireAdmin, requireBranchNotSuspended } from '../auth';
 import { notify } from '../services/notify';
 import { ensureEventsSchema } from '../services/eventsSchema';
 import { shapeEvent } from '../services/eventsCommon';
@@ -208,6 +208,10 @@ adminEvents.get('/:id', async (c) => {
 adminEvents.post('/:id/approve', async (c) => {
   const a = await admin(c);
   if (a instanceof Response) return a;
+  // D142 — a suspended branch cannot put anything NEW under the brand. The
+  // gate is after the admin check, so an anonymous caller still gets 401
+  // rather than learning the licence state.
+  await requireBranchNotSuspended(c);
   const id = intParam(c.req.param('id'));
   if (!id) return c.json({ error: 'not_found' }, 404);
   const event = await loadEvent(c.env, id);
@@ -287,6 +291,10 @@ adminEvents.post('/:id/unpublish', async (c) => {
 adminEvents.post('/:id/feature', async (c) => {
   const a = await admin(c);
   if (a instanceof Response) return a;
+  // D142 — a suspended branch cannot put anything NEW under the brand. The
+  // gate is after the admin check, so an anonymous caller still gets 401
+  // rather than learning the licence state.
+  await requireBranchNotSuspended(c);
   const id = intParam(c.req.param('id'));
   if (!id) return c.json({ error: 'not_found' }, 404);
   const event = await loadEvent(c.env, id);

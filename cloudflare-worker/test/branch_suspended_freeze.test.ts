@@ -34,6 +34,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import { BRANCH_SUSPENDED } from '../src/util/branch.ts';
+import { ADMIN_FROZEN, BRANCH_SUSPENDED_CODE, branchSuspendedBody } from '../src/util/authErrors.ts';
 import { requireAdmin, requireBranchNotSuspended } from '../src/auth.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -66,7 +67,12 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
  * `status` null means the branch_licence TABLE is absent — a branch whose
  * migration 256/257 has not run, or one HQ has not pushed to yet.
  */
-function dbWith(status: string | null) {
+function dbWith(status: string | null, opts: { withReason?: boolean } = {}) {
+  // D142 — `withReason` defaults TRUE because migration 256 has those columns
+  // and a fixture narrower than the schema cannot fail on the shape production
+  // actually has. The narrow variant exists for exactly one test below, which
+  // proves the freeze survives without them.
+  const withReason = opts.withReason !== false;
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(`
     CREATE TABLE users (
@@ -78,8 +84,17 @@ function dbWith(status: string | null) {
   db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)')
     .run(ADMIN, 'admin', 'Sue', 'sue@axal.example');
   if (status !== null) {
-    db.exec('CREATE TABLE branch_licence (id INTEGER PRIMARY KEY, status TEXT NOT NULL)');
-    db.prepare('INSERT INTO branch_licence (id, status) VALUES (1, ?)').run(status);
+    db.exec(
+      'CREATE TABLE branch_licence (id INTEGER PRIMARY KEY, status TEXT NOT NULL'
+      + (withReason ? ', suspended_at TEXT, suspended_note TEXT' : '') + ')',
+    );
+    if (withReason) {
+      db.prepare(
+        'INSERT INTO branch_licence (id, status, suspended_at, suspended_note) VALUES (1, ?, ?, ?)',
+      ).run(status, '2026-07-18 11:40:00', 'payment default, 41 days');
+    } else {
+      db.prepare('INSERT INTO branch_licence (id, status) VALUES (1, ?)').run(status);
+    }
   }
   return db;
 }
@@ -108,7 +123,14 @@ function decideApp(env: Record<string, unknown>) {
   });
   app.onError((err: any, c) => {
     const msg = String(err?.message || '');
-    if (msg === BRANCH_SUSPENDED) return c.json({ detail: msg }, 423);
+    // D142 — THE SHIM CALLS THE REAL BODY BUILDER, it does not imitate one.
+    // It used to hand-build `{detail: msg}`, under a comment promising it
+    // could not drift from the production mapping — and the moment the branch
+    // refusal grew a `code`, it had. A stand-in that reimplements the thing it
+    // stands in for is a second implementation with a test pointed at the
+    // wrong one. The structural test below pins that BOTH real mappers
+    // (`index.ts` and `mapError`) route through this same function.
+    if (msg === BRANCH_SUSPENDED) return c.json(branchSuspendedBody(err), 423);
     if (msg === 'Unauthorized') return c.json({ detail: msg }, 401);
     return c.json({ detail: msg }, 403);
   });
@@ -129,11 +151,49 @@ const envFor = (vars: object, status: string | null) => ({
   ...vars, DB: makeD1(dbWith(status)), JWT_SECRET, ENVIRONMENT: 'development',
 });
 
+/** The same env, on a licence copy that predates migration 256's reason columns. */
+const envNarrow = (vars: object, status: string | null) => ({
+  ...vars, DB: makeD1(dbWith(status, { withReason: false })), JWT_SECRET, ENVIRONMENT: 'development',
+});
+
 test('a suspended branch refuses a decision write with 423', async () => {
   const post = decideApp(envFor(FR_VARS, 'suspended'));
   const r = await post(ADMIN);
   assert.equal(r.status, 423, 'a frozen queue is Locked, not Forbidden');
   assert.equal(r.body.detail, BRANCH_SUSPENDED);
+});
+
+test('the refusal carries a machine-readable code, and HQ\u2019s own reason (D142)', async () => {
+  // WHY THIS IS THE LOAD-BEARING ONE. Until D142 the branch freeze shipped as
+  // `423 {detail}` and nothing else, while `frontend/src/lib/api.js` keys
+  // STRICTLY on `code === 'admin_frozen'` for its HQ twin. So the branch 423
+  // reached no handler and fell through to whatever generic error the page
+  // printed — which is why three places in the repo could claim the
+  // frozen-branch banner had shipped when there was nothing on the wire to key
+  // it on.
+  const post = decideApp(envFor(FR_VARS, 'suspended'));
+  const r = await post(ADMIN);
+  assert.equal(r.status, 423);
+  assert.equal(r.body.code, BRANCH_SUSPENDED_CODE, 'the shell keys on this, not on the prose');
+  assert.notEqual(r.body.code, ADMIN_FROZEN, 'the branch freeze is not the HQ freeze wearing its code');
+  // HQ's own words, pushed with the licence — not this worker's paraphrase.
+  assert.equal(r.body.reason, 'payment default, 41 days');
+  assert.equal(r.body.since, '2026-07-18 11:40:00');
+});
+
+test('an unreadable REASON does not unfreeze the branch (D142)', async () => {
+  // The hole the first draft had, kept as a test rather than as a memory. It
+  // selected `status, suspended_at, suspended_note` in one statement; on a
+  // copy narrower than migration 256 that throws `no such column`, the catch
+  // read it as "unreadable, so not suspended", and a suspended branch went on
+  // trading. The decision is made on `status` alone and the reason is fetched
+  // after, so a branch that cannot say WHY is still frozen.
+  const post = decideApp(envNarrow(FR_VARS, 'suspended'));
+  const r = await post(ADMIN);
+  assert.equal(r.status, 423, 'a missing reason column must never lift the freeze');
+  assert.equal(r.body.code, BRANCH_SUSPENDED_CODE);
+  assert.equal(r.body.reason, null, 'and the absence is stated, never invented');
+  assert.equal(r.body.since, null);
 });
 
 test('an ACTIVE branch decides normally — the gate is not a blanket refusal', async () => {
@@ -188,38 +248,108 @@ test('the shared table maps the refusal to 423, off the shared constant', () => 
   assert.match(src, /AUTH_ERROR_STATUSES: Record<string, [^>]*423[^>]*>/);
 });
 
-test('all four approval files gate their decision write, after the admin gate', () => {
+test('BOTH production error paths build the refusal from the shared function', () => {
+  // There are two, and D110/D134 record what happens when they disagree:
+  // `app.onError` for routes that let a throw escape, and `mapError` for the
+  // 31 route files that catch their own. A body added to one and not the other
+  // is a refusal that changes shape depending on which file raised it.
+  for (const f of [
+    'cloudflare-worker/src/index.ts',
+    'cloudflare-worker/src/routes/_t13t14t15_helpers.ts',
+  ]) {
+    const src = read(f);
+    assert.match(
+      src, /if \(msg === BRANCH_SUSPENDED\) return c\.json\(branchSuspendedBody\(\w+\), 423\)/,
+      `${f} must map the branch freeze through branchSuspendedBody, not a literal object`,
+    );
+  }
+});
+
+test('every gated write sits AFTER its own admin gate, in every file', () => {
+  // D142 — this used to read `indexOf`, which finds the FIRST gate in a file
+  // and stops. That was fine while every file had exactly one; the community
+  // files now have two and four, so a second gate placed before its admin
+  // check would have gone unexamined. It walks every occurrence now.
   const FILES = [
+    // D107 — the four approval lanes.
     'cloudflare-worker/src/routes/admin_lp_applications.ts',
     'cloudflare-worker/src/routes/refer_earn.ts',
     'cloudflare-worker/src/routes/admin_cohort.ts',
     'cloudflare-worker/src/routes/spinout_moderation.ts',
+    // D142 — the community publish-and-promote writes.
+    'cloudflare-worker/src/routes/admin_events.ts',
+    'cloudflare-worker/src/routes/admin_jobs.ts',
+    'cloudflare-worker/src/routes/admin_circles.ts',
   ];
+  let checked = 0;
   for (const f of FILES) {
     const src = read(f);
-    const gate = src.indexOf('await requireBranchNotSuspended(c)');
-    assert.ok(gate > 0, `${f} must call the freeze gate on its decision write`);
+    const gates: number[] = [];
+    for (let at = src.indexOf('await requireBranchNotSuspended(c)'); at > 0;
+      at = src.indexOf('await requireBranchNotSuspended(c)', at + 1)) gates.push(at);
+    assert.ok(gates.length > 0, `${f} must call the freeze gate on its guarded writes`);
 
-    // The admin gate must come first WITHIN THE SAME HANDLER, which is why
-    // this slices the handler out rather than comparing file offsets: these
-    // files register several routes, so an admin gate belonging to an EARLIER
-    // handler sits before this one no matter where the freeze gate is put,
-    // and a whole-file index comparison passes even when the two are
-    // reversed. Mutation-checked by swapping the pair in admin_cohort.ts: the
-    // file-offset version did not notice.
-    const open = Math.max(
-      ...['.post(', '.patch(', '.put(', '.delete('].map((m) => src.lastIndexOf(m, gate)),
-    );
-    assert.ok(open > 0 && open < gate, `${f}: could not locate the handler around the freeze gate`);
-    const handler = src.slice(open, gate);
-    // Both admin shapes are accepted because spinout_moderation uses
-    // requireAuth plus an explicit role check rather than requireAdmin — a
-    // real difference, not one to paper over.
-    assert.ok(
-      handler.includes('await requireAdmin(c)') || handler.includes("admin.role !== 'admin'"),
-      `${f}: the admin gate must run BEFORE the freeze gate in the same handler, `
-      + 'or an anonymous caller learns the licence state',
-    );
+    for (const gate of gates) {
+      // The admin gate must come first WITHIN THE SAME HANDLER, which is why
+      // this slices the handler out rather than comparing file offsets: these
+      // files register several routes, so an admin gate belonging to an EARLIER
+      // handler sits before this one no matter where the freeze gate is put,
+      // and a whole-file index comparison passes even when the two are
+      // reversed. Mutation-checked by swapping the pair in admin_cohort.ts: the
+      // file-offset version did not notice.
+      const open = Math.max(
+        ...['.post(', '.patch(', '.put(', '.delete('].map((m) => src.lastIndexOf(m, gate)),
+      );
+      assert.ok(open > 0 && open < gate, `${f}: could not locate the handler around a freeze gate`);
+      const handler = src.slice(open, gate);
+      // Three admin shapes are accepted because the files genuinely differ:
+      // `requireAdmin`, spinout_moderation's explicit role check, and the
+      // community files' `admin(c)` helper which returns a Response. Papering
+      // over that difference would weaken the assertion, not simplify it.
+      assert.ok(
+        handler.includes('await requireAdmin(c)')
+        || handler.includes("admin.role !== 'admin'")
+        || /const a = await admin\(c\);\s*\n\s*if \(a instanceof Response\) return a;/.test(handler),
+        `${f}: the admin gate must run BEFORE the freeze gate in the same handler, `
+        + 'or an anonymous caller learns the licence state',
+      );
+      checked += 1;
+    }
     assert.match(src, /requireBranchNotSuspended[^\n]*from '\.\.\/auth'|requireBranchNotSuspended[,}]/);
+  }
+  // A floor, so deleting gates cannot quietly shrink what this covers.
+  assert.ok(checked >= 11, `only ${checked} gated writes were examined; the four lanes plus seven community writes is 11`);
+});
+
+test('a suspended branch can still TAKE DOWN what it published', () => {
+  // THE RULE, ASSERTED FROM BOTH SIDES. A freeze that also froze removal would
+  // trap a branch with content under its own brand that it cannot pull — worse
+  // than the freeze it implements, and not what the canvas asks for
+  // ("Existing pages stay up"). So the takedowns must NOT carry the gate.
+  const cases: Array<[string, string[]]> = [
+    ['cloudflare-worker/src/routes/admin_events.ts',
+      ["adminEvents.post('/:id/reject'", "adminEvents.post('/:id/unpublish'",
+        "adminEvents.post('/:id/cancel'", "adminEvents.post('/:id/capacity'"]],
+    ['cloudflare-worker/src/routes/admin_jobs.ts',
+      ["adminJobs.post('/:id/reject'", "adminJobs.post('/:id/unpublish'"]],
+    ['cloudflare-worker/src/routes/admin_circles.ts',
+      ["adminCircles.post('/:id/unpublish'", "adminCircles.delete('/:id'"]],
+  ];
+  for (const [f, handlers] of cases) {
+    const src = read(f);
+    for (const h of handlers) {
+      const at = src.indexOf(h);
+      assert.ok(at > 0, `${f}: ${h} not found — this list is stale`);
+      // Bounded to this handler: the next route registration ends it.
+      const next = ['.post(', '.patch(', '.put(', '.delete(']
+        .map((m) => src.indexOf(m, at + h.length))
+        .filter((n) => n > 0);
+      const body = src.slice(at, next.length ? Math.min(...next) : src.length);
+      assert.ok(
+        !body.includes('requireBranchNotSuspended'),
+        `${f}: ${h} is a TAKEDOWN and must not be frozen — a branch that cannot `
+        + 'remove its own published content is worse off than one that cannot publish',
+      );
+    }
   }
 });
