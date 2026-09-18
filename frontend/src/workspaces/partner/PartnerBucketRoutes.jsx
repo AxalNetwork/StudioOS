@@ -24,7 +24,6 @@ import { api } from '../../lib/api';
 // "Delivery · Ship the work" on a Pipeline route. Mounting its feature pages
 // directly removes the doubled chrome and the wrong-bucket header together,
 // and leaves /partner/operations/* exactly as it was.
-const PartnerEngagements = lazy(() => import('../../pages/partner/operations/EngagementsPage'));
 const PerksPage = lazy(() => import('../../pages/PerksPage'));
 const ServiceCatalogPage = lazy(() => import('../../pages/ServiceCatalogPage'));
 // Pipeline · analytics used to mount `PartnerInsightsPage` — Demand Insights,
