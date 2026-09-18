@@ -181,12 +181,16 @@ export default function HqHomePage() {
   })();
 
   // D153 / H12 — frame 1. AFTER every hook, so the hook order is the same on
-  // both sides of this branch, and before the rail: the rail's coverage lines
-  // summarise HQ's own ledger and platform totals, and carrying them into a
-  // view of one branch would put four false sentences beside four true
-  // figures. A rail that can say which scope it answered in is H13's, and
-  // `WorkerRail` has no `scope` prop today (#244's remainder) — D153 unblocks
-  // that refusal rather than discharging it.
+  // both sides of this branch, and before the rail below: THAT rail's coverage
+  // lines summarise HQ's own ledger and platform totals, and carrying them
+  // into a view of one branch would put four false sentences beside four true
+  // figures.
+  //
+  // D154 — the overlay now carries a rail OF ITS OWN, built from the branch's
+  // read and chipped with the branch it read. D153 shipped without one because
+  // `WorkerRail` had no `scope` prop and a rail that could not say which scope
+  // it answered in was worse on this screen than none; that was the last thing
+  // standing between H13's rule 1 and the page, and it is built.
   if (viewAs) {
     return (
       <div className="min-w-0" data-testid="hq-home-page">
@@ -199,6 +203,11 @@ export default function HqHomePage() {
     <WorkerRail
       workspace="HQ"
       role="super_admin"
+      // D154 / H13 rule 1 — the scope the page READ IN, reported. Here it is
+      // every branch at once, which is a real answer and not a default: the
+      // fan-out is what this page performed, and the coverage line below says
+      // how many of them answered.
+      scope="All branches"
       stance="Read-only overview"
       note="This rail summarises the licence ledger and platform-wide account totals. It takes no action."
       coverage={ready ? [

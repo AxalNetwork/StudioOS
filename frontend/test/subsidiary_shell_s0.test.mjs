@@ -155,15 +155,27 @@ test('the shell arm decides a sidebar, never access', () => {
   }
 });
 
-test('every pending zone states what it will show and which PR builds it', () => {
-  // A notice with a missing prop is the "coming soon" card this component was
-  // written to avoid, so each rendered instance must carry all four.
-  const uses = APP_CODE.match(/<BranchZonePending[^/]*\/>/g) || [];
-  assert.ok(uses.length >= 1, 'the pending notice must actually be used');
-  for (const u of uses) {
-    for (const prop of ['artboard=', 'title=', 'will=', 'pr=']) {
-      assert.ok(u.includes(prop), `a BranchZonePending is missing ${prop}: ${u.slice(0, 80)}`);
-    }
-    assert.match(u, /pr="PR \d+"/, 'the notice must name a numbered PR, not "soon"');
+test('no branch row renders a pending notice, because every branch artboard is built', () => {
+  // WAS "every pending zone states what it will show and which PR builds it",
+  // asserting `uses.length >= 1` — the scaffolding had to EXIST. D155 built
+  // S11 Settings, the last branch route rendering one, so that assertion began
+  // failing on the day its own job was finished: the inverse of the stale
+  // refusal this programme keeps re-aiming, and the same lesson from the other
+  // side. A guard tied to an interim arrangement has to be re-aimed when the
+  // interim ends.
+  //
+  // `BranchZonePending` is DELETED rather than left unused — a component named
+  // Pending with nothing pending is the stale artefact D129 and D131 deleted
+  // in their own areas — and what is pinned now is the stronger property it
+  // existed to approach: every row in the branch sidebar resolves to a real
+  // page, so none of them can 404 and none needs a notice standing in.
+  assert.ok(!APP_CODE.includes('BranchZonePending'),
+    'a pending notice came back — if a branch artboard is genuinely unbuilt, say so on its own page');
+  const rows = (SIDEBAR_GROUPS.branch_admin || []).flatMap((g) => g.items || []);
+  assert.ok(rows.length >= 8, `expected the canvas's eight branch rows, found ${rows.length}`);
+  for (const r of rows) {
+    const line = APP_CODE.split('\n').find((l) => l.includes(`path="${r.to}"`));
+    assert.ok(line, `${r.to} is a sidebar row with no route`);
+    assert.doesNotMatch(line, /Pending/, `${r.to} still renders a placeholder`);
   }
 });

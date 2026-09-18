@@ -58,6 +58,13 @@ r.get('/insights', async (c) => {
     // cannot disagree.
     let accounts = 0;
     let seatsUsed = 0;
+    // D155 — THE BREAKDOWN WAS COMPUTED AND DROPPED. `GROUP BY role` already
+    // returns it and the loop below already walks it; only the totals left the
+    // function. S11's "Staff & roles" row is a sentence about that breakdown
+    // ("6 admins, 2 reviewers"), so without it the row had nothing to say
+    // about a figure this query had in hand. Ninth instance of a producer with
+    // no reader in this programme (#252, D142, D149, D150, D151, D152, D153).
+    const byRole: Record<string, number> = {};
     let statsAvailable = true;
     let statsReason: string | null = null;
     try {
@@ -67,6 +74,7 @@ r.get('/insights', async (c) => {
       for (const row of q.results || []) {
         const n = Number(row.n) || 0;
         accounts += n;
+        byRole[String(row.role)] = n;
         if ((SEAT_ROLES as readonly string[]).includes(String(row.role))) seatsUsed += n;
       }
     } catch (e) {
@@ -95,6 +103,10 @@ r.get('/insights', async (c) => {
       stats: {
         accounts: statsAvailable ? accounts : null,
         seats_used: statsAvailable ? seatsUsed : null,
+        // ACTIVE ONLY, and the flag says so rather than leaving a reader to
+        // infer it from a total that does not match the directory.
+        by_role: statsAvailable ? byRole : null,
+        by_role_active_only: true,
         // THE FIGURE CARRIES WHAT IT MEANS, or it reads as a seat ledger. Same
         // sentence `branchOverview` sends over RPC (D127), because two
         // different explanations of one number is how two surfaces come to
