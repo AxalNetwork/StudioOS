@@ -33,12 +33,6 @@ const ADMIN_ID = 1;
 const OWNER_ID = 10; // investor whose LP owns call #1
 const OTHER_ID = 20; // a different investor (owns call #2)
 
-// LP records: lp #100 -> OWNER_ID, lp #200 -> OTHER_ID.
-const LPS = [
-  { id: 100, user_id: OWNER_ID },
-  { id: 200, user_id: OTHER_ID },
-];
-
 async function mintToken(userId: number, role: string): Promise<string> {
   // No `jti` so getCurrentUser skips the user_sessions revocation lookup.
   return new SignJWT({ user_id: userId, role })
