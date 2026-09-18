@@ -1128,9 +1128,34 @@ export type GuardrailCounters = {
   verdicts:
     | { available: true; evaluated: number; safe_count: number; unsafe_count: number; safe_rate: number | null }
     | { available: false; reason: string };
-  /** What the guard CAUSED, over `advisor_turn_audit`. */
+  /**
+   * What the guard CAUSED, over `advisor_turn_audit`.
+   *
+   * D158 — `rules` is WHICH RULE fired, which until migration 270 was computed
+   * on every guarded turn and thrown away. Three things about its shape are
+   * deliberate:
+   *
+   *   · `rules` and `states` are SEPARATE. `classifyInput` returns an S-code
+   *     when llama-guard names a violated category, and otherwise one of
+   *     `safe` / `empty` / `router_failed` / `error` — which are not rules that
+   *     fired, they are descriptions of the classification itself. Mixing them
+   *     would put "the router failed" in a list headed "what tripped the
+   *     guard", and a router failure is the guard NOT running.
+   *   · `unclassified` is its own number and is never folded into either. Every
+   *     row written before 270 has a null category, and reporting those as
+   *     `safe` would be a verdict nothing reached.
+   *   · The whole block still fails as one with the rest of `enforcement`: an
+   *     unreadable `advisor_turn_audit` is not a turn that fired no rules.
+   */
   enforcement:
-    | { available: true; blocked: number; flagged: number }
+    | {
+      available: true;
+      blocked: number;
+      flagged: number;
+      rules: Array<{ category: string; turns: number }>;
+      states: Array<{ category: string; turns: number }>;
+      unclassified: number;
+    }
     | { available: false; reason: string };
 };
 
@@ -1159,6 +1184,27 @@ export async function loadGuardrailCounters(env: Env, days = 7): Promise<Guardra
   ).bind(since).first<{ blocked: number; flagged: number }>()
     .catch(() => undefined);
 
+  // D158 — the breakdown, riding `idx_advisor_turn_audit_category`. Rows with a
+  // null category are counted here rather than excluded, so `unclassified` is a
+  // figure the page can show rather than a silent difference between this total
+  // and `blocked`.
+  const byCategory = await env.DB.prepare(
+    `SELECT COALESCE(guardrail_category, '') AS category, COUNT(*) AS turns
+       FROM advisor_turn_audit
+      WHERE created_at >= ?
+      GROUP BY COALESCE(guardrail_category, '')
+      ORDER BY turns DESC, category ASC`,
+  ).bind(since).all<{ category: string; turns: number }>()
+    .catch(() => undefined);
+
+  // An S-code is a rule that fired; everything else `classifyInput` can return
+  // describes the classification instead. A literal test, not a built regex.
+  const isRule = (c: string) => /^s\d+$/.test(c);
+  const catRows = (byCategory?.results || []).map((r) => ({
+    category: String(r.category || ''),
+    turns: Number(r.turns || 0),
+  }));
+
   const evaluated = Number(safety?.evaluated || 0);
   return {
     window_days: win,
@@ -1186,6 +1232,9 @@ export async function loadGuardrailCounters(env: Env, days = 7): Promise<Guardra
         available: true,
         blocked: Number(enforcement?.blocked || 0),
         flagged: Number(enforcement?.flagged || 0),
+        rules: catRows.filter((r) => isRule(r.category)),
+        states: catRows.filter((r) => r.category !== '' && !isRule(r.category)),
+        unclassified: catRows.find((r) => r.category === '')?.turns ?? 0,
       },
   };
 }

@@ -171,6 +171,47 @@ function AiSafety({ block }) {
           tone={e?.available && e.flagged ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'}
         />
       </div>
+      {/*
+        D158 — WHICH RULE FIRED. Until migration 270 this panel could say how
+        often the guard fired and never what for, and the list below carried a
+        row saying so. Three things here follow the payload rather than the
+        layout: `rules` and `states` are rendered apart, because a router
+        failure is the guard NOT running and does not belong in a list headed
+        "what tripped it"; `unclassified` is stated rather than folded in,
+        because every turn recorded before 270 has no category and calling one
+        `safe` would be a verdict nothing reached; and the whole block is
+        absent, not zeroed, when `advisor_turn_audit` could not be read.
+      */}
+      {e?.available && (
+        <div className="mt-3" data-testid="hq-ai-safety-rules">
+          <div className="text-[11px] font-semibold text-axal-muted">What tripped the guard</div>
+          {e.rules?.length ? (
+            <ul className="mt-1 space-y-0.5">
+              {e.rules.map((rr) => (
+                <li key={rr.category} className="text-[11px] text-axal-faint tabular-nums">
+                  <b className="text-axal-muted">{rr.category}</b> — {num(rr.turns)} {rr.turns === 1 ? 'turn' : 'turns'}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="mt-1 text-[11px] text-axal-faint" data-testid="hq-ai-safety-rules-none">
+              No turn in this window named a violated rule.
+            </div>
+          )}
+          {e.unclassified > 0 && (
+            <div className="mt-1 text-[11px] text-axal-faint" data-testid="hq-ai-safety-unclassified">
+              {num(e.unclassified)} {e.unclassified === 1 ? 'turn was' : 'turns were'} recorded without a
+              category. Turns written before the category was stored carry none — that is not a turn judged safe.
+            </div>
+          )}
+          {e.states?.length > 0 && (
+            <div className="mt-1 text-[11px] text-axal-faint" data-testid="hq-ai-safety-states">
+              Classification outcomes: {e.states.map((ss) => `${ss.category} ${ss.turns}`).join(' · ')}. These
+              describe the check itself, not a rule that fired.
+            </div>
+          )}
+        </div>
+      )}
       {(block?.not_counted || []).length > 0 && (
         <ul className="mt-3 space-y-1.5" data-testid="hq-ai-safety-not-counted">
           {block.not_counted.map((n) => (
