@@ -1089,7 +1089,7 @@ function tabsForRole(role, obligations) {
  */
 export default function TrustCenterPage({ chromeless = false }) {
   const [matrix, setMatrix] = useState(null);   // /api/trust/me
-  const [legacy, setLegacy] = useState(null);   // /api/trust/summary (old)
+  const [, setLegacy] = useState(null);         // /api/trust/summary (old)
   const [requiredNdas, setRequiredNdas] = useState([]); // /api/trust/nda/required
   const [kyc, setKyc] = useState(null);         // /api/kyc/status — READ ONLY here
   const [err, setErr] = useState(null);
