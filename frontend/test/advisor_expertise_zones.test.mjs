@@ -229,19 +229,6 @@ function zoneBodyTags(code) {
   return tags;
 }
 
-/** The `loading={…}` expression of one tag, brace-balanced. */
-function loadingExpr(tag) {
-  const key = 'loading={';
-  const at = tag.indexOf(key);
-  if (at === -1) return null;
-  let depth = 1;
-  for (let i = at + key.length; i < tag.length; i += 1) {
-    if (tag[i] === '{') depth += 1;
-    else if (tag[i] === '}') { depth -= 1; if (depth === 0) return tag.slice(at + key.length, i); }
-  }
-  return null;
-}
-
 test('no zone holds `loading` true past its own error', () => {
   // THE BUG THIS PINS SHUT, which shipped and was reported from production as
   // /expertise/profile spinning forever: a `loading` expression that ORs a
