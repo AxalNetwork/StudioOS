@@ -83,6 +83,21 @@ export default function PlatformPage() {
   }, []);
   useEffect(() => { loadDeps(); }, [loadDeps]);
 
+  // D161 — traffic by branch, its own read for the same reason `deps` is: it
+  // goes out to Analytics Engine over the network and fails differently from
+  // both the platform summary and the registry. A third `useState` rather than
+  // a field on either, so an unreadable metrics store cannot empty the keys,
+  // jobs or deployments halves of this page.
+  const [traffic, setTraffic] = useState(null);
+  const loadTraffic = useCallback(() => {
+    setTraffic(null);
+    api.analyticsTrafficByBranch('', '').then(setTraffic, (e) => {
+      reportError('hq-platform:trafficByBranch', e);
+      setTraffic(UNAVAILABLE);
+    });
+  }, []);
+  useEffect(() => { loadTraffic(); }, [loadTraffic]);
+
   const ready = data && data !== UNAVAILABLE;
   const integrations = ready ? data.integrations : null;
   const jobs = ready ? data.jobs : null;
@@ -292,6 +307,63 @@ export default function PlatformPage() {
                 <p className="mt-1.5 text-[11.5px] text-axal-faint">
                   {deps.coverage.answered} of {deps.coverage.total} branches answered.
                 </p>
+              )}
+            </Zone>
+
+            {/* D161 — the branch dimension's reader. D105 justified sharing
+                one Analytics Engine dataset across every branch on the grounds
+                it was "indexed by BRANCH_CODE"; it never was, so until now no
+                per-branch figure existed to draw. The dimension now rides in
+                blob6 of every request, and this is where HQ reads it.
+
+                SUPER ADMIN ONLY, deliberately. `/monitoring/analytics/technical`
+                is `requireAdmin` and stays a platform-wide aggregate, because a
+                plain admin is a branch admin and attributing traffic to a named
+                branch there would show every branch admin every other branch's
+                figures. */}
+            <Zone title="Traffic by branch" sub="one row per deployment that served a request">
+              {traffic === UNAVAILABLE ? (
+                <Unreadable
+                  what="Traffic by branch"
+                  claim="This is not a claim that no branch served traffic."
+                  onRetry={loadTraffic}
+                />
+              ) : traffic === null ? (
+                <p className="text-[12.5px] text-axal-muted">Reading the metrics store…</p>
+              ) : traffic.available === false ? (
+                <Absent reason={traffic.reason} />
+              ) : (traffic.rows || []).length === 0 ? (
+                <p className="text-[12.5px] leading-relaxed text-axal-muted">
+                  The metrics store answered and holds no request in this window. That is an empty
+                  result, not an unreadable one.
+                </p>
+              ) : (
+                <>
+                  <ul className="divide-y divide-axal-hairline" data-testid="hq-traffic-by-branch">
+                    {traffic.rows.map((t) => (
+                      <li key={t.branch} className="flex items-baseline justify-between gap-3 py-2 text-[12.5px]">
+                        <span className="min-w-0 truncate">
+                          <span className="font-semibold">{t.branch === 'hq' ? 'HQ' : t.branch}</span>
+                          <span className="text-axal-muted tabular-nums"> · {num(t.hits)} requests</span>
+                        </span>
+                        <span className="shrink-0 tabular-nums text-axal-faint">
+                          {num(t.p95_ms)}ms p95 · {t.error_rate_pct}% 5xx
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  {/* With no branch provisioned every row carries `hq`, so say
+                      so rather than letting a single row read as a fan-out. */}
+                  {traffic.rows.length === 1 && traffic.rows[0].branch === 'hq' && (
+                    <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">
+                      Only HQ has served traffic. Each branch appears here once its Worker is deployed
+                      and answering — this is one deployment, not one branch out of several.
+                    </p>
+                  )}
+                  <p className="mt-1.5 text-[11px] text-axal-faint">
+                    Read {day(traffic.as_of)}.
+                  </p>
+                </>
               )}
             </Zone>
 

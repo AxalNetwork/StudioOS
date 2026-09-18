@@ -6,6 +6,7 @@ import { requireAdmin, requireFactor, requireStepUp, requireHqAuthoring } from '
 import { hashEmail } from '../util/hashEmail';
 import { mintDownloadToken } from '../services/signedDownload';
 import { sendAgreementAssignedEmail } from '../services/email';
+import { fanOut } from '../services/branches';
 import {
   listTemplates as storeListTemplates,
   getTemplate as storeGetTemplate,
@@ -1348,6 +1349,61 @@ adminContracts.post('/templates/store', async (c) => {
     if (e instanceof TemplateError) return c.json({ error: e.message, code: e.code }, e.status);
     throw e;
   }
+});
+
+// POST /templates/publish — push the master library to every branch (D147).
+//
+// THE PUSH IS REPORTED, NEVER THROWN — D111's rule, and the same shape
+// `admin_escalations.ts` uses for an answer and `admin_licences.ts` for a
+// licence transition. HQ's library is HQ's whether or not a branch answered,
+// and a 502 for one unreachable branch would tell an operator that a push to
+// the other three did not happen.
+//
+// WHAT IT SENDS IS EXACTLY WHAT HQ'S OWN LIBRARY SHOWS. `storeListTemplates`
+// filters `is_active = 1`, so an archived template is absent from the push and
+// the branch withdraws it at the next one. No body travels: nothing on a branch
+// renders or instantiates one (migration 268 says why), so this is a catalogue.
+//
+// ZERO BRANCHES IS A REAL ANSWER. `fanOut` over an env with no `BRANCH_*`
+// binding returns `[]`, and this returns `branches: []` with `pushed: 0` — which
+// is true, and is what an operator sees today.
+adminContracts.post('/templates/publish', async (c) => {
+  const admin = await requireHqAuthoring(c);
+  const templates = await storeListTemplates(c.env);
+  const pushed_at = new Date().toISOString();
+  const payload = {
+    templates: templates.map((t) => ({
+      slug: t.slug, title: t.title, category: t.category, version: t.version,
+    })),
+    pushed_at,
+  };
+
+  const results = await fanOut<{ ok: true; stored: number; withdrawn: number }>(
+    c.env, 'publishTemplate', [payload],
+  );
+
+  return c.json({
+    ok: true,
+    pushed_at,
+    template_count: payload.templates.length,
+    pushed_by: admin.id,
+    // One row per branch in `services/branches.ts`'s THREE states, never two:
+    // `unreadable` is not a claim that the branch is down, and `not_deployed`
+    // must not share its colour.
+    branches: results.map((r) => ({
+      code: r.code,
+      status: r.status,
+      ...(r.data ? { stored: r.data.stored, withdrawn: r.data.withdrawn } : {}),
+      ...(r.reason ? { reason: r.reason } : {}),
+    })),
+    answered: results.filter((r) => r.status === 'ok').length,
+    total: results.length,
+    ...(results.length ? {} : {
+      branches_reason:
+        'No branch Worker is bound to HQ yet, so the library was not pushed anywhere. It will '
+        + 'reach a branch the first time one is provisioned and this is run again.',
+    }),
+  });
 });
 
 // GET /templates/store/:slug — single template (full body + merge fields).

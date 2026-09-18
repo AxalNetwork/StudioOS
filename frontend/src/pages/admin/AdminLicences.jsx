@@ -1,6 +1,6 @@
 // Territory licences — the HQ ledger for the subsidiary model.
 //
-// Design handoff: Admin · Super.dc.html, "Licenses" nav row and the five-step
+// Design handoff: Admin · Super.dc.html, "Licences" nav row and the five-step
 // issue flow (Entity → Territory → Seats → Terms → Activate). Recreated
 // natively in the admin shell like AdminLpApplications and AdminExploring,
 // rather than ported as a standalone page, so it inherits auth, nav and dark
@@ -39,11 +39,17 @@
 // under them is the thing this file refuses.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Loader2, AlertCircle, Check, X, Globe, Users, FileText, Ban, RotateCw,
+  Loader2, AlertCircle, AlertTriangle, Check, X, Globe, Users, FileText, Ban, RotateCw,
+  Send, ShieldOff, UserPlus,
 } from 'lucide-react';
 import { api } from '../../lib/api';
-import { coverageCells, renewalPipeline } from '../../lib/licenceCoverage';
+import { bpsPercent as pct } from '../../lib/bps';
+import { coverageCells, renewalPipeline, sortCells } from '../../lib/licenceCoverage';
+import { DEPLOY_TIMELINE, deployProgress } from '../../lib/deployTimeline';
 import { reportError } from '../../lib/log';
+import {
+  FREEZING_STATUSES, NOTICE_KINDS, noticeKindLabel, noticeRank, daysTo,
+} from '../../lib/notices';
 
 const SEAT_TYPES = [
   { k: 'founder', label: 'Founder' },
@@ -67,6 +73,45 @@ const STATUS_TONE = {
 // provenance, not a step anybody performs.
 const STEPS = ['Entity', 'Territory', 'Seats', 'Terms', 'Contract', 'Deploy'];
 const HISTORY_STEP = STEPS.length + 1;
+// D134 — also unnumbered, and for the same reason History is: appointing an
+// administrator is not a step of the issue flow. A licence can be issued,
+// activated and deployed with nobody named on it, and an administrator can be
+// changed years later without any of the six steps running again.
+const ADMINS_STEP = STEPS.length + 2;
+// D136 — the third unnumbered tab, and the same argument a third time. Issuing a
+// compliance notice is something HQ does to a licence that has been running for
+// months; putting it in the numbered flow would say a licence cannot be issued
+// without one.
+const NOTICES_STEP = STEPS.length + 3;
+
+// The ladder's own statuses, which are NOT licence statuses. `STATUS_TONE` above
+// covers `active`/`suspended`/`terminated`/`draft`/`pending_activation` and none
+// of the six below is in it — a notice reusing that map would fall through to
+// the `draft` grey and render `overdue` as the calmest thing on the screen.
+//
+// The two FREEZING statuses (`overdue`, `rejected`, per `util/authErrors.ts`)
+// are the two in rose, because what they have in common is not their position in
+// the sequence — it is that the account cannot write.
+const NOTICE_TONE = {
+  issued: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+  overdue: 'bg-rose-50 text-rose-700 border-rose-200',
+  responded: 'bg-amber-50 text-amber-800 border-amber-200',
+  accepted: 'bg-green-50 text-green-700 border-green-200',
+  rejected: 'bg-rose-50 text-rose-700 border-rose-200',
+  withdrawn: 'bg-gray-100 text-gray-500 border-gray-200',
+};
+
+// D138 — `NOTICE_KINDS`, `noticeKindLabel` and the freezing set were declared
+// here AND in `MyLicencePage.jsx` when D136 shipped both surfaces on one day.
+// They live in `lib/notices.js` now, on the rule `lib/README.md` already
+// states: "If a helper appears in two places, put it here once rather than a
+// third time." `NOTICE_TONE` below deliberately did NOT move — see that file's
+// header for why two tone maps are two visual treatments and not one fact.
+
+// MIN/MAX/DEFAULT_RESPOND_DAYS in `services/complianceLadder.ts`. The server
+// clamps to this range whatever arrives, so the input's bounds are the same
+// numbers rather than a looser set the server would silently correct.
+const RESPOND_DAYS = { min: 1, max: 90, def: 14 };
 
 // Residency, exactly as Cloudflare offers it (A.4, D.1). `eu` is the only
 // guarantee on D1; a hint is a hint, and there is no in-country option outside
@@ -90,38 +135,30 @@ const DO_JURISDICTIONS = [
   { v: 'us', label: 'US' },
 ];
 
-// What provisioning reports, in the order it happens (migration 258). Kept as
-// a list rather than inferred from the row so a deployment sitting at
-// `schema_applied` shows the four steps still ahead of it.
-const DEPLOY_TIMELINE = [
-  ['requested', 'Requested'],
-  ['database_created', 'Database created'],
-  ['schema_applied', 'Schema applied'],
-  ['secrets_present', 'Secrets present'],
-  ['principal_seeded', 'Principal seeded'],
-  ['worker_live', 'Worker live'],
-  ['hostname_active', 'Hostname active'],
-  ['linked', 'Linked to HQ'],
-];
-
 const BRANCH_CODE_RE = /^[a-z][a-z0-9-]{1,15}$/;
 
 const n0 = (n) => Number(n || 0).toLocaleString();
 
-// Basis points in, percent out. 3500 → "35%". Integer bps is the stored form
-// precisely so this is the only place a fraction is ever computed.
-const pct = (bps) => (bps === null || bps === undefined ? null : `${(Number(bps) / 100).toFixed(2).replace(/\.?0+$/, '')}%`);
+// Basis points in, percent out — now `lib/bps.js`, imported above as `pct` so
+// no call site in this file changes.
+//
+// THE COMMENT THIS REPLACES SAID "this is the only place a fraction is ever
+// computed", AND IT WAS ALREADY FALSE when it was written: `MyLicencePage`
+// declared the same body as `fmtBps`, `NeedsBoardPage` had it inline on a tax
+// rate, and HQ's Revenue page was about to be the fourth. That is the same
+// class of stale claim D129 and D131 each deleted — a sentence that describes
+// an intention rather than the tree. It is true now because there IS one
+// definition, and `frontend/test/bps_single_definition.test.mjs` keeps it true.
 
 const fee = (cents, currency) => (cents === null || cents === undefined
   ? null
   : `${currency || ''} ${(Math.round(Number(cents)) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`.trim());
 
-function daysTo(iso) {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return Math.round((d.getTime() - Date.now()) / 86400000);
-}
+// D138 — `toUtcInstant` and `daysTo` moved to `lib/notices.js`. They were
+// exported from this PAGE for their test, and `HqTeamTable.jsx` needs the same
+// normalisation: `admin_notices` stamps are SQL `YYYY-MM-DD HH:MM:SS`, which
+// V8 reads as the READER'S LOCAL time and other engines reject. Importing one
+// page's export from another page is what `lib/README.md` exists to prevent.
 
 function Chip({ children, tone }) {
   return (
@@ -526,13 +563,20 @@ function DeployStep({ licence }) {
   }
 
   if (mine) {
-    const at = DEPLOY_TIMELINE.findIndex(([k]) => k === mine.status);
+    // THREE STATES, BECAUSE TWO WERE THE DEFECT — the derivation and the whole
+    // argument for it are `lib/deployTimeline.js`'s, so that a test can put a
+    // RUNNING deployment and a FAILED one through it and see them differ. A
+    // scan of this file could only ever see that three markers are written,
+    // which is not the thing that was broken.
+    const { failed, done, total, states, summary } = deployProgress(mine.status);
     return (
       <div data-testid="licence-deploy-step" className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <Globe size={14} className="text-gray-500" />
           <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{mine.hostname}</span>
-          <Chip tone={mine.status === 'failed'
+          {/* One definition of failed, shared with the timeline below, so the
+              chip and the marks can never disagree about the same row. */}
+          <Chip tone={failed
             ? 'bg-red-50 text-red-700 border-red-200'
             : 'bg-indigo-50 text-indigo-700 border-indigo-200'}>{mine.status.replace(/_/g, ' ')}</Chip>
           {/* The live read is its own chip, never folded into the status: a
@@ -542,23 +586,56 @@ function DeployStep({ licence }) {
             ? 'bg-green-50 text-green-700 border-green-200'
             : 'bg-gray-100 text-gray-600 border-gray-200'}>{mine.live_state.replace(/_/g, ' ')}</Chip>
         </div>
-        {mine.status_note && <p className="text-sm text-red-700">{mine.status_note}</p>}
+        {mine.status_note && (
+          <div
+            data-testid="deploy-status-note"
+            className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+          >
+            {/* The heading says whose sentence this is. The note is written by
+                the route that stopped (admin_deployments.ts names the missing
+                credential and the 403 scope apart, rather than calling both
+                "not configured"), so it is repeated here and never restated —
+                a second copy of a server sentence is the thing the credential
+                block below already refuses. */}
+            <span className="block text-[11px] font-medium uppercase tracking-wide">
+              {failed ? 'Why it stopped' : 'Reported by provisioning'}
+            </span>
+            <span className="mt-1 block">{mine.status_note}</span>
+          </div>
+        )}
         {mine.live_state !== 'ok' && mine.live_reason && (
           <p className="text-xs text-gray-600 dark:text-gray-400">{mine.live_reason}</p>
         )}
-        <ol data-testid="deploy-timeline" className="space-y-1 text-sm">
+        <p data-testid="deploy-summary" className="text-sm text-gray-700 dark:text-gray-300">
+          {summary}
+        </p>
+        <ol data-testid="deploy-timeline" data-done={done} data-total={total} className="space-y-1 text-sm">
           {DEPLOY_TIMELINE.map(([key, label], i) => {
-            const done = at >= 0 && i <= at;
+            const state = states[i];
             return (
-              <li key={key} className="flex items-center gap-2">
-                {done
-                  ? <Check size={13} className="shrink-0 text-green-600" />
-                  : <span className="inline-block h-[13px] w-[13px] shrink-0 rounded-full border border-gray-300 dark:border-gray-700" />}
-                <span className={done ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500'}>{label}</span>
+              <li key={key} data-state={state} className="flex items-center gap-2">
+                {state === 'ok' && <Check size={13} className="shrink-0 text-green-600" />}
+                {state === 'wait' && (
+                  <span className="inline-block h-[13px] w-[13px] shrink-0 rounded-full border border-gray-300 dark:border-gray-700" />
+                )}
+                {/* Dashed, not a cross: the mark means "not recorded", and a
+                    cross would say this step ran and failed, which is a claim
+                    the row cannot support for any particular step. */}
+                {state === 'unknown' && (
+                  <span className="inline-block h-[13px] w-[13px] shrink-0 rounded-full border border-dashed border-amber-500" />
+                )}
+                <span className={state === 'ok' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500'}>
+                  {label}
+                </span>
               </li>
             );
           })}
         </ol>
+        <p data-testid="deploy-timeline-bound" className="text-[11px] text-gray-500">
+          No step carries a time or a note of its own: the deployment row holds one status and one
+          note for the whole request, so the note above belongs to the deployment rather than to any
+          step of it.
+        </p>
         <p className="text-[11px] text-gray-500">
           Residency requested: {mine.residency_requested || 'none'}. Granted:{' '}
           {mine.residency_granted || 'not yet reported by provisioning'}.
@@ -649,6 +726,491 @@ function DeployStep({ licence }) {
         Deploy this branch
       </button>
       {err && <p className="text-sm text-red-600">{err}</p>}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Administrators — the door admin accounts are opened and closed by    *
+ * ------------------------------------------------------------------ */
+
+// D134 — `licence_admins` has existed since migration 190 and had no UI at all:
+// its three api.js methods had zero callers, so naming a subsidiary's
+// administrator meant SQL. This is the section, and it is deliberately the
+// whole lifecycle rather than a list — appoint, demote, detach — because the
+// three only make sense read together.
+//
+// THE TWO-STEP CLOSE IS ON SCREEN RATHER THAN IN A 409. Detach refuses while
+// the account still holds the admin role, so the button says so and stays
+// disabled until the demote has happened. A UI that offered both and let the
+// server pick would teach the operator that one of its buttons is a lie.
+//
+// A FAILED READ IS NOT AN EMPTY LIST. `items === null` after a failure renders
+// the server's own sentence; "no administrators" is a claim about the licence
+// and must never be produced by a request that did not arrive.
+function AdminsEditor({ licence, onSaved }) {
+  const [items, setItems] = useState(undefined);
+  const [loadErr, setLoadErr] = useState(null);
+  const [form, setForm] = useState({ email: '', admin_role: 'principal', reason: '' });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const load = useCallback(() => {
+    setLoadErr(null);
+    api.licenceAdmins(licence.uid)
+      .then((d) => setItems(Array.isArray(d?.items) ? d.items : []))
+      .catch((e) => {
+        reportError('AdminLicences:licenceAdmins', e);
+        setItems(null);
+        setLoadErr(e?.message || 'The administrator list could not be read.');
+      });
+  }, [licence.uid]);
+  useEffect(load, [load]);
+
+  const refresh = () => { load(); onSaved?.(); };
+
+  async function run(fn) {
+    setBusy(true); setErr(null);
+    try { await fn(); refresh(); }
+    catch (e) { reportError('AdminLicences:adminAction', e); setErr(e?.message || 'That did not go through.'); }
+    finally { setBusy(false); }
+  }
+
+  const canAppoint = form.email.trim().length > 0 && form.reason.trim().length >= 10;
+
+  return (
+    <div data-testid="licence-admins">
+      <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Administrators</h3>
+      <p className="mt-1 text-[11px] text-gray-500">
+        Appointing someone here makes the account an admin and binds it to this licence in one
+        step, so no administrator exists without a territory behind them. Closing one is two
+        steps, in this order: demote, then detach.
+      </p>
+
+      {items === undefined && <p className="mt-3 text-sm text-gray-500">Loading…</p>}
+      {items === null && (
+        <p data-testid="licence-admins-unreadable" className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
+          {loadErr} This is not the same as having none — nothing was read.
+        </p>
+      )}
+      {Array.isArray(items) && items.length === 0 && (
+        <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">
+          Nobody administers this licence yet.
+        </p>
+      )}
+      {Array.isArray(items) && items.length > 0 && (
+        <ul className="mt-3 space-y-2">
+          {items.map((a) => {
+            const isAdmin = String(a.role || '').toLowerCase() === 'admin';
+            const active = Number(a.is_active ?? 0) === 1;
+            return (
+              <li key={a.user_id} className="rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      {a.name || a.email}
+                    </div>
+                    <div className="text-xs text-gray-500">{a.email} · {a.admin_role}</div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {isAdmin
+                      ? <Chip tone={active ? STATUS_TONE.active : STATUS_TONE.suspended}>
+                          {active ? 'admin' : 'admin · deactivated'}
+                        </Chip>
+                      : <Chip tone={STATUS_TONE.draft}>no longer an admin — detach</Chip>}
+                    <button
+                      type="button" disabled={busy || !isAdmin}
+                      onClick={() => {
+                        const reason = window.prompt('Why is this administrator being removed? At least 10 characters, and it is recorded.');
+                        if (reason) run(() => api.adminDemoteAdmin(a.user_id, reason));
+                      }}
+                      className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-40"
+                    >
+                      <ShieldOff size={12} /> Demote
+                    </button>
+                    <button
+                      type="button" disabled={busy || isAdmin}
+                      onClick={() => run(() => api.licenceAdminRemove(licence.uid, a.user_id))}
+                      className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300"
+                    >
+                      <X size={12} /> Detach
+                    </button>
+                  </div>
+                </div>
+                {isAdmin && (
+                  <p className="mt-2 text-[11px] text-gray-500">
+                    Detach is available once this account is no longer an admin — unbinding first
+                    would leave an administrator with no licence behind them.
+                  </p>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      <div className="mt-4 rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Appoint an administrator</div>
+        <p className="mt-1 text-[11px] text-gray-500">
+          The address must already have an account — appointing one nobody holds would create an
+          administrator who cannot sign in.
+        </p>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          <input
+            type="email" placeholder="name@example.com" value={form.email}
+            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            className="rounded-md border border-gray-300 px-2 py-1 text-sm dark:border-gray-700"
+          />
+          <select
+            value={form.admin_role}
+            onChange={(e) => setForm((f) => ({ ...f, admin_role: e.target.value }))}
+            className="rounded-md border border-gray-300 px-2 py-1 text-sm dark:border-gray-700"
+          >
+            <option value="principal">Principal</option>
+            <option value="delegate">Delegate</option>
+          </select>
+        </div>
+        <textarea
+          rows={2} placeholder="Why this account, in at least 10 characters. It is recorded."
+          value={form.reason}
+          onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
+          className="mt-2 w-full rounded-md border border-gray-300 px-2 py-1 text-sm dark:border-gray-700"
+        />
+        <button
+          type="button" disabled={busy || !canAppoint}
+          onClick={() => run(async () => {
+            await api.licenceAdminAdd(licence.uid, {
+              email: form.email.trim(), admin_role: form.admin_role, reason: form.reason.trim(),
+            });
+            setForm({ email: '', admin_role: 'principal', reason: '' });
+          })}
+          className="mt-2 inline-flex items-center gap-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+        >
+          {busy ? <Loader2 size={14} className="animate-spin" /> : <><UserPlus size={14} /> Appoint</>}
+        </button>
+      </div>
+
+      {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
+      <p className="mt-3 text-[11px] text-gray-500">
+        Every act here needs a recent TOTP step-up as well as the Super Admin elevation, so a
+        403 can mean "step up and try again" rather than "you may not".
+      </p>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Notices — the compliance ladder, from HQ's end                       *
+ * ------------------------------------------------------------------ */
+
+// D136 — D135 built the whole ladder and gave it no door: `licenceNotices`,
+// `licenceNoticeIssue` and `licenceNoticeReview` shipped with zero callers, so
+// issuing a notice meant SQL — and the sweep runs every minute, which means a
+// notice issued that way would freeze an account whose only screen said nothing
+// about why. This is HQ's end of it.
+//
+// ACCEPT AND REJECT ARE DISABLED UNTIL THE ADDRESSEE HAS ANSWERED, rather than
+// offered and refused. The server answers 409 `not_responded` every time, which
+// is D134's `still_an_admin` one route over: a UI that offers a button the
+// server always refuses teaches the operator that its buttons are advisory.
+//
+// AND THE ADDRESSEE IS A PICKER, NOT A TEXT BOX. `POST /notices` resolves the
+// email against `licence_admins` and 404s `not_an_administrator` for anyone
+// else, so a free-text field would be a field whose wrong answers are only
+// discoverable by submitting. The options are this licence's own administrators.
+function NoticesEditor({ licence, onSaved }) {
+  const [items, setItems] = useState(undefined);
+  const [holders, setHolders] = useState(null);
+  const [loadErr, setLoadErr] = useState(null);
+  const [admins, setAdmins] = useState(undefined);
+  const [form, setForm] = useState({
+    email: '', kind: 'renewal_terms', subject: '', body: '', respond_days: String(RESPOND_DAYS.def),
+  });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [lastReview, setLastReview] = useState(null);
+
+  const load = useCallback(() => {
+    setLoadErr(null);
+    api.licenceNotices(licence.uid)
+      .then((d) => {
+        // `notices_available: false` arrives with a 200 and an empty array, so
+        // the UNREADABLE state has to be read off the flag rather than off the
+        // length — otherwise a database that has not applied migration 264
+        // renders "no notices", which is a claim about the licence that nothing
+        // measured. Same null-means-unreadable contract as AdminsEditor.
+        if (d?.notices_available === false) {
+          setItems(null);
+          setLoadErr(d.notices_reason || 'The notices could not be read.');
+          setHolders(null);
+          return;
+        }
+        setItems(Array.isArray(d?.items) ? d.items : []);
+        setHolders(Number.isFinite(Number(d?.freeze_holders)) ? Number(d.freeze_holders) : null);
+      })
+      .catch((e) => {
+        reportError('AdminLicences:licenceNotices', e);
+        setItems(null);
+        setLoadErr(e?.message || 'The notices could not be read.');
+      });
+    // The addressee picker's options. Its own failure is its own state: a
+    // notices list that reads fine beside an administrator list that does not
+    // is a real combination, and collapsing the two would hide one of them.
+    api.licenceAdmins(licence.uid)
+      .then((d) => setAdmins(Array.isArray(d?.items) ? d.items : []))
+      .catch((e) => { reportError('AdminLicences:noticeAddressees', e); setAdmins(null); });
+  }, [licence.uid]);
+  useEffect(load, [load]);
+
+  const refresh = () => { load(); onSaved?.(); };
+
+  async function run(fn) {
+    setBusy(true); setErr(null);
+    try { await fn(); refresh(); }
+    catch (e) { reportError('AdminLicences:noticeAction', e); setErr(e?.message || 'That did not go through.'); }
+    finally { setBusy(false); }
+  }
+
+  // WORST FIRST, and "worst" means frozen rather than newest. A notice holding
+  // an account frozen is the only kind anybody has to do something about, so it
+  // sorts above one waiting on HQ, which sorts above one waiting on the
+  // addressee, which sorts above the closed ones. Inside a band, oldest first:
+  // the longest-frozen account is the one furthest down the ladder.
+  const sorted = useMemo(() => {
+    if (!Array.isArray(items)) return items;
+    return [...items].sort((a, b) => {
+      const r = noticeRank(a.status) - noticeRank(b.status);
+      if (r !== 0) return r;
+      return String(a.froze_at || a.respond_by || '')
+        .localeCompare(String(b.froze_at || b.respond_by || ''));
+    });
+  }, [items]);
+
+  const days = Number(form.respond_days);
+  const canIssue = form.email.trim().length > 0
+    && form.subject.trim().length >= 3
+    && form.body.trim().length >= 10
+    && Number.isFinite(days) && days >= RESPOND_DAYS.min && days <= RESPOND_DAYS.max;
+
+  return (
+    <div data-testid="licence-notices">
+      <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Compliance notices</h3>
+      <p className="mt-1 text-[11px] text-gray-500">
+        A notice is the first rung: the administrator is told what is wrong and by when to answer.
+        A deadline that passes unanswered freezes their account and suspends this licence — writes
+        stop, reading does not. Answering lifts the freeze; you accept or reject afterwards.
+        Terminating is never automatic and is the button at the top of this page.
+      </p>
+
+      {items === undefined && <p className="mt-3 text-sm text-gray-500">Loading…</p>}
+      {items === null && (
+        <p data-testid="licence-notices-unreadable" className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
+          {loadErr} This is not the same as there being none — nothing was read.
+        </p>
+      )}
+      {Array.isArray(items) && items.length === 0 && (
+        <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">
+          No notice has been issued against this licence.
+        </p>
+      )}
+
+      {holders !== null && holders > 0 && (
+        <p data-testid="licence-freeze-holders" className="mt-3 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+          <AlertTriangle size={13} className="mr-1.5 -mt-0.5 inline" />
+          {holders === 1
+            ? 'One notice is holding this licence frozen.'
+            : `${holders} notices are holding this licence frozen.`}{' '}
+          Accepting one is not enough — the freeze lifts when the last of them is answered and accepted.
+        </p>
+      )}
+
+      {lastReview && (
+        <p data-testid="licence-notice-reviewed" className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
+          Recorded as <strong className="font-semibold">{lastReview.status}</strong>.{' '}
+          {lastReview.reinstated
+            ? 'That was the last one holding it, so the licence is active again.'
+            : `${lastReview.freeze_holders} notice${lastReview.freeze_holders === 1 ? '' : 's'} still holding the freeze.`}
+        </p>
+      )}
+
+      {Array.isArray(sorted) && sorted.length > 0 && (
+        <ul className="mt-3 space-y-2">
+          {sorted.map((n) => {
+            const reviewable = n.status === 'responded';
+            const frozenDays = FREEZING_STATUSES.has(n.status) ? daysTo(n.froze_at) : null;
+            const due = daysTo(n.respond_by);
+            return (
+              <li key={n.uid} className="rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{n.subject}</div>
+                    <div className="text-xs text-gray-500">
+                      {n.name || n.email} · {noticeKindLabel(n.kind)}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Chip tone={NOTICE_TONE[n.status]}>{String(n.status || '').replace(/_/g, ' ')}</Chip>
+                    <button
+                      type="button" disabled={busy || !reviewable}
+                      onClick={() => run(async () => {
+                        const note = window.prompt('A note on why this is accepted. Optional, and it is recorded.') || '';
+                        const res = await api.licenceNoticeReview(licence.uid, n.uid, { decision: 'accept', note });
+                        setLastReview(res);
+                      })}
+                      className="inline-flex items-center gap-1 rounded-md border border-green-300 px-2.5 py-1 text-xs font-medium text-green-700 hover:bg-green-50 disabled:opacity-40"
+                    >
+                      <Check size={12} /> Accept
+                    </button>
+                    <button
+                      type="button" disabled={busy || !reviewable}
+                      onClick={() => run(async () => {
+                        const note = window.prompt('Why is this response not accepted? The account stays frozen, and this is what they read.');
+                        if (note === null) return;
+                        const res = await api.licenceNoticeReview(licence.uid, n.uid, { decision: 'reject', note });
+                        setLastReview(res);
+                      })}
+                      className="inline-flex items-center gap-1 rounded-md border border-rose-300 px-2.5 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-40"
+                    >
+                      <X size={12} /> Reject
+                    </button>
+                  </div>
+                </div>
+
+                <p className="mt-2 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">{n.body}</p>
+
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-500">
+                  <span>
+                    Due {String(n.respond_by || '').slice(0, 10)}
+                    {due === null ? '' : due < 0 ? ` · ${Math.abs(due)} days overdue` : ` · in ${due} days`}
+                  </span>
+                  {/* THE ONLY CLOCK ON THIS SCREEN, and it counts UP from the
+                      freeze rather than down to anything. There is no second
+                      deadline: HQ decides when an account has had long enough,
+                      and a countdown would imply the platform decides. */}
+                  {frozenDays !== null && (
+                    <span data-testid="licence-notice-frozen-for" className="font-medium text-rose-700">
+                      Frozen since {String(n.froze_at || '').slice(0, 10)} · {Math.abs(frozenDays)} days
+                    </span>
+                  )}
+                  {n.responded_at && <span>Answered {String(n.responded_at).slice(0, 10)}</span>}
+                  {n.reviewed_at && <span>Reviewed {String(n.reviewed_at).slice(0, 10)}</span>}
+                </div>
+
+                {n.response
+                  ? (
+                    <div className="mt-2 rounded-md border border-gray-200 bg-gray-50 p-2.5 dark:border-gray-800 dark:bg-gray-900">
+                      <div className="text-[11px] font-medium text-gray-500">Their response</div>
+                      <p className="mt-0.5 whitespace-pre-wrap text-sm text-gray-800 dark:text-gray-200">{n.response}</p>
+                    </div>
+                  )
+                  : (
+                    <p className="mt-2 text-[11px] text-gray-500">
+                      Accept and Reject are available once the administrator has answered — there is
+                      nothing to review until they have.
+                    </p>
+                  )}
+
+                {n.review_note && (
+                  <p className="mt-2 text-[11px] text-gray-500">Your note: {n.review_note}</p>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      <div className="mt-4 rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Issue a notice</div>
+        {admins === undefined && <p className="mt-1 text-[11px] text-gray-500">Loading administrators…</p>}
+        {admins === null && (
+          <p data-testid="licence-notice-addressees-unreadable" className="mt-1 text-[11px] text-gray-600">
+            The administrator list could not be read, so there is nobody to address. That is not the
+            same as this licence having none.
+          </p>
+        )}
+        {Array.isArray(admins) && admins.length === 0 && (
+          <p className="mt-1 text-[11px] text-gray-600">
+            Nobody administers this licence, so a notice would have nobody to act on it. Appoint an
+            administrator first.
+          </p>
+        )}
+        {Array.isArray(admins) && admins.length > 0 && (
+          <>
+            <p className="mt-1 text-[11px] text-gray-500">
+              The addressee has to be an administrator of this licence — the freeze lands on their
+              account, so a notice to anyone else would have no remedy behind it.
+            </p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+              <select
+                value={form.email}
+                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                className="rounded-md border border-gray-300 px-2 py-1 text-sm dark:border-gray-700"
+              >
+                <option value="">Who is this for…</option>
+                {admins.map((a) => (
+                  <option key={a.user_id} value={a.email}>{a.name ? `${a.name} — ${a.email}` : a.email}</option>
+                ))}
+              </select>
+              <select
+                value={form.kind}
+                onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}
+                className="rounded-md border border-gray-300 px-2 py-1 text-sm dark:border-gray-700"
+              >
+                {NOTICE_KINDS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+              </select>
+              {/* A COUNT OF DAYS, NEVER A DATE PICKER. `respond_by` is computed
+                  server-side as `datetime('now', '+N days')` so the deadline and
+                  the sweep that reads it share one format and one clock; a date
+                  input would say the browser sets the deadline, in the reader's
+                  own zone, which is the timestamp defect this repo keeps fixing. */}
+              <input
+                type="number" min={RESPOND_DAYS.min} max={RESPOND_DAYS.max} value={form.respond_days}
+                onChange={(e) => setForm((f) => ({ ...f, respond_days: e.target.value }))}
+                className="rounded-md border border-gray-300 px-2 py-1 text-sm dark:border-gray-700"
+                aria-label="Days to respond"
+              />
+            </div>
+            <input
+              type="text" placeholder="Subject — what this is about, in a line" value={form.subject}
+              onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
+              className="mt-2 w-full rounded-md border border-gray-300 px-2 py-1 text-sm dark:border-gray-700"
+            />
+            <textarea
+              rows={4} maxLength={5000}
+              placeholder="What is wrong and what would settle it. At least 10 characters — this is what they act on, and what a tribunal reads afterwards."
+              value={form.body}
+              onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
+              className="mt-2 w-full rounded-md border border-gray-300 px-2 py-1 text-sm dark:border-gray-700"
+            />
+            <button
+              type="button" disabled={busy || !canIssue}
+              onClick={() => run(async () => {
+                await api.licenceNoticeIssue(licence.uid, {
+                  email: form.email, kind: form.kind, subject: form.subject.trim(),
+                  body: form.body.trim(), respond_days: Number(form.respond_days),
+                });
+                setForm({
+                  email: '', kind: 'renewal_terms', subject: '', body: '',
+                  respond_days: String(RESPOND_DAYS.def),
+                });
+              })}
+              className="mt-2 inline-flex items-center gap-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {busy ? <Loader2 size={14} className="animate-spin" /> : <><Send size={14} /> Issue notice</>}
+            </button>
+            <p className="mt-2 text-[11px] text-gray-500">
+              Between {RESPOND_DAYS.min} and {RESPOND_DAYS.max} days to answer. The clock starts now,
+              and the administrator is emailed and told in the app.
+            </p>
+          </>
+        )}
+      </div>
+
+      {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
+      <p className="mt-3 text-[11px] text-gray-500">
+        Issuing and reviewing need a recent TOTP step-up as well as the Super Admin elevation, so a
+        403 can mean &quot;step up and try again&quot; rather than &quot;you may not&quot;.
+      </p>
     </div>
   );
 }
@@ -783,8 +1345,25 @@ function Detail({ uid, held, onChanged }) {
             {i + 1}. {label}
           </button>
         ))}
-        {/* Unnumbered, because it is not a step of the issue flow — it is the
-            append-only record of what the flow did. */}
+        {/* Unnumbered, because neither is a step of the issue flow — one is the
+            append-only record of what the flow did, and the other is who runs
+            the subsidiary afterwards. */}
+        <button
+          type="button" onClick={() => setStep(ADMINS_STEP)}
+          className={`-mb-px border-b-2 px-3 py-2 text-xs ${
+            step === ADMINS_STEP ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          Administrators
+        </button>
+        <button
+          type="button" onClick={() => setStep(NOTICES_STEP)}
+          className={`-mb-px border-b-2 px-3 py-2 text-xs ${
+            step === NOTICES_STEP ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          Notices
+        </button>
         <button
           type="button" onClick={() => setStep(HISTORY_STEP)}
           className={`-mb-px border-b-2 px-3 py-2 text-xs ${
@@ -809,6 +1388,8 @@ function Detail({ uid, held, onChanged }) {
         {step === 4 && <TermsEditor licence={d} onSaved={refresh} />}
         {step === 5 && <ContractStep licence={d} onSaved={refresh} />}
         {step === 6 && <DeployStep licence={d} />}
+        {step === ADMINS_STEP && <AdminsEditor licence={d} onSaved={refresh} />}
+        {step === NOTICES_STEP && <NoticesEditor licence={d} onSaved={refresh} />}
         {step === HISTORY_STEP && (
           <div>
             <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">History</h3>
@@ -847,9 +1428,24 @@ function Detail({ uid, held, onChanged }) {
  * UNIQUE index exists to prevent. Free is the third, and it is the reason the
  * grid is 27 cells rather than a list of holders.
  */
-function Coverage({ items }) {
+/**
+ * SORT MODES, and why `state` is the one that ships selected (D146). The canvas
+ * draws the control with the first segment styled as chosen, and that is the
+ * segment labelled "By state" — so this changes the order the grid opens in,
+ * which is a visible change and is meant to be. Grouping is what makes the
+ * white space countable at a glance; A–Z is one click away and is the order
+ * `coverageCells()` already emits.
+ */
+const COVERAGE_SORTS = [
+  { key: 'state', label: 'By state' },
+  { key: 'az', label: 'A–Z' },
+];
+
+function Coverage({ items, onOpen }) {
   const { cells, held_active: active, held_suspended: suspended, free, outside_eu: outside } =
     useMemo(() => coverageCells(items), [items]);
+  const [sort, setSort] = useState('state');
+  const ordered = useMemo(() => sortCells(cells, sort), [cells, sort]);
   const pipeline = useMemo(() => renewalPipeline(items), [items]);
 
   const tone = {
@@ -867,21 +1463,68 @@ function Coverage({ items }) {
             {active} held · {suspended} suspended · {free} white space
           </span>
         </div>
-        <div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(64px,1fr))] gap-1.5">
-          {cells.map((c) => (
-            <div
-              key={c.code}
-              title={c.licence ? `${c.name} — ${c.licence.licence_ref} (${c.licence.status})` : `${c.name} — available`}
-              data-testid={`coverage-${c.code}`}
-              data-state={c.state}
-              className={`rounded-md border px-1.5 py-1 text-center ${tone[c.state]}`}
+        {/* The sort control, on SecurityPage's HQ filter-chip shape: same tier,
+            same oxblood accent, `aria-pressed` carrying the state so the choice
+            is readable to a screen reader and not only to the eye. */}
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5" data-testid="hq-coverage-sort">
+          {COVERAGE_SORTS.map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => setSort(s.key)}
+              aria-pressed={sort === s.key}
+              className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${
+                sort === s.key
+                  ? 'border-rose-200 bg-rose-50 text-[#881337] dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200'
+                  : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400'
+              }`}
             >
-              <div className="text-[12px] font-bold tabular-nums">{c.code}</div>
-              <div className="truncate text-[9.5px] leading-tight">
-                {c.licence ? c.licence.licence_ref : '—'}
-              </div>
-            </div>
+              {s.label}
+            </button>
           ))}
+        </div>
+        <div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(64px,1fr))] gap-1.5">
+          {ordered.map((c) => {
+            const cls = `rounded-md border px-1.5 py-1 text-center ${tone[c.state]}`;
+            const label = c.licence
+              ? `${c.name} — ${c.licence.licence_ref} (${c.licence.status})`
+              : `${c.name} — available`;
+            const body = (
+              <>
+                <div className="text-[12px] font-bold tabular-nums">{c.code}</div>
+                <div className="truncate text-[9.5px] leading-tight">
+                  {c.licence ? c.licence.licence_ref : '—'}
+                </div>
+              </>
+            );
+            // A HELD CELL OPENS ITS LICENCE; WHITE SPACE STAYS A DIV. There is
+            // nothing to open behind a country nobody holds, and a button that
+            // refuses is the `still_an_admin` mistake D134 named — it teaches
+            // the operator that some of this grid's controls are a lie.
+            return c.licence ? (
+              <button
+                key={c.code}
+                type="button"
+                onClick={() => onOpen?.(c.licence.uid)}
+                title={label}
+                data-testid={`coverage-${c.code}`}
+                data-state={c.state}
+                className={`${cls} hover:brightness-95`}
+              >
+                {body}
+              </button>
+            ) : (
+              <div
+                key={c.code}
+                title={label}
+                data-testid={`coverage-${c.code}`}
+                data-state={c.state}
+                className={cls}
+              >
+                {body}
+              </div>
+            );
+          })}
         </div>
         <p className="mt-2.5 text-[11.5px] leading-relaxed text-gray-500">
           A suspended licence still holds its countries — releasing them is a termination, not a
@@ -976,7 +1619,9 @@ export default function AdminLicences() {
         </button>
       </div>
 
-      <Coverage items={items} />
+      {/* `setSel` is the same selector the licence rows below use, so a click on
+          a held country and a click on its row land in exactly one place. */}
+      <Coverage items={items} onOpen={setSel} />
 
       {data.seats_used_available === false && (
         <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 dark:border-gray-800 dark:text-gray-300">

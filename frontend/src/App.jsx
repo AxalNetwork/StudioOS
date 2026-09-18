@@ -11,6 +11,7 @@ import { ActiveCompanyContext } from './contexts/ActiveCompanyContext';
 // ViewModeContext lives in its own module so App.jsx exports only React
 // components — mixing component + hook exports breaks Vite Fast Refresh.
 import ViewModeContext from './contexts/ViewModeContext';
+import ViewAsBranchContext from './contexts/ViewAsBranchContext';
 // Single source of truth for "which role is this session browsing as". The
 // shell picks the sidebar from it and the router picks route elements from it;
 // when those two disagree the nav offers one thing and the route serves another.
@@ -28,6 +29,11 @@ import {
 } from 'lucide-react';
 import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES } from './sidebarConfig';
 import PaywallModal from './components/PaywallModal';
+import AdminFrozenBar from './components/AdminFrozenBar';
+import BranchSuspendedBar from './components/BranchSuspendedBar';
+import HqSupportSessionBar from './components/HqSupportSessionBar';
+import HqViewingAsBar from './components/HqViewingAsBar';
+import { clearSupportSession } from './lib/supportSession';
 import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
 // renders synchronously on first paint. It marks itself a no-auth-redirect
@@ -166,7 +172,7 @@ const SendForSignaturePage = lazy(() => import('./pages/legal/SendForSignaturePa
 // The subsidiary administrator's read of their own territory licence.
 // Migration 190 made "which licence is this admin's?" answerable at all.
 const MyLicencePage = lazy(() => import('./pages/subsidiary/MyLicencePage'));
-const BranchZonePending = lazy(() => import('./pages/branch/BranchZonePending'));
+const BranchSettings = lazy(() => import('./pages/branch/BranchSettings'));
 const BranchApprovals = lazy(() => import('./pages/branch/BranchApprovals'));
 // The frame every /branch/* route below renders in, and the branch tier's one
 // Worker AI rail mount (D126). Lazy like its siblings so the rail and its price
@@ -174,6 +180,10 @@ const BranchApprovals = lazy(() => import('./pages/branch/BranchApprovals'));
 const BranchZone = lazy(() => import('./pages/branch/BranchZone'));
 const BranchAccounts = lazy(() => import('./pages/branch/BranchAccounts'));
 const BranchHome = lazy(() => import('./pages/branch/BranchHome'));
+const BranchPrograms = lazy(() => import('./pages/branch/BranchPrograms'));
+const BranchCommunity = lazy(() => import('./pages/branch/BranchCommunity'));
+const BranchContracts = lazy(() => import('./pages/branch/BranchContracts'));
+const BranchInsights = lazy(() => import('./pages/branch/BranchInsights'));
 // The Super Admin's HQ-only surfaces (migrations 199/207). `hqOnly` below
 // renders the notice for an admin without the elevation.
 const SuperAdminOnlyNotice = lazy(() => import('./pages/hq/SuperAdminOnlyNotice'));
@@ -256,6 +266,9 @@ const ICDecisionsPage = lazy(() => import('./pages/ICDecisionsPage'));
 const ICDecisionPage = lazy(() => import('./pages/ICDecisionPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const HelpCenterPage = lazy(() => import('./pages/HelpCenterPage'));
+// D144 — `/inbox`, the address `services/notify.ts` has been putting in mail
+// since before any route answered it.
+const InboxPage = lazy(() => import('./pages/InboxPage'));
 const OnboardingPersonaPage = lazy(() => import('./pages/OnboardingPersonaPage'));
 const AcademyLessonPage = lazy(() => import('./pages/AcademyLessonPage'));
 const OnboardingFounderPage = lazy(() => import('./pages/OnboardingFounderPage'));
@@ -753,6 +766,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // switcher confirms this id against the caller's memberships once they load
   // and corrects it if it is stale.
   const [savedCompanyId] = useState(() => initActiveCompanyId());
+  // D153 / H12 — the view-as scope. See the provider below.
+  const [viewAsBranch, setViewAsBranch] = useState(null);
   const [companyList, setCompanyList] = useState([]);
 
   // Task #31 — Honor the user's "Sidebar default" appearance preference on
@@ -879,10 +894,42 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     [activeRole, isAdmin, isImpersonating, shellRole],
   );
 
+  // D153 / H12 — the view-as scope, held in the SHELL rather than on a page,
+  // for the reason the frozen bar is: it changes what the chrome says, and a
+  // page that owned it would drop it the moment the operator navigated.
+  //
+  // IT PERSISTS NOTHING — no localStorage, no sessionStorage, no URL — on
+  // `AdminFrozenBar`'s stated rule: a mode the viewer must not be able to
+  // forget they are in must not survive into a session that did not enter it.
+  // That is also why `clearSession` needs no line for it, unlike the support
+  // payload it does purge: there is no key to remove, and signing out unmounts
+  // this layout, which IS the purge. A stored scope would need one; this is
+  // the reason it is not stored.
+  const viewAsBranchContextValue = useMemo(
+    () => ({ branch: viewAsBranch, setBranch: setViewAsBranch }),
+    [viewAsBranch],
+  );
+
   return (
     <ActiveCompanyContext.Provider value={{ company: activeCompany, setCompany: setActiveCompany, companies: companyList, setCompanies: setCompanyList }}>
     <ViewModeContext.Provider value={viewModeContextValue}>
+    <ViewAsBranchContext.Provider value={viewAsBranchContextValue}>
       <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
+        {/* D142 / S13 — ABOVE `PortalSwitcher`, and the order is the point.
+            `isImpersonating` is `!!realUser`, which an HQ support session never
+            sets (the operator is a row in HQ's database this deployment cannot
+            read). So supporting a branch ADMIN mounted the ordinary purple
+            "Admin Mode" bar with a working View-as picker — an HQ-driven
+            session dressed as the admin's own — and supporting anyone else
+            rendered nothing at all. This renders first, so that bar can never
+            be the only chrome on a session the viewer did not start. It draws
+            nothing when there is no live support session. */}
+        <SafeMount name="HqSupportSessionBar"><HqSupportSessionBar /></SafeMount>
+        {/* D153 / H12 — ABOVE `PortalSwitcher`, for D142's reason one tier up:
+            the ordinary admin chrome must never be the only frame on a view
+            the operator is not in by default. It draws nothing outside the
+            overlay. */}
+        <SafeMount name="HqViewingAsBar"><HqViewingAsBar /></SafeMount>
         {isAdmin && (
           <PortalSwitcher
             viewMode={viewMode}
@@ -952,6 +999,15 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 {branchFact.name || branchFact.code}
                 {(branchFact.territories || []).length > 0 && ` · ${(branchFact.territories || []).join(' · ')}`}
                 {' · BRANCH'}
+                {/* D142 — `/me.branch` has carried `status` and `as_of` since
+                    D106 and the badge read NEITHER, so a suspended branch's
+                    badge was byte-identical to an active one. The word only
+                    appears when the state is not active: a badge that said
+                    "ACTIVE" on every branch would be noise, and the one state
+                    worth interrupting someone over is the one that changes what
+                    they can do. */}
+                {branchFact.status && branchFact.status !== 'active'
+                  && ` · ${String(branchFact.status).toUpperCase()}`}
               </span>
             )}
             {(activeRole === 'founder' || activeRole === 'admin') && (
@@ -1028,6 +1084,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
         <InstallPrompt />
         <StepUpModal />
       </Suspense>
+    </ViewAsBranchContext.Provider>
     </ViewModeContext.Provider>
     </ActiveCompanyContext.Provider>
   );
@@ -1583,6 +1640,13 @@ function AppInner() {
     localStorage.removeItem('realUser');
     localStorage.removeItem('realToken');
     localStorage.removeItem('viewMode');
+    // D142 — the HQ support-session payload, which this did not clear. It was
+    // written by `SupportRedeemPage`, read by nothing, and removed by nothing,
+    // so it outlived both the thirty-minute session and sign-out on that
+    // browser: the next ordinary session on the same machine would have been
+    // told HQ was inside the account. `lib/supportSession.js` owns the key so
+    // the purge and the reader cannot be renamed apart.
+    clearSupportSession();
     clearHqView();
     // The active company is a per-BROWSER memory (localStorage), not a
     // per-account one. Left in place, the next account to sign in on this
@@ -2082,7 +2146,7 @@ function AppInner() {
           Worker serving them, and on HQ they carry no data at all. A second,
           weaker copy of the wall in the router would be the thing that looks
           like the guarantee without being it. */}
-      <Route path="/branch" element={guard(['admin'], <BranchHome />)} />
+      <Route path="/branch" element={guard(['admin'], <BranchHome user={user} />)} />
       {/* D129 — LIVE, and it wraps ITSELF in BranchZone because its rail
           coverage is what it loaded. The notice this replaces said seats used
           "is not a number that can be shown today", which D127 made false: a
@@ -2100,12 +2164,12 @@ function AppInner() {
           frame from its route here; a zone with data owns it, exactly as every
           workspace page passes its own `rail` to WorkspaceShell. Each of these
           seven loses its wrapper on the day PR 12 or PR 14 gives it a page. */}
-      <Route path="/branch/approvals" element={guard(['admin'], <BranchApprovals />)} />
-      <Route path="/branch/programs" element={guard(['admin'], <BranchZone workspace="Programs"><BranchZonePending artboard="S4 Programs" title="Timing is yours, authoring is HQ's" will="The cohort calendar with dates you adjust, and assessment runs whose results are yours. Changing a question is a Content submission, which the Worker already refuses here and says so." pr="PR 14" /></BranchZone>)} />
-      <Route path="/branch/community" element={guard(['admin'], <BranchZone workspace="Community"><BranchZonePending artboard="S4 Community" title="Events, jobs, circles and profiles — entirely local" will="The community zones re-homed under this shell. Nothing in them is shared with another territory, and nothing in them is pushed from HQ." pr="PR 14" /></BranchZone>)} />
-      <Route path="/branch/contracts" element={guard(['admin'], <BranchZone workspace="Contracts"><BranchZonePending artboard="S5 Contracts" title="Instantiate, never author" will="Active contracts with the template version travelling on the row, HQ's master library read-only with its as-of stamp and archived versions visible but unusable, and pending signatures." pr="PR 14" /></BranchZone>)} />
-      <Route path="/branch/insights" element={guard(['admin'], <BranchZone workspace="Insights"><BranchZonePending artboard="S6 Insights" title="Four stats and one tick against the median" will="Accounts, activation, programme throughput and revenue share for the quarter, plus a benchmark shown as a single tick against the anonymised platform median — never a ranked list of territories." pr="PR 14" /></BranchZone>)} />
-      <Route path="/branch/settings" element={guard(['admin'], <BranchZone workspace="Settings"><BranchZonePending artboard="S6 Settings" title="Who owns each row" will="Subsidiary name and staff are yours; territory, brand kit and the licence summary are HQ's, each with an owner chip and, on HQ-owned rows, the request path. Your licence summary is already readable today under Your licence below." pr="PR 14" /></BranchZone>)} />
+      <Route path="/branch/approvals" element={guard(['admin'], <BranchApprovals user={user} />)} />
+      <Route path="/branch/programs" element={guard(['admin'], <BranchPrograms user={user} />)} />
+      <Route path="/branch/community" element={guard(['admin'], <BranchCommunity user={user} />)} />
+      <Route path="/branch/contracts" element={guard(['admin'], <BranchContracts user={user} />)} />
+      <Route path="/branch/insights" element={guard(['admin'], <BranchInsights user={user} />)} />
+      <Route path="/branch/settings" element={guard(['admin'], <BranchSettings user={user} />)} />
       {/* The HQ shell's Contracts and Team rows. Both frame panels the Admin
           Console already has (Legal templates; the Users table) for the
           franchisor, with the holder console above the accounts. */}
@@ -2294,6 +2358,9 @@ function AppInner() {
         `/tickets`, `/tickets/<id>`, `/help/<id>`, `/docs`, `/docs/admin/*`.
       */}
       <Route path="/help" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <HelpCenterPage />)} />
+      {/* Every role, `exploring` included: an application decision is a
+          notification, and the person waiting on one holds no other role. */}
+      <Route path="/inbox" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <InboxPage />)} />
       <Route path="/help/tickets" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
       <Route path="/help/tickets/:id" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
       <Route path="/help/admin/*" element={<AdminDocsPathGuard />} />
@@ -2903,6 +2970,16 @@ export default function App() {
             whole app is gone". */}
         <SafeMount name="SpinoutLabListener"><GlobalSpinoutLabListenerMount /></SafeMount>
         <SafeMount name="GlobalPaywallMount"><GlobalPaywallMount /></SafeMount>
+        {/* D136 — mounted here for the same reason the paywall is: the
+            compliance freeze refuses writes on every admin surface, so the
+            thing that explains the refusal cannot live on one page. It renders
+            nothing until a 423 arrives. */}
+        <SafeMount name="AdminFrozenBar"><AdminFrozenBar /></SafeMount>
+        {/* D142 — the branch twin, mounted for the same reason: the suspension
+            refuses writes across the whole branch shell, so the thing that
+            explains the refusal cannot live on one page. Renders nothing until
+            a 423 carrying `code: 'branch_suspended'` arrives. */}
+        <SafeMount name="BranchSuspendedBar"><BranchSuspendedBar /></SafeMount>
         <SafeMount name="CookieConsent"><CookieConsent /></SafeMount>
       </SettingsProvider>
     </AuthProvider>

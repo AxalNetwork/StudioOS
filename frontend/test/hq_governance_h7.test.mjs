@@ -144,37 +144,115 @@ test('tenant is filled only where a store can fill it, and never with a dash', (
   assert.doesNotMatch(cells, /—/, 'an em-dash stands in for an absent fact (D56/D68)');
 });
 
-test('the "Return to HQ view" overlay is not drawn, and the page says why', () => {
+test('the "Return to HQ view" overlay is built, and this page describes it rather than drawing it', () => {
+  // NINTH INSTANCE OF THE CLASS, and by now it is a rule rather than a
+  // surprise: a guard that pins a refusal has to be re-aimed the day the
+  // refusal stops being true, or it becomes the thing preventing the fix.
+  // This test used to assert the OPPOSITE of everything below — no "Viewing
+  // as" chrome anywhere, `tenant_view_available: false`, and no "Return to HQ
+  // view" control in App.jsx. Every one of those was correct while the overlay
+  // was unbuilt (D150 had already corrected its REASON once, from U1 to "not
+  // built"), and every one of them is false now that D153 built it.
+  //
+  // And the old assertion was never wrong in kind — it was CONDITIONAL, and
+  // said so: its failure message was "a 'Return to HQ view' control appeared
+  // with NO TENANT SCOPE BEHIND IT". It did not ban the control; it banned a
+  // control with nothing behind it. So the re-aim is structural rather than a
+  // loosening: the chrome may exist only where the reads are actually scoped.
   assert.ok(h7().includes('Return to HQ view'), 'the artboard no longer draws the overlay');
-  // THE ABSENCE OF A CONTROL, NOT OF A PHRASE. Matching the words caught the
-  // page's own sentence explaining that the overlay is deliberately not
-  // built — the opposite of the defect, and the same trap the Platform page
-  // guard hit with "Reveal". So: the phrase may appear in prose, and must
-  // not appear inside anything clickable.
-  const controls = [...PAGE.matchAll(/<(button|a)\b[\s\S]*?<\/\1>/g)].map((m) => m[0]);
-  assert.ok(controls.length > 0, 'the page has no controls at all — this assertion stopped checking anything');
-  for (const c of controls) {
-    assert.doesNotMatch(c, /Return to HQ|Viewing as/,
-      'the overlay\'s chrome appeared as a control with no tenant scope behind it');
-  }
-  assert.ok(!P.includes('Viewing as'), 'the page drew a tenant-scoped banner it cannot back');
-  assert.match(P, /No &ldquo;Return to HQ view&rdquo;/, 'the page stopped naming the overlay it does not draw');
-  assert.ok(!codeOnly(raw('frontend/src/App.jsx')).includes('Return to HQ view'),
-    'a "Return to HQ view" control appeared with no tenant scope behind it');
-  // But the absence is explained, from the payload rather than from a copy.
-  assert.match(ROUTE, /tenant_view_available: false/);
-  assert.match(ROUTE, /tenant_view_reason:[\s\S]{0,500}U1/);
+
+  // 1 — THE CHROME IS IN THE SHELL, not on a page. The overlay frames every
+  // page it covers, so a per-page banner would be one copy per page and would
+  // disagree with itself the first time one was missed.
+  const bar = codeOnly(raw('frontend/src/components/HqViewingAsBar.jsx'));
+  assert.match(bar, /Return to HQ view/, 'the shell bar lost its way out');
+  assert.match(bar, /Read-only/, 'the bar stopped saying the view is read-only');
+  assert.match(bar, /useViewAsBranch/, 'the bar invented its own state instead of reading the shell\'s');
+  const app = codeOnly(raw('frontend/src/App.jsx'));
+  assert.match(app, /<SafeMount name="HqViewingAsBar">/, 'the bar is not mounted');
+  // ABOVE `PortalSwitcher`, D142's rule one tier up: the ordinary admin chrome
+  // must never be the only frame on a view the operator is not in by default.
+  // ANCHORED ON THE MOUNT, NOT THE NAME. Reading `indexOf('HqViewingAsBar')`
+  // found the IMPORT line at the top of the file, which is before every mount
+  // — so the comparison was true whatever the mount order was, and the
+  // assertion could not fail. Caught by moving the mount below PortalSwitcher
+  // and watching it pass. An assertion that cannot fail is not a guard.
+  assert.ok(
+    app.indexOf('<SafeMount name="HqViewingAsBar">') < app.indexOf('<PortalSwitcher'),
+    'the viewing-as bar mounts below PortalSwitcher, so the admin bar can frame a scoped view alone',
+  );
+
+  // 2 — THERE IS A SCOPE BEHIND IT, which is what the old guard demanded. The
+  // reads change, not the render: a page that filtered a payload it already
+  // had would be exactly the "filter on an HQ table" H12 says this is not.
+  const apiSrc = codeOnly(raw('frontend/src/lib/api.js'));
+  assert.match(apiSrc, /hqOverview: \(branch\)/, 'hqOverview stopped taking a branch');
+  assert.match(apiSrc, /\?branch=\$\{encodeURIComponent\(b\)\}/, 'the scope never reaches the wire');
+  const hq = codeOnly(raw('cloudflare-worker/src/routes/admin_hq.ts'));
+  assert.match(hq, /branchRead<BranchOverview>\(env, scoped, 'overview'\)/,
+    'the scoped route fans out and discards instead of reading one branch');
+
+  // 3 — THE PAYLOAD STOPPED REFUSING. `false` here is the refusal this test
+  // spent two decisions pinning; it is the assertion that fails if anyone
+  // restores it.
+  assert.match(ROUTE, /tenant_view_available: true/);
+  assert.doesNotMatch(ROUTE, /tenant_view_available: false/,
+    'the governance payload went back to refusing a view the product has');
+  assert.doesNotMatch(ROUTE, /tenant_view_reason:[\s\S]{0,600}has not been built/,
+    'the reason still says the overlay is unbuilt');
+  assert.doesNotMatch(ROUTE, /tenant_view_reason:[\s\S]{0,600}which is U1/);
   assert.match(P, /\{feed\.tenant_view_reason\}/, 'the page hardcodes the explanation instead of reading it');
 });
 
-test('guardrail hits stay unrecorded — the artboard\'s three rows have no store', () => {
+
+test('guardrail hits are counted — but never the artboard\'s per-category rows', () => {
+  // D152 RE-AIMED THIS, AND IT IS THE SEVENTH TIME A GUARD PINNING A REFUSAL
+  // HAD TO MOVE THE DAY THE REFUSAL STOPPED BEING TRUE. The title said the
+  // artboard's rows "have no store" and the body asserted
+  // `guardrails: absent(NO_AI_SAFETY_STORE)`. The store existed: `safety_score`
+  // is written on every router call and `advisor_turn_audit` carries the block
+  // and the flag — both already rolled up, and already drawn on `AiUsageTab`.
+  //
+  // What survives is SHARPER than what it replaced, because the artboard draws
+  // `{ what, meta, n }` — a COUNT PER CATEGORY — and the category is precisely
+  // the field `writeTurnAudit` throws away. So the panel's totals are real and
+  // its rows are not, and those are two different facts about one artboard.
   const board = h7();
   assert.ok(board.includes('Guardrail hits'), 'the artboard no longer draws the panel');
   assert.ok(board.includes('Advisor-AI outputs the screen caught'), 'the artboard changed the panel\'s subtitle');
-  // The page carries the artboard's phrase on the zone that owns the absence
-  // rather than opening a second zone for the same missing store.
+  // The page carries the artboard's phrase on the zone that owns the figures
+  // rather than opening a second zone for the same store.
   assert.match(P, /sub="guardrail hits · Advisor-AI outputs the screen caught"/);
-  assert.match(ROUTE, /guardrails: absent\(NO_AI_SAFETY_STORE\)/);
+
+  // The counters are REAL and come from the one rollup, not from a literal.
+  assert.match(ROUTE, /ai_safety: await aiSafetyBlock\(env\)/,
+    '/overview stopped serving the guardrail counters');
+  assert.match(P, /<AiSafety block=\{ready \? data\.ai_safety : null\}/,
+    'the AI-safety zone stopped rendering the counters it is served');
+
+  // D158 — THE CATEGORY ROW IS GONE, BECAUSE THE ABSENCE IT DESCRIBED IS.
+  // This assertion used to REQUIRE the row `what: 'Which guardrail rule fired'`,
+  // and its own comment gave the reason: a per-category count would be
+  // "invented for a column no table has". Migration 270 gave
+  // `advisor_turn_audit` that column, so the premise is what changed. Twelfth
+  // refusal re-aimed the day it stopped being true — and the first the codebase
+  // had filed against itself.
+  //
+  // What is pinned now is the stronger property the row was standing in for:
+  // the panel may claim a per-rule breakdown ONLY where one is actually served.
+  assert.doesNotMatch(ROUTE, /what: 'Which guardrail rule fired'/,
+    'the panel is refusing a breakdown it now serves');
+  assert.match(ROUTE, /enforcement: counters\.enforcement/,
+    'the block stopped passing enforcement through, so the breakdown reaches nobody');
+  // The rows that ARE still unbuilt keep their reasons, and still carry no
+  // invented count — the half of the old assertion that is still true.
+  for (const what of ['Token anomalies', 'Guardrail counters by branch']) {
+    const at = ROUTE.indexOf(`what: '${what}'`);
+    assert.ok(at > 0, `${what} lost its row without the absence being closed`);
+    assert.doesNotMatch(ROUTE.slice(at, ROUTE.indexOf('},', at)), /\bn:\s/,
+      `the ${what} row acquired a count, which nothing measures`);
+  }
+
   // None of the artboard's sample counts leaked onto the page.
   for (const n of ['Outbound investor message', 'Founder-facing draft', 'LP correspondence']) {
     assert.ok(!PAGE.includes(n), `the artboard's fixture "${n}" was rendered as though it were data`);
@@ -214,4 +292,75 @@ test('nothing absent on this page falls back to a number', () => {
     'an unreadable feed does not say what it is not');
   assert.match(P, /data-testid="hq-gov-empty"/, 'an empty feed renders as nothing at all');
   assert.match(ROUTE, /const readAudit = filter === 'all' \|\| filter === 'exports';/);
+});
+
+test('the AI-safety zone renders counters, and each half shows its own state', () => {
+  // D152. The zone was `<Absent block={data.ai_safety} …>` — one line of
+  // refusal where four figures belong. What must hold now is not that the
+  // tiles exist but that NEITHER PAIR CAN RENDER A NUMBER IT WAS NOT GIVEN:
+  // the verdict pair reads `verdicts.available`, the enforcement pair reads
+  // `enforcement.available`, and they are separate because they come from
+  // separate tables that fail separately.
+  const at = P.indexOf('function AiSafety(');
+  assert.ok(at > 0, 'the AI-safety zone lost its component');
+  const body = P.slice(at, P.indexOf('function Stat(', at));
+
+  for (const [label, flag] of [
+    ['Guard verdicts', 'v?.available'],
+    ['Judged unsafe', 'v?.available'],
+    ['Turns blocked', 'e?.available'],
+    ['Outputs flagged', 'e?.available'],
+  ]) {
+    const cell = body.indexOf(`label="${label}"`);
+    assert.ok(cell > 0, `the "${label}" tile is gone`);
+    // Bounded to this tile, so a neighbour's gate cannot satisfy the
+    // assertion — the mistake a whole-file scan makes every time.
+    const tile = body.slice(cell, body.indexOf('/>', cell));
+    assert.ok(
+      tile.includes(`value={${flag}`),
+      `"${label}" must render its figure under \`${flag}\` — the store it actually came from`,
+    );
+    // AND THE ABSENT ARM IS `null`, NOT A NUMBER — asserted here because the
+    // page's own `|| 0` / `?? 0` ban cannot see it. A mutation to
+    // `value={v?.available ? num(v.evaluated) : 0}` walked through every
+    // other assertion in this PR: it is not the banned idiom, and the gate it
+    // checks is still there. A tile that renders 0 for a counter it could not
+    // read is the exact defect on the exact surface where it is worst.
+    assert.match(
+      tile, /:\s*null\}/,
+      `"${label}" falls back to a number when its store could not be read — absent is not zero`,
+    );
+  }
+
+  // A rate over an empty denominator is not 0%, and the page says which.
+  assert.match(body, /safe_rate !== null/,
+    'the safe rate stopped distinguishing "nothing was evaluated" from "0% safe"');
+  assert.match(body, /the guard did not run in this window/);
+
+  // The narrowed absences are rendered WITHOUT a count, because the artboard's
+  // per-category rows are the one thing no table can supply.
+  assert.match(body, /data-testid="hq-ai-safety-not-counted"/);
+  assert.match(body, /\{n\.reason\}/, 'the not-counted rows dropped their reasons');
+});
+
+test('the rail stopped saying nothing aggregates guardrail verdicts', () => {
+  // THE SIXTH TIME A RAIL ROW HAD TO BE RE-AIMED THE DAY ITS REFUSAL STOPPED
+  // BEING TRUE (D129, D131, D140, D147, D150's three, D151's three). This row
+  // was the sharpest of them: it denied a rollup the platform was rendering on
+  // another page of the same admin console.
+  //
+  // RAW, NOT `codeOnly`: the correction is recorded in a comment that quotes
+  // the sentence, and a scan of the stripped source is what proves the CLAIM
+  // is gone from the rendered rows rather than from the file.
+  assert.ok(PAGE.includes('Nothing aggregates guardrail verdicts'),
+    'the page stopped recording which claim D152 corrected');
+  assert.doesNotMatch(P, /Nothing aggregates guardrail verdicts/,
+    'the false rail row came back — the verdicts are aggregated, and drawn on AiUsageTab');
+
+  // And the rows that replaced it are the SERVER's, not retyped — so the zone
+  // and the rail cannot come to disagree about what is missing.
+  assert.match(P, /data\.ai_safety\?\.not_counted \|\| \[\]/,
+    'the rail hand-types its AI-safety absences instead of reading the payload');
+  assert.match(ROUTE, /what: 'Token anomalies'/,
+    'the one clause of the old sentence that was TRUE lost its row');
 });

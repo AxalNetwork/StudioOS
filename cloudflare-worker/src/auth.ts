@@ -3,6 +3,7 @@ import { SignJWT, jwtVerify } from 'jose';
 import type { Env, User, JWTPayload } from './types';
 import { getSQL } from './db';
 import { branchOf, authCookieName, csrfCookieName, HQ_ONLY, HQ_AUTHORING_ONLY, BRANCH_SUSPENDED } from './util/branch';
+import { ADMIN_FROZEN, FREEZING_STATUSES } from './util/authErrors';
 
 const JWT_ALGORITHM = 'HS256';
 const JWT_EXPIRY_HOURS = 24;
@@ -443,7 +444,70 @@ export async function requireAuth(c: Context<{ Bindings: Env }>): Promise<User> 
 export async function requireAdmin(c: Context<{ Bindings: Env }>): Promise<User> {
   const user = await requireAuth(c);
   if (user.role !== 'admin') throw new Error('Admin required');
+  await refuseWhileFrozen(c, user);
   return user;
+}
+
+/**
+ * D135 — THE COMPLIANCE FREEZE, and it lives here rather than in a path list.
+ *
+ * The ladder's middle rung: HQ notifies, and an admin who does not act is
+ * frozen until they do. "Frozen" has to mean something on every surface an
+ * admin can write through, and there are 271 `requireAdmin` call sites across
+ * 51 files. A list of frozen paths in `index.ts` would go stale the next time a
+ * route is added — the exact failure D106 avoided by putting the branch gate
+ * inside `hydrateSuperAdmin` rather than beside the routes. One edit here
+ * covers every one of them, including the ones nobody has written yet.
+ *
+ * FOUR THINGS IT DELIBERATELY DOES NOT DO:
+ *
+ *  - IT NEVER GATES A READ. `requireBranchNotSuspended` already states the rule
+ *    for its branch-side twin — "READS ARE NEVER GATED BY IT" — and the reason
+ *    is sharper here: an admin who cannot see what they were asked cannot do
+ *    the thing that lifts the freeze. GET, HEAD and OPTIONS pass untouched.
+ *  - IT NEVER FREEZES THE SUPER ADMIN, and the code says so rather than relying
+ *    on there being nobody to do it. HQ issues the notices; a HQ frozen by its
+ *    own ladder could not lift anybody's.
+ *  - IT DOES NOTHING ON A BRANCH. `admin_notices` is HQ's table; a branch has
+ *    the twin above, reading its own pushed licence copy. Two tiers, two
+ *    lookups, neither pretending to be the other.
+ *  - AN UNREADABLE TABLE IS NOT A FREEZE. A database that has not applied
+ *    migration 264 reads as not frozen, on `requireBranchNotSuspended`'s stated
+ *    reasoning: being frozen is a claim somebody MADE, and inferring it from a
+ *    missing row would freeze every admin during the window between deploy and
+ *    migration — exactly when somebody is trying to work.
+ *
+ * WHAT HOLDS THE FREEZE is a notice in `overdue` (the sweep moved it there when
+ * its deadline passed unanswered) or `rejected` (HQ read the response and did
+ * not accept it). An `issued` notice inside its window freezes nothing: the
+ * admin has been told and has time to act, which is the rung before this one.
+ *
+ * THE LOOKUP SELECTS THE NOTICE, NOT A COUNT, and costs the same. A 423 that
+ * cannot say which notice caused it leaves the holder with nothing to act on,
+ * and this is the one row that answers it.
+ */
+async function refuseWhileFrozen(c: Context<{ Bindings: Env }>, user: User): Promise<void> {
+  const method = String(c.req.method || '').toUpperCase();
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return;
+  if (branchOf(c.env)) return;
+  if (isSuperAdmin(user as any)) return;
+  let notice: { uid: string; subject: string; respond_by: string; status: string } | null = null;
+  try {
+    notice = await c.env.DB.prepare(
+      `SELECT uid, subject, respond_by, status
+         FROM admin_notices
+        WHERE user_id = ? AND status IN (?, ?)
+        ORDER BY datetime(respond_by)
+        LIMIT 1`,
+    ).bind(user.id, ...FREEZING_STATUSES).first<{ uid: string; subject: string; respond_by: string; status: string }>();
+  } catch (e) {
+    console.warn('[compliance] admin_notices unreadable on a write gate', (e as Error).message);
+    return;
+  }
+  if (!notice) return;
+  const err: any = new Error(ADMIN_FROZEN);
+  err.notice = notice;
+  throw err;
 }
 
 /**
@@ -606,7 +670,38 @@ export async function requireBranchNotSuspended(c: Context<{ Bindings: Env }>): 
     console.warn('[branch] branch_licence unreadable on a write gate', (e as Error).message);
     return;
   }
-  if (status === 'suspended') throw new Error(BRANCH_SUSPENDED);
+  if (status !== 'suspended') return;
+
+  // D142 — THE REASON IS READ SEPARATELY, AND CANNOT UNFREEZE THE BRANCH.
+  //
+  // The first draft selected `status, suspended_at, suspended_note` together,
+  // which reads as tidier and is a hole: on any database whose `branch_licence`
+  // is narrower than migration 256 the widened SELECT throws `no such column`,
+  // the catch above treats that as "unreadable, so not suspended", and a branch
+  // HQ suspended goes on trading. A unit fixture caught it — the freeze test
+  // went 200 where it had been 423 — which is the D133 lesson arriving from the
+  // other side: there, fixtures narrower than the schema made a present row
+  // read as absent; here, one made an enforced freeze read as lifted.
+  //
+  // So the decision is made on `status` alone, exactly as it was before this
+  // change, and the reason is decoration fetched afterwards. A copy that cannot
+  // say WHY it is suspended is still suspended, and the shell renders a stated
+  // absence rather than a lifted freeze.
+  let since: string | null = null;
+  let reason: string | null = null;
+  try {
+    const row = await c.env.DB.prepare(
+      'SELECT suspended_at, suspended_note FROM branch_licence WHERE id = 1',
+    ).first<{ suspended_at: string | null; suspended_note: string | null }>();
+    since = row?.suspended_at ?? null;
+    reason = row?.suspended_note ?? null;
+  } catch (e) {
+    console.warn('[branch] suspension reason unreadable; the freeze still holds', (e as Error).message);
+  }
+  // The message stays the sentence `AUTH_ERROR_STATUSES` keys on, so every
+  // existing reader is unchanged; what is new is the two fields hung off it,
+  // which `branchSuspendedBody` turns into the `code` the shell keys on.
+  throw Object.assign(new Error(BRANCH_SUSPENDED), { since, reason });
 }
 
 /**
@@ -795,6 +890,40 @@ export async function requireStepUp(
   const mostRecent = candidates.length ? Math.max(...candidates) : 0;
   if (!mostRecent || Date.now() - mostRecent > ttlMinutes * 60 * 1000) deny();
   return user;
+}
+
+/**
+ * The write bar for a super-admin act that changes who holds power: a
+ * TOTP-MINTED session, a RECENT step-up, then the elevation — the order
+ * `routes/admin.ts`'s `POST /impersonate` checks them in, which is the route
+ * that set this bar in the first place.
+ *
+ * WHY IT IS HERE AND NOT IN THE ROUTER THAT FIRST NEEDED IT. It was written
+ * privately inside `routes/admin_super_admins.ts` when granting the elevation
+ * was the only act that wanted it. D134 gives the same bar to promoting an
+ * account to admin and to demoting one, in two more files — and three copies
+ * of a three-line gate is how two of them come to check only two of the three.
+ * `frontend/src/lib/README.md` states the rule for the SPA and it is the same
+ * rule here: if a helper appears in two places, put it in one.
+ *
+ * WHAT EACH STEP BUYS, because a reader who does not know will eventually
+ * "simplify" one away:
+ *  - `requireFactor(c, 'totp')` is a fact about how the session was MINTED. A
+ *    session that authenticated by SMS, magic link or Google can never satisfy
+ *    it, whatever the holder does afterwards.
+ *  - `requireStepUp(c)` is a fact about WHEN. A TOTP session left open on a
+ *    desk for a day is not a person at a keyboard; the step-up is.
+ *  - `requireSuperAdmin(c)` is a fact about WHO, and it is last because the
+ *    other two are cheap and this one is the answer people quote.
+ *
+ * IT IS NOT A REPLACEMENT FOR `requireSuperAdmin` ON READS. Reading the
+ * franchising ledger needs the elevation and nothing more; a step-up on every
+ * list would train the holder to type a TOTP code without reading why.
+ */
+export async function requireSuperAdminWriteBar(c: Context<{ Bindings: Env }>): Promise<User> {
+  await requireFactor(c, 'totp');
+  await requireStepUp(c);
+  return await requireSuperAdmin(c);
 }
 
 /**

@@ -212,9 +212,16 @@ test('the chosen model reaches the worker', () => {
   const api = codeOnly(read('frontend/src/lib/api.js'));
   const method = api.slice(api.indexOf('aiWorkspaceExplain:'), api.indexOf('aiWorkspaceExplain:') + 400);
   assert.ok(method.length > 100, 'aiWorkspaceExplain was not found in api.js');
-  assert.match(method, /\(\{ workspace, zone, coverage, model \}\)/,
+  // RE-AIMED IN D154, AND THE RE-AIM IS THE POINT. This pinned the parameter
+  // list as an EXACT TUPLE — `({ workspace, zone, coverage, model })` — so
+  // adding a fifth field failed it while changing nothing about the model. The
+  // property it exists for is narrower and survives: the method must ACCEPT a
+  // model and must FORWARD it, and dropping either end is the silent break its
+  // header describes (the rail shows the 3b selected, the 70b runs, and every
+  // figure on screen is wrong by eight times).
+  assert.match(method, /aiWorkspaceExplain: \(\{[^}]*\bmodel\b[^}]*\}\) =>/,
     'the api method no longer accepts a model');
-  assert.match(method, /JSON\.stringify\(\{ workspace, zone, coverage, model \}\)/,
+  assert.match(method, /JSON\.stringify\(\{[^}]*\bmodel\b[^}]*\}\)/,
     'the api method accepts a model and drops it before the request');
 });
 

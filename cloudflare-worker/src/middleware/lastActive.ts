@@ -27,7 +27,12 @@ const TTL_SECONDS = 300; // 5 min — matches the cookie/session refresh cadence
 // middleware ever issues an UPDATE. Mirrors ensureProfileColumns() so a
 // stale dev D1 self-heals on the first authenticated request.
 const LAST_ACTIVE_COLUMN_READY = new WeakMap<object, boolean>();
-async function ensureLastActiveColumn(env: Env): Promise<void> {
+// Exported for `routes/admin_hq.ts`'s Team read (D138), which SELECTs
+// `last_active_at` and would otherwise be the one caller depending on this
+// middleware having already run. It is idempotent and cached per binding in a
+// WeakMap rather than a module-level boolean — the D95/#204 shape — so a second
+// caller costs one map lookup.
+export async function ensureLastActiveColumn(env: Env): Promise<void> {
   if (LAST_ACTIVE_COLUMN_READY.get(bindingKey(env))) return;
   try { await env.DB.prepare(`ALTER TABLE users ADD COLUMN last_active_at TIMESTAMP`).run(); } catch {}
   try { await env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_users_last_active ON users(last_active_at)`).run(); } catch {}

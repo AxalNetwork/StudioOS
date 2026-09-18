@@ -43,7 +43,19 @@ const NAME = 'check-timestamp-comparisons';
 const problems = [];
 
 /** Columns whose whole purpose is to be compared against the clock. */
-const TTL_COLUMN = '(?:expires_at|valid_until|confirm_expires_at|starts_at|start_at)';
+// D135 — `respond_by` joins them the same commit its table is created in
+// (migration 264, `admin_notices`). A deadline swept against the clock is
+// exactly what this guard exists for, and the list has no allowlist to fall
+// back on: a column outside it is a column nobody is watching. Adding the name
+// here and the column there in one commit is what keeps that true — the
+// alternative is a guard that covers everything except the newest instance.
+// `due_at` joined the list with D143, in the same change that gave
+// `hq_escalations.due_at` its first reader. It is the sharpest instance the list
+// has: the column is written from JavaScript as ISO-8601 (`rpc/hqOps.ts`) while
+// `created_at` and `updated_at` on the SAME row default to `datetime('now')`, so
+// one table carries both formats and a bare comparison against the clock is
+// wrong in a way that only shows when a UTC date rolls over.
+const TTL_COLUMN = '(?:expires_at|valid_until|confirm_expires_at|starts_at|start_at|respond_by|due_at)';
 // A bare column on the left of a comparison against the clock. The negative
 // lookbehind lets `datetime(expires_at)` through and nothing else.
 const BARE_TTL = new RegExp(

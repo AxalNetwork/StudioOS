@@ -51,10 +51,19 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireSuperAdmin } from '../auth';
+import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
+import {
+  DEFAULT_RESPOND_DAYS, MAX_RESPOND_DAYS, MIN_RESPOND_DAYS, NOTICE_KINDS,
+  freezeHoldersForLicence, notifyLicenceAdmins,
+} from '../services/complianceLadder';
 import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
+import { hashEmail } from '../util/hashEmail';
 import { ensureLegalTemplatesSchema, getTemplate, listTemplates } from '../services/legalTemplateStore';
 import { mergeValues, renderContract } from '../services/licenceContract';
+// D137 — every transition below now reaches the branch that runs under the
+// licence. `applyLicence` had no caller at all, so HQ's suspend changed four
+// columns here and nothing on the subsidiary.
+import { pushLicenceToBranch } from '../services/licencePush';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -71,6 +80,15 @@ export type LicenceRow = {
   revenue_share_bps: number | null; token_split_bps: number | null;
   starts_on: string | null; renews_on: string | null; suspended_at: string | null;
   terminated_at: string | null; status_note: string | null; created_at: string;
+};
+
+/** What each notice kind is called in the mail. The CHECK's four values are
+ *  machine words; this is the sentence the addressee reads. */
+const KIND_LABELS: Record<string, string> = {
+  renewal_terms: 'Renewal terms',
+  fees: 'Fees',
+  term_violation: 'A term of the agreement',
+  other: 'Your licence',
 };
 
 const str = (v: unknown, max = 500): string => String(v ?? '').trim().slice(0, max);
@@ -96,6 +114,40 @@ async function logEvent(
     licenceId, event, detail === undefined ? null : JSON.stringify(detail),
     note ?? null, actorId, nowIso(),
   ).run();
+}
+
+/**
+ * The licence's own state machine, which until D139 existed only in prose.
+ *
+ * Migration 187 wrote the semantics down and nothing enforced them:
+ *
+ *   active      — trading
+ *   suspended   — not trading, STILL HOLDS ITS TERRITORY
+ *   terminated  — over; territory released
+ *
+ * `reinstate` was the only transition that checked, and its refusal is the
+ * shape copied here. The other three accepted ANY status, so a **terminated**
+ * licence — one whose territory has been released and given to somebody else —
+ * could be suspended or renewed, and a renewal would push a date onto a licence
+ * that is over. Nothing has exercised it: production holds zero licences. It is
+ * latent, and it is cheap exactly while that is true.
+ *
+ * Re-suspending an already-suspended licence is refused too, and for a reason
+ * the ladder made real: the UPDATE would overwrite `suspended_at`, which is
+ * what HQ's Team table and the addressee's own page read as "frozen since".
+ * Silently restarting that clock is worse than refusing to.
+ */
+function transitionRefusal(
+  status: string | null | undefined, verb: 'suspend' | 'renew' | 'terminate',
+): string | null {
+  const now = String(status || '');
+  if (now === 'terminated') {
+    return `This licence is terminated — it is over and its territory has been released, so it cannot be ${verb === 'renew' ? 'renewed' : `${verb}d`}.`;
+  }
+  if (verb === 'suspend' && now === 'suspended') {
+    return 'This licence is already suspended. Suspending it again would restart the "suspended since" clock its administrators are measured against; reinstate it first, or edit the note on the licence.';
+  }
+  return null;
 }
 
 /**
@@ -406,7 +458,8 @@ r.post('/:uid/activate', async (c) => {
       "UPDATE territory_licences SET status = 'active', status_note = NULL, suspended_at = NULL, updated_at = ? WHERE id = ?",
     ).bind(nowIso(), licence.id).run();
     await logEvent(c.env, licence.id, 'activated', admin.id);
-    return c.json({ ok: true, status: 'active' });
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, status: 'active', pushed });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -415,6 +468,9 @@ r.post('/:uid/suspend', async (c) => {
     const admin = await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
+    // D139 — the state machine, on `reinstate`'s own 409 shape.
+    const refusal = transitionRefusal(licence.status, 'suspend');
+    if (refusal) return c.json({ error: 'bad_transition', message: refusal }, 409);
     const note = str(c.req.query('note') || (await c.req.json().catch(() => ({} as any)))?.note, 1000);
     if (!note) return c.json({ error: 'a suspension must record why' }, 400);
     // Territory rows are untouched on purpose: a suspended licence still holds
@@ -423,7 +479,21 @@ r.post('/:uid/suspend', async (c) => {
       "UPDATE territory_licences SET status = 'suspended', status_note = ?, suspended_at = ?, updated_at = ? WHERE id = ?",
     ).bind(note, nowIso(), nowIso(), licence.id).run();
     await logEvent(c.env, licence.id, 'suspended', admin.id, null, note);
-    return c.json({ ok: true, status: 'suspended', territory_released: false });
+    // D135 — THIS FILE HAD ZERO `notify()` CALLS. Suspending a licence changed
+    // four columns in HQ's ledger and told the holder nothing: they found out by
+    // hitting a 423. "First admins get notified" is the ladder's first sentence,
+    // so this is the missing half of the flow rather than an addition to it.
+    await notifyLicenceAdmins(c.env, licence.id, {
+      type: 'licence_suspended',
+      title: 'Your licence has been suspended by HQ',
+      body: `${note} Your territory is not released — suspension is not a lapse — and reading is unaffected.`,
+      payload: { licence_uid: licence.uid },
+    });
+    // REPORTED, NEVER THROWN. The suspension is recorded at HQ whatever the
+    // branch does; `pushed.ok === false` is a fact about the branch, and a 502
+    // here would ask an operator to re-suspend something already suspended.
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, status: 'suspended', territory_released: false, pushed });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -439,7 +509,14 @@ r.post('/:uid/reinstate', async (c) => {
       "UPDATE territory_licences SET status = 'active', status_note = NULL, suspended_at = NULL, updated_at = ? WHERE id = ?",
     ).bind(nowIso(), licence.id).run();
     await logEvent(c.env, licence.id, 'reinstated', admin.id);
-    return c.json({ ok: true, status: 'active' });
+    await notifyLicenceAdmins(c.env, licence.id, {
+      type: 'licence_reinstated',
+      title: 'Your licence is active again',
+      body: 'HQ has reinstated it. Your account can make changes again.',
+      payload: { licence_uid: licence.uid },
+    });
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, status: 'active', pushed });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -448,6 +525,9 @@ r.post('/:uid/renew', async (c) => {
     const admin = await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
+    // D139 — the state machine, on `reinstate`'s own 409 shape.
+    const refusal = transitionRefusal(licence.status, 'renew');
+    if (refusal) return c.json({ error: 'bad_transition', message: refusal }, 409);
     const b = await c.req.json().catch(() => ({} as any));
     // An explicit date wins. Otherwise push out by the term, from the CURRENT
     // renewal date rather than from today, so a late renewal does not silently
@@ -464,15 +544,157 @@ r.post('/:uid/renew', async (c) => {
       'UPDATE territory_licences SET renews_on = ?, updated_at = ? WHERE id = ?',
     ).bind(next, nowIso(), licence.id).run();
     await logEvent(c.env, licence.id, 'renewed', admin.id, { renews_on: next });
-    return c.json({ ok: true, renews_on: next });
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, renews_on: next, pushed });
   } catch (e) { return mapError(c, e); }
 });
+
+/**
+ * What a termination does to the people who administered the licence (D145).
+ *
+ * WHAT WAS LEFT BEHIND. Terminate released the territory, set the status and —
+ * since D139 — withdrew the licence's open compliance notices. It never touched
+ * `users.role`, `licence_admins` or `is_active`, so afterwards the licence's
+ * administrators still held `role = 'admin'` over a licence that no longer
+ * exists: an unscoped admin, which is exactly the state D134's door was built
+ * to make unreachable, arriving through the back.
+ *
+ * DEMOTE THEN DETACH, NEVER THE REVERSE, and that order is not a preference.
+ * `DELETE /:uid/admins/:userId` refuses while the account still holds the role
+ * precisely because detaching first leaves an admin bound to nothing. This
+ * composes the two in the order D134 already enforces between them.
+ *
+ * ONE FLOOR, NOT TWO. A `super_admins` holder is skipped: the elevation sits ON
+ * the admin role, so demoting its holder would leave it pointing at a
+ * non-admin — the same reason `POST /users/:userId/demote-admin` refuses that
+ * target. A "never demote the last active admin" floor was considered and NOT
+ * added, because `admin.ts` already retired its own for the reason that applies
+ * here unchanged: the caller has just passed `requireSuperAdmin`, is an active
+ * admin, and cannot be one of this licence's administrators being demoted — so
+ * at least one active admin always survives, by construction. A conjunct that
+ * cannot be false is not a guard.
+ *
+ * TRUST OBLIGATIONS FOLLOW THE ROLE; THE EXPLORING REVIEW DOES NOT. Re-seeding
+ * with `pruneStaleForRole` waives the admin-only obligations rather than
+ * deleting them, so the audit survives — the same call the demote route makes.
+ * `resetExploringReview` is deliberately NOT made: it is module-private to
+ * `routes/admin.ts`, and more to the point these accounts are being
+ * DEACTIVATED, so they are in no review queue to reset. Reactivating one is a
+ * deliberate act that goes through the role route and its own bookkeeping.
+ *
+ * REPORTED, NEVER THROWN — D139's shape, on D111's precedent. A recorded
+ * termination must not be undone by a failure in the cleanup after it, and a
+ * partial result is returned per account with its reason rather than collapsed
+ * into one boolean.
+ */
+export async function deprovisionLicenceAdmins(
+  env: Env,
+  licenceId: number,
+  actor: { id: number; name?: string | null; email: string },
+  note: string,
+): Promise<{
+  ok: boolean;
+  demoted: number;
+  detached: number;
+  deactivated: number;
+  skipped: { user_id: number; reason: string }[];
+  reason?: string;
+}> {
+  const out = { ok: true, demoted: 0, detached: 0, deactivated: 0, skipped: [] as { user_id: number; reason: string }[] };
+  let admins: { user_id: number; email: string; name: string | null; role: string }[] = [];
+  try {
+    const res = await env.DB.prepare(
+      `SELECT la.user_id, u.email, u.name, u.role
+         FROM licence_admins la JOIN users u ON u.id = la.user_id
+        WHERE la.licence_id = ?`,
+    ).bind(licenceId).all<{ user_id: number; email: string; name: string | null; role: string }>();
+    admins = res.results ?? [];
+  } catch (e) {
+    return {
+      ...out,
+      ok: false,
+      reason: 'The licence\'s administrators could not be read, so none were deprovisioned and any '
+        + 'of them may still hold the admin role. The termination itself is recorded: ' + (e as Error).message,
+    };
+  }
+  if (!admins.length) return out;
+
+  // The elevation holders, read once. Same lookup `routes/licence.ts` uses.
+  let holders: Set<number>;
+  try {
+    const res = await env.DB.prepare('SELECT user_id FROM super_admins').all<{ user_id: number }>();
+    holders = new Set((res.results || []).map((h) => Number(h.user_id)));
+  } catch (e) {
+    // UNREADABLE MEANS SKIP EVERYTHING, not demote everything. Failing closed
+    // here costs a manual cleanup; failing open could strip the elevation's
+    // holder of the role it sits on.
+    return {
+      ...out,
+      ok: false,
+      reason: 'The Super Admin holders could not be read, so no administrator was demoted — '
+        + 'demoting the holder would leave the elevation pointing at a non-admin. '
+        + 'The termination itself is recorded: ' + (e as Error).message,
+    };
+  }
+
+  for (const a of admins) {
+    if (holders.has(Number(a.user_id))) {
+      out.skipped.push({
+        user_id: a.user_id,
+        reason: 'Holds the Super Admin elevation, which sits on the admin role — revoke or transfer it first.',
+      });
+      continue;
+    }
+    try {
+      await env.DB.batch([
+        env.DB.prepare("UPDATE users SET role = 'exploring', is_active = 0 WHERE id = ?").bind(a.user_id),
+        env.DB.prepare('DELETE FROM licence_admins WHERE licence_id = ? AND user_id = ?').bind(licenceId, a.user_id),
+      ]);
+      out.demoted += 1;
+      out.detached += 1;
+      out.deactivated += 1;
+    } catch (e) {
+      out.ok = false;
+      out.skipped.push({ user_id: a.user_id, reason: `Could not be deprovisioned: ${(e as Error).message}` });
+      continue;
+    }
+    // Best-effort from here: the role is already revoked, and neither of these
+    // failing leaves the account holding a power it should not have.
+    try {
+      const { seedObligations } = await import('../services/trust');
+      await seedObligations(env, a.user_id, 'exploring', { pruneStaleForRole: true });
+    } catch (e) { console.error('[licence/terminate] trust re-seed failed', (e as Error).message); }
+    try {
+      const actorHash = await hashEmail(actor.email);
+      const targetHash = await hashEmail(a.email);
+      await env.DB.batch([
+        // `role_changed` / `your_role_changed`, not a new action name: both are
+        // already in admin_security.ts's audit allowlist and ActivityPage's
+        // label map, and a distinct action would be invisible in every reader.
+        env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?,?,?,?)')
+          .bind('role_changed',
+            `Super admin ${actor.name || actor.email} demoted ${a.name || a.email} from ${a.role} to exploring `
+            + `and deactivated the account: the licence they administered was terminated. Reason: ${note}`,
+            actorHash, actor.id),
+        env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?,?,?,?)')
+          .bind('your_role_changed',
+            `Your administrator role was removed and your account deactivated because the licence you `
+            + `administered was terminated. Reason: ${note}`,
+            targetHash, a.user_id),
+      ]);
+    } catch (e) { console.error('[licence/terminate] activity log failed', (e as Error).message); }
+  }
+  return out;
+}
 
 r.post('/:uid/terminate', async (c) => {
   try {
     const admin = await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
+    // D139 — the state machine, on `reinstate`'s own 409 shape.
+    const refusal = transitionRefusal(licence.status, 'terminate');
+    if (refusal) return c.json({ error: 'bad_transition', message: refusal }, 409);
     const note = str((await c.req.json().catch(() => ({} as any)))?.note, 1000);
     if (!note) return c.json({ error: 'a termination must record why' }, 400);
     const released = await c.env.DB.prepare(
@@ -487,7 +709,66 @@ r.post('/:uid/terminate', async (c) => {
       ).bind(note, nowIso(), nowIso(), licence.id),
     ]);
     await logEvent(c.env, licence.id, 'terminated', admin.id, { released: codes }, note);
-    return c.json({ ok: true, status: 'terminated', released: codes });
+
+    // D139 — THE LADDER WOULD OTHERWISE GO ON FREEZING PEOPLE OVER A LICENCE
+    // THAT NO LONGER EXISTS. `auth.ts`'s compliance gate reads `admin_notices`
+    // by `user_id` and never consults the licence's status, so an `overdue` or
+    // `rejected` notice keeps an administrator's account frozen after HQ has
+    // terminated the very licence the notice is about — and answering it cannot
+    // help, because there is nothing left to comply with. Migration 264 already
+    // has the word for a notice HQ is no longer pressing: `withdrawn`.
+    //
+    // OUTSIDE THE BATCH, ON PURPOSE. A database that has not applied 264 has no
+    // `admin_notices` table and no notices to withdraw; putting this in the
+    // batch would make its absence fail the termination itself. So it is
+    // reported the way `pushed` is (the D111 precedent): the termination is
+    // recorded whatever happens here, and what happened here is its own field.
+    //
+    // `accepted` and `withdrawn` are left alone — they are already closed, and
+    // rewriting a closed row would lose which way it closed.
+    let noticesWithdrawn: { ok: boolean; count?: number; reason?: string };
+    try {
+      const res = await c.env.DB.prepare(
+        `UPDATE admin_notices
+            SET status = 'withdrawn', updated_at = ?
+          WHERE licence_id = ? AND status IN ('issued', 'overdue', 'responded', 'rejected')`,
+      ).bind(nowIso(), licence.id).run();
+      noticesWithdrawn = { ok: true, count: Number(res?.meta?.changes) || 0 };
+    } catch (e) {
+      noticesWithdrawn = {
+        ok: false,
+        reason: 'The compliance notices against this licence could not be withdrawn, so an '
+          + 'administrator frozen by one may still be frozen. The termination itself is recorded: '
+          + (e as Error).message,
+      };
+    }
+
+    // Told LAST, after the batch, because a notification about a termination
+    // that then failed to apply is worse than a late one. The administrators
+    // are still bound at this point — D134's detach is a separate act — so the
+    // lookup still finds them.
+    await notifyLicenceAdmins(c.env, licence.id, {
+      type: 'licence_terminated',
+      title: 'Your licence has been terminated',
+      body: `${note} ${codes.length ? `The ${codes.length === 1 ? 'territory' : `${codes.length} territories`} it held ${codes.length === 1 ? 'has' : 'have'} been released.` : ''}`.trim(),
+      payload: { licence_uid: licence.uid, released: codes },
+    });
+    // D145 — AFTER the notification, and that ordering is load-bearing. The
+    // comment above says the administrators are still bound at that point so
+    // the lookup finds them; deprovisioning first would send the "your licence
+    // has been terminated" mail to nobody. Reported as its own field, never
+    // thrown, exactly as `notices_withdrawn` above.
+    const adminsDeprovisioned = await deprovisionLicenceAdmins(
+      c.env, licence.id, { id: admin.id, name: (admin as any).name, email: admin.email }, note,
+    );
+    // Pushed AFTER the territory release, so the copy the branch receives
+    // reports the same empty territory the ledger now holds.
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({
+      ok: true, status: 'terminated', released: codes, pushed,
+      notices_withdrawn: noticesWithdrawn,
+      admins_deprovisioned: adminsDeprovisioned,
+    });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -498,13 +779,35 @@ r.post('/:uid/terminate', async (c) => {
 // HQ writes this; the holder reads it through GET /api/licence/mine. Assigning
 // an administrator is a contractual act, so it lands in licence_events like
 // every other one.
+//
+// D134 — THIS IS THE DOOR ADMIN ACCOUNTS ARE OPENED THROUGH, and until D134 it
+// was half a door. `POST` wrote the binding and left `users.role` alone, so the
+// only way to actually mint an admin was SQL against production —
+// `PATCH /api/admin/users/:userId/role` refuses `role === 'admin'` outright and
+// still does. The user's model is that one super admin opens, supervises, bans
+// and closes many subsidiary admins; "open" had no route at all.
+//
+// So the promotion happens HERE, bound to a licence in the same batch, and that
+// ordering is the point: an admin minted through this door is licence-bound by
+// construction and there is no path that produces an unscoped one. The reverse
+// is deliberately NOT symmetric — `DELETE` refuses while the account still
+// holds the role, because detaching first would leave exactly the unscoped
+// admin this door exists to make impossible. Demote, then detach; the demote is
+// `POST /api/admin/users/:userId/demote-admin`, and `GET` returns `u.role` so
+// the state between the two steps is on the screen rather than inferred.
 r.get('/:uid/admins', async (c) => {
   try {
     await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
+    // `u.role` and `u.is_active` are the two facts that make the row honest
+    // rather than a name: a binding survives a demotion and survives a
+    // deactivation, so a list that showed neither would render a closed
+    // account and a live one identically. The transient state between demote
+    // and detach is visible for the same reason.
     const rows = await c.env.DB.prepare(
-      `SELECT la.admin_role, la.created_at, u.id AS user_id, u.name, u.email
+      `SELECT la.admin_role, la.created_at, u.id AS user_id, u.name, u.email,
+              u.role, u.is_active
          FROM licence_admins la JOIN users u ON u.id = la.user_id
         WHERE la.licence_id = ? ORDER BY la.admin_role, u.email`,
     ).bind(licence.id).all<any>();
@@ -514,21 +817,37 @@ r.get('/:uid/admins', async (c) => {
 
 r.post('/:uid/admins', async (c) => {
   try {
-    const admin = await requireSuperAdmin(c);
+    // D134 — THE WRITE BAR, not the plain elevation. Every other route in this
+    // file re-terms or suspends a licence; this one mints an administrator, and
+    // the thing it is closest to is impersonation, which has always wanted a
+    // TOTP-minted session and a recent step-up. A super-admin session left open
+    // on a desk should not be able to create a peer.
+    const admin = await requireSuperAdminWriteBar(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
     const b = await c.req.json().catch(() => ({} as any));
     const email = str(b?.email, 320).toLowerCase();
     const role = str(b?.admin_role, 20) || 'principal';
+    const reason = str(b?.reason, 500);
     if (!email) return c.json({ error: 'an email address is required' }, 400);
     if (role !== 'principal' && role !== 'delegate') {
       return c.json({ error: "admin_role must be 'principal' or 'delegate'" }, 400);
     }
+    // The same rule the impersonation reason carries, for the same reason:
+    // enforced server-side because a UI-only rule would be a convention rather
+    // than a control, and ten characters because this is the line somebody
+    // reads in the audit when they ask why an account has admin.
+    if (reason.length < 10) {
+      return c.json({
+        error: 'A reason of at least 10 characters is required — minting an administrator is the line someone reads in the audit later.',
+        code: 'reason_too_short',
+      }, 400);
+    }
     // Resolve to an existing account, like the data room does. Assigning a
     // licence to an address nobody holds would create an administrator who
     // cannot sign in.
-    const u = await c.env.DB.prepare('SELECT id, email FROM users WHERE LOWER(email) = ?')
-      .bind(email).first<{ id: number; email: string }>();
+    const u = await c.env.DB.prepare('SELECT id, email, role FROM users WHERE LOWER(email) = ?')
+      .bind(email).first<{ id: number; email: string; role: string }>();
     if (!u) return c.json({ error: 'no account with that address' }, 404);
 
     // licence_admins is UNIQUE on user_id alone — see migration 190. Report
@@ -542,32 +861,298 @@ r.post('/:uid/admins', async (c) => {
       return c.json({ error: `that account already administers ${held.licence_ref}` }, 409);
     }
 
-    await c.env.DB.prepare(
-      `INSERT INTO licence_admins (licence_id, user_id, admin_role, granted_by_user_id)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(user_id) DO UPDATE SET admin_role = excluded.admin_role`,
-    ).bind(licence.id, u.id, role, admin.id).run();
+    // ONE BATCH, AND THE ORDER OF THE TWO WRITES DOES NOT MATTER — that they
+    // are one statement does. A binding without the role is an administrator
+    // who cannot administer; the role without a binding is the unscoped admin
+    // the whole door exists to prevent. Either alone is a state somebody would
+    // have to notice and repair by hand.
+    const previousRole = String(u.role || '');
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO licence_admins (licence_id, user_id, admin_role, granted_by_user_id)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET admin_role = excluded.admin_role`,
+      ).bind(licence.id, u.id, role, admin.id),
+      c.env.DB.prepare("UPDATE users SET role = 'admin' WHERE id = ?").bind(u.id),
+    ]);
     await logEvent(c.env, licence.id, 'terms_changed', admin.id,
-      { administrator_added: u.email, admin_role: role });
-    return c.json({ ok: true, user_id: u.id, admin_role: role });
+      { administrator_added: u.email, admin_role: role, promoted_from: previousRole }, reason);
+    // The account's OWN feed learns it too. `role_changed` / `your_role_changed`
+    // are the pair `routes/admin.ts` already writes and every audit reader
+    // already renders; a new action name would show up nowhere until three
+    // separate allowlists were swept, which is the failure that pair's own
+    // comment describes.
+    try {
+      const actorHash = await hashEmail(admin.email);
+      const targetHash = await hashEmail(u.email);
+      await c.env.DB.batch([
+        c.env.DB.prepare(
+          'INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?,?,?,?)',
+        ).bind('role_changed',
+          `Super admin ${admin.name} made ${u.email} an administrator of ${licence.licence_ref} (was ${previousRole || 'unrecorded'}). Reason: ${reason}`,
+          actorHash, admin.id),
+        c.env.DB.prepare(
+          'INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?,?,?,?)',
+        ).bind('your_role_changed',
+          `You were made an administrator of ${licence.licence_ref} by ${admin.name}`,
+          targetHash, u.id),
+      ]);
+    } catch (e) {
+      console.warn('[licences/admins] activity log failed', (e as Error).message);
+    }
+    return c.json({ ok: true, user_id: u.id, admin_role: role, role: 'admin', promoted_from: previousRole });
   } catch (e) { return mapError(c, e); }
 });
 
 r.delete('/:uid/admins/:userId{[0-9]+}', async (c) => {
   try {
-    const admin = await requireSuperAdmin(c);
+    // Same bar as the add, because the two are one power read from either end.
+    const admin = await requireSuperAdminWriteBar(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
     const userId = Number(c.req.param('userId'));
     const gone = await c.env.DB.prepare(
-      'SELECT u.email FROM licence_admins la JOIN users u ON u.id = la.user_id WHERE la.licence_id = ? AND la.user_id = ?',
-    ).bind(licence.id, userId).first<{ email: string }>();
+      'SELECT u.email, u.role FROM licence_admins la JOIN users u ON u.id = la.user_id WHERE la.licence_id = ? AND la.user_id = ?',
+    ).bind(licence.id, userId).first<{ email: string; role: string }>();
     if (!gone) return c.json({ error: 'not_found' }, 404);
+    // D134 — DETACH REFUSES WHILE THEY ARE STILL AN ADMIN, and this is the
+    // asymmetry that makes the add safe. `POST` above binds and promotes in one
+    // batch precisely so no admin exists without a licence behind them;
+    // unbinding first would produce exactly that account — role intact, nothing
+    // naming which territory it belongs to, and no screen that lists it.
+    //
+    // The refusal names the step rather than stating a policy, because the
+    // caller's next action is a single route away and a 409 that does not say
+    // which one is a dead end.
+    if (String(gone.role).toLowerCase() === 'admin') {
+      return c.json({
+        error: `${gone.email} still holds the admin role. Demote the account first `
+          + '(POST /api/admin/users/:userId/demote-admin) — detaching alone would leave an '
+          + 'administrator with no licence behind them.',
+        code: 'still_an_admin',
+      }, 409);
+    }
     await c.env.DB.prepare('DELETE FROM licence_admins WHERE licence_id = ? AND user_id = ?')
       .bind(licence.id, userId).run();
     await logEvent(c.env, licence.id, 'terms_changed', admin.id,
       { administrator_removed: gone.email });
     return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+/* ------------------------------------------------------------------ *
+ * The compliance ladder — HQ's half (D135)                             *
+ * ------------------------------------------------------------------ */
+
+// "First admins get notified; if admins do not act on notifications, admin
+// accounts are frozen until they act; and lastly if they don't comply admin
+// accounts are terminated." These three routes are the first and third of
+// those: HQ issues a notice with a deadline, and HQ reads the response and
+// accepts or rejects it. The middle rung — the freeze — belongs to a clock, in
+// `services/complianceLadder.ts`, because a rung a person has to remember to
+// climb is not a ladder.
+//
+// THE NOTICE IS NOT A LICENCE EVENT, and that is deliberate rather than an
+// omission. `licence_events`' CHECK admits nine values (migration 187) and
+// "notice issued" is not one of them; writing `terms_changed` instead would put
+// a false sentence in the one table a contract dispute reads. The notice row IS
+// the record. What DOES reach `licence_events` is the `suspended` the sweep
+// performs, which is a real transition and is in the CHECK.
+//
+// AND THE ADDRESSEE MUST ADMINISTER THIS LICENCE. A notice about a territory
+// sent to someone who does not hold it is a notice with no remedy behind it:
+// the freeze would land on an account whose licence is somebody else's.
+
+r.get('/:uid/notices', async (c) => {
+  try {
+    await requireSuperAdmin(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    let items: any[] = [];
+    let readable = true;
+    try {
+      const res = await c.env.DB.prepare(
+        `SELECT n.uid, n.kind, n.subject, n.body, n.respond_by, n.status,
+                n.response, n.responded_at, n.review_note, n.reviewed_at,
+                n.froze_at, n.created_at,
+                u.id AS user_id, u.name, u.email
+           FROM admin_notices n JOIN users u ON u.id = n.user_id
+          WHERE n.licence_id = ?
+          ORDER BY n.id DESC`,
+      ).bind(licence.id).all<any>();
+      items = res.results || [];
+    } catch { readable = false; }
+    return c.json({
+      items: readable ? items : [],
+      // An unreadable table is NOT "no notices". A database that has not applied
+      // migration 264 must say so rather than render an empty list, which is a
+      // claim about the licence that nothing measured.
+      notices_available: readable,
+      ...(readable ? {} : {
+        notices_reason: 'The admin_notices table could not be read on this database (migration 264).',
+      }),
+      freeze_holders: readable ? await freezeHoldersForLicence(c.env, licence.id) : null,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+r.post('/:uid/notices', async (c) => {
+  try {
+    const admin = await requireSuperAdminWriteBar(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const b = await c.req.json().catch(() => ({} as any));
+    const kind = str(b?.kind, 32);
+    const subject = str(b?.subject, 200);
+    const body = str(b?.body, 5000);
+    const email = str(b?.email, 320).toLowerCase();
+    if (!(NOTICE_KINDS as readonly string[]).includes(kind)) {
+      return c.json({ error: `kind must be one of ${NOTICE_KINDS.join(', ')}`, code: 'bad_kind' }, 400);
+    }
+    if (subject.length < 3) return c.json({ error: 'a notice needs a subject' }, 400);
+    // The body IS the notice. A ten-character floor for the same reason every
+    // other reason field on this tier has one: it is what the addressee reads
+    // when deciding what to do, and what a tribunal reads afterwards.
+    if (body.length < 10) {
+      return c.json({
+        error: 'A notice body of at least 10 characters is required — it is what the addressee has to act on.',
+        code: 'body_too_short',
+      }, 400);
+    }
+    const days = Math.min(MAX_RESPOND_DAYS, Math.max(MIN_RESPOND_DAYS,
+      Number.isFinite(Number(b?.respond_days)) ? Math.trunc(Number(b.respond_days)) : DEFAULT_RESPOND_DAYS));
+
+    const target = await c.env.DB.prepare(
+      `SELECT u.id, u.email, u.name FROM licence_admins la JOIN users u ON u.id = la.user_id
+        WHERE la.licence_id = ? AND LOWER(u.email) = ?`,
+    ).bind(licence.id, email).first<{ id: number; email: string; name: string }>();
+    if (!target) {
+      return c.json({
+        error: `no administrator of ${licence.licence_ref} with that address — a notice has to reach someone who can act on it`,
+        code: 'not_an_administrator',
+      }, 404);
+    }
+
+    const uid = newUid();
+    try {
+      // `respond_by` is computed in SQL, never bound as an ISO string. The
+      // column is swept against `datetime('now')`, and an ISO value compared
+      // there is ALWAYS the greater one — a deadline that does not bite until
+      // the UTC date rolls over. One writer, one format.
+      await c.env.DB.prepare(
+        `INSERT INTO admin_notices
+           (uid, user_id, licence_id, kind, subject, body, issued_by_user_id, respond_by, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', ?), 'issued')`,
+      ).bind(uid, target.id, licence.id, kind, subject, body, admin.id, `+${days} days`).run();
+    } catch (e) {
+      const msg = String((e as Error).message || '');
+      if (/no such table/i.test(msg)) {
+        return c.json({
+          error: 'The admin_notices table does not exist on this database (migration 264 has not been applied).',
+          code: 'store_missing',
+        }, 503);
+      }
+      throw e;
+    }
+
+    const row = await c.env.DB.prepare(
+      'SELECT uid, respond_by, status FROM admin_notices WHERE uid = ?',
+    ).bind(uid).first<{ uid: string; respond_by: string; status: string }>();
+
+    // `send()` and NOT `notify()` here, and the difference is worth stating
+    // because the two look interchangeable and are not. `send()` renders a
+    // DESIGNED template, queues through JOB_QUEUE so a failure retries into the
+    // DLQ, writes `email_send_log`, and mirrors the message into the inbox with
+    // its category and CTA — six modules already use it. `notify()` has no
+    // template: it sends `[Axal] <title>` with the body as plain text. A notice
+    // is the one piece of mail on this ladder that is worth designing, so it
+    // goes through the path that can render one. The freeze that follows uses
+    // `notify()`, because by then the person is looking at a 423 and what they
+    // need is one sentence and the route back.
+    let delivered = false;
+    try {
+      const { send } = await import('../services/email/send');
+      const res = await send(c.env, 'compliance_notice_issued', target.email, {
+        name: target.name || target.email,
+        subject,
+        kind_label: KIND_LABELS[kind] ?? kind,
+        respond_by: String(row?.respond_by || ''),
+        body,
+        licence_url: `${String((c.env as any).APP_URL || 'https://axal.vc')}/admin/my-licence`,
+      }, { userId: target.id });
+      delivered = Boolean(res?.ok);
+    } catch (e) { console.warn('[compliance] notice mail failed', (e as Error).message); }
+
+    return c.json({
+      ok: true,
+      notice: { uid, status: row?.status ?? 'issued', respond_by: row?.respond_by ?? null },
+      // Whether the message actually left, reported rather than assumed — the
+      // `email_sent` argument migration 236 already made: a notice nobody was
+      // told about is a different thing from one that is merely unanswered, and
+      // the ladder's next rung freezes an account over the difference.
+      email_sent: delivered,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+r.post('/:uid/notices/:noticeUid/review', async (c) => {
+  try {
+    const admin = await requireSuperAdminWriteBar(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const b = await c.req.json().catch(() => ({} as any));
+    const decision = str(b?.decision, 16);
+    const note = str(b?.note, 1000);
+    if (decision !== 'accept' && decision !== 'reject') {
+      return c.json({ error: "decision must be 'accept' or 'reject'", code: 'bad_decision' }, 400);
+    }
+    const notice = await c.env.DB.prepare(
+      'SELECT id, uid, user_id, status FROM admin_notices WHERE uid = ? AND licence_id = ?',
+    ).bind(c.req.param('noticeUid'), licence.id).first<{ id: number; uid: string; user_id: number; status: string }>();
+    if (!notice) return c.json({ error: 'not_found' }, 404);
+    // A CLICK BY THE PERSON WHO OWES A FEE IS NOT EVIDENCE THE FEE WAS PAID —
+    // which is why HQ reviews and lifts, and why there is nothing to review
+    // until the addressee has actually said something.
+    if (notice.status !== 'responded') {
+      return c.json({
+        error: `this notice is ${notice.status}; there is nothing to review until the addressee has responded`,
+        code: 'not_responded',
+      }, 409);
+    }
+    const next = decision === 'accept' ? 'accepted' : 'rejected';
+    await c.env.DB.prepare(
+      `UPDATE admin_notices
+          SET status = ?, reviewed_by_user_id = ?, reviewed_at = datetime('now'),
+              review_note = ?, updated_at = datetime('now')
+        WHERE id = ?`,
+    ).bind(next, admin.id, note || null, notice.id).run();
+
+    // ACCEPTING LIFTS THE FREEZE ONLY WHEN IT WAS THE LAST THING HOLDING IT.
+    // Two outstanding notices and one accepted is still a frozen account; the
+    // count is what says which. Reinstatement reuses the licence's own state —
+    // there is no second flag to keep in step.
+    let reinstated = false;
+    const holders = await freezeHoldersForLicence(c.env, licence.id);
+    if (next === 'accepted' && holders === 0 && licence.status === 'suspended') {
+      await c.env.DB.prepare(
+        "UPDATE territory_licences SET status = 'active', status_note = NULL, suspended_at = NULL, updated_at = ? WHERE id = ? AND status = 'suspended'",
+      ).bind(nowIso(), licence.id).run();
+      await logEvent(c.env, licence.id, 'reinstated', admin.id, { notice_uid: notice.uid }, note || null);
+      reinstated = true;
+    }
+    await notifyLicenceAdmins(c.env, licence.id, {
+      type: next === 'accepted' ? 'compliance_accepted' : 'compliance_rejected',
+      title: next === 'accepted'
+        ? 'HQ accepted your response'
+        : 'HQ did not accept your response',
+      body: next === 'accepted'
+        ? (reinstated
+          ? 'Your licence is active again and your account can write.'
+          : `Accepted. ${holders} other notice${holders === 1 ? '' : 's'} still outstanding, so the freeze stays until those are answered.`)
+        : `Your account stays frozen.${note ? ` HQ's note: ${note}` : ''}`,
+      payload: { notice_uid: notice.uid, decision: next },
+    });
+    return c.json({ ok: true, status: next, freeze_holders: holders, reinstated });
   } catch (e) { return mapError(c, e); }
 });
 

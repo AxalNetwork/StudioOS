@@ -66,6 +66,13 @@ const SCHEMA = `
     revenue_share_bps INTEGER, token_split_bps INTEGER, annual_fee_cents INTEGER,
     currency TEXT, term_start TEXT, term_end TEXT,
     renewal_at TEXT, template_version TEXT, suspended_at TEXT, suspended_note TEXT,
+    -- Migration 265 (D137). A fixture NARROWER than the schema does not fail
+    -- honestly: the SELECT throws, the payload degrades to licence_not_pushed,
+    -- and every assertion below reads "HQ has not pushed this branch its
+    -- licence" about a row that is sitting right there. Same lesson as D133.
+    -- (No backticks in here: this comment lives inside a JS template literal.)
+    registered_address TEXT, signatory_name TEXT, signatory_title TEXT,
+    term_years INTEGER, terminated_at TEXT,
     pushed_at TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')));
 `;
 
@@ -81,10 +88,16 @@ function db(seed = '') {
 const PUSHED = `
   INSERT INTO branch_licence
     (id, licence_uid, licence_ref, legal_entity, brand_name, territory, status, seats_json,
-     revenue_share_bps, token_split_bps, template_version, pushed_at)
+     revenue_share_bps, token_split_bps, template_version,
+     term_start, renewal_at, suspended_note,
+     registered_address, signatory_name, signatory_title, term_years,
+     pushed_at)
   VALUES (1, 'lic_fr_001', 'AXL-001', 'Axal VC France SAS', 'Axal VC France', 'FR, BE,lu', 'active',
           '{"founder":200,"investor_lp":80,"advisor":30,"service_partner":15}',
-          3500, 3100, 'v4', '2026-09-14T22:10:00Z');
+          3500, 3100, 'v4',
+          '2026-01-01', '2027-01-01', 'Fees outstanding since Q2.',
+          '12 rue de la Paix, 75002 Paris', 'Claire Dubois', 'Managing Director', 3,
+          '2026-09-14T22:10:00Z');
 `;
 
 const app = new Hono<any>();
@@ -256,10 +269,32 @@ test('the copy uses HQ\'s field names, because the page that reads it is HQ\'s p
     'the copy must not ALSO emit its own column name — two spellings of one fact is how they diverge',
   );
 
+  // D137 — EVERY KEY THE PAGE READS, DERIVED FROM THE PAGE. The four typed
+  // here before were the four somebody remembered, and the other eight went on
+  // being emitted under the TABLE's names or not at all: `starts_on`,
+  // `renews_on` and `status_note` were `term_start`, `renewal_at` and
+  // `suspended_note`, and `term_years`, `registered_address`, `signatory_name`,
+  // `signatory_title` and `terminated_at` were never stored. So the Entity
+  // panel printed "Not recorded" four times about facts HQ holds, and the
+  // sentence saying WHY a licence was suspended was blank on the page a
+  // suspended administrator is sent to.
+  //
+  // Deriving the list means the next field added to the page fails here rather
+  // than rendering blank on a tier nobody has run yet — which is how all eight
+  // of these survived.
   const page = readFileSync(new URL('../../frontend/src/pages/subsidiary/MyLicencePage.jsx', import.meta.url), 'utf8');
-  for (const key of ['legal_entity_name', 'licence_ref', 'brand_name', 'status']) {
-    assert.ok(page.includes(`l.${key}`), `the page reads l.${key}; the payload must supply it`);
-    assert.ok(key in body.licence, `the payload is missing ${key}, which the page renders`);
+  const readKeys = [...new Set([...page.matchAll(/\bl\.([a-z_][a-z0-9_]*)/g)].map((m) => m[1]))];
+  assert.ok(readKeys.length >= 12, `only ${readKeys.length} keys parsed out of the page — the scan is broken, not the payload`);
+  for (const key of readKeys) {
+    assert.ok(key in body.licence, `the page renders l.${key} and the branch payload does not supply it`);
+  }
+  // And the table's own spellings must NOT also appear: two names for one fact
+  // is how they diverge, which is the defect this test was opened for.
+  for (const columnName of ['legal_entity', 'term_start', 'renewal_at', 'suspended_note']) {
+    assert.ok(
+      !(columnName in body.licence),
+      `the copy also emits its own column name "${columnName}" — one fact, one spelling`,
+    );
   }
 });
 

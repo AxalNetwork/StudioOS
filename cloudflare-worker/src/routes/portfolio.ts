@@ -86,7 +86,7 @@ async function computeScore(env: Env, projectId: number): Promise<{ score: numbe
   const thirty = new Date(Date.now() - 30 * 86400000).toISOString();
   const a = await env.DB.prepare(
     `SELECT COUNT(*) AS c FROM activity_logs
-     WHERE created_at >= ? AND (
+     WHERE datetime(created_at) >= datetime(?) AND (
        details LIKE ('%project=' || ? || '%') OR details LIKE ('%project_id=' || ? || '%')
      )`
   ).bind(thirty, projectId, projectId).first<{ c: number }>().catch(() => null);

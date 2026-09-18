@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { TrendingUp, Users, Store, Layers, Plus, Loader2, Sparkles, X, Save, Search, Send, Brain, Star, ChevronDown, Building2 } from 'lucide-react';
 import { api } from '../lib/api';
+import { bpsPercent } from '../lib/bps';
 import CompanyProfilePanel from '../components/CompanyProfilePanel';
 
 export default function NetworkEffectsPage() {
@@ -140,7 +141,11 @@ function LevelCard({ level, count, mult }) {
     <div className="bg-gradient-to-br from-violet-50 to-white border border-violet-200 rounded-xl p-4">
       <div className="text-xs uppercase tracking-wide text-violet-600 font-semibold">Level {level}</div>
       <div className="text-3xl font-bold text-gray-900 mt-1 dark:text-gray-100">{count}</div>
-      <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">{(mult / 100).toFixed(0)}% commission multiplier</div>
+      {/* D149: one bps formatter. This copy was `toFixed(0)`, which ROUNDS a
+          rate — 150 bps would have read "2%". Latent rather than live:
+          `COMPOUNDING_BPS` is [10000, 5000, 2500], so every value it has ever
+          held is a whole percent and no string changes here. */}
+      <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">{bpsPercent(mult)} commission multiplier</div>
     </div>
   );
 }

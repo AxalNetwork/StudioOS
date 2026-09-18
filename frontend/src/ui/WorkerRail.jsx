@@ -173,6 +173,38 @@ export default function WorkerRail({
   note,
   coverage = [],
   coverageNote,
+  /**
+   * WHICH SCOPE THE PAGE READ IN — H13 rule 1, "scope precedes the question".
+   *
+   * IT REPORTS, IT NEVER OFFERS, and that distinction is the whole decision.
+   * D150 refused a scope CHIP on the stated ground that "the page decides what
+   * it fetched before the rail runs, so both options produce the same read" —
+   * a picker whose options cannot differ is the `still_an_admin` mistake D134
+   * named. That was correct then and D153 made it false: under the view-as
+   * overlay the page routes its reads through ONE branch, so "All branches"
+   * and "Axal VC France" are now two genuinely different reads.
+   *
+   * What the canvas asks for is not a picker either — "the chip is what the
+   * viewing-as banner set". So this renders the scope the page was already in
+   * and changing it is the shell bar's job, one layer up, where the mode
+   * actually lives. A chip that offered a scope the rail cannot change would
+   * be the refused control wearing the accepted one's clothes.
+   *
+   * Absent means the page did not say, which is different from "everything":
+   * a rail with no scope draws no chip rather than claiming platform-wide.
+   */
+  scope,
+  /**
+   * The branch CODE behind that chip, when the scope is one branch.
+   *
+   * A SEPARATE PROP FROM `scope`, ON PURPOSE. `scope` is a LABEL — copy a
+   * person reads, "All branches" or a brand name — and this is an IDENTIFIER
+   * the route keys an audit row on. Conflating them would send the word "All
+   * branches" to the server as a branch code, which would either be dropped
+   * silently or, worse, logged as though a branch called that had been read.
+   * The rail sends this one and renders the other.
+   */
+  scopeBranch,
   unavailable = [],
   action = null,
   // Does THIS workspace have fill-the-blanks work? The surface declares the
@@ -263,6 +295,11 @@ export default function WorkerRail({
     try {
       const r = await api.aiWorkspaceExplain({
         workspace, zone: stance || '', coverage, model: activeModel || undefined,
+        // H13 RULE 4 — the scope travels with the question, which is what lets
+        // the route log a branch read-back. Sent only when the page named one:
+        // an unscoped run is not about a branch and must not write a row
+        // claiming it was (D150's reason, narrowed rather than reversed).
+        branch: scopeBranch || undefined,
       });
       setRun({ state: 'done', text: r?.text || '', note: '', usage: r?.usage || null });
     } catch (e) {
@@ -285,7 +322,7 @@ export default function WorkerRail({
         usage: null,
       });
     }
-  }, [workspace, stance, coverage, activeModel]);
+  }, [workspace, stance, coverage, activeModel, scopeBranch]);
 
   // `recorded` false, or no report at all, are the same thing to a reader: the
   // platform cannot say what has been spent. Neither draws a bar.
@@ -387,6 +424,11 @@ export default function WorkerRail({
 
         <section className="fwr-block">
           <span>Coverage</span>
+          {scope && (
+            <strong className="fwr-scope" data-testid="worker-rail-scope">
+              Scope: {scope}
+            </strong>
+          )}
           {coverage.length
             ? coverage.map((line) => <strong key={line}>{line}</strong>)
             : <strong className="fwr-absent">Not recorded</strong>}

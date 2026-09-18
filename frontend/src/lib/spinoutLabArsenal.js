@@ -79,24 +79,34 @@ export const TOOL_COUNT = LAB_TOOLS.length;
 /**
  * The three starting points. `leads` names tool ids, never routes, so a route
  * rename is a one-line change in LAB_TOOLS above and nothing here moves.
+ *
+ * `who` IS THE SCREEN'S SENTENCE; `brief` IS THE PRINTED ONE (D141). The
+ * Programme Brief sets each track on one line in a narrow column, and the
+ * screen's longer sentence wraps there and reads as a ragged list. They are two
+ * renderings of one fact, held together rather than as two lists of the same
+ * three tracks — which is what `lib/README.md`'s rule forbids and what would
+ * otherwise let the brief describe a programme the app does not.
  */
 export const LAB_TRACKS = [
   {
     id: 'form',
     name: 'Form',
     who: 'No entity yet — an idea, a prototype, or research you want out of the lab.',
+    brief: 'No entity yet. An idea, a prototype, or research.',
     leads: ['inc', 'e83b', 'cap', 'coagree', 'cofind', 'comply'],
   },
   {
     id: 'fit',
     name: 'Find fit',
     who: 'Incorporated already, but the market has not answered yet.',
+    brief: 'Incorporated, no product-market fit yet.',
     leads: ['disc', 'market', 'profile', 'score', 'revenue'],
   },
   {
     id: 'line',
     name: 'Launch a line',
     who: 'Incorporated and running — testing a second product on the same entity.',
+    brief: 'Incorporated, testing a new product.',
     leads: ['disc', 'market', 'brand', 'roadmap', 'revenue'],
   },
 ];

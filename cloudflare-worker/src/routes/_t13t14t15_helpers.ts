@@ -3,7 +3,8 @@
  */
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
-import { AUTH_ERROR_STATUSES } from '../util/authErrors';
+import { ADMIN_FROZEN, AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, adminFrozenBody, branchSuspendedBody, stepUpRefusalBody } from '../util/authErrors';
+import { BRANCH_SUSPENDED } from '../util/branch';
 
 export function role(u: { role: string }): string {
   return (u.role || '').toLowerCase();
@@ -123,6 +124,14 @@ export function mapError(c: Context<{ Bindings: Env }>, e: any) {
   // `app.onError` never sees them — answered a permission refusal with **400
   // Bad Request**. The SPA cannot tell a refusal from a malformed request at
   // 400, and the gate that worked reported the wrong thing.
+  // D134 — the step-up refusal carries a body, not only a status. Its remedy is
+  // "type a fresh TOTP code and retry", and the SPA finds that out from `code`;
+  // a bare `{detail: 'step_up_required'}` would be the right number and still a
+  // dead end. Same object as `app.onError` builds, from the same function.
+  if (msg === ADMIN_FROZEN) return c.json(adminFrozenBody(e), 423);
+  if (msg === BRANCH_SUSPENDED) return c.json(branchSuspendedBody(e), 423);
+  if (msg === STEP_UP_REQUIRED) return c.json(stepUpRefusalBody(e), 403);
+
   const status = AUTH_ERROR_STATUSES[msg] ?? 400;
   return c.json({ detail: msg }, status as any);
 }

@@ -140,7 +140,19 @@ test('the page converts entered currency to cents and shows bps as a percentage'
   const s = read(PAGE);
   assert.match(s, /Math\.round\(Number\(f\.annual_fee\) \* 100\)/, 'entered units → integer cents');
   assert.ok(!/parseFloat\(/.test(s), 'no float parsing of money');
-  assert.match(s, /Number\(bps\) \/ 100/, 'bps → percent happens in exactly one place');
+  // D149 MOVED THE PROPERTY AND THIS ASSERTION FOLLOWED IT, INVERTED. It used
+  // to read `Number(bps) / 100` here under the comment "bps → percent happens
+  // in exactly one place" — which was true of this file and false of the tree:
+  // the same arithmetic was written SIX times, three of them in a different
+  // format. So the page must now NOT contain it, and the one-place property is
+  // asserted across all of `frontend/src` by `bps_single_definition.test.mjs`.
+  // A guard scoped to the file a helper happens to live in cannot see the copy
+  // in the next file, which is how six of them accumulated.
+  assert.match(s, /import \{ bpsPercent as pct \} from '\.\.\/\.\.\/lib\/bps'/);
+  assert.ok(
+    !/\/ 100\)\.toFixed\(/.test(s),
+    'bps → percent is lib/bps.js\'s, not a copy in this page',
+  );
 });
 
 /* ---------------------------------------------------------------- *
@@ -223,6 +235,15 @@ test('every mutation is admin-only and recorded', () => {
 });
 
 test('the event log is append-only', () => {
+  // D156 MADE THIS A DATABASE CONSTRAINT, AND THIS ASSERTION STAYS ANYWAY.
+  // Migration 269 installs BEFORE UPDATE / BEFORE DELETE triggers on
+  // `licence_events`, so the property now holds against every writer rather
+  // than against the writers that happen to live in this one file — which is
+  // the whole point, because a scan of the source cannot see a write that is
+  // not in the source. What this keeps buying is the OTHER direction: a
+  // handler that reaches for an UPDATE fails here at review time, rather than
+  // shipping and raising ABORT in front of an operator. The database guard is
+  // in `cloudflare-worker/test/audit_immutability_d156.test.ts`.
   const s = read(ROUTE);
   assert.ok(!/UPDATE licence_events|DELETE FROM licence_events/.test(s),
     'a contract dispute is exactly when an overwritten history is useless');

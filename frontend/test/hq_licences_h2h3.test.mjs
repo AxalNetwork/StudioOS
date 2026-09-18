@@ -31,8 +31,9 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { EU_27, EU_CODES, coverageCells, renewalPipeline } from '../src/lib/licenceCoverage.js';
-import { codeOnly } from './_codeOnly.mjs';
+import { EU_27, EU_CODES, coverageCells, renewalPipeline, sortCells } from '../src/lib/licenceCoverage.js';
+import { DEPLOY_TIMELINE, deployProgress } from '../src/lib/deployTimeline.js';
+import { codeOnly, codeOnlyJsx } from './_codeOnly.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -146,6 +147,104 @@ test('a licence with no renewal date, and a terminated one, are not in the pipel
   assert.equal(renewalPipeline([lic({ status: 'suspended' })], today).length, 1);
 });
 
+/* ── H2 · the sort and the click (D146) ────────────────────────────── */
+
+// Two licences whose codes and states disagree about order, so a test cannot
+// pass by accident: DE is held-active and sorts LAST alphabetically of the
+// three named here; AT is free and sorts FIRST.
+const sorted = () => coverageCells([
+  lic({ uid: 'lic_de', licence_ref: 'AXL-002', territories: ['DE'] }),
+  lic({ uid: 'lic_es', licence_ref: 'AXL-004', territories: ['ES'], status: 'suspended' }),
+]).cells;
+
+test("'az' is the identity — coverageCells already emits alphabetical order", () => {
+  const cells = sorted();
+  assert.deepEqual(sortCells(cells, 'az').map((c) => c.code), [...EU_CODES]);
+  // An unknown mode reads as A–Z rather than throwing: this is a display
+  // control, and a grid that renders nothing because a key was misspelt is
+  // worse than a grid in the order it already had.
+  assert.deepEqual(sortCells(cells, 'nonsense').map((c) => c.code), [...EU_CODES]);
+  assert.deepEqual(sortCells(cells).map((c) => c.code), [...EU_CODES]);
+});
+
+test("'state' groups held-active, then held-suspended, then white space", () => {
+  const out = sortCells(sorted(), 'state');
+  assert.deepEqual(
+    out.map((c) => c.state).filter((s, i, a) => s !== a[i - 1]),
+    ['held_active', 'held_suspended', 'free'],
+    'each state appears in exactly one contiguous run, worst-available-last',
+  );
+  // The specific rows, so a rank flip cannot pass by still producing three runs.
+  assert.equal(out[0].code, 'DE', 'the only held-active country leads');
+  assert.equal(out[1].code, 'ES', 'the suspended one follows — it still holds its territory');
+  assert.equal(out[2].code, 'AT', 'white space begins, A–Z within the group');
+  assert.equal(out.length, 27, 'sorting never drops or invents a cell');
+});
+
+test('the sort is stable, so the two orders agree wherever state does not decide', () => {
+  // Within one state the order must still be the A–Z the other option gives.
+  const free = sortCells(sorted(), 'state').filter((c) => c.state === 'free').map((c) => c.code);
+  assert.deepEqual(free, [...free].sort(), 'A–Z survives inside each group');
+});
+
+test('sortCells does not mutate its input', () => {
+  // coverageCells returns a fresh array today, so an in-place sort would
+  // happen to work — and would break the day a caller memoises the cells.
+  const cells = sorted();
+  const before = cells.map((c) => c.code);
+  sortCells(cells, 'state');
+  assert.deepEqual(cells.map((c) => c.code), before);
+});
+
+test('a held cell opens its licence and white space is not a button', () => {
+  // The grid renders through the sorted list, not the raw cells.
+  assert.match(PAGE, /sortCells\(cells, sort\)/);
+  assert.match(PAGE, /ordered\.map\(/);
+  assert.ok(!/\{cells\.map\(/.test(PAGE), 'the unsorted cells must not be what renders');
+
+  // A held cell is the same <button onClick> idiom the licence rows use, and
+  // it opens by uid — the selector the rows already set.
+  assert.match(PAGE, /onClick=\{\(\) => onOpen\?\.\(c\.licence\.uid\)\}/);
+  // …and the call site hands it the very same setter, so a click on a country
+  // and a click on its row cannot land in two different places.
+  assert.match(PAGE, /<Coverage items=\{items\} onOpen=\{setSel\} \/>/);
+
+  // WHITE SPACE STAYS A DIV. A button that refuses is the `still_an_admin`
+  // mistake D134 named. The ternary is keyed on `c.licence`, which is null for
+  // exactly the free cells.
+  assert.match(PAGE, /return c\.licence \? \(/);
+
+  // The control itself: two options, `aria-pressed` carrying the choice.
+  assert.match(PAGE, /data-testid="hq-coverage-sort"/);
+  assert.match(PAGE, /aria-pressed=\{sort === s\.key\}/);
+  assert.match(PAGE, /\{ key: 'state', label: 'By state' \}/);
+  assert.match(PAGE, /\{ key: 'az', label: 'A–Z' \}/);
+  // "By state" ships selected, because the canvas draws that segment chosen.
+  assert.match(PAGE, /useState\('state'\)/);
+});
+
+test('the HQ sidebar comment counts the rows its own guard counts', () => {
+  const CFG = read('frontend/src/sidebarConfig.js');
+  // The array has shipped eleven rows since D138; the prose above it said
+  // eight until D146, omitting Revenue, Content and Platform — the three
+  // rows whose own comments sit a few lines below it.
+  assert.ok(!/has eight rows/.test(CFG), 'the eight-row claim is gone');
+  assert.ok(!/All eight resolve today/.test(CFG), 'and so is its follow-on');
+  assert.match(CFG, /ELEVEN rows/);
+  assert.match(CFG, /All eleven resolve today/);
+  // NAMED, NOT COUNTED. A number on its own goes stale exactly the way the
+  // last one did, so the comment must list the rows — and the three it used to
+  // omit are asserted against the comment's own sentence rather than anywhere
+  // in the file, or a mention in an unrelated line three hundred lines down
+  // would satisfy it.
+  const sentence = CFG.match(/The approved canvas has ELEVEN rows[^.]*\./)?.[0] ?? '';
+  assert.ok(sentence, 'the eleven-row sentence exists to be read');
+  for (const row of ['Home', 'Licences', 'Funds', 'Contracts', 'Team',
+    'Revenue', 'Content', 'Platform', 'Support', 'Security', 'Settings']) {
+    assert.ok(sentence.includes(row), `${row} is named in the comment, not just implied by a count`);
+  }
+});
+
 /* ── H2 · the page renders both zones ──────────────────────────────── */
 
 test('the coverage grid and the renewal pipeline are on the page, off the shared library', () => {
@@ -240,15 +339,111 @@ test('the branch code is refused rather than corrected, on the same charset as t
 });
 
 test('the timeline shows the steps still ahead, not only the one reached', () => {
-  const m = PAGE.match(/const DEPLOY_TIMELINE = \[([\s\S]*?)\];/);
-  assert.ok(m, 'the timeline is a literal list, in provisioning order');
-  const keys = [...m[1].matchAll(/\['([a-z_]+)',/g)].map((x) => x[1]);
+  // D149 MOVED THE LIST TO `lib/deployTimeline.js` AND THIS TEST FOLLOWED IT,
+  // assertions unchanged — which is what proves the move was a move. It is read
+  // as the exported value rather than sliced out of source text, because it is
+  // now a value a test can hold.
+  const keys = DEPLOY_TIMELINE.map(([k]) => k);
   assert.deepEqual(keys, [
     'requested', 'database_created', 'schema_applied', 'secrets_present',
     'principal_seeded', 'worker_live', 'hostname_active', 'linked',
   ]);
   assert.ok(!keys.includes('failed'), 'failed is a status, not a stage on the way');
   assert.match(PAGE, /data-testid="deploy-timeline"/);
+  // And the page must read the one list rather than keeping a second copy of
+  // the eight steps beside it.
+  assert.match(PAGE, /from '\.\.\/\.\.\/lib\/deployTimeline'/);
+  assert.ok(
+    !/const DEPLOY_TIMELINE = \[/.test(PAGE),
+    'the eight steps are declared once, in lib/deployTimeline.js',
+  );
+});
+
+/* ── H8 · the deploy timeline's three states (D149) ─────────────────── */
+
+test('a RUNNING deployment and a FAILED one no longer render alike', () => {
+  // THE ASSERTION THE WHOLE FIX TURNS ON, and it needs both cases: the defect
+  // was that they rendered IDENTICALLY, so a fixture holding only the failed
+  // one could not see it. Before D149 the render was `at >= 0 && i <= at`, so
+  // `failed` (at === -1) drew eight empty circles and `requested` drew one
+  // check and seven — different, yes, but a failure AFTER step 3 and a run
+  // still ON step 4 both drew three checks and five circles, and a failure
+  // drew what "not started" would draw.
+  const running = deployProgress('schema_applied');
+  const failed = deployProgress('failed');
+
+  assert.notDeepEqual(running.states, failed.states);
+  assert.notEqual(running.summary, failed.summary);
+
+  // Running: the steps behind are done, the steps ahead are waiting, and
+  // nothing claims to know about a step it cannot see.
+  assert.deepEqual(running.states, ['ok', 'ok', 'ok', 'wait', 'wait', 'wait', 'wait', 'wait']);
+  assert.equal(running.failed, false);
+  assert.equal(running.done, 3);
+
+  // Failed: every step is `unknown`, and NOT `fail`. `status` was overwritten,
+  // so which step it failed at is gone — but the row exists, so claiming all
+  // eight failed would be a second false statement in place of the first.
+  assert.deepEqual(failed.states, Array(8).fill('unknown'));
+  assert.ok(!failed.states.includes('fail'), 'no step may be marked failed: none is recorded as such');
+  assert.equal(failed.failed, true);
+  assert.equal(failed.done, 0);
+
+  // The two states a binary render collapsed: a failure after step 3 against a
+  // run still working on step 4.
+  assert.notDeepEqual(deployProgress('failed').states, deployProgress('secrets_present').states);
+});
+
+test('every one of the eight steps derives its own state, and the last one completes', () => {
+  // Walked end to end rather than sampled, because an off-by-one at either end
+  // is the mistake this shape invites: `requested` must complete exactly one
+  // step and `linked` must complete all eight with nothing left waiting.
+  for (const [i, [key]] of DEPLOY_TIMELINE.entries()) {
+    const p = deployProgress(key);
+    assert.equal(p.done, i + 1, `${key} completes ${i + 1} steps`);
+    assert.equal(p.states[i], 'ok', `${key} marks its own step done`);
+    if (i + 1 < p.total) assert.equal(p.states[i + 1], 'wait', `${key} leaves the next step waiting`);
+    assert.equal(p.states.filter((x) => x === 'ok').length, i + 1);
+  }
+  assert.equal(deployProgress('linked').states.filter((x) => x === 'wait').length, 0);
+  assert.equal(deployProgress('requested').done, 1);
+});
+
+test('the summary counts what the marks show, and says so when it cannot', () => {
+  // A summary derived separately from the marks is how the two come to
+  // disagree, so it is asserted against them rather than against a literal.
+  for (const status of [...DEPLOY_TIMELINE.map(([k]) => k), 'failed']) {
+    const p = deployProgress(status);
+    assert.equal(p.done, p.states.filter((x) => x === 'ok').length, `${status}: the count matches the marks`);
+  }
+  assert.equal(deployProgress('worker_live').summary, '6 of 8 complete · 2 waiting');
+  // The failed summary must SAY the step is unrecorded rather than print a
+  // count that implies nothing happened. "0 of 8 complete" would be the same
+  // lie the blank timeline told.
+  const failed = deployProgress('failed').summary;
+  assert.match(failed, /not recorded/);
+  assert.ok(!/^0 of 8 complete/.test(failed), 'a failure is not a deployment that never started');
+  assert.match(PAGE, /data-testid="deploy-summary"/);
+});
+
+test('the page draws three distinct marks and states what the store cannot carry', () => {
+  // The derivation is proved above; this is the wiring, which a scan CAN see.
+  for (const state of ['ok', 'wait', 'unknown']) {
+    assert.ok(
+      new RegExp(`state === '${state}'`).test(PAGE),
+      `the timeline must draw its own mark for ${state}`,
+    );
+  }
+  assert.match(PAGE, /data-state=\{state\}/);
+  assert.match(PAGE, /states\[i\]/);
+  // Per-step times and per-step notes are NOT derivable from one status and
+  // one note, so the page says so instead of inventing seven timestamps from
+  // `requested_at` — the D140/D147 rule.
+  assert.match(PAGE, /data-testid="deploy-timeline-bound"/);
+  assert.match(PAGE, /No step carries a time or a note of its own/);
+  // And the one note there is gets named as the deployment's, not a step's.
+  assert.match(PAGE, /data-testid="deploy-status-note"/);
+  assert.match(PAGE, /Why it stopped/);
 });
 
 /* ── H6 · Platform → Deployments ───────────────────────────────────── */
@@ -267,4 +462,70 @@ test('the provisioning status and the live read are rendered as two chips, never
     assert.match(src, /\bstatus\b/, `${name} must render the provisioning status`);
   }
   assert.match(PLATFORM, /registry_available/, 'an unreadable registry is not zero branches');
+});
+
+/* ── D161 · Platform → Traffic by branch ───────────────────────────── */
+
+// The JSX comments are stripped here as well as the block ones: this zone's
+// markup EXPLAINS the states it draws, and an assertion satisfied by that
+// explanation rather than by the render is not an assertion.
+const PLATFORM_JSX = codeOnlyJsx(read('frontend/src/pages/hq/PlatformPage.jsx'));
+
+test('the branch traffic split is its own read, on its own method', () => {
+  // Its own `useState`/loader, not a field on the platform summary: it goes out
+  // to Analytics Engine over the network and fails differently, so an
+  // unreadable metrics store must not empty the keys, jobs or deployments
+  // halves of this page.
+  assert.match(PLATFORM_JSX, /api\.analyticsTrafficByBranch\(/);
+  assert.match(PLATFORM_JSX, /data-testid="hq-traffic-by-branch"/);
+  assert.match(API, /analyticsTrafficByBranch:\s*\(from, to\)/);
+  assert.match(API, /\/monitoring\/analytics\/traffic-by-branch\?from=/);
+  // And it is a SEPARATE method from the platform-wide aggregate, deliberately:
+  // that one is requireAdmin, and a plain admin is a branch admin here, so
+  // attributing traffic to a named branch through it would show every branch
+  // admin every other branch's figures.
+  assert.match(API, /analyticsTechnical:\s*\(from, to\)/,
+    'the aggregate keeps its own method and its own gate');
+  assert.ok(!/analyticsTechnical:[\s\S]{0,200}branch=/.test(API),
+    'the requireAdmin aggregate must not grow a ?branch= parameter');
+});
+
+/**
+ * The traffic zone's own markup, bounded at both ends.
+ *
+ * WHY THIS IS A SLICE AND NOT A WHOLE-FILE SCAN, learned the hard way one
+ * mutation ago: the Deployments zone four hundred lines above renders "an empty
+ * registry, not an unreadable one", so a whole-file match on that phrase passed
+ * with THIS zone's empty-state sentence deleted outright. An assertion a
+ * neighbouring zone can satisfy is not an assertion about this one.
+ */
+function trafficZone() {
+  const from = PLATFORM_JSX.indexOf('Traffic by branch');
+  assert.ok(from > 0, 'the zone must exist');
+  const to = PLATFORM_JSX.indexOf('Feature flags', from);
+  assert.ok(to > from, 'and must sit before Feature flags, which is what bounds this slice');
+  return PLATFORM_JSX.slice(from, to);
+}
+
+test('could not read and no traffic are two different renders, and neither is a zero', () => {
+  // The rule since D107/D129, on the surface this time. An empty split has two
+  // entirely different causes and a page that drew both as 0 would be making a
+  // claim nothing measured.
+  const zone = trafficZone();
+  assert.match(zone, /traffic === UNAVAILABLE/, 'the request itself can fail');
+  assert.match(zone, /traffic\.available === false/, 'and so can the store behind it');
+  assert.match(zone, /<Absent reason=\{traffic\.reason\}/,
+    "the server's own sentence is rendered, never one written here");
+  assert.match(zone, /answered and holds no request[\s\S]{0,80}not an unreadable one/,
+    'and the empty-but-readable case says so in its own words, in THIS zone');
+  // The ban this page already enforces everywhere else, applied to the new zone.
+  assert.ok(!/\|\|\s*0/.test(zone), 'no figure on this zone falls back to 0');
+});
+
+test('one row does not read as one branch out of several', () => {
+  // The state of the platform today: zero branches provisioned, so every row
+  // carries `hq` and the split renders exactly one group. Drawn without this,
+  // a single row reads as a fan-out that found one answer.
+  assert.match(PLATFORM_JSX, /traffic\.rows\.length === 1 && traffic\.rows\[0\]\.branch === 'hq'/);
+  assert.match(PLATFORM_JSX, /this is one deployment, not one branch out of several/);
 });

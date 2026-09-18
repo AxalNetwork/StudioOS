@@ -110,8 +110,21 @@ function freshDb() {
     CREATE TABLE activity_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, details TEXT, actor TEXT, user_id INTEGER
     );
+    -- D159 — WIDENED TO THE SHAPE PRODUCTION HAS. This was a four-column
+    -- stand-in (id, admin_user_id, action, filters_json), and it was narrower
+    -- than the thing it stood in for in a way that changed behaviour:
+    -- ensureAdminAuditLogTable creates its index on (admin_user_id,
+    -- exported_at DESC) in the SAME try block as its PRAGMA-guarded ADD
+    -- COLUMNs, so a table with no exported_at made the index throw and the
+    -- ADD COLUMNs never ran -- and the audit INSERT then failed against a
+    -- column the fixture had silently refused to grow. A fixture narrower
+    -- than the schema reports a defect that is its own; the D133 lesson, one
+    -- table over.
     CREATE TABLE admin_audit_log (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER, action TEXT, filters_json TEXT
+      id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER NOT NULL, action TEXT NOT NULL,
+      report_type TEXT, format TEXT, filters_json TEXT, storage_key TEXT, download_url TEXT,
+      exported_at TEXT NOT NULL DEFAULT (datetime('now')),
+      viewed_user_id INTEGER, conversation_id INTEGER, viewed_at TEXT
     );
   `);
   const u = db.prepare('INSERT INTO users (id, role, partner_id, name, email) VALUES (?,?,?,?,?)');
@@ -192,10 +205,17 @@ test('an admin attaches one named account to one named firm', async () => {
   // And it is written down. An attach nobody can trace afterwards is the thing
   // impersonation exists to avoid.
   const logged = db.prepare(
-    "SELECT filters_json FROM admin_audit_log WHERE action = 'partner_firm_link_set'").all();
+    "SELECT filters_json, viewed_user_id FROM admin_audit_log WHERE action = 'partner_firm_link_set'")
+    .all();
   assert.equal(logged.length, 1);
   const details = JSON.parse((logged[0] as any).filters_json);
-  assert.deepEqual([details.user_id, details.from, details.to], [ORPHAN, null, 9]);
+  // D159 — the key is `target_user_id`, not `user_id`. This call site was the
+  // one of five that named its subject differently, so the shared
+  // logAdminAction could not find it and the row landed with no subject.
+  assert.deepEqual([details.target_user_id, details.from, details.to], [ORPHAN, null, 9]);
+  // And the subject now reaches the column HQ's governance feed joins on,
+  // which is what makes the Target column say who this was done to.
+  assert.equal((logged[0] as any).viewed_user_id, ORPHAN);
 });
 
 test('detaching is a real answer, and is recorded as one', async () => {

@@ -7481,9 +7481,20 @@ anywhere in the output, `OAUTH_CALLBACK_BASE_URL` included.
 **The Analytics Engine dataset is shared.** Every other resource is per
 branch, which is the isolation the whole design rests on, but the HQ
 statements and the anonymised median in the subsidiary Insights screen are
-computed *across* branches. One dataset indexed by `BRANCH_CODE` is what makes
-those two numbers possible without a cross-branch read; renaming it per branch
-would have quietly removed them.
+computed *across* branches. One dataset carrying the branch on every row is
+what makes those two numbers possible without a cross-branch read; renaming it
+per branch would have quietly removed them.
+
+> **CORRECTED BY D161.** This paragraph said "one dataset **indexed by**
+> `BRANCH_CODE`", and that was never built — the sole index was the route
+> (`middleware/observability.ts`), and the reader had no branch predicate, so
+> every per-branch AE query returned nothing for as long as the sentence
+> stood. D161 builds the dimension, and deliberately as a **blob** rather than
+> an index: the first index is the sampling key and the sampling key is the
+> route, so moving it would make samples either side of the change
+> incomparable and lose the route-level sampling fairness it exists for. The
+> dataset is therefore shared and **filterable** by branch, not indexed by it —
+> which is what the two numbers above actually need.
 
 **Crons are trimmed to two.** HQ declares six cadences, four of which pull
 external market-intelligence sources and send platform digests. Copied
@@ -10250,3 +10261,3594 @@ stale count) · `frontend/src/pages/AnalyticsTab.jsx` (`Refusal`, and
 `frontend/test/analytics_refusal_d132.test.mjs` (new, 5) ·
 `UNRESOLVED_ITEMS.md` U1 · **D132**. **No migration — 264 remains free**, for
 the sixth consecutive PR.
+
+---
+
+## D133 — the admin-over-admin reach D132 left behind, and a cap that was only a sentence
+
+**Date:** 2026-09-16 · **Task:** #255 · **Status:** shipped
+
+D132 raised three cross-admin reads to the super admin and wrote the rule that
+decides the rest, in `monitoring_analytics.ts`'s own header: *"a route that
+reaches `admin_audit_log a LEFT JOIN users u` is a cross-admin read whatever it
+renders, and gating some of them is gating none of them."* It then applied that
+rule **inside one file**. Auditing the platform against the owner's words rather
+than against D132's own plan found four surfaces outside it that were the same
+claim, and one invariant that was never an invariant at all.
+
+### The four, sharpest first
+
+| surface | what it was | now |
+| --- | --- | --- |
+| `POST /admin/impersonate/:userId` | the only target check was `isSuperAdmin(target) && !isSuperAdmin(caller)`, so **a plain admin could take over a peer's session** — strictly worse than reading their record, one route from the `toggle-active` hole D132 fixed | an **admin** target needs the super admin; the holder-vs-holder refusal keeps its own sentence above it |
+| `GET /admin/users/:user_id/profile` | no role check on the target at all. It returns the target's **last 100 `activity_logs`** matched on `user_id OR actor`, so pointed at a peer it is that admin's own **actor-side** feed: every `user_toggled`, `role_changed`, `admin_impersonate` they wrote | an admin target needs the super admin; **reading your own drawer is not a cross-admin read**, so the self case passes ahead of the check |
+| `GET /admin/cohort/impersonation-audit` | `impersonation_sessions` joined to `users` twice, for actor and target names and emails — byte-for-byte D132's shape, one file over | `requireSuperAdmin` |
+| `moveAccountOut` | deactivates by id with **no role check**; only the HQ route's `requireSuperAdmin` stood in the way, and `rpc/index.ts` says an entrypoint is *"callable by any Worker in the account"* | refuses an admin target **inside the RPC**, because a control that lives only at one caller is a control the function does not have |
+
+The last one also refuses the super admin, deliberately: deactivating a branch's
+administrator would leave `licence_admins` pointing at a dormant account and the
+subsidiary with nobody able to sign in. Unbinding at HQ is the tool for that, and
+D134 is where it lands.
+
+### "Only one super admin exists" was a migration that had already run
+
+Migration 207's `DELETE` is a one-shot. `super_admins`' only constraint is
+`user_id PRIMARY KEY` — which says an admin holds the elevation **at most once**,
+not that **at most one admin holds it**. `POST /super-admins/:userId` counted
+nothing. The UI said *"One holder **by decision**"* and offered *"Every admin
+already holds it"* as an empty state, a string that only makes sense if many are
+expected. A holder could elevate a second, a third, an nth.
+
+The ceiling now sits beside the floor `DELETE /:userId` already had
+(`last_super_admin`) — the same rule read from the other end, in one file so
+neither can be changed without the other.
+
+### THE CEILING WAS A WALL, AND A MUTATION IS WHAT SAID SO
+
+With exactly one holder, revoke refuses **three ways**: `cannot_revoke_self` for
+the holder's own row, `last_super_admin` for the only row, and there is nobody
+else to ask. So "revoke first, then grant" is not a path that exists, and a bare
+ceiling would have frozen the elevation on whoever held it, **permanently**.
+
+The test that should have caught this passed for the wrong reason: it revoked
+the holder's row and then asserted a grant was *not refused with 409* — but a
+caller with no elevation is stopped by `requireWriteBar` with **403**, and 403 is
+not 409. It asserted nothing. Only the mutation `> 0` → `>= 0` exposed it.
+
+The fix is an explicit, atomic transfer: the holder names a successor with
+`?transfer=1`, and the grant and the revoke go in one `DB.batch`, so the set
+moves from `{holder}` to `{successor}` without ever being two or empty. The page
+follows — with a holder present the control says **Transfer**, because a Grant
+button that reliably 409s is the bare refusal D132 was written about.
+
+### A conjunct that cannot be false is not a guard
+
+The transfer branch's first draft also required `held[0].id === actor.id`, and
+no mutation could kill it: `requireWriteBar` has already proved the caller is a
+super admin, and reaching that line proves `held.length === 1`, so the one active
+holder **is** the caller. A database predating this ceiling that carries two
+holders fails the length test and gets the 409 — the right answer, since it
+should be reduced to one first. The conjunct is gone rather than decorative, and
+the test that covered it now names the control that actually refuses a
+non-holder: the write bar, asserted as **403** rather than as "not 200".
+
+### Mutations
+
+**18 aimed, 16 caught, and both escapes changed something real.** The first
+(`> 0` → `>= 0` on the ceiling) exposed the wall described above and the dead
+conjunct beside it. The second pointed `superAdminGrant` at a different path and
+still passed, because the guard's 300-character window ran past it into
+`superAdminRevoke`, whose own URL satisfied the assertion — the single failure
+mode a bounded substring scan has, now bounded at the next method instead.
+
+**Two more landed somewhere other than where they were aimed and were re-run
+rather than counted:** one left the original `requireSuperAdmin` in place beside
+the injected `requireAdmin`, so the guard never came off; the other swapped in a
+symbol `admin_super_admins.ts` does not import, failing on an unresolved
+reference rather than on the loosened gate. Neither is evidence, and the tally
+says so.
+
+### A fifth guard that pinned a spelling
+
+`super_admin.test.ts`'s api.js check matched `superAdminGrant`'s exact
+single-parameter source line, so giving it the options argument a transfer needs
+failed a test that protects nothing about that signature. Re-pointed at the
+property — each method exists, reaches its own path, and uses its own verb —
+which is what it was written for. That is the fourth such case in this
+programme, after `branch_rail_mount`, `branch_approvals_board_d130` and the
+`flushSurface` quartet.
+
+### Files
+
+`routes/admin.ts` (impersonate + profile drawer) · `routes/admin_cohort.ts` ·
+`routes/admin_super_admins.ts` (the ceiling and the transfer) ·
+`rpc/branchOps.ts` (`moveAccountOut`) · `frontend/src/lib/api.js` ·
+`frontend/src/pages/hq/SuperAdminHolders.jsx` ·
+`cloudflare-worker/test/admin_over_admin_d133.test.ts` (new, 15) ·
+`frontend/test/super_admin_one_holder_d133.test.mjs` (new, 5) · **D133**.
+**No migration — 264 remains free**, for the seventh consecutive PR.
+
+---
+
+## D134 — opening and closing an admin account, through the licence
+
+**Date:** 2026-09-16 · **Task:** #256 · **Status:** shipped
+
+The owner's model is one super admin who can *"open, ban, close and supervise
+admin accounts"*, with *"many admin profiles … as subsidiaries"*. D132 gave
+**ban**, D133 gave **supervise**. Measured against the code rather than against
+the plan, **open** and **close** had no route at all:
+
+| power | before D134 |
+| --- | --- |
+| **open** | `PATCH /admin/users/:userId/role` refuses `role === 'admin'` with `admin_promotion_disabled`, for everyone including the holder — and its super-admin override is validated deliberately **above** that guard so it can never reach it. `POST /admin/licences/:uid/admins` wrote the `licence_admins` binding and **left `users.role` alone**. The only path was SQL against production, or `branch-provision.yml`'s single seeded principal — a GitHub Actions permission, not an elevation. |
+| **close** | The same route refuses demotion with `admin_demotion_disabled`, on the same terms. SQL again. |
+
+So the table that answers *"which licence does this administrator run?"* could
+name an account that was not an administrator, and an administrator could exist
+with nothing naming the territory behind them. Both halves now have a door.
+
+### Open is ONE act; close is TWO, and the asymmetry is the design
+
+`POST /:uid/admins` writes the binding **and** `users.role = 'admin'` in one
+`DB.batch`. Neither write alone is a state anybody wants: a binding without the
+role is an administrator who cannot administer, and the role without a binding is
+the unscoped admin the whole door exists to prevent. One statement, so neither
+can be left behind by a failure somebody would have to notice and repair by hand.
+
+`DELETE /:uid/admins/:userId` refuses with **409 `still_an_admin`** while the
+target holds the role, and the refusal names the demote route rather than stating
+a policy — a 409 that does not say which door is next is a dead end. The order is
+therefore **demote → detach**, and between the two the account is a non-admin
+still holding a binding. That transient state is on the screen rather than
+inferred: `GET /:uid/admins` now returns `u.role` and `u.is_active`, and the row
+reads *"no longer an admin — detach"*.
+
+### The demote is its own route, not a hole in the role route
+
+`POST /admin/users/:userId/demote-admin`. The alternative — opening
+`admin_demotion_disabled` for the holder — was rejected on the role route's own
+terms: its override exists to be narrow, is validated above both admin guards for
+exactly that reason, and a test pins the ordering. Loosening it would also put
+the power on a route gated by plain `requireAdmin`. The new route takes the
+**write bar** instead, which is strictly higher and is what the rest of this
+power already carries.
+
+**The destination is `exploring`, not a role the caller picks.** Nobody has
+decided what a former administrator is, and offering founder/investor/advisor in
+a dropdown would put that decision where nobody thought about it. `exploring` is
+the platform's own holding state, it is where every signup lands, and it routes
+the account back through `/admin/exploring`, where assigning a real role needs a
+signed binding agreement. The honest answer and the one with a gate behind it.
+
+Two refusals, each a way to lock the platform out of itself: **yourself**
+(the elevation sits on the `admin` role, so self-demotion would leave a
+`super_admins` row pointing at a non-admin, which `holders()` filters out — the
+platform would read as having no super admin), and **the elevation holder**,
+which names the revoke step.
+
+### A third refusal was written, and it was dead
+
+The first draft carried a `last_admin` floor mirroring `last_super_admin`:
+refuse when `COUNT(*) WHERE role='admin' AND is_active=1 AND id != target`
+reaches zero. **The test written to drive it could not.** The count can never be
+zero: the caller has passed `requireSuperAdmin` (role `admin`) through
+`getCurrentUser` (which refuses an inactive account with 401) and cannot be the
+target. At least one active admin — the caller — always survives, by
+construction. The floor holds; the check that claimed to hold it could not fail,
+and a conjunct that cannot be false is not a guard. It is gone, with the reason
+in the handler, and the test now pins the property it rested on: a deactivated
+super admin is refused at **authentication**, not there.
+
+This is the second such removal in two PRs — D133 struck `held[0].id === actor.id`
+for the same reason. Both were found by writing the failing case first.
+
+### One write bar, in `auth.ts`
+
+`requireWriteBar` — TOTP-minted session, recent step-up, then the elevation — was
+module-private in `routes/admin_super_admins.ts`. D134 gives the same bar to
+appointing and detaching an administrator and to demoting one, in two more files.
+Three hand-written copies of a three-line gate is how two of them come to check
+only two of the three, so it is now `requireSuperAdminWriteBar` in `auth.ts`,
+beside the gates it composes. Reads keep `requireSuperAdmin` alone on purpose: a
+step-up on every list trains the holder to type a TOTP code without reading why.
+
+`super_admin.test.ts:223` asserted the bar's three checks **out of the router
+file**, so the move failed a correct change. It is re-pointed at what that router
+actually owns — no `requireAdmin`, both writes through the shared bar, no local
+copy — and the bar's contents are pinned once, beside the definition. **The fifth
+guard in this programme to pin a location or a spelling rather than a property**,
+after `branch_rail_mount`, `branch_approvals_board_d130`, the `flushSurface`
+quartet and D133's `superAdminGrant` line.
+
+### A live defect this PR landed on, and fixed: `step_up_required` was 400
+
+`AUTH_ERROR_STATUSES` carried `'TOTP required': 403` and **no `step_up_required`
+entry**; `app.onError` handled it as a special case *above* the lookup. So the
+**31 route files that catch their own throws and call `mapError`** — never
+reaching that handler — answered a step-up refusal with **400 Bad Request**,
+carrying neither the `code` the SPA prompts off nor the TTL it shows.
+
+That is D110's finding one key over, and D110's own comment predicted it: *"not a
+message and a key drifting apart, but two tables of keys."* D134 is the PR that
+first routes a step-up gate through `mapError` — `admin_licences.ts` catches its
+own throws — so without the fix the new write bar's most common refusal would
+have shipped as a status the SPA cannot act on. The body is now built by
+`stepUpRefusalBody()` in `util/authErrors.ts` and both readers call it.
+
+### The first UI `licence_admins` has ever had
+
+Migration 190 shipped the table in May; `api.licenceAdmins`, `licenceAdminAdd`
+and `licenceAdminRemove` shipped with its routes and had **zero callers**, so
+naming a subsidiary's administrator meant SQL. The Administrators section sits
+beside History on the licence detail — **unnumbered, because appointing an
+administrator is not a step of the six-step issue flow**: a licence can be issued,
+activated and deployed with nobody on it, and an administrator can change years
+later without any of the six running again.
+
+Detach is **disabled** while the account holds the role rather than offered and
+refused, because a UI that let the server pick teaches the operator that one of
+its two buttons is a lie. A failed read renders the server's sentence and
+explicitly is not an empty list: *"nobody administers this licence"* is a claim
+about the business and must never be produced by a request that did not arrive.
+
+### Two stale sentences retired
+
+Both refusals said the role *"can only be granted / changed via direct database
+SQL (security policy)"*. True when written; false the moment this PR shipped. Each
+now names the route that does the job — the same rule this programme has applied
+to a notice that outlived its fact in D129, D131 and D132.
+
+### What this does NOT do, stated so it is not read as an oversight
+
+- **A demote has no UI outside a licence.** An admin who holds no `licence_admins`
+  row can be demoted only by calling the route. That surface is D138's, whose
+  subject is the admin accounts themselves.
+- **Terminate is not this.** Demote + detach leaves the account active and its
+  audit intact. Deactivation is D132's `toggle-active`; the compliance ladder that
+  decides *when* is D135.
+
+### Files
+
+`auth.ts` (the shared write bar) · `util/authErrors.ts` + `index.ts` +
+`routes/_t13t14t15_helpers.ts` (the `step_up_required` fix) ·
+`routes/admin_licences.ts` (appoint, list, detach) · `routes/admin.ts` (demote,
+the extracted `resetExploringReview`, the two corrected sentences) ·
+`routes/admin_super_admins.ts` (uses the shared bar) · `frontend/src/lib/api.js` ·
+`frontend/src/pages/admin/AdminLicences.jsx` ·
+`cloudflare-worker/test/licence_admin_lifecycle_d134.test.ts` (new, 19) ·
+`frontend/test/licence_admins_ui_d134.test.mjs` (new, 7) ·
+`cloudflare-worker/test/super_admin.test.ts` (re-pointed) · **D134**.
+**No migration — 264 remains free**, for the eighth consecutive PR.
+
+---
+
+## D135 — the compliance ladder: a notice, a clock, and a freeze that is not a ban
+
+**Date:** 2026-09-16 · **Task:** #257 · **Status:** shipped
+
+The owner's requirement, in full:
+
+> *"Super admin (HQ) should be able to notify admins and send warnings or
+> notifications, on licence renewal terms, fees, term violations … if admins do
+> not respect the terms of the contracts and agreement terms of the Super admin
+> (HQ), admin accounts can be terminated, but first admins get notified; if
+> admins do not act on notifications, admin accounts are frozen until they act
+> on things from what they have been notified; and lastly if they don't comply
+> admin accounts are terminated."*
+
+D132 gave **ban**, D133 **supervise**, D134 **open and close**. This is what
+gives all four their meaning: the evidence and the sequence behind them.
+
+```
+ACTIVE ──notice issued──▶ ISSUED ──deadline passes unanswered──▶ OVERDUE
+                             │                                      │
+                   admin responds                         admin responds
+                             └──────────▶ RESPONDED ◀───────────────┘
+                                             │
+                              HQ accepts ────┴──── HQ rejects
+                                   │                    │
+                              ACCEPTED              REJECTED
+                         (freeze lifts if this   (freeze stays; HQ's next
+                          was the last holder)    move is a new notice or
+                                                  a deliberate termination)
+```
+
+### The state is the licence's own — a second flag would be a second truth
+
+`territory_licences.status` already carries the two end states with the comments
+that prove the semantics were chosen deliberately (migration 187): `suspended` —
+*"not trading, STILL HOLDS ITS TERRITORY"* — and `terminated` — *"over;
+territory released"* — beside `suspended_at`, `terminated_at` and `status_note`.
+`/suspend`, `/reinstate` and `/terminate` exist, are super-admin-only, and are
+audited through `licence_events`' CHECK. **Migration 264 supplies the reason and
+the clock; the licence supplies the state.** The reuse is sound because the
+subjects match: renewal terms, fees and term violations are licence matters, and
+`licence_admins` is `UNIQUE(user_id)`.
+
+### The freeze goes inside `requireAdmin` — one edit, not a path list
+
+271 call sites across 51 files. A list of frozen paths in `index.ts` would go
+stale the next time a route is added — the failure D106 avoided by putting the
+branch gate inside `hydrateSuperAdmin`. Four properties are deliberate:
+
+- **It never gates a read.** `requireBranchNotSuspended` states the rule for its
+  branch-side twin; the reason is sharper here, because an admin who cannot see
+  what they were asked cannot do the thing that lifts the freeze.
+- **It never freezes the super admin**, and the code says so rather than relying
+  on there being nobody to do it.
+- **It does nothing on a branch.** `admin_notices` is HQ's table; a branch has
+  the twin, reading its own pushed copy. Two tiers, two lookups.
+- **An unreadable table is not a freeze.** A database between deploy and
+  migration reads as not frozen — inferring a freeze from a missing row would
+  freeze every admin exactly when somebody is trying to work.
+
+**423, not 403**, for D107's stated reason about the twin: a frozen admin *may*
+take this decision, and HQ has stopped them taking it today.
+
+### The response route is not an admin route, so there is no exception list
+
+The reply lives on `routes/licence.ts` — already *"one licence, for the person
+who administers it"*, already `requireAuth`, already mounted. Behind
+`requireAdmin` the freeze would lock the addressee out of the one action that
+lifts it, and the usual patch is a list of skipped paths, which is the thing that
+rots. Ownership is in the WHERE, so somebody else's notice answers **404** rather
+than 403 — a 403 confirms it exists.
+
+**Responding lifts the freeze; HQ's acceptance is not what unblocks writing.**
+`responded` is not a freezing status, so an admin who answers can work while HQ
+reads. Holding the freeze through a review of unknown length would punish
+somebody for doing exactly what they were asked. A rejection freezes again, and
+that is a decision somebody made rather than a queue they sat in.
+
+### Three corrections the code forced on the plan
+
+1. **`notify()` is not the only sanctioned path, and the plan's "never a direct
+   `sendEmail`" conflated two different things.** `services/email/send.ts`'s
+   `send()` renders a designed template, queues through JOB_QUEUE so a failure
+   retries into the DLQ, writes `email_send_log`, **and mirrors the message into
+   the inbox** with its category and CTA — six modules already use it. `notify()`
+   has no template at all: its mail is `[Axal] <title>` plus the body as plain
+   text, and `template_key` is only *stamped* on the inbox row as metadata. So a
+   template added for `notify()` to render would have been a template nothing
+   reaches. The notice — the one piece of mail on this ladder worth designing —
+   goes through `send()`; the freeze and the licence transitions go through
+   `notify()`, because by then the person is looking at a 423 and what they need
+   is one sentence and the route back.
+2. **The sweep's two writes had to become two passes, and a test is what found
+   it.** The first shape suspended the licence inside the flip loop, so a pass
+   that flipped the notice and then failed to suspend could never retry: the next
+   pass no longer selects a row that is not `issued`, and the account would read
+   frozen while its licence went on trading. The suspend is now its own pass,
+   selecting *every active licence with a notice currently holding it frozen* —
+   true of a row flipped a second ago and of one whose suspend failed an hour
+   ago. The test written for the retry is what caught it.
+3. **`check-sql-prepare` refuses a generated placeholder list**, so
+   `FREEZING_STATUSES` could not be spread into the SQL. It is a fixed-length
+   **tuple type**, so adding a third status is a compile error at every binding
+   site rather than a silent under-bind, and a test counts the placeholders
+   against its length.
+
+### `respond_by` is named so the timestamp guard can see it
+
+`check-timestamp-comparisons.mjs` has **no allowlist by design**, so a deadline
+column outside `TTL_COLUMN` is a column nobody is watching — and a deadline swept
+against the clock is precisely the defect class it exists for. The name goes in
+the guard in the same commit the column is created, and every write goes through
+`datetime('now', '+N days')`, so the format is the sweep's own rather than an ISO
+string that would not bite until the UTC date rolled over.
+
+### The sweep: five-minute cadence, no new cron, never terminating
+
+No new cron expression — `* * * * *` already fires every minute and every block
+gates on the **wall clock**, so this is one `if` and nothing in `wrangler.toml`.
+**Not gated on `hqCadences`**, on the D122 precedent one block up: a branch holds
+no notices, so the sweep's own predicate is the tier discriminator and a better
+one — it selects rows by what they are, not by which deployment is asking.
+`froze_at` is stamped with the **computed deadline**, never the sweep's clock, so
+the cadence bounds how long an account writes past its deadline and never changes
+what a row says.
+
+**It never terminates.** A clock owns the reversible rung; ending an account
+stays a deliberate human act. That split is what makes the automatic half safe to
+run every minute, and a test asserts it against a notice 400 days overdue.
+
+### Two escapes that were the same discovery from opposite sides
+
+Widening the sweep's SELECT and making its flip unconditional both escaped their
+first tests. The reason is one fact: **in a single-threaded run the two conjuncts
+are each independently sufficient**, so neither can be killed while the other
+stands. They are not redundant in production — two isolates can race, both SELECT
+the row while it is `issued`, and only the conditional UPDATE decides which owns
+the transition. Each is now pinned where it is actually observable: the SELECT
+through the reported `due` count, the UPDATE through two interleaved sweeps over
+one database. 22 mutations, 22 caught.
+
+### One guard re-pointed — the sixth
+
+`licence_admins.test.mjs` banned `c.req.param('uid')` across the whole of
+`routes/licence.ts`, to express *"the licence must come from the session, never
+from the request"*. D135 adds a route taking a **notice** uid, scoped by the
+session in its own WHERE — which does not cross that line, but failed the
+spelling. The ban is now bounded to the `/mine` handler it was about, and the new
+route carries the same claim in the form that applies to it: ownership in the
+read's WHERE *and* in the write's. The file also reads through `codeOnly()` now,
+because its `requireAdmin` ban was tripping on a comment explaining why this
+router deliberately does not use `requireAdmin`.
+
+### Files
+
+`sql/migrations/264_admin_notices.sql` (new) ·
+`scripts/check-timestamp-comparisons.mjs` (`respond_by` joins `TTL_COLUMN`) ·
+`util/authErrors.ts` (`ADMIN_FROZEN`, `FREEZING_STATUSES`, `adminFrozenBody`) ·
+`auth.ts` (the freeze inside `requireAdmin`) · `index.ts` + `routes/_t13t14t15_helpers.ts`
+(both error readers) · `services/complianceLadder.ts` (new — the sweep and the
+fan-out) · `routes/admin_licences.ts` (issue, list, review, and the three
+transitions that now tell the holder) · `routes/licence.ts` (the addressee's two)
+· `templates/email/{layout,registry}.ts` (the `compliance` category and one
+template) · `frontend/src/lib/api.js` ·
+`cloudflare-worker/test/compliance_ladder_d135.test.ts` (new, 25) ·
+`frontend/test/licence_admins.test.mjs` (re-pointed, +1) · **D135**.
+**Migration 264 — the first new store in eight PRs.** Next free is **265**.
+
+## D136 — the ladder's two surfaces, and the door D135 did not build
+
+**Date:** 2026-09-16 · **Status:** accepted · **Supersedes:** nothing ·
+**Builds on:** D135 (the ladder's backend), D134 (open and close), D107 (the
+branch-side 423 and its banner), #204 (unreadable is not empty).
+
+### The finding this entry exists for
+
+D135 shipped the compliance ladder complete: migration 264, the freeze inside
+`requireAdmin`, the two-pass minute sweep, three routes for HQ, two for the
+addressee, and five methods in `frontend/src/lib/api.js`.
+
+**Every one of those five methods had zero callers.** `AdminLicences.jsx` had no
+case-insensitive match for "notice"; `MyLicencePage.jsx` called exactly one api
+method. So HQ could not issue a notice and a frozen administrator could not
+answer one — and that is worse than inert rather than merely incomplete, because
+the sweep runs every minute: a notice inserted by SQL would have frozen an
+account whose only screen said nothing about why, with no form anywhere to lift
+it. A ladder nobody can climb is a trap.
+
+This is the seventh time in this programme that a store or a route shipped
+without the surface that reaches it (`licence_admins` went five months, D134;
+`branch_benchmarks` still has neither writer nor reader, task #252). The pattern
+is not a scheduling accident — a backend PR is testable on its own and a surface
+PR is not, so the surface is the half that slips. Recording it here so the next
+split is made knowing which half tends to be left.
+
+### What lands
+
+**HQ issues and reviews, on a third unnumbered tab.** `NOTICES_STEP =
+STEPS.length + 3`, beside History (+1) and Administrators (+2) and deliberately
+NOT inside `STEPS`: the six-step issue flow is what it takes to create a
+licence, and a compliance notice is something that happens to one that has been
+running for months. Adding it there would renumber the canvas and say a licence
+cannot be issued without a notice. `NoticesEditor` copies `AdminsEditor`'s six
+idioms exactly — three-state `useState(undefined)`, a `useCallback` load keyed
+on the uid, `refresh`, `run(fn)`, a `can…` gate mirroring the server's own
+floors, and the closing step-up note.
+
+**Accept and Reject are disabled until the addressee has answered.** The server
+answers 409 `not_responded` every time otherwise, so this is D134's
+`still_an_admin` decision one route over: a UI that offers a button the server
+always refuses teaches the operator that its buttons are advisory.
+
+**The addressee is a `<select>` over this licence's own administrators**, not a
+free-text email box, because `POST /notices` resolves the address against
+`licence_admins` and 404s `not_an_administrator` for anybody else — a text field
+would be a field whose wrong answers are only discoverable by submitting.
+
+**The response window is a bounded count of DAYS, never a date picker.**
+`respond_by` is computed server-side as `datetime('now', '+N days')` so that the
+deadline and the sweep that reads it share one format and one clock. A date
+input would put the deadline in the browser's zone, which is the timestamp
+defect class this repo has now fixed four times.
+
+**One clock, and it counts up.** Per the owner's call there is no second
+deadline: the screen states "frozen since \<date\>, N days" and sorts worst-first
+(freezing statuses, then waiting-on-HQ, then waiting-on-them, then closed; oldest
+first inside a band). Terminating stays the deliberate act it already was, at the
+top of the page. A countdown would say the platform decides when an account has
+had long enough; it does not.
+
+**The addressee gets a banner above the page, not instead of it.** A freeze stops
+writes and not reading, so a page that replaced itself would enforce something
+the server does not — and the licence terms are exactly what somebody answering a
+notice about fees needs to look at. It is **not dismissible and persists
+nothing**: `components/InfoStrip.jsx` and both `*Banner*` components clear
+themselves through `localStorage`, which is right for content and wrong for a
+compliance freeze. And the three ladder states are three claims, not one:
+`issued` is a reminder with nothing frozen, `overdue` and `rejected` are a
+freeze. One banner for both would be a false alarm in one direction and a silent
+freeze in the other.
+
+**423 finally has a client-side identity.** `423` appeared NOWHERE in
+`frontend/src` before this — measured, not assumed — while
+`routes/branch_escalations.ts` had been citing "the frozen banner (D107)" as
+though one shipped. `api.js` now learns 423 the way it already knows 402 and
+`step_up_required`: a refusal carrying `code: 'admin_frozen'` fans out
+`studioos:admin_frozen`, and a bar mounted once beside `GlobalPaywallMount`
+names the notice and links to `/admin/my-licence`. Nothing is needed server-side
+— `adminFrozenBody` already puts the causing notice in the body, because the gate
+had the row in hand. **The throw is unchanged**, so every page's own catch still
+receives the structured error.
+
+**Why both the bar and the banner**, rather than one: the page explains the state
+where it can be acted on, the bar explains it at the moment of the refusal,
+wherever the administrator happened to be. Neither substitutes for the other, and
+both read the one sentence the worker already ships twice
+(`services/complianceLadder.ts` and the email template) rather than inventing a
+third wording — a test asserts all three agree.
+
+### The defect this PR found and fixed on the way
+
+**`daysTo` could not read the stamps the notice store writes.** It was
+`new Date(iso)`, correct for `territory_licences.renews_on` (a bare
+`YYYY-MM-DD`, UTC midnight by spec) and wrong for `admin_notices.respond_by` and
+`froze_at` (SQL `YYYY-MM-DD HH:MM:SS`): that shape is not in the spec's grammar,
+V8 accepts it and reads it as the **reader's local time**, and other engines
+return `NaN`. So "in 6 days" would have been wrong by the reader's UTC offset, on
+exactly the column a deadline is read from. `toUtcInstant` normalises it; the
+bare-date form is untouched.
+
+### Three lessons about the tests, because each cost a mutation
+
+1. **An assertion that cannot fail on the machines that run it is not a guard —
+   and CI runs UTC.** The first version of the `daysTo` test compared the two
+   parses on a UTC machine, where they are the same instant, so it passed with
+   the normalisation deleted. It now sets a non-UTC zone for the duration and
+   asserts the runtime honoured the change.
+2. **`Math.round` swallows a four-hour misread at every exact day multiple.** The
+   second version still passed, because 6.0 and 6.167 are both "6". It now sweeps
+   all 24 hours of the day and asserts that the SQL spelling and the explicit-Z
+   spelling of the same instant agree — a claim that needs no knowledge of the
+   offset.
+3. **Markup inside an unreachable branch satisfies a source scan.** Two
+   assertions passed with their gates replaced by `false`, because the element
+   was still in the file. Both now read backwards from the element to its own
+   gate and require the gate to consult the value — the property, not the
+   spelling.
+
+All three are the same failure from different sides, and it is the one this
+repo keeps re-learning: the version anybody writes first is the version that
+cannot fail.
+
+### Files
+
+`frontend/src/pages/admin/AdminLicences.jsx` (`NOTICES_STEP`, the tab,
+`NoticesEditor`, a notice tone map, `toUtcInstant`) ·
+`frontend/src/pages/subsidiary/MyLicencePage.jsx` (the second read, the banner,
+the notice list, the response form) · `frontend/src/lib/api.js` (the 423 branch)
+· `frontend/src/components/AdminFrozenBar.jsx` (new) · `frontend/src/App.jsx`
+(one mount) · `frontend/test/compliance_ladder_ui_d136.test.mjs` (new, 18) ·
+**D136**.
+
+**No new `/api/*` method** — all five existed, so `check-api-drift` has nothing
+to say. **No migration**: 264 shipped in D135 and **265 is still free**.
+
+### What this does NOT do
+
+HQ's suspend still reaches no branch: `applyLicence` has no caller (D137, task
+#259). It does not block this, because no branch has been provisioned and the
+whole ladder runs on HQ — but it must close before the first one is, or a frozen
+subsidiary keeps trading.
+
+## D137 — the licence push pipe, connected before a branch exists
+
+**Date:** 2026-09-16 · **Status:** accepted · **Builds on:** D111 (a push is
+reported, never thrown), D107 (the branch's licence copy), D135/D136 (the
+compliance ladder), migration 257 (the first field the copy omitted).
+
+### The defect
+
+**`applyLicence` had no caller.** The `HqEntrypoint` method whose entire job is
+to hand a branch its licence appeared in `cloudflare-worker/src` exactly twice —
+its definition and its one-line delegation — plus three tests. Nothing in
+`frontend/src`, `scripts` or `.github` called it either, and symmetrically
+`BranchEntrypoint.licence()` had no branch-side caller; `fanOut` was only ever
+invoked with `'overview'` and `'health'`.
+
+So `POST /api/admin/licences/:uid/suspend` changed four columns in HQ's ledger
+and **changed nothing on the subsidiary**. D135 turned that from latent into
+urgent: the compliance sweep now suspends a licence on a clock, every minute,
+so without this an account HQ believes is frozen belongs to a branch that goes
+on trading — and nobody would be looking, because the freeze looked done at HQ.
+
+It is still true that no branch has been provisioned, so nothing is broken in
+production today. That is precisely why it is fixed now: after the first
+provisioning it would be a live incident rather than a gap.
+
+### The push is reported, never thrown
+
+`routes/admin_escalations.ts:94-116` states the rule for D111's escalation
+answer and this is its fourth instance. HQ's ledger is the record; the branch
+is a second, fallible thing. A 502 for an unreachable branch would ask an
+operator to re-suspend something already suspended, and the retry would find it
+done. So each transition keeps its own write, its own `licence_events` row, its
+own notification and its own 200, and carries `pushed: {ok, reason?, code?}`
+beside the outcome.
+
+**One helper, five callers** — `services/licencePush.ts`. Four licence
+transitions plus the sweep's own suspend. Copying D111's twelve lines five
+times is how five call sites come to disagree about what "landed" means; this
+repo has now made that consolidation for `likeNeedle`, the absence helpers, one
+`GROUP BY role`, one definition of open and one zone formatter.
+
+**Three refusal states, three sentences**, because they need different actions:
+no deployment row (nothing to push to, and no licence has one yet), a
+deployment with no service binding (provisioning ran, HQ has not been
+redeployed), and a branch that threw or refused (its own message survives).
+
+**The sweep counts `pushed` separately from `suspended`.** Folding them would
+report a freeze as complete when only half of it happened.
+
+### The eight fields, and why it was not six
+
+The plan said "six mis-renamed fields". Measured, it was **eight broken fields
+in two classes**, and the distinction is the work:
+
+`MyLicencePage` reads HQ's vocabulary — `LicenceRow`'s columns, which `hydrate`
+spreads verbatim. The branch payload emitted the **table's** names instead:
+`term_start`, `renewal_at` and `suspended_note` where the page reads
+`starts_on`, `renews_on` and `status_note`. And five more the copy **never
+stored at all**: `registered_address`, `signatory_name`, `signatory_title`,
+`term_years`, `terminated_at`.
+
+So on a branch the Entity panel printed "Not recorded" four times about facts HQ
+holds, the term and renewal date were blank, a terminated licence never showed
+when it ended — and `status_note`, the sentence saying **why** a licence was
+suspended, was blank on the page a suspended administrator is sent to.
+
+`licence.ts:174-181` already carried the rule: *"THE KEYS ARE HQ'S, NOT THE
+TABLE'S … a copy that renamed its own fields would render blank on exactly the
+tier it was built for — which is what it did until this line."* It was applied
+to `legal_entity` and stopped. This finishes it.
+
+**Migration 265** adds the five, additively, on `257_branch_licence_ref.sql`'s
+shape — same table, same operation, for the same reason. 257's header already
+argues why a new migration beats editing an applied one *"even when the table it
+corrects is empty in every database that exists, because the rule is what makes
+that emptiness something we can stop having to check."*
+
+**`term_end` is pushed as NULL rather than derived.** The copy has the column
+and HQ has no such fact: it holds a duration (`term_years`) beside `starts_on`.
+Computing an end date would be the copy asserting something HQ never said.
+
+### The guard is derived, not typed
+
+`branch_licence_copy.test.ts` asserted four key names, typed in — which is how
+the other eight survived. It now parses **every `l.<key>` the page reads** out
+of `MyLicencePage.jsx` and requires the payload to supply each, and refuses the
+table's own spellings alongside them. The next field added to the page fails
+here rather than rendering blank on a tier nobody has run yet.
+
+### Two fixtures were narrower than the schema
+
+`branch_licence_copy` and `branch_rpc_fanout` both hardcode `branch_licence`'s
+DDL, and neither had 265's columns — so the SELECT threw and the payload
+degraded to `licence_not_pushed`, i.e. six tests reported "HQ has not pushed
+this branch its licence" about a row sitting in front of them. The D133 lesson,
+twice: a fixture narrower than the schema does not fail honestly.
+
+### Files
+
+`cloudflare-worker/sql/migrations/265_branch_licence_entity.sql` (new) ·
+`services/licencePush.ts` (new) · `services/complianceLadder.ts` (the sweep
+pushes, and counts it apart) · `routes/admin_licences.ts` (five transitions) ·
+`routes/licence.ts` (the payload speaks HQ's vocabulary) ·
+`rpc/branchOps.ts` (`applyLicenceCopy` binds the five) ·
+`test/licence_push_d137.test.ts` (new, 12) · two fixtures widened · **D137**.
+
+**Migration 265 used; next free is 266.** No new `/api/*` method.
+
+### What this does NOT do
+
+The branch-side 423 still has no machine-readable `code` of its own, so the
+frozen-branch banner D107 is cited for remains unbuilt; that is S7/S13's, with
+the three false "the banner shipped" claims to correct. And `publishTemplate`,
+`applyBenchmarks`, `templates()`, `governanceFeed` and the partner pair are
+still unbuilt producers — `applyLicence` was the first of six to get a caller.
+
+## D138 — the supervision surface, and a picker that was reading a page
+
+**The owner's sentence is "HQ needs to be able to supervise all admins."** Five
+merged decisions built every power it implies — D134 opens an account through a
+licence, D135 freezes one and gives the freeze a reason and a clock, D136 builds
+the two screens that work a notice, D137 pushes the decision to a branch — and
+until this one **there was no screen anywhere whose subject was the
+administrators.** Supervising meant opening one licence at a time:
+`/admin/licences` → a licence → its Administrators tab → its Notices tab. "Who
+is frozen right now" could not be asked, only assembled, and the ladder has been
+live in production since 2026-09-16 20:10Z.
+
+So `GET /api/admin/hq/admins` and `pages/hq/HqTeamTable.jsx`, mounted on
+`/admin/accounts` between the holder console and the Admin Console's directory.
+It is the canvas's **H9**, which closes #243 and #260 as one screen rather than
+two.
+
+### The defect it carries, and it is functional rather than cosmetic
+
+`SuperAdminHolders.jsx:41` called `api.adminListUsers()` **with no arguments** —
+`ORDER BY created_at DESC LIMIT 100` — and filtered that PAGE to
+`role === 'admin'` in the browser. Admins are among the **oldest** accounts, so
+past a hundred rows an admin is not in the list at all, and the `<select>` reads
+*"No other admin to hand it to"* about a database that has several. In a
+**picker**, absence is not a display problem: the elevation cannot be granted.
+
+The new route filters on role **server-side with no LIMIT**, which is sound
+because the query has a predicate — admins are one per licence plus HQ, not a
+directory. It is the shape `routes/users.ts` already runs for `?role=`.
+
+**The test for that needed a fixture nobody would write by accident.** A LIMIT on
+a role-filtered query is invisible until there are **more than a hundred
+admins**: the first fixture seeded 120 *founders*, and the mutation that added
+`LIMIT 100` passed, because the predicate excluded them before the limit was
+reached. The fixture now seeds 120 admins plus five founders, so the predicate
+and the limit fail differently and each has its own assertion. An assertion that
+cannot fail on the machines that run it is not a guard.
+
+### What the screen reads, and the one thing it refuses to infer
+
+Four reads, each with its own failure state: the roster (`users WHERE role`), the
+licence and `admin_role` (`licence_admins ⋈ territory_licences`, read
+user→licence for the first time — D134's route reads licence→users, one licence
+at a time, which is the walk this replaces), the rung
+(`admin_notices GROUP BY user_id, status`, riding
+`idx_admin_notices_user(user_id, status)` which migration 264 already created and
+no route had read for a third party), and the elevation (`super_admins`). Plus
+`users.last_active_at`, written by `middleware/lastActive.ts` and **absent from
+every list payload until now**, so "when was this admin last here" had no answer
+anywhere.
+
+**An unreadable `admin_notices` reports `ladder_readable: false` with its reason
+and NO rung at all — never four rungs of "clear".** `auth.ts`'s own freeze gate
+states the rule in the same words: being under notice is a claim somebody MADE,
+and inferring its absence from a failed read is how a screen comes to say the
+opposite of the truth. It is also the D133 lesson twice over — two fixtures
+narrower than the schema once had seven tests reporting "HQ has not pushed this
+branch its licence" about a row sitting in front of them.
+
+**The deadline and the freeze stamp are the EARLIEST of an admin's open notices,
+not the newest**, because what a supervisor needs is the oldest unanswered thing;
+taking the latest would make a long-frozen account look freshly frozen. That
+choice was also unreachable by the first test: `GROUP BY user_id, status` already
+reduces same-status rows with `MIN()`, so two `overdue` notices arrive as one
+group and the per-admin reduction never saw two candidates. The fixture now uses
+two different statuses.
+
+### The groups are H9's own model
+
+> *"There is no global accounts table. HQ asks each branch over its private link
+> and groups what comes back, so a search result is really four answers and a
+> fifth for HQ-held accounts — and when one branch does not answer, its group
+> says so instead of showing zero."*
+
+So the HQ-held roster is complete and always returned, and `q` is what HQ **asks
+the branches** — through `fanOut(env, 'searchAccounts', [q, 20])`, which already
+existed with its three states (`ok` / `unreadable` / `not_deployed`). With no
+branch provisioned `branches` is `[]`, every admin is HQ-held, and the Branch
+column says so: a fact about where the row lives, not a placeholder.
+
+The browser narrows the roster as you type. **That is honest here and was the bug
+there:** filtering a complete list narrows it; filtering a page hides rows.
+
+### What is NOT drawn, measured rather than deferred
+
+**H9's "Move to another branch".** Its route exists —
+`POST /api/admin/branches/:code/accounts/:userId/move` (D.6, `admin_support_sessions.ts:191`)
+— and it requires a **source** branch code and a **destination** branch code,
+each a live `BRANCH_*` binding, refusing when they are equal. With no branch
+provisioned there is neither end, so the control could only ever refuse. D134
+already named that mistake on this tier: *a UI that offered both and let the
+server pick teaches the operator that one of its buttons is a lie.* The page says
+what a move is and that it needs two provisioned branches. It rejoins #243 when
+the first branch exists.
+
+### One definition of what freezes — the sixth consolidation
+
+D136 shipped its two surfaces on one day and each declared its own copy of the
+freezing set, the notice kinds and the worst-first ordering; this screen would
+have been the third. `frontend/src/lib/notices.js` now holds them once, on the
+rule `lib/README.md` already states. The ordering is expressed **once and read
+two ways**: `RUNGS` is the precedence, `rungRank` keys it by rung (the Team table
+sorts admins), `noticeRank` keys it by status through `rungOfStatus` (the licence
+detail sorts notices) — so the two screens cannot come to disagree about which
+state is urgent, and the file does not hold two lists meaning the same thing.
+
+**The two `NOTICE_TONE` maps deliberately did not move.** Their hue assignment
+agrees in all six statuses, but one is a bordered chip in HQ's light console and
+the other a dark-mode-aware pill, and **Tailwind cannot build a class name at
+runtime** — the JIT pass scans source for literals, so `bg-${hue}-50` emits
+nothing. Merging them would mean changing one page's appearance or shipping
+classes the build purges. That is D117's `money` lesson verbatim, stated in the
+new file's header rather than left for whoever tries next.
+
+D127 one `GROUP BY role`, D128 one LIKE escaper, D130 one definition of open,
+D131 one count, D132 one zone formatter, D138 one definition of what freezes.
+
+### Two findings recorded rather than changed
+
+1. **`admin.ts:113` is the only `GROUP BY role` of five without
+   `WHERE is_active = 1`** (`rpc/branchOps.ts:202`, `admin_hq.ts:60`,
+   `market_intel.ts:963` and `licence.ts:157` all have it). **It stays as it is.**
+   The four others count seats used and platform health, where active is the
+   right denominator; `admin.ts:113` totals a **directory** whose list below it
+   is likewise unfiltered and carries a state column. A tile counting active
+   above a list showing deactivated rows would be the tile-vs-table disagreement
+   D128 was written to end. Changing a live tile on a pattern-match rather than a
+   reading is what this note prevents.
+2. **`admin.ts`'s back-compat comment named a reader that stops reading.** It
+   said the flat array was *"load-bearing: `SuperAdminHolders.jsx` still reads
+   this as a flat array"*. It does not any more, and it was the last flat caller
+   in the SPA. The **behaviour stays** — removing a response shape is a breaking
+   change for anything outside this repo — and the **comment is corrected**,
+   because a comment naming a reader that no longer exists is the same class of
+   stale claim as D129's seat store and D131's six blocks. A guard now asserts no
+   caller under `frontend/src` reads the flat form.
+
+**No migration. 266 stays free.** `check-api-drift` is satisfied by the one new
+method carrying its route in the same commit.
+
+### And a lesson from the harness, not the code
+
+One mutation reported "not applied — anchor not unique" twice, and the second
+time it was because the *harness patch itself* had landed nowhere: a two-space
+indent against a one-space source, with the write still succeeding and printing
+"fixed". A harness edit that silently changes nothing is the same failure as a
+mutation that lands somewhere other than where it was aimed, one level up. The
+edit is now asserted to have changed the file before it is trusted.
+
+---
+
+## D139 — the licence ledger's own integrity: an event its constraint rejects, three transitions with no state machine, and a freeze that outlived its licence
+
+**#261 was filed as "eight licence-area defects the ladder audits turned up".**
+This repo's own rule is that an audit finding is true as of its date and is not a
+live bug until re-checked, so all eight were re-measured against `bb0e768c2`
+before anything was written. **Six are live and two are struck**, and the six are
+not one concern — this decision carries only the ones that are the *licence
+ledger's own integrity*. The rest are filed with their measurements.
+
+### The sharpest one, and it is worse than it was filed
+
+`admin_licences.ts` calls `logEvent(c.env, licence.id, 'contract_instantiated', …)`
+when HQ instantiates a licence agreement. Migration 187's `licence_events` CHECK
+admits **nine** values and that is not one of them — 187 predates licence
+contracts, which arrived in 259.
+
+`logEvent` is a **bare `await` with no try/catch**, and it sits **after** the
+contract INSERT and **before** the `201`. So on real D1, in order: the previous
+contract is superseded, the new contract row lands, the event raises on the
+CHECK, and `mapError` answers **400**. The operator is told *Bad Request* about a
+contract that **was created**, and pressing the button again supersedes that one
+and writes another — every retry silently stacks a superseded draft.
+
+**It has never fired, and saying so is part of the fix.** Read-only against
+production `studioos-db`, aggregates only: `licence_events` **0 rows**,
+`territory_licences` **0**, `licence_contracts` **0**. No licence has ever been
+issued, so no contract has ever been instantiated and the 400 has harmed nobody.
+This is **latent, not live**, and the PR does not claim an incident. What the
+emptiness changes is the **cost**: migration 266's rebuild copies zero rows,
+which makes now the cheapest moment this will ever have. Migration 257's header
+already wrote the argument one table over — the rule holds *"even when the table
+it corrects is empty in every database that exists, because the rule is what
+makes that emptiness something we can stop having to check."*
+
+### Why a rebuild, and why not the three cheaper answers
+
+SQLite cannot `ALTER` a CHECK. The only supported way to widen one is the
+documented rebuild — create the table anew with the corrected constraint, copy,
+drop, rename — which is a departure from this repo's additive-only habit and is
+stated in **266**'s header rather than discovered. The table is append-only,
+nothing carries a foreign key **at** it, and its one index is recreated by name.
+
+- **Not "drop the CHECK".** It is the thing that would have caught this.
+- **Not "rename the event" to one of the nine.** `terms_changed` and `activated`
+  are smaller acts than instantiating the agreement, and the trail is what the
+  table exists for. **The constraint is wrong, not the write.**
+- **Not "wrap `logEvent` in a try/catch".** That converts a loud 400 into a
+  silently missing audit row, which is the worse of the two.
+
+### The fixture was the blind spot, and it is now read off disk
+
+`licence_contract_instantiate.test.ts` recreated `licence_events` with
+`event TEXT NOT NULL` and **no CHECK**, then asserted the row — so the suite was
+green against a table production does not have. That is the same class as an
+assertion that cannot fail, and `compliance_ladder_d135.test.ts` had already
+stated the rule it kept: *"The CHECK is migration 187's, copied rather than
+relaxed."* The fixture now slices the CREATE out of **266**, falling back to 187
+if 266 is ever removed, so it cannot silently lose the constraint again.
+
+**Proved both ways rather than asserted.** With 266 present the suite is 14/14;
+with 266 withheld, three contract tests **fail** — which is the demonstration
+that the fixture, not the assertion, was what hid the defect. And relaxing the
+fixture back makes them pass **even without 266**, which is the same fact from
+the other side.
+
+### The state machine, which existed only in prose
+
+Migration 187 wrote the semantics down in its own comments —
+
+```
+active      — trading
+suspended   — not trading, STILL HOLDS ITS TERRITORY
+terminated  — over; territory released
+```
+
+— and **nothing enforced them**. Measured: `suspend` 0 status guards, `renew` 0,
+`terminate` 0, `reinstate` **1**. So a **terminated** licence — one whose
+territory has been released and may already have been granted to somebody else —
+could be suspended or renewed, and a renewal would push a date onto a licence
+that is over.
+
+`transitionRefusal()` is one helper carrying the rule once, and the three
+transitions each answer **409 `bad_transition`** on `reinstate`'s own refusal
+shape rather than inventing a second one.
+
+**Re-suspending an already-suspended licence is refused too, and the ladder is
+what made that real.** The UPDATE overwrites `suspended_at`, which HQ's Team
+table (D138) and the addressee's own page (D136) both read as *"frozen since"*.
+Silently restarting the clock an administrator is measured against is worse than
+refusing, so the refusal names the alternative: reinstate first, or edit the
+note.
+
+### The freeze that outlived its licence
+
+Terminate deletes `licence_territories` and updates `territory_licences`, and
+nothing else. Since **D135 shipped the freeze** that leaves a live contradiction
+the original filing predates: `auth.ts`'s gate reads `admin_notices` by
+`user_id` and **never consults the licence's status**, so a terminated licence's
+open notices go on freezing its administrators forever — over a licence that no
+longer exists to comply with, where answering the notice cannot help because
+there is nothing left to comply *with*.
+
+That half is not a product call, it is the ladder contradicting itself, and
+migration 264 already has the word for a notice HQ is no longer pressing:
+**`withdrawn`**. Terminate now withdraws the licence's `issued`, `overdue`,
+`responded` and `rejected` notices. `accepted` and `withdrawn` are **left
+alone** — they are already closed, and rewriting a closed row would lose which
+way it closed.
+
+**It runs outside the `DB.batch`, and that is deliberate.** A database that has
+not applied 264 has no `admin_notices` table; inside the batch its absence would
+fail the termination itself. So it is **reported rather than thrown**, the D111
+precedent this file has now applied four times: the termination is recorded
+whatever happens, and `notices_withdrawn: {ok, count} | {ok: false, reason}` is
+its own field beside `pushed`. A withdrawal that fails says so in a sentence
+naming the consequence — *an administrator frozen by one may still be frozen* —
+rather than letting a completed termination look like a failure.
+
+### The two struck, with their measurements
+
+1. **`renewalSweep` binds ISO against a bare `expires_at`** — filed as the
+   bound-parameter timestamp defect. **Not a defect.** `trust.ts:1174-1181` binds
+   ISO on **both** sides against a column written as ISO, which is consistent,
+   and this plan file already said so in an earlier pass: *"the companion sweep
+   700 lines away reads the same column correctly."* What is real is that **no
+   lexical guard can see it** — that is `check-timestamp-comparisons`'s blind
+   spot and it belongs to **#253**, not here.
+2. **`licence_contracts` has four statuses and only `draft` is reachable** —
+   **not a defect, an unbuilt feature already recorded as one.** `ROUTE_MAP.md`
+   row 41: *"Still not shipped: sending a contract for signature (`status` and
+   `envelope_uid` exist and nothing writes them)."* Honest absence.
+
+### Filed rather than folded in, each with its measurement
+
+- **`hq_escalations.due_at` has an SLA band and no cron.** Written at
+  `rpc/hqOps.ts:90`, no reader in `index.ts`. A breached HQ SLA changes a badge
+  colour and notifies nobody. Its own task.
+- **`/inbox` is a dead CTA.** `notify.ts:480` builds `${root}/inbox`; `App.jsx`
+  registers **zero** `path="/inbox*"`. Either a route or a different link — a
+  product call about where a notification should land.
+- **`notifications` is both a view and a runtime table.** Migration 053 creates
+  the back-compat VIEW; `services/notifications.ts:29` a
+  `CREATE TABLE IF NOT EXISTS`. Which wins depends on which ran last on a given
+  D1 — a schema-collision question, and the `metrics_snapshots` precedent (#183,
+  #202) says it is its own piece of work.
+- **What terminate should deprovision beyond the notices** — admins keeping
+  `role='admin'`, the deployment row, seats, contracts. A product call, and
+  D134's demote/detach primitives are what it would compose.
+
+### One `frontend/src` file did not move, so `docs/` did not either
+
+D139 is worker-and-SQL only. The freeze it lifts is felt on two shipped screens
+and neither needed a line changed: the rung they render is derived from
+`admin_notices.status`, and `withdrawn` was already outside `FREEZING_STATUSES`
+before this decision existed. The test asserts the lift **through**
+`FREEZING_STATUSES` itself rather than restating the four strings, so the two
+cannot drift apart.
+
+---
+
+## D140 — branch S4: a calendar nobody can move, an index of four consoles, and the third promise that outlived its fact
+
+`/branch/programs` and `/branch/community` were the last two branch artboards
+blocked on nothing — S5 and S6 wait on `publishTemplate` and `applyBenchmarks`,
+which F.5 listed and nobody built. So S4 shipped on its own, and researching it
+before building it is what shaped it, because **the notice it replaces promised
+two things and neither survived measurement.**
+
+### The promise, and why it is deleted rather than reworded
+
+`/branch/programs` rendered: *"The cohort calendar with **dates you adjust**, and
+assessment runs whose results are yours."*
+
+**No route anywhere lets an admin move a cycle or a week.** Measured across the
+whole worker rather than taken from the plan file: there is **no
+`UPDATE week_windows` at all**, and every `UPDATE cohort_cycles` touches
+`status`, `app_status`, `force_proceed` or `applications_open_at/close_at` —
+**never `start_at`/`end_at`**. The four week windows are pure month arithmetic
+(`cycleWeekWindows(year, month)`), and both rows are written by
+`INSERT OR IGNORE`, so re-materialising a cycle cannot move one either.
+
+A date picker here would be the `still_an_admin` mistake D134 already named on
+the tier above: *a UI that offered a button and let the server pick teaches the
+operator that one of its buttons is a lie.* So the page draws no date control,
+no form, and says on the calendar itself — where a reader meets the dates rather
+than in a footnote — that they are derived and read here rather than set.
+
+**This is the third promise in this programme to outlive its fact**, after
+D129's seat store and D131's six S1 blocks. The rule the branch README states is
+applied again and the sentence is **deleted at source**, with a scan refusing it
+anywhere under `frontend/src` — the `NO_VERDICT_SNAPSHOT` precedent.
+
+### What a branch genuinely controls is the outcome, not the calendar
+
+Per company, per week: `grace` (1–168h, reason mandatory) and `override`, both
+audited through `applyWeekDecision` into `company_week_status` and
+`stage_transition_log`. That is a real and defensible reading of *"timing is
+yours"* — it is simply not a date picker, and the page says which it is.
+
+**And it links to those two writes rather than re-implementing them.** They
+already have a working console — `AdminCohortTiming`, a **tab** of
+`/admin/spinout-lab` rather than a route of its own — and two audited writes
+drawn twice is how two surfaces come to disagree about what was decided.
+
+### Assessment ships as analytics, not as runs
+
+`admin_assessment.ts` has **23 routes and 17 of them are behind
+`requireHqAuthoring`** (D106): authoring is HQ's, and offering a branch admin a
+button that 403s is the same lie as the date picker. The page draws none, and
+says so.
+
+What it cannot draw is the artboard's *"assessment runs"*: there is **no
+`GET /sessions` and no `GET /results`** in that file, and the one session-shaped
+route, `POST /sessions/:id/rescore`, needs a `public_id` no console surfaces. So
+a table of runs would have nothing to read. The gap is named on the page rather
+than only in the rail, and **the test reads the absence out of the worker** — the
+day somebody ships a list route, the assertion fails and the page gets its table
+instead of the claim going quietly stale.
+
+### Community is an index, not four new screens
+
+All four consoles are real, working and **already branch-reachable**:
+`admin_events.ts` (9 routes), `admin_jobs.ts` (5), `admin_circles.ts` (8) and
+`admin_network_profiles.ts` (6) carry **zero** `requireHqAuthoring` between
+them, and each has a live SPA route. What did not exist is the page the sidebar's
+Community row points at.
+
+**Each card says what its console actually does, because three of the four are
+narrower than their names** and a reader who assumes otherwise goes looking for a
+control that is not there:
+
+- **Events** — moderation and analytics. Members write the events; the console
+  approves, rejects, unpublishes, features, cancels and sets capacity. It does
+  not author one.
+- **Job board** — **moderation only.** Five routes, and there is no admin create,
+  edit or delete.
+- **Circles** — full CRUD. The one community surface a branch authors outright.
+- **Network profiles** — CRUD, photo and reorder, and **not a member
+  directory.** The only public route over that table is `network_public.ts`'s
+  single photo-blob proxy, and the only other reader in the whole worker is
+  `services/decks/axalSpinoutDemoDay.ts`. There is no member-facing list
+  endpoint at all; what the table feeds is the Demo Day deck's Mentors & Network
+  slide. The card says that rather than letting the name imply otherwise.
+
+**The page fetches nothing, deliberately.** Four counts would each be a second
+read of a console's own list, and a count here disagreeing with the table one
+click away is the tile-vs-table defect D128 was written to end. The cards link;
+the consoles count.
+
+### One zone formatter — the fifth consolidation
+
+`inZone` was written on `BranchHome` for S1's week deadline (D131) and S4's
+calendar is its second caller. `lib/README.md` already states the rule — *"If a
+helper appears in two places, put it here once rather than a third time"* — so it
+moved to **`frontend/src/lib/zoneTime.js`** with `dateInZone` beside it, and
+`BranchHome` imports what it used to declare. The existing S1 test was
+**re-pointed rather than deleted**: its assertions pin the zone as a *required*
+argument and are worth the same wherever the function lives.
+
+It is deliberately **not** merged with `lib/spinoutLab.js`'s date helpers, which
+bake `COHORT_TZ` in. Those format a programme date for a founder who is *on* the
+programme clock; this one formats an instant for a reader who is not and must be
+told which clock it is. Two behaviours under one name is D117's `money` trap, so
+the split is stated rather than left for whoever tries next.
+
+**And the zone itself is read, never retyped.** `lib/spinoutLab.js` already
+exports `COHORT_TZ` and the worker declares its own in
+`services/cohortTiming.ts`; the two cannot import each other, so the test pins
+them equal. A rename on one side now fails the build instead of going unnoticed.
+
+D127 one `GROUP BY role`, D128 one LIKE escaper, D130 one definition of open,
+D131 one count, D132 one zone formatter *(planned and not taken — this is where
+it actually landed)*, D138 one definition of what freezes, **D140 one zone
+formatter.**
+
+### The defect the new guard caught before it shipped
+
+`cycleLabel(null, 10)` returned **`'October null'`**. The guard was
+`Number.isFinite(Number(year))` — and `Number(null)` is `0`, which *is* finite,
+so a missing year walked straight through and would have rendered on screen. The
+empty values are rejected before the numeric check now. Worth recording because
+it is the same shape as every other assertion-that-cannot-fail in this file: the
+test was written first, and it failed on the first run for the right reason.
+
+**No new `/api/*` method, no worker route, no migration — 267 stays free.** Every
+read this PR needs already exists and is already branch-reachable on plain
+`requireAdmin`, so `check-api-drift` has nothing to say. `frontend/src` moves, so
+`docs/` is rebuilt.
+
+## D141 — the Programme Brief: seventy-six bindings, six of which the platform can answer
+
+**The ask, in the owner's words:** *integrate the new PROGRAMME BRIEF at
+`https://axal.vc/spinout-lab/brief`, PDF-exportable, using the artifact,
+**plugged to a backend that auto-updates every `{}` bracket element***.
+
+**The mechanism is right and the scope is not, and this entry says so rather
+than quietly building the smaller thing.** The design artifact is a Claude
+Design canvas whose payload is a `<script type="text/x-dc">` model, and the
+first thing it settles is the notation. It carries **two**, doing two different
+jobs:
+
+| notation | count | what it is |
+| --- | --- | --- |
+| `{{ binding }}` | **76** unique | the canvas rendering its OWN data — tracks, tools, gates, jurisdictions |
+| `{dotted.path}` | **6** | the platform fields, which is what the `{}` ask names |
+
+The six, verbatim from the canvas's `renderVals()`: `{brief.generated_at}`,
+`{brief.year}`, `{cohort.name}`, `{cohort.close_at}`, `{cohort.start_date}`,
+`{cohort.places}`. Task #239's title said "the six `{}` tokens" and was exact.
+The canvas states the split itself, in its own header:
+
+> *"One source: the same TOOLS / TRACKS / JURS the public page renders, so the
+> brief cannot describe a programme the page does not. **Live values stay as
+> fields — a generated PDF fills them from the platform, never from this
+> file.**"*
+
+So the seventy-six sort into three groups with three different homes, and
+choosing a store for the third would have been a mistake this programme has now
+made and deleted twice:
+
+| group | roughly | home |
+| --- | --- | --- |
+| measured, and changes on its own | 6 | **`GET /api/spinout-lab/brief`** — new, public, no store |
+| already one shared SPA source the Lab pages read | ~20 | `lib/spinoutLabArsenal.js`, read rather than copied |
+| the programme's own prose and diagrams | ~50 | **`lib/spinoutBrief.js`** — content in git, reviewed in a diff |
+
+**Giving the third group a D1 table would be D129's seat store and D140's
+adjustable dates a third time** — a store built so a page could look dynamic,
+holding values nobody measures and nobody edits. It is content. It changes by
+someone editing it, and a reviewer reads the change.
+
+### What the brief was, and why "finish it" was the wrong framing
+
+`/spinout-lab/brief` already existed: four landscape slides
+(`SpinoutLabBriefPage.jsx`, 195 lines) with print CSS, a Save-as-PDF button and
+a live stats read through `useSpinoutStats`. What it did **not** have was any of
+the artifact's structure — no tracks, no gates, no arsenal, no jurisdictions, no
+terms — and no route of its own. So this is a rebuild against the canvas, not a
+completion.
+
+*(A correction on the record: an earlier note in this session called the page
+"fully static — no `api.` call, no state." That was wrong. It read live data
+through the `useSpinoutStats` **hook**, which a grep for `api.`/`useState`
+does not see. The rebuild changes what it reads, not whether it read.)*
+
+### The route — six fields, no store, no migration
+
+`GET /api/spinout-lab/brief` on `spinout_lab.ts`, public the way `/stats` and
+`/cohort` already are (auth here is per-handler; a route is public by not
+calling `requireAuth`). **Five of the six read no table at all** —
+`resolveApplicationTarget` and `monthLabel` are wall-clock arithmetic in
+`COHORT_TZ` — and the sixth, `places`, comes through the shared
+`getCohortSizeSettings`, whose product default IS the operative number until an
+operator overrides it. The fixture therefore creates **no cohort tables**, so
+anyone who later "improves" the route by reading a cycle row fails the test
+rather than emptying the brief on a database that has not run those migrations.
+
+`COHORT_TZ` is imported from `cohortTiming`, which **declares** it;
+`cohortApplications` imports the constant without re-exporting it, so
+destructuring it there is `undefined`. That was caught by the worker typecheck,
+not by reading.
+
+**The route names the zone beside the instants**, and the page formats every
+date with the zone the route sent rather than one it assumes. A reader anywhere
+is told that 23:59 is Delaware's. That is `lib/zoneTime.js`'s third caller, and
+its required-zone argument is exactly this case.
+
+### Nothing on the page may be typed that is derivable
+
+The arsenal's heading reads *"Nineteen working tools. Count them."* — an
+invitation to check. It is `numberWordCap(TOOL_COUNT)`, and the test asserts
+both halves: the rendered heading spells the count `LAB_TOOLS` actually holds,
+**and** the word does not appear as a literal anywhere in the page source. Same
+for `LAB_TRACKS.length` and for the twenty-eight days, which are `COHORT_WEEKS
+× 7`. The brief has already carried a frozen number once — *"Cohort 4 · closes
+August 1, 2026"*, past by the time anyone read it — and this is the one page a
+founder prints and forwards to an investor.
+
+### The nine mini-charts ship labelled as examples, or they do not ship
+
+The canvas gives nine of the nineteen tools a small chart, and every figure in
+them is invented for the design: `'9 interviews · 6 need-to-have'`, `'$2.4B ·
+$340M · $34M · cited'`, `'$1.5M target · 30% committed'`. The canvas's own
+comment calls them *"a simplified reading of their real screen … so a founder
+who later opens the tool recognises the picture"* — the SHAPE, not a
+measurement. And the brief is public: it is read by exactly the person who has
+no account, so there is no founder's data that could go there even in
+principle. Unlabelled, a chart with a figure under it reads as measured, which
+would make these the most convincing wrong thing on the page. Every one renders
+under `EXAMPLE_LABEL`, and the test counts labels against charts.
+
+### Two absences, not one
+
+A failed read and a month with no open cohort are different facts, and the page
+says which. `resolveApplicationTarget` reports `ok: false` between a close and
+the next month's opening; the brief then has no cohort to name and says so,
+rather than naming the wrong one. `places` is answered on both paths and keeps
+rendering. The test asserts that a failed read does **not** claim to know that
+no cohort is open — it knows nothing.
+
+### The finding that earned its own assertion
+
+The SPA computes the cohort window **itself** — `resolveOpenCohort`
+(`lib/spinoutLab.js`), which is what the marketing hero and the Lab intro quote
+— while this brief's route answers from `resolveApplicationTarget`
+(`services/cohortApplications.ts`). Two independent implementations of one rule
+(seven days before the 1st, 23:59:59 Delaware) in two languages. Compared across
+48 probes spanning mid-month, either side of a close, and DST boundaries:
+**they agree on every one**. So this is latent drift, not a live defect — and
+the day they disagree, two pages on the same site quote different deadlines for
+the same cohort. `spinout_brief_d141.test.mjs` pins them equal, importing both
+real implementations rather than restating either. The frontend test loader
+resolves the worker's TypeScript, which is what makes a cross-language
+behavioural assertion possible here at all.
+
+### PDF export is print CSS, by the owner's call
+
+`window.print()` plus `@page { size: letter portrait; margin: 0 }` and a page
+break per section. No new dependency, no worker route, works offline, and the
+artefact the founder saves is the page they were reading. Cloudflare Browser
+Rendering is already a binding if a byte-identical server PDF is ever wanted;
+that is filed, not built.
+
+**The document is white in both themes, deliberately.** Only the chrome around
+it follows the reader's theme. A dark-mode page that prints white is two
+different documents under one URL, and this one is a document.
+
+`check-dark-mode` was right to flag the first draft's seven `bg-white` cards,
+and the answer is not its exemption pragma. The document already declared its
+own palette as constants and painted its page ground with an inline colour;
+`bg-white` was the one part of it reaching for a theme-aware utility, which is
+the wrong MECHANISM rather than a forgotten pair. `PAPER` joins the palette,
+the guard has nothing left to pair, and no exemption has to be trusted. The
+toolbar keeps its `dark:` variants because it is app chrome. Both halves are
+asserted — the document may carry no theme-aware class, and every light surface
+in the chrome must still carry its dark counterpart. The second of those was
+written weakly first (it only checked that *some* `dark:` survived in the
+chrome) and passed a mutation that stripped the pair off the Back link; it now
+reads each class string.
+
+### One thing kept against the canvas: the track record
+
+The artifact draws no outcomes block, and the brief it replaced had one —
+`companiesLabel(companies)` and `raised`, read from the public
+`/spinout-lab/stats` the marketing hero reads. **Those two figures are
+measured**, they are the load-bearing fact for the investor this brief gets
+forwarded to, and dropping a true number because a layout omitted it is the
+wrong trade. It moves to page 4 and keeps the one hook, so the brief and the
+hero cannot quote different track records on the same day — which is why
+`useSpinoutStats` was lifted into `lib/` in the first place. The third figure,
+"28 days", is `COHORT_WEEKS × 7` rather than a literal.
+
+That block also produced the one mutation that escaped the first battery:
+`spinout_brief_live_data.test.mjs` asserts the page *reads* the hook, which is a
+source scan an empty render survives intact. Deleting the block passed both
+files until a render assertion existed. **A guard that reads the source cannot
+see a component that stopped drawing.**
+
+### The guard that had to be re-aimed rather than deleted
+
+`spinout_brief_live_data.test.mjs` predates this and lost four assertions to the
+rebuild. Two were restored by keeping the track record. The other two pinned
+`openCohortCopy()` and its interpolations — a mechanism the page correctly no
+longer has, since it reads the cohort from the route. Their RULE survives and is
+now enforced harder: "the brief and the hero cannot quote different dates" used
+to rest on a shared call and now rests on the parity assertion above, comparing
+two implementations on their output. What stays in the old file is the property
+that belongs to that page — it must not compute a second cohort of its own, and
+an absent one must not become a date. This is the D129/D131/D140 rule applied to
+a guard rather than to a promise: the fact moved, so the assertion moves with
+it rather than being reworded around the gap.
+
+### `BriefDocument` is exported, and that is the testing decision
+
+`renderToStaticMarkup` never runs an effect, so a component that fetched its own
+data could only ever be asserted in its loading state — and the loading state is
+not the one that has to be right. The document is therefore pure and
+prop-driven, the wrapper does the one fetch, and both states are rendered and
+read: six fields filled, and six stating their own absence. That is #516's
+`MarkHistory` precedent applied to a whole page.
+
+**The unsurvivable failure, asserted directly:** no `{{`, no `{cohort.`, no
+`{brief.` may reach the rendered output in any of the three states. A binding
+printed as text in a document somebody is being asked to rely on is the one
+thing this page cannot come back from, and it is a property of the OUTPUT that
+no source scan can see.
+
+### One shared name kept, two collisions named
+
+`spinoutBrief.js` declares no tool and no track — it carries the prose and the
+brief reads `spinoutLabArsenal.js` for the rest, so the brief cannot describe a
+programme the product does not have. The guard for that refuses the arsenal's
+**shape** (`blurb:`, `route:`, `leads:`, `who:`, `group:`) rather than trusting
+names, because a name can collide by coincidence and a key cannot — and the two
+real collisions are named rather than waved past: "Office hours" is a support
+row on page 4 as well as a tool card on page 3, and "Form" is both a track and
+the name of the third gate on that track. A collision that disappears fails the
+test as a stale entry, on `check-inline-project-pickers`'s shape.
+
+`LAB_TRACKS` gained a `brief:` short form beside its longer `who:` — one source
+read two ways, the D138 `RUNGS`/`rungRank` shape — because the screen's sentence
+wraps to a ragged list in a print column. Two lists of the same three tracks is
+what `lib/README.md`'s rule forbids.
+
+**One new `/api/*` method with its route in the same commit; no migration — 267
+stays free.** `frontend/src` moves, so `docs/` is rebuilt.
+
+## D142 — the branch's own view of being frozen, and of being watched (S7, S13)
+
+**Every power around this was already built and the branch could not be told
+about any of it.** HQ can suspend a licence (D135), the suspension reaches the
+branch (D137), the branch can escalate (D112) — and a suspended branch's badge
+was byte-identical to an active one, a frozen write surfaced as a generic page
+error, and while HQ was inside a branch admin's account the branch rendered its
+ordinary purple *"Admin Mode"* bar with a working View-as picker.
+
+### The 423 was anonymous on the wire, and nothing could be built on it
+
+`requireBranchNotSuspended` threw `new Error(BRANCH_SUSPENDED)` — a sentence
+written for a person — which shipped as `423 {"detail": …}` and nothing else.
+Its HQ twin `adminFrozenBody` sends `{detail, code:'admin_frozen', notice}`, and
+`frontend/src/lib/api.js` keys **strictly** on that `code`. So the branch 423
+reached no handler.
+
+**That is why three places in this repo could claim the frozen-branch banner had
+shipped.** It had not, and it could not have: there was nothing on the wire to
+key one on. `branchSuspendedBody` is the twin now, carrying
+`code: 'branch_suspended'` plus HQ's own `suspended_at` and `suspended_note` —
+HQ's words rather than this worker's paraphrase, because the admin reading the
+refusal is being asked to act on somebody else's decision. Both production error
+paths route through it (`app.onError` and `mapError`, the two D110 and D134
+exist to keep in step), and a test pins that rather than trusting it.
+
+### What a suspension actually freezes — the artboard drew four rows and one was enforced
+
+Re-counted against the code: `requireBranchNotSuspended` had exactly **four**
+call sites, all Approvals-or-admissions. Mapped against S7's Locked column:
+
+| S7 draws as locked | before | after |
+| --- | --- | --- |
+| **Approvals** | ✅ three lanes | unchanged |
+| **Programs** — *"admissions closed; the running cohort continues"* | ✅ `admin_cohort.ts`'s gate is on `/applications/:id/decide`, admissions exactly | unchanged — the running cohort's week decisions stay open, which is what the canvas asks for |
+| **Community** — *"cannot be published"* | ❌ **zero** gates | **gated** |
+| **Seat assignment** | ❌ nothing to gate | **recorded, not drawn** |
+
+**The rule for Community, because it is three files and fifteen handlers.** A
+suspended branch may not put anything **new** under the brand, and may still
+take things **down**. So `approve`, `publish`, `feature` and the two circle
+writes that can set `published` are refused; `reject`, `unpublish`, `cancel`,
+`delete` and a capacity edit are not. Freezing a takedown would trap a frozen
+branch with content under its own brand it cannot remove — worse than the freeze
+it implements — and the canvas asks for exactly this split. Asserted from both
+sides: the seven that must refuse, and the eight that must not.
+
+**Seat assignment locks a control that was never built, and this corrects a
+claim the task list still carried.** `seat_assignments` has **no migration**
+(zero hits in `cloudflare-worker/sql/`, absent from the baseline), **no route**
+and **no `api.js` method**; its only trace in the worker is a comment at
+`routes/licence.ts` recording that the store was promised and never delivered.
+D127 and D129 chose a different design — seats-used is counted from `users.role`
+and `seats_used_basis` says so on screen. Drawing a freeze on it would be the
+same false claim this programme has deleted three times (D129's seat store,
+D131's six S1 blocks, D140's adjustable dates), so it lives in
+`lib/branchFreeze.js`'s `NOT_BUILT` with its measurement, and a test fails the
+day a migration creates the table — at which point the row can be drawn for
+real.
+
+### One list, read by the screen and asserted against the server
+
+`lib/branchFreeze.js` names, per locked row, the route **files** that enforce
+it. `branch_shell_s7_s13.test.mjs` reads the worker and asserts the named set
+and the enforcing set are identical: a sixth gate with no row fails, and a row
+whose file stopped gating fails. Without it the screen drifts from the product
+silently — and here that is worse than a stale promise, because a branch would
+be told a write is frozen when it is not.
+
+That is the seventh consolidation on this argument: D127 one `GROUP BY role`,
+D128 one LIKE escaper, D130 one definition of open, D131 one count, D138 one
+definition of what freezes an ADMIN, D140 one zone formatter, D142 one
+definition of what freezes a BRANCH.
+
+### A defect this change introduced, and the fixture that caught it
+
+The first draft selected `status, suspended_at, suspended_note` in one
+statement, which reads as tidier. On any database whose `branch_licence` is
+narrower than migration 256 that throws `no such column`, the gate's existing
+catch reads it as *"unreadable, so not suspended"*, and **a branch HQ suspended
+goes on trading.** The freeze test went 200 where it had been 423.
+
+The decision is made on `status` alone now, exactly as before, and the reason is
+fetched afterwards in its own try: **a copy that cannot say why it is suspended
+is still suspended.** This is D133's lesson arriving from the other side —
+there, fixtures narrower than the schema made a present row read as absent; here
+one made an enforced freeze read as lifted.
+
+**Two stand-ins were narrower than the thing they stood in for**, and both are
+widened: the fixture's `branch_licence` was two columns, and the test app's
+`onError` hand-built `{detail}` under a comment promising it could not drift
+from production — it had, the moment the refusal grew a `code`. It calls the
+real body builder now. The structural test also walked only the **first** gate
+per file, which was fine while every file had one; events and circles now have
+two and four.
+
+### S13 — the payload written, never read, and never cleared
+
+`SupportRedeemPage` has written `localStorage.supportSession` since D120 under a
+comment saying it is *"stored for the banner"*. That key occurred **exactly
+once** in all of `frontend/src` — the setter. No reader, and nothing removed it:
+`clearSession` purged five keys and left this one, so the blob outlived the
+thirty-minute session **and** outlived sign-out on that browser. A banner built
+on it naively would have told the branch user's *next ordinary session* that HQ
+was inside their account.
+
+`lib/supportSession.js` owns the key, expires the payload against its own
+`expires_at`, clears it on the way past, and is what `clearSession` calls — so
+the purge and the reader cannot be renamed apart.
+
+**And what rendered before was worse than nothing for an admin target.**
+`isImpersonating = !!realUser`, which a support session never sets (the operator
+is a row in HQ's database this deployment cannot read), so supporting a branch
+**admin** mounted `PortalSwitcher`'s ordinary purple bar with a working View-as
+picker — an HQ-driven session dressed as the admin's own — and supporting anyone
+else rendered nothing. `HqSupportSessionBar` mounts **above** `PortalSwitcher`,
+and the test asserts the order, so that bar can never be the only chrome on a
+session the viewer did not start. It has **no dismiss control at all**, unlike
+the frozen bars: it describes something still happening, not a refusal that
+already finished.
+
+### The false claims, re-counted rather than trusted
+
+An earlier pass recorded "six false claims plus two tests". Re-measured against
+this tree there is **one** genuinely false attribution —
+`branch_escalations.ts` credited *PR 5* with shipping the banner, which it
+never did — and it is corrected. The others (`branch_approvals.ts`,
+`util/branch.ts`, `BranchApprovals.jsx`, and the two test comments) were
+forward-looking sentences about what the banner tells a branch to do, and D142
+makes them true rather than needing deletion. **The count is what the code says,
+not what a previous note remembered.**
+
+### Not built, and stated rather than left looking overlooked
+
+S13's *"audit line it leaves"* panel. Every reader of `impersonation_sessions`
+is an HQ route (`admin.ts`, `admin_cohort.ts`, `admin_security.ts`); there is no
+branch-side read of the branch's own rows, and D122 made those rows close
+correctly but gave nobody on the branch a way to see them. The canvas's
+justification is exactly right — *"the branch database is what was read, and a
+tenant should not have to ask HQ what was done to it"* — so it is filed as its
+own route rather than faked from the client's own stored payload, which knows
+only about the session it is in.
+
+**No migration — 267 stays free.** No new `/api/*` method, so `check-api-drift`
+has nothing to say. `frontend/src` moves, so `docs/` is rebuilt.
+
+## D143 — a breached HQ SLA tells somebody, and the guard learns the column it was missing
+
+**Context.** `hq_escalations` (migration 259) is how a branch asks HQ for
+something it cannot decide alone — moderation, brand approval on localised
+content, a seat increase. Every row carries a `due_at` computed from the kind's
+SLA band (`SLA_HOURS`, `rpc/hqOps.ts`), and `slaBand()` derives `ok` /
+`due_soon` / `past` from it on every read, so S3 and H1 both draw the band and
+both draw it correctly.
+
+**Nothing acted on it.** `due_at` had no reader anywhere in the scheduled
+handler. A subsidiary that escalated something and heard nothing was waiting on
+an answer no clock was chasing: the badge turned red and the silence was the
+whole feature. Filed as one of the eight licence-area defects in D139 and
+deferred there as its own concern, which is what this is.
+
+**The decision: a breach notifies HQ.** A sweep in `services/`, on the existing
+`* * * * *` trigger at a fifteen-minute cadence, through `notify()` with
+`category: 'compliance'` — the category `notify.ts` and `TemplateCategory` have
+both carried since D135, so this needed no new plumbing. It never answers an
+escalation; it reports that a deadline passed, and answering stays a deliberate
+act on `PATCH /api/admin/escalations/:uid`. That split is the same one that makes
+the compliance ladder's automatic half safe to run on a clock.
+
+### The finding that shaped it, which is not the one in the task title
+
+`hq_escalations` carries **two timestamp formats in one row.** `created_at` and
+`updated_at` default to `datetime('now')` — SQLite's `YYYY-MM-DD HH:MM:SS` —
+while `due_at` is written from JavaScript as ISO-8601
+(`new Date(...).toISOString()`, `rpc/hqOps.ts`). So the obvious predicate,
+`due_at <= CURRENT_TIMESTAMP`, compares two different text shapes. It does not
+fail: `T` (0x54) sorts after a space (0x20), so an ISO stamp compares GREATER
+than a SQL one naming a later instant, and the sweep silently skips every breach
+until the UTC **date** rolls over and the date prefix starts deciding. That is
+the bound-parameter defect class that has bitten the magic link, the support
+code and two trust sweeps.
+
+**And the guard could not see it.** `scripts/check-timestamp-comparisons.mjs`
+watches a fixed `TTL_COLUMN` list with no allowlist by design — a column outside
+it is a column nobody is watching. `respond_by` is on that list because D135
+obeyed the guard's own header when it created the column
+(*"Adding the name here and the column there in one commit is what keeps that
+true"*). **`due_at` was not**, so the guard watched every deadline column except
+this one, on precisely the sweep it exists for. D143 adds it, in the same change
+that gives the column its first reader.
+
+The sweep itself wraps **both** sides — `datetime(due_at) <= datetime('now')` —
+which normalises either stored format to one, so the comparison is correct
+whichever way a row was written. The guard's negative lookbehind blesses exactly
+that shape, and `complianceLadder.ts` already uses it one table over.
+
+### Two things that read like mistakes and are not
+
+**The claim is a column, not a state flip.** Every minute-cadence sweep in this
+repo is idempotent by construction — the WHERE matches only rows in the
+pre-transition state — and reserves a ledger row for side effects that are not a
+state flip. Sending mail *is* such a side effect, and here there is no flip to
+hang it on: a breached escalation is still `open` afterwards, because a breach
+does not answer it. Adding a `breached` status would have been worse, not
+better: it would drop the row out of `openEscalations()`, which reads
+`status = 'open'`, so a breach would have hidden the very thing it was reporting.
+Migration 267's `sla_breach_notified_at IS NULL` is the claim, and the
+conditional UPDATE is what makes owning it atomic.
+
+**It stamps the sweep's own clock, and that honours the D122 rule rather than
+breaking it.** `complianceLadder.ts` states the rule for `froze_at`: stamp the
+computed deadline, never the sweep's clock, because the account stopped being
+able to write at `respond_by` and recording the sweep's clock would make the
+audit late in the direction that flatters the operator. Here the act being
+recorded is the **notification**, which genuinely happened when the sweep ran,
+and the breach's own moment already has a column — `due_at`. Both stamps say
+when their own event happened, which is the rule, not an exception to it.
+
+A consequence worth stating: **the cadence is visible here in a way it is not in
+the ladder.** D135 can run every five minutes and say the interval affects
+nothing a row says. This sweep's whole output is a message, so the interval *is*
+the worst case for how late HQ hears — fifteen minutes against an SLA measured
+in hours, which is slack of about a percent.
+
+**A send that fails does not un-claim the row.** Re-claiming would re-warn on
+every subsequent pass, turning one unreachable mailbox into an unbounded stream.
+The failure is logged and the row stays reported.
+
+**Not gated on `hqCadences`**, on the D122 precedent and for its stated reason: a
+branch holds none of this table's rows, so the predicate is the tier
+discriminator and a better one — it selects rows by what they are, not by which
+deployment is asking.
+
+### Measured before writing
+
+Read-only against production `studioos-db`, aggregates only: `hq_escalations`
+holds **0 rows**, 0 of them open, 0 with a `due_at`. So migration 267's `ALTER`
+copies nothing, which is both why it is safe and why now is the cheapest moment
+it will ever have. The ledger carries 269 rows against 269 migration files on
+disk — nothing pending, nothing orphaned. Zero branches are provisioned, so no
+escalation has ever been raised and the silence has harmed nobody; this is a
+**latent** defect that fires on the first real use of a shipped surface, and the
+entry does not claim an incident.
+
+**Migration 267 is used, against D142's "267 stays free" — which was true when
+D142 was written.** No new `/api/*` method, so `check-api-drift` has nothing to
+say. No `frontend/src` change, so `docs/` does not move.
+
+## D144 — the inbox had everything except an address
+
+**Context.** `services/notify.ts` builds `${root}/inbox` into every notification
+email it sends, under a comment describing *"the in-app inbox at `/inbox`"*.
+`App.jsx` registered **zero** `/inbox` routes. So every notification email
+carried a link to a 404 — filed as a dead CTA in D139's list of eight, and
+deferred there as its own concern.
+
+**Re-measured, the filing was wrong about what was missing.** The in-app inbox
+is built and has been mounted in the shell all along:
+`components/NotificationBell.jsx` reads `api.listNotifications()`, renders the
+rows, marks one or all read, and navigates per row. Every worker route behind it
+exists — `routes/notifications.ts` mounted at `/api/notifications`, with `GET /`,
+`/unread-count`, `/mark-read`, `/read-all`, `/:id/read` and `DELETE /:id` — and
+both `api.js` methods exist and are consumed.
+
+**What was missing is a URL.** A dropdown does not have one, and an email CTA
+needs one. That is the entire gap, and it is why D144 is a **page**: no
+migration, no new `/api/*` method, nothing for `check-api-drift`, and no edit to
+`notify.ts` — the link it already writes becomes true the moment the route
+exists.
+
+### The consolidation is the point, not the page
+
+The obvious way to build the page is to write the rows again. That is the thing
+to avoid, and `frontend/src/lib/README.md` already states the rule: *"If a
+helper appears in two places, put it here once rather than a third time."* Two
+renderings drift, and what they would drift about is **what a person believes
+they were told**.
+
+So `components/NotificationList.jsx` is the rows, **lifted out of the bell
+rather than copied**, and both the bell and `/inbox` render it. Deliberately
+with no `variant` prop: the dropdown is narrow and the page is wide, the same
+row reads correctly in both, and giving the page its own row shape would re-open
+exactly the gap the component closes. The test asserts neither caller declares a
+row of its own.
+
+Eighth consolidation on this argument — D127 one `GROUP BY role`, D128 one LIKE
+escaper, D130 one definition of open, D131 one count, D138 one definition of
+what freezes, D140 one zone formatter, D142 one freeze list, D144 one
+notification row.
+
+### A second defect, found while lifting
+
+`NotificationBell`'s load had `catch { setItems([]); }`, and an empty list
+renders *"You're all caught up."* So a failed read told the reader their inbox
+was empty — a claim about the store that nothing measured, and the same
+honest-absence rule this repo applies everywhere else. The list now renders
+three distinct states — loading, unreadable, empty — and **both** callers
+distinguish them. The page also offers a retry; the bell re-reads on next open.
+
+**The bell gains a link to the page.** A surface reachable only from an email is
+one that gets built and then never found.
+
+**Route roles include `exploring`**, which is not an oversight: an application
+decision arrives as a notification, and the person waiting on one holds no other
+role.
+
+**No migration — 267 was used by D143 and 268 is free.** No new `/api/*` method.
+`frontend/src` moves, so `docs/` is rebuilt.
+
+## D145 — terminating a licence now deprovisions the people who administered it
+
+**Context.** `POST /api/admin/licences/:uid/terminate` released the territory,
+set `status = 'terminated'`, recorded the event, and — since D139 — withdrew the
+licence's open compliance notices so the ladder stopped freezing administrators
+over a licence that no longer existed. It never touched `users.role`,
+`licence_admins` or `is_active`.
+
+So after a termination its administrators still held `role = 'admin'`, bound to
+a licence that had been ended. **That is the unscoped admin D134's door was
+built to make unreachable, arriving through the back** — D134 made promotion
+licence-bound by construction precisely so no path could produce one.
+
+**The decision: revoke and unbind, keep the record.** Per administrator, in one
+batch: `role = 'exploring'`, `is_active = 0`, and the `licence_admins` row
+deleted. The account, the audit and the licence's history all survive —
+"terminated" here has always meant role revocation and deactivation, never
+deletion, because no account of any role can be deleted anywhere in this
+codebase and the audit depends on the rows staying.
+
+### Three things the code decided differently from the plan
+
+**1. One floor, not two — and `admin.ts` had already argued why.** The plan
+named two: never demote a `super_admins` holder, and never demote the last
+active admin. The first is real and is enforced: the elevation sits **on** the
+admin role, so demoting its holder leaves it pointing at a non-admin, which is
+the same reason `POST /users/:userId/demote-admin` refuses that target.
+
+The second was **not** added, and the demote route's own header already
+explains it — it retired exactly that check for exactly this reason: *"the count
+can never be zero, because the caller has just passed `requireSuperAdmin` …
+So at least one active admin — the caller — always survives, by construction.
+The floor holds; the check that claimed to hold it was dead, and a conjunct that
+cannot be false is not a guard."* The terminating actor is a super admin, is
+active, and cannot be one of the licence's administrators being demoted. Adding
+the floor here would have been re-introducing the dead conjunct one file over.
+
+**2. The order is `notify` → `deprovision`, and that is load-bearing.** The
+existing comment above `notifyLicenceAdmins` says the administrators are still
+bound at that point *"so the lookup still finds them"*. Deprovisioning first
+would send the "your licence has been terminated" mail to nobody, because the
+bindings are how the recipients are found.
+
+**3. An unreadable `super_admins` demotes NOBODY — it fails closed.** The
+asymmetry is deliberate. Failing open would risk stripping the elevation's
+holder of the role it sits on, which is not recoverable through the API; failing
+closed costs a manual cleanup. The termination itself is recorded either way and
+the reason says so.
+
+### What it deliberately does not carry over from the demote route
+
+`seedObligations(..., { pruneStaleForRole: true })` **is** called, so the
+admin-only trust obligations are waived rather than deleted and the audit
+survives — the same call the demote route makes. `resetExploringReview` is
+**not**: it is module-private to `routes/admin.ts`, and more to the point these
+accounts are being deactivated, so they are in no review queue to reset.
+Reactivating one is a deliberate act that goes through the role route and its
+own bookkeeping.
+
+**No extraction of the demote route's body.** Sharing one definition was
+weighed — it is the pattern this repo has taken eight times — and rejected here
+because `resetExploringReview` is private to a live, carefully-documented route,
+and moving it would widen a licence fix into a refactor of the admin lifecycle.
+What is shared instead is the *value that matters*: both paths write
+`role = 'exploring'`, and both write `role_changed` / `your_role_changed` rather
+than a new action name, because a distinct action would be invisible in
+`admin_security.ts`'s allowlist and `ActivityPage`'s label map until three
+sweeps had been done.
+
+**Reported, never thrown** — D139's shape on D111's precedent, returned as
+`admins_deprovisioned` beside `notices_withdrawn`, per account with its reason.
+A recorded termination must not be undone by a failure in the cleanup after it.
+
+**No new `licence_events` value**, and a test pins that: widening migration
+187's CHECK needs a migration, which is what D139 learned the expensive way.
+
+**No migration — 268 is free.** No new `/api/*` method. No `frontend/src`
+change, so `docs/` does not move.
+
+## D146 — the coverage grid gets its sort and its click, and a comment stops contradicting its own guard
+
+**Task #241. The title is wider than the work, and the canvas said so before I
+did.** `#241` reads "the nav naming and H2's coverage-grid sort and open-licence
+click". `design/canvases/integrated/Admin · Super.dc.html` carries its own
+changelog, and it settles the scope better than the task title:
+
+> `{ where:'H2', what:'Coverage grid: sort control and open-licence affordance',`
+> `why:'Held-active, held-suspended and white space were already the three`
+> `states; **the sort and the click are the additions.** Renewal pipeline`
+> `already carried days and fee.' }`
+
+So H2's three states and its renewal pipeline shipped in D110 and are untouched
+here. Two things were missing, and the third item — the nav — turned out not to
+be about the nav at all.
+
+### 1 · The grid had no sort
+
+`coverageCells()` emits the 27 cells in `EU_CODES` order and `Coverage` rendered
+them straight through. The canvas draws a two-option control, `mapSort:
+['By state','A–Z']`.
+
+`sortCells(cells, mode)` is a **pure exported helper in
+`lib/licenceCoverage.js`**, not a comparator in the component, because what
+order the grid is in is a fact about coverage and that file already owns the
+other two — which cells exist, and what state each one is in. A comparator in
+`Coverage` would have been the third place that has to know what
+`held_suspended` means.
+
+**`'az'` is the identity, not a second sort.** `coverageCells()` already emits
+alphabetical order, so `'az'` returns the cells as they came rather than
+re-deriving an order that is already true — and `'state'` breaks its ties by
+leaving that incoming order alone, which `Array.prototype.sort` guarantees
+because it is stable. That is what makes the two options agree by construction
+wherever state does not decide, instead of by two comparators that have to be
+kept in step.
+
+**"By state" ships selected, and that changes what the grid opens as.** The
+canvas styles the first segment as chosen and the first segment is "By state",
+so this is a visible change and is meant to be. It also serves the zone's own
+stated purpose: `licenceCoverage.js`'s header says the white space is the point,
+and in code order the free cells are scattered through 27 tiles and have to be
+counted — grouped, they are one block whose size reads at a glance. *Strike it
+and the initial state goes back to `'az'`: one word.*
+
+### 2 · Clicking a held cell did nothing
+
+Every cell was a plain `<div>` with a `title`. **No data change was needed** —
+`coverageCells()` already puts `licence: { uid, … }` on every held cell — and the
+mechanism already existed one screen down, where the licence rows are
+`<button type="button" onClick={() => setSel(l.uid)}>`. `Coverage` closes at 1470
+and `AdminLicences` opens at 1472, so the call site is inside the component that
+declares `setSel`; `onOpen={setSel}` needed no lifting and no context. A click on
+a held country and a click on its row now land in exactly one place.
+
+**Free cells stay `<div>`.** There is nothing to open behind a country nobody
+holds, and a button that refuses is the `still_an_admin` mistake D134 named — it
+teaches the operator that some of this grid's controls are a lie.
+
+### 3 · The nav rows were right; the sentence above them was not
+
+This is the item the task title misdescribes, and it is worth stating because
+the repo had the answer on both sides already. `sidebarConfig.js` shipped
+**eleven** HQ rows. The comment directly above them said *"The approved canvas
+has eight rows … All eight resolve today"*, omitting Revenue, Content and
+Platform — **the three rows whose own explanatory comments sit a few lines
+below it**. And `super_admin_shell.test.mjs` has a test literally named *"all
+eleven rows are present, in canvas order"* that `deepEqual`s all eleven.
+
+So a guard said eleven, a comment said eight, and they described one array in
+one repo. The array was never wrong. **A comment that a guard already
+contradicts is the cheapest kind of false claim to leave lying around and the
+most misleading to read** — the same class this programme deleted in D129's seat
+store, D131's six blocks and D140's adjustable dates, one layer down. The
+comment now names all eleven, and the guard asserts the *sentence* contains each
+one, so a future count cannot go stale the way this one did without failing.
+
+`AdminLicences.jsx:3` also cited the canvas's `"Licenses"` nav row; the canvas
+now spells it Licences, and so does the comment.
+
+**No migration — 268 is free.** No new `/api/*` method, so `check-api-drift` has
+nothing to say. `frontend/src` moves, so `docs/` is rebuilt through the root
+build.
+
+## D147
+
+**HQ's master template library reaches a branch, and the branch says what the
+copy is** — `publishTemplate`, the first of the two producers F.5 specified and
+nobody built (#234's S5/S10 half; migration 268).
+
+### What was actually missing, and two filed claims that did not survive measurement
+
+`publishTemplate` had **zero occurrences** in `cloudflare-worker/src`. So
+`/branch/contracts` rendered a notice naming three things and the tier had no
+way to produce any of them. That much was right.
+
+**The second "live defect" behind this task is STRUCK — it was a
+mis-attribution.** The filed note said *"`GET /api/legal/templates` does not read
+the template store at all; it maps a hardcoded in-module `TEMPLATES` constant."*
+True, and not a defect: `routes/legal.ts`'s `TEMPLATES` is the founder
+**incorporation-kit** generator — `layer`, `content`, `fillContent`,
+`JURISDICTION_TEMPLATES` — a different family from `legal_templates`, HQ's master
+**contract** library. And the generation path already prefers the D1 store:
+`getActiveTemplateBody(env, tkey)` first, the inline body only as the documented
+fallback. Nothing there is wrong.
+
+**The first defect is real and far narrower than filed.** `templates_reason` in
+`admin_licences.ts` says *"HQ has authored no master templates yet."* Its route
+is `requireSuperAdmin`, which on a branch answers **"HQ only"** (D106), so a
+branch never reads that sentence; and on HQ migration 085 seeds **66** rows (the
+note said 67), so `listTemplates()` is never empty and the reason never fires. It
+is dead copy, and it is reworded here rather than sold as the motivation.
+
+### The store: a `branch_*` copy, not columns on `legal_templates`
+
+A branch **already has** `legal_templates` and `legal_template_versions` — both
+are in `schema_baseline.sql`, so a bootstrapped branch gets them empty, and
+`services/legalTemplateStore.ts` carries a lazy `CREATE TABLE IF NOT EXISTS` on
+top. What it lacks is a `pushed_at`. Adding `source` and `pushed_at` to
+`legal_templates` would have meant editing a migration **and** a runtime
+bootstrap in lockstep — the `metrics_snapshots` collision (#183, #202), one table
+with two definitions that disagree depending on which ran first — and it would
+have put HQ's copy in the table a branch is refused write access to, so
+`requireHqAuthoring` would be the only thing separating the two.
+
+So migration **268** adds `branch_templates` and `branch_templates_sync`, on the
+rule migration 256 already set: *a pushed copy lives in its own `branch_*` table
+with its own `pushed_at`* — `branch_licence`, `branch_promo_ceiling`,
+`branch_benchmarks`, and now this.
+
+### Three things the copy deliberately does NOT carry, each with its measurement
+
+1. **`body_md`.** Nothing on a branch renders or instantiates a template body:
+   S5's picker shows the library, and `licence_contracts` (migration 259) is
+   HQ's table behind `requireSuperAdmin`. A body column with no reader is the
+   store-built-so-a-page-looks-complete mistake this programme has deleted four
+   times (D129's seat store, D131's six blocks, D140's adjustable dates, D141's
+   invented bindings). When instantiation lands it is one additive `ALTER`.
+2. **`is_active`.** S10 draws archived versions as *"visible and unusable"*, and
+   **HQ cannot produce that state**: `listTemplates` filters `is_active = 1`, so
+   HQ's own library shows only active templates, and the contract route's own
+   comment says *"the current version is the only one HQ is offering today."* A
+   column here could only ever hold 1, and the page branch rendering a 0 would
+   be code production never reaches. `version` carries the true statement.
+3. **A version history.** Pushing every historical row so a picker could grey
+   them out would model a choice HQ refuses to make.
+
+### The write is a reload, and the two forms tried before it were both wrong
+
+A library is a **set**, so a push that only inserted and updated could never say
+*this one is gone* — a template HQ withdrew would stay offerable on every branch
+forever. Two SQL forms for that withdrawal were written and discarded:
+
+- `DELETE … WHERE slug NOT IN (…)` builds its placeholder list with `${…}`,
+  which lands in the query **text** where no binding protects it.
+  `check-sql-prepare` refused it, correctly.
+- `DELETE … WHERE updated_at < ?` against this push's own stamp **looks** exact
+  and is not: two pushes inside the same millisecond share a stamp, the
+  comparison is false for every row, and nothing is withdrawn. The test that
+  found it was **flaky rather than failing**, which is worse than either — a
+  silently inert sweep that passes most runs.
+
+So the write is a reload — `DELETE`, then insert what HQ sent, then the sync row
+— in one `DB.batch`, which runs as a single transaction: the `DELETE` only takes
+effect if every `INSERT` after it does, so a push that fails part-way leaves the
+previous library standing rather than an empty picker. The withdrawn count is a
+set difference computed in JS, because a before/after total is wrong the moment
+a push both adds and withdraws.
+
+### `branch_templates_sync` exists so two absences are two sentences
+
+An empty `branch_templates` means either *HQ pushed a library and it was empty*
+or *HQ has never pushed*, and only the first is a statement about HQ. The sync
+row is written in the same batch as the library, so its presence **is** the fact
+that a push happened. D107's `licence_not_pushed` is the precedent: an empty copy
+and an absent copy are two claims, not one. The route renders three states —
+unreadable, never pushed, pushed-and-empty — and the test asserts the ordering,
+because a never-pushed branch tested *after* the empty-list branch can never be
+reached.
+
+### The HQ half is in this PR, or the producer has no caller
+
+`POST /api/admin/contracts/templates/publish` (`requireHqAuthoring`) reads
+`listTemplates(env)` and fans out through `services/branches.ts`, **reported and
+never thrown** — D111's rule, the shape an escalation answer and a licence
+transition already use: HQ's library is HQ's whether or not a branch answered,
+and a 502 for one unreachable branch would tell an operator that a push to the
+other three did not happen. `AdminTemplates.jsx` gains the control. A producer
+whose only caller is a test is the defect being fixed, one level up.
+
+**Zero branches is a real answer.** `fanOut` over an env with no `BRANCH_*`
+binding returns `[]`, and the route answers `branches: []` with its own
+`branches_reason` — supplied by the **server** so the page cannot drift from it,
+and the test refuses a second copy of that sentence in the SPA.
+
+### No authoring control on the branch page, and the refusal is stated
+
+D.9 puts authoring at HQ; `requireHqAuthoring` already enforces it server-side.
+A greyed pencil here would be the `still_an_admin` mistake D134 named — a control
+that exists to be rejected teaches the operator that some of its buttons are
+lies. The page says what changing a template actually is: a Content submission.
+
+### Still not shipped, and named rather than drawn
+
+**S5's Active contracts and Pending signature.** `licence_contracts` is HQ's
+table and every route over it is super-admin-only, so a branch has no contracts
+read of its own. The block states that with its reason instead of rendering an
+empty ledger under a heading that implies rows are coming.
+
+**Migration 268** is used; **269 is free.** One new `/api/*` method each side,
+both with their routes in the same commit. `frontend/src` moves, so `docs/` is
+rebuilt through the root build.
+
+## D148
+
+**What HQ can honestly publish a median of, and the branch's one tick** —
+`applyBenchmarks`, the second producer F.5 specified and nobody built. Closes
+**#252**: `branch_benchmarks` was created by migration 256 and had neither a
+writer nor a reader.
+
+### The threshold is three, and the reason is arithmetic rather than policy
+
+Migration 256's header says HQ *"withholds the row entirely below its own
+k-threshold"* and does not say what k is. It has to be **3**:
+
+| n | why it is not enough |
+| --- | --- |
+| 1 | the median **is** that branch's figure, published under a name that hides whose it is — the "never another branch's figure" the same header forbids |
+| 2 | the median is the mean of the two, so a branch that knows its own number subtracts it and reads the other's **exactly** |
+| 3 | the smallest n at which no single branch is recoverable from the median plus its own value |
+
+`MIN_BRANCHES` is one exported constant carrying that argument in its own
+header, and the test reads it rather than restating it. The threshold is applied
+**per metric**, not once per fan-out: a branch can answer and still have no
+readable backlog, and a median over two of three branches is exactly as
+recoverable as a median over two of two.
+
+### What can honestly be medianed — measured, not chosen from the canvas
+
+S6 draws four stats. Read against `branchOverview()` — the only cross-branch
+call returning comparable per-branch numbers — exactly **three** of its fields
+are measurements and one is not:
+
+| field | publishable? |
+| --- | --- |
+| `accounts.total` | ✅ a count of active accounts |
+| `seats_used` | ✅ a count, with its own stated basis (D127) |
+| `backlog[].count` | ✅ the four local queues (D130) |
+| `revenue_mtd_cents` | ❌ **`null` by construction**, with its own reason — and `branchRevenueSummary` agrees: every stream it returns is `available: false` |
+
+Activation and programme throughput have no branch-side read anywhere. So
+**three of S6's four drawn stats cannot be benchmarked**, and the page states
+that instead of deriving them. Revenue is the interesting one: the *rate* is on
+the pushed licence and the *amount* is not knowable on a branch — subscription
+charges live in the Stripe API and a subsidiary charges no onward licence fee —
+so a rate times a number nobody has is not a figure.
+
+### An unreadable branch is excluded from n, never counted as a zero
+
+`fanOut` returns three states and the middle one gets forgotten: `unreadable` is
+not a claim that the branch is down. A branch that did not answer contributes
+**nothing** — not a zero, which would drag every median toward the floor and
+make the platform look worse the flakier its network is. `n_branches` is the
+count that **answered**, and it travels with the median so the screen says "of
+N". The test seeds four branches with one throwing and asserts the median is 20
+rather than 15, so counting a silence as a zero fails.
+
+### The write is a reload, for the reason D147's was
+
+A benchmark set is a **set**: a push that only upserted could never retire a
+metric HQ stopped publishing — and a metric withheld *because it fell below k*
+is precisely the one that must disappear rather than linger at its last value, a
+median the screen would go on asserting after HQ stopped standing behind it.
+
+### The cron is gated on `hqCadences`, which is the opposite call from its neighbours
+
+D122, D135 and D143 each deliberately **refused** that gate, because those
+sweeps act on **this deployment's own rows** and their `WHERE` clause is the
+better tier discriminator. This one is the other direction: it **fans out**, and
+a branch has no branches. The gate and the function agree rather than one
+covering for the other — `publishBenchmarks` refuses on a branch outright. Daily
+at 04:55 UTC on the existing `* * * * *`, **no new cron expression**: every
+published row carries its own `period` and HQ's `pushed_at`, so the cadence
+bounds nothing a row says, and an hourly recompute of a quarterly figure would
+be N remote calls an hour to move a number that moves in weeks.
+
+### With zero branches this publishes nothing, and that is the deliverable
+
+The fan-out returns `[]`, `withheld_reason` says why in the branch's own terms,
+and the cron logs *withheld* rather than a success with zero rows. The branch
+page renders the absence with the same argument. That is the D129 / D131 / D140
+/ D147 pattern for a fifth time: ship the truth and state what is missing,
+rather than a tick against a median of one.
+
+### One defect the tests found rather than review
+
+`median()` sorting with the default comparator — `[9, 10, 11].sort()` is
+`[10, 11, 9]` and the median comes back **11**. It only shows up once a value
+crosses a digit boundary, which is exactly the class that survives a small
+fixture, so the comparator is explicit and the fixture crosses one.
+
+### Two assertions were re-aimed rather than the code changed
+
+A banned-word scan for `rank` **failed on correct code**: it forbids the page's
+own sentence *"never a ranked list"* — the refusal itself. A lexical scan cannot
+tell a rule from its violation, so the assertion is structural now: `BenchmarkRow`
+carries no field naming a branch, so a ranked list is **unrepresentable** rather
+than merely absent. The route-window assertion took a fixed 400 characters and
+reached into the next route's notice; it is bounded by the next `<Route` now,
+and asserts the window actually contains its own element.
+
+**No migration — `branch_benchmarks` is migration 256's and 269 stays free.**
+One new `/api/*` method with its route in the same commit. `frontend/src` moves,
+so `docs/` is rebuilt through the root build.
+
+**Still not shipped: S11 Settings.** `/branch/settings` keeps its notice. Owner
+chips per row are a different artboard from a benchmark, and the licence summary
+they would frame is already readable at `/admin/my-licence`. Filed as the
+remainder of #234.
+
+---
+
+## D149 — three HQ figures that did not show their own state (#242)
+
+**Date:** 2026-09-17 · **Scope:** `frontend/src` only. No migration, no worker
+change, no new `/api/*` method — every field rendered here was already on a
+payload the page fetched.
+
+#242 is "audit H8, H10 and H11 against their new artboards". Its scope came
+from the canvas's own changelog rather than the task title, which is the third
+time running that has corrected a task, and the audit split it into work of
+very different sizes. This takes the part that is render-level and honest
+today; the rest is filed below with its measurement.
+
+### 1 · H8 — a failed deployment rendered exactly like one nobody had started
+
+`AdminLicences.jsx`'s deploy timeline had the canvas's eight steps with
+matching labels and drew them `const done = at >= 0 && i <= at` — a check or an
+empty circle. Two states for three, and `failed` is **not one of the eight
+steps** (migration 258's vocabulary is `requested … linked` plus `failed`), so
+`at` was **-1** and every one of the eight steps rendered blank. A deployment
+that failed was byte for byte a deployment that had not begun; and a run still
+working on step 4 was byte for byte one that failed after step 3.
+
+Two different states drawn the same way is this programme's recurring defect —
+D107's empty-vs-absent licence copy, D128's tile-vs-table, D147's
+never-pushed-vs-pushed-empty — and it is the fourth time.
+
+**What is drawn is bounded by what the store holds, which was measured rather
+than assumed.** `licence_deployments` carries ONE `status` and ONE
+`status_note`, with no per-step history. So:
+
+| the canvas draws | shipped |
+| --- | --- |
+| a per-step state | ✅ `ok` behind the step reached, `wait` ahead of it |
+| the summary *"N of 8 complete · M waiting"* | ✅ from the same |
+| a per-step **note** | ✅ for the deployment, labelled as the deployment's |
+| a per-step **time** | ❌ **stated, not drawn** |
+| which step a failure happened at | ❌ **stated, not drawn** |
+
+The two ❌ rows are said on the page — the D140/D147 rule. Deriving seven
+timestamps from the one `requested_at` is the class of figure this file exists
+to refuse.
+
+**A failed step reads `unknown`, never `fail`, and the word matters.** `status`
+was overwritten with `'failed'`, so the progress it had reached is gone. Marking
+all eight `fail` would claim the request was never even made, while the row
+saying it was is right there — replacing one false statement with another.
+
+### 2 · H10 — `owed` rendered without the rate it was computed from
+
+H10 is otherwise shipped, and in one place better than the canvas: where the
+canvas draws a bare `{{ p.issued }}` the promo table renders `<Unrecorded/>`
+with its own reason. The one gap is the canvas's `× {{ h10SharePct }} owed`
+column. `owed` is `gross × revenue share`, computed server-side by
+`drawStatement`, and it rendered as a bare number — so an operator disputing a
+statement had to open the licence to check it. **The rate was already on the
+row**: `admin_statements.ts` declares and writes `revenue_share_bps` precisely
+so a statement records the rate it was drawn at rather than the rate the licence
+carries today.
+
+A licence with no rate recorded prints **no rate**, not `× 0%` — the clause
+drops, `zoneFilterBuilder`'s rule one surface over. `× 0%` beside an owed figure
+says HQ is owed nothing.
+
+### 3 · The consolidation that forced, and the count was wrong by half
+
+Rendering that rate needed bps → percent, **which already existed six times**.
+The task filed three; three is what a scan keyed on one body finds, and the
+other three had each written their own format:
+
+| site | name | drift |
+| --- | --- | --- |
+| `pages/admin/AdminLicences.jsx` | `pct` | — |
+| `pages/subsidiary/MyLicencePage.jsx` | `fmtBps` | — |
+| `pages/NeedsBoardPage.jsx` | inline | — |
+| `pages/CompanySettingsPage.jsx` | inline | no trim: 150 bps read **"1.50%"** |
+| `pages/IntroductionsPanel.jsx` | `feePct` | `toFixed(bps % 100 ? 2 : 0)`: 3550 read **"35.50%"** |
+| `pages/NetworkEffectsPage.jsx` | inline | `toFixed(0)`, which **rounds a rate** |
+
+So one 3550 rendered "35.5%" on three surfaces and "35.50%" on a fourth. The
+last is latent only — `COMPOUNDING_BPS` is `[10000, 5000, 2500]`, every value a
+whole percent — but a formatter that rounds a rate is one non-round value from
+misreporting one. `frontend/src/lib/bps.js` is now the one definition; D127 one
+`GROUP BY role`, D128 one LIKE escaper, D130 one definition of open, D131 one
+count, D138 one definition of what freezes, D140 one zone formatter, D142 one
+freeze list, D144 one notification row, and this is the **ninth**.
+
+**It splits the way D117 split `text` and `titleCase`**: the helper returns
+`null` for an absent value and does arithmetic only, and each page keeps its own
+absent copy — `'Not recorded'` on `MyLicencePage` to match the eight absences
+around it, `'no rate recorded'` on `IntroductionsPanel` beside its own "no
+economics attached". **A fallback is a human-written sentence.**
+
+**AND THE MOVE IS ALSO A CORRECTION.** None of the six guarded the empty
+string: `Number('')`, `Number('   ')` and `Number([])` are all **0** and all
+finite, so a `Number.isFinite` test alone renders a value nobody recorded as
+**"0%"** — on a revenue share, the statement that a branch owes nothing. The
+first draft of the guard listed the empty string by name and `[]` walked
+straight through, which is why the rule is the **type** and not the value.
+
+**Two strings change, and they are named rather than absorbed:** a carry of 150
+bps now reads "1.5%" where the toast said "1.50%", and a referral fee of 3550
+reads "35.5%" where the panel said "35.50%". Whole percents are unchanged
+everywhere, so the other four surfaces render exactly what they rendered.
+
+### The derivation was lifted so the fix could be tested at all
+
+`DEPLOY_TIMELINE` and the new `deployProgress` live in
+`frontend/src/lib/deployTimeline.js`, on `sortCells`'s precedent (D146): which
+steps a status implies is a fact about migration 258's vocabulary, not about a
+layout. It is also the only way the central assertion can exist — **a source
+scan over the page can see that three markers are written and cannot see that a
+running deployment and a failed one now differ**, which is the entire defect.
+`hq_licences_h2h3.test.mjs` follows the list to its new home with its
+assertions unchanged, which is what proves the move was a move.
+
+### Filed rather than folded in, each with its measurement
+
+- **H11's publish confirmation** — *"Publishing v3.2 notifies N branches on
+  older versions."* D147 built the push this would count; the **pre**-publish
+  count needs a branch-side `templateVersions()` on `HqEntrypoint` that does not
+  exist. That is a producer, not a render.
+- **H11's rollout percentage and Roll back.** Measured: **zero** occurrences of
+  `Roll back`, `rollout` or `Open diff` in `frontend/src`, and no rollback route
+  in the worker. It is a Cloudflare versions-API operation — F.8 item 5's
+  gradual deployments — blocked on the widened `CLOUDFLARE_API_TOKEN`. Drawing a
+  Roll back button that cannot roll back is the `still_an_admin` mistake D134
+  named.
+- **H8's "link to Platform" beside the credential block.** The block itself was
+  already shipped and is better than the canvas draws it: the Deploy button
+  disables on the server's `dispatch_available` and renders the server's own
+  `dispatch_reason`, rather than offering a control that 409s. The link is not
+  added, because the credential is a Worker secret set outside the app entirely
+  — a link to Platform would suggest the fix lives there.
+
+**No migration — 269 is still free.**
+
+---
+
+## D150 — HQ Home refused figures the server was already sending it (#244)
+
+**Date:** 2026-09-17 · **Scope:** one SELECT and two type widenings in the
+worker, plus `frontend/src`. No migration — **269 stays free** — and no new
+`/api/*` method: both fields have been on the payload since D108.
+
+#244 reads "HQ H13: the AI rail's scope chip, its cost line and its four
+rules". Researching it before building — the fifth time running that has
+corrected a task — found that three of those four parts cannot be built, and
+that a sharper defect sits underneath on a shipped HQ screen.
+
+### The defect
+
+`GET /api/admin/hq/overview` computes and returns **`branches`** (the fan-out
+over every `BRANCH_*` binding, each entry in one of D108's three states) and
+**`branches_coverage`** (`{total, answered, complete, unreadable[]}`).
+**`HqHomePage` read neither.** Its "Subsidiary health" zone was drawn from the
+licence ledger alone, so **Accounts** and **MTD · backlog** rendered
+`<Unrecorded/>` under a footnote saying they *"need every account to name its
+licence; none does yet"*.
+
+**That reason was never the blocker for a branch.** U1 is a fact about HQ's own
+database. A branch is a separate Worker over a separate D1 (D.2), so every
+account there is that branch's **by construction** — which is exactly why
+`branchOverview` can count them, why D148 could publish medians of them, and
+why they were already on the wire. The page was refusing figures the server was
+sending it.
+
+**Three independent facts, not one reading:** the page contained zero
+references to `branches` outside comments; `hq_home.test.mjs` contained zero;
+and D108's own plan named two guards — `branch_rpc_fanout.test.ts` **and**
+`hq_home_branches_h1.test.mjs`. The worker one exists. **The frontend one never
+did.** The producer shipped and was tested; the consumer was not built, and
+nothing was watching the gap.
+
+Same class as **#252**, **D142** and **D149**. **Sixth instance.**
+
+### What the fix needed that did not exist
+
+A branch entry **could not be joined to a licence**. `deployedBranches` selected
+`code, hostname, status` and not `licence_uid`, though migration 258 declares it
+`UNIQUE`; `BranchResult` and `withRegistry`'s registry type carried none either.
+So `licence_uid` is projected and threaded through — and `withRegistry` had a
+one-word bug on the way: it `continue`d on any code it had already seen, so a
+branch that **answered** never received the licence at all. The case a caller
+most wants to join was the one the loop skipped.
+
+**An unregistered branch keeps a null licence rather than borrowing one.** A
+binding can exist before HQ holds a row for it, and guessing would attach one
+territory's figures to another's contract — the worst thing this join can do.
+
+### The three states are three sentences
+
+`ok` shows figures **with the time the branch answered**; `unreadable` is
+`<Unrecorded/>` with a reason and is **never a zero** — a silence read as zero
+shrinks a total and makes the platform look worse the flakier its network is
+(D148's lesson, one surface up); a licence with no branch has not been
+deployed. Where the branch supplies its own reason (`seats_used_reason`,
+`backlog_reason`) that sentence wins, because the server writes a better one
+than the page can.
+
+### H13 rule 3, which is the one rule of four that is real today
+
+*"Unreadable is a word in the answer."* The rail summarises the coverage lines
+beside it — `workspace_explain` runs over exactly those and deliberately not the
+rows — so a line that omits an unanswered branch yields an answer that totals
+over the rest in silence. `coverage()` already returns the unreadable branch
+**codes**, so the line names them. With none deployed it says so instead of
+counting zero: the D129 / D131 / D140 / D147 / D148 pattern for a sixth time.
+
+### Three reasons that had outlived their blockers
+
+Twelve of the fifteen `unavailable` rows across the five HQ rails are accurate.
+Three were not, and are corrected rather than reworded:
+
+- *"Revenue per subsidiary — that call is not built"* — **false**; D111 built
+  `reportUsage` and `revenueSummary`. What is missing is that no branch has
+  **reported** one.
+- *"Seat utilisation — needs `seat_assignments`"* — half stale. D127 decided
+  **against** that store and counts seats from `users.role`. What has no store
+  is *which seat id* a person holds, so that is what the row now says.
+- Security's *"no tenant-scoped view to return from; that is the same U1"* —
+  wrong reason. The overlay is **unbuilt (#235)**, not blocked. Corrected in the
+  payload, which is the one copy both surfaces render.
+
+### The guards that were enforcing the refusal — THREE of them, and that is the number worth recording
+
+`hq_home.test.mjs` **asserted** that Accounts and MTD · backlog render
+`<Unrecorded/>`, and its header said *"None is computable"*. `hq_governance_h7.test.mjs`
+required the overlay's reason to match `/U1/`. `admin_governance.test.ts` required
+the same of the payload. All three failed on the fix, correctly, and each had to
+follow its property rather than its wording.
+
+**A guard that pins a refusal has to be re-aimed the day the refusal stops being
+true, or it becomes the thing preventing the fix.** With D149's
+`territory_licences.test.mjs` and `hq_licences_h2h3.test.mjs` that is **five
+instances across two PRs**, which is enough to call it a class rather than a
+coincidence: this programme deletes false claims for a living, and every false
+claim it has shipped had a test holding it in place.
+
+Three of this PR's own assertions were wrong first, and the mutation run is what
+said so rather than review:
+
+- a cell window of a fixed 420 characters **failed on correct code** the moment a
+  cell grew a comment — D147's fixed-window trap, bounded by the next `<dt>` now;
+- a negative scan forbidding the U1 sentence **failed on the comment recording
+  why the sentence was removed** — *a lexical scan cannot tell a rule from its
+  violation*, which is D148's `rank` scan exactly. It asserts what the footnote
+  must **say** instead;
+- and the re-aimed `hq_home.test.mjs` first asked only that the word `live`
+  appear somewhere in each cell. A mutation replacing the gate with a constant
+  `false` — the page hard-wired back to refusing, which is the whole defect —
+  **passed it**, because `live?.…` survives in the fallback. It pins `{live &&`
+  now. *An assertion that cannot fail on the defect it was written for is not a
+  guard*, and the only reason this one was caught is that the mutation was aimed
+  at it deliberately.
+
+### Not built, each with its measurement
+
+- **H13's scope chip as a control.** The page decides what it fetched before the
+  rail runs, so both options produce the same read. A picker whose options
+  cannot differ is the `still_an_admin` mistake D134 named and D138 refused for
+  H9's Move modal.
+- **Rule 2's per-scope cost multiplier** — one run, one price.
+- **Rule 4's audit row** — the rail reads no branch, so logging it as a
+  privileged branch read would write a **false** audit entry.
+- **H13's "HQ margin, shown only on this tier"** — `ai_usage_logs.est_cost_usd`
+  is a cost with no price beside it, and `admin_revenue.ts` already ships that
+  refusal on H5. **Third time this canvas figure has had to be refused.**
+- The canvas's *"What the scope changes"* panel is an **artboard explanation**
+  beside two rail previews, not a UI element: the four rules govern behaviour
+  and are not copy to render.
+
+## D151 — three branch zones told the rail nothing, and the guard that names the rule watched the other tier (#246)
+
+**Date:** 2026-09-17 · **Scope:** `frontend/src` only. No migration — **269 stays
+free** — no worker change, and no new `/api/*` method: every field was already on
+a payload the page already fetched.
+
+#246 is "branch S12: the AI rail scoped to one branch, and the cross-branch
+decline card". Measured before building — the sixth time running that has
+corrected a task — **half of S12 had already shipped**, and the half that had
+not was a defect rather than a missing drawing.
+
+| S12 element | state before this |
+| --- | --- |
+| *"Searching Axal VC France accounts"* | ✅ D129 |
+| The decline card | ✅ **refused with a measurement** (D126): the rail has no free-text input, `aiRouter.ts` carries no branch awareness, and a branch Worker has one D1 binding — the question cannot be **asked**, so a card refusing it is theatre about a wall that is already load-bearing |
+| Rule 4, cost before the run | ✅ the rail's own meter |
+| Rule 1, *"scope is fixed"* | ◐ the sentence said *"this deployment"* and never named it |
+| Rule 3, *"it points at the copy it does have"* | ❌ |
+
+### The defect
+
+`WorkerRail`'s `canRun = coverage.length > 0`. With no coverage it renders
+**"Not recorded"** and disables its only button under *"Nothing to read back yet
+— this page has not loaded a summary."*
+
+**Three of the seven branch zones passed no coverage**, and on two of them that
+sentence was **false**: `/branch/insights` had loaded its stats, a benchmark and
+a server-written `unavailable` list; `/branch/contracts` had loaded HQ's library
+and its push stamp. (`/branch/community` fetches nothing **deliberately** — D140
+refused four counts there for D128's reason — so there the sentence is true.)
+
+**The rule was already in the repo, watching one tier.**
+`branch_rail_mount.test.mjs` pins three HQ pages with the message *"without
+coverage the rail's only button stays disabled"* — and **D126 is the PR that both
+fixed those three and mounted the branch rail.** It fixed the tier it was
+auditing and left the tier it was building.
+
+### `pushed_at` was read zero times in the SPA
+
+S12 rule 3: *"HQ pushes one anonymised median with a timestamp. The rail may
+cite that, **and says when HQ computed it**."* D148 shipped
+`branch_benchmarks.pushed_at`, `branch_insights.ts` selects it, and
+`BranchInsights.jsx` contained **no occurrence of it** — a pushed copy drawn
+without its age, which is the defect D147 and D149 both landed on. **Seventh
+instance of a producer with no reader** (#252, D142, D149, D150).
+
+Same page, same shape a second time: it rendered the server's `unavailable` list
+as its own card and never forwarded it to the rail's block for exactly that.
+
+### The judgement call: a sentence, not a chip
+
+The canvas draws the scope as a caret-less chip reading the branch's name. **It
+ships as the rail's own sentence instead**, for two measured reasons: the
+territory badge already names the branch on every branch screen, so a chip is a
+second copy of one string on one screen; and **D150 refused H13's HQ chip**, so a
+branch chip would contrast with nothing. The chip's information content — *this
+one, and it does not open* — was already the note. What the note lacked was the
+name. *Strike this and the alternative is a `scope` prop on `WorkerRail`.*
+
+`branchLabel(user)` lands in `lib/shellRole.js` beside `branchOfUser`, because
+`BranchAccounts` already derived it for the S0 search sentence and the frame
+would have been the second copy. **Tenth consolidation** (D127, D128, D130,
+D131, D138, D140, D142, D144, D149).
+
+### Six guards were pinned to a spelling, and one of them was this PR's own
+
+Passing `user={user}` to seven routes failed **six** pre-existing assertions that
+matched `<BranchHome />`, `<BranchInsights />`, `<BranchApprovals />` and so on —
+the prop-less spelling — while asserting a fact the prop does not change: which
+component the route mounts. A seventh pinned the rail's note as a literal, and an
+eighth compared `indexOf('benchmarks_available === false')` against
+`indexOf('benchmarks.length')` **across the whole file**, so the new rail
+coverage line inverted it while the render's order was untouched — the unbounded
+window D147 hit with a 400-char route slice and D150 with a 420-char cell.
+
+**And the new guard made the same mistake before it was run.** Its first draft
+required `[…].filter(Boolean)` — one zone's idiom — and failed three pages whose
+coverage was already correct, because the branch tier builds coverage four
+legitimate ways. It asserts the property now: coverage is built in the component
+and gated on its reads, so a failed one drops its line. Two more of this PR's own
+assertions were wrong first: a phrase matched across a string concatenation the
+source wraps, and an apostrophe that is backslash-escaped in a single-quoted
+literal. *An assertion about prose has to be written against how the source
+stores it.*
+
+### One mutation escaped, and it is the guard's limit rather than its failure
+
+`const coverage = ['literal'] || […]` passed the new gated-on-reads assertion:
+the `||` short-circuits past the gating at runtime while **leaving it in the
+file**, and the assertion reads source. Re-aimed at the shape it actually
+claims — the whole construction replaced by a constant array — it is caught.
+So the guard enforces its property and the first mutation landed somewhere
+other than where it was aimed, which is not evidence either way; the real
+limit is that **a source-reading guard cannot see evaluation**, the class D141
+recorded as *"a guard that reads the source cannot see a component that stopped
+drawing"*. That limit is written into the test beside the assertion rather than
+left for the next reader to find. **18 mutations, 18 caught** once M3 is aimed
+at its own claim.
+
+### What the code corrected after the plan
+
+The plan said Contracts' coverage would count archived templates. **There is no
+archived state**: D147 dropped `is_active` from the push on its own rule, and the
+payload's `not_carried` says so in the server's words. The line is gone and the
+rail forwards `not_carried` rather than typing a second copy of it.
+
+## D152 — HQ's Security page denied a store it had, one click from the page that draws it (#235)
+
+**Date:** 2026-09-17 · **Scope:** one service, one route, one page, three test
+files. **No migration — 269 stays free** — and **no new `/api/*` method**: both
+fields were already on payloads `SecurityPage` already fetched.
+
+#235 is "H12 view-as overlay as shell state, guardrail hits by branch, AE audit
+mirror". Measuring it before building — the seventh time running that has
+corrected a task — found that H12 draws **three frames**, that the third has a
+refusal in front of it, and that the refusal is **false on two of its three
+clauses** while being rendered on a shipped HQ screen. That correction is this
+entry; the overlay is the next PR.
+
+### The defect: one sentence, two zones, and two of its three clauses wrong
+
+`admin_security.ts` carried one constant with two consumers by design — its own
+comment said *"One sentence, two zones"*:
+
+> *"No guardrail-hit, flagged-output or token-anomaly counter is stored for the
+> AI rails."*
+
+| clause | true? | measured |
+| --- | --- | --- |
+| **guardrail-hit** | **FALSE** | `ai_usage_logs.safety_score` (migration 040) is written by `recordUsage` on **every** router call; `task = 'safety'` rows are llama-guard's verdicts |
+| **flagged-output** | **FALSE** | `advisor_turn_audit.shadow_flagged` (migration 043), with its own index `idx_advisor_turn_audit_flagged`, written from seventeen call sites in `routes/advisor.ts` |
+| **token-anomaly** | **true** | the phrase occurs **nowhere** in the repo except that constant |
+
+**And it was already aggregated and already on screen.** `loadAiUsageReport`
+rolled up `evaluated / safe_count / unsafe_count`, served at
+`GET /api/monitoring/ai-usage` and rendered by `AiUsageTab` as *"Guardrail
+safety (llama-guard)"*. So HQ's security desk refused a figure the same admin
+console was drawing one click away — **the sixth refusal that outlived its fact**
+(D129's seat store, D131's six blocks, D140's adjustable dates, D147, D150's
+three rail rows, D151's three zones) and the first where what was denied was
+visible elsewhere in the product.
+
+### The consolidation, and it is the twelfth
+
+The rollup was **inline inside `loadAiUsageReport`**, so `admin_security.ts`
+needing it would have been the **second copy of the SQL** — and two copies of a
+safety rollup is how two screens come to disagree about what a guardrail hit is.
+`loadGuardrailCounters(env, days)` is now the one definition and
+`loadAiUsageReport` is its first caller. D127 one `GROUP BY role`, D128 one LIKE
+escaper, D130 one definition of open, D131 one count, D138 one definition of what
+freezes, D140 one zone formatter, D142 one freeze list, D144 one notification
+row, D149 one bps formatter, D151 one name for the branch, **D152 one guardrail
+rollup**.
+
+**Two stores, because they count different things.** `ai_usage_logs` holds what
+llama-guard **thought** (the verdict); `advisor_turn_audit` holds what the
+platform **did** (`refusal_reason = 'safety_block'` → blocked, `shadow_flagged`
+→ flagged). Reporting one as the other is how a safety figure comes to mean
+nothing. Each half carries its **own** `available` flag, because
+`advisor_turn_audit` is lazily bootstrapped (`ensureAuditSchema`) — its absence
+is a state the read can actually meet, and *"0 turns blocked"* is the most
+reassuring possible way to be wrong on a security page. That is the #204 class,
+on the worst surface for it.
+
+**`safe_rate` is `null`, not `0`, when nothing was evaluated.** A rate over an
+empty denominator is undefined, and *"0% judged safe"* is the opposite claim from
+*"the guard never ran"*. `loadAiUsageReport` keeps its own zero-defaulted copy —
+`AiUsageTab` is shipped and changing what its tiles mean is not this PR's
+concern.
+
+### The refusal is narrowed, not deleted (the D111 pattern)
+
+Three things are still genuinely uncounted, each now its own row rather than one
+sentence covering them:
+
+- **Token anomalies.** Nothing watches per-account consumption for a spike. A
+  spend cap being hit is recorded as a refusal, and a limit reached is not an
+  anomaly detected.
+- **Which guardrail rule fired.** `classifyInput` returns the violated category
+  on every hit and the 422 body sends it to the caller — and **no store has a
+  column for it**: `writeTurnAudit`'s parameter list records the score, the
+  refusal and the flag and drops the category. A producer with no store; the
+  **eighth instance** of that shape in this programme, and the sharpest single
+  finding here. **Filed with its measurement, not built** — it is a migration
+  plus a writer change, a different concern from correcting a false sentence.
+  This is also exactly why H7's artboard rows stay undrawn: it draws
+  `{ what, meta, n }`, a **count per category**, and the category is the field
+  that is thrown away. The counters are real; the rows are not.
+- **By branch — H12's third frame.** Neither table carries a branch, tenant or
+  licence column; no branch RPC returns safety counters; and Analytics Engine
+  has no branch index (below). So the row says the figures are platform-wide and
+  why, rather than splitting one deployment's numbers four ways.
+
+### `/governance` gets a pointer, not a second copy
+
+`guardrails` had **zero readers in the SPA**, and both payloads land on the same
+page — `SecurityPage` fetches `/overview` and `/governance` together, and the
+page's own header records that H7 was reconciled **into** this surface rather
+than drawn beside it. So H7's guardrail panel **is** the AI-safety zone. Serving
+the block twice would have put two renders of one rollup on one screen (D128's
+tile-vs-table, one page over) and spent a second pair of D1 reads on a field
+nothing reads. It carries `{counters_on, field, window_days, not_counted}`
+instead — the shape `audit: { total, feed }` at the top of `/overview` already
+uses, which likewise has no SPA reader and is a self-documenting pointer.
+
+### Refused with its measurement
+
+**H12's "Passed on retry" column cannot exist.** `aiRouter.ts` routes `safety` to
+`@cf/meta/llama-guard-3-8b` and records that `safety` has **no alternates**, so a
+safety call structurally cannot fall back; `retry` has zero hits in
+`guardrails.ts`, and `ai_usage_logs.fallback_used` is a *model* fallback meaning
+something else. Drawing the column would invent a number.
+
+**A smaller one worth recording:** `'safety_block'` is declared in `aiRouter`'s
+`RefusalReason` union and **never written to `ai_usage_logs.refusal`** by any
+code — the only writers of that value are `advisor.ts`'s two `writeTurnAudit`
+calls and one HTTP error body. That is why the block count has to come from the
+audit table, and it is the reason stated in the function's header rather than a
+preference.
+
+### A finding recorded, not fixed here — D105's premise is half-built
+
+D105 justified keeping the Analytics Engine dataset **shared**, against the
+per-branch isolation the whole design rests on, on the grounds that it is
+*"indexed by `BRANCH_CODE`"*. **It is not.** The repo's sole `writeDataPoint`
+(`middleware/observability.ts`) writes `indexes: [path.slice(0, 96)]` and no
+branch code in any index, blob or double; the reader hardcodes
+`FROM studioos_metrics` with no branch predicate. So the write-side half of
+D105's own justification was never built, and any per-branch AE query returns
+nothing today — **a decision record stating a capability that does not exist,
+which is the same class this entry corrects one layer up.** Not fixed here: it
+changes what every request writes, and it belongs with the AE audit mirror (F.8
+item 1), which also does not exist.
+
+### Three guards had to be re-aimed, and that is the sixth, seventh and eighth
+
+`admin_governance.test.ts` asserted `guardrails.available === false` and matched
+the refusal's text; `hq_governance_h7.test.mjs` asserted
+`guardrails: absent(NO_AI_SAFETY_STORE)` under a title saying the artboard's rows
+*"have no store"*. **The guards pinning the refusal were the thing standing in
+the way of correcting it** — the same shape D150 hit one line above one of them.
+Each now asserts the property that replaced it, in both directions.
+
+**And one of this PR's own new guards was wrong before it ran**, in the way this
+programme keeps repeating: banning the table names in `admin_security.ts` failed
+on correct code, because the *"by branch"* reason **names both tables** to
+explain why the counters are platform-wide. *A lexical scan cannot tell a rule
+from its violation* (D148's `rank`, D150's U1 comment) — **third instance**. It
+asserts the SQL shape instead: a query reaches a table through `FROM` or `JOIN`,
+and no sentence about a table does that.
+
+### One mutation escaped, and it found a hole in a rule this page already had
+
+`value={v?.available ? num(v.evaluated) : 0}` passed everything. The page's
+"absent is not zero" rule is enforced by scanning for `|| 0` and `?? 0`, and a
+**ternary** falling back to zero is neither — so a counter the platform could
+not read would have rendered `0` on a security page, which is the defect this
+entry is about, in the place it is worst. The fix was to strengthen the new
+assertion (each tile's absent arm must be `null`) rather than to drop the
+mutation: **an assertion that cannot fail on the defect it was written for is
+not a guard**, and this one is mine. **19 mutations, 19 caught** once it was
+re-aimed.
+
+Two more of this PR's own guards were wrong before they ran, both in shapes
+already named here: a ban on the table names failed on the sentence that
+explains why the counters are platform-wide (*a lexical scan cannot tell a rule
+from its violation*), and spreading the server's rows into the rail's
+`unavailable` array broke the line-oriented `[title, detail]` guard two files
+enforce — the entry was still a pair, and **a spread hides the row shape from
+exactly the check that exists to see it**. The detail is computed above the JSX
+and the array stays one literal pair per line.
+
+## D153 — HQ could read a branch and had no way to look at one (#235's remainder, H12 frames 1 and 2)
+
+**The defect.** D108 built the per-branch read, D150 wired its figures into HQ
+Home's health cards, and D152 corrected the sentence that used to say a
+tenant-scoped view was blocked by U1 — it said, correctly, that the view had
+**not been built**. So HQ could read one branch's accounts, seats, backlog and
+escalations and had **no screen that showed one branch at a time**. Every HQ
+figure was either a platform total or one card in a fan-out.
+
+**What the canvas asks for, and it is the whole design:**
+
+> *"The overlay is not a filter on an HQ table — it is one private-link read,
+> of one branch, rendered with every action removed. Each figure carries the
+> branch and the time it was read, so nothing on the screen can be mistaken for
+> a platform total."*
+
+Each clause is built and each is pinned by an assertion in
+`frontend/test/hq_view_as_h12.test.mjs`.
+
+**One read, of one branch.** `GET /api/admin/hq/overview` and `/admins` learn
+`?branch=<code>`; both answer a deliberately smaller payload — `{scope,
+branches: [one], branches_coverage}` — and neither runs HQ's own platform
+queries on that path. **No new `/api/*` method**: `hqOverview` and `hqAdmins`
+gained an argument, so `check-api-drift` has nothing to say.
+
+**Not a filter, structurally.** HQ Home's own fetch is skipped under the
+overlay, and the scoped route returns before its roster and ledger reads. There
+is no platform payload sitting behind the scoped screen to have been narrowed —
+which is what makes the canvas's sentence true rather than merely claimed.
+
+**The thirteenth consolidation.** `branchByCode(env, code)` in
+`services/branches.ts`, read by the four sites that hand-rolled
+`branchBindings(env).find((x) => x.code === code)` (`licencePush.ts`,
+`admin_support_sessions.ts`, `admin_statements.ts`, `admin_escalations.ts`) and
+composed twice by the fifth, which resolves a pair. Those five were a **second
+definition of how a code matches a binding**, sitting beside the one definition
+of how a binding's code is derived — the same rule read from opposite ends,
+free to drift the day one of them normalised. **The absence carries no copy**:
+each caller keeps its own tailored sentence (*"so the change is recorded at
+HQ"*, *"so there is nothing to open a session on"*, *"so the ceiling is set at
+HQ"*, *"so the decision is recorded at HQ"*), which is D117's rule that a
+fallback is a human-written sentence, re-applied. Beside it `branchRead` returns
+**one** branch in the fan-out's own three states, so an unbound code answers
+`not_deployed` rather than `unreadable` and an unreadable branch is never a page
+of zeros.
+
+**Every action absent, not disabled.** The overlay body draws **no** button,
+link, form or input — asserted as the absence of controls rather than the
+absence of the word *disabled*, since the latter is a legitimate word elsewhere.
+A greyed control claims the action exists here and is momentarily unavailable;
+it does not exist here, which is D134's `still_an_admin` lesson one tier up.
+
+**Every figure stamped, per tile.** The branch and the read time sit on each of
+the four tiles rather than once in a header a reader scrolls past, because the
+stamp is the single thing that stops a number here being read as a platform
+total. Two clocks travel, answering different questions: `read_at` is when this
+screen was filled, `as_of` is how old the branch's own figure was when it left.
+
+**Two absences stated rather than drawn.** H12's *"Queues · as the branch sees
+them"* zone has **no producer at all** — measured, not assumed: twelve
+`HqEntrypoint` methods and fifteen `branchOps` exports, and none is a decision
+feed — so the heading is drawn and the reason stated, the shape D140, D147 and
+D151 all used. And MTD revenue is `null` **by construction** (`branchOverview`
+returns `revenue_mtd_cents: null` with its own reason), so the tile renders the
+server's sentence; the canvas draws a number there and the branch does not have
+one.
+
+**The chrome is in the SHELL and persists nothing.** `HqViewingAsBar` mounts
+above `PortalSwitcher`, on D142's rule one tier up: the ordinary admin chrome
+must never be the only frame on a view the operator is not in by default. The
+scope is plain React state in `ViewAsBranchContext` — no `localStorage`, no
+`sessionStorage`, no URL — on `AdminFrozenBar`'s stated rule, and that is
+exactly why `clearSession` needs no line for it: there is no key to remove, and
+signing out unmounts the layout.
+
+**The way IN is drawn only where there is a branch behind it** — a health card
+whose branch answered. A "view as" on an unbound or unreadable branch would open
+a screen of absences. The way OUT is the shell bar, because the overlay frames
+every page it covers rather than the one that entered it.
+
+**THE REFUSAL IS DELETED, NOT REWORDED — the ninth instance.**
+`/governance`'s `tenant_view_available` went true and its sentence now says what
+the overlay *is not* (a read, not a role; no action runs from it), because that
+is the part a reader can still get wrong. **Eight assertions across two files
+were re-aimed**, and the old guard was never wrong in kind: its failure message
+was *"a 'Return to HQ view' control appeared with **no tenant scope behind
+it**"* — conditional, not absolute. D153's whole job was to put something behind
+it, so the re-aim is structural rather than a loosening.
+
+**Two more stale guards surfaced while re-aiming those**, both legitimately
+re-pointed rather than loosened: `hq_home.test.mjs` pinned `hqOverview`'s
+zero-argument signature and is now explicit about the distinction D153 draws —
+the **tenant switcher** narrows this page over a payload it already has and must
+keep sending nothing, while the **view-as overlay** changes what the server
+reads and must send `?branch=` — and `hq_team_h9.test.mjs` pinned `hqAdmins(q)`.
+
+**And one of my own new comments broke a guard before it ran** — fourth
+instance of *a lexical scan cannot tell a rule from its violation*. The h7 test
+derives the tables `admin_security.ts` reads by matching what follows the word
+`FROM`, and a comment reading "THIS WENT FROM false TO true" added a phantom
+table called `false` to that set. The comment is worded around it and says why.
+
+**A TENTH GUARD PINNED THE SAME REFUSAL, in the worker** —
+`admin_governance.test.ts` asserted `tenant_view_available === false`, which
+`test:drift` found rather than review. And **one of my own new assertions could
+not fail**: the mount-order check read `App.jsx.indexOf('HqViewingAsBar')`,
+which finds the IMPORT line at the top of the file and is therefore before every
+mount whatever the order is. Caught by moving the bar below `PortalSwitcher` and
+watching it pass; it anchors on `<SafeMount name="HqViewingAsBar">` now.
+**Fourteen mutations applied, fourteen caught**, the last only after the
+assertion it exposed was strengthened.
+
+**And the mutation run itself demonstrated the rule it is run under.** One
+restore reached for `git checkout --` instead of the snapshot, on a file the
+snapshot did not cover (`SecurityPage.jsx`) — which silently reverted that
+file's whole D153 edit to `main` and baked the reverted page into a `docs/`
+rebuild. `test:drift` caught it, from the very guard re-aimed two paragraphs
+above. **A mutation harness must restore from a snapshot, never from git**, and
+the snapshot must cover every file the run can touch.
+
+**No migration — 269 stays free.** **Deliberately not built:** H12's frame 3
+(D152 shipped its counters), H9's Trust column (a branch hit carries no trust
+field; trust is HQ's own service over HQ's own accounts and is not a per-branch
+figure), and H13's scope chip — which D153 **unblocks**, because D150 refused it
+on the ground that *"the page decides what it fetched before the rail runs, so
+both options produce the same read"*, and under the overlay they demonstrably
+differ. `WorkerRail` has no `scope` prop today, and building it is #244's
+remainder rather than this PR's; under the overlay HQ Home therefore renders no
+rail at all, since the rail's coverage lines summarise HQ's own ledger and would
+be four false sentences beside four true figures.
+
+## D154 — H13's four rules: one built, one restated, one re-asserted, and one whose refusal D153 made false (#244)
+
+**Where H13 stood.** D150 shipped rule 3 and refused rules 1, 2 and 4, each with
+its measurement. Two of those refusals rested on the same fact — that HQ read in
+exactly one scope — and D153 removed it.
+
+| rule | before | now |
+| --- | --- | --- |
+| **1 · Scope precedes the question** | refused: *"the page decides what it fetched before the rail runs, so both options produce the same read"* | **BUILT.** Under the overlay they demonstrably differ |
+| **2 · Cost is per scope** | refused: one run, one price | **still refused**, restated on screen with its measurement |
+| **3 · Unreadable is a word in the answer** | shipped (HQ Home's branch line) | re-asserted, now on both surfaces |
+| **4 · Anything about a named branch is logged** | refused: *"logging that as a privileged branch read would write a FALSE audit entry"* | **BUILT**, narrowed to the scoped case |
+
+**Rule 1 — the chip reports, it never offers, and that is the decision.** D150
+refused a *picker*, correctly: a picker whose options cannot differ is the
+`still_an_admin` mistake D134 named. The canvas never asked for one — *"the chip
+is what the viewing-as banner set"* — so `WorkerRail` gains a `scope` prop that
+renders the scope the page **was already in**, and changing it stays the shell
+bar's job one layer up, where the mode actually lives. A chip that offered a
+scope the rail cannot change would be the refused control wearing the accepted
+one's clothes, and the guard asserts the absence of anything clickable inside it
+rather than the absence of a word.
+
+Absent draws nothing: a rail with no scope makes no claim, because "the page did
+not say" is not "platform-wide".
+
+**Rule 4 — the refusal had a premise, and it is gone.** D150's words were exact:
+the rail reads no branch, it summarises coverage lines the page rendered, so a
+row saying a branch was read would be **false**. Under D153's overlay those same
+lines *are* one branch's figures, so the canvas's rule applies on its own terms —
+*"reading a branch is a privileged act even when it is only a question."*
+
+So `POST /api/ai/workspace/explain` takes an optional `branch` and writes one
+`admin_audit_log` row — `ai_branch_readback`, the table HQ's Security feed
+already reads — **when and only when** a branch is named. An unscoped run still
+writes nothing, because it is still true that nothing privileged happened: the
+refusal is **narrowed rather than reversed**, which is the D111 pattern for a
+reason that half-expires. Three further properties are pinned because each is a
+way of getting an audit trail wrong: the row is written **before** the run (the
+reads an operator most wants to see are the refused ones, and "what was asked of
+this branch" is the question it answers, not "what came back"); the code is
+**validated** against `BRANCH_CODE_RE`, so client text cannot land in a column an
+operator reads as a branch; and the **label and the identifier are separate
+props** — `scope` is copy a person reads, `scopeBranch` is what the row is keyed
+on, and conflating them would send the words "All branches" as a branch code.
+
+**Rule 2 stays refused, and says so on the screen.** The canvas prices "All
+branches" as up to four reads and four drafts with the estimate multiplying
+before the run. This read-back performs one run at one price whatever its scope,
+because it summarises lines the page already has and does not fan out. The
+multiplier is real only once the read-back itself fans out, which is a producer
+nothing has built — so the rail states it as an absence rather than showing a
+number nothing measured.
+
+**Two things this exposed in my own work.** The `ai_workspace_explain` fixture
+**could not authenticate**, so the first version of rule 4's two negative tests
+went green while the route never ran a line — vacuous in exactly the way this
+programme keeps catching. The user lookup goes through a tagged-template helper
+returning an array rather than `.first()`, and a live `user_sessions` row is
+required as well; both were found by probing the real route rather than reasoning
+about it. And D153's own comment saying `WorkerRail` had no `scope` prop became
+false the moment this landed, so it is corrected rather than left to be cited by
+the next surface.
+
+**No migration — 269 stays free.** No new `/api/*` method: `aiWorkspaceExplain`
+gained a field. **#244 is closed.**
+
+## D155 — S11 Settings: the artboard names the wrong owner on two of its five rows (#234's remainder)
+
+**The last branch route.** `/branch/settings` was the one row still rendering
+`BranchZonePending`; S4 shipped as D140, S5+S10 as D147, S6 as D148. With this
+every row in the branch sidebar resolves to a real page.
+
+**What the artboard is for, and why a wrong owner is fatal to it.** S11's whole
+subject is ownership — *"HQ-owned rows show the request path instead of a
+disabled input: a greyed field invites a ticket asking to enable it; a chip
+saying HQ and a route saying 'escalation' answers the question on the page."* A
+row that names the wrong owner is therefore not a cosmetic error on this screen;
+it is the screen being wrong about the only thing it exists to say.
+
+**And it names the wrong owner twice.** The canvas marks **Subsidiary name** and
+**Staff & roles** as the branch's to edit. Measured:
+
+| row | canvas | measured |
+| --- | --- | --- |
+| Subsidiary name | Yours · Edit | **HQ's, twice over.** The name this deployment answers by is `BRANCH_NAME`, a Worker var set at provisioning — `routes/auth.ts` says so where it builds `/me.branch`: *"THE VARS ARE THE SOURCE, NOT THE DATABASE"* — so changing it is a redeploy, not a form. And the licence copy's `brand_name` is HQ's: there is not one `UPDATE branch_licence` in the worker, by design (D.9), so an edit would be overwritten by HQ's next push |
+| Territory | HQ · Request | ✅ |
+| Staff & roles | Yours · Edit | **SPLIT, and the editable half is not roles.** `PATCH /users/:userId/role` answers `admin_promotion_disabled` to everyone but the super admin, and `hydrateSuperAdmin` returns 0 on a branch without querying (D106) — so a branch admin can *never* change a role, and D134 made the licence the only door for granting one. What a branch does own is deactivating a **non-admin** account on its own database: `toggle-active` refuses only an admin target (D132) |
+| Brand kit | HQ · Ask | ✅ — and the canvas wrote the absence itself, which D.10 had already decided: no brand-kit store exists |
+| Licence summary | HQ · Request seats | ✅ |
+
+So the split is **four of five HQ-owned**, not the canvas's three, and the count
+on screen is derived from the rows rather than typed — the canvas typed it and
+got it wrong. The correction is stated **on the page**, not only in a comment,
+so a reader who notices the artboard says otherwise gets the reason rather than
+a discrepancy.
+
+**No field is drawn anywhere.** Every row's action is a link to somewhere that
+works, and the test asserts each destination is a registered route. A disabled
+input here would be the `still_an_admin` mistake D134 named, at its worst: on a
+page whose subject is who may act, a greyed control claims the action exists and
+is merely switched off.
+
+**Ninth producer with no reader.** `GET /api/branch/insights` ran
+`GROUP BY role`, walked the rows, and returned only the totals — the breakdown
+S11's staff line is a sentence about was computed and dropped. It is returned
+now, with `by_role_active_only` beside it so a reader is not left to infer why
+it does not match the directory. **No new `/api/*` method:** the page composes
+`myLicence()` and `branchInsights()`, both of which the branch already had.
+
+**`BranchZonePending` is deleted, and its guard re-aimed — the inverse of the
+stale refusal.** The component existed so the sidebar could match the canvas
+while the pages landed one at a time. With S11 built it has nothing to stand in
+for, and a component named Pending with nothing pending is the stale artefact
+D129 and D131 deleted in their own areas. Its guard asserted
+`uses.length >= 1` — *the scaffolding had to exist* — so it began failing the
+day its own job was finished. What is pinned now is the stronger property it was
+approaching: **every row in the branch sidebar resolves to a real page.** The
+same lesson as the eleven re-aimed refusals, arriving from the other side: a
+guard tied to an interim arrangement has to be re-aimed when the interim ends.
+
+**One of my own new assertions caught a real defect in my own code**, which is
+the point of writing them: `lic.territories?.length || 0` would have rendered
+*"0 territories held"* for a licence copy that arrived without the array — a
+claim about this branch's licence that nothing measured. Both zero-defaults are
+gone. **No migration — 269 stays free.**
+
+---
+
+## D156 — three audit tables were append-only by convention; migration 269 makes the database say so
+
+**Task #236, the first of F.8's standalone improvements.** F.8 item 1 asked for
+immutability triggers on the audit stores. Measured before building — the
+seventeenth time in this programme that measuring a filed item corrected it —
+**three of F.8's items are stale and one is genuinely unbuilt**, and the reading
+of two of them was mine to correct:
+
+| F.8 item | measured against the code, 2026-09-18 |
+| --- | --- |
+| **1 · immutability triggers** | **genuinely unbuilt.** No `BEFORE UPDATE`/`BEFORE DELETE` trigger exists on `admin_audit_log`, `impersonation_sessions` or `licence_events`. The only trigger in the repo is `sql/historical/lp_investors_seal.sql`, which is the precedent this copies |
+| 7 · `requireAdmin` on `/monitoring/throughput` | **stale.** `routes/monitoring.ts:255-258` already refuses anyone outside `admin`/`partner`/`investor`; the route's own heading calls it *"operator-visible limited stats"* and that is what it is |
+| 7 · retire the `admin_news.ts` twin | **stale, and my own first reading of it was wrong.** I reported it as carrying zero handlers. The scan matched `^r\.`; this router's const is `adminNews`. It registers **11** handlers, documented in its own header, and is mounted at `index.ts:742`. There is no twin to retire |
+| 7 · step-up on `/impersonate-sessions/:id/end` | **refused with the measurement.** The UPDATE is bounded `AND admin_user_id = ?`, so an admin can only close their own session; it is the client's best-effort close on exit, and a step-up in front of it would leave sessions permanently open — which is precisely the state D122 was written to end |
+
+### The defect: "immutable" was a description of the writers' habits
+
+HQ's Security page renders all three stores and the feed is described as
+immutable. Measured repo-wide, across `.ts`, `.py`, `.mjs`, `.js` and `.sql`:
+
+| table | INSERT | UPDATE | DELETE |
+| --- | --- | --- | --- |
+| `admin_audit_log` | **33** | **0** | **0** |
+| `licence_events` | **2** | **0** | **0** |
+| `impersonation_sessions` | **2** | **2** | **0** |
+
+So nothing in the repo rewrites an audit row. What was missing is anything that
+would **refuse** one. `frontend/test/territory_licences.test.mjs` holds a
+source-scan over `licence_events` — *"a contract dispute is exactly when an
+overwritten history is useless"* — and that scan is structurally blind to a
+`wrangler d1 execute`, a queue job reaching `DB.prepare()` directly, or any
+writer that does not live in the file it reads. **A lexical scan of the source
+cannot see a write that is not in the source.** Migration 269 moves the
+guarantee into the only place it can hold against every writer.
+
+### The third table cannot take the same seal, and that is the finding
+
+`impersonation_sessions` has exactly one legitimate mutation: stamping
+`ended_at` on a session that is still open, written by `routes/admin.ts:1699`
+(the operator's own exit) and by `util/supportSessionSweep.ts:91` (**D122**'s
+sweep, for the branch rows HQ's route can never match because
+`admin_user_id = 0`). Both are guarded `ended_at IS NULL`.
+
+**A blanket UPDATE seal here would have broken D122** and left every branch
+support session reading `not closed` on HQ's Security page for ever — the exact
+defect D122 exists to fix, reintroduced by the migration meant to strengthen the
+same table. So that table gets a `WHEN`-guarded seal instead, permitting the
+close and refusing everything else: no re-closing a session whose end time has
+already been reported to the supervised party, no re-opening one, and no
+rewriting who supported whom, when it started, or the typed reason.
+
+### The guard was half-exempt, and migration 269 is what found it
+
+`scripts/check-sql-migrations.mjs` refused this migration on
+**`ROLLBACK / END`** — on the line that closes a trigger body its own comment
+(`:27-29`) says is legal: *"`BEGIN` also opens a TRIGGER body, and a trigger is
+perfectly legal in a migration."* The carve-out was written for the opener and
+not for the closer, so a trigger was legal to open and illegal to close. It went
+unnoticed because **269 is the first migration in the repo to install one**.
+
+Fixed in this same PR, on D143's precedent (`due_at` joined `TTL_COLUMN` in the
+PR that created the column): a `stripTriggerBodies` pass excises
+`CREATE TRIGGER … END;` spans before the scan — **strictly stronger** than
+exempting the keyword, because outside a trigger `END;` stays refused, and that
+is the statement that aborted migration 200's deploy. The widening is asserted
+in both directions in `frontend/test/migration_column_shapes.test.mjs`, which
+the guard's own header names as the place for exactly that, on its stated
+principle that *a widening no test exercises is a widening nobody notices*.
+
+### Verification
+
+**15 mutations, 15 caught** — and one escaped first, on my own assertion rather
+than on the code. `M8` dropped `OR NEW.ended_at IS NULL` from the `WHEN` clause
+and nothing failed, because the re-open test acts on a **closed** row, which the
+neighbouring `OLD.ended_at IS NOT NULL` conjunct catches either way. The conjunct
+guards a different case — an update that touches an open session and leaves it
+open — and that case had no test. An assertion that cannot fail on the mutation
+it exists for is not a guard, so the test was written rather than the conjunct
+dropped.
+
+The guard is a real `node:sqlite` test applying the migration file **verbatim off
+disk**; restating the trigger bodies in the test would test the copy. Foreign
+keys stay **on**, with stub parents, so a row that could not exist in production
+cannot exist in the fixture either.
+
+**No new `/api/*` method, no route change, no SPA change.** Migration **269** is
+used; **270 is free**.
+
+**A note for anyone rebuilding a sealed table.** SQLite cannot `ALTER` a CHECK,
+so widening one means create-copy-drop-rename — which is what migration 266 did
+to `licence_events`. `DROP TABLE` drops its triggers with it. Any future rebuild
+of a table sealed here must re-run 269's statements at the end of its own
+migration, or the seal silently disappears. That is stated in the migration
+header and asserted by the guard, so a rebuild that forgets fails the build.
+
+---
+
+## D157 — D132 closed a question that only needed narrowing: an admin could not read their own record
+
+**Task #236, F.8 item 7's self-audit read.** The second of the standalone
+improvements, and the second in a row where the filed item was right and the
+measurement changed its shape.
+
+### The defect
+
+D132 raised `/analytics/audit`, `/analytics/audit/export.csv` and
+`/analytics/exports/recent` to `requireSuperAdmin`, and its reasoning is
+correct and still stands, in its own words at `monitoring_analytics.ts:233-239`:
+
+> *"this reads OTHER ADMINS' activity. The rows are `admin_audit_log a LEFT
+> JOIN users u ON u.id = a.admin_user_id`, so a plain admin was reading every
+> other admin's export history by name and email."*
+
+But that **closed** a question rather than narrowing it. *"What have I done"* is
+not *"what has my peer done"*, and after D132 an administrator could not see
+their own privileged-action record at all — on a platform whose Security page
+describes that record as the thing an operator is accountable to.
+
+**Narrowed rather than reversed**, which is the D111 pattern D154 applied to
+rule 4 one decision earlier. The three refusals D132 made are untouched, and
+`self_audit_d157.test.ts` asserts all three still hold rather than assuming it.
+
+### Why `requireAdmin` is the right gate, from this file's own rule
+
+The file's header already wrote the test, before this route existed:
+
+> *"a route that reaches `admin_audit_log a LEFT JOIN users u` is a cross-admin
+> read whatever it renders, and gating some of them is gating none of them.
+> Keep new routes here on `requireAdmin` unless they cross that line too."*
+
+`GET /analytics/audit/mine` does not cross it. There is **no join to `users`**,
+because the caller is the only subject and there is no other person's name to
+render. And the subject is **not an input**: `admin_user_id` is bound from
+`adminUser.id` and the query string is never consulted for it, so there is no
+parameter that could name somebody else. That is the **structural** form of
+D132's rule rather than a validated form of it — nothing to validate, because
+nothing is read.
+
+So the header's count stays **three**, and the header now says so explicitly.
+
+### Three things the code decided against the obvious reading
+
+1. **No action filter, on `admin_security.ts`'s precedent rather than
+   `/audit`'s.** `/audit` admits `ALLOWED_ACTIONS = ['analytics_export',
+   'subscription_plan_update']` — two of the many actions written to this table.
+   HQ's own feed deliberately admits all of them, and `hq_security.test.mjs:130`
+   pins exactly that: *"the audit zone reads every action, not the two the
+   monitoring read allows."* An administrator's own record is the same kind of
+   thing: showing them two of their actions and silently dropping the rest
+   would be a feed that is wrong about the one subject it has. The guard asserts
+   the difference **both ways** — `/audit/mine` has no filter and `/audit` still
+   does — so it is a real divergence between two handlers rather than a property
+   nothing could break.
+2. **A tenth producer with no reader, at the index level.**
+   `idx_admin_audit_user_ts(admin_user_id, exported_at DESC)` is created by
+   `ensureAdminAuditLogTable` and **no read uses its leading column** — both
+   existing reads pass `adminUserId: null` into `buildAuditWhere`. The index was
+   built for exactly this query and had no caller. The `ORDER BY` matches its
+   second column so it applies whole, and that is asserted.
+3. **The page states what it does NOT show.** A feed of privileged actions that
+   does not say whose it is invites being read as the platform's, which is the
+   claim D132 closed. The scope is **echoed by the server** and rendered, and
+   the page says in one line that another administrator's record is not readable
+   here and never was for this tier — so a reader who wonders gets the reason
+   rather than a silence.
+
+### The unreadable state is not the empty one
+
+`admin_audit_log` is lazily bootstrapped, so its absence is a state this read can
+genuinely meet — the #204 class, one surface up. A failed read renders its own
+reason and the sentence *"This is not a claim that you have taken no privileged
+actions"*; an empty one says nothing was recorded. Two different states, drawn
+differently, which is this programme's most repeated correction.
+
+### One correction the guard made to itself, before it ran
+
+The first draft asserted the cross-admin rule by **counting two totals** — join
+statements against `requireSuperAdmin` calls — and they are not one to one:
+each gated handler runs **two** joined queries, items and count, so the
+arithmetic was wrong (5 against 3) while the rule it meant was right. It now
+**sweeps every handler in the file** and asserts that any handler joining
+`users` gates on the elevation, which says the actual thing and catches a fourth
+added later. A second draft then built its handler slicer as a `new RegExp` from
+data — the shape Semgrep has flagged three times in this repo — and took the
+literal form instead, which also fixed a real hole: the slicer matched `r.get('`
+only and silently skipped the file's one POST handler.
+
+### Verification
+
+`test:drift` exit 0 from a redirected log. **14 mutations, 14 caught.** No
+migration — **270 stays free.** One new `/api/*` method with its route in the
+same commit, so `check-api-drift` is satisfied. `frontend/src` moves, so `docs/`
+is rebuilt by the root build.
+
+---
+
+## D158 — the guardrail category was computed on every guarded turn and thrown away
+
+**Task #276, filed from D152's own research and built here.** The third of
+#236's standalone improvements, after D156 and D157.
+
+### The defect
+
+`services/advisor/guardrails.ts:122-138` — `classifyInput` runs llama-guard and
+parses its reply into `{ blocked, score, category }`, where `category` is the
+**S-code naming which rule fired** (`out.split('\n')[1]`, e.g. `s1`, `s10`), or
+one of `empty` / `safe` / `router_failed` / `error`.
+
+Measured repo-wide before anything was written:
+
+| where the category went | measured |
+| --- | --- |
+| `routes/advisor.ts:891`, `:1895` | the 422 response body — **the only two consumers** |
+| `TurnAudit` | **no field** |
+| `advisor_turn_audit`, migration 043 **and** the runtime bootstrap | **no column, in either** |
+| `guardrail_category` / `refusal_category` in any migration | **zero** |
+
+So **which rule fired was unrecoverable the moment the response was sent.** HQ
+could count *that* a guardrail blocked a turn — D152 shipped those counters —
+and could never say *what for*, on the one screen whose subject is AI safety.
+**Eleventh producer-with-no-store** in this programme.
+
+### The twelfth stale refusal, and the first this codebase filed against itself
+
+`admin_security.ts`'s `AI_SAFETY_NOT_COUNTED` carried a row reading *"Which
+guardrail rule fired … no store has a column for it"*, rendered on HQ's Security
+page. D152 wrote that row from this very measurement. **D158 makes it false**,
+so it is **removed rather than reworded**, and both guards pinning it were
+re-aimed — one of which stated the premise outright: *"a row carrying an `n`
+here would be a per-category count invented for a column no table has."*
+Migration 270 gives the table that column.
+
+Every previous instance of this class was a refusal that outlived a fact
+somebody else had changed. This is the first where the codebase filed the gap,
+and the filing is what got it closed.
+
+### The trap, and it is the #183/#202 class
+
+`advisor_turn_audit` has **two definitions**: migration 043's lineage and
+`ensureAuditSchema`'s `CREATE TABLE IF NOT EXISTS`. **A CREATE-IF-NOT-EXISTS
+cannot add a column to a table that already exists**, so migration 270 alone
+would have left the bootstrap stale and the resulting shape would depend on
+which ran first — the `metrics_snapshots` collision that cost two PRs to unwind.
+Both move in the same commit: the bootstrap's `CREATE` gains the column *and* a
+PRAGMA-guarded `ADD COLUMN`, copying `ensureGuardrailColumns` in that same file
+rather than inventing an idiom. **A test builds both shapes and asserts their
+column sets are equal** — the property nobody had been checking.
+
+### Three things decided against the obvious reading
+
+1. **The field is REQUIRED on `TurnAudit`, not optional.** There are **seventeen**
+   `writeTurnAudit` call sites; **seven** have a `safety` result in scope and ten
+   do not. An optional field would let an eighteenth be added with the category
+   silently missing. Required, **the typechecker refuses the call** — a guard
+   that cannot be forgotten to run. The rule it enforces is *the category travels
+   with the score*, asserted in both directions.
+2. **`rules` and `states` are returned apart.** An S-code is a rule that fired;
+   `safe` / `empty` / `router_failed` / `error` describe the classification
+   itself. Mixing them would put *"the router failed"* in a list headed *"what
+   tripped the guard"* — and a router failure is the guard **not running**.
+3. **Nothing is backfilled, and `unclassified` is its own figure.** Production
+   holds **121 rows, 8 carrying a refusal**, none with a category because none
+   was stored. Those read **unknown**; a null rendered as `safe` would be a
+   verdict nothing reached, which is the defect class this programme keeps
+   deleting. The page says so in words rather than leaving a silent gap between
+   the breakdown and `blocked`.
+
+### Deliberately not done
+
+- **The raw model output is not stored.** `classifyInput` already narrows it to a
+  short token; persisting the completion would put user-adjacent text in an audit
+  table, which is the opposite of what redaction exists for.
+- **Not split by branch.** That absence keeps its own row: neither
+  `ai_usage_logs` nor `advisor_turn_audit` carries a branch column, and this
+  change does not add one.
+
+### Verification
+
+`test:drift` exit 0 from a redirected log. **12 mutations, 12 caught** — including
+a migration that backfills existing rows as `safe`, a bootstrap that loses the
+repairing `ALTER`, and putting the stale refusal row back. Real `node:sqlite`
+fixtures, applying migration 270 **verbatim off disk** against a table built in
+its pre-270 shape. Migration **270** is used; **271 is free**.
+
+---
+
+## D159
+
+**One `logAdminAction`, and the two copies that dropped the audit write.**
+(F.8 item 7's "one `logAdminAction`", task #278)
+
+### The defect
+
+`logAdminAction` was declared **four times** with the same five-parameter
+signature, and the four did not do the same thing:
+
+| copy | writes |
+| --- | --- |
+| `routes/admin_exploring.ts:83` | `activity_logs` **+** `admin_audit_log` |
+| `routes/admin_partners.ts:46` | `activity_logs` **+** `admin_audit_log` |
+| `routes/admin_advisor_audit.ts:37` | `activity_logs` **only** |
+| `services/matchAudit.ts` | `activity_logs` **only** |
+
+`matchAudit.ts`'s own header said it *"mirrors admin_advisor_audit.ts
+::logAdminAction (same columns)"*. That was true, and it is exactly how it
+inherited the gap.
+
+**What it cost is not bookkeeping.** HQ's H7 governance feed
+(`routes/admin_security.ts` `GET /governance`) unions four stores, and an
+action reaches it two ways only: from `admin_audit_log`, which
+`FEED_AUDIT_ALL_SQL` reads **unfiltered**, or from `activity_logs` — but that
+arm is `WHERE l.action IN (?,?,?,?,?,?,?,?)` against `ACTOR_SIDE_ACTIONS`, a
+fixed list of eight (`role_changed`, `user_toggled`, four KYC actions, two
+contract actions). So **four privileged admin actions reached neither arm**:
+
+- `advisor_shadow_cleared` — an admin clears a user's AI-safety shadow flag
+- `advisor_locked` / `advisor_unlocked` — an admin locks or unlocks an advisor
+- `match_list_generated` — an admin generates a match list over people
+
+They were invisible on the one screen whose entire subject is privileged
+actions, and `/security/overview`'s `audit.total` undercounted by exactly them.
+**D156 sealed `admin_audit_log` against UPDATE and DELETE three days earlier;
+a row that never arrives gets nothing from that seal.**
+
+### What lands
+
+`cloudflare-worker/src/services/adminAudit.ts` — one exported helper, in
+`services/` and not `util/` on `util/README.md`'s own line about domain
+knowledge. The four call-site files import it and delete their copies. It
+imports `ensureAdminAuditLogTable` from `routes/admin.ts`; a service reaching
+into routes has **ten precedents** here (`services/catalog.ts`,
+`services/promos.ts` → `routes/billing`) and `routes/admin.ts` imports neither
+audit service, so there is no cycle.
+
+**The bootstrap moves in with it.** The two copies that did write to
+`admin_audit_log` swallowed failure under a bare catch reading *"admin_audit_log
+may not exist in some envs"* — while `ensureAdminAuditLogTable` exists precisely
+so that it does, and nine other writers call it first. The catch was hiding a
+condition its own neighbour already fixes. It is kept only for what is
+genuinely best-effort: an audit write must never be the reason an admin action
+fails **after it has happened**.
+
+### The correction the build made, which is the sharper half
+
+The plan said the key naming a subject was `target_user_id` **unanimously**.
+Measured across all eleven call sites, five name a person and it is
+`target_user_id` in **four of the five**. The fifth,
+`partner_firm_link_set` (`routes/admin_partners.ts`), passed **`user_id`** — so
+attaching a person to a partner firm would have been recorded with **no subject
+at all**: the quiet version of this same bug, surviving the fix for it. D159
+renames that one key, and a guard pins the spelling, because a convention that
+is only four-fifths true is not a convention — it is a coincidence with a
+counter-example already in the tree. Nothing parses `admin_audit_log.filters_json`
+by key (the parsers are all on the unrelated `publications` table), checked
+before renaming.
+
+**The target is filled at all**, which neither surviving copy did: they bound
+three columns, so every row they wrote had a blank Target on a feed that
+`LEFT JOIN users t ON t.id = a.viewed_user_id` to render one. Validation mirrors
+the callers' own (`Number.isFinite(uid) && uid > 0`) rather than being stricter
+— a helper that silently dropped a target its caller had already validated would
+be this same bug again, one layer down.
+
+### Verification
+
+`test:drift` exit 0 read as the exit code from a redirected log. **No migration
+— 271 stays free.** No new `/api/*` method, no `frontend/src` change, so `docs/`
+does not move. **9 mutations, 9 caught**, one only after the mutation itself was
+corrected: the first M6 *added* a second audit write instead of collapsing the
+two try blocks, so the row still landed and the assertion correctly still
+passed — the mutation was wrong, not the guard.
+
+**Two of my own assertions were wrong before they ran, and both are recorded
+rather than quietly fixed.** The fixture reported *"activity_logs did not
+receive the action"* because `activity_logs` carries
+`project_id INTEGER REFERENCES projects(id)` and the fixture had no `projects`
+stub — a failure the helper **swallows by design**, so the test was reporting a
+defect that was its own. And the convention scan used a 400-character window
+that reached past each call into the `return c.json({ ok: true, user_id: uid })`
+below it, reporting four violations that were not violations — **the same
+overreach as D147's**, now bounded by matching parentheses instead, with a
+mutation that reverts it to the window and must fail.
+
+---
+
+## D160
+
+**A raw ISO bind met a bare timestamp comparison, and the window lost a day.**
+(#253 — D125's timestamp audit, second half: the bound-parameter blind spot)
+
+### The defect
+
+`scripts/check-timestamp-comparisons.mjs` watches for a bare TTL column compared
+against the clock, and its own header states what it cannot see:
+
+> *"A column compared against a BOUND PARAMETER (`created_at >= ?`) is the same
+> defect and is invisible here, because the format lives at the bind site. That
+> is how `rpc/branchOps.ts` came to drop every row dated on a quarter's first
+> day. Finding those needs the bind traced, which is a different tool."*
+
+Traced. SQLite compares TEXT lexically, and three bind shapes reach these
+queries — only one is wrong:
+
+| bind | value | against `datetime('now')` storage |
+| --- | --- | --- |
+| `.toISOString()` | `2026-08-19T12:44:00.000Z` | ❌ **wrong** |
+| `…slice(0,19).replace('T',' ')` | `2026-08-19 12:44:00` | ✅ exact |
+| `…slice(0,10)` | `2026-08-19` | ✅ correct by prefix alignment |
+
+At index 10 the raw ISO has `'T'` (0x54) where the column has `' '` (0x20), so
+**every row dated on the bind's own date sorts below it and is dropped**, while
+later dates pass. A thirty-day window quietly returns twenty-nine.
+
+`market_intel.ts` already documented this hazard and already fixed it in its
+Citations query — `WHERE datetime(created_at) >= datetime(?)`, with a comment
+spelling out the `T` separator. Three queries 650 lines below it did not.
+
+### What the sweep corrected about the filing
+
+The plan named three sites. Measured, the picture is both narrower and wider:
+
+- **Narrower.** Of 47 grep candidates, most are correct. `aiRouter.ts` (D152's
+  guardrail counters and D158's category breakdown) and `aiSpend.ts` normalise
+  with `.replace('T', ' ')`; `admin_revenue.ts`'s `quarterOf` emits bare dates,
+  which are correct by prefix alignment; and `branchOps.ts:553` is a **comment**,
+  not a comparison — the lexical-scan trap again.
+- **Wider.** The new guard found **seven more** the manual sampling missed, in
+  `advisors.ts`, `portfolio.ts`, `wellbeing.ts`, `market_intel/extractors` and
+  `xAggregator.ts`. That it found defects its author had not is the strongest
+  evidence it works.
+
+Every `created_at` in the schema is SQL-format — **308 columns** default to
+`datetime('now')` or `CURRENT_TIMESTAMP`, and **zero** INSERTs write one from a
+JS ISO string — so all of them are real.
+
+### What lands
+
+24 comparisons across six files wrapped as `datetime(col) … datetime(?)`, and
+`cloudflare-worker/test/iso_bind_comparisons_d160.test.ts`.
+
+**It deliberately does not require every comparison to be wrapped.** 46 sites
+bind against a bare timestamp column and all but the ten fixed here are correct.
+A blanket rule would mean rewriting 36 working queries — churn on correct code,
+and a diff nobody can review for the lines that matter. The rule fires only where
+a **raw ISO bind** and a **bare comparison** meet.
+
+The cost of wrapping is that an index on the column cannot serve the predicate.
+Accepted, and stated rather than discovered: these are analytics reads over small
+tables, and the Citations query set that precedent already.
+
+### The guard corrected itself before it shipped
+
+Its first draft carried a `(?<!datetime\()` lookbehind — *skip it if the COLUMN
+is wrapped* — which is the wrong test, and would have waved through a real
+defect. **The placeholder side is what decides it**: `col >= datetime(?)` is
+correct even with a raw ISO bind, because `datetime()` normalises the bind to the
+column's format; `datetime(col) >= ?` is still broken, because the left becomes
+SQL format while the right stays ISO. The lookbehind is gone and an assertion
+pins the half-wrapped form as a defect.
+
+### Verification
+
+`test:drift` exit 0 from a redirected log — frontend 2703, worker 3480 (3477 pass
++ the 3 pre-existing environment-gated skips), retention 35, zero `not ok`. Worker
+typecheck, `check-sql-prepare`, `check-sqlite-dialect` and
+`check-timestamp-comparisons` exit 0. **3 mutations, 3 caught** — reverting a fix,
+blinding the classifier so its assertion cannot fail, and restoring the bad
+lookbehind. No migration; **271 stays free**. No `frontend/src` change.
+
+---
+
+## D161
+
+**The branch dimension D105 justified sharing a dataset for was never written,
+and the config var that would have let a preview read its own writes had no
+reader.** (#277 — D105's half-built premise)
+
+### The defect, both halves
+
+**D105 traded isolation for a capability that did not exist.** Every other
+Cloudflare resource is per branch; the Analytics Engine dataset alone is
+shared, and the reason given was that *"One dataset indexed by `BRANCH_CODE` is
+what makes those two numbers possible without a cross-branch read."* Measured:
+the repo's only `writeDataPoint` (`middleware/observability.ts`) wrote
+`indexes: [path]` and carried **no branch code in any index, blob or double**,
+and the reader (`services/analyticsReports.ts`) hardcoded `FROM
+studioos_metrics` with **no branch dimension at all**. So the write-side half
+of D105's own justification was never built and every per-branch AE query
+returned nothing — a decision record stating a capability that did not exist,
+which is the class this programme has now deleted a dozen times.
+
+**And `AE_DATASET` was a producer with no reader, which already cost
+something.** The generated branch configs have written it since D105, whose own
+comment says it exists so *"the SQL-API reader"* stops *"hardcoding HQ's"* —
+and `AE_DATASET` had **zero hits anywhere in `cloudflare-worker/`**, the `Env`
+type included. Meanwhile `[env.preview]` writes `studioos_metrics_preview`
+(`wrangler.toml`) while the reader queried `studioos_metrics`, so **a preview
+deployment's AE reads could not see its own writes** — invisible, because a
+failed read returns `null` and silently falls back to D1 `system_metrics`.
+
+### A blob, not an index — and D105's sentence is corrected rather than satisfied
+
+Three reasons, in order:
+
+1. **The first index is the sampling key**, and the sampling key is the route.
+   Making the branch an index changes it for every request on the platform, so
+   samples either side of the change stop being comparable and route-level
+   sampling fairness — the reason `path` is the key — is lost.
+2. **The blob slots are a stated contract** (*"must match SQL reads in
+   analyticsReports.ts"*), so appending after the last used slot breaks nothing.
+   blob1–blob5 are unchanged; blob6 is new.
+3. **The decisive one.** `AnalyticsEngineDataPoint.indexes` is typed
+   `((ArrayBuffer | string) | null)[]` — an **unbounded** array — so a second
+   index *typechecks*, and the write site swallows failures with a
+   `console.warn`. If the runtime rejects a second index the failure is silent
+   and unverifiable from here. **The blob design does not depend on that fact,
+   which is the point of choosing it.**
+
+**How many indexes AE accepts per data point could not be read from this
+environment**, in six attempts across two channels: the Cloudflare docs MCP
+returns empty for every phrasing tried, and `developers.cloudflare.com` is
+`EGRESS_BLOCKED` by this environment's proxy. Recorded as unreadable rather
+than asserted from memory.
+
+So D105's paragraph now says what is true — the dataset is shared and
+**filterable** by branch, not indexed by it — corrected in **all three** places
+that restated the false claim (`DECISIONS.md`, `scripts/lib/branchConfig.mjs`,
+`scripts/lib/branchConfig.test.mjs`). Fixing one and leaving two is exactly how
+this class survives.
+
+### The gate is the design, not a detail of it
+
+`/monitoring/analytics/technical` and `/management` are **`requireAdmin`**, and
+on this platform's tier model a plain admin **is** a branch admin. Today those
+routes return platform-wide **aggregates with no branch attribution**, which a
+branch admin may defensibly see. Letting the branch dimension flow through them
+would turn an aggregate into **per-branch attribution** — every branch admin
+reading every other branch's traffic, the exact isolation the branch programme
+exists to create. That file's header already states D133's rule: *a route that
+reaches a cross-admin read is one whatever it renders, and gating some of them
+is gating none of them.*
+
+So the rule is narrow and costs nothing:
+
+> **The dimension is WRITTEN on every request. The per-branch SPLIT is
+> super-admin-only. The existing platform-wide aggregate on `requireAdmin` does
+> not change at all.**
+
+Zero behaviour change for every admin who is not the holder is the property
+that makes this safe to ship ahead of the first branch being provisioned.
+
+### The throw on the hot path, reasoned about rather than inherited
+
+`branchOf(env)` **throws** on a malformed `BRANCH_CODE`, deliberately
+(`util/branch.ts`): *"A branch Worker that quietly ran as HQ would serve HQ's
+console over branch data, and every request failing loudly is the safer of the
+two."* That is a throw on every request's metrics write, so it needed an
+argument rather than a habit. It is safe here structurally: the AE write
+already sits inside its own `try/catch` that warns and continues, so a
+malformed code costs **a dropped metric, not a failed request** — correct,
+because such a deployment is already failing loudly at boot
+(`assertBranchAppUrl`) and on every authed path. `env.BRANCH_CODE` is
+deliberately **not** read raw, which would write a garbage dimension verbatim.
+
+### What lands
+
+| path | change |
+| --- | --- |
+| `middleware/observability.ts` | the one `writeDataPoint` appends `branchOf(env) \|\| 'hq'` as **blob6**; `indexes` untouched. Also drops an `as unknown as` cast working around `Env.ANALYTICS`, which is properly declared, and makes the `MiddlewareHandler` import type-only — the file was the only middleware importing it as a value, and that is what kept the module from loading under the test runner |
+| `types.ts` | `Env` gains **`AE_DATASET`**, defaulting to `studioos_metrics` so HQ is unchanged |
+| `services/analyticsReports.ts` | `aeDataset(env)` gives the var its reader; `aeSql(env, sqlText)` consolidates the one fetch shape; **`loadTrafficByBranch`** is the split, returning `available/reason/as_of/rows` |
+| `routes/monitoring_analytics.ts` | `/traffic-by-branch` on **`requireSuperAdmin`**. `/technical` and `/management` unchanged, with the reason stated in place |
+| `frontend/src/lib/api.js`, `pages/hq/PlatformPage.jsx` | one method and its HQ consumer, in the same commit so `check-api-drift` is satisfied |
+| `test/ae_branch_dimension_d161.test.ts` | new |
+
+**No migration — 271 stays free.** No new store.
+
+### Two states that must not render alike
+
+An empty split has two entirely different causes — **no branch has traffic**,
+or **AE could not be read at all** — and `loadTrafficByBranch` returns them
+differently (`available: true` with no rows, against `available: false` with a
+reason naming the store). The surface renders them as different sentences,
+neither of them a zero. That is the rule this programme has applied since D107
+and D129, and the reason the unreadable path is exercised by three separate
+fixtures rather than assumed.
+
+### An optional branch predicate was written first, and deleted before it shipped
+
+`loadTechnicalFromAnalyticsEngine` briefly gained an optional branch filter.
+Nothing would have called it — the split answers the per-branch question by
+**grouping**, not filtering — so it was a producer with no reader, which is the
+shape this entry exists to correct. Removing it also deleted the only path by
+which a caller-supplied value could reach AE SQL, and that matters: the AE SQL
+API takes `text/plain` and has **no binding mechanism at all**, so every value
+in those queries is interpolated. The interpolation surface is now enumerated
+and pinned by a test — only the configured dataset name and the parsed range
+reach it — and `BRANCH_CODE_RE` is shown to **refuse** a quote-bearing value
+rather than escape it.
+
+### Verification
+
+`test:drift` exit 0 read as the exit code from a redirected log. **13
+mutations, 13 caught** — one only after the assertion it exposed was
+strengthened. On the worker: the branch tidied into `indexes`; the branch
+written into blob1; `env.BRANCH_CODE` read raw; the split served on
+`requireAdmin` (the one this change exists for); the dataset hardcoded back
+over `AE_DATASET`; the branch dimension added to the `requireAdmin` aggregate;
+an unreadable store rendered as an available empty list; a caller-influenced
+value interpolated into the `text/plain` SQL. On the surface: the unreadable
+state drawn as a zero; the empty-but-readable sentence deleted; the one-row
+clarification dropped; the zone removed; a `?branch=` grown on the
+`requireAdmin` method. Every anchor asserted unique before it was applied,
+every mutation proved to have changed bytes, every restore from a **snapshot**
+and verified byte-identical.
+
+**The one escape, and it is the D147 lesson again.** "The empty-but-readable
+sentence deleted" passed at first, because the Deployments zone four hundred
+lines up renders *"an empty registry, not an unreadable one"* — so a whole-file
+match on that phrase held with this zone's own sentence gone outright. An
+assertion a NEIGHBOURING zone can satisfy is not an assertion about this one.
+The check is now bounded at both ends to the traffic zone's own markup, and the
+mutation is caught.
+
+**The absent-branch case is exercised, not assumed**, and it is two cases: with
+zero branches provisioned every row carries `hq` and the split renders exactly
+one group, and separately AE may be unreadable in three distinct ways. **A
+preview-shaped fixture proves the dataset fix** — `AE_DATASET` pointed at
+`studioos_metrics_preview`, with both AE queries asserted to name it and to
+carry no trace of the hardcoded name.
+
+---
+
+## D162
+
+**The bound-parameter rule stops being a typed list of six, and four
+entitlement reads stop losing a day.** (#253 — D125's timestamp audit, the
+remainder D160 left)
+
+### What D160 left, and why a list was always going to leave it
+
+D160 closed D125's stated blind spot — a raw `.toISOString()` bind meeting a
+bare timestamp comparison, which drops every row dated on the bind's own date,
+because SQLite compares TEXT lexically and index 10 is `'T'` (0x54) against
+`' '` (0x20). It watched **six column names, chosen by hand**. Measured against
+the wider vocabulary those six miss **four live sites in three files**, every
+one of them money- or entitlement-adjacent:
+
+| site | column | what it did |
+| --- | --- | --- |
+| `routes/news.ts` | `article_submission_log.submitted_at` | the three-per-week submission limit **under-counted**, so an author whose earlier submission fell on the window's own date got a fourth |
+| `routes/wellbeing.ts` (the count) | `expert_profile_views.viewed_at` | the free-tier monthly cap **under-counted**, so views taken on the 1st were free |
+| `routes/wellbeing.ts` (the already-seen check) | the same column | a founder who viewed an expert **on the 1st** was told they had not, and was charged a second unit for it |
+| `services/xAggregator.ts` | `market_intel_indexes.computed_at` | `safeHasMIChart` answered **false** for a chart computed on the period's first day — the same wrong answer its own header records the previous version always giving |
+
+**The two wellbeing sites pull OPPOSITE ways on the same day**, which is why
+the class is worth stating rather than assuming understood. On the 1st of a
+month the paid cap both **leaks** (the count misses views, so the quota reads
+low) and **over-charges** (the already-seen check misses the prior view, so one
+expert costs two units) — on one request path, from one date boundary. Fixing
+either alone leaves the cap wrong in the other direction.
+
+### The rule, and it needs no list
+
+The defect is not "a raw ISO bind". It is a raw ISO bind meeting a column
+**SQLite itself wrote**. A column declared `DEFAULT (datetime('now'))` or
+`DEFAULT CURRENT_TIMESTAMP` holds `YYYY-MM-DD HH:MM:SS`; a column with no
+default holds whatever JavaScript bound, which in this codebase is ISO — and
+ISO against ISO is consistent. So the schema already knows which is which, and
+`test/_sqlFormatColumns.mjs` asks it instead of curating a list.
+
+It separates the seven measured candidates perfectly. The three with a clock
+default are exactly the three broken columns; the four without are exactly the
+four struck — `advisor_office_hour_slots.starts_at` (no default, bound verbatim
+from the request), `legal_obligations.expires_at` and `pairwise_ndas.valid_until`
+(written `.toISOString()`; **D125 struck these explicitly**), and
+`users.mi_digest_paused_until`, whose own comment already documented it as ISO
+and said comparing as strings is safe.
+
+### Three things proving the subsumption found, none of which a list would have
+
+D160's scan stays, as a backstop against the derivation silently returning
+nothing — and proving it is subsumed rather than claiming it turned up all
+three of these:
+
+1. **`paid_at` has no DDL default and IS SQL-format**, set with
+   `datetime('now')` or `CURRENT_TIMESTAMP` at four sites
+   (`services/incorporations.ts` ×2, `services/orders.ts`, `routes/network.ts`).
+   A schema-only rule would have called a money column clear. The derivation
+   reads the code's clock writes as well.
+2. **The clock-write rule had to be TABLE-AWARE, and its first draft was not.**
+   Attributing a clock write to every table at once looked like the safe
+   direction — err toward flagging — and it is not: `expires_at` is written
+   with the clock on one table and with `.toISOString()` on `legal_obligations`,
+   so the table-agnostic set demanded a rewrite of the very query D125 examined
+   and struck. **A false positive here costs churn on correct code, which D125
+   refused by name.**
+3. **Two of D160's six names are declared by nothing at all.** `occurred_at`
+   has zero occurrences in the baseline, in any migration and in any runtime
+   bootstrap; a standalone `recorded_at` likewise (the only such text in the
+   tree is `outcome_recorded_at`, a different column its own word boundary
+   correctly does not match). A hand list can carry a name nothing has ever
+   declared and never fail for it — which is the whole argument, arrived at by
+   measurement rather than by preference.
+
+### What lands
+
+| path | change |
+| --- | --- |
+| `routes/news.ts`, `routes/wellbeing.ts` ×2, `services/xAggregator.ts` | four comparisons wrapped `datetime(col) >= datetime(?)` |
+| `test/_sqlFormatColumns.mjs` | **new** — the derivation, plus `rawIsoNames` lifted out of D160's test file so one definition serves both and importing one test file no longer re-registers its tests inside another's run |
+| `test/iso_bind_comparisons_d160.test.ts` | imports `rawIsoNames` instead of declaring it; its scan and its three unit tests are otherwise untouched |
+| `test/iso_bind_sql_columns_d162.test.ts` | **new** |
+
+**No migration — 271 stays free.** No `frontend/src` change, so no `docs/`
+rebuild. Wrapping costs the column's index for that predicate, accepted for the
+reason D160 accepted it and stated rather than discovered: these are small
+tables read once per request, and a correct count beats a fast wrong one.
+
+### Verification
+
+`test:drift` exit 0 read as the exit code from a redirected log. **7 mutations,
+7 caught**: each of the four comparisons un-wrapped; the half-wrapped form (a
+normalised column against a raw ISO bind, which is still the defect); the DDL
+derivation made to return nothing, which must fail the subsumption assertion
+rather than let the sweep pass **vacuously**; and the clock-write rule made
+table-agnostic again, which must fail the assertion that one table's clock
+write cannot make another table's column look SQL-format. Every anchor asserted
+unique before it was applied, every mutation proved to have changed bytes,
+every restore from a **snapshot** and verified byte-identical.

@@ -23,7 +23,7 @@ import { mapError } from './_t13t14t15_helpers';
 import {
   answerEscalation, listEscalations, ESCALATION_KINDS, ESCALATION_STATUSES,
 } from '../rpc/hqOps';
-import { branchBindings } from '../services/branches';
+import { branchByCode } from '../services/branches';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -97,7 +97,7 @@ r.patch('/escalations/:uid', async (c) => {
       reason: `No branch Worker is bound for ${decided.row.branch_code}, so the decision is recorded `
         + 'at HQ and will reach the branch when a binding exists.',
     };
-    const binding = branchBindings(c.env).find((x) => x.code === decided.row.branch_code);
+    const binding = branchByCode(c.env, decided.row.branch_code);
     if (binding) {
       try {
         const res = await (binding.stub as any).applyEscalationAnswer({

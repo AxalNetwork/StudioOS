@@ -80,13 +80,35 @@ test('the scope caption names a territory only where there is one', () => {
   assert.match(PAGE, /import \{ branchOfUser \} from '\.\.\/lib\/shellRole'/);
 });
 
-test('the api method keeps its no-argument form, because a live caller uses it', () => {
-  // `SuperAdminHolders.jsx` calls `adminListUsers()` and reads a flat array.
-  // Widening the signature must not have made the envelope mandatory.
+test('the api method keeps its no-argument form, and the envelope stays opt-in', () => {
+  // Widening the signature must not have made the envelope mandatory: the flat
+  // array is a published response shape, and removing one is a breaking change
+  // for anything outside this repo.
   assert.match(API, /adminListUsers: \(opts = \{\}\) =>/, 'the method lost its default argument');
   assert.match(API, /if \(opts\.q\) qs\.set\('q'/);
   assert.match(API, /if \(opts\.envelope\) qs\.set\('envelope', '1'\)/);
-  const holders = codeOnlyJsx(read('frontend/src/pages/hq/SuperAdminHolders.jsx'));
-  assert.match(holders, /api\.adminListUsers\(\)/,
-    'the flat-array caller changed — if it now passes an envelope, this test is what should have told you');
+
+  // D138 — THIS HALF WAS RE-POINTED RATHER THAN DELETED, and the reason is the
+  // finding. It used to read: "`SuperAdminHolders.jsx` calls `adminListUsers()`
+  // and reads a flat array", asserting that caller stayed. It does not any
+  // more, ON PURPOSE: reading the flat form meant reading the newest 100
+  // accounts and filtering them to `role === 'admin'` in the browser, and
+  // admins are among the OLDEST accounts — so its grant picker silently omitted
+  // them and the elevation could not be handed over. It reads
+  // `GET /admin/hq/admins`, which filters on role server-side with no LIMIT.
+  //
+  // What survives is the property this test was actually written for: EVERY
+  // caller in the SPA asks for the envelope, so nothing is reading a page as
+  // though it were a whole. That is the stronger assertion, and it is what
+  // `hq_team_h9.test.mjs` also guards from the other side.
+  const callers = [
+    'frontend/src/pages/AdminPage.jsx',
+    'frontend/src/pages/branch/BranchAccounts.jsx',
+    'frontend/src/pages/hq/SuperAdminHolders.jsx',
+  ];
+  for (const file of callers) {
+    const code = codeOnlyJsx(read(file));
+    assert.ok(!/api\.adminListUsers\(\s*\)/.test(code),
+      `${file} reads the newest-100 page as though it were the directory`);
+  }
 });
