@@ -262,16 +262,6 @@ const Avatar: React.FC<{
   );
 };
 
-// Progress / funnel bar: a track with a filled portion.
-const Bar: React.FC<{ l: number; t: number; w: number; h: number; pct: number; fill: string; track?: string }> = ({
-  l, t, w, h, pct, fill, track = K.panel2,
-}) => (
-  <>
-    <div style={{ position: 'absolute', left: inch(l), top: inch(t), width: inch(w), height: inch(h), background: track, borderRadius: inch(h / 2) }} />
-    <div style={{ position: 'absolute', left: inch(l), top: inch(t), width: inch(w * Math.max(0, Math.min(1, pct))), height: inch(h), background: fill, borderRadius: inch(h / 2) }} />
-  </>
-);
-
 const StatusDot: React.FC<{ status: Status; d: number }> = ({ status, d }) => {
   const px = inch(d);
   if (status === 'done') {
