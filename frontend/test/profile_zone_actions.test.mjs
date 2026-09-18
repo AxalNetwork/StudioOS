@@ -1447,7 +1447,6 @@ test('an action that performs nothing is drawn disabled, and never clickable', (
   // really about: THE CONTROL MUST NOT BE CLICKABLE. A dead button that
   // responds to a click teaches the reader it is dead by wasting the click.
   const builder = read('frontend/src/workspaces/zoneActionBuilder.js');
-  const bind = builder.slice(builder.indexOf('export function makeZoneActions'));
   // Through `codeOnly`, because the branch's own comment explains that it
   // carries no `onClick` — a raw-source check fails on the explanation.
   const code = codeOnly(builder);
