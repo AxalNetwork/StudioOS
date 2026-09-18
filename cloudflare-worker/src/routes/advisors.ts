@@ -1701,8 +1701,8 @@ advisors.get('/me/ledger', async (c) => {
          FROM advisor_bookings b
          LEFT JOIN users u ON u.id = b.founder_user_id
         WHERE b.advisor_id = ?
-          AND (? IS NULL OR b.created_at >= ?)
-          AND (? IS NULL OR b.created_at < ?)
+          AND (? IS NULL OR datetime(b.created_at) >= datetime(?))
+          AND (? IS NULL OR datetime(b.created_at) < datetime(?))
         ORDER BY b.created_at DESC
         LIMIT 2000`
     ).bind(m.id, from, from, until, until).all<{
@@ -2069,7 +2069,7 @@ advisors.get('/me/tax-summary', async (c) => {
     const rows = await c.env.DB.prepare(
       `SELECT amount_cents, platform_cut_cents, take_rate_bps, founder_user_id
          FROM advisor_bookings
-        WHERE advisor_id = ? AND created_at >= ? AND created_at < ?`
+        WHERE advisor_id = ? AND datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?)`
     ).bind(m.id, `${year}-01-01T00:00:00.000Z`, `${year + 1}-01-01T00:00:00.000Z`)
       .all<{ amount_cents: number | null; platform_cut_cents: number | null; take_rate_bps: number | null; founder_user_id: number | null }>();
     const lines = rows.results || [];

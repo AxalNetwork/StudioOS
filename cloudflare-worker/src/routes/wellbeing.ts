@@ -516,14 +516,14 @@ wellbeing.get('/aggregate', async (c) => {
         `SELECT ${cols},
                 mood_plain, stress_plain, sleep_plain, energy_plain, focus_plain, social_plain
            FROM wellbeing_daily_pulses
-          WHERE created_at >= ?`,
+          WHERE datetime(created_at) >= datetime(?)`,
       ).bind(cutoff).all<any>();
     } catch (e: any) {
       if (/no such column/i.test(String(e?.message || ''))) {
         res = await c.env.DB.prepare(
           `SELECT ${cols}
              FROM wellbeing_daily_pulses
-            WHERE created_at >= ?`,
+            WHERE datetime(created_at) >= datetime(?)`,
         ).bind(cutoff).all<any>();
       } else { throw e; }
     }

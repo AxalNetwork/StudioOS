@@ -43,7 +43,7 @@ async function safeTopSectors(env: Env, periodStart: string, periodEnd: string, 
     const rs = await env.DB.prepare(
       `SELECT sector, COUNT(*) AS n FROM projects
         WHERE sector IS NOT NULL AND sector <> ''
-          AND created_at >= ? AND created_at <= ?
+          AND datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime(?)
         GROUP BY sector ORDER BY n DESC LIMIT ?`,
     ).bind(periodStart, periodEnd, limit).all<{ sector: string; n: number }>();
     return (rs?.results || [])
@@ -98,12 +98,12 @@ function append(body: string, tags: string[]): string {
 async function buildPublicDraft(env: Env, w: BuildInput): Promise<XDraft> {
   const ventures = await safeCount(
     env,
-    `SELECT COUNT(*) AS n FROM projects WHERE created_at >= ? AND created_at <= ?`,
+    `SELECT COUNT(*) AS n FROM projects WHERE datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime(?)`,
     w.periodStart, w.periodEnd,
   );
   const deals = await safeCount(
     env,
-    `SELECT COUNT(*) AS n FROM partner_deals WHERE created_at >= ? AND created_at <= ?`,
+    `SELECT COUNT(*) AS n FROM partner_deals WHERE datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime(?)`,
     w.periodStart, w.periodEnd,
   );
   const safeV = ventures >= K_MIN ? ventures : null;
@@ -129,12 +129,12 @@ async function buildPublicDraft(env: Env, w: BuildInput): Promise<XDraft> {
 async function buildFoundersDraft(env: Env, w: BuildInput): Promise<XDraft> {
   const sessions = await safeCount(
     env,
-    `SELECT COUNT(*) AS n FROM advisor_sessions WHERE created_at >= ? AND created_at <= ?`,
+    `SELECT COUNT(*) AS n FROM advisor_sessions WHERE datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime(?)`,
     w.periodStart, w.periodEnd,
   );
   const intros = await safeCount(
     env,
-    `SELECT COUNT(*) AS n FROM introductions WHERE created_at >= ? AND created_at <= ?`,
+    `SELECT COUNT(*) AS n FROM introductions WHERE datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime(?)`,
     w.periodStart, w.periodEnd,
   );
   const body = append(
@@ -153,7 +153,7 @@ async function buildFoundersDraft(env: Env, w: BuildInput): Promise<XDraft> {
 async function buildInvestorsDraft(env: Env, w: BuildInput): Promise<XDraft> {
   const newDeals = await safeCount(
     env,
-    `SELECT COUNT(*) AS n FROM deals WHERE created_at >= ? AND created_at <= ?`,
+    `SELECT COUNT(*) AS n FROM deals WHERE datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime(?)`,
     w.periodStart, w.periodEnd,
   );
   const sectors = await safeTopSectors(env, w.periodStart, w.periodEnd);
@@ -175,7 +175,7 @@ async function buildInvestorsDraft(env: Env, w: BuildInput): Promise<XDraft> {
 async function buildAdvisorsDraft(env: Env, w: BuildInput): Promise<XDraft> {
   const requests = await safeCount(
     env,
-    `SELECT COUNT(*) AS n FROM partner_office_hours WHERE created_at >= ? AND created_at <= ?`,
+    `SELECT COUNT(*) AS n FROM partner_office_hours WHERE datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime(?)`,
     w.periodStart, w.periodEnd,
   );
   const body = append(
@@ -194,7 +194,7 @@ async function buildAdvisorsDraft(env: Env, w: BuildInput): Promise<XDraft> {
 async function buildPartnersDraft(env: Env, w: BuildInput): Promise<XDraft> {
   const deals = await safeCount(
     env,
-    `SELECT COUNT(*) AS n FROM partner_deals WHERE created_at >= ? AND created_at <= ?`,
+    `SELECT COUNT(*) AS n FROM partner_deals WHERE datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime(?)`,
     w.periodStart, w.periodEnd,
   );
   const body = append(

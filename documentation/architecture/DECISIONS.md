@@ -13493,3 +13493,89 @@ that reached past each call into the `return c.json({ ok: true, user_id: uid })`
 below it, reporting four violations that were not violations — **the same
 overreach as D147's**, now bounded by matching parentheses instead, with a
 mutation that reverts it to the window and must fail.
+
+---
+
+## D160
+
+**A raw ISO bind met a bare timestamp comparison, and the window lost a day.**
+(#253 — D125's timestamp audit, second half: the bound-parameter blind spot)
+
+### The defect
+
+`scripts/check-timestamp-comparisons.mjs` watches for a bare TTL column compared
+against the clock, and its own header states what it cannot see:
+
+> *"A column compared against a BOUND PARAMETER (`created_at >= ?`) is the same
+> defect and is invisible here, because the format lives at the bind site. That
+> is how `rpc/branchOps.ts` came to drop every row dated on a quarter's first
+> day. Finding those needs the bind traced, which is a different tool."*
+
+Traced. SQLite compares TEXT lexically, and three bind shapes reach these
+queries — only one is wrong:
+
+| bind | value | against `datetime('now')` storage |
+| --- | --- | --- |
+| `.toISOString()` | `2026-08-19T12:44:00.000Z` | ❌ **wrong** |
+| `…slice(0,19).replace('T',' ')` | `2026-08-19 12:44:00` | ✅ exact |
+| `…slice(0,10)` | `2026-08-19` | ✅ correct by prefix alignment |
+
+At index 10 the raw ISO has `'T'` (0x54) where the column has `' '` (0x20), so
+**every row dated on the bind's own date sorts below it and is dropped**, while
+later dates pass. A thirty-day window quietly returns twenty-nine.
+
+`market_intel.ts` already documented this hazard and already fixed it in its
+Citations query — `WHERE datetime(created_at) >= datetime(?)`, with a comment
+spelling out the `T` separator. Three queries 650 lines below it did not.
+
+### What the sweep corrected about the filing
+
+The plan named three sites. Measured, the picture is both narrower and wider:
+
+- **Narrower.** Of 47 grep candidates, most are correct. `aiRouter.ts` (D152's
+  guardrail counters and D158's category breakdown) and `aiSpend.ts` normalise
+  with `.replace('T', ' ')`; `admin_revenue.ts`'s `quarterOf` emits bare dates,
+  which are correct by prefix alignment; and `branchOps.ts:553` is a **comment**,
+  not a comparison — the lexical-scan trap again.
+- **Wider.** The new guard found **seven more** the manual sampling missed, in
+  `advisors.ts`, `portfolio.ts`, `wellbeing.ts`, `market_intel/extractors` and
+  `xAggregator.ts`. That it found defects its author had not is the strongest
+  evidence it works.
+
+Every `created_at` in the schema is SQL-format — **308 columns** default to
+`datetime('now')` or `CURRENT_TIMESTAMP`, and **zero** INSERTs write one from a
+JS ISO string — so all of them are real.
+
+### What lands
+
+24 comparisons across six files wrapped as `datetime(col) … datetime(?)`, and
+`cloudflare-worker/test/iso_bind_comparisons_d160.test.ts`.
+
+**It deliberately does not require every comparison to be wrapped.** 46 sites
+bind against a bare timestamp column and all but the ten fixed here are correct.
+A blanket rule would mean rewriting 36 working queries — churn on correct code,
+and a diff nobody can review for the lines that matter. The rule fires only where
+a **raw ISO bind** and a **bare comparison** meet.
+
+The cost of wrapping is that an index on the column cannot serve the predicate.
+Accepted, and stated rather than discovered: these are analytics reads over small
+tables, and the Citations query set that precedent already.
+
+### The guard corrected itself before it shipped
+
+Its first draft carried a `(?<!datetime\()` lookbehind — *skip it if the COLUMN
+is wrapped* — which is the wrong test, and would have waved through a real
+defect. **The placeholder side is what decides it**: `col >= datetime(?)` is
+correct even with a raw ISO bind, because `datetime()` normalises the bind to the
+column's format; `datetime(col) >= ?` is still broken, because the left becomes
+SQL format while the right stays ISO. The lookbehind is gone and an assertion
+pins the half-wrapped form as a defect.
+
+### Verification
+
+`test:drift` exit 0 from a redirected log — frontend 2703, worker 3480 (3477 pass
++ the 3 pre-existing environment-gated skips), retention 35, zero `not ok`. Worker
+typecheck, `check-sql-prepare`, `check-sqlite-dialect` and
+`check-timestamp-comparisons` exit 0. **3 mutations, 3 caught** — reverting a fix,
+blinding the classifier so its assertion cannot fail, and restoring the bad
+lookbehind. No migration; **271 stays free**. No `frontend/src` change.
