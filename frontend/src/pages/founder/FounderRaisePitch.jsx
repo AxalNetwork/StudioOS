@@ -107,15 +107,6 @@ export default function FounderRaisePitch() {
   const current = currentVersion(versions);
   const analytics = useMemo(() => normalizeAnalytics(engagement), [engagement]);
   const query = projectId ? `?project_id=${projectId}` : '';
-  const selectProject = (value) => {
-    const id = Number(value);
-    setProjectId(id);
-    setParams((old) => {
-      const next = new URLSearchParams(old);
-      next.set('project_id', String(id));
-      return next;
-    }, { replace: true });
-  };
 
   return <main className="fr-pitch" data-testid="founder-raise-pitch">
     <div className="fr-pitch-shell">
