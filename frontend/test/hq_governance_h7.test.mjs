@@ -179,14 +179,42 @@ test('the "Return to HQ view" overlay is not drawn, and the page says why', () =
   assert.match(P, /\{feed\.tenant_view_reason\}/, 'the page hardcodes the explanation instead of reading it');
 });
 
-test('guardrail hits stay unrecorded — the artboard\'s three rows have no store', () => {
+test('guardrail hits are counted — but never the artboard\'s per-category rows', () => {
+  // D152 RE-AIMED THIS, AND IT IS THE SEVENTH TIME A GUARD PINNING A REFUSAL
+  // HAD TO MOVE THE DAY THE REFUSAL STOPPED BEING TRUE. The title said the
+  // artboard's rows "have no store" and the body asserted
+  // `guardrails: absent(NO_AI_SAFETY_STORE)`. The store existed: `safety_score`
+  // is written on every router call and `advisor_turn_audit` carries the block
+  // and the flag — both already rolled up, and already drawn on `AiUsageTab`.
+  //
+  // What survives is SHARPER than what it replaced, because the artboard draws
+  // `{ what, meta, n }` — a COUNT PER CATEGORY — and the category is precisely
+  // the field `writeTurnAudit` throws away. So the panel's totals are real and
+  // its rows are not, and those are two different facts about one artboard.
   const board = h7();
   assert.ok(board.includes('Guardrail hits'), 'the artboard no longer draws the panel');
   assert.ok(board.includes('Advisor-AI outputs the screen caught'), 'the artboard changed the panel\'s subtitle');
-  // The page carries the artboard's phrase on the zone that owns the absence
-  // rather than opening a second zone for the same missing store.
+  // The page carries the artboard's phrase on the zone that owns the figures
+  // rather than opening a second zone for the same store.
   assert.match(P, /sub="guardrail hits · Advisor-AI outputs the screen caught"/);
-  assert.match(ROUTE, /guardrails: absent\(NO_AI_SAFETY_STORE\)/);
+
+  // The counters are REAL and come from the one rollup, not from a literal.
+  assert.match(ROUTE, /ai_safety: await aiSafetyBlock\(env\)/,
+    '/overview stopped serving the guardrail counters');
+  assert.match(P, /<AiSafety block=\{ready \? data\.ai_safety : null\}/,
+    'the AI-safety zone stopped rendering the counters it is served');
+
+  // AND THE ROWS STAY UNBUILT, WITH THE MEASUREMENT THAT MAKES THEM UNBUILT.
+  // `not_counted` is deliberately `{ what, reason }` and not the artboard's
+  // `{ what, meta, n }`: a row carrying an `n` here would be a per-category
+  // count invented for a column no table has.
+  assert.match(ROUTE, /what: 'Which guardrail rule fired'/,
+    'the category absence lost its row — the panel now implies it can break hits down by rule');
+  const at = ROUTE.indexOf("what: 'Which guardrail rule fired'");
+  const row = ROUTE.slice(at, ROUTE.indexOf('},', at));
+  assert.doesNotMatch(row, /\bn:\s/, 'the category row acquired a count, which nothing measures');
+  assert.match(row, /writeTurnAudit/, 'the row stopped naming the writer that drops the category');
+
   // None of the artboard's sample counts leaked onto the page.
   for (const n of ['Outbound investor message', 'Founder-facing draft', 'LP correspondence']) {
     assert.ok(!PAGE.includes(n), `the artboard's fixture "${n}" was rendered as though it were data`);
@@ -226,4 +254,75 @@ test('nothing absent on this page falls back to a number', () => {
     'an unreadable feed does not say what it is not');
   assert.match(P, /data-testid="hq-gov-empty"/, 'an empty feed renders as nothing at all');
   assert.match(ROUTE, /const readAudit = filter === 'all' \|\| filter === 'exports';/);
+});
+
+test('the AI-safety zone renders counters, and each half shows its own state', () => {
+  // D152. The zone was `<Absent block={data.ai_safety} …>` — one line of
+  // refusal where four figures belong. What must hold now is not that the
+  // tiles exist but that NEITHER PAIR CAN RENDER A NUMBER IT WAS NOT GIVEN:
+  // the verdict pair reads `verdicts.available`, the enforcement pair reads
+  // `enforcement.available`, and they are separate because they come from
+  // separate tables that fail separately.
+  const at = P.indexOf('function AiSafety(');
+  assert.ok(at > 0, 'the AI-safety zone lost its component');
+  const body = P.slice(at, P.indexOf('function Stat(', at));
+
+  for (const [label, flag] of [
+    ['Guard verdicts', 'v?.available'],
+    ['Judged unsafe', 'v?.available'],
+    ['Turns blocked', 'e?.available'],
+    ['Outputs flagged', 'e?.available'],
+  ]) {
+    const cell = body.indexOf(`label="${label}"`);
+    assert.ok(cell > 0, `the "${label}" tile is gone`);
+    // Bounded to this tile, so a neighbour's gate cannot satisfy the
+    // assertion — the mistake a whole-file scan makes every time.
+    const tile = body.slice(cell, body.indexOf('/>', cell));
+    assert.ok(
+      tile.includes(`value={${flag}`),
+      `"${label}" must render its figure under \`${flag}\` — the store it actually came from`,
+    );
+    // AND THE ABSENT ARM IS `null`, NOT A NUMBER — asserted here because the
+    // page's own `|| 0` / `?? 0` ban cannot see it. A mutation to
+    // `value={v?.available ? num(v.evaluated) : 0}` walked through every
+    // other assertion in this PR: it is not the banned idiom, and the gate it
+    // checks is still there. A tile that renders 0 for a counter it could not
+    // read is the exact defect on the exact surface where it is worst.
+    assert.match(
+      tile, /:\s*null\}/,
+      `"${label}" falls back to a number when its store could not be read — absent is not zero`,
+    );
+  }
+
+  // A rate over an empty denominator is not 0%, and the page says which.
+  assert.match(body, /safe_rate !== null/,
+    'the safe rate stopped distinguishing "nothing was evaluated" from "0% safe"');
+  assert.match(body, /the guard did not run in this window/);
+
+  // The narrowed absences are rendered WITHOUT a count, because the artboard's
+  // per-category rows are the one thing no table can supply.
+  assert.match(body, /data-testid="hq-ai-safety-not-counted"/);
+  assert.match(body, /\{n\.reason\}/, 'the not-counted rows dropped their reasons');
+});
+
+test('the rail stopped saying nothing aggregates guardrail verdicts', () => {
+  // THE SIXTH TIME A RAIL ROW HAD TO BE RE-AIMED THE DAY ITS REFUSAL STOPPED
+  // BEING TRUE (D129, D131, D140, D147, D150's three, D151's three). This row
+  // was the sharpest of them: it denied a rollup the platform was rendering on
+  // another page of the same admin console.
+  //
+  // RAW, NOT `codeOnly`: the correction is recorded in a comment that quotes
+  // the sentence, and a scan of the stripped source is what proves the CLAIM
+  // is gone from the rendered rows rather than from the file.
+  assert.ok(PAGE.includes('Nothing aggregates guardrail verdicts'),
+    'the page stopped recording which claim D152 corrected');
+  assert.doesNotMatch(P, /Nothing aggregates guardrail verdicts/,
+    'the false rail row came back — the verdicts are aggregated, and drawn on AiUsageTab');
+
+  // And the rows that replaced it are the SERVER's, not retyped — so the zone
+  // and the rail cannot come to disagree about what is missing.
+  assert.match(P, /data\.ai_safety\?\.not_counted \|\| \[\]/,
+    'the rail hand-types its AI-safety absences instead of reading the payload');
+  assert.match(ROUTE, /what: 'Token anomalies'/,
+    'the one clause of the old sentence that was TRUE lost its row');
 });

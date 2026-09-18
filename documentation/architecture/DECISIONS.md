@@ -12684,3 +12684,169 @@ The plan said Contracts' coverage would count archived templates. **There is no
 archived state**: D147 dropped `is_active` from the push on its own rule, and the
 payload's `not_carried` says so in the server's words. The line is gone and the
 rail forwards `not_carried` rather than typing a second copy of it.
+
+## D152 — HQ's Security page denied a store it had, one click from the page that draws it (#235)
+
+**Date:** 2026-09-17 · **Scope:** one service, one route, one page, three test
+files. **No migration — 269 stays free** — and **no new `/api/*` method**: both
+fields were already on payloads `SecurityPage` already fetched.
+
+#235 is "H12 view-as overlay as shell state, guardrail hits by branch, AE audit
+mirror". Measuring it before building — the seventh time running that has
+corrected a task — found that H12 draws **three frames**, that the third has a
+refusal in front of it, and that the refusal is **false on two of its three
+clauses** while being rendered on a shipped HQ screen. That correction is this
+entry; the overlay is the next PR.
+
+### The defect: one sentence, two zones, and two of its three clauses wrong
+
+`admin_security.ts` carried one constant with two consumers by design — its own
+comment said *"One sentence, two zones"*:
+
+> *"No guardrail-hit, flagged-output or token-anomaly counter is stored for the
+> AI rails."*
+
+| clause | true? | measured |
+| --- | --- | --- |
+| **guardrail-hit** | **FALSE** | `ai_usage_logs.safety_score` (migration 040) is written by `recordUsage` on **every** router call; `task = 'safety'` rows are llama-guard's verdicts |
+| **flagged-output** | **FALSE** | `advisor_turn_audit.shadow_flagged` (migration 043), with its own index `idx_advisor_turn_audit_flagged`, written from seventeen call sites in `routes/advisor.ts` |
+| **token-anomaly** | **true** | the phrase occurs **nowhere** in the repo except that constant |
+
+**And it was already aggregated and already on screen.** `loadAiUsageReport`
+rolled up `evaluated / safe_count / unsafe_count`, served at
+`GET /api/monitoring/ai-usage` and rendered by `AiUsageTab` as *"Guardrail
+safety (llama-guard)"*. So HQ's security desk refused a figure the same admin
+console was drawing one click away — **the sixth refusal that outlived its fact**
+(D129's seat store, D131's six blocks, D140's adjustable dates, D147, D150's
+three rail rows, D151's three zones) and the first where what was denied was
+visible elsewhere in the product.
+
+### The consolidation, and it is the twelfth
+
+The rollup was **inline inside `loadAiUsageReport`**, so `admin_security.ts`
+needing it would have been the **second copy of the SQL** — and two copies of a
+safety rollup is how two screens come to disagree about what a guardrail hit is.
+`loadGuardrailCounters(env, days)` is now the one definition and
+`loadAiUsageReport` is its first caller. D127 one `GROUP BY role`, D128 one LIKE
+escaper, D130 one definition of open, D131 one count, D138 one definition of what
+freezes, D140 one zone formatter, D142 one freeze list, D144 one notification
+row, D149 one bps formatter, D151 one name for the branch, **D152 one guardrail
+rollup**.
+
+**Two stores, because they count different things.** `ai_usage_logs` holds what
+llama-guard **thought** (the verdict); `advisor_turn_audit` holds what the
+platform **did** (`refusal_reason = 'safety_block'` → blocked, `shadow_flagged`
+→ flagged). Reporting one as the other is how a safety figure comes to mean
+nothing. Each half carries its **own** `available` flag, because
+`advisor_turn_audit` is lazily bootstrapped (`ensureAuditSchema`) — its absence
+is a state the read can actually meet, and *"0 turns blocked"* is the most
+reassuring possible way to be wrong on a security page. That is the #204 class,
+on the worst surface for it.
+
+**`safe_rate` is `null`, not `0`, when nothing was evaluated.** A rate over an
+empty denominator is undefined, and *"0% judged safe"* is the opposite claim from
+*"the guard never ran"*. `loadAiUsageReport` keeps its own zero-defaulted copy —
+`AiUsageTab` is shipped and changing what its tiles mean is not this PR's
+concern.
+
+### The refusal is narrowed, not deleted (the D111 pattern)
+
+Three things are still genuinely uncounted, each now its own row rather than one
+sentence covering them:
+
+- **Token anomalies.** Nothing watches per-account consumption for a spike. A
+  spend cap being hit is recorded as a refusal, and a limit reached is not an
+  anomaly detected.
+- **Which guardrail rule fired.** `classifyInput` returns the violated category
+  on every hit and the 422 body sends it to the caller — and **no store has a
+  column for it**: `writeTurnAudit`'s parameter list records the score, the
+  refusal and the flag and drops the category. A producer with no store; the
+  **eighth instance** of that shape in this programme, and the sharpest single
+  finding here. **Filed with its measurement, not built** — it is a migration
+  plus a writer change, a different concern from correcting a false sentence.
+  This is also exactly why H7's artboard rows stay undrawn: it draws
+  `{ what, meta, n }`, a **count per category**, and the category is the field
+  that is thrown away. The counters are real; the rows are not.
+- **By branch — H12's third frame.** Neither table carries a branch, tenant or
+  licence column; no branch RPC returns safety counters; and Analytics Engine
+  has no branch index (below). So the row says the figures are platform-wide and
+  why, rather than splitting one deployment's numbers four ways.
+
+### `/governance` gets a pointer, not a second copy
+
+`guardrails` had **zero readers in the SPA**, and both payloads land on the same
+page — `SecurityPage` fetches `/overview` and `/governance` together, and the
+page's own header records that H7 was reconciled **into** this surface rather
+than drawn beside it. So H7's guardrail panel **is** the AI-safety zone. Serving
+the block twice would have put two renders of one rollup on one screen (D128's
+tile-vs-table, one page over) and spent a second pair of D1 reads on a field
+nothing reads. It carries `{counters_on, field, window_days, not_counted}`
+instead — the shape `audit: { total, feed }` at the top of `/overview` already
+uses, which likewise has no SPA reader and is a self-documenting pointer.
+
+### Refused with its measurement
+
+**H12's "Passed on retry" column cannot exist.** `aiRouter.ts` routes `safety` to
+`@cf/meta/llama-guard-3-8b` and records that `safety` has **no alternates**, so a
+safety call structurally cannot fall back; `retry` has zero hits in
+`guardrails.ts`, and `ai_usage_logs.fallback_used` is a *model* fallback meaning
+something else. Drawing the column would invent a number.
+
+**A smaller one worth recording:** `'safety_block'` is declared in `aiRouter`'s
+`RefusalReason` union and **never written to `ai_usage_logs.refusal`** by any
+code — the only writers of that value are `advisor.ts`'s two `writeTurnAudit`
+calls and one HTTP error body. That is why the block count has to come from the
+audit table, and it is the reason stated in the function's header rather than a
+preference.
+
+### A finding recorded, not fixed here — D105's premise is half-built
+
+D105 justified keeping the Analytics Engine dataset **shared**, against the
+per-branch isolation the whole design rests on, on the grounds that it is
+*"indexed by `BRANCH_CODE`"*. **It is not.** The repo's sole `writeDataPoint`
+(`middleware/observability.ts`) writes `indexes: [path.slice(0, 96)]` and no
+branch code in any index, blob or double; the reader hardcodes
+`FROM studioos_metrics` with no branch predicate. So the write-side half of
+D105's own justification was never built, and any per-branch AE query returns
+nothing today — **a decision record stating a capability that does not exist,
+which is the same class this entry corrects one layer up.** Not fixed here: it
+changes what every request writes, and it belongs with the AE audit mirror (F.8
+item 1), which also does not exist.
+
+### Three guards had to be re-aimed, and that is the sixth, seventh and eighth
+
+`admin_governance.test.ts` asserted `guardrails.available === false` and matched
+the refusal's text; `hq_governance_h7.test.mjs` asserted
+`guardrails: absent(NO_AI_SAFETY_STORE)` under a title saying the artboard's rows
+*"have no store"*. **The guards pinning the refusal were the thing standing in
+the way of correcting it** — the same shape D150 hit one line above one of them.
+Each now asserts the property that replaced it, in both directions.
+
+**And one of this PR's own new guards was wrong before it ran**, in the way this
+programme keeps repeating: banning the table names in `admin_security.ts` failed
+on correct code, because the *"by branch"* reason **names both tables** to
+explain why the counters are platform-wide. *A lexical scan cannot tell a rule
+from its violation* (D148's `rank`, D150's U1 comment) — **third instance**. It
+asserts the SQL shape instead: a query reaches a table through `FROM` or `JOIN`,
+and no sentence about a table does that.
+
+### One mutation escaped, and it found a hole in a rule this page already had
+
+`value={v?.available ? num(v.evaluated) : 0}` passed everything. The page's
+"absent is not zero" rule is enforced by scanning for `|| 0` and `?? 0`, and a
+**ternary** falling back to zero is neither — so a counter the platform could
+not read would have rendered `0` on a security page, which is the defect this
+entry is about, in the place it is worst. The fix was to strengthen the new
+assertion (each tile's absent arm must be `null`) rather than to drop the
+mutation: **an assertion that cannot fail on the defect it was written for is
+not a guard**, and this one is mine. **19 mutations, 19 caught** once it was
+re-aimed.
+
+Two more of this PR's own guards were wrong before they ran, both in shapes
+already named here: a ban on the table names failed on the sentence that
+explains why the counters are platform-wide (*a lexical scan cannot tell a rule
+from its violation*), and spreading the server's rows into the rail's
+`unavailable` array broke the line-oriented `[title, detail]` guard two files
+enforce — the entry was still a pair, and **a spread hides the row shape from
+exactly the check that exists to see it**. The detail is computed above the JSX
+and the array stays one literal pair per line.
