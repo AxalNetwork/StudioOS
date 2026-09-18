@@ -13205,3 +13205,102 @@ to `licence_events`. `DROP TABLE` drops its triggers with it. Any future rebuild
 of a table sealed here must re-run 269's statements at the end of its own
 migration, or the seal silently disappears. That is stated in the migration
 header and asserted by the guard, so a rebuild that forgets fails the build.
+
+---
+
+## D157 — D132 closed a question that only needed narrowing: an admin could not read their own record
+
+**Task #236, F.8 item 7's self-audit read.** The second of the standalone
+improvements, and the second in a row where the filed item was right and the
+measurement changed its shape.
+
+### The defect
+
+D132 raised `/analytics/audit`, `/analytics/audit/export.csv` and
+`/analytics/exports/recent` to `requireSuperAdmin`, and its reasoning is
+correct and still stands, in its own words at `monitoring_analytics.ts:233-239`:
+
+> *"this reads OTHER ADMINS' activity. The rows are `admin_audit_log a LEFT
+> JOIN users u ON u.id = a.admin_user_id`, so a plain admin was reading every
+> other admin's export history by name and email."*
+
+But that **closed** a question rather than narrowing it. *"What have I done"* is
+not *"what has my peer done"*, and after D132 an administrator could not see
+their own privileged-action record at all — on a platform whose Security page
+describes that record as the thing an operator is accountable to.
+
+**Narrowed rather than reversed**, which is the D111 pattern D154 applied to
+rule 4 one decision earlier. The three refusals D132 made are untouched, and
+`self_audit_d157.test.ts` asserts all three still hold rather than assuming it.
+
+### Why `requireAdmin` is the right gate, from this file's own rule
+
+The file's header already wrote the test, before this route existed:
+
+> *"a route that reaches `admin_audit_log a LEFT JOIN users u` is a cross-admin
+> read whatever it renders, and gating some of them is gating none of them.
+> Keep new routes here on `requireAdmin` unless they cross that line too."*
+
+`GET /analytics/audit/mine` does not cross it. There is **no join to `users`**,
+because the caller is the only subject and there is no other person's name to
+render. And the subject is **not an input**: `admin_user_id` is bound from
+`adminUser.id` and the query string is never consulted for it, so there is no
+parameter that could name somebody else. That is the **structural** form of
+D132's rule rather than a validated form of it — nothing to validate, because
+nothing is read.
+
+So the header's count stays **three**, and the header now says so explicitly.
+
+### Three things the code decided against the obvious reading
+
+1. **No action filter, on `admin_security.ts`'s precedent rather than
+   `/audit`'s.** `/audit` admits `ALLOWED_ACTIONS = ['analytics_export',
+   'subscription_plan_update']` — two of the many actions written to this table.
+   HQ's own feed deliberately admits all of them, and `hq_security.test.mjs:130`
+   pins exactly that: *"the audit zone reads every action, not the two the
+   monitoring read allows."* An administrator's own record is the same kind of
+   thing: showing them two of their actions and silently dropping the rest
+   would be a feed that is wrong about the one subject it has. The guard asserts
+   the difference **both ways** — `/audit/mine` has no filter and `/audit` still
+   does — so it is a real divergence between two handlers rather than a property
+   nothing could break.
+2. **A tenth producer with no reader, at the index level.**
+   `idx_admin_audit_user_ts(admin_user_id, exported_at DESC)` is created by
+   `ensureAdminAuditLogTable` and **no read uses its leading column** — both
+   existing reads pass `adminUserId: null` into `buildAuditWhere`. The index was
+   built for exactly this query and had no caller. The `ORDER BY` matches its
+   second column so it applies whole, and that is asserted.
+3. **The page states what it does NOT show.** A feed of privileged actions that
+   does not say whose it is invites being read as the platform's, which is the
+   claim D132 closed. The scope is **echoed by the server** and rendered, and
+   the page says in one line that another administrator's record is not readable
+   here and never was for this tier — so a reader who wonders gets the reason
+   rather than a silence.
+
+### The unreadable state is not the empty one
+
+`admin_audit_log` is lazily bootstrapped, so its absence is a state this read can
+genuinely meet — the #204 class, one surface up. A failed read renders its own
+reason and the sentence *"This is not a claim that you have taken no privileged
+actions"*; an empty one says nothing was recorded. Two different states, drawn
+differently, which is this programme's most repeated correction.
+
+### One correction the guard made to itself, before it ran
+
+The first draft asserted the cross-admin rule by **counting two totals** — join
+statements against `requireSuperAdmin` calls — and they are not one to one:
+each gated handler runs **two** joined queries, items and count, so the
+arithmetic was wrong (5 against 3) while the rule it meant was right. It now
+**sweeps every handler in the file** and asserts that any handler joining
+`users` gates on the elevation, which says the actual thing and catches a fourth
+added later. A second draft then built its handler slicer as a `new RegExp` from
+data — the shape Semgrep has flagged three times in this repo — and took the
+literal form instead, which also fixed a real hole: the slicer matched `r.get('`
+only and silently skipped the file's one POST handler.
+
+### Verification
+
+`test:drift` exit 0 from a redirected log. **14 mutations, 14 caught.** No
+migration — **270 stays free.** One new `/api/*` method with its route in the
+same commit, so `check-api-drift` is satisfied. `frontend/src` moves, so `docs/`
+is rebuilt by the root build.

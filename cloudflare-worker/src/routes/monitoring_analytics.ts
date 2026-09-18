@@ -14,6 +14,13 @@
  * it renders, and gating some of them is gating none of them. Keep new routes
  * here on `requireAdmin` unless they cross that line too.
  *
+ * `/audit/mine` (D157) is the first route to take that rule up on its own
+ * terms: it reads this same table on `requireAdmin` and does NOT cross the
+ * line, because it carries no join to `users` and binds `admin_user_id` from
+ * the session. So the count above stays THREE. The test is the join and the
+ * subject, never the table name — which is also why a fourth super-admin route
+ * is not what a self-scoped read needs.
+ *
  * Routes:
  *   GET  /overview?from=&to=
  *   GET  /cohorts?metric=&granularity=
@@ -22,7 +29,8 @@
  *   GET  /financial?from=&to=
  *   GET  /technical?from=&to=
  *   POST /export                        body { report, format, from, to, filters }
- *   GET  /audit?limit=&offset=          (Recent Exports panel)
+ *   GET  /audit?limit=&offset=          (Recent Exports panel, SUPER ADMIN)
+ *   GET  /audit/mine?limit=&offset=     (the caller's OWN actions, admin — D157)
  *   GET  /download/:token               (HMAC-gated R2 fetch)
  *
  * Storage key: `analytics-exports/<admin_id>/<isoTs>-<rand>.<ext>`
@@ -401,6 +409,69 @@ r.get('/audit/export.csv', async (c) => {
     },
   });
 });
+
+/**
+ * D157 — an admin reads the log of THEIR OWN privileged actions.
+ *
+ * D132 raised `/audit`, `/audit/export.csv` and `/exports/recent` to the super
+ * admin, correctly: each reads `admin_audit_log a LEFT JOIN users u`, so a
+ * plain admin was reading every other admin's activity by name and email. But
+ * that CLOSED a question rather than narrowing it — "what have I done" is not
+ * "what has my peer done", and after D132 an administrator could not see their
+ * own record at all. This is the narrowing, on the D111 pattern D154 used
+ * again: keep the refusal that was right, and answer the part of the question
+ * that never needed refusing.
+ *
+ * IT DOES NOT CROSS THE LINE THIS FILE'S OWN HEADER DRAWS, and that is why the
+ * gate is `requireAdmin`. The header's test is the JOIN — "a route that reaches
+ * `admin_audit_log a LEFT JOIN users u` is a cross-admin read whatever it
+ * renders". There is no join here, because the caller is the only subject and
+ * there is no other person's name to render. The subject is not read from the
+ * request either: `admin_user_id` is bound from the session and the query
+ * string is not consulted, so there is no parameter to get wrong. That is the
+ * structural form of D132's rule rather than a validated form of it.
+ *
+ * NO ACTION FILTER, on `admin_security.ts`'s precedent rather than `/audit`'s.
+ * `/audit` admits two of the many actions written to this table; HQ's own feed
+ * deliberately admits all of them, and `hq_security.test.mjs` pins that ("the
+ * audit zone reads every action, not the two the monitoring read allows").
+ * An administrator's own record is the same kind of thing: showing them two of
+ * their actions and silently dropping the rest would be a feed that is wrong
+ * about the one subject it has.
+ *
+ * It rides `idx_admin_audit_user_ts(admin_user_id, exported_at DESC)`, created
+ * by `ensureAdminAuditLogTable` and until now unused on its leading column —
+ * both existing reads pass `adminUserId: null`. The index was built for exactly
+ * this query and had no caller.
+ */
+r.get('/audit/mine', async (c) => {
+  const adminUser = await requireAdmin(c);
+  await ensureSchema(c.env);
+  const sql = getSQL(c.env);
+  const limit = clampInt(c.req.query('limit'), 25, 1, 100);
+  const offset = clampInt(c.req.query('offset'), 0, 0, 100000);
+  const items = await sql`
+    SELECT a.id, a.action, a.report_type, a.format, a.filters_json,
+           a.viewed_user_id, a.exported_at
+      FROM admin_audit_log a
+     WHERE a.admin_user_id = ${adminUser.id}
+     ORDER BY a.exported_at DESC, a.id DESC
+     LIMIT ${limit} OFFSET ${offset}`;
+  const totalRow = await sql`
+    SELECT COUNT(*) AS c FROM admin_audit_log a WHERE a.admin_user_id = ${adminUser.id}`;
+  await sql.end();
+  return c.json({
+    items,
+    total: Number(totalRow[0]?.c ?? 0),
+    limit,
+    offset,
+    // The scope is echoed so the page can STATE it rather than imply it. A feed
+    // of privileged actions that does not say whose it is invites being read as
+    // the platform's.
+    scope: { admin_user_id: adminUser.id, all_actions: true },
+  });
+});
+
 
 // ---------- plan catalog (Task #13) ----------
 r.get('/plans', async (c) => {
