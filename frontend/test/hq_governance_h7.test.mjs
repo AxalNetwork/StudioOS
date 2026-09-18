@@ -230,16 +230,28 @@ test('guardrail hits are counted — but never the artboard\'s per-category rows
   assert.match(P, /<AiSafety block=\{ready \? data\.ai_safety : null\}/,
     'the AI-safety zone stopped rendering the counters it is served');
 
-  // AND THE ROWS STAY UNBUILT, WITH THE MEASUREMENT THAT MAKES THEM UNBUILT.
-  // `not_counted` is deliberately `{ what, reason }` and not the artboard's
-  // `{ what, meta, n }`: a row carrying an `n` here would be a per-category
-  // count invented for a column no table has.
-  assert.match(ROUTE, /what: 'Which guardrail rule fired'/,
-    'the category absence lost its row — the panel now implies it can break hits down by rule');
-  const at = ROUTE.indexOf("what: 'Which guardrail rule fired'");
-  const row = ROUTE.slice(at, ROUTE.indexOf('},', at));
-  assert.doesNotMatch(row, /\bn:\s/, 'the category row acquired a count, which nothing measures');
-  assert.match(row, /writeTurnAudit/, 'the row stopped naming the writer that drops the category');
+  // D158 — THE CATEGORY ROW IS GONE, BECAUSE THE ABSENCE IT DESCRIBED IS.
+  // This assertion used to REQUIRE the row `what: 'Which guardrail rule fired'`,
+  // and its own comment gave the reason: a per-category count would be
+  // "invented for a column no table has". Migration 270 gave
+  // `advisor_turn_audit` that column, so the premise is what changed. Twelfth
+  // refusal re-aimed the day it stopped being true — and the first the codebase
+  // had filed against itself.
+  //
+  // What is pinned now is the stronger property the row was standing in for:
+  // the panel may claim a per-rule breakdown ONLY where one is actually served.
+  assert.doesNotMatch(ROUTE, /what: 'Which guardrail rule fired'/,
+    'the panel is refusing a breakdown it now serves');
+  assert.match(ROUTE, /enforcement: counters\.enforcement/,
+    'the block stopped passing enforcement through, so the breakdown reaches nobody');
+  // The rows that ARE still unbuilt keep their reasons, and still carry no
+  // invented count — the half of the old assertion that is still true.
+  for (const what of ['Token anomalies', 'Guardrail counters by branch']) {
+    const at = ROUTE.indexOf(`what: '${what}'`);
+    assert.ok(at > 0, `${what} lost its row without the absence being closed`);
+    assert.doesNotMatch(ROUTE.slice(at, ROUTE.indexOf('},', at)), /\bn:\s/,
+      `the ${what} row acquired a count, which nothing measures`);
+  }
 
   // None of the artboard's sample counts leaked onto the page.
   for (const n of ['Outbound investor message', 'Founder-facing draft', 'LP correspondence']) {

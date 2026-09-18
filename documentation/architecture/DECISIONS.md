@@ -13304,3 +13304,93 @@ only and silently skipped the file's one POST handler.
 migration — **270 stays free.** One new `/api/*` method with its route in the
 same commit, so `check-api-drift` is satisfied. `frontend/src` moves, so `docs/`
 is rebuilt by the root build.
+
+---
+
+## D158 — the guardrail category was computed on every guarded turn and thrown away
+
+**Task #276, filed from D152's own research and built here.** The third of
+#236's standalone improvements, after D156 and D157.
+
+### The defect
+
+`services/advisor/guardrails.ts:122-138` — `classifyInput` runs llama-guard and
+parses its reply into `{ blocked, score, category }`, where `category` is the
+**S-code naming which rule fired** (`out.split('\n')[1]`, e.g. `s1`, `s10`), or
+one of `empty` / `safe` / `router_failed` / `error`.
+
+Measured repo-wide before anything was written:
+
+| where the category went | measured |
+| --- | --- |
+| `routes/advisor.ts:891`, `:1895` | the 422 response body — **the only two consumers** |
+| `TurnAudit` | **no field** |
+| `advisor_turn_audit`, migration 043 **and** the runtime bootstrap | **no column, in either** |
+| `guardrail_category` / `refusal_category` in any migration | **zero** |
+
+So **which rule fired was unrecoverable the moment the response was sent.** HQ
+could count *that* a guardrail blocked a turn — D152 shipped those counters —
+and could never say *what for*, on the one screen whose subject is AI safety.
+**Eleventh producer-with-no-store** in this programme.
+
+### The twelfth stale refusal, and the first this codebase filed against itself
+
+`admin_security.ts`'s `AI_SAFETY_NOT_COUNTED` carried a row reading *"Which
+guardrail rule fired … no store has a column for it"*, rendered on HQ's Security
+page. D152 wrote that row from this very measurement. **D158 makes it false**,
+so it is **removed rather than reworded**, and both guards pinning it were
+re-aimed — one of which stated the premise outright: *"a row carrying an `n`
+here would be a per-category count invented for a column no table has."*
+Migration 270 gives the table that column.
+
+Every previous instance of this class was a refusal that outlived a fact
+somebody else had changed. This is the first where the codebase filed the gap,
+and the filing is what got it closed.
+
+### The trap, and it is the #183/#202 class
+
+`advisor_turn_audit` has **two definitions**: migration 043's lineage and
+`ensureAuditSchema`'s `CREATE TABLE IF NOT EXISTS`. **A CREATE-IF-NOT-EXISTS
+cannot add a column to a table that already exists**, so migration 270 alone
+would have left the bootstrap stale and the resulting shape would depend on
+which ran first — the `metrics_snapshots` collision that cost two PRs to unwind.
+Both move in the same commit: the bootstrap's `CREATE` gains the column *and* a
+PRAGMA-guarded `ADD COLUMN`, copying `ensureGuardrailColumns` in that same file
+rather than inventing an idiom. **A test builds both shapes and asserts their
+column sets are equal** — the property nobody had been checking.
+
+### Three things decided against the obvious reading
+
+1. **The field is REQUIRED on `TurnAudit`, not optional.** There are **seventeen**
+   `writeTurnAudit` call sites; **seven** have a `safety` result in scope and ten
+   do not. An optional field would let an eighteenth be added with the category
+   silently missing. Required, **the typechecker refuses the call** — a guard
+   that cannot be forgotten to run. The rule it enforces is *the category travels
+   with the score*, asserted in both directions.
+2. **`rules` and `states` are returned apart.** An S-code is a rule that fired;
+   `safe` / `empty` / `router_failed` / `error` describe the classification
+   itself. Mixing them would put *"the router failed"* in a list headed *"what
+   tripped the guard"* — and a router failure is the guard **not running**.
+3. **Nothing is backfilled, and `unclassified` is its own figure.** Production
+   holds **121 rows, 8 carrying a refusal**, none with a category because none
+   was stored. Those read **unknown**; a null rendered as `safe` would be a
+   verdict nothing reached, which is the defect class this programme keeps
+   deleting. The page says so in words rather than leaving a silent gap between
+   the breakdown and `blocked`.
+
+### Deliberately not done
+
+- **The raw model output is not stored.** `classifyInput` already narrows it to a
+  short token; persisting the completion would put user-adjacent text in an audit
+  table, which is the opposite of what redaction exists for.
+- **Not split by branch.** That absence keeps its own row: neither
+  `ai_usage_logs` nor `advisor_turn_audit` carries a branch column, and this
+  change does not add one.
+
+### Verification
+
+`test:drift` exit 0 from a redirected log. **12 mutations, 12 caught** — including
+a migration that backfills existing rows as `safe`, a bootstrap that loses the
+repairing `ALTER`, and putting the stale refusal row back. Real `node:sqlite`
+fixtures, applying migration 270 **verbatim off disk** against a table built in
+its pre-270 shape. Migration **270** is used; **271 is free**.

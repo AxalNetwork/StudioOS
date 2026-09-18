@@ -83,12 +83,15 @@ const AI_SAFETY_NOT_COUNTED: Array<{ what: string; reason: string }> = [
       + 'per month, and a cap being hit is recorded as a refusal — but a refusal is a limit reached, not an '
       + 'anomaly detected.',
   },
-  {
-    what: 'Which guardrail rule fired',
-    reason: 'The guard returns the violated category on every hit and the 422 body sends it to the caller, but '
-      + 'no store has a column for it: `writeTurnAudit` records the score, the refusal and the flag, and drops '
-      + 'the category. So the counters here say how often the guard fired and never which rule.',
-  },
+  // D158 — 'Which guardrail rule fired' WAS THE SECOND ROW HERE AND IS GONE,
+  // because the thing it described was fixed rather than merely re-described.
+  // D152 filed the category as a producer with no store and put this row on the
+  // screen saying so; migration 270 gave `advisor_turn_audit` the column,
+  // `writeTurnAudit` binds it at all seventeen call sites, and
+  // `loadGuardrailCounters` returns the breakdown as `enforcement.rules`. The
+  // TWELFTH refusal in this programme to be re-aimed the day it stopped being
+  // true — and the first one this codebase filed against itself, which is what
+  // a filed measurement is supposed to lead to.
   {
     what: 'Guardrail counters by branch',
     reason: 'Neither `ai_usage_logs` nor `advisor_turn_audit` carries a branch, tenant or licence column, and no '

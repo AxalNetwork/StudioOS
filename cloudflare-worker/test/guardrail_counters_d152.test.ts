@@ -210,10 +210,28 @@ test('the rollup has ONE definition — loadAiUsageReport is its caller, not a s
     (src.match(/FROM ai_usage_logs WHERE created_at >= \? AND task = 'safety'/g) || []).length, 1,
     'the llama-guard rollup is written twice — /monitoring/ai-usage and HQ Security must share one',
   );
-  assert.equal(
-    (src.match(/FROM advisor_turn_audit/g) || []).length, 1,
-    'the enforcement rollup is written twice',
-  );
+  // D158 — THIS WAS A COUNT AND IS NOW A CONTAINMENT CHECK, because the two are
+  // not the same property. It asserted exactly one `FROM advisor_turn_audit` in
+  // the file, which D158's by-category breakdown broke by adding a SECOND READ
+  // INSIDE THE ONE ROLLUP — not a second definition of it. The rule D152 set is
+  // that the rollup is defined once so the two endpoints cannot disagree about
+  // what a guardrail hit is; a count cannot tell "defined twice" from "reads
+  // that table twice in the one place", and only the first is the defect.
+  //
+  // So: every read of the table must live inside `loadGuardrailCounters`. A
+  // second copy in `loadAiUsageReport` still fails — which is the case the
+  // original assertion existed for — while a second query in the one function
+  // passes. Stronger than the count, not looser: the count would also have
+  // passed a lone read that had MOVED out of the rollup entirely.
+  const fnAt = src.indexOf('export async function loadGuardrailCounters');
+  assert.ok(fnAt > 0, 'the rollup function is gone');
+  const fnEnd = src.indexOf('\nexport async function ', fnAt + 10);
+  const rollup = src.slice(fnAt, fnEnd > 0 ? fnEnd : src.length);
+  const inFile = (src.match(/FROM advisor_turn_audit/g) || []).length;
+  const inRollup = (rollup.match(/FROM advisor_turn_audit/g) || []).length;
+  assert.ok(inRollup >= 1, 'the rollup stopped reading advisor_turn_audit');
+  assert.equal(inFile, inRollup,
+    'advisor_turn_audit is read outside loadGuardrailCounters — that is a second rollup');
   assert.equal(
     (src.match(/loadGuardrailCounters\(env, win\)/g) || []).length, 1,
     'loadAiUsageReport stopped being the rollup\'s caller',

@@ -604,7 +604,7 @@ advisor.post('/start', async (c) => {
     await writeTurnAudit(c.env, {
       userId: user.id, conversationId: null, model: null,
       promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
-      safetyScore: null, sanitisationActions: [],
+      safetyScore: null, sanitisationActions: [], guardrailCategory: null,
       refusalReason: ks.reason || 'kill_switch', shadowFlagged: false,
     });
     return c.json({ error: ks.message, status: 'refused', reason: ks.reason }, 423);
@@ -616,7 +616,7 @@ advisor.post('/start', async (c) => {
     await writeTurnAudit(c.env, {
       userId: user.id, conversationId: null, model: null,
       promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
-      safetyScore: null, sanitisationActions: [],
+      safetyScore: null, sanitisationActions: [], guardrailCategory: null,
       refusalReason: 'shadow_flag', shadowFlagged: true,
     });
     return c.json({ error: ks.message, status: 'refused', reason: 'shadow_flag' }, 423);
@@ -809,7 +809,7 @@ advisor.post('/answer', async (c) => {
     await writeTurnAudit(c.env, {
       userId: user.id, conversationId: null, model: null,
       promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
-      safetyScore: null, sanitisationActions: [],
+      safetyScore: null, sanitisationActions: [], guardrailCategory: null,
       refusalReason: ks.reason || 'kill_switch', shadowFlagged: false,
     });
     return c.json({ error: ks.message, status: 'refused', reason: ks.reason }, 423);
@@ -821,7 +821,7 @@ advisor.post('/answer', async (c) => {
     await writeTurnAudit(c.env, {
       userId: user.id, conversationId: null, model: null,
       promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
-      safetyScore: null, sanitisationActions: [],
+      safetyScore: null, sanitisationActions: [], guardrailCategory: null,
       refusalReason: 'shadow_flag', shadowFlagged: true,
     });
     return c.json({ error: ks.message, status: 'refused', reason: 'shadow_flag' }, 423);
@@ -856,7 +856,7 @@ advisor.post('/answer', async (c) => {
     await writeTurnAudit(c.env, {
       userId: user.id, conversationId: conv.id, model: null,
       promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
-      safetyScore: null, sanitisationActions: [],
+      safetyScore: null, sanitisationActions: [], guardrailCategory: null,
       refusalReason: 'destructive', shadowFlagged: false,
     });
     return c.json({
@@ -880,7 +880,7 @@ advisor.post('/answer', async (c) => {
       userId: user.id, conversationId: conv.id,
       model: '@cf/meta/llama-guard-3-8b',
       promptHash: await promptHash(), toolCalls: [],
-      aiSpendUsd: 0, safetyScore: safety.score,
+      aiSpendUsd: 0, safetyScore: safety.score, guardrailCategory: safety.category,
       sanitisationActions: [], refusalReason: 'safety_block',
       shadowFlagged: false,
     });
@@ -949,7 +949,7 @@ advisor.post('/answer', async (c) => {
       userId: user.id, conversationId: conv.id, model: null,
       promptHash: await promptHash(),
       toolCalls: [{ name: 'writeAnswer', gate_result: toolGate.reason }],
-      aiSpendUsd: 0, safetyScore: safety.score,
+      aiSpendUsd: 0, safetyScore: safety.score, guardrailCategory: safety.category,
       sanitisationActions: [], refusalReason: `gate_${toolGate.reason}`,
       shadowFlagged: false,
     });
@@ -1199,7 +1199,7 @@ advisor.post('/answer', async (c) => {
     userId: user.id, conversationId: conv.id, model: null,
     promptHash: await promptHash(),
     toolCalls: [{ name: 'writeAnswer', status: result.status }],
-    aiSpendUsd: 0, safetyScore: safety.score,
+    aiSpendUsd: 0, safetyScore: safety.score, guardrailCategory: safety.category,
     sanitisationActions: [], refusalReason: null,
     shadowFlagged: false,
   });
@@ -1866,7 +1866,7 @@ advisor.post('/explain', async (c) => {
     await writeTurnAudit(c.env, {
       userId: user.id, conversationId: null, model: null,
       promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
-      safetyScore: null, sanitisationActions: [],
+      safetyScore: null, sanitisationActions: [], guardrailCategory: null,
       refusalReason: ks.reason || 'kill_switch', shadowFlagged: false,
     });
     return c.json({ error: ks.message, status: 'refused', reason: ks.reason }, 423);
@@ -1884,7 +1884,7 @@ advisor.post('/explain', async (c) => {
       userId: user.id, conversationId: null,
       model: '@cf/meta/llama-guard-3-8b',
       promptHash: await promptHash(), toolCalls: [],
-      aiSpendUsd: 0, safetyScore: safety.score,
+      aiSpendUsd: 0, safetyScore: safety.score, guardrailCategory: safety.category,
       sanitisationActions: [], refusalReason: 'safety_block',
       shadowFlagged: false,
     });
@@ -1965,7 +1965,7 @@ advisor.post('/explain', async (c) => {
     await writeTurnAudit(c.env, {
       userId: user.id, conversationId, model: null,
       promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
-      safetyScore: safety.score, sanitisationActions: [],
+      safetyScore: safety.score, sanitisationActions: [], guardrailCategory: safety.category,
       refusalReason: 'shadow_flag', shadowFlagged: true,
     });
     if (conversationId) {
@@ -2006,7 +2006,7 @@ advisor.post('/explain', async (c) => {
       model: ai.usage?.model || null,
       promptHash: await promptHash(), toolCalls: [],
       aiSpendUsd: ai.usage?.est_cost_usd || 0,
-      safetyScore: safety.score,
+      safetyScore: safety.score, guardrailCategory: safety.category,
       sanitisationActions: [],
       refusalReason: ai.refusal || 'upstream_error',
       shadowFlagged: false,
@@ -2067,7 +2067,7 @@ advisor.post('/explain', async (c) => {
           model: modelUsed,
           promptHash: await promptHash(), toolCalls: [],
           aiSpendUsd: usage?.est_cost_usd || 0,
-          safetyScore: safety.score,
+          safetyScore: safety.score, guardrailCategory: safety.category,
           sanitisationActions: [
             ...(leaked ? ['verbatim_leak_stripped'] : []),
           ],
@@ -2178,7 +2178,7 @@ advisor.post('/tool', async (c) => {
         userId: user.id, conversationId: conv.id, model: null,
         promptHash: await promptHash(),
         toolCalls: [{ name, gate_result: gateResult.reason }],
-        aiSpendUsd: 0, safetyScore: null,
+        aiSpendUsd: 0, safetyScore: null, guardrailCategory: null,
         sanitisationActions: [], refusalReason: `gate_${gateResult.reason}`,
         shadowFlagged: false,
       });
@@ -2200,7 +2200,7 @@ advisor.post('/tool', async (c) => {
         userId: user.id, conversationId: conv.id, model: null,
         promptHash: await promptHash(),
         toolCalls: [{ name, error: (e as Error).message }],
-        aiSpendUsd: 0, safetyScore: null,
+        aiSpendUsd: 0, safetyScore: null, guardrailCategory: null,
         sanitisationActions: [], refusalReason: 'tool_error',
         shadowFlagged: false,
       });
@@ -2233,7 +2233,7 @@ advisor.post('/tool', async (c) => {
     userId: user.id, conversationId: conv.id, model: null,
     promptHash: await promptHash(),
     toolCalls: [{ name: effectiveTool, requested: name, route: envelope.cta?.route, degraded: degradedToPaywall }],
-    aiSpendUsd: 0, safetyScore: null,
+    aiSpendUsd: 0, safetyScore: null, guardrailCategory: null,
     sanitisationActions: [], refusalReason: null,
     shadowFlagged: false,
   });
@@ -2400,7 +2400,7 @@ advisor.post('/tool/auto', async (c) => {
       route: envelope.cta?.route, degraded: degradedToPaywall,
       via: 'tool_auto',
     }],
-    aiSpendUsd: 0, safetyScore: null,
+    aiSpendUsd: 0, safetyScore: null, guardrailCategory: null,
     sanitisationActions: [], refusalReason: llmRefusal,
     shadowFlagged: false,
   });
