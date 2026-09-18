@@ -3018,7 +3018,18 @@ export const api = {
   licences: () => request('/admin/licences'),
   // HQ · Home. One payload for the franchisor's overview; the page's tenant
   // switcher narrows it client-side and sends nothing back (routes/admin_hq.ts).
-  hqOverview: () => request('/admin/hq/overview'),
+  //
+  // D153 — `branch` is the ONE argument that changes what the server READS
+  // rather than what the page shows. With it the route performs a single
+  // private-link read of that branch and answers a deliberately smaller
+  // payload — `{scope, branches: [one], branches_coverage}` and none of HQ's
+  // own platform fields — because H12's overlay is one branch's figures, not a
+  // platform payload with a filter drawn over it. No new method: the route is
+  // the same one, so `check-api-drift` has nothing to say.
+  hqOverview: (branch) => {
+    const b = String(branch || '').trim();
+    return request(`/admin/hq/overview${b ? `?branch=${encodeURIComponent(b)}` : ''}`);
+  },
   // D138 — H9 · Team. Every administrator, filtered SERVER-SIDE on role with no
   // LIMIT, with the licence each holds, their rung on the compliance ladder and
   // the super-admin badge. `q` is not a filter on that list — it is what HQ
@@ -3026,9 +3037,14 @@ export const api = {
   // database and cannot be listed from here (D.2). The returned roster is
   // complete, so the page narrows it in the browser; that is honest here and was
   // the defect in `SuperAdminHolders`, where the browser filtered a PAGE.
-  hqAdmins: (q) => {
+  // D153 — `branch` scopes the read the same way it does on `hqOverview`, and
+  // with the same consequence: HQ's own roster is not narrowed, it is not read.
+  hqAdmins: (q, branch) => {
     const s = String(q || '').trim();
-    return request(`/admin/hq/admins${s ? `?q=${encodeURIComponent(s)}` : ''}`);
+    const b = String(branch || '').trim();
+    const qs = [b ? `branch=${encodeURIComponent(b)}` : '', s ? `q=${encodeURIComponent(s)}` : '']
+      .filter(Boolean).join('&');
+    return request(`/admin/hq/admins${qs ? `?${qs}` : ''}`);
   },
   // HQ · Revenue (canvas H5). D1 only — open disputes come from Stripe
   // through adminBillingListDisputes, read separately so an outage there

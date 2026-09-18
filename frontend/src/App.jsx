@@ -11,6 +11,7 @@ import { ActiveCompanyContext } from './contexts/ActiveCompanyContext';
 // ViewModeContext lives in its own module so App.jsx exports only React
 // components — mixing component + hook exports breaks Vite Fast Refresh.
 import ViewModeContext from './contexts/ViewModeContext';
+import ViewAsBranchContext from './contexts/ViewAsBranchContext';
 // Single source of truth for "which role is this session browsing as". The
 // shell picks the sidebar from it and the router picks route elements from it;
 // when those two disagree the nav offers one thing and the route serves another.
@@ -31,6 +32,7 @@ import PaywallModal from './components/PaywallModal';
 import AdminFrozenBar from './components/AdminFrozenBar';
 import BranchSuspendedBar from './components/BranchSuspendedBar';
 import HqSupportSessionBar from './components/HqSupportSessionBar';
+import HqViewingAsBar from './components/HqViewingAsBar';
 import { clearSupportSession } from './lib/supportSession';
 import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
@@ -764,6 +766,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // switcher confirms this id against the caller's memberships once they load
   // and corrects it if it is stale.
   const [savedCompanyId] = useState(() => initActiveCompanyId());
+  // D153 / H12 — the view-as scope. See the provider below.
+  const [viewAsBranch, setViewAsBranch] = useState(null);
   const [companyList, setCompanyList] = useState([]);
 
   // Task #31 — Honor the user's "Sidebar default" appearance preference on
@@ -890,9 +894,26 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     [activeRole, isAdmin, isImpersonating, shellRole],
   );
 
+  // D153 / H12 — the view-as scope, held in the SHELL rather than on a page,
+  // for the reason the frozen bar is: it changes what the chrome says, and a
+  // page that owned it would drop it the moment the operator navigated.
+  //
+  // IT PERSISTS NOTHING — no localStorage, no sessionStorage, no URL — on
+  // `AdminFrozenBar`'s stated rule: a mode the viewer must not be able to
+  // forget they are in must not survive into a session that did not enter it.
+  // That is also why `clearSession` needs no line for it, unlike the support
+  // payload it does purge: there is no key to remove, and signing out unmounts
+  // this layout, which IS the purge. A stored scope would need one; this is
+  // the reason it is not stored.
+  const viewAsBranchContextValue = useMemo(
+    () => ({ branch: viewAsBranch, setBranch: setViewAsBranch }),
+    [viewAsBranch],
+  );
+
   return (
     <ActiveCompanyContext.Provider value={{ company: activeCompany, setCompany: setActiveCompany, companies: companyList, setCompanies: setCompanyList }}>
     <ViewModeContext.Provider value={viewModeContextValue}>
+    <ViewAsBranchContext.Provider value={viewAsBranchContextValue}>
       <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
         {/* D142 / S13 — ABOVE `PortalSwitcher`, and the order is the point.
             `isImpersonating` is `!!realUser`, which an HQ support session never
@@ -904,6 +925,11 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             be the only chrome on a session the viewer did not start. It draws
             nothing when there is no live support session. */}
         <SafeMount name="HqSupportSessionBar"><HqSupportSessionBar /></SafeMount>
+        {/* D153 / H12 — ABOVE `PortalSwitcher`, for D142's reason one tier up:
+            the ordinary admin chrome must never be the only frame on a view
+            the operator is not in by default. It draws nothing outside the
+            overlay. */}
+        <SafeMount name="HqViewingAsBar"><HqViewingAsBar /></SafeMount>
         {isAdmin && (
           <PortalSwitcher
             viewMode={viewMode}
@@ -1058,6 +1084,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
         <InstallPrompt />
         <StepUpModal />
       </Suspense>
+    </ViewAsBranchContext.Provider>
     </ViewModeContext.Provider>
     </ActiveCompanyContext.Provider>
   );

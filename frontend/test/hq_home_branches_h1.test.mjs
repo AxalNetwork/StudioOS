@@ -162,13 +162,19 @@ test('the reasons that outlived their blockers are corrected, not reworded', () 
   assert.match(PAGE, /no branch has sent one yet/, 'what is missing is a report, not the call');
   // Security's row cited U1 for a view that U1 does not block. The reason the
   // SERVER sends is the one copy both surfaces render, so it is asserted there.
+  // D153 — THE OVERLAY IS BUILT, so both halves of this pin are re-aimed. D150
+  // corrected the reason (U1 never applied to a branch) and left the refusal
+  // standing; D153 removes the refusal. What is pinned now is the property
+  // that survives: neither surface may go back to claiming the view does not
+  // exist, and the two must still agree — the rail row is typed on the page
+  // while the sentence is fetched, and correcting one and not the other is how
+  // they came to disagree in the first place.
   const SEC = read('cloudflare-worker/src/routes/admin_security.ts');
-  assert.match(SEC, /this is a view that has not been built/);
+  assert.doesNotMatch(SEC, /this is a view that has not been built/,
+    'the payload still says the overlay is unbuilt');
   assert.doesNotMatch(SEC, /which is U1\./, 'the overlay is unbuilt, not blocked by U1');
-  // And Security's OWN rail carries a second copy of the same claim — the rail
-  // rows are typed on the page, not fetched. Correcting one and not the other
-  // is how the surfaces come to disagree, so both are pinned.
   const SECPAGE = codeOnly(read('frontend/src/pages/hq/SecurityPage.jsx'));
   assert.doesNotMatch(SECPAGE, /that is the same U1/, 'the rail still blames U1 for the overlay');
-  assert.match(SECPAGE, /\['The "Return to HQ view" overlay', 'Not built\./);
+  assert.doesNotMatch(SECPAGE, /\['The "Return to HQ view" overlay', 'Not built\./,
+    'the rail row went back to calling the overlay unbuilt');
 });

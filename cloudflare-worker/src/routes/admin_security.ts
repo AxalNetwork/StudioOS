@@ -689,22 +689,32 @@ r.get('/governance', async (c) => {
       not_counted: AI_SAFETY_NOT_COUNTED,
     },
     // H7's chrome: "Viewing as: Axal VC France · Return to HQ view".
-    tenant_view_available: false,
-    // D150 — THE LAST CLAUSE WAS WRONG AND IS CORRECTED RATHER THAN REWORDED.
-    // It said seeing a subsidiary as its own admins see it "needs every row to
-    // name its licence, which is U1". U1 is a fact about HQ's OWN database. A
-    // branch is a separate Worker over a separate D1 (D.2), so nothing there
-    // needs to name a licence — which is exactly why D108's fan-out can read a
-    // branch's accounts, seats and backlog at all, and why H1's health cards
-    // now render them. What is missing is the OVERLAY: shell state that routes
-    // every read on a page through one branch and says so. That is #235, and
-    // it is unbuilt rather than blocked.
+    //
+    // D153 — THE AVAILABILITY FLAG FLIPPED, AND THE SENTENCE CHANGED WITH IT.
+    // (Worded without naming the old value: this file is scanned for the table
+    // names it reads by matching what follows the word FROM, and a comment
+    // that put a bare word after it added a phantom table to that set. Fourth
+    // instance of "a lexical scan cannot tell a rule from its violation".)
+    // D150 corrected this refusal's REASON (it used to blame U1, which is a
+    // fact about HQ's own rows and never applied to a branch) and left the
+    // refusal itself standing, correctly: the overlay was unbuilt. It is built
+    // now — `?branch=` on the HQ reads, `ViewAsBranchContext` in the shell,
+    // `HqViewingAsBar` above all other chrome — so the refusal is DELETED
+    // rather than reworded, which is what this programme does with a reason
+    // that has outlived its fact, and the ninth time a guard pinning one has
+    // had to be re-aimed the day it stopped being true.
+    //
+    // WHAT THE SENTENCE SAYS NOW IS WHAT THE OVERLAY IS NOT, because that is
+    // the part a reader of this feed can still get wrong: it is a read, not a
+    // role, and nothing on it can be acted on.
+    tenant_view_available: true,
     tenant_view_reason:
-      'There is no tenant-scoped view to return from yet. The two "view as" modes that exist are a ROLE switch '
-      + '(an admin browsing as a founder) and a support session against ONE account, each with its own exit. '
-      + 'Seeing a whole subsidiary as its own admins see it means routing a page\'s reads through one branch '
-      + 'and saying so in the chrome; HQ can already read a branch, so this is a view that has not been built '
-      + 'rather than one the data forbids.',
+      'HQ can read one branch at a time through its private link, and the chrome says so while it is doing it: '
+      + 'a "Viewing as <branch> — read-only" bar above every other bar, with "Return to HQ view" to leave. '
+      + 'It is not a third "view as" mode beside the ROLE switch (an admin browsing as a founder) and the '
+      + 'support session against ONE account: those two change who you are, and this one changes only which '
+      + 'database was read. Every action is absent under it rather than disabled, because no action runs '
+      + 'from it.',
   });
 });
 

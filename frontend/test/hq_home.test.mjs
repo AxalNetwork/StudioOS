@@ -31,12 +31,25 @@ test('the HQ Home row points at /hq, and /hq is HQ-only', () => {
   assert.match(line, /hqOnly\(/, 'an admin without the elevation gets the notice, not the overview');
 });
 
-test('the page reads one endpoint and never sends a tenant to the server', () => {
-  // The switcher narrows client-side. A scoped request here would be the
-  // half-applied scope U1 warns about: this page changes, nothing else does.
+test('the page reads one endpoint, and the TENANT SWITCHER still sends nothing', () => {
+  // WAS "never sends a tenant to the server", and the distinction D153 draws
+  // is the whole reason this had to be re-aimed rather than deleted. Two
+  // different controls, two different meanings:
+  //
+  //   - the TENANT SWITCHER narrows THIS PAGE over a payload already loaded,
+  //     and must keep sending nothing. A scoped request behind it would be the
+  //     half-applied scope U1 warns about: this page changes, nothing else
+  //     does, while looking global.
+  //   - the VIEW-AS OVERLAY (H12) is a different thing wearing a similar word:
+  //     it changes what the server READS, and says so in chrome that frames
+  //     every page it covers. It sends `?branch=`, and must.
+  //
+  // So the assertion below is unchanged in force — the switcher's own note is
+  // still pinned — and `hqOverview` is now allowed to take an argument,
+  // because the overlay is the caller that passes one.
   const calls = [...PAGE.matchAll(/api\.(\w+)\(/g)].map((m) => m[1]);
   assert.deepEqual([...new Set(calls)], ['hqOverview']);
-  assert.match(read('frontend/src/lib/api.js'), /hqOverview: \(\) => request\('\/admin\/hq\/overview'\)/);
+  assert.match(read('frontend/src/lib/api.js'), /hqOverview: \(branch\) => \{/);
   assert.match(PAGE, /Narrowed to \{selected\.brand_name\} on this page only/);
 });
 

@@ -20,7 +20,7 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
 import {
-  fanOut, coverage, withRegistry, branchBindings, BRANCH_BINDING_PREFIX,
+  fanOut, coverage, withRegistry, branchBindings, branchByCode, branchRead, BRANCH_BINDING_PREFIX,
 } from '../src/services/branches.ts';
 import { branchHealth, branchOverview, branchSearchAccounts, applyLicenceCopy } from '../src/rpc/branchOps.ts';
 import { recordEscalation, openEscalations, slaBand, ESCALATION_KINDS } from '../src/rpc/hqOps.ts';
@@ -107,6 +107,93 @@ test('bindings are discovered by prefix, and the reserved vars are not bindings'
   // the binding scan by accident.
   assert.ok(!branchBindings(env).some((b) => ['code', 'name', 'territory'].includes(b.code)));
   assert.equal(BRANCH_BINDING_PREFIX, 'BRANCH_');
+});
+
+test('branchByCode is the ONE definition of how a code matches a binding (D153)', () => {
+  const env: any = {
+    ...HQ,
+    BRANCH_FR: { overview: async () => ({}) },
+    BRANCH_LATAM_SOUTH: { overview: async () => ({}) },
+  };
+  assert.equal(branchByCode(env, 'fr')?.binding, 'BRANCH_FR');
+  // The NEEDLE is normalised exactly as the binding's SUFFIX is — lower-cased,
+  // underscores to hyphens. Before D153 five sites spelled out
+  // `branchBindings(env).find((x) => x.code === code)`, which is a second
+  // definition of the same rule read from the other end, repeated five times
+  // and free to drift from the derivation the day one of them normalised.
+  assert.equal(branchByCode(env, 'FR')?.code, 'fr', 'a code in the wrong case matched nothing');
+  assert.equal(branchByCode(env, 'latam_south')?.code, 'latam-south',
+    'an underscore in the needle matched nothing, though the binding derives a hyphen');
+  assert.equal(branchByCode(env, ' fr ')?.code, 'fr');
+  // Absent and invalid both answer null, and the ABSENCE CARRIES NO COPY: each
+  // of the five callers writes its own sentence about what an unbound branch
+  // means for the write it was about to do, which is D117's rule — a fallback
+  // is a human-written sentence.
+  assert.equal(branchByCode(env, 'dach'), null, 'an unbound code resolved to something');
+  assert.equal(branchByCode(env, ''), null);
+  assert.equal(branchByCode(env, null), null);
+  assert.equal(branchByCode(env, '../etc'), null, 'a needle that is not a branch code was scanned for');
+  const src = readFileSync(new URL('../src/services/branches.ts', import.meta.url), 'utf8');
+  assert.ok(!/reason:/.test(src.slice(src.indexOf('export function branchByCode'), src.indexOf('export async function fanOut'))),
+    'branchByCode grew a reason sentence, flattening copy its callers chose');
+});
+
+test('the five single-branch sites read the one resolver, and each keeps its own words', () => {
+  const sites = [
+    ['cloudflare-worker/src/services/licencePush.ts', 'so the change is recorded at HQ'],
+    ['cloudflare-worker/src/routes/admin_support_sessions.ts', 'so there is nothing to open a session on'],
+    ['cloudflare-worker/src/routes/admin_statements.ts', 'so the ceiling is set at HQ'],
+    ['cloudflare-worker/src/routes/admin_escalations.ts', 'so the decision is recorded'],
+  ];
+  for (const [file, ownWords] of sites) {
+    const src = read(file);
+    assert.ok(!/branchBindings\([^)]*\)\.find\(/.test(src), `${file} still hand-rolls the lookup`);
+    assert.ok(src.includes('branchByCode'), `${file} does not read the shared resolver`);
+    assert.ok(src.includes(ownWords), `${file} lost its own reason sentence to the helper`);
+  }
+  // The fifth site resolves TWO codes and refuses unless both are bound — a
+  // move that closed an account on a source whose destination is not even
+  // bound could not possibly complete.
+  const move = read('cloudflare-worker/src/routes/admin_support_sessions.ts');
+  assert.match(move, /const source = branchByCode\(c\.env, from\);/);
+  assert.match(move, /const destination = branchByCode\(c\.env, to\);/);
+  assert.match(move, /if \(!source \|\| !destination\)/, 'the move stopped refusing on a half-bound pair');
+});
+
+test('branchRead answers ONE branch in the fan-out\'s own three states (D153)', async () => {
+  const env: any = {
+    ...HQ,
+    BRANCH_FR: { overview: async () => ({ accounts: { total: 7 }, as_of: '2026-09-18T08:00:00Z' }) },
+    BRANCH_DACH: { overview: async () => { throw new Error('D1_ERROR: no such table'); } },
+  };
+  const ok = await branchRead<any>(env, 'fr', 'overview');
+  assert.equal(ok.status, 'ok');
+  assert.equal(ok.data.accounts.total, 7);
+  assert.equal(ok.as_of, '2026-09-18T08:00:00Z', 'the branch\'s own stamp did not survive');
+
+  // UNREADABLE IS NOT ZERO, and it is not a claim the branch is down.
+  const bad = await branchRead<any>(env, 'dach', 'overview');
+  assert.equal(bad.status, 'unreadable');
+  assert.ok(bad.data === undefined, 'a failed single read carried data to be rendered');
+  assert.match(bad.reason!, /no such table/);
+
+  // AND AN UNBOUND CODE IS A THIRD STATE, not the second. One is a binding HQ
+  // has not redeployed to gain; the other is a call that did not come back,
+  // and collapsing them prints the wrong colour on the screen above.
+  const none = await branchRead<any>(env, 'nordics', 'overview');
+  assert.equal(none.status, 'not_deployed');
+  assert.equal(none.binding, 'BRANCH_NORDICS', 'the absent branch does not name the binding it would need');
+  assert.match(none.reason!, /no service binding/);
+
+  // It reads ONE branch: the other binding is never called.
+  let dachCalls = 0;
+  const counted: any = {
+    ...HQ,
+    BRANCH_FR: { overview: async () => ({ accounts: { total: 1 } }) },
+    BRANCH_DACH: { overview: async () => { dachCalls += 1; return {}; } },
+  };
+  await branchRead<any>(counted, 'fr', 'overview');
+  assert.equal(dachCalls, 0, 'the single-branch read fanned out and discarded');
 });
 
 test('HQ with no branches deployed fans out to nothing, which is not a failure', async () => {

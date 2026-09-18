@@ -33,7 +33,7 @@ import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import {
   drawStatement, quarterKey, PERIOD_RE, STATEMENT_STREAMS, type StreamFigure,
 } from '../services/statements';
-import { branchBindings } from '../services/branches';
+import { branchByCode } from '../services/branches';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -415,9 +415,7 @@ r.put('/promo-ceilings/:uid', async (c) => {
     const dep = await c.env.DB.prepare(
       'SELECT code FROM licence_deployments WHERE licence_uid = ?',
     ).bind(licenceUid).first<{ code: string }>().catch(() => null);
-    const binding = dep
-      ? branchBindings(c.env).find((x) => x.code === dep.code)
-      : undefined;
+    const binding = dep ? branchByCode(c.env, dep.code) : null;
     if (binding) {
       try {
         await (binding.stub as any).applyPromoCeiling({
