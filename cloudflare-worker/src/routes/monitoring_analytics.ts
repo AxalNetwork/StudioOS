@@ -42,7 +42,7 @@ import { getSQL } from '../db';
 import { requireAdmin, requireSuperAdmin } from '../auth';
 import {
   parseRange, BadRangeError, loadOverview, loadCohorts, loadUsers, loadUser,
-  loadFinancial, loadTechnical,
+  loadFinancial, loadTechnical, loadTrafficByBranch,
   reportToCsv, reportToHtml,
   signDownloadToken, verifyDownloadToken,
   planAuditToCsv, type PlanAuditRow,
@@ -166,7 +166,25 @@ r.get('/financial', async (c) => {
 r.get('/technical', async (c) => {
   await requireAdmin(c);
   const p = tryParseRange(c); if ('err' in p) return p.err;
+  // D161 — DELIBERATELY NOT BRANCH-SPLIT, and `requireAdmin` is why. A plain
+  // admin is a branch admin on this platform, and what this returns is a
+  // platform-wide AGGREGATE with no branch attribution, which they may
+  // defensibly see. `loadTrafficByBranch` below is the split, and it is super
+  // admin only. Adding a `?branch=` here would hand every branch admin every
+  // other branch's traffic — the isolation the branch programme exists for.
   return c.json(await loadTechnical(c.env, p.range));
+});
+
+// D161 — traffic by branch. SUPER ADMIN, for the reason stated on `/technical`
+// above and in `loadTrafficByBranch`'s own header: this is the one read that
+// attributes traffic to a named branch, and one super admin supervises many
+// subsidiary admins while a subsidiary admin supervises no peer. It sits in
+// this file rather than `admin_hq.ts` because the query, the range parsing and
+// the Analytics Engine credentials all already live here.
+r.get('/traffic-by-branch', async (c) => {
+  await requireSuperAdmin(c);
+  const p = tryParseRange(c); if ('err' in p) return p.err;
+  return c.json(await loadTrafficByBranch(c.env, p.range));
 });
 
 // Task #13 — server-composed Management view: a single fetch returns

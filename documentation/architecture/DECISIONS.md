@@ -7481,9 +7481,20 @@ anywhere in the output, `OAUTH_CALLBACK_BASE_URL` included.
 **The Analytics Engine dataset is shared.** Every other resource is per
 branch, which is the isolation the whole design rests on, but the HQ
 statements and the anonymised median in the subsidiary Insights screen are
-computed *across* branches. One dataset indexed by `BRANCH_CODE` is what makes
-those two numbers possible without a cross-branch read; renaming it per branch
-would have quietly removed them.
+computed *across* branches. One dataset carrying the branch on every row is
+what makes those two numbers possible without a cross-branch read; renaming it
+per branch would have quietly removed them.
+
+> **CORRECTED BY D161.** This paragraph said "one dataset **indexed by**
+> `BRANCH_CODE`", and that was never built — the sole index was the route
+> (`middleware/observability.ts`), and the reader had no branch predicate, so
+> every per-branch AE query returned nothing for as long as the sentence
+> stood. D161 builds the dimension, and deliberately as a **blob** rather than
+> an index: the first index is the sampling key and the sampling key is the
+> route, so moving it would make samples either side of the change
+> incomparable and lose the route-level sampling fairness it exists for. The
+> dataset is therefore shared and **filterable** by branch, not indexed by it —
+> which is what the two numbers above actually need.
 
 **Crons are trimmed to two.** HQ declares six cadences, four of which pull
 external market-intelligence sources and send platform digests. Copied
@@ -13579,3 +13590,165 @@ typecheck, `check-sql-prepare`, `check-sqlite-dialect` and
 `check-timestamp-comparisons` exit 0. **3 mutations, 3 caught** — reverting a fix,
 blinding the classifier so its assertion cannot fail, and restoring the bad
 lookbehind. No migration; **271 stays free**. No `frontend/src` change.
+
+---
+
+## D161
+
+**The branch dimension D105 justified sharing a dataset for was never written,
+and the config var that would have let a preview read its own writes had no
+reader.** (#277 — D105's half-built premise)
+
+### The defect, both halves
+
+**D105 traded isolation for a capability that did not exist.** Every other
+Cloudflare resource is per branch; the Analytics Engine dataset alone is
+shared, and the reason given was that *"One dataset indexed by `BRANCH_CODE` is
+what makes those two numbers possible without a cross-branch read."* Measured:
+the repo's only `writeDataPoint` (`middleware/observability.ts`) wrote
+`indexes: [path]` and carried **no branch code in any index, blob or double**,
+and the reader (`services/analyticsReports.ts`) hardcoded `FROM
+studioos_metrics` with **no branch dimension at all**. So the write-side half
+of D105's own justification was never built and every per-branch AE query
+returned nothing — a decision record stating a capability that did not exist,
+which is the class this programme has now deleted a dozen times.
+
+**And `AE_DATASET` was a producer with no reader, which already cost
+something.** The generated branch configs have written it since D105, whose own
+comment says it exists so *"the SQL-API reader"* stops *"hardcoding HQ's"* —
+and `AE_DATASET` had **zero hits anywhere in `cloudflare-worker/`**, the `Env`
+type included. Meanwhile `[env.preview]` writes `studioos_metrics_preview`
+(`wrangler.toml`) while the reader queried `studioos_metrics`, so **a preview
+deployment's AE reads could not see its own writes** — invisible, because a
+failed read returns `null` and silently falls back to D1 `system_metrics`.
+
+### A blob, not an index — and D105's sentence is corrected rather than satisfied
+
+Three reasons, in order:
+
+1. **The first index is the sampling key**, and the sampling key is the route.
+   Making the branch an index changes it for every request on the platform, so
+   samples either side of the change stop being comparable and route-level
+   sampling fairness — the reason `path` is the key — is lost.
+2. **The blob slots are a stated contract** (*"must match SQL reads in
+   analyticsReports.ts"*), so appending after the last used slot breaks nothing.
+   blob1–blob5 are unchanged; blob6 is new.
+3. **The decisive one.** `AnalyticsEngineDataPoint.indexes` is typed
+   `((ArrayBuffer | string) | null)[]` — an **unbounded** array — so a second
+   index *typechecks*, and the write site swallows failures with a
+   `console.warn`. If the runtime rejects a second index the failure is silent
+   and unverifiable from here. **The blob design does not depend on that fact,
+   which is the point of choosing it.**
+
+**How many indexes AE accepts per data point could not be read from this
+environment**, in six attempts across two channels: the Cloudflare docs MCP
+returns empty for every phrasing tried, and `developers.cloudflare.com` is
+`EGRESS_BLOCKED` by this environment's proxy. Recorded as unreadable rather
+than asserted from memory.
+
+So D105's paragraph now says what is true — the dataset is shared and
+**filterable** by branch, not indexed by it — corrected in **all three** places
+that restated the false claim (`DECISIONS.md`, `scripts/lib/branchConfig.mjs`,
+`scripts/lib/branchConfig.test.mjs`). Fixing one and leaving two is exactly how
+this class survives.
+
+### The gate is the design, not a detail of it
+
+`/monitoring/analytics/technical` and `/management` are **`requireAdmin`**, and
+on this platform's tier model a plain admin **is** a branch admin. Today those
+routes return platform-wide **aggregates with no branch attribution**, which a
+branch admin may defensibly see. Letting the branch dimension flow through them
+would turn an aggregate into **per-branch attribution** — every branch admin
+reading every other branch's traffic, the exact isolation the branch programme
+exists to create. That file's header already states D133's rule: *a route that
+reaches a cross-admin read is one whatever it renders, and gating some of them
+is gating none of them.*
+
+So the rule is narrow and costs nothing:
+
+> **The dimension is WRITTEN on every request. The per-branch SPLIT is
+> super-admin-only. The existing platform-wide aggregate on `requireAdmin` does
+> not change at all.**
+
+Zero behaviour change for every admin who is not the holder is the property
+that makes this safe to ship ahead of the first branch being provisioned.
+
+### The throw on the hot path, reasoned about rather than inherited
+
+`branchOf(env)` **throws** on a malformed `BRANCH_CODE`, deliberately
+(`util/branch.ts`): *"A branch Worker that quietly ran as HQ would serve HQ's
+console over branch data, and every request failing loudly is the safer of the
+two."* That is a throw on every request's metrics write, so it needed an
+argument rather than a habit. It is safe here structurally: the AE write
+already sits inside its own `try/catch` that warns and continues, so a
+malformed code costs **a dropped metric, not a failed request** — correct,
+because such a deployment is already failing loudly at boot
+(`assertBranchAppUrl`) and on every authed path. `env.BRANCH_CODE` is
+deliberately **not** read raw, which would write a garbage dimension verbatim.
+
+### What lands
+
+| path | change |
+| --- | --- |
+| `middleware/observability.ts` | the one `writeDataPoint` appends `branchOf(env) \|\| 'hq'` as **blob6**; `indexes` untouched. Also drops an `as unknown as` cast working around `Env.ANALYTICS`, which is properly declared, and makes the `MiddlewareHandler` import type-only — the file was the only middleware importing it as a value, and that is what kept the module from loading under the test runner |
+| `types.ts` | `Env` gains **`AE_DATASET`**, defaulting to `studioos_metrics` so HQ is unchanged |
+| `services/analyticsReports.ts` | `aeDataset(env)` gives the var its reader; `aeSql(env, sqlText)` consolidates the one fetch shape; **`loadTrafficByBranch`** is the split, returning `available/reason/as_of/rows` |
+| `routes/monitoring_analytics.ts` | `/traffic-by-branch` on **`requireSuperAdmin`**. `/technical` and `/management` unchanged, with the reason stated in place |
+| `frontend/src/lib/api.js`, `pages/hq/PlatformPage.jsx` | one method and its HQ consumer, in the same commit so `check-api-drift` is satisfied |
+| `test/ae_branch_dimension_d161.test.ts` | new |
+
+**No migration — 271 stays free.** No new store.
+
+### Two states that must not render alike
+
+An empty split has two entirely different causes — **no branch has traffic**,
+or **AE could not be read at all** — and `loadTrafficByBranch` returns them
+differently (`available: true` with no rows, against `available: false` with a
+reason naming the store). The surface renders them as different sentences,
+neither of them a zero. That is the rule this programme has applied since D107
+and D129, and the reason the unreadable path is exercised by three separate
+fixtures rather than assumed.
+
+### An optional branch predicate was written first, and deleted before it shipped
+
+`loadTechnicalFromAnalyticsEngine` briefly gained an optional branch filter.
+Nothing would have called it — the split answers the per-branch question by
+**grouping**, not filtering — so it was a producer with no reader, which is the
+shape this entry exists to correct. Removing it also deleted the only path by
+which a caller-supplied value could reach AE SQL, and that matters: the AE SQL
+API takes `text/plain` and has **no binding mechanism at all**, so every value
+in those queries is interpolated. The interpolation surface is now enumerated
+and pinned by a test — only the configured dataset name and the parsed range
+reach it — and `BRANCH_CODE_RE` is shown to **refuse** a quote-bearing value
+rather than escape it.
+
+### Verification
+
+`test:drift` exit 0 read as the exit code from a redirected log. **13
+mutations, 13 caught** — one only after the assertion it exposed was
+strengthened. On the worker: the branch tidied into `indexes`; the branch
+written into blob1; `env.BRANCH_CODE` read raw; the split served on
+`requireAdmin` (the one this change exists for); the dataset hardcoded back
+over `AE_DATASET`; the branch dimension added to the `requireAdmin` aggregate;
+an unreadable store rendered as an available empty list; a caller-influenced
+value interpolated into the `text/plain` SQL. On the surface: the unreadable
+state drawn as a zero; the empty-but-readable sentence deleted; the one-row
+clarification dropped; the zone removed; a `?branch=` grown on the
+`requireAdmin` method. Every anchor asserted unique before it was applied,
+every mutation proved to have changed bytes, every restore from a **snapshot**
+and verified byte-identical.
+
+**The one escape, and it is the D147 lesson again.** "The empty-but-readable
+sentence deleted" passed at first, because the Deployments zone four hundred
+lines up renders *"an empty registry, not an unreadable one"* — so a whole-file
+match on that phrase held with this zone's own sentence gone outright. An
+assertion a NEIGHBOURING zone can satisfy is not an assertion about this one.
+The check is now bounded at both ends to the traffic zone's own markup, and the
+mutation is caught.
+
+**The absent-branch case is exercised, not assumed**, and it is two cases: with
+zero branches provisioned every row carries `hq` and the split renders exactly
+one group, and separately AE may be unreadable in three distinct ways. **A
+preview-shaped fixture proves the dataset fix** — `AE_DATASET` pointed at
+`studioos_metrics_preview`, with both AE queries asserted to name it and to
+carry no trace of the hardcoded name.
