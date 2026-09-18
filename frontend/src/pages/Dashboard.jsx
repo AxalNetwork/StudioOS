@@ -560,11 +560,6 @@ function Card({ title, icon: Icon, link, linkLabel, children }) {
   );
 }
 
-function PriorityDot({ p }) {
-  const c = p === 'high' ? 'bg-red-500' : p === 'medium' ? 'bg-amber-500' : 'bg-gray-400';
-  return <span className={`w-2 h-2 rounded-full ${c} flex-shrink-0`} />;
-}
-
 function RoleBadge({ role }) {
   // Task #81 — investors get their own indigo badge instead of the gray fallback.
   const styles = {
