@@ -137,10 +137,13 @@ export const SIDEBAR_GROUPS = {
   // THE GROUP ABOVE AND IS NOT ONE. That comment forbids a row pointing at a
   // route that does not exist, because such a row "looks shipped and 404s".
   // Every row here HAS a route, registered in App.jsx and covered by the same
-  // guard; the ones whose artboards are not built render `BranchZonePending`,
-  // which names the artboard, what will be on it and which PR builds it. A
-  // stated notice is not a 404, and a one-row sidebar — which is what the
-  // rule applied literally would ship, since only Settings has a page today —
+  // guard — and as of D155 every one of them resolves to a REAL PAGE. The
+  // interim arrangement this comment used to describe (rows whose artboards
+  // were not built rendering `BranchZonePending`, a notice naming the artboard
+  // and the PR that would build it) is over, and the component is deleted
+  // rather than left unused. What it bought was a sidebar matching the canvas
+  // while the pages landed one at a time; a one-row sidebar — which is what the
+  // rule applied literally would have shipped, since only Settings had a page —
   // is not the subsidiary canvas and does not answer the question the frame
   // exists to answer.
   branch_admin: [

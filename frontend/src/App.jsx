@@ -172,7 +172,7 @@ const SendForSignaturePage = lazy(() => import('./pages/legal/SendForSignaturePa
 // The subsidiary administrator's read of their own territory licence.
 // Migration 190 made "which licence is this admin's?" answerable at all.
 const MyLicencePage = lazy(() => import('./pages/subsidiary/MyLicencePage'));
-const BranchZonePending = lazy(() => import('./pages/branch/BranchZonePending'));
+const BranchSettings = lazy(() => import('./pages/branch/BranchSettings'));
 const BranchApprovals = lazy(() => import('./pages/branch/BranchApprovals'));
 // The frame every /branch/* route below renders in, and the branch tier's one
 // Worker AI rail mount (D126). Lazy like its siblings so the rail and its price
@@ -2169,7 +2169,7 @@ function AppInner() {
       <Route path="/branch/community" element={guard(['admin'], <BranchCommunity user={user} />)} />
       <Route path="/branch/contracts" element={guard(['admin'], <BranchContracts user={user} />)} />
       <Route path="/branch/insights" element={guard(['admin'], <BranchInsights user={user} />)} />
-      <Route path="/branch/settings" element={guard(['admin'], <BranchZone workspace="Settings"><BranchZonePending artboard="S6 Settings" title="Who owns each row" will="Subsidiary name and staff are yours; territory, brand kit and the licence summary are HQ's, each with an owner chip and, on HQ-owned rows, the request path. Your licence summary is already readable today under Your licence below." pr="PR 14" /></BranchZone>)} />
+      <Route path="/branch/settings" element={guard(['admin'], <BranchSettings user={user} />)} />
       {/* The HQ shell's Contracts and Team rows. Both frame panels the Admin
           Console already has (Legal templates; the Users table) for the
           franchisor, with the holder console above the accounts. */}

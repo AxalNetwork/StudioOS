@@ -13048,3 +13048,63 @@ the next surface.
 
 **No migration — 269 stays free.** No new `/api/*` method: `aiWorkspaceExplain`
 gained a field. **#244 is closed.**
+
+## D155 — S11 Settings: the artboard names the wrong owner on two of its five rows (#234's remainder)
+
+**The last branch route.** `/branch/settings` was the one row still rendering
+`BranchZonePending`; S4 shipped as D140, S5+S10 as D147, S6 as D148. With this
+every row in the branch sidebar resolves to a real page.
+
+**What the artboard is for, and why a wrong owner is fatal to it.** S11's whole
+subject is ownership — *"HQ-owned rows show the request path instead of a
+disabled input: a greyed field invites a ticket asking to enable it; a chip
+saying HQ and a route saying 'escalation' answers the question on the page."* A
+row that names the wrong owner is therefore not a cosmetic error on this screen;
+it is the screen being wrong about the only thing it exists to say.
+
+**And it names the wrong owner twice.** The canvas marks **Subsidiary name** and
+**Staff & roles** as the branch's to edit. Measured:
+
+| row | canvas | measured |
+| --- | --- | --- |
+| Subsidiary name | Yours · Edit | **HQ's, twice over.** The name this deployment answers by is `BRANCH_NAME`, a Worker var set at provisioning — `routes/auth.ts` says so where it builds `/me.branch`: *"THE VARS ARE THE SOURCE, NOT THE DATABASE"* — so changing it is a redeploy, not a form. And the licence copy's `brand_name` is HQ's: there is not one `UPDATE branch_licence` in the worker, by design (D.9), so an edit would be overwritten by HQ's next push |
+| Territory | HQ · Request | ✅ |
+| Staff & roles | Yours · Edit | **SPLIT, and the editable half is not roles.** `PATCH /users/:userId/role` answers `admin_promotion_disabled` to everyone but the super admin, and `hydrateSuperAdmin` returns 0 on a branch without querying (D106) — so a branch admin can *never* change a role, and D134 made the licence the only door for granting one. What a branch does own is deactivating a **non-admin** account on its own database: `toggle-active` refuses only an admin target (D132) |
+| Brand kit | HQ · Ask | ✅ — and the canvas wrote the absence itself, which D.10 had already decided: no brand-kit store exists |
+| Licence summary | HQ · Request seats | ✅ |
+
+So the split is **four of five HQ-owned**, not the canvas's three, and the count
+on screen is derived from the rows rather than typed — the canvas typed it and
+got it wrong. The correction is stated **on the page**, not only in a comment,
+so a reader who notices the artboard says otherwise gets the reason rather than
+a discrepancy.
+
+**No field is drawn anywhere.** Every row's action is a link to somewhere that
+works, and the test asserts each destination is a registered route. A disabled
+input here would be the `still_an_admin` mistake D134 named, at its worst: on a
+page whose subject is who may act, a greyed control claims the action exists and
+is merely switched off.
+
+**Ninth producer with no reader.** `GET /api/branch/insights` ran
+`GROUP BY role`, walked the rows, and returned only the totals — the breakdown
+S11's staff line is a sentence about was computed and dropped. It is returned
+now, with `by_role_active_only` beside it so a reader is not left to infer why
+it does not match the directory. **No new `/api/*` method:** the page composes
+`myLicence()` and `branchInsights()`, both of which the branch already had.
+
+**`BranchZonePending` is deleted, and its guard re-aimed — the inverse of the
+stale refusal.** The component existed so the sidebar could match the canvas
+while the pages landed one at a time. With S11 built it has nothing to stand in
+for, and a component named Pending with nothing pending is the stale artefact
+D129 and D131 deleted in their own areas. Its guard asserted
+`uses.length >= 1` — *the scaffolding had to exist* — so it began failing the
+day its own job was finished. What is pinned now is the stronger property it was
+approaching: **every row in the branch sidebar resolves to a real page.** The
+same lesson as the eleven re-aimed refusals, arriving from the other side: a
+guard tied to an interim arrangement has to be re-aimed when the interim ends.
+
+**One of my own new assertions caught a real defect in my own code**, which is
+the point of writing them: `lic.territories?.length || 0` would have rendered
+*"0 territories held"* for a licence copy that arrived without the array — a
+claim about this branch's licence that nothing measured. Both zero-defaults are
+gone. **No migration — 269 stays free.**
