@@ -235,32 +235,7 @@ const Oval: React.FC<{
   }}>{children}</div>
 );
 
-// Circular avatar: shows a profile photo cropped to a circle when a URL is
-// present and loads, otherwise falls back to the initials monogram (also used
-// when the image errors out, so a dead URL never shows a broken-image icon).
-const Avatar: React.FC<{
-  l: number; t: number; d: number; photo?: string; initials: string;
-  fill: string; fontSize: number; textColor: string; z?: number;
-}> = ({ l, t, d, photo, initials, fill, fontSize, textColor, z }) => {
-  const [errored, setErrored] = React.useState(false);
-  const showPhoto = !!photo && !errored;
-  return (
-    <div style={{
-      position: 'absolute', left: inch(l), top: inch(t), width: inch(d), height: inch(d),
-      borderRadius: '50%', background: fill, overflow: 'hidden', zIndex: z,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }}>
-      {showPhoto ? (
-        <img
-          src={photo} alt={initials} onError={() => setErrored(true)}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-        />
-      ) : (
-        <span style={{ fontFamily: FF, fontWeight: 700, fontSize: pt(fontSize), color: textColor }}>{initials}</span>
-      )}
-    </div>
-  );
-};
+
 
 // Progress / funnel bar: a track with a filled portion.
 const Bar: React.FC<{ l: number; t: number; w: number; h: number; pct: number; fill: string; track?: string }> = ({
