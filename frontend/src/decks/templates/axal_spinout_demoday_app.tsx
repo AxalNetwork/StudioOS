@@ -272,25 +272,6 @@ const Bar: React.FC<{ l: number; t: number; w: number; h: number; pct: number; f
   </>
 );
 
-const StatusDot: React.FC<{ status: Status; d: number }> = ({ status, d }) => {
-  const px = inch(d);
-  if (status === 'done') {
-    return (
-      <div style={{ width: px, height: px, borderRadius: '50%', background: K.done, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <svg width={px * 0.55} height={px * 0.55} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-      </div>
-    );
-  }
-  if (status === 'active') {
-    return (
-      <div style={{ width: px, height: px, borderRadius: '50%', background: K.active, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ width: px * 0.34, height: px * 0.34, borderRadius: '50%', background: '#fff' }} />
-      </div>
-    );
-  }
-  return <div style={{ width: px, height: px, borderRadius: '50%', background: '#fff', border: `${pt(1.5)}px solid ${K.faint}` }} />;
-};
-
 const StepIcon: React.FC<{ name: string; d: number; color: string }> = ({ name, d, color }) => {
   const s = inch(d);
   const p = { width: s, height: s, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
