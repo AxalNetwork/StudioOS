@@ -2586,6 +2586,12 @@ export const api = {
   monitoringRateLimits: (minutes = 60) => request(`/monitoring/rate-limits?minutes=${minutes}`),
   monitoringErrors: (limit = 50) => request(`/monitoring/errors?limit=${limit}`),
   monitoringAnomalies: () => request('/monitoring/anomalies'),
+  // D157 — the caller's OWN privileged actions. Deliberately NOT a filter on
+  // `/analytics/audit`, which is super-admin-only because it joins `users` and
+  // renders other admins by name: the subject here is bound from the session,
+  // so there is no parameter that could name somebody else.
+  monitoringMyAudit: (limit = 25, offset = 0) =>
+    request(`/monitoring/analytics/audit/mine?limit=${limit}&offset=${offset}`),
   monitoringThroughput: () => request('/monitoring/throughput'),
   monitoringCleanup: () => request('/monitoring/cleanup', { method: 'POST' }),
   // Task #1 (AX) — admin AI router usage rollup (per-day spend, fallback

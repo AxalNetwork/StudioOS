@@ -249,6 +249,88 @@ function ErrorDetailModal({ error, allErrors, onClose }) {
   );
 }
 
+/**
+ * D157 — the caller's own privileged-action log.
+ *
+ * WHOSE FEED THIS IS, SAID ON SCREEN. `scope.admin_user_id` comes back from the
+ * route, and the heading states the feed is this account's own. A list of
+ * privileged actions that does not say whose it is invites being read as the
+ * platform's, which is the claim D132 closed for a reason.
+ *
+ * AN UNREADABLE STORE IS NOT AN EMPTY ONE. `admin_audit_log` is lazily
+ * bootstrapped, so its absence is a state this read can genuinely meet; a
+ * failed read renders its own reason rather than "no actions recorded", which
+ * would be a claim about the operator that nothing measured.
+ */
+function MyActionsTab() {
+  const [data, setData] = useState(undefined);
+  const [failed, setFailed] = useState('');
+
+  const load = React.useCallback(async () => {
+    setFailed('');
+    try { setData(await api.monitoringMyAudit(50, 0)); }
+    catch (e) { setData(null); setFailed(e?.message || 'the audit store could not be read'); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  if (data === undefined) return <div className="p-6 text-sm text-gray-500">Loading…</div>;
+  if (data === null) {
+    return (
+      <div data-testid="my-actions-unreadable" className="p-6">
+        <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Your action log could not be read.</div>
+        <div className="text-xs text-gray-500 mt-1">{failed}</div>
+        <div className="text-xs text-gray-500 mt-1">
+          This is not a claim that you have taken no privileged actions.
+        </div>
+        <button type="button" onClick={load} className="mt-3 text-xs font-medium text-violet-700 underline">Try again</button>
+      </div>
+    );
+  }
+  const items = data.items || [];
+  return (
+    <div className="p-6 space-y-4">
+      <div>
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100" data-testid="my-actions-heading">
+          Your own privileged actions
+        </h2>
+        <p className="text-xs text-gray-500 mt-1" data-testid="my-actions-scope">
+          Every action recorded against this account (#{data.scope?.admin_user_id}), newest first.
+          Another administrator&rsquo;s record is not readable here, and never was for this tier.
+        </p>
+      </div>
+      {items.length === 0 ? (
+        <div className="text-sm text-gray-500" data-testid="my-actions-empty">
+          No privileged action has been recorded against this account.
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
+                <th className="py-2 pr-4">When</th>
+                <th className="py-2 pr-4">Action</th>
+                <th className="py-2 pr-4">Subject</th>
+              </tr>
+            </thead>
+            <tbody data-testid="my-actions-rows">
+              {items.map((r) => (
+                <tr key={r.id} className="border-t border-gray-100 dark:border-gray-800">
+                  <td className="py-2 pr-4 whitespace-nowrap tabular-nums">{r.exported_at}</td>
+                  <td className="py-2 pr-4 font-medium">{r.action}</td>
+                  <td className="py-2 pr-4 text-gray-500">{r.report_type || '\u2014'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="text-xs text-gray-500 mt-3" data-testid="my-actions-total">
+            Showing {items.length} of {data.total}.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function MonitoringPage() {
   const [metrics, setMetrics] = useState(null);
   const [rateLimits, setRateLimits] = useState(null);
@@ -272,7 +354,7 @@ export default function MonitoringPage() {
   })();
   const initialTab = (() => {
     const t = qp.get('tab');
-    return (t === 'integrity' || t === 'infra' || t === 'overview' || t === 'analytics' || t === 'ai-usage' || t === 'dlq' || t === 'cron') ? t : 'overview';
+    return (t === 'integrity' || t === 'infra' || t === 'overview' || t === 'analytics' || t === 'ai-usage' || t === 'dlq' || t === 'cron' || t === 'my-actions') ? t : 'overview';
   })();
   const [tab, setTab] = useState(initialTab);
   const focusSnapshotId = (() => {
@@ -376,6 +458,7 @@ export default function MonitoringPage() {
           { id: 'dlq', label: 'DLQ' },
           { id: 'cron', label: 'Cron History' },
           { id: 'ai-usage', label: 'AI Usage' },
+          { id: 'my-actions', label: 'My actions' },
         ].map(t => (
           <button
             key={t.id}
@@ -397,6 +480,7 @@ export default function MonitoringPage() {
        tab === 'ai-usage' ? <AiUsageTab /> :
        tab === 'dlq' ? <DlqTab /> :
        tab === 'cron' ? <CronTab /> :
+       tab === 'my-actions' ? <MyActionsTab /> :
        tab === 'integrity' ? <ScoreIntegrityTab focusSnapshotId={focusSnapshotId} /> : (
       <>
       {/* Summary cards */}
