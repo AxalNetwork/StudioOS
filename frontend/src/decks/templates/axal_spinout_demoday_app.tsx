@@ -303,17 +303,6 @@ const StepIcon: React.FC<{ name: string; d: number; color: string }> = ({ name, 
   }
 };
 
-const Eyebrow: React.FC<{ label: string; idx: string; dark?: boolean }> = ({ label, idx, dark }) => (
-  <>
-    <Txt l={ML} t={0.5} w={8} h={0.3} size={11} bold color={K.accent} spacing={1.5} valign="middle">
-      {String(label).toUpperCase()}
-    </Txt>
-    <Txt l={W - MARGIN - 3} t={0.5} w={3} h={0.3} size={11} bold align="right" valign="middle" spacing={1} color={dark ? K.dfaint : K.faint}>
-      {idx} / 11
-    </Txt>
-  </>
-);
-
 const Title: React.FC<{ text: any; path: string; editable?: boolean; onEdit?: OnEdit; w?: number }> = ({ text, path, editable, onEdit, w }) => (
   <Ed l={ML} t={1.05} w={w || 11.5} h={0.95} size={27} bold color={K.ink} lh={1.04} valign="top" value={text} path={path} editable={editable} onEdit={onEdit} />
 );
