@@ -13852,3 +13852,125 @@ table-agnostic again, which must fail the assertion that one table's clock
 write cannot make another table's column look SQL-format. Every anchor asserted
 unique before it was applied, every mutation proved to have changed bytes,
 every restore from a **snapshot** and verified byte-identical.
+
+---
+
+## D163
+
+**HQ's own branch-targeting acts survive the branch going dark.**
+
+Every HQ→branch push reports whether it LANDED as its own field and never
+throws — the D111 rule `services/licencePush.ts:13-19` states outright, and it
+is right: HQ's ledger is the record, and a 502 for an unreachable branch would
+make an operator re-enter a decision that is already stored.
+
+**But that report is per-call and ephemeral.** It reaches the operator who made
+the call, in that one response, and nothing keeps it. HQ's D1 records the
+transition; it does not record that the branch refused the copy, or that no
+Worker answered. So the question an outage post-mortem actually asks — *which
+branch was unreachable, and which of HQ's own acts against it failed while it
+was* — had no store that could answer it. D161 named this as its own next step
+and built the prerequisite: the branch dimension on the Analytics Engine write.
+
+### The finding the whole design turns on
+
+**`HqEntrypoint` is exported BY THE BRANCH** (`rpc/index.ts:41`). It is the
+class HQ calls, and it runs on the branch's own `env`. So a `writeDataPoint`
+placed inside those handlers — the obvious home for it — would be lost in
+exactly the case the mirror exists to survive. The write belongs at **HQ's call
+site, in HQ's isolate**, recording what HQ OBSERVED rather than what the branch
+managed to say.
+
+Analytics Engine is the one store that satisfies both halves: every deployment
+already writes to it (D105's shared dataset), and it does not live on the
+branch whose silence is the thing being recorded.
+
+### The one that would have corrupted two live reports
+
+Neither existing AE reader filtered by row kind, because until now there was
+only one kind. Without a predicate, a mirror row appears in
+`loadTechnicalFromAnalyticsEngine` as an endpoint named `hq:branch_action`
+(`GROUP BY blob1`) and is counted into a branch's `hits` in
+`loadTrafficByBranch` (`GROUP BY blob6`) — **both figures on a live HQ screen.**
+So both queries gain `AND blob1 LIKE '/%'` in this same commit.
+
+It matches on **blob1 rather than index1** for a verifiability reason rather
+than a performance one: blob1 is the slot both queries already project and
+group by, so a WHERE over it is a demonstrated construct in this repo, and
+`developers.cloudflare.com` is `EGRESS_BLOCKED` from this environment, so an
+untested one could not be confirmed. An HTTP row's blob1 always starts `/api/`
+(`middleware/observability.ts:26` meters nothing else); the sentinel cannot
+collide with it.
+
+### Security · Governance is NOT the home, and that was measured
+
+`admin_security.ts`'s feed is stated three times in the live code to be HQ's
+own record of what HQ did, and not a branch's to show — the file header (quoted
+at `frontend/src/pages/hq/SecurityPage.jsx:55-56`), the rail row at `:379`, and
+`tenant_reason` at `admin_security.ts:664`. That is a deliberate boundary, not
+an oversight, and this decision does not touch it. It does not need to: the
+mirror carries **only HQ's own acts**, grouped by which branch they concerned —
+the same thing `licence_events` already does with `brand_name`, which that file
+calls "the one column that is real here, and only here."
+
+### What lands
+
+| path | change |
+| --- | --- |
+| `cloudflare-worker/src/services/auditMirror.ts` | **new** — `mirrorBranchAction(env, action, outcome, code)`. Synchronous (`writeDataPoint` is fire-and-forget, so it costs the request nothing), own try/catch, `console.warn` only, never throws |
+| `cloudflare-worker/src/services/licencePush.ts` | `pushLicenceToBranch` mirrors at its three code-carrying exits — **one edit, six callers** (`admin_licences.ts` ×5 and `services/complianceLadder.ts:307`) |
+| `cloudflare-worker/src/routes/admin_support_sessions.ts` | `openSupportSession`, `moveAccountOut`, `inviteAccount` — the move mirrors against **whichever end** is unbound, never both |
+| `cloudflare-worker/src/routes/admin_escalations.ts` | the escalation-answer push |
+| `cloudflare-worker/src/routes/admin_statements.ts` | the promo-ceiling push |
+| `cloudflare-worker/src/services/analyticsReports.ts` | `loadBranchActionMirror`, plus the two `HTTP_ROWS_ONLY` guards above |
+| `cloudflare-worker/src/routes/admin_deployments.ts` | `GET /deployments` gains a `branch_actions` block beside `registry_available` and `dispatch_available` — **no new `/api/*` method** |
+| `frontend/src/pages/hq/PlatformPage.jsx` | the Deployments zone renders it per branch, with the unreadable state said **once** |
+
+**The row shape**, aligned with the per-request row rather than packed tight:
+`index1` and `blob1` the sentinel, `blob2` action, `blob3` outcome, `blob6` the
+branch — **the same slot** `observability.ts:126` uses — and no doubles.
+
+**No migration; AE is not D1. 271 stays free.**
+
+### Three calls made rather than asked, each cheap to reverse
+
+1. **The mirror carries no identity at all** — no actor id, no email, no reason
+   text. HQ's own D1 holds the actor authoritatively
+   (`admin_audit_log.admin_user_id`, `licence_events.actor_user_id`) and is
+   always readable, because it is HQ's. The mirror exists for the one dimension
+   D1 cannot give; identity in a shared analytics store would add exposure and
+   no information. *Strike it and the actor id rides in double3, the slot the
+   per-request row already uses for `user_id`.*
+2. **A licence with no deployment is not mirrored at all.** It has no branch, so
+   there is no branch the act concerns, and a row with an empty branch would put
+   a non-branch in the per-branch grouping. `not_deployed` is kept for the
+   narrower, real case: a deployment row exists and no Worker is bound to it.
+3. **The two fan-out pushes are excluded** — `applyBenchmarks`
+   (`services/branchBenchmarks.ts:220`) and `publishTemplate`
+   (`routes/admin_contracts.ts:1382`) broadcast to every branch rather than
+   targeting one, so they are a different row shape: one per branch per publish,
+   off the `fanOut` result array. Filed, not built.
+
+**And one refused with its measurement:** a genuine unreachable-vs-refused
+split. Every call site collapses those two into one `catch` today
+(`licencePush.ts:180-182` and the four others), so `failed` collapses them here
+too rather than claiming a distinction its own inputs cannot make.
+
+### Verification
+
+`test:drift` exit 0 read as the exit code from a redirected log. **8 mutations,
+8 caught** — the exclusion predicate dropped from **both** readers (which fails
+two assertions, one per report, read off the SQL on the WIRE rather than out of
+the source, so a predicate written but not sent still fails); the branch moved
+out of blob6; the `BRANCH_CODE_RE` refusal removed; the AE write allowed to
+throw; and on the surface, the zone-level unreadable sentence deleted, the
+server's reason replaced by one written on the page, the nothing-recorded guard
+dropped, and a count given a `|| 0` fallback. Every anchor asserted unique
+before it was applied, every restore from a **snapshot** and verified
+byte-identical.
+
+**One thing the build corrected in its own test.** The first fixture returned a
+bare array where `aeSql` unwraps `{ data }`, so the populated-read assertion
+measured zero rows and failed — correctly. A fixture shaped differently from
+the thing it stands in for is how a test passes against its own mistake, and
+this one failed instead.

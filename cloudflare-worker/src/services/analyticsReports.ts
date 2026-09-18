@@ -11,6 +11,7 @@
  */
 import type { Env } from '../types';
 import { getSQL } from '../db';
+import { MIRROR_KIND } from './auditMirror';
 import {
   loadPlanPriceMap, priceFor, ensureSubscriptionPlansSchema,
   loadFxRates, convertFromUsd,
@@ -742,6 +743,27 @@ function aeDataset(env: Env): string {
 }
 
 /**
+ * D163 — THE TWO REPORTS BELOW COUNT HTTP ROWS ONLY, AND SAYING SO IS NOT
+ * OPTIONAL.
+ *
+ * The dataset is shared (D105) and, since D163, carries a second kind of row:
+ * one HQ act against one branch, written by `services/auditMirror.ts`. Neither
+ * query below filtered by row kind, because until now there was only one kind
+ * — so without this predicate a mirror row would appear in the technical
+ * report as an endpoint named `hq:branch_action`, and would be counted into a
+ * branch's `hits` in the traffic split. Both are figures on a live HQ screen.
+ *
+ * It matches on blob1 rather than index1 deliberately: blob1 is the slot both
+ * queries already project and group by, so a WHERE over it is a demonstrated
+ * construct in this repo, and the Cloudflare docs are unreachable from this
+ * environment (EGRESS_BLOCKED) to verify an untested one. An HTTP row's blob1
+ * is always a path starting `/api/` (`middleware/observability.ts:26` only
+ * meters those), and the mirror's is the `MIRROR_KIND` sentinel, so the two
+ * cannot collide.
+ */
+const HTTP_ROWS_ONLY = "blob1 LIKE '/%'";
+
+/**
  * D161 — the AE SQL call, in one place because there are now two queries.
  *
  * Returns the rows, or `null` for EVERY failure: unconfigured credentials, a
@@ -808,6 +830,7 @@ async function loadTechnicalFromAnalyticsEngine(
     FROM ${aeDataset(env)}
     WHERE timestamp >= toDateTime('${range.fromIso}')
       AND timestamp <= toDateTime('${range.toIso}')
+      AND ${HTTP_ROWS_ONLY}
     GROUP BY blob1
     ORDER BY hits DESC
     LIMIT 25
@@ -877,6 +900,7 @@ export async function loadTrafficByBranch(
     FROM ${aeDataset(env)}
     WHERE timestamp >= toDateTime('${range.fromIso}')
       AND timestamp <= toDateTime('${range.toIso}')
+      AND ${HTTP_ROWS_ONLY}
     GROUP BY blob6
     ORDER BY hits DESC
     LIMIT 50
@@ -904,6 +928,73 @@ export async function loadTrafficByBranch(
     };
   });
   return { available: true, as_of, rows };
+}
+
+/** D163 — one branch, and how HQ's own acts against it went. */
+export interface BranchActionRow {
+  branch: string;
+  action: string;
+  outcome: string;
+  count: number;
+  last_at: string | null;
+}
+
+/**
+ * D163 — HQ's own branch-targeting acts, grouped by branch and outcome.
+ *
+ * WHAT THIS IS NOT. It is not a second copy of the audit trail, and it is not
+ * a window into a branch's own console. Every row here was written by HQ,
+ * about an act HQ performed, recording only whether the branch it targeted
+ * answered — see `services/auditMirror.ts` for what is deliberately absent
+ * from it (actor, email, reason: all held authoritatively in HQ's own D1).
+ * The governance feed's stated scope is untouched by it.
+ *
+ * `available: false` CARRIES A REASON AND IS NOT AN EMPTY LIST. `aeSql`
+ * returns `null` for unconfigured credentials, a non-OK response and a throw
+ * alike; "HQ has pushed nothing" and "the telemetry store could not be read"
+ * are different claims and the surface renders them differently — the rule
+ * `loadTrafficByBranch` states one function up.
+ */
+export async function loadBranchActionMirror(
+  env: Env,
+  range: DateRange,
+): Promise<{ available: boolean; reason?: string; as_of: string; rows: BranchActionRow[] }> {
+  const as_of = new Date().toISOString();
+  const sqlText = `
+    SELECT blob6 AS branch,
+           blob2 AS action,
+           blob3 AS outcome,
+           COUNT() AS n,
+           MAX(timestamp) AS last_at
+    FROM ${aeDataset(env)}
+    WHERE timestamp >= toDateTime('${range.fromIso}')
+      AND timestamp <= toDateTime('${range.toIso}')
+      AND blob1 = '${MIRROR_KIND}'
+    GROUP BY blob6, blob2, blob3
+    ORDER BY last_at DESC
+    LIMIT 200
+  `.trim();
+  const data = await aeSql(env, sqlText);
+  if (data === null) {
+    return {
+      available: false,
+      reason: 'The telemetry store could not be read, so this is not "HQ has pushed nothing" — '
+        + 'Analytics Engine is unconfigured or did not answer.',
+      as_of,
+      rows: [],
+    };
+  }
+  return {
+    available: true,
+    as_of,
+    rows: data.map((r) => ({
+      branch: str(r.branch as string) || 'hq',
+      action: str(r.action as string),
+      outcome: str(r.outcome as string),
+      count: num(r.n as number),
+      last_at: r.last_at ? str(r.last_at as string) : null,
+    })),
+  };
 }
 
 export async function loadTechnical(env: Env, range: DateRange): Promise<TechnicalReport> {

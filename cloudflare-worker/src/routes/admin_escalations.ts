@@ -24,6 +24,7 @@ import {
   answerEscalation, listEscalations, ESCALATION_KINDS, ESCALATION_STATUSES,
 } from '../rpc/hqOps';
 import { branchByCode } from '../services/branches';
+import { mirrorBranchAction } from '../services/auditMirror';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -114,6 +115,15 @@ r.patch('/escalations/:uid', async (c) => {
         pushed = { ok: false, reason: `The branch did not accept the decision: ${(e as Error).message}` };
       }
     }
+    // D163 — one call for both arms. No binding is `not_deployed`; a binding
+    // that answered is its own verdict. HQ's ledger already holds the decision
+    // either way, which is why this records only whether it TRAVELLED.
+    mirrorBranchAction(
+      c.env,
+      'escalation_answered',
+      !binding ? 'not_deployed' : (pushed.ok ? 'ok' : 'failed'),
+      decided.row.branch_code,
+    );
 
     return c.json({ ...decided.row, pushed });
   } catch (e) { return mapError(c, e); }

@@ -30,6 +30,7 @@ import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
 import { githubConfigured, dispatchWorkflow } from '../services/githubSync';
 import { fanOut, coverage, withRegistry, type BranchResult } from '../services/branches';
+import { loadBranchActionMirror, parseRange } from '../services/analyticsReports';
 import { BRANCH_CODE_RE } from '../util/branch';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -208,6 +209,15 @@ r.get('/deployments', async (c) => {
   const live = withRegistry(asked, rows.map((d) => ({ code: d.code, hostname: d.hostname, status: d.status })));
   const byCode = new Map(live.map((l: BranchResult<unknown>) => [l.code, l]));
 
+  // D163 — HQ's own acts against each branch over the last 30 days, from the
+  // one store that is not the branch. `live_state` above says whether a branch
+  // answers RIGHT NOW; this says what HQ tried while it was not answering, and
+  // survives the branch being down because Analytics Engine does not live on
+  // it. A fixed window rather than a query parameter: this zone is a console,
+  // not a date-ranged report, and nothing here interpolates a request value
+  // into AE's query-text-only SQL.
+  const branchActions = await loadBranchActionMirror(env, parseRange(null, null, 30));
+
   return c.json({
     registry_available: registryReadable,
     ...(registryReadable ? {} : {
@@ -238,6 +248,15 @@ r.get('/deployments', async (c) => {
         .filter((l: BranchResult<unknown>) => l.status === 'not_deployed')
         .map((l: BranchResult<unknown>) => l.code),
     },
+    // D163 — SAID ONCE RATHER THAN ONCE PER ROW. An unreadable telemetry store
+    // is one fact about HQ's own instrumentation, not a fact about each
+    // branch; repeating it per deployment would read as every branch being
+    // unreachable, which is the conflation the three-state design exists to
+    // prevent. The rows carry their own branch and the page joins on it.
+    branch_actions_available: branchActions.available,
+    ...(branchActions.available ? {} : { branch_actions_reason: branchActions.reason }),
+    branch_actions_as_of: branchActions.as_of,
+    branch_actions: branchActions.rows,
     // The button's own precondition, so the page can disable it with a reason
     // rather than letting someone press it and read a 409.
     dispatch_available: githubConfigured(env),
