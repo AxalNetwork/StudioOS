@@ -222,19 +222,6 @@ const Rect: React.FC<{
   }} />
 );
 
-const Oval: React.FC<{
-  l: number; t: number; d: number; fill: string; line?: string; lineW?: number;
-  children?: React.ReactNode; shadow?: boolean; z?: number;
-}> = ({ l, t, d, fill, line, lineW = 1, children, shadow, z }) => (
-  <div style={{
-    position: 'absolute', left: inch(l), top: inch(t), width: inch(d), height: inch(d),
-    borderRadius: '50%', background: fill,
-    border: line ? `${pt(lineW)}px solid ${line}` : 'none',
-    boxShadow: shadow ? '2px 2px 9px rgba(0,0,0,0.10)' : undefined,
-    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: z,
-  }}>{children}</div>
-);
-
 // Circular avatar: shows a profile photo cropped to a circle when a URL is
 // present and loads, otherwise falls back to the initials monogram (also used
 // when the image errors out, so a dead URL never shows a broken-image icon).
