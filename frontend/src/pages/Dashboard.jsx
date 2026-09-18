@@ -201,7 +201,6 @@ export default function Dashboard({ activeRole, authUser }) {
   const { user, operator_workspace, notifications, role_view } = data;
 
   const isInvestor = role_view === 'investor';
-  const isOperator = role_view === 'founder' || role_view === 'admin' || (operator_workspace?.assigned_tasks?.length > 0);
   const unreadNotifs = notifications?.length || 0;
 
   if ((activeRole || role_view) === 'founder') {
