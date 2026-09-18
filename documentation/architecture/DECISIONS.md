@@ -12981,3 +12981,70 @@ differ. `WorkerRail` has no `scope` prop today, and building it is #244's
 remainder rather than this PR's; under the overlay HQ Home therefore renders no
 rail at all, since the rail's coverage lines summarise HQ's own ledger and would
 be four false sentences beside four true figures.
+
+## D154 — H13's four rules: one built, one restated, one re-asserted, and one whose refusal D153 made false (#244)
+
+**Where H13 stood.** D150 shipped rule 3 and refused rules 1, 2 and 4, each with
+its measurement. Two of those refusals rested on the same fact — that HQ read in
+exactly one scope — and D153 removed it.
+
+| rule | before | now |
+| --- | --- | --- |
+| **1 · Scope precedes the question** | refused: *"the page decides what it fetched before the rail runs, so both options produce the same read"* | **BUILT.** Under the overlay they demonstrably differ |
+| **2 · Cost is per scope** | refused: one run, one price | **still refused**, restated on screen with its measurement |
+| **3 · Unreadable is a word in the answer** | shipped (HQ Home's branch line) | re-asserted, now on both surfaces |
+| **4 · Anything about a named branch is logged** | refused: *"logging that as a privileged branch read would write a FALSE audit entry"* | **BUILT**, narrowed to the scoped case |
+
+**Rule 1 — the chip reports, it never offers, and that is the decision.** D150
+refused a *picker*, correctly: a picker whose options cannot differ is the
+`still_an_admin` mistake D134 named. The canvas never asked for one — *"the chip
+is what the viewing-as banner set"* — so `WorkerRail` gains a `scope` prop that
+renders the scope the page **was already in**, and changing it stays the shell
+bar's job one layer up, where the mode actually lives. A chip that offered a
+scope the rail cannot change would be the refused control wearing the accepted
+one's clothes, and the guard asserts the absence of anything clickable inside it
+rather than the absence of a word.
+
+Absent draws nothing: a rail with no scope makes no claim, because "the page did
+not say" is not "platform-wide".
+
+**Rule 4 — the refusal had a premise, and it is gone.** D150's words were exact:
+the rail reads no branch, it summarises coverage lines the page rendered, so a
+row saying a branch was read would be **false**. Under D153's overlay those same
+lines *are* one branch's figures, so the canvas's rule applies on its own terms —
+*"reading a branch is a privileged act even when it is only a question."*
+
+So `POST /api/ai/workspace/explain` takes an optional `branch` and writes one
+`admin_audit_log` row — `ai_branch_readback`, the table HQ's Security feed
+already reads — **when and only when** a branch is named. An unscoped run still
+writes nothing, because it is still true that nothing privileged happened: the
+refusal is **narrowed rather than reversed**, which is the D111 pattern for a
+reason that half-expires. Three further properties are pinned because each is a
+way of getting an audit trail wrong: the row is written **before** the run (the
+reads an operator most wants to see are the refused ones, and "what was asked of
+this branch" is the question it answers, not "what came back"); the code is
+**validated** against `BRANCH_CODE_RE`, so client text cannot land in a column an
+operator reads as a branch; and the **label and the identifier are separate
+props** — `scope` is copy a person reads, `scopeBranch` is what the row is keyed
+on, and conflating them would send the words "All branches" as a branch code.
+
+**Rule 2 stays refused, and says so on the screen.** The canvas prices "All
+branches" as up to four reads and four drafts with the estimate multiplying
+before the run. This read-back performs one run at one price whatever its scope,
+because it summarises lines the page already has and does not fan out. The
+multiplier is real only once the read-back itself fans out, which is a producer
+nothing has built — so the rail states it as an absence rather than showing a
+number nothing measured.
+
+**Two things this exposed in my own work.** The `ai_workspace_explain` fixture
+**could not authenticate**, so the first version of rule 4's two negative tests
+went green while the route never ran a line — vacuous in exactly the way this
+programme keeps catching. The user lookup goes through a tagged-template helper
+returning an array rather than `.first()`, and a live `user_sessions` row is
+required as well; both were found by probing the real route rather than reasoning
+about it. And D153's own comment saying `WorkerRail` had no `scope` prop became
+false the moment this landed, so it is corrected rather than left to be cited by
+the next surface.
+
+**No migration — 269 stays free.** No new `/api/*` method: `aiWorkspaceExplain`
+gained a field. **#244 is closed.**

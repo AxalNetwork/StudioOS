@@ -91,9 +91,24 @@ test('every action is ABSENT under the overlay, never disabled', () => {
   // Asserted as the ABSENCE OF CONTROLS rather than as the absence of the word
   // "disabled", because a page may legitimately disable something outside the
   // overlay: the overlay body is its own file, so the scan is bounded to it.
-  const controls = [...OVERLAY.matchAll(/<(button|a|form|input|select|textarea)\b/g)].map((m) => m[1]);
+  //
+  // BOUNDED TO THE PAGE BODY, and D154 is why that bound has to be explicit.
+  // The overlay now carries a `WorkerRail`, and a rail has controls of its own
+  // — a read-back button, a model menu. Those are not actions ON THE BRANCH:
+  // the rail summarises the lines this page already rendered and writes
+  // nothing anywhere. Scanning the whole file would either pass by accident
+  // (`<WorkerRail />` is not a `<button>`) or fail on a rail that is allowed to
+  // be there, and neither would be saying the thing this test means.
+  // `const rail = (` is declared ABOVE `const body = (`, so the body runs from
+  // its own declaration to the end of the file and the slice needs no end.
+  const bodyAt = OVERLAY.indexOf('const body = (');
+  assert.ok(bodyAt > 0 && bodyAt > OVERLAY.indexOf('const rail = ('),
+    'the overlay body moved above the rail — this slice no longer bounds what it claims to');
+  const body = OVERLAY.slice(bodyAt);
+  const controls = [...body.matchAll(/<(button|a|form|input|select|textarea)\b/g)].map((m) => m[1]);
+  assert.ok(body.length > 200, 'the overlay body could not be located — this assertion stopped checking anything');
   assert.deepEqual(controls, [], `the overlay drew ${controls.join(', ')} — an action that cannot run from this view`);
-  assert.ok(!OVERLAY.includes('disabled'), 'the overlay greyed a control instead of not drawing it');
+  assert.ok(!body.includes('disabled'), 'the overlay greyed a control instead of not drawing it');
   // Team's scoped half says the same thing in words, and skips HQ's roster
   // rather than filtering it.
   assert.match(TEAM, /api\.hqAdmins\(asked, viewAs \|\| undefined\)/, 'Team does not send the scope');

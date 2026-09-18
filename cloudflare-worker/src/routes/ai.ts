@@ -23,6 +23,8 @@ import { requireAuth } from '../auth';
 import { loadMyAiSpend } from '../services/aiSpend';
 import { ROUTE, PRICE_USD_PER_1M_TOKENS, run as aiRun } from '../services/aiRouter';
 import { classifyInput } from '../services/advisor/guardrails';
+import { ensureAdminAuditLogTable } from './admin';
+import { BRANCH_CODE_RE } from '../util/branch';
 
 const ai = new Hono<{ Bindings: Env }>();
 
@@ -135,7 +137,7 @@ ai.post('/workspace/explain', async (c) => {
   const user = await requireAuth(c);
 
   const body = await c.req.json<{
-    workspace?: string; zone?: string; coverage?: unknown; model?: string;
+    workspace?: string; zone?: string; coverage?: unknown; model?: string; branch?: string;
   }>().catch(() => null);
   const workspace = String(body?.workspace || '').trim().slice(0, 60);
   const zone = String(body?.zone || '').trim().slice(0, 60);
@@ -144,6 +146,33 @@ ai.post('/workspace/explain', async (c) => {
   // clamp is not validation, it is a bound on what gets logged if someone
   // posts a megabyte.
   const model = String(body?.model || '').trim().slice(0, 120) || undefined;
+  /**
+   * H13 RULE 4 — "anything about a named branch is logged", and D150's refusal
+   * of it had a premise D153 removed.
+   *
+   * D150 declined to log a rail run, with its reason stated: "the rail reads
+   * no branch — POST /api/ai/workspace/explain runs over the coverage lines
+   * the page already rendered, deliberately not the rows. Logging that as a
+   * privileged branch read would write a FALSE audit entry, which is worse
+   * than none." That was exactly right while every HQ page read the fan-out or
+   * its own ledger: the lines summarised HQ's own screen, and no branch was
+   * named in them.
+   *
+   * D153's overlay makes a page route its reads through ONE branch, so under
+   * it those same lines ARE that branch's figures — and a question asked about
+   * them is a question about a named branch. The canvas's rule then applies on
+   * its own terms: "cross-branch answers write to Security, the same as an
+   * impersonation — reading a branch is a privileged act even when it is only
+   * a question."
+   *
+   * So the row is written WHEN AND ONLY WHEN the caller names a branch. An
+   * unscoped run still writes nothing, because it is still true that nothing
+   * privileged happened — the refusal is narrowed rather than reversed, which
+   * is the D111 pattern this repo applies to every reason that half-expires.
+   */
+  const branchRaw = String(body?.branch || '').trim().toLowerCase();
+  const branch = branchRaw && BRANCH_CODE_RE.test(branchRaw) ? branchRaw : '';
+
   const coverage = (Array.isArray(body?.coverage) ? body!.coverage : [])
     .slice(0, 12)
     .map((line) => String(line).trim().slice(0, 200))
@@ -175,6 +204,24 @@ ai.post('/workspace/explain', async (c) => {
       message: 'That page summary could not be sent for review.',
       category: safety.category,
     }, 422);
+  }
+
+  // BEFORE THE RUN, NOT AFTER IT. An audit row written only on success would
+  // omit exactly the reads an operator most wants to see — the ones that were
+  // refused, timed out or blocked — and "what was asked of this branch" is the
+  // question the row exists to answer, not "what came back". Best-effort and
+  // its own try/catch on the D111 precedent: a failed audit insert must not
+  // turn a read into a 500, and the read is reported either way.
+  if (branch) {
+    try {
+      await ensureAdminAuditLogTable(c.env);
+      await c.env.DB.prepare(
+        `INSERT INTO admin_audit_log (admin_user_id, action, report_type, viewed_user_id, filters_json)
+         VALUES (?, 'ai_branch_readback', 'branch', NULL, ?)`,
+      ).bind(user.id, JSON.stringify({ branch, workspace, zone, coverage_lines: coverage.length })).run();
+    } catch (e) {
+      console.error('[ai/workspace/explain] branch audit insert failed', (e as Error).message);
+    }
   }
 
   const r = await aiRun(c.env, {

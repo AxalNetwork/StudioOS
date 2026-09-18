@@ -2627,11 +2627,18 @@ export const api = {
   // caller sent before the menu existed and what a page with no stored choice
   // sends now. The worker validates it against the task's `alternates` and
   // refuses an unlisted one rather than substituting — see aiRouter.ts.
-  aiWorkspaceExplain: ({ workspace, zone, coverage, model }) =>
+  //
+  // D154 — `branch` is what makes H13 rule 4 true rather than false. It is the
+  // scope the PAGE read in, not a filter: when it is present the coverage
+  // lines being sent are one branch's figures, so the route writes an audit
+  // row saying a named branch was read back. Omitted means nothing privileged
+  // happened and nothing is logged, which is what D150 correctly refused to
+  // pretend otherwise about.
+  aiWorkspaceExplain: ({ workspace, zone, coverage, model, branch }) =>
     request('/ai/workspace/explain', {
       method: 'POST',
       timeoutMs: 60_000,
-      body: JSON.stringify({ workspace, zone, coverage, model }),
+      body: JSON.stringify({ workspace, zone, coverage, model, branch }),
     }),
 
   // ---------- Monitoring → Analytics (admin, Task #3 / Task #13) ----------

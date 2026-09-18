@@ -30,7 +30,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Eye } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
-import { Card, Unrecorded, Unreadable } from '../../ui';
+import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 
 const UNAVAILABLE = Symbol('unavailable');
 const num = (v) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Number(v).toLocaleString());
@@ -85,7 +85,56 @@ export default function HqBranchOverlay({ branch }) {
     ? (one.reason || 'This branch could not be read, so nothing below is a figure.')
     : null;
 
-  return (
+  // D154 / H13 — the rail's own coverage, and every line is one branch's.
+  // RULE 1 is why the chip exists at all: the same question ("how many overdue
+  // approvals?") means a different thing per scope, so the scope is stated
+  // before it is asked rather than inferred from the answer. RULE 3 is why an
+  // unreadable branch produces a SENTENCE here rather than an empty list: a
+  // rail that summarised nothing and said nothing would let a generated answer
+  // read as "none" when the truth is "not read".
+  const railCoverage = [];
+  if (live) {
+    if (num(live.accounts?.total) !== null) railCoverage.push(`${num(live.accounts.total)} accounts on ${code}`);
+    if (num(live.seats_used) !== null) railCoverage.push(`${num(live.seats_used)} seats used`);
+    if (num(live.backlog) !== null) railCoverage.push(`${num(live.backlog)} open approvals`);
+    railCoverage.push(`read ${readAt || 'at an unrecorded time'}${asOf ? ` · branch stamped ${asOf}` : ''}`);
+  }
+
+  const rail = (
+    <WorkerRail
+      workspace="HQ"
+      role="super_admin"
+      // RULE 1 — the chip is what the viewing-as banner set. It reports the
+      // scope this page read in; changing it is the bar's job, one layer up.
+      scope={code}
+      // RULE 4 — the CODE, which is what makes the read-back loggable. The
+      // chip above is copy; this is the identifier the route audits on.
+      scopeBranch={code}
+      stance="Read-only branch view"
+      note="Every line here came from one branch's read, over its private link. This rail takes no action, and no action on this screen runs from HQ."
+      coverage={ready ? railCoverage : []}
+      coverageNote={
+        ready
+          ? (absent || undefined)
+          : (data === UNAVAILABLE ? 'This branch could not be read.' : 'Reading this branch…')
+      }
+      unavailable={[
+        // Measured, not deferred: twelve `HqEntrypoint` methods and fifteen
+        // `branchOps` exports, and none of them is a decision feed.
+        ['What this branch decided', 'No branch RPC returns a decision feed, so the approvals behind the backlog count are on the branch and not here.'],
+        // H13 RULE 2, refused with its measurement and restated rather than
+        // dropped. The canvas prices "All branches" as up to four reads and
+        // four drafts, with the estimate multiplying before the run. This rail
+        // performs ONE run at ONE price whatever its scope — the multiplier is
+        // real only once the read-back itself fans out, which is a producer
+        // nothing has built. A cost line that multiplied anyway would be a
+        // number nothing measured.
+        ['A per-scope cost multiplier', 'One run, one price. The estimate below is per run, not per branch: this read-back does not fan out, so there is nothing to multiply.'],
+      ]}
+    />
+  );
+
+  const body = (
     <div data-testid="hq-branch-overlay" data-branch={code} data-branch-state={one ? one.status : 'loading'}>
       <header>
         <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
@@ -168,6 +217,13 @@ export default function HqBranchOverlay({ branch }) {
           the tile above; the decisions behind it are its own record.
         </p>
       </Card>
+    </div>
+  );
+
+  return (
+    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start lg:gap-6">
+      <div className="min-w-0">{body}</div>
+      <div className="mt-6 lg:mt-0">{rail}</div>
     </div>
   );
 }
