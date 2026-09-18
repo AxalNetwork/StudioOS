@@ -210,18 +210,6 @@ const Ed: React.FC<EdProps> = ({
   </div>
 );
 
-const Rect: React.FC<{
-  l: number; t: number; w: number; h: number; fill?: string; line?: string | false;
-  lineW?: number; r?: number; shadow?: boolean; z?: number;
-}> = ({ l, t, w, h, fill = K.white, line = K.line, lineW = 1, r = 0.08, shadow = true, z }) => (
-  <div style={{
-    position: 'absolute', left: inch(l), top: inch(t), width: inch(w), height: inch(h),
-    background: fill, borderRadius: inch(r),
-    border: line === false ? 'none' : `${pt(lineW)}px solid ${line}`,
-  boxShadow: shadow ? '0 1px 3px rgba(23,19,33,0.035)' : undefined, zIndex: z,
-  }} />
-);
-
 const Oval: React.FC<{
   l: number; t: number; d: number; fill: string; line?: string; lineW?: number;
   children?: React.ReactNode; shadow?: boolean; z?: number;
