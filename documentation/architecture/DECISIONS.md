@@ -13752,3 +13752,103 @@ one group, and separately AE may be unreadable in three distinct ways. **A
 preview-shaped fixture proves the dataset fix** — `AE_DATASET` pointed at
 `studioos_metrics_preview`, with both AE queries asserted to name it and to
 carry no trace of the hardcoded name.
+
+---
+
+## D162
+
+**The bound-parameter rule stops being a typed list of six, and four
+entitlement reads stop losing a day.** (#253 — D125's timestamp audit, the
+remainder D160 left)
+
+### What D160 left, and why a list was always going to leave it
+
+D160 closed D125's stated blind spot — a raw `.toISOString()` bind meeting a
+bare timestamp comparison, which drops every row dated on the bind's own date,
+because SQLite compares TEXT lexically and index 10 is `'T'` (0x54) against
+`' '` (0x20). It watched **six column names, chosen by hand**. Measured against
+the wider vocabulary those six miss **four live sites in three files**, every
+one of them money- or entitlement-adjacent:
+
+| site | column | what it did |
+| --- | --- | --- |
+| `routes/news.ts` | `article_submission_log.submitted_at` | the three-per-week submission limit **under-counted**, so an author whose earlier submission fell on the window's own date got a fourth |
+| `routes/wellbeing.ts` (the count) | `expert_profile_views.viewed_at` | the free-tier monthly cap **under-counted**, so views taken on the 1st were free |
+| `routes/wellbeing.ts` (the already-seen check) | the same column | a founder who viewed an expert **on the 1st** was told they had not, and was charged a second unit for it |
+| `services/xAggregator.ts` | `market_intel_indexes.computed_at` | `safeHasMIChart` answered **false** for a chart computed on the period's first day — the same wrong answer its own header records the previous version always giving |
+
+**The two wellbeing sites pull OPPOSITE ways on the same day**, which is why
+the class is worth stating rather than assuming understood. On the 1st of a
+month the paid cap both **leaks** (the count misses views, so the quota reads
+low) and **over-charges** (the already-seen check misses the prior view, so one
+expert costs two units) — on one request path, from one date boundary. Fixing
+either alone leaves the cap wrong in the other direction.
+
+### The rule, and it needs no list
+
+The defect is not "a raw ISO bind". It is a raw ISO bind meeting a column
+**SQLite itself wrote**. A column declared `DEFAULT (datetime('now'))` or
+`DEFAULT CURRENT_TIMESTAMP` holds `YYYY-MM-DD HH:MM:SS`; a column with no
+default holds whatever JavaScript bound, which in this codebase is ISO — and
+ISO against ISO is consistent. So the schema already knows which is which, and
+`test/_sqlFormatColumns.mjs` asks it instead of curating a list.
+
+It separates the seven measured candidates perfectly. The three with a clock
+default are exactly the three broken columns; the four without are exactly the
+four struck — `advisor_office_hour_slots.starts_at` (no default, bound verbatim
+from the request), `legal_obligations.expires_at` and `pairwise_ndas.valid_until`
+(written `.toISOString()`; **D125 struck these explicitly**), and
+`users.mi_digest_paused_until`, whose own comment already documented it as ISO
+and said comparing as strings is safe.
+
+### Three things proving the subsumption found, none of which a list would have
+
+D160's scan stays, as a backstop against the derivation silently returning
+nothing — and proving it is subsumed rather than claiming it turned up all
+three of these:
+
+1. **`paid_at` has no DDL default and IS SQL-format**, set with
+   `datetime('now')` or `CURRENT_TIMESTAMP` at four sites
+   (`services/incorporations.ts` ×2, `services/orders.ts`, `routes/network.ts`).
+   A schema-only rule would have called a money column clear. The derivation
+   reads the code's clock writes as well.
+2. **The clock-write rule had to be TABLE-AWARE, and its first draft was not.**
+   Attributing a clock write to every table at once looked like the safe
+   direction — err toward flagging — and it is not: `expires_at` is written
+   with the clock on one table and with `.toISOString()` on `legal_obligations`,
+   so the table-agnostic set demanded a rewrite of the very query D125 examined
+   and struck. **A false positive here costs churn on correct code, which D125
+   refused by name.**
+3. **Two of D160's six names are declared by nothing at all.** `occurred_at`
+   has zero occurrences in the baseline, in any migration and in any runtime
+   bootstrap; a standalone `recorded_at` likewise (the only such text in the
+   tree is `outcome_recorded_at`, a different column its own word boundary
+   correctly does not match). A hand list can carry a name nothing has ever
+   declared and never fail for it — which is the whole argument, arrived at by
+   measurement rather than by preference.
+
+### What lands
+
+| path | change |
+| --- | --- |
+| `routes/news.ts`, `routes/wellbeing.ts` ×2, `services/xAggregator.ts` | four comparisons wrapped `datetime(col) >= datetime(?)` |
+| `test/_sqlFormatColumns.mjs` | **new** — the derivation, plus `rawIsoNames` lifted out of D160's test file so one definition serves both and importing one test file no longer re-registers its tests inside another's run |
+| `test/iso_bind_comparisons_d160.test.ts` | imports `rawIsoNames` instead of declaring it; its scan and its three unit tests are otherwise untouched |
+| `test/iso_bind_sql_columns_d162.test.ts` | **new** |
+
+**No migration — 271 stays free.** No `frontend/src` change, so no `docs/`
+rebuild. Wrapping costs the column's index for that predicate, accepted for the
+reason D160 accepted it and stated rather than discovered: these are small
+tables read once per request, and a correct count beats a fast wrong one.
+
+### Verification
+
+`test:drift` exit 0 read as the exit code from a redirected log. **7 mutations,
+7 caught**: each of the four comparisons un-wrapped; the half-wrapped form (a
+normalised column against a raw ISO bind, which is still the defect); the DDL
+derivation made to return nothing, which must fail the subsumption assertion
+rather than let the sweep pass **vacuously**; and the clock-write rule made
+table-agnostic again, which must fail the assertion that one table's clock
+write cannot make another table's column look SQL-format. Every anchor asserted
+unique before it was applied, every mutation proved to have changed bytes,
+every restore from a **snapshot** and verified byte-identical.

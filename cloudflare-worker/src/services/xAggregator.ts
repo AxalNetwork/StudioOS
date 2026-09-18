@@ -69,7 +69,8 @@ async function safeTopSectors(env: Env, periodStart: string, periodEnd: string, 
 async function safeHasMIChart(env: Env, periodStart: string): Promise<boolean> {
   try {
     const r = await env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM market_intel_indexes WHERE computed_at >= ?`,
+      `SELECT COUNT(*) AS n FROM market_intel_indexes
+       WHERE datetime(computed_at) >= datetime(?)`,
     ).bind(periodStart).first<{ n: number }>();
     return Number(r?.n ?? 0) > 0;
   } catch {

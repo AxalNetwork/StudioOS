@@ -44,6 +44,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 
+import { rawIsoNames } from './_sqlFormatColumns.mjs';
+
 const SRC = resolve(process.cwd(), 'cloudflare-worker/src');
 
 function tsFiles(dir: string, out: string[] = []): string[] {
@@ -70,22 +72,6 @@ function balanced(src: string, at: number): string {
   return src.slice(open);
 }
 
-/**
- * Names in `src` bound to a RAW `.toISOString()` — one whose result is not
- * narrowed to SQL format (`.replace('T', ' ')`) or to a bare date
- * (`.slice(0, 10)`). Both `const x = …` and a later `x = …` assignment count:
- * `market_intel.ts` declares `let cutoff: string` and assigns it in branches.
- */
-export function rawIsoNames(src: string): Set<string> {
-  const names = new Set<string>();
-  for (const m of src.matchAll(/(?:const|let|var)?\s*([A-Za-z_$][\w$]*)\s*=\s*([^;]*?\.toISOString\(\)[^;]*);/g)) {
-    const name = m[1];
-    const tail = m[2].slice(m[2].indexOf('.toISOString()') + '.toISOString()'.length);
-    const normalised = tail.includes(".replace('T'") || tail.includes('.replace("T"') || /\.slice\(\s*0\s*,\s*10\s*\)/.test(tail);
-    if (!normalised) names.add(name);
-  }
-  return names;
-}
 
 /**
  * A timestamp column compared to a RAW placeholder.
