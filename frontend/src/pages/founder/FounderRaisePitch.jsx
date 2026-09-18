@@ -25,7 +25,6 @@ const formatDateTime = (value) => {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? String(value) : new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(parsed);
 };
-const status = (value) => text(value).replace(/[_-]/g, ' ');
 const currentVersion = (versions) => versions.find((item) => item.is_current || item.current) || versions[0] || null;
 const displayVersion = (version) => version?.version == null ? 'Version not recorded' : `v${version.version}`;
 
