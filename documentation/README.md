@@ -57,7 +57,9 @@ An audit is a **snapshot, not a spec**. `audits/BETA_READINESS_AUDIT_2026-05-20.
 describes the platform on 20 May 2026 and was correct then. Do not treat a
 finding in an audit as a live bug without re-checking it against the code —
 several have been fixed since, and the audit files are not updated when they
-are. `audits/PLATFORM-DELIVERY-AUDIT.md` is the most recent full sweep.
+are. `audits/PLATFORM-DELIVERY-AUDIT.md` is the most recent canvas-by-canvas
+sweep. `audits/SCALE_1000_DAU_AUDIT_2026-09-18.md` is the load plan for the
+first 1,000 daily users.
 
 ## Files deliberately left at the repo root
 
