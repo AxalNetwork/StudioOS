@@ -235,6 +235,15 @@ test('every mutation is admin-only and recorded', () => {
 });
 
 test('the event log is append-only', () => {
+  // D156 MADE THIS A DATABASE CONSTRAINT, AND THIS ASSERTION STAYS ANYWAY.
+  // Migration 269 installs BEFORE UPDATE / BEFORE DELETE triggers on
+  // `licence_events`, so the property now holds against every writer rather
+  // than against the writers that happen to live in this one file — which is
+  // the whole point, because a scan of the source cannot see a write that is
+  // not in the source. What this keeps buying is the OTHER direction: a
+  // handler that reaches for an UPDATE fails here at review time, rather than
+  // shipping and raising ABORT in front of an operator. The database guard is
+  // in `cloudflare-worker/test/audit_immutability_d156.test.ts`.
   const s = read(ROUTE);
   assert.ok(!/UPDATE licence_events|DELETE FROM licence_events/.test(s),
     'a contract dispute is exactly when an overwritten history is useless');

@@ -13108,3 +13108,100 @@ the point of writing them: `lic.territories?.length || 0` would have rendered
 *"0 territories held"* for a licence copy that arrived without the array — a
 claim about this branch's licence that nothing measured. Both zero-defaults are
 gone. **No migration — 269 stays free.**
+
+---
+
+## D156 — three audit tables were append-only by convention; migration 269 makes the database say so
+
+**Task #236, the first of F.8's standalone improvements.** F.8 item 1 asked for
+immutability triggers on the audit stores. Measured before building — the
+seventeenth time in this programme that measuring a filed item corrected it —
+**three of F.8's items are stale and one is genuinely unbuilt**, and the reading
+of two of them was mine to correct:
+
+| F.8 item | measured against the code, 2026-09-18 |
+| --- | --- |
+| **1 · immutability triggers** | **genuinely unbuilt.** No `BEFORE UPDATE`/`BEFORE DELETE` trigger exists on `admin_audit_log`, `impersonation_sessions` or `licence_events`. The only trigger in the repo is `sql/historical/lp_investors_seal.sql`, which is the precedent this copies |
+| 7 · `requireAdmin` on `/monitoring/throughput` | **stale.** `routes/monitoring.ts:255-258` already refuses anyone outside `admin`/`partner`/`investor`; the route's own heading calls it *"operator-visible limited stats"* and that is what it is |
+| 7 · retire the `admin_news.ts` twin | **stale, and my own first reading of it was wrong.** I reported it as carrying zero handlers. The scan matched `^r\.`; this router's const is `adminNews`. It registers **11** handlers, documented in its own header, and is mounted at `index.ts:742`. There is no twin to retire |
+| 7 · step-up on `/impersonate-sessions/:id/end` | **refused with the measurement.** The UPDATE is bounded `AND admin_user_id = ?`, so an admin can only close their own session; it is the client's best-effort close on exit, and a step-up in front of it would leave sessions permanently open — which is precisely the state D122 was written to end |
+
+### The defect: "immutable" was a description of the writers' habits
+
+HQ's Security page renders all three stores and the feed is described as
+immutable. Measured repo-wide, across `.ts`, `.py`, `.mjs`, `.js` and `.sql`:
+
+| table | INSERT | UPDATE | DELETE |
+| --- | --- | --- | --- |
+| `admin_audit_log` | **33** | **0** | **0** |
+| `licence_events` | **2** | **0** | **0** |
+| `impersonation_sessions` | **2** | **2** | **0** |
+
+So nothing in the repo rewrites an audit row. What was missing is anything that
+would **refuse** one. `frontend/test/territory_licences.test.mjs` holds a
+source-scan over `licence_events` — *"a contract dispute is exactly when an
+overwritten history is useless"* — and that scan is structurally blind to a
+`wrangler d1 execute`, a queue job reaching `DB.prepare()` directly, or any
+writer that does not live in the file it reads. **A lexical scan of the source
+cannot see a write that is not in the source.** Migration 269 moves the
+guarantee into the only place it can hold against every writer.
+
+### The third table cannot take the same seal, and that is the finding
+
+`impersonation_sessions` has exactly one legitimate mutation: stamping
+`ended_at` on a session that is still open, written by `routes/admin.ts:1699`
+(the operator's own exit) and by `util/supportSessionSweep.ts:91` (**D122**'s
+sweep, for the branch rows HQ's route can never match because
+`admin_user_id = 0`). Both are guarded `ended_at IS NULL`.
+
+**A blanket UPDATE seal here would have broken D122** and left every branch
+support session reading `not closed` on HQ's Security page for ever — the exact
+defect D122 exists to fix, reintroduced by the migration meant to strengthen the
+same table. So that table gets a `WHEN`-guarded seal instead, permitting the
+close and refusing everything else: no re-closing a session whose end time has
+already been reported to the supervised party, no re-opening one, and no
+rewriting who supported whom, when it started, or the typed reason.
+
+### The guard was half-exempt, and migration 269 is what found it
+
+`scripts/check-sql-migrations.mjs` refused this migration on
+**`ROLLBACK / END`** — on the line that closes a trigger body its own comment
+(`:27-29`) says is legal: *"`BEGIN` also opens a TRIGGER body, and a trigger is
+perfectly legal in a migration."* The carve-out was written for the opener and
+not for the closer, so a trigger was legal to open and illegal to close. It went
+unnoticed because **269 is the first migration in the repo to install one**.
+
+Fixed in this same PR, on D143's precedent (`due_at` joined `TTL_COLUMN` in the
+PR that created the column): a `stripTriggerBodies` pass excises
+`CREATE TRIGGER … END;` spans before the scan — **strictly stronger** than
+exempting the keyword, because outside a trigger `END;` stays refused, and that
+is the statement that aborted migration 200's deploy. The widening is asserted
+in both directions in `frontend/test/migration_column_shapes.test.mjs`, which
+the guard's own header names as the place for exactly that, on its stated
+principle that *a widening no test exercises is a widening nobody notices*.
+
+### Verification
+
+**15 mutations, 15 caught** — and one escaped first, on my own assertion rather
+than on the code. `M8` dropped `OR NEW.ended_at IS NULL` from the `WHEN` clause
+and nothing failed, because the re-open test acts on a **closed** row, which the
+neighbouring `OLD.ended_at IS NOT NULL` conjunct catches either way. The conjunct
+guards a different case — an update that touches an open session and leaves it
+open — and that case had no test. An assertion that cannot fail on the mutation
+it exists for is not a guard, so the test was written rather than the conjunct
+dropped.
+
+The guard is a real `node:sqlite` test applying the migration file **verbatim off
+disk**; restating the trigger bodies in the test would test the copy. Foreign
+keys stay **on**, with stub parents, so a row that could not exist in production
+cannot exist in the fixture either.
+
+**No new `/api/*` method, no route change, no SPA change.** Migration **269** is
+used; **270 is free**.
+
+**A note for anyone rebuilding a sealed table.** SQLite cannot `ALTER` a CHECK,
+so widening one means create-copy-drop-rename — which is what migration 266 did
+to `licence_events`. `DROP TABLE` drops its triggers with it. Any future rebuild
+of a table sealed here must re-run 269's statements at the end of its own
+migration, or the seal silently disappears. That is stated in the migration
+header and asserted by the guard, so a rebuild that forgets fails the build.
