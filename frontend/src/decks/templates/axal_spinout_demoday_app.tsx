@@ -291,17 +291,7 @@ const StatusDot: React.FC<{ status: Status; d: number }> = ({ status, d }) => {
   return <div style={{ width: px, height: px, borderRadius: '50%', background: '#fff', border: `${pt(1.5)}px solid ${K.faint}` }} />;
 };
 
-const StepIcon: React.FC<{ name: string; d: number; color: string }> = ({ name, d, color }) => {
-  const s = inch(d);
-  const p = { width: s, height: s, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
-  switch (name) {
-    case 'ingest': return <svg {...p}><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M4 21h16" /></svg>;
-    case 'score': return <svg {...p}><path d="M21 12a9 9 0 1 1-9-9" /><path d="M12 12 17 8" /><circle cx="12" cy="12" r="1.4" fill={color} stroke="none" /></svg>;
-    case 'monitor': return <svg {...p}><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg>;
-    case 'act': return <svg {...p}><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" /></svg>;
-    default: return null;
-  }
-};
+
 
 const Eyebrow: React.FC<{ label: string; idx: string; dark?: boolean }> = ({ label, idx, dark }) => (
   <>
