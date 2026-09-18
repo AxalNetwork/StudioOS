@@ -21,7 +21,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAdmin } from '../auth';
 import { getSQL } from '../db';
-import { hashEmail } from '../util/hashEmail';
+import { logAdminAction } from '../services/adminAudit';
 import { createAndSendEnvelope } from './esign';
 import { ensureExploringSchema } from '../services/exploringSchema';
 import { clampLimit } from '../util/pagination';
@@ -78,22 +78,6 @@ export function deriveOnboardingSummary(
     } catch { /* malformed chat history */ }
   }
   return null;
-}
-
-async function logAdminAction(
-  env: Env, adminId: number, adminEmail: string, action: string, details: Record<string, unknown>,
-): Promise<void> {
-  try {
-    const actorHash = await hashEmail(adminEmail);
-    await env.DB.prepare(
-      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
-    ).bind(action, JSON.stringify(details), actorHash, adminId).run();
-  } catch (e) { console.warn('[admin_exploring] activity log failed', e); }
-  try {
-    await env.DB.prepare(
-      `INSERT INTO admin_audit_log (admin_user_id, action, filters_json) VALUES (?, ?, ?)`,
-    ).bind(adminId, action, JSON.stringify(details)).run();
-  } catch { /* admin_audit_log may not exist in some envs */ }
 }
 
 // ---------------------------------------------------------------------------
