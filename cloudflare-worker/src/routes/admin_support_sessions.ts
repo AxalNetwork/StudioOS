@@ -42,6 +42,7 @@ import { requireFactor, requireStepUp, requireSuperAdmin } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { mapError } from './_t13t14t15_helpers';
 import { branchByCode } from '../services/branches';
+import { mirrorBranchAction } from '../services/auditMirror';
 import { BRANCH_CODE_RE } from '../util/branch';
 import { SUPPORT_REASON_MIN, MOVE_REASON_MIN } from '../rpc/branchOps';
 
@@ -90,6 +91,7 @@ r.post('/branches/:code/support-session', async (c) => {
 
     const binding = branchByCode(c.env, code);
     if (!binding) {
+      mirrorBranchAction(c.env, 'support_session_opened', 'not_deployed', code);
       return c.json({
         error: 'branch_not_bound',
         message: `No branch Worker is bound for ${code}, so there is nothing to open a session on. `
@@ -114,11 +116,13 @@ r.post('/branches/:code/support-session', async (c) => {
       // characters, an account that is not there, a `super_admins` row that
       // should not exist. Passing the message through beats a 500 that says
       // nothing, and these are all HQ-authored inputs rather than user content.
+      mirrorBranchAction(c.env, 'support_session_opened', 'failed', code);
       return c.json({
         error: 'branch_refused',
         message: String((e as Error).message || e).replace(/^rpc: /, '').slice(0, 400),
       }, 409);
     }
+    mirrorBranchAction(c.env, 'support_session_opened', 'ok', code);
 
     // HQ'S OWN ROW, WRITTEN HERE. The branch writes its own at authorisation
     // and again at redeem; neither database can read the other, so "audited on
@@ -240,6 +244,11 @@ r.post('/branches/:code/accounts/:userId/move', async (c) => {
     // could not possibly complete — a refusal is better than half of it.
     if (!source || !destination) {
       const missing = [!source ? from : null, !destination ? to : null].filter(Boolean).join(' and ');
+      // D163 — mirrored against WHICHEVER end is unbound, not against the move.
+      // A move names two branches and only one of them may be the problem;
+      // attributing it to both would invent an outage on a branch that is fine.
+      if (!source) mirrorBranchAction(c.env, 'account_moved_out', 'not_deployed', from);
+      if (!destination) mirrorBranchAction(c.env, 'account_invited', 'not_deployed', to);
       return c.json({
         error: 'branch_not_bound',
         message: `No branch Worker is bound for ${missing}, so this move cannot complete. `
@@ -260,11 +269,13 @@ r.post('/branches/:code/accounts/:userId/move', async (c) => {
     } catch (e) {
       // NOTHING HAS HAPPENED YET when this throws, so it is a clean refusal
       // rather than a partial move — the branch validates before it writes.
+      mirrorBranchAction(c.env, 'account_moved_out', 'failed', from);
       return c.json({
         error: 'source_refused',
         message: String((e as Error).message || e).replace(/^rpc: /, '').slice(0, 400),
       }, 409);
     }
+    mirrorBranchAction(c.env, 'account_moved_out', 'ok', from);
 
     // THE SECOND LEG, REPORTED AND NEVER THROWN. See the header.
     let invited: { ok: boolean; uid?: string; email_sent?: boolean; reason?: string };
@@ -287,7 +298,12 @@ r.post('/branches/:code/accounts/:userId/move', async (c) => {
         email_sent: Boolean(inv?.email_sent),
         ...(inv?.email_reason ? { reason: inv.email_reason } : {}),
       };
+      // The invitation LANDING is the branch answering; whether the mail left
+      // is the branch's own business and migration 236's separate fact. The
+      // mirror records the first, which is the one about reachability.
+      mirrorBranchAction(c.env, 'account_invited', 'ok', to);
     } catch (e) {
+      mirrorBranchAction(c.env, 'account_invited', 'failed', to);
       invited = {
         ok: false,
         reason: `The account was closed on ${from} and the invitation on ${to} did not land: `

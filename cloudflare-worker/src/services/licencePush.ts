@@ -26,6 +26,13 @@
  */
 import type { Env } from '../types';
 import { branchByCode } from './branches';
+import { mirrorBranchAction } from './auditMirror';
+
+/**
+ * D163 — one action name for all six callers, because the mirror groups by it
+ * and five spellings would be five actions.
+ */
+const LICENCE_PUSH_ACTION = 'licence_pushed';
 
 export type LicencePushResult = {
   /** Did the branch accept the copy? `false` is a real state, not an error. */
@@ -136,6 +143,7 @@ export async function pushLicenceToBranch(
 
   const binding = branchByCode(env, code);
   if (!binding) {
+    mirrorBranchAction(env, LICENCE_PUSH_ACTION, 'not_deployed', code);
     return {
       ok: false,
       code,
@@ -163,6 +171,7 @@ export async function pushLicenceToBranch(
   } catch (e) {
     // A partial record is worse than a late one: a copy pushed without its
     // territory would tell the branch it holds no country.
+    mirrorBranchAction(env, LICENCE_PUSH_ACTION, 'failed', code);
     return { ok: false, code, reason: `HQ could not assemble the licence copy: ${(e as Error).message}` };
   }
 
@@ -174,10 +183,17 @@ export async function pushLicenceToBranch(
     // a real state — a branch that refused the copy — and an operator should
     // read the branch's own sentence rather than a generic success.
     if (res && typeof res === 'object' && 'ok' in (res as Record<string, unknown>)) {
-      return { ...(res as LicencePushResult), code };
+      const answered = { ...(res as LicencePushResult), code };
+      // D163 — the branch's OWN verdict, not the fact that it answered. A
+      // refusal reaching HQ is a landed call and a failed push, and the mirror
+      // records the second.
+      mirrorBranchAction(env, LICENCE_PUSH_ACTION, answered.ok ? 'ok' : 'failed', code);
+      return answered;
     }
+    mirrorBranchAction(env, LICENCE_PUSH_ACTION, 'ok', code);
     return { ok: true, code };
   } catch (e) {
+    mirrorBranchAction(env, LICENCE_PUSH_ACTION, 'failed', code);
     return { ok: false, code, reason: `The branch did not accept the licence: ${(e as Error).message}` };
   }
 }

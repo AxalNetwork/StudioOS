@@ -393,18 +393,37 @@ test('nothing a caller supplies reaches the text/plain SQL', () => {
   // `${...}` become BOUND parameters, and flagging them would be the guard
   // misreading a safe idiom as the unsafe one.
   const literals = [...REPORTS_SRC.matchAll(/const sqlText = `([^`]*)`/g)].map(m => m[1]);
-  assert.equal(literals.length, 2,
-    'two AE queries: the platform aggregate and the branch split. A third would have to be read '
-    + 'by this rule, so the count is pinned rather than the rule quietly skipping it.');
-  assert.equal((REPORTS_SRC.match(/aeSql\(env, sqlText\)/g) || []).length, 2,
-    'and both go through the one fetch helper, so there is a single place where SQL text is sent');
+  // THREE SINCE D163, AND THE COUNT DOING ITS JOB IS WHY. It was pinned at two
+  // with the note that "a third would have to be read by this rule rather than
+  // the rule quietly skipping it" — D163 added the branch-action mirror's
+  // reader and this failed, which is the guard working. The third query is
+  // read by the same enumeration below; what it adds to the interpolation
+  // surface is `MIRROR_KIND`, a module constant, never a request value.
+  assert.equal(literals.length, 3,
+    'three AE queries: the platform aggregate, the branch split and the action mirror. A fourth '
+    + 'would have to be read by this rule, so the count stays pinned.');
+  assert.equal((REPORTS_SRC.match(/aeSql\(env, sqlText\)/g) || []).length, 3,
+    'and all three go through the one fetch helper, so there is a single place where SQL text is sent');
 
   const interpolations = new Set<string>();
   for (const lit of literals) {
     for (const m of lit.matchAll(/\$\{([^}]*)\}/g)) interpolations.add(m[1].trim());
   }
-  assert.deepEqual([...interpolations].sort(), ['aeDataset(env)', 'range.fromIso', 'range.toIso'],
-    'only the configured dataset name and the parsed range may be interpolated into AE SQL');
+  assert.deepEqual([...interpolations].sort(),
+    ['HTTP_ROWS_ONLY', 'MIRROR_KIND', 'aeDataset(env)', 'range.fromIso', 'range.toIso'],
+    'only the configured dataset name, the parsed range, the row-kind sentinel and the '
+    + 'row-kind predicate may be interpolated into AE SQL');
+  // And BOTH new entries are MODULE CONSTANTS, not values a caller can reach.
+  // An allowlist entry a request could influence would be the hole this whole
+  // rule exists to keep shut, so each one is proved to be a fixed literal
+  // rather than merely named here.
+  assert.match(
+    readFileSync(resolve(root, 'cloudflare-worker/src/services/auditMirror.ts'), 'utf8'),
+    /export const MIRROR_KIND = '[a-z:_]+';/,
+    'MIRROR_KIND is a fixed literal, so interpolating it cannot carry a request value',
+  );
+  assert.match(REPORTS_SRC, /const HTTP_ROWS_ONLY = "blob1 LIKE '\/%'";/,
+    'HTTP_ROWS_ONLY is a fixed literal predicate, not built from anything');
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
