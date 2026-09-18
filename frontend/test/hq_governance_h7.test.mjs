@@ -144,40 +144,66 @@ test('tenant is filled only where a store can fill it, and never with a dash', (
   assert.doesNotMatch(cells, /—/, 'an em-dash stands in for an absent fact (D56/D68)');
 });
 
-test('the "Return to HQ view" overlay is not drawn, and the page says why', () => {
-  assert.ok(h7().includes('Return to HQ view'), 'the artboard no longer draws the overlay');
-  // THE ABSENCE OF A CONTROL, NOT OF A PHRASE. Matching the words caught the
-  // page's own sentence explaining that the overlay is deliberately not
-  // built — the opposite of the defect, and the same trap the Platform page
-  // guard hit with "Reveal". So: the phrase may appear in prose, and must
-  // not appear inside anything clickable.
-  const controls = [...PAGE.matchAll(/<(button|a)\b[\s\S]*?<\/\1>/g)].map((m) => m[0]);
-  assert.ok(controls.length > 0, 'the page has no controls at all — this assertion stopped checking anything');
-  for (const c of controls) {
-    assert.doesNotMatch(c, /Return to HQ|Viewing as/,
-      'the overlay\'s chrome appeared as a control with no tenant scope behind it');
-  }
-  assert.ok(!P.includes('Viewing as'), 'the page drew a tenant-scoped banner it cannot back');
-  assert.match(P, /No &ldquo;Return to HQ view&rdquo;/, 'the page stopped naming the overlay it does not draw');
-  assert.ok(!codeOnly(raw('frontend/src/App.jsx')).includes('Return to HQ view'),
-    'a "Return to HQ view" control appeared with no tenant scope behind it');
-  // But the absence is explained, from the payload rather than from a copy.
-  assert.match(ROUTE, /tenant_view_available: false/);
-  // D150 — THE FOURTH GUARD IN THIS PR THAT WAS PINNING A STALE REASON, and
-  // the assertion follows the property rather than the word. It required the
-  // sentence to cite **U1**, which was wrong: U1 is a fact about HQ's own
-  // database, and HQ has been able to read a branch since D108 — so seeing a
-  // subsidiary as its own admins see it is a view nobody has BUILT (#235),
-  // not one the data forbids. Pinning "U1" made the correct sentence fail.
+test('the "Return to HQ view" overlay is built, and this page describes it rather than drawing it', () => {
+  // NINTH INSTANCE OF THE CLASS, and by now it is a rule rather than a
+  // surprise: a guard that pins a refusal has to be re-aimed the day the
+  // refusal stops being true, or it becomes the thing preventing the fix.
+  // This test used to assert the OPPOSITE of everything below — no "Viewing
+  // as" chrome anywhere, `tenant_view_available: false`, and no "Return to HQ
+  // view" control in App.jsx. Every one of those was correct while the overlay
+  // was unbuilt (D150 had already corrected its REASON once, from U1 to "not
+  // built"), and every one of them is false now that D153 built it.
   //
-  // What is pinned now is what the sentence must establish: the two view-as
-  // modes that DO exist are named, and the absence is attributed to the view
-  // rather than to the data.
-  assert.match(ROUTE, /tenant_view_reason:[\s\S]{0,600}ROLE switch/);
-  assert.match(ROUTE, /tenant_view_reason:[\s\S]{0,600}has not been built/);
+  // And the old assertion was never wrong in kind — it was CONDITIONAL, and
+  // said so: its failure message was "a 'Return to HQ view' control appeared
+  // with NO TENANT SCOPE BEHIND IT". It did not ban the control; it banned a
+  // control with nothing behind it. So the re-aim is structural rather than a
+  // loosening: the chrome may exist only where the reads are actually scoped.
+  assert.ok(h7().includes('Return to HQ view'), 'the artboard no longer draws the overlay');
+
+  // 1 — THE CHROME IS IN THE SHELL, not on a page. The overlay frames every
+  // page it covers, so a per-page banner would be one copy per page and would
+  // disagree with itself the first time one was missed.
+  const bar = codeOnly(raw('frontend/src/components/HqViewingAsBar.jsx'));
+  assert.match(bar, /Return to HQ view/, 'the shell bar lost its way out');
+  assert.match(bar, /Read-only/, 'the bar stopped saying the view is read-only');
+  assert.match(bar, /useViewAsBranch/, 'the bar invented its own state instead of reading the shell\'s');
+  const app = codeOnly(raw('frontend/src/App.jsx'));
+  assert.match(app, /<SafeMount name="HqViewingAsBar">/, 'the bar is not mounted');
+  // ABOVE `PortalSwitcher`, D142's rule one tier up: the ordinary admin chrome
+  // must never be the only frame on a view the operator is not in by default.
+  // ANCHORED ON THE MOUNT, NOT THE NAME. Reading `indexOf('HqViewingAsBar')`
+  // found the IMPORT line at the top of the file, which is before every mount
+  // — so the comparison was true whatever the mount order was, and the
+  // assertion could not fail. Caught by moving the mount below PortalSwitcher
+  // and watching it pass. An assertion that cannot fail is not a guard.
+  assert.ok(
+    app.indexOf('<SafeMount name="HqViewingAsBar">') < app.indexOf('<PortalSwitcher'),
+    'the viewing-as bar mounts below PortalSwitcher, so the admin bar can frame a scoped view alone',
+  );
+
+  // 2 — THERE IS A SCOPE BEHIND IT, which is what the old guard demanded. The
+  // reads change, not the render: a page that filtered a payload it already
+  // had would be exactly the "filter on an HQ table" H12 says this is not.
+  const apiSrc = codeOnly(raw('frontend/src/lib/api.js'));
+  assert.match(apiSrc, /hqOverview: \(branch\)/, 'hqOverview stopped taking a branch');
+  assert.match(apiSrc, /\?branch=\$\{encodeURIComponent\(b\)\}/, 'the scope never reaches the wire');
+  const hq = codeOnly(raw('cloudflare-worker/src/routes/admin_hq.ts'));
+  assert.match(hq, /branchRead<BranchOverview>\(env, scoped, 'overview'\)/,
+    'the scoped route fans out and discards instead of reading one branch');
+
+  // 3 — THE PAYLOAD STOPPED REFUSING. `false` here is the refusal this test
+  // spent two decisions pinning; it is the assertion that fails if anyone
+  // restores it.
+  assert.match(ROUTE, /tenant_view_available: true/);
+  assert.doesNotMatch(ROUTE, /tenant_view_available: false/,
+    'the governance payload went back to refusing a view the product has');
+  assert.doesNotMatch(ROUTE, /tenant_view_reason:[\s\S]{0,600}has not been built/,
+    'the reason still says the overlay is unbuilt');
   assert.doesNotMatch(ROUTE, /tenant_view_reason:[\s\S]{0,600}which is U1/);
   assert.match(P, /\{feed\.tenant_view_reason\}/, 'the page hardcodes the explanation instead of reading it');
 });
+
 
 test('guardrail hits are counted — but never the artboard\'s per-category rows', () => {
   // D152 RE-AIMED THIS, AND IT IS THE SEVENTH TIME A GUARD PINNING A REFUSAL

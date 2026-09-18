@@ -12850,3 +12850,134 @@ from its violation*), and spreading the server's rows into the rail's
 enforce — the entry was still a pair, and **a spread hides the row shape from
 exactly the check that exists to see it**. The detail is computed above the JSX
 and the array stays one literal pair per line.
+
+## D153 — HQ could read a branch and had no way to look at one (#235's remainder, H12 frames 1 and 2)
+
+**The defect.** D108 built the per-branch read, D150 wired its figures into HQ
+Home's health cards, and D152 corrected the sentence that used to say a
+tenant-scoped view was blocked by U1 — it said, correctly, that the view had
+**not been built**. So HQ could read one branch's accounts, seats, backlog and
+escalations and had **no screen that showed one branch at a time**. Every HQ
+figure was either a platform total or one card in a fan-out.
+
+**What the canvas asks for, and it is the whole design:**
+
+> *"The overlay is not a filter on an HQ table — it is one private-link read,
+> of one branch, rendered with every action removed. Each figure carries the
+> branch and the time it was read, so nothing on the screen can be mistaken for
+> a platform total."*
+
+Each clause is built and each is pinned by an assertion in
+`frontend/test/hq_view_as_h12.test.mjs`.
+
+**One read, of one branch.** `GET /api/admin/hq/overview` and `/admins` learn
+`?branch=<code>`; both answer a deliberately smaller payload — `{scope,
+branches: [one], branches_coverage}` — and neither runs HQ's own platform
+queries on that path. **No new `/api/*` method**: `hqOverview` and `hqAdmins`
+gained an argument, so `check-api-drift` has nothing to say.
+
+**Not a filter, structurally.** HQ Home's own fetch is skipped under the
+overlay, and the scoped route returns before its roster and ledger reads. There
+is no platform payload sitting behind the scoped screen to have been narrowed —
+which is what makes the canvas's sentence true rather than merely claimed.
+
+**The thirteenth consolidation.** `branchByCode(env, code)` in
+`services/branches.ts`, read by the four sites that hand-rolled
+`branchBindings(env).find((x) => x.code === code)` (`licencePush.ts`,
+`admin_support_sessions.ts`, `admin_statements.ts`, `admin_escalations.ts`) and
+composed twice by the fifth, which resolves a pair. Those five were a **second
+definition of how a code matches a binding**, sitting beside the one definition
+of how a binding's code is derived — the same rule read from opposite ends,
+free to drift the day one of them normalised. **The absence carries no copy**:
+each caller keeps its own tailored sentence (*"so the change is recorded at
+HQ"*, *"so there is nothing to open a session on"*, *"so the ceiling is set at
+HQ"*, *"so the decision is recorded at HQ"*), which is D117's rule that a
+fallback is a human-written sentence, re-applied. Beside it `branchRead` returns
+**one** branch in the fan-out's own three states, so an unbound code answers
+`not_deployed` rather than `unreadable` and an unreadable branch is never a page
+of zeros.
+
+**Every action absent, not disabled.** The overlay body draws **no** button,
+link, form or input — asserted as the absence of controls rather than the
+absence of the word *disabled*, since the latter is a legitimate word elsewhere.
+A greyed control claims the action exists here and is momentarily unavailable;
+it does not exist here, which is D134's `still_an_admin` lesson one tier up.
+
+**Every figure stamped, per tile.** The branch and the read time sit on each of
+the four tiles rather than once in a header a reader scrolls past, because the
+stamp is the single thing that stops a number here being read as a platform
+total. Two clocks travel, answering different questions: `read_at` is when this
+screen was filled, `as_of` is how old the branch's own figure was when it left.
+
+**Two absences stated rather than drawn.** H12's *"Queues · as the branch sees
+them"* zone has **no producer at all** — measured, not assumed: twelve
+`HqEntrypoint` methods and fifteen `branchOps` exports, and none is a decision
+feed — so the heading is drawn and the reason stated, the shape D140, D147 and
+D151 all used. And MTD revenue is `null` **by construction** (`branchOverview`
+returns `revenue_mtd_cents: null` with its own reason), so the tile renders the
+server's sentence; the canvas draws a number there and the branch does not have
+one.
+
+**The chrome is in the SHELL and persists nothing.** `HqViewingAsBar` mounts
+above `PortalSwitcher`, on D142's rule one tier up: the ordinary admin chrome
+must never be the only frame on a view the operator is not in by default. The
+scope is plain React state in `ViewAsBranchContext` — no `localStorage`, no
+`sessionStorage`, no URL — on `AdminFrozenBar`'s stated rule, and that is
+exactly why `clearSession` needs no line for it: there is no key to remove, and
+signing out unmounts the layout.
+
+**The way IN is drawn only where there is a branch behind it** — a health card
+whose branch answered. A "view as" on an unbound or unreadable branch would open
+a screen of absences. The way OUT is the shell bar, because the overlay frames
+every page it covers rather than the one that entered it.
+
+**THE REFUSAL IS DELETED, NOT REWORDED — the ninth instance.**
+`/governance`'s `tenant_view_available` went true and its sentence now says what
+the overlay *is not* (a read, not a role; no action runs from it), because that
+is the part a reader can still get wrong. **Eight assertions across two files
+were re-aimed**, and the old guard was never wrong in kind: its failure message
+was *"a 'Return to HQ view' control appeared with **no tenant scope behind
+it**"* — conditional, not absolute. D153's whole job was to put something behind
+it, so the re-aim is structural rather than a loosening.
+
+**Two more stale guards surfaced while re-aiming those**, both legitimately
+re-pointed rather than loosened: `hq_home.test.mjs` pinned `hqOverview`'s
+zero-argument signature and is now explicit about the distinction D153 draws —
+the **tenant switcher** narrows this page over a payload it already has and must
+keep sending nothing, while the **view-as overlay** changes what the server
+reads and must send `?branch=` — and `hq_team_h9.test.mjs` pinned `hqAdmins(q)`.
+
+**And one of my own new comments broke a guard before it ran** — fourth
+instance of *a lexical scan cannot tell a rule from its violation*. The h7 test
+derives the tables `admin_security.ts` reads by matching what follows the word
+`FROM`, and a comment reading "THIS WENT FROM false TO true" added a phantom
+table called `false` to that set. The comment is worded around it and says why.
+
+**A TENTH GUARD PINNED THE SAME REFUSAL, in the worker** —
+`admin_governance.test.ts` asserted `tenant_view_available === false`, which
+`test:drift` found rather than review. And **one of my own new assertions could
+not fail**: the mount-order check read `App.jsx.indexOf('HqViewingAsBar')`,
+which finds the IMPORT line at the top of the file and is therefore before every
+mount whatever the order is. Caught by moving the bar below `PortalSwitcher` and
+watching it pass; it anchors on `<SafeMount name="HqViewingAsBar">` now.
+**Fourteen mutations applied, fourteen caught**, the last only after the
+assertion it exposed was strengthened.
+
+**And the mutation run itself demonstrated the rule it is run under.** One
+restore reached for `git checkout --` instead of the snapshot, on a file the
+snapshot did not cover (`SecurityPage.jsx`) — which silently reverted that
+file's whole D153 edit to `main` and baked the reverted page into a `docs/`
+rebuild. `test:drift` caught it, from the very guard re-aimed two paragraphs
+above. **A mutation harness must restore from a snapshot, never from git**, and
+the snapshot must cover every file the run can touch.
+
+**No migration — 269 stays free.** **Deliberately not built:** H12's frame 3
+(D152 shipped its counters), H9's Trust column (a branch hit carries no trust
+field; trust is HQ's own service over HQ's own accounts and is not a per-branch
+figure), and H13's scope chip — which D153 **unblocks**, because D150 refused it
+on the ground that *"the page decides what it fetched before the rail runs, so
+both options produce the same read"*, and under the overlay they demonstrably
+differ. `WorkerRail` has no `scope` prop today, and building it is #244's
+remainder rather than this PR's; under the overlay HQ Home therefore renders no
+rail at all, since the rail's coverage lines summarise HQ's own ledger and would
+be four false sentences beside four true figures.

@@ -104,6 +104,42 @@ export function branchBindings(env: Env): Array<{ code: string; binding: string;
 }
 
 /**
+ * One branch's binding, resolved from its code — or `null`.
+ *
+ * WHY THIS EXISTS, AND WHY IT RETURNS `null` RATHER THAN A SENTENCE. Five
+ * sites resolved a single code by hand before D153
+ * (`services/licencePush.ts`, `routes/admin_support_sessions.ts` twice,
+ * `routes/admin_statements.ts`, `routes/admin_escalations.ts`), each spelling
+ * out `branchBindings(env).find((x) => x.code === code)`. That is a second
+ * definition of how a code MATCHES a binding, repeated five times, sitting
+ * beside the one definition of how a binding's code is DERIVED — the two are
+ * the same rule read from opposite ends, and they were free to drift the day
+ * one of them normalised and the other did not.
+ *
+ * So the needle is normalised here exactly as `branchBindings` normalises the
+ * suffix — lower-cased, underscores to hyphens — and a needle that is not a
+ * valid branch code matches nothing rather than scanning for something that
+ * could never have been produced.
+ *
+ * THE ABSENCE CARRIES NO COPY, DELIBERATELY. Each of those five sites writes
+ * its own sentence about what an unbound branch means for the write it was
+ * about to do — "so the change is recorded at HQ", "so there is nothing to
+ * open a session on", "so the ceiling is set at HQ", "so the decision is
+ * recorded at HQ" — and folding four tailored sentences into one would flatten
+ * copy somebody chose. That is the rule D117 set and D149 re-applied: a
+ * fallback is a human-written sentence. This function answers whether the
+ * branch is bound; the caller says what that means.
+ */
+export function branchByCode(
+  env: Env,
+  code: string | null | undefined,
+): { code: string; binding: string; stub: BranchStub } | null {
+  const needle = String(code || '').trim().toLowerCase().replace(/_/g, '-');
+  if (!needle || !BRANCH_CODE_RE.test(needle)) return null;
+  return branchBindings(env).find((x) => x.code === needle) || null;
+}
+
+/**
  * Call one method on every branch, concurrently, under one deadline.
  *
  * `Promise.allSettled`, never `Promise.all`: the whole point is that a
@@ -115,7 +151,52 @@ export async function fanOut<T>(
   args: unknown[] = [],
   deadlineMs = BRANCH_DEADLINE_MS,
 ): Promise<BranchResult<T>[]> {
-  const targets = branchBindings(env);
+  return runTargets<T>(branchBindings(env), method, args, deadlineMs);
+}
+
+/**
+ * Read ONE branch, in the same three states the fan-out reports.
+ *
+ * D153 — H12's overlay is not a filter on an HQ table, it is one private-link
+ * read of one branch, so the route behind it must actually read one branch
+ * rather than fan out and discard. Going through `runTargets` is what makes
+ * the states IDENTICAL to the fan-out's: a branch that could not be read under
+ * the overlay says the same thing it says on a health card, in the same shape,
+ * because it is the same code.
+ *
+ * An unbound code answers `not_deployed` rather than `unreadable`. The two are
+ * different facts — one is a binding HQ has not redeployed to gain, the other
+ * is a call that did not come back — and the whole module exists because
+ * collapsing them prints the wrong colour.
+ */
+export async function branchRead<T>(
+  env: Env,
+  code: string,
+  method: string,
+  args: unknown[] = [],
+  deadlineMs = BRANCH_DEADLINE_MS,
+): Promise<BranchResult<T>> {
+  const target = branchByCode(env, code);
+  if (!target) {
+    const normalised = String(code || '').trim().toLowerCase().replace(/_/g, '-');
+    return {
+      code: normalised,
+      binding: `${BRANCH_BINDING_PREFIX}${normalised.toUpperCase().replace(/-/g, '_')}`,
+      status: 'not_deployed',
+      reason: 'This Worker has no service binding to that branch, so there is nothing to read from. '
+        + 'The binding is committed to wrangler.toml at provisioning and arrives with HQ\'s next deploy.',
+    };
+  }
+  const [only] = await runTargets<T>([target], method, args, deadlineMs);
+  return only;
+}
+
+async function runTargets<T>(
+  targets: Array<{ code: string; binding: string; stub: BranchStub }>,
+  method: string,
+  args: unknown[],
+  deadlineMs: number,
+): Promise<BranchResult<T>[]> {
   if (!targets.length) return [];
 
   const settled = await Promise.allSettled(

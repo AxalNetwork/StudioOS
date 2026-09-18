@@ -36,7 +36,7 @@ import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
 import { hydrate, type LicenceRow } from './admin_licences';
 import { DERIVED_UNAVAILABLE } from './licence';
-import { fanOut, coverage, withRegistry } from '../services/branches';
+import { fanOut, branchRead, coverage, withRegistry, type BranchResult } from '../services/branches';
 import { openEscalations } from '../rpc/hqOps';
 import type { BranchOverview, BranchAccountHit } from '../rpc/branchOps';
 import { FREEZING_STATUSES } from '../util/authErrors';
@@ -87,9 +87,61 @@ async function deployedBranches(env: Env): Promise<Array<{
   }
 }
 
+/**
+ * The `?branch=<code>` scope — H12's overlay, on the wire (D153).
+ *
+ * WHAT THE OVERLAY IS, IN THE CANVAS'S OWN WORDS: "The overlay is not a filter
+ * on an HQ table — it is one private-link read, of one branch, rendered with
+ * every action removed. Each figure carries the branch and the time it was
+ * read, so nothing on the screen can be mistaken for a platform total."
+ *
+ * So a scoped response DELIBERATELY DROPS the platform-wide fields rather than
+ * sending them alongside one branch's. `accounts`, `seats_licensed`,
+ * `licences`, `queue` and `events` are HQ's own ledger; carrying them in a
+ * payload the page is rendering under a "Viewing as <branch>" banner is
+ * precisely how a total gets read as a territory's. A page that wants them
+ * asks without the parameter.
+ *
+ * `read_at` is HQ's clock and `as_of` is the branch's own. Both are sent
+ * because they answer different questions: when this screen was filled, and
+ * how old the branch's own figure was when it left.
+ */
+function scopeOf(c: { req: { query: (k: string) => string | undefined } }): string {
+  return String(c.req.query('branch') || '').trim();
+}
+
+async function stampLicence<T>(env: Env, one: BranchResult<T>): Promise<BranchResult<T>> {
+  const reg = await deployedBranches(env);
+  const row = reg.find((x) => String(x.code).toLowerCase() === one.code);
+  if (row?.licence_uid) one.licence_uid = String(row.licence_uid);
+  return one;
+}
+
 r.get('/overview', async (c) => {
   await requireSuperAdmin(c);
   const env = c.env;
+
+  // D153 — ONE BRANCH, READ ONCE, INSTEAD OF THE FAN-OUT. Not the fan-out
+  // filtered afterwards: a filtered fan-out would still call every other
+  // branch, and the read HQ performed is exactly what the overlay's banner
+  // claims it performed.
+  const scoped = scopeOf(c);
+  if (scoped) {
+    const one = await stampLicence(env, await branchRead<BranchOverview>(env, scoped, 'overview'));
+    return c.json({
+      scope: {
+        branch: one.code,
+        binding: one.binding,
+        status: one.status,
+        licence_uid: one.licence_uid ?? null,
+        as_of: one.as_of ?? null,
+        read_at: new Date().toISOString(),
+        ...(one.reason ? { reason: one.reason } : {}),
+      },
+      branches: [one],
+      branches_coverage: coverage([one]),
+    });
+  }
 
   const roles = await env.DB.prepare(
     'SELECT role, COUNT(*) AS n FROM users WHERE is_active = 1 GROUP BY role ORDER BY n DESC',
@@ -295,6 +347,33 @@ function rungOf(statuses: Set<string>): 'frozen' | 'awaiting_review' | 'notified
 r.get('/admins', async (c) => {
   await requireSuperAdmin(c);
   const env = c.env;
+
+  // D153 — THE SCOPED READ HAPPENS BEFORE HQ'S OWN ROSTER, not after it. Under
+  // the overlay the subject is one branch's accounts, so HQ's complete
+  // administrator list is not narrowed here, it is not read at all: sending it
+  // beside one branch's rows is what would make the overlay a filter on an HQ
+  // table, which is the one thing H12 says it is not.
+  const scopedTeam = scopeOf(c);
+  if (scopedTeam) {
+    const asked = String(c.req.query('q') || '').trim();
+    const one = await stampLicence(env, await branchRead<BranchAccountSearch>(
+      env, scopedTeam, 'searchAccounts', [asked, BRANCH_SEARCH_LIMIT],
+    ));
+    return c.json({
+      scope: {
+        branch: one.code,
+        binding: one.binding,
+        status: one.status,
+        licence_uid: one.licence_uid ?? null,
+        as_of: one.as_of ?? null,
+        read_at: new Date().toISOString(),
+        asked,
+        ...(one.reason ? { reason: one.reason } : {}),
+      },
+      branches: [one],
+      branches_coverage: coverage([one]),
+    });
+  }
   // `last_active_at` is a runtime-added column on databases older than
   // migration 049's helper (see its header). Selecting it without this is the
   // "no such column" 500 that #203 was written about.

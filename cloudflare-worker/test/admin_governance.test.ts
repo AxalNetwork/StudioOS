@@ -432,17 +432,26 @@ test('the two panels H7 draws with no store behind them say so', async () => {
   // And the narrowed absences travel with the pointer, so a reader of this
   // endpoint alone is not told a narrower truth than a reader of the other.
   assert.ok(Array.isArray(r.body.guardrails.not_counted) && r.body.guardrails.not_counted.length > 0);
-  assert.equal(r.body.tenant_view_available, false, 'the "Return to HQ view" overlay is claimed to exist');
-  // D150 RE-AIMED THIS ASSERTION, AND THE RE-AIM IS THE POINT. It used to
-  // require the reason to cite U1 — so the guard pinning the refusal was the
-  // thing standing in the way of correcting it. U1 is a fact about HQ's own
-  // database; a branch is a separate Worker over a separate D1, which is why
-  // D108's fan-out reads a branch's accounts at all. What is asserted now is
-  // the property that is still true: the overlay is UNBUILT (#235), and the
-  // reason must not blame the data instead. Both directions, because the
-  // positive alone passes on a reason that says both things.
-  assert.match(r.body.tenant_view_reason, /has not been built/);
+  // D153 — AND THE OVERLAY HALF IS RE-AIMED A SECOND TIME, which makes this
+  // assertion a record of the whole class. D150 re-aimed it once (the reason
+  // used to cite U1, a fact about HQ's own database that never applied to a
+  // branch) and left the refusal standing, correctly: the overlay was unbuilt.
+  // D153 built it — `?branch=` on the HQ reads, shell state, a read-only bar
+  // above all other chrome — so the refusal itself is gone. Ninth instance of
+  // a guard pinning a refusal that had to be re-aimed the day the refusal
+  // stopped being true.
+  //
+  // What is pinned now is what the sentence must still establish, because it
+  // is the part a reader of this feed can get wrong: the overlay is a READ
+  // rather than a role, and nothing runs from it. Both directions — the
+  // availability flag alone would pass on a sentence saying anything at all.
+  assert.equal(r.body.tenant_view_available, true, 'the payload went back to refusing a view the product has');
+  assert.doesNotMatch(r.body.tenant_view_reason, /has not been built/,
+    'the reason still says the overlay is unbuilt');
   assert.doesNotMatch(r.body.tenant_view_reason, /U1/, 'U1 does not block a per-branch read');
+  assert.match(r.body.tenant_view_reason, /read-only/i, 'the sentence stopped saying the view is read-only');
+  assert.match(r.body.tenant_view_reason, /absent under it rather than disabled/,
+    'the sentence stopped saying the actions are absent rather than disabled');
 });
 
 test('the guardrail rollup is one definition, and the sentence it replaced cannot come back', async () => {

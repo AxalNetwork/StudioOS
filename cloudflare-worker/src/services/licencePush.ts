@@ -25,7 +25,7 @@
  * definition of open, and one zone formatter.
  */
 import type { Env } from '../types';
-import { branchBindings } from './branches';
+import { branchByCode } from './branches';
 
 export type LicencePushResult = {
   /** Did the branch accept the copy? `false` is a real state, not an error. */
@@ -134,7 +134,7 @@ export async function pushLicenceToBranch(
     };
   }
 
-  const binding = branchBindings(env).find((x) => x.code === code);
+  const binding = branchByCode(env, code);
   if (!binding) {
     return {
       ok: false,

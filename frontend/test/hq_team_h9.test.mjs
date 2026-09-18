@@ -71,12 +71,31 @@ test('no caller anywhere in the SPA reads the flat, unpaginated user list', () =
     'a caller reads the newest-100 page as though it were the whole directory');
 });
 
-test('the route exists in api.js and asks the branches with q', () => {
-  assert.match(API, /hqAdmins: \(q\) =>/, 'api.hqAdmins is gone or renamed');
+test('the route exists in api.js, asks the branches with q, and carries the view-as scope', () => {
+  // D153 — the signature gained a SECOND argument, and the two are different
+  // in kind rather than in position, which is why both are pinned:
+  //   - `q` is what HQ ASKS THE BRANCHES. If it ever became a server-side
+  //     filter on the roster, the picker would be reading a filtered list
+  //     again, which is the D138 defect.
+  //   - `branch` changes WHICH DATABASE IS READ. Under the overlay HQ's own
+  //     roster is not narrowed, it is not read at all — a narrowed HQ table is
+  //     precisely what H12 says the overlay is not.
+  assert.match(API, /hqAdmins: \(q, branch\) =>/, 'api.hqAdmins is gone, renamed, or lost its scope');
   assert.match(API, /\/admin\/hq\/admins/, 'hqAdmins does not point at the Team route');
-  // `q` is what HQ asks the BRANCHES. If it became a server-side filter on the
-  // roster, the picker would be reading a filtered list again.
-  assert.match(TEAM, /api\.hqAdmins\(asked\)/, 'the table does not pass the query through');
+  assert.match(TEAM, /api\.hqAdmins\(asked, viewAs \|\| undefined\)/,
+    'the table does not pass the query and the scope through');
+  // The scope reaches the wire, and the server reads ONE branch with it rather
+  // than fanning out and discarding.
+  assert.match(API, /branch=\$\{encodeURIComponent\(b\)\}/, 'the scope never reaches the wire');
+  const HQ = codeOnly(read('cloudflare-worker/src/routes/admin_hq.ts'));
+  assert.match(HQ, /branchRead<BranchAccountSearch>\(/,
+    'the scoped Team read fans out instead of reading one branch');
+  // And HQ's own roster is genuinely skipped, not filtered: the scoped answer
+  // returns before the roster query runs.
+  assert.ok(
+    HQ.indexOf('if (scopedTeam)') < HQ.indexOf("WHERE role = 'admin'"),
+    'the scoped read happens after HQ\'s roster query, so the overlay is a filter over it',
+  );
 });
 
 test('the filter narrows a complete list in the browser, which is the honest case', () => {

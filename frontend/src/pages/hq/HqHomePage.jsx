@@ -4,6 +4,8 @@ import { Globe, Landmark } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
+import HqBranchOverlay from './HqBranchOverlay';
 
 /**
  * HQ · Home — the whole business on one screen (Admin · Super canvas, H1).
@@ -101,11 +103,21 @@ function Tile({ label, value, note, tone = 'text-axal-ink' }) {
 export default function HqHomePage() {
   const [data, setData] = useState(null);       // null = loading, UNAVAILABLE = failed
   const [tenant, setTenant] = useState('');     // '' = all subsidiaries; else a licence uid
+  // D153 / H12 — the view-as scope, from the shell. `setViewAs` is what a
+  // health card's own button calls; the way OUT is the shell bar's "Return to
+  // HQ view", which is chrome rather than a control on this page, because the
+  // overlay frames every page it covers and not only this one.
+  const { branch: viewAs, setBranch: setViewAs } = useViewAsBranch();
 
   const load = useCallback(() => {
+    // D153 — under the overlay this page does not fetch AT ALL. `HqBranchOverlay`
+    // performs its own scoped read, and reading HQ's platform payload beside it
+    // would put a licence ledger and a platform account total one render away
+    // from a screen whose banner says nothing on it is a platform total.
+    if (viewAs) return;
     setData(null);
     api.hqOverview().then(setData, (e) => { reportError('hq-home', e); setData(UNAVAILABLE); });
-  }, []);
+  }, [viewAs]);
   useEffect(() => { load(); }, [load]);
 
   const ready = data && data !== UNAVAILABLE;
@@ -167,6 +179,21 @@ export default function HqHomePage() {
       ? `${base} — ${unread.join(', ')} did not, so any total here excludes ${plural(unread.length, 'it', 'them')}`
       : `${base}, so branch figures here are complete`;
   })();
+
+  // D153 / H12 — frame 1. AFTER every hook, so the hook order is the same on
+  // both sides of this branch, and before the rail: the rail's coverage lines
+  // summarise HQ's own ledger and platform totals, and carrying them into a
+  // view of one branch would put four false sentences beside four true
+  // figures. A rail that can say which scope it answered in is H13's, and
+  // `WorkerRail` has no `scope` prop today (#244's remainder) — D153 unblocks
+  // that refusal rather than discharging it.
+  if (viewAs) {
+    return (
+      <div className="min-w-0" data-testid="hq-home-page">
+        <HqBranchOverlay branch={viewAs} />
+      </div>
+    );
+  }
 
   const rail = (
     <WorkerRail
@@ -317,6 +344,23 @@ export default function HqHomePage() {
                     <span className="truncate text-[12.5px] font-extrabold tracking-tight">{l.brand_name}</span>
                     <Pill status={l.status} />
                   </div>
+                  {/* D153 / H12 — the way IN, and it is drawn only where there
+                      is something behind it. A licence whose branch is not
+                      bound, or did not answer, gets NO control: a "view as"
+                      that opens a screen of absences would be the
+                      `still_an_admin` mistake D134 named, one tier up. The way
+                      OUT is the shell bar, because the overlay frames every
+                      page rather than this one. */}
+                  {b && b.status === 'ok' && (
+                    <button
+                      type="button"
+                      data-testid="hq-view-as-enter"
+                      onClick={() => setViewAs(b.code)}
+                      className="mt-2 rounded border border-axal-hairline px-2 py-0.5 text-[11px] font-semibold text-axal-muted hover:bg-axal-ground"
+                    >
+                      View as {b.code}
+                    </button>
+                  )}
                   <div className="mt-1 font-mono text-[10px] text-axal-faint">{l.licence_ref} · {l.territories.length ? l.territories.join(' · ') : 'no territory'}</div>
                   <dl className="mt-3 grid grid-cols-2 gap-2 border-t border-axal-hairline pt-2 text-[11px]">
                     <div><dt className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Seats licensed</dt><dd className="mt-0.5 font-bold tabular-nums">{num(l.seats_licensed) ?? <Unrecorded />}</dd></div>

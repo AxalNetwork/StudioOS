@@ -4,6 +4,7 @@ import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, Unrecorded, Unreadable } from '../../ui';
 import { daysTo, rungRank } from '../../lib/notices';
+import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
 
 /**
  * HQ · Team — the first screen whose SUBJECT is the administrators (H9, D138).
@@ -178,6 +179,11 @@ export default function HqTeamTable({ reloadKey = 0 }) {
   const [error, setError] = useState(null);
   const [typed, setTyped] = useState('');
   const [asked, setAsked] = useState('');
+  // D153 / H12 frame 2 — the same scope the shell bar names. Under it the
+  // route reads ONE branch and does not read HQ's roster at all, so the
+  // HQ-held half below is absent rather than filtered away: a narrowed HQ
+  // table is exactly what H12 says the overlay is not.
+  const { branch: viewAs } = useViewAsBranch();
 
   // The 250ms / two-character debounce `AdminPage` already uses, for the same
   // reason: each keystroke would otherwise ask every branch over its own link.
@@ -192,14 +198,14 @@ export default function HqTeamTable({ reloadKey = 0 }) {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const res = await api.hqAdmins(asked);
+      const res = await api.hqAdmins(asked, viewAs || undefined);
       setData(res && typeof res === 'object' ? res : null);
     } catch (e) {
       reportError('HqTeamTable:load', e);
       setData(null);
       setError(String(e?.message || e || 'Request failed'));
     }
-  }, [asked]);
+  }, [asked, viewAs]);
 
   useEffect(() => { load(); }, [load, reloadKey]);
 
@@ -264,12 +270,22 @@ export default function HqTeamTable({ reloadKey = 0 }) {
         </label>
       </div>
 
-      {!ladderReadable && (
+      {viewAs && (
+        <p className="mt-3 text-[12px] leading-relaxed text-axal-muted" data-testid="hq-team-scoped-note">
+          Reading {viewAs} alone. HQ&rsquo;s own administrator roster is not narrowed here — it is not
+          read: this is one branch&rsquo;s answer to one question, not an HQ table with a filter over it.
+          Nothing here can be acted on, which is why no move, reassign or suspend control is drawn —
+          an action that cannot run from this view is not drawn in it.
+        </p>
+      )}
+
+      {!ladderReadable && !viewAs && (
         <p className="mt-3" data-testid="hq-team-ladder-unreadable">
           <Unreadable what="The compliance ladder" claim={data.ladder_reason || 'No rung is shown for any administrator.'} onRetry={load} />
         </p>
       )}
 
+      {!viewAs && (
       <div className="mt-4 flex items-baseline gap-2" data-testid="hq-team-group-hq">
         <span className="text-[11px] font-extrabold uppercase tracking-[.08em] text-axal-ink">Axal VC HQ</span>
         <span className="text-[11.5px] text-axal-faint">
@@ -278,8 +294,9 @@ export default function HqTeamTable({ reloadKey = 0 }) {
           {needle ? ` · showing ${rows.length}` : ''}
         </span>
       </div>
+      )}
 
-      {rows.length === 0 ? (
+      {viewAs ? null : rows.length === 0 ? (
         <p className="mt-2 text-[12px] text-axal-faint">
           {needle
             ? 'No administrator here matches that.'
@@ -346,6 +363,19 @@ export default function HqTeamTable({ reloadKey = 0 }) {
       ))}
 
       <p className="mt-4 text-[11px] leading-relaxed text-axal-faint">
+        {viewAs && (
+          <>
+            {/* The column H9 draws that has no source, stated rather than
+                drawn empty: trust is HQ's own service over HQ's own accounts
+                and is not computed per branch, so a branch hit carries no
+                trust field to put in one. D129's precedent on S2 governs the
+                other one — a hit carries `role`, not a licence type, so the
+                heading beside it says Role. */}
+            A branch hit carries a role and an active state; it carries no trust score, because trust
+            is computed over HQ&rsquo;s own accounts and is not a per-branch figure.
+            {' '}
+          </>
+        )}
         {branches.length === 0
           ? 'No branch is provisioned, so every account on the platform is HQ-held and this is the whole team.'
           : `Of ${data.branches_coverage?.total ?? branches.length} branches, ${data.branches_coverage?.answered ?? 0} answered.`}

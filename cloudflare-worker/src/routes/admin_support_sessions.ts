@@ -41,7 +41,7 @@ import type { Env } from '../types';
 import { requireFactor, requireStepUp, requireSuperAdmin } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { mapError } from './_t13t14t15_helpers';
-import { branchBindings } from '../services/branches';
+import { branchByCode } from '../services/branches';
 import { BRANCH_CODE_RE } from '../util/branch';
 import { SUPPORT_REASON_MIN, MOVE_REASON_MIN } from '../rpc/branchOps';
 
@@ -88,7 +88,7 @@ r.post('/branches/:code/support-session', async (c) => {
       }, 409);
     }
 
-    const binding = branchBindings(c.env).find((x) => x.code === code);
+    const binding = branchByCode(c.env, code);
     if (!binding) {
       return c.json({
         error: 'branch_not_bound',
@@ -229,9 +229,12 @@ r.post('/branches/:code/accounts/:userId/move', async (c) => {
       }, 409);
     }
 
-    const bindings = branchBindings(c.env);
-    const source = bindings.find((x) => x.code === from);
-    const destination = bindings.find((x) => x.code === to);
+    // TWO CODES, RESOLVED THROUGH THE ONE RESOLVER TWICE. A move is the one
+    // site that needs a pair, and composing `branchByCode` is what keeps the
+    // matching rule identical at both ends: a source resolved one way and a
+    // destination another is how a move half-completes.
+    const source = branchByCode(c.env, from);
+    const destination = branchByCode(c.env, to);
     // BOTH BINDINGS ARE CHECKED BEFORE EITHER IS CALLED. Closing an account on
     // the source when the destination is not even bound would be a move that
     // could not possibly complete — a refusal is better than half of it.
