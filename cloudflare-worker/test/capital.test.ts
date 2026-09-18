@@ -39,12 +39,6 @@ const LPS = [
   { id: 200, user_id: OTHER_ID },
 ];
 
-// Two pending capital calls, one per LP (distinct created_at for ordering).
-const CALLS = [
-  { id: 1, limited_partner_id: 100, project_id: null, amount: 500, status: 'pending', created_at: '2026-01-02' },
-  { id: 2, limited_partner_id: 200, project_id: null, amount: 700, status: 'pending', created_at: '2026-01-01' },
-];
-
 async function mintToken(userId: number, role: string): Promise<string> {
   // No `jti` so getCurrentUser skips the user_sessions revocation lookup.
   return new SignJWT({ user_id: userId, role })

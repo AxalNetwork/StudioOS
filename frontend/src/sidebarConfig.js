@@ -80,12 +80,21 @@ export const SIDEBAR_GROUPS = {
   // laid over the top, and `shellRoleFor` (lib/shellRole.js) picks it when the
   // flag is set and the holder has not switched to the plain Admin view.
   //
-  // ROWS ARE ADDED AS THEIR PAGES LAND. The approved canvas has eight rows —
-  // Home, Licences, Funds, Contracts, Team, Support, Security, Settings. A row
+  // ROWS ARE ADDED AS THEIR PAGES LAND. The approved canvas has ELEVEN rows —
+  // Home, Licences, Funds, Contracts, Team, Revenue, Content, Platform,
+  // Support, Security, Settings — and its own changelog says so: "Sidebar is
+  // the eleven-row HQ group … The seven-row nav is not drawn anywhere." A row
   // pointing at a route that does not exist is worse than a missing row: it
-  // looks shipped and 404s. All eight resolve today, and
+  // looks shipped and 404s. All eleven resolve today, and
   // `super_admin_shell.test.mjs` fails if a row is added whose route is not
   // registered in App.jsx.
+  //
+  // This sentence said EIGHT until D146, and omitted Revenue, Content and
+  // Platform — the three rows whose own comments sit a few lines below it. The
+  // array was never wrong; the prose describing it was, and the test three
+  // files away is literally named "all eleven rows are present, in canvas
+  // order". A comment a guard already contradicts is the cheapest kind of
+  // false claim to leave lying around, and the most misleading to read.
   //
   // Two rows deliberately do not point where their labels first suggest:
   //   Team  → /admin/accounts, the cross-tenant accounts table with the holder
@@ -128,10 +137,13 @@ export const SIDEBAR_GROUPS = {
   // THE GROUP ABOVE AND IS NOT ONE. That comment forbids a row pointing at a
   // route that does not exist, because such a row "looks shipped and 404s".
   // Every row here HAS a route, registered in App.jsx and covered by the same
-  // guard; the ones whose artboards are not built render `BranchZonePending`,
-  // which names the artboard, what will be on it and which PR builds it. A
-  // stated notice is not a 404, and a one-row sidebar — which is what the
-  // rule applied literally would ship, since only Settings has a page today —
+  // guard — and as of D155 every one of them resolves to a REAL PAGE. The
+  // interim arrangement this comment used to describe (rows whose artboards
+  // were not built rendering `BranchZonePending`, a notice naming the artboard
+  // and the PR that would build it) is over, and the component is deleted
+  // rather than left unused. What it bought was a sidebar matching the canvas
+  // while the pages landed one at a time; a one-row sidebar — which is what the
+  // rule applied literally would have shipped, since only Settings had a page —
   // is not the subsidiary canvas and does not answer the question the frame
   // exists to answer.
   branch_admin: [

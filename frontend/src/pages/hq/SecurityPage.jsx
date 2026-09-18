@@ -9,12 +9,20 @@ import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
  * became under decision A4).
  *
  * Eight zones in the canvas's order, over `GET /api/admin/security/overview`.
- * Four are real — sessions and access (with the platform-wide force re-auth),
- * data subject requests, KYC, the admin action audit — and four are named as
- * not recorded in the zone the canvas draws for them: security events, AI
- * safety, sanctions, backup and DR. The canvas calls the `security_events`
- * ledger "the one real backend build"; it is not built, and this page says
- * so where the feed would be rather than rendering the canvas's sample rows.
+ * Five are real — sessions and access (with the platform-wide force re-auth),
+ * data subject requests, KYC, the admin action audit, and AI safety — and
+ * three are named as not recorded in the zone the canvas draws for them:
+ * security events, sanctions, backup and DR. The canvas calls the
+ * `security_events` ledger "the one real backend build"; it is not built, and
+ * this page says so where the feed would be rather than rendering the canvas's
+ * sample rows.
+ *
+ * AI SAFETY MOVED FROM THE SECOND LIST TO THE FIRST IN D152, AND IT SHOULD
+ * NEVER HAVE BEEN IN THE SECOND. The zone rendered "No guardrail-hit,
+ * flagged-output or token-anomaly counter is stored" — a sentence that was
+ * false on two of its three clauses about a rollup `AiUsageTab` was already
+ * drawing one click away. It now reads real counters from two stores and keeps
+ * a narrowed list of what they still cannot say (the D111 pattern).
  *
  * ABSENT IS NOT ZERO. `num` returns null for a missing figure, a failed
  * request is unreadable rather than a quiet platform, and each `available:
@@ -39,10 +47,13 @@ import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
  * edited for legibility." No tile sits above the feed. The tiles this page
  * does carry belong to Y2's own zones, which are not the log.
  *
- * WHAT H7 DRAWS AND THIS PAGE DOES NOT: the "Viewing as: Axal VC France ·
- * Return to HQ view" overlay. It is a tenant-scoped read-only view, and
- * tenant scope is U1. The reason comes from the payload rather than from
- * here so there is one copy of it.
+ * H7'S "Viewing as: Axal VC France · Return to HQ view" OVERLAY IS BUILT
+ * (D153), and this page describes it rather than drawing it: the bar lives in
+ * the shell, above every other bar, so it frames Home and Team rather than one
+ * page. What this page carries is the sentence, and it comes from the payload
+ * rather than from here so there is one copy of it. This zone's own figures
+ * stay HQ-wide — the governance feed is HQ's record of what HQ did, which is
+ * not a branch's to show.
  */
 const UNAVAILABLE = Symbol('unavailable');
 
@@ -98,6 +109,119 @@ function Absent({ block, fallback }) {
     <p className="text-[12.5px] leading-relaxed text-axal-muted">
       <Unrecorded /> — {block?.reason || fallback}
     </p>
+  );
+}
+
+/**
+ * D152 — the "AI safety" zone stopped being one `<Absent>` line.
+ *
+ * It rendered `data.ai_safety.reason`, which said no guardrail, flagged-output
+ * or token-anomaly counter was stored. Two of those three were false, and the
+ * verdict rollup was ALREADY on screen elsewhere — `AiUsageTab` draws it as
+ * "Guardrail safety (llama-guard)". So HQ's security desk denied a figure the
+ * platform was showing one click away.
+ *
+ * FOUR TILES, TWO STORES, AND THE SPLIT IS THE POINT. A verdict is what the
+ * guard THOUGHT; a block and a flag are what the platform DID about it. They
+ * come from different tables and fail independently (`advisor_turn_audit` is
+ * lazily bootstrapped), so each pair reads its own availability and an
+ * unreadable half renders `<Unrecorded/>` with its reason rather than a zero —
+ * on a safety counter, a false zero is the worst possible direction to be
+ * wrong in.
+ *
+ * `!block` is loading-or-unreadable, never "nothing was recorded": the page's
+ * own `<Unreadable/>` above says which, and these tiles must not answer a
+ * question they were not able to ask.
+ */
+function AiSafety({ block }) {
+  const v = block?.verdicts;
+  const e = block?.enforcement;
+  // `windowNote`, not `window`: a local of that name shadows the browser global
+  // inside this component, which is legal and quietly confusing.
+  const windowNote = block ? `in ${block.window_days} days` : 'unreadable';
+  // A rate over an empty denominator is not 0%. The server sends null; the
+  // note says what actually happened instead of printing a percentage.
+  const rate = v?.available && v.safe_rate !== null && v.safe_rate !== undefined
+    ? `${(v.safe_rate * 100).toFixed(1)}% judged safe`
+    : (v?.available ? 'the guard did not run in this window' : (v?.reason || 'unreadable'));
+  return (
+    <div data-testid="hq-ai-safety">
+      <div className="grid grid-cols-2 gap-2">
+        <Stat
+          label="Guard verdicts"
+          value={v?.available ? num(v.evaluated) : null}
+          note={v?.available ? `llama-guard calls ${windowNote}` : (v?.reason || 'unreadable')}
+        />
+        <Stat
+          label="Judged unsafe"
+          value={v?.available ? num(v.unsafe_count) : null}
+          note={rate}
+          tone={v?.available && v.unsafe_count ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'}
+        />
+        <Stat
+          label="Turns blocked"
+          value={e?.available ? num(e.blocked) : null}
+          note={e?.available ? 'refused before the model answered' : (e?.reason || 'unreadable')}
+          tone={e?.available && e.blocked ? 'text-red-700 dark:text-red-300' : 'text-axal-ink dark:text-white'}
+        />
+        <Stat
+          label="Outputs flagged"
+          value={e?.available ? num(e.flagged) : null}
+          note={e?.available ? 'shadow-flagged, the turn still answered' : (e?.reason || 'unreadable')}
+          tone={e?.available && e.flagged ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'}
+        />
+      </div>
+      {/*
+        D158 — WHICH RULE FIRED. Until migration 270 this panel could say how
+        often the guard fired and never what for, and the list below carried a
+        row saying so. Three things here follow the payload rather than the
+        layout: `rules` and `states` are rendered apart, because a router
+        failure is the guard NOT running and does not belong in a list headed
+        "what tripped it"; `unclassified` is stated rather than folded in,
+        because every turn recorded before 270 has no category and calling one
+        `safe` would be a verdict nothing reached; and the whole block is
+        absent, not zeroed, when `advisor_turn_audit` could not be read.
+      */}
+      {e?.available && (
+        <div className="mt-3" data-testid="hq-ai-safety-rules">
+          <div className="text-[11px] font-semibold text-axal-muted">What tripped the guard</div>
+          {e.rules?.length ? (
+            <ul className="mt-1 space-y-0.5">
+              {e.rules.map((rr) => (
+                <li key={rr.category} className="text-[11px] text-axal-faint tabular-nums">
+                  <b className="text-axal-muted">{rr.category}</b> — {num(rr.turns)} {rr.turns === 1 ? 'turn' : 'turns'}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="mt-1 text-[11px] text-axal-faint" data-testid="hq-ai-safety-rules-none">
+              No turn in this window named a violated rule.
+            </div>
+          )}
+          {e.unclassified > 0 && (
+            <div className="mt-1 text-[11px] text-axal-faint" data-testid="hq-ai-safety-unclassified">
+              {num(e.unclassified)} {e.unclassified === 1 ? 'turn was' : 'turns were'} recorded without a
+              category. Turns written before the category was stored carry none — that is not a turn judged safe.
+            </div>
+          )}
+          {e.states?.length > 0 && (
+            <div className="mt-1 text-[11px] text-axal-faint" data-testid="hq-ai-safety-states">
+              Classification outcomes: {e.states.map((ss) => `${ss.category} ${ss.turns}`).join(' · ')}. These
+              describe the check itself, not a rule that fired.
+            </div>
+          )}
+        </div>
+      )}
+      {(block?.not_counted || []).length > 0 && (
+        <ul className="mt-3 space-y-1.5" data-testid="hq-ai-safety-not-counted">
+          {block.not_counted.map((n) => (
+            <li key={n.what} className="text-[11px] leading-relaxed text-axal-faint">
+              <b className="text-axal-muted">{n.what}</b> — <Unrecorded />. {n.reason}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -203,6 +327,22 @@ export default function HqSecurityPage() {
   const dsr = ready ? data.dsr?.rows || [] : [];
   const dsrDue = dsr.filter((d) => d.days_left !== null && d.days_left <= 14).length;
   const withoutMfa = mfa ? mfa.admins_total - mfa.admins_with_mfa : null;
+  // D152 — the rail's AI-safety row, built from the SERVER's list rather than
+  // retyped, but kept to ONE literal pair. Spreading the mapped rows straight
+  // into `unavailable` was the first shape and it was wrong: two guards read
+  // that array line by line to prove every entry is a `[title, detail]` pair —
+  // WorkerRail destructures each one, so a bare string renders as its first
+  // two characters — and a spread hides the row shape from exactly the check
+  // that exists to see it. The gaps' full reasons are in the zone; the rail
+  // names them.
+  const aiGaps = ready ? (data.ai_safety?.not_counted || []).map((n) => n.what) : [];
+  // Computed here rather than inline, because the rail's `unavailable` entries
+  // are ONE PER LINE by convention and two guards read that array line by
+  // line — a wrapped pair is still a pair, and still invisible to them.
+  const aiSafetyDetail = !ready ? 'unreadable'
+    : (aiGaps.length
+      ? `Guardrail verdicts and enforcement ARE counted — the zone above reads them. Not counted: ${aiGaps.join(' · ')}, each with its reason there.`
+      : 'Counted, with nothing named as still missing.');
 
   const rail = (
     <WorkerRail
@@ -220,11 +360,23 @@ export default function HqSecurityPage() {
         // [title, detail] pairs: WorkerRail destructures each entry, so a bare
         // string would render as its first two characters.
         ['Security events', 'No security_events ledger exists yet.'],
-        ['AI safety counters', 'Nothing aggregates guardrail verdicts.'],
+        // D152 — THIS ROW SAID "Nothing aggregates guardrail verdicts" AND IT
+        // WAS FALSE. Something did: `aiRouter.loadAiUsageReport` had rolled
+        // them up all along and `AiUsageTab` rendered them. Correcting it is
+        // the sixth time this programme has had to re-aim a rail row the day
+        // its refusal stopped being true, and what it says now is named by the
+        // SERVER rather than retyped here, so the zone and the rail cannot
+        // disagree about what is missing.
+        ['AI safety counters', aiSafetyDetail],
         ['Sanctions screening', 'Not run on the platform.'],
         ['Backup and restore-drill status', 'Not recorded where the platform can read it.'],
         ['Per-tenant anything', 'No account names its licence yet (U1) — except a licence event, which is about one.'],
-        ['The "Return to HQ view" overlay', 'There is no tenant-scoped view to return from; that is the same U1.'],
+        // D153 — THIS ROW IS GONE, not reworded: the overlay is built, so a
+        // rail row saying it is not would be the stale-refusal defect this
+        // programme keeps deleting. What the overlay does NOT cover is this
+        // page, and that is a fact about scope rather than about a gap:
+        // governance is HQ's own record of HQ's own acts.
+        ['The governance feed under the overlay', 'Out of scope. Viewing as a branch scopes Home and Team; this feed is HQ\'s record of what HQ did, which no branch holds.'],
       ]}
       data-testid="hq-security-rail"
     />
@@ -247,9 +399,9 @@ export default function HqSecurityPage() {
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">Security</h1>
           <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
             Was Governance, which described the audit log and nothing else. That log is here as one zone of
-            eight, reading the four stores a privileged action actually lands in rather than the one. Four
-            zones read their stores; four say what is not recorded and why. Only a licence event names a
-            subsidiary — nothing else here is scoped per subsidiary yet.
+            eight, reading the four stores a privileged action actually lands in rather than the one. Five
+            zones read their stores; three say what is not recorded and why. Only a licence event names a
+            subsidiary — nothing else here is scoped per subsidiary yet, the guardrail counters included.
           </p>
         </header>
 
@@ -287,7 +439,7 @@ export default function HqSecurityPage() {
             </Zone>
 
             <Zone title="AI safety" sub="guardrail hits · Advisor-AI outputs the screen caught">
-              <Absent block={ready ? data.ai_safety : null} fallback="no safety counter is stored." />
+              <AiSafety block={ready ? data.ai_safety : null} />
             </Zone>
           </div>
 
@@ -424,7 +576,7 @@ export default function HqSecurityPage() {
                   the only decoration here, and it is there to be scanned for.
                 </p>
                 <p className="mt-2 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-gov-tenant-view">
-                  <b>No &ldquo;Return to HQ view&rdquo;.</b> {feed.tenant_view_reason}
+                  <b>Viewing as a branch.</b> {feed.tenant_view_reason}
                 </p>
               </>
             )}

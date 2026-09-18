@@ -516,14 +516,14 @@ wellbeing.get('/aggregate', async (c) => {
         `SELECT ${cols},
                 mood_plain, stress_plain, sleep_plain, energy_plain, focus_plain, social_plain
            FROM wellbeing_daily_pulses
-          WHERE created_at >= ?`,
+          WHERE datetime(created_at) >= datetime(?)`,
       ).bind(cutoff).all<any>();
     } catch (e: any) {
       if (/no such column/i.test(String(e?.message || ''))) {
         res = await c.env.DB.prepare(
           `SELECT ${cols}
              FROM wellbeing_daily_pulses
-            WHERE created_at >= ?`,
+            WHERE datetime(created_at) >= datetime(?)`,
         ).bind(cutoff).all<any>();
       } else { throw e; }
     }
@@ -787,7 +787,7 @@ async function countMonthlyProfileViews(env: Env, userId: number): Promise<numbe
   const r = await env.DB.prepare(
     `SELECT COUNT(DISTINCT expert_id) as n
        FROM expert_profile_views
-      WHERE user_id = ? AND viewed_at >= ?`,
+      WHERE user_id = ? AND datetime(viewed_at) >= datetime(?)`,
   ).bind(userId, monthStart).first<{ n: number }>();
   return Number(r?.n || 0);
 }
@@ -905,7 +905,7 @@ wellbeing.get('/experts/:uid', async (c) => {
     })();
     const seen = await c.env.DB.prepare(
       `SELECT 1 FROM expert_profile_views
-        WHERE user_id = ? AND expert_id = ? AND viewed_at >= ? LIMIT 1`,
+        WHERE user_id = ? AND expert_id = ? AND datetime(viewed_at) >= datetime(?) LIMIT 1`,
     ).bind(user.id, expert.id, monthStart).first();
     if (!seen) {
       const used = await countMonthlyProfileViews(c.env, user.id);

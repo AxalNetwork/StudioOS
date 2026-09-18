@@ -64,6 +64,12 @@ type BranchLicenceRow = {
   template_version: string | null;
   suspended_at: string | null;
   suspended_note: string | null;
+  // Migration 265 — the five `MyLicencePage` reads and the copy never carried.
+  registered_address: string | null;
+  signatory_name: string | null;
+  signatory_title: string | null;
+  term_years: number | null;
+  terminated_at: string | null;
   pushed_at: string;
 };
 
@@ -87,7 +93,9 @@ async function branchLicencePayload(env: Env, code: string) {
     row = await env.DB.prepare(
       `SELECT licence_uid, licence_ref, legal_entity, brand_name, territory, status, seats_json,
               revenue_share_bps, token_split_bps, annual_fee_cents, currency, term_start, term_end,
-              renewal_at, template_version, suspended_at, suspended_note, pushed_at
+              renewal_at, template_version, suspended_at, suspended_note,
+              registered_address, signatory_name, signatory_title, term_years, terminated_at,
+              pushed_at
          FROM branch_licence WHERE id = 1`,
     ).first<BranchLicenceRow>();
   } catch (e) {
@@ -204,12 +212,28 @@ async function branchLicencePayload(env: Env, code: string) {
       token_split_bps: row.token_split_bps,
       annual_fee_cents: row.annual_fee_cents,
       currency: row.currency,
-      term_start: row.term_start,
-      term_end: row.term_end,
-      renewal_at: row.renewal_at,
-      template_version: row.template_version,
+      // D137 — THE REST OF THE RENAME THE COMMENT ABOVE STARTED. That comment
+      // was applied to `legal_entity` alone and stopped, so seven more fields
+      // went on being emitted under the TABLE's names while `MyLicencePage`
+      // read HQ's. Every one of them rendered blank on exactly the tier the
+      // copy exists for — including `status_note`, which is the sentence
+      // saying WHY a licence was suspended, on the page a suspended
+      // administrator goes to find out.
+      //
+      // The mapping is `LicenceRow` (routes/admin_licences.ts), which is what
+      // `hydrate` spreads verbatim into HQ's payload, so the two tiers now
+      // answer with one vocabulary. A test asserts that set-equality rather
+      // than this comment.
+      starts_on: row.term_start,
+      renews_on: row.renewal_at,
+      status_note: row.suspended_note,
+      term_years: row.term_years,
+      registered_address: row.registered_address,
+      signatory_name: row.signatory_name,
+      signatory_title: row.signatory_title,
       suspended_at: row.suspended_at,
-      suspended_note: row.suspended_note,
+      terminated_at: row.terminated_at,
+      template_version: row.template_version,
       admin_role: 'principal',
     },
     // NOT an empty history. `licence_events` is HQ's append-only trail and is
@@ -321,6 +345,124 @@ r.get('/mine', async (c) => {
     events: events.results || [],
     ...DERIVED_UNAVAILABLE,
   });
+});
+
+/* ------------------------------------------------------------------ *
+ * The compliance ladder — the addressee's half (D135)                  *
+ * ------------------------------------------------------------------ */
+
+// THESE TWO ROUTES LIVE HERE PRECISELY BECAUSE THIS FILE IS NOT AN ADMIN
+// ROUTER, and that is what lets the ladder work without an exception list.
+//
+// The freeze lives inside `requireAdmin` (auth.ts), so every admin write on HQ
+// refuses with 423 while a notice is outstanding. Put the reply behind
+// `requireAdmin` and the freeze locks the addressee out of the one action that
+// lifts it; the usual patch — a list of paths the gate skips — is the thing
+// that rots, because the next route added to it is the one nobody remembers.
+// `requireAuth` plus "you are this notice's addressee" is also the honest
+// description of what is happening: an admin answering their own warning is not
+// exercising admin power, they are the person the letter was addressed to.
+//
+// IT IS ALSO WHY THIS FILE STOPS BEING READ-ONLY. Its header says "one licence,
+// read-only, for the person who administers it" — true until the ladder needed
+// somewhere for that person to answer from, and the answer belongs beside the
+// licence they are answering about rather than in a third router with a third
+// gate. Reading stays the bulk of it; there is exactly one write.
+//
+// WHAT A RESPONSE IS NOT: it is not compliance. Writing "paid it" does not
+// settle anything — the notice moves to `responded` and waits for HQ, because a
+// click by the person who owes a fee is not evidence the fee was paid. The lift
+// is HQ's, at POST /api/admin/licences/:uid/notices/:noticeUid/review.
+
+const noticeText = (v: unknown, max = 5000): string => String(v ?? '').trim().slice(0, max);
+
+r.get('/notices', async (c) => {
+  const user = await requireAuth(c);
+  let items: Array<Record<string, unknown>> = [];
+  let readable = true;
+  try {
+    const res = await c.env.DB.prepare(
+      `SELECT n.uid, n.kind, n.subject, n.body, n.respond_by, n.status,
+              n.response, n.responded_at, n.review_note, n.reviewed_at,
+              n.froze_at, n.created_at,
+              l.licence_ref, l.brand_name, l.status AS licence_status
+         FROM admin_notices n
+         LEFT JOIN territory_licences l ON l.id = n.licence_id
+        WHERE n.user_id = ?
+        ORDER BY n.id DESC`,
+    ).bind(user.id).all<Record<string, unknown>>();
+    items = res.results || [];
+  } catch { readable = false; }
+  return c.json({
+    items: readable ? items : [],
+    // An unreadable store is not an empty inbox. Telling somebody whose account
+    // is frozen that they have no notices would be the worst possible version
+    // of a missing table — the #204 distinction, on the surface it matters most.
+    notices_available: readable,
+    ...(readable ? {} : {
+      notices_reason: 'The admin_notices table could not be read on this database (migration 264).',
+    }),
+  });
+});
+
+r.post('/notices/:uid/respond', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const response = noticeText((body as Record<string, unknown>)?.response);
+  if (response.length < 10) {
+    return c.json({
+      error: 'A response of at least 10 characters is required — it is what HQ reads when deciding whether this is settled.',
+      code: 'response_too_short',
+    }, 400);
+  }
+  // OWNERSHIP IS IN THE WHERE, not a check after the read: a notice addressed
+  // to somebody else answers 404 rather than 403, because 403 confirms that it
+  // exists. Same reasoning `mapError`'s header gives for the ownership helpers.
+  const notice = await c.env.DB.prepare(
+    'SELECT id, uid, status, subject FROM admin_notices WHERE uid = ? AND user_id = ?',
+  ).bind(c.req.param('uid'), user.id).first<{ id: number; uid: string; status: string; subject: string }>();
+  if (!notice) return c.json({ error: 'not_found' }, 404);
+  // ANSWERABLE FROM BOTH `issued` AND `overdue`. Answering late is the whole
+  // point of the middle rung — "frozen until they act on things from what they
+  // have been notified" describes somebody acting AFTER the deadline, and a
+  // ladder that refused a late answer would have no way back up it.
+  if (notice.status !== 'issued' && notice.status !== 'overdue') {
+    return c.json({
+      error: `this notice is ${notice.status} and is not waiting on you`,
+      code: 'not_answerable',
+    }, 409);
+  }
+  await c.env.DB.prepare(
+    `UPDATE admin_notices
+        SET status = 'responded', response = ?, responded_at = datetime('now'),
+            updated_at = datetime('now')
+      WHERE id = ? AND user_id = ?`,
+  ).bind(response, notice.id, user.id).run();
+
+  // THE FREEZE LIFTS ON RESPONDING, NOT ON HQ ACCEPTING, and that is a choice
+  // rather than an oversight. `responded` is not in FREEZING_STATUSES, so an
+  // admin who answers can write again while HQ reads it. Holding the freeze
+  // through a review of unknown length would punish the person for doing
+  // exactly what they were asked; if HQ rejects, `rejected` freezes them again,
+  // and that refusal is a decision somebody made rather than a queue they sat
+  // in. "Frozen until they act" is the owner's sentence, and acting is this.
+  try {
+    const { notify } = await import('../services/notify');
+    const hq = await c.env.DB.prepare('SELECT user_id FROM super_admins').all<{ user_id: number }>();
+    for (const h of (hq.results || [])) {
+      await notify(c.env, {
+        userId: Number(h.user_id),
+        type: 'compliance_response',
+        title: 'A compliance notice has been answered',
+        body: `${user.name || user.email} responded to "${notice.subject}". It is waiting on your review.`,
+        link: '/admin/licences',
+        category: 'compliance',
+        payload: { notice_uid: notice.uid },
+      });
+    }
+  } catch (e) { console.warn('[compliance] HQ notification failed', (e as Error).message); }
+
+  return c.json({ ok: true, status: 'responded' });
 });
 
 export default r;

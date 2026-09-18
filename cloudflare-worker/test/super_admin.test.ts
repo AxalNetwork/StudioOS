@@ -220,17 +220,30 @@ test('migration 207 narrows the elevation to the one named account, after 199', 
     '199 is not edited to carry the decision; 207 is the decision');
 });
 
-test('the holder console gates every write behind TOTP, step-up and the elevation', () => {
+test('the holder console gates every write behind the shared write bar', () => {
+  // RE-POINTED IN D134, AND THE REASON IS WORTH KEEPING. This used to read the
+  // bar's three checks out of THIS file, because the bar was declared here. It
+  // now lives in `auth.ts` — promoting an admin through a licence and demoting
+  // one want the same three checks in the same order, and a third hand-written
+  // copy is how one of them comes to check only two. A guard that pins WHERE a
+  // helper is declared fails a correct move; this pins what this router does,
+  // which is the claim it actually owns.
+  //
+  // The bar's CONTENTS and their order are pinned once, in
+  // `licence_admin_lifecycle_d134.test.ts`, beside the definition. Asserting
+  // them here as well would be two tests of one fact that can be changed apart.
   const src = read(ROUTER);
   assert.doesNotMatch(src, /\brequireAdmin\b/, 'a plain admin gate here is a franchisee minting franchisors');
-  assert.match(src, /requireFactor\(c, 'totp'\)/);
-  assert.match(src, /requireStepUp\(c\)/);
-  assert.match(src, /requireSuperAdmin\(c\)/);
-  // The bar is one function, so a new write cannot forget one of the three.
-  const bar = src.slice(src.indexOf('async function requireWriteBar'), src.indexOf('function parseUserId'));
-  assert.ok(bar.indexOf("requireFactor(c, 'totp')") < bar.indexOf('requireStepUp(c)'), 'factor before step-up');
-  assert.ok(bar.indexOf('requireStepUp(c)') < bar.indexOf('requireSuperAdmin(c)'), 'step-up before the elevation');
-  assert.equal((src.match(/await requireWriteBar\(c\)/g) || []).length, 2, 'both writes use the bar');
+  assert.match(src, /import \{[^}]*requireSuperAdminWriteBar[^}]*\} from '\.\.\/auth'/,
+    'the bar is not the shared one — a local copy can drift from it silently');
+  assert.doesNotMatch(src, /^async function requireWriteBar/m,
+    'this router declared its own bar again');
+  assert.equal((src.match(/await requireSuperAdminWriteBar\(c\)/g) || []).length, 2,
+    'both writes use the bar');
+  // Reads take the elevation alone, deliberately: a step-up on every list
+  // trains the holder to type a TOTP code without reading why.
+  assert.match(src, /r\.get\('\/', async \(c\) => \{\s*await requireSuperAdmin\(c\);/,
+    'the holder list stopped taking the elevation, or started taking the write bar');
 });
 
 test('the holder console never empties the set, never elevates a non-admin, never self-revokes', () => {
@@ -299,8 +312,35 @@ test('force re-auth is behind the impersonation bar, needs a reason, and is audi
 });
 
 test('the SPA reaches the console through api.js', () => {
+  // THIS PINNED A SPELLING AND A LEGITIMATE CHANGE FAILED IT — the fourth time
+  // in this programme (`branch_rail_mount`, `branch_approvals_board_d130`, the
+  // `flushSurface` quartet). D133 gave `superAdminGrant` an options argument so
+  // a holder can hand the platform on, and the old regex matched the exact
+  // single-parameter source line, so it refused a signature change that broke
+  // nothing it was written to protect.
+  //
+  // What it was written to protect is that each method exists and reaches its
+  // OWN path and verb, so that is what it now asserts — bounded to each
+  // method's own body so a neighbour's `request(...)` cannot satisfy it.
   const api = read('frontend/src/lib/api.js');
-  assert.match(api, /superAdmins: \(\) => request\('\/admin\/super-admins'\)/);
-  assert.match(api, /superAdminGrant: \(userId\) => request\(`\/admin\/super-admins\/\$\{userId\}`, \{ method: 'POST' \}\)/);
-  assert.match(api, /superAdminRevoke: \(userId\) => request\(`\/admin\/super-admins\/\$\{userId\}`, \{ method: 'DELETE' \}\)/);
+  for (const [name, verb] of [
+    ['superAdmins', null], ['superAdminGrant', 'POST'], ['superAdminRevoke', 'DELETE'],
+  ] as [string, string | null][]) {
+    const at = api.indexOf(`${name}:`);
+    assert.ok(at > 0, `${name} no longer reaches the console`);
+    // BOUNDED AT THE NEXT METHOD, NOT AT A CHARACTER COUNT. A first draft took
+    // 300 characters and a mutation walked straight through it: the window ran
+    // past `superAdminGrant` into `superAdminRevoke`, whose own URL satisfied
+    // the path assertion. That is the one failure mode a substring scan has,
+    // and it is the second time in two days it has had to be closed.
+    const rest = api.slice(at);
+    const nextKey = rest.slice(1).search(/\n {2}[A-Za-z_$][\w$]*:/);
+    const body = nextKey > 0 ? rest.slice(0, nextKey + 1) : rest;
+    assert.ok(body.includes('/admin/super-admins'),
+      `${name} no longer calls the super-admin route`);
+    if (verb) {
+      assert.ok(body.includes(`method: '${verb}'`), `${name} stopped using ${verb}`);
+      assert.ok(/\$\{userId\}/.test(body), `${name} stopped naming the target`);
+    }
+  }
 });

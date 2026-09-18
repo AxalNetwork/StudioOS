@@ -292,6 +292,21 @@ export interface Env {
   // 32-hex account UUID. Both unset → `loadTechnical` reads from D1.
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_AE_API_TOKEN?: string;
+  // D161 — the dataset name the SQL reader queries. The generated branch
+  // configs have written this since D105 (scripts/lib/branchConfig.mjs) with
+  // the stated purpose of "keeping the SQL-API reader from hardcoding HQ's",
+  // and until now NOTHING read it: `loadTechnicalFromAnalyticsEngine` had
+  // `FROM studioos_metrics` as a literal. That cost something real — the
+  // preview environment writes to `studioos_metrics_preview`
+  // (wrangler.toml [env.preview]), so a preview deployment's reads could not
+  // see its own writes, and the mismatch was invisible because a failed read
+  // returns null and falls back to D1 `system_metrics`.
+  //
+  // It is a NAME, not a tier discriminator: every branch points at the same
+  // shared `studioos_metrics`, which is D105's whole design — one dataset so
+  // cross-branch figures are possible without a cross-branch read, with the
+  // branch carried per row in blob6 instead. Unset → `studioos_metrics`.
+  AE_DATASET?: string;
   // Task #7 — Cloudflare API token scoped to `Workers Scripts: Edit`,
   // used by services/cloudflareSecrets.ts to promote admin-entered
   // integration keys into real Worker secrets via the CF API. Reuses

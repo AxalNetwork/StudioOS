@@ -5,6 +5,7 @@ import {
   Wallet, Gift, Package, History, ChevronDown, ChevronUp, Handshake, Scale,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { bpsPercent } from '../lib/bps';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
 import ZoneDraft from '../workspaces/ZoneDraft';
 import { Eyebrow, Instrument } from '../workspaces/canvasKit';
@@ -264,7 +265,11 @@ function standing(state, theirName) {
   return `Asked. Cannot advance until ${theirName} answers.`;
 }
 
-const feePct = (bps) => `${(bps / 100).toFixed(bps % 100 ? 2 : 0)}%`;
+// D149: the arithmetic is `lib/bps.js`'s. This copy carried a SECOND trim rule
+// — `toFixed(bps % 100 ? 2 : 0)` — which agreed with the others on a whole
+// percent and disagreed on a fraction: 3550 read "35.50%" here and "35.5%"
+// everywhere else. The absent copy stays local, as D117 split it.
+const feePct = (bps) => bpsPercent(bps) ?? 'no rate recorded';
 
 /**
  * `zoneActions` is the same render prop `RelationshipsPanel` takes, called with

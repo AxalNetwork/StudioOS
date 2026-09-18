@@ -171,6 +171,8 @@ import adminSupportSessions from './routes/admin_support_sessions';
 import branchEscalationRoutes from './routes/branch_escalations';
 import branchApprovalRoutes from './routes/branch_approvals';
 import branchHomeRoutes from './routes/branch_home';
+import branchTemplateRoutes from './routes/branch_templates';
+import branchInsightsRoutes from './routes/branch_insights';
 import adminSuperAdmins from './routes/admin_super_admins';
 import adminHq from './routes/admin_hq';
 import adminRevenue from './routes/admin_revenue';
@@ -271,7 +273,8 @@ import { writeCronRunHistory } from './util/cronHistory';
 import { branchOf, assertBranchAppUrl } from './util/branch';
 // D110 — one table of which thrown sentence is which status, shared with
 // `routes/_t13t14t15_helpers.ts`'s `mapError`. The two used to disagree.
-import { AUTH_ERROR_STATUSES } from './util/authErrors';
+import { ADMIN_FROZEN, AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, adminFrozenBody, branchSuspendedBody, stepUpRefusalBody } from './util/authErrors';
+import { BRANCH_SUSPENDED } from './util/branch';
 import { enqueueReembedChunks } from './util/reembedSweep';
 import { rebuildUsersRoleCheckForInvestor, rebuildUsersRoleCheckForAdvisor } from './util/usersRoleRebuild';
 import { bindingKey } from './util/schemaBootstrap';
@@ -797,6 +800,14 @@ app.route('/api/branch', branchApprovalRoutes);
 // D131 — S1's digest. A third file on the same prefix because it composes what
 // the other two read rather than owning a store of its own.
 app.route('/api/branch', branchHomeRoutes);
+
+// S5 + S10 (D147) — HQ's master contract library as this branch holds it.
+// Same mount as the other three branch reads; `requireBranchTier` inside
+// refuses it on HQ, where the library itself lives.
+app.route('/api/branch', branchTemplateRoutes);
+
+// S6 (D148) — this territory's own stats, and the anonymised median HQ pushed.
+app.route('/api/branch', branchInsightsRoutes);
 app.route('/api/admin/licences', adminLicences);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
 // catch-all for the same reason as the licence ledger above.
@@ -1085,11 +1096,18 @@ app.onError((err: any, c) => {
   const msg = (err?.message ?? '') as string;
   // BLOCK-AUTH-03 — step-up gate. Carries a machine-readable code + the TTL so
   // the SPA can prompt for a fresh TOTP, POST /api/auth/step-up, then retry.
-  if (msg === 'step_up_required') {
-    return c.json(
-      { detail: 'Recent re-authentication required', code: 'step_up_required', ttl_minutes: err?.ttlMinutes ?? 15 },
-      403,
-    );
+  // D135 — the frozen refusal carries the notice that caused it, for the same
+  // reason the step-up carries its TTL: the status alone leaves the holder with
+  // nothing to act on.
+  if (msg === ADMIN_FROZEN) return c.json(adminFrozenBody(err), 423);
+  // D142 — the branch twin. Without this line the gate's 423 fell through to
+  // the table below and shipped as `{detail}` alone, which no client can key
+  // on; `api.js` keys strictly on `code`.
+  if (msg === BRANCH_SUSPENDED) return c.json(branchSuspendedBody(err), 423);
+  if (msg === STEP_UP_REQUIRED) {
+    // D134 — the body comes from `util/authErrors.ts` so `mapError`, which 31
+    // route files reach instead of this handler, answers with the same object.
+    return c.json(stepUpRefusalBody(err), 403);
   }
   const mapped = AUTH_ERROR_STATUSES[msg];
   if (mapped) return c.json({ detail: msg }, mapped);
@@ -1538,6 +1556,105 @@ export default {
             const s = await closeExpiredSupportSessions(env);
             if (s.closed) console.info(`[cron] support sessions closed=${s.closed}`);
           } catch (e) { console.error('[cron] support session sweep failed', e); }
+        }
+        // D135 — the compliance ladder's middle rung. A notice whose deadline
+        // has passed unanswered freezes the account it was addressed to.
+        //
+        // NO NEW CRON EXPRESSION. `* * * * *` already fires every minute and
+        // every block here gates on the WALL CLOCK, never on which expression
+        // fired, so this is one `if` and nothing in wrangler.toml — the same
+        // correction D106 recorded when a trim of the expression list was
+        // mistaken for a change in cadence.
+        //
+        // NOT GATED ON `hqCadences`, on the D122 precedent one block up and for
+        // its stated reason: `admin_notices` is HQ's table and a branch holds
+        // none, so the sweep's own predicate IS the tier discriminator and a
+        // better one — it selects rows by what they are, not by which
+        // deployment is asking. On a branch it matches nothing and costs an
+        // index probe.
+        //
+        // EVERY FIVE MINUTES, NOT EVERY MINUTE, because `froze_at` is stamped
+        // with the notice's own deadline rather than the sweep's clock: the
+        // cadence bounds how long an account keeps writing past its deadline,
+        // and does not affect what any row says.
+        //
+        // IT NEVER TERMINATES. The reversible rung is the clock's; ending an
+        // account stays a deliberate human act.
+        if (now.getUTCMinutes() % 5 === 0) {
+          try {
+            const { freezeOverdueNotices } = await import('./services/complianceLadder');
+            const f = await freezeOverdueNotices(env);
+            if (!f.readable) {
+              console.warn('[cron] compliance sweep could not read admin_notices');
+            } else if (f.froze || f.suspended) {
+              console.info(`[cron] compliance froze=${f.froze} suspended=${f.suspended} notified=${f.notified}`);
+            }
+          } catch (e) { console.error('[cron] compliance sweep failed', e); }
+        }
+        // D143 — a breached HQ SLA tells somebody. `hq_escalations.due_at` has
+        // been written since migration 259 and read by nothing: `slaBand()`
+        // derives the badge on every read, and a subsidiary that escalated
+        // something and heard nothing was waiting on an answer no clock chased.
+        //
+        // NOT GATED ON `hqCadences`, on the D122 precedent two blocks up and for
+        // its stated reason: `hq_escalations` is HQ's table and a branch holds
+        // none of its rows, so the sweep's own predicate IS the tier
+        // discriminator and a better one — it selects rows by what they are, not
+        // by which deployment is asking.
+        //
+        // EVERY FIFTEEN MINUTES, AND UNLIKE THE LADDER ABOVE THE CADENCE IS
+        // VISIBLE. `froze_at` carries the notice's own deadline, so that sweep's
+        // interval bounds nothing a row says; here the act being recorded is the
+        // NOTIFICATION, so the interval IS the worst case for how late HQ hears.
+        // Fifteen minutes against an SLA measured in hours (`SLA_HOURS`,
+        // rpc/hqOps.ts) is slack of about a percent, at a fifth of the cost of
+        // the every-minute shape.
+        //
+        // IT NEVER ANSWERS AN ESCALATION — it reports that a deadline passed.
+        // Answering stays a deliberate act on PATCH /api/admin/escalations/:uid.
+        if (now.getUTCMinutes() % 15 === 0) {
+          try {
+            const { reportBreachedEscalations } = await import('./services/hqEscalationSla');
+            const s = await reportBreachedEscalations(env);
+            if (!s.readable) {
+              console.warn('[cron] hq SLA sweep could not read hq_escalations');
+            } else if (s.reported) {
+              console.info(`[cron] hq SLA breached=${s.breached} reported=${s.reported} notified=${s.notified}`);
+            }
+          } catch (e) { console.error('[cron] hq SLA sweep failed', e); }
+        }
+        // D148 — the anonymised platform median, computed at HQ and pushed to
+        // every branch. `branch_benchmarks` was created by migration 256 and
+        // had no writer at all (#252); this is it.
+        //
+        // GATED ON `hqCadences`, WHICH IS THE OPPOSITE CALL FROM THE THREE
+        // BLOCKS ABOVE, and the reason is the direction of the work. Those
+        // sweeps act on THIS deployment's own rows, so their WHERE clause is
+        // the tier discriminator. This one fans out to every branch, and a
+        // branch has no branches — `publishBenchmarks` refuses on one outright
+        // rather than quietly fanning out to nothing, so the gate and the
+        // function agree instead of one covering for the other.
+        //
+        // DAILY, AND THE CADENCE BOUNDS NOTHING A ROW SAYS. Every published row
+        // carries its own `period` and HQ's `pushed_at`, so a branch reading a
+        // day-old median knows it is a day old. The alternative — an hourly
+        // recompute of a quarterly figure — would be N remote calls an hour to
+        // move a number that moves in weeks.
+        //
+        // IT PUBLISHES NOTHING BELOW THREE ANSWERING BRANCHES, by construction
+        // rather than by this block's choice: `MIN_BRANCHES` lives with the
+        // argument for it. With no branch provisioned the fan-out returns an
+        // empty list and this costs one scan of `env` a day.
+        if (hqCadences && now.getUTCHours() === 4 && now.getUTCMinutes() === 55) {
+          try {
+            const { publishBenchmarks, currentPeriod } = await import('./services/branchBenchmarks');
+            const r = await publishBenchmarks(env, currentPeriod(now));
+            if (r.withheld_reason) {
+              console.info(`[cron] benchmarks withheld (${r.answered}/${r.total} answered): ${r.withheld_reason}`);
+            } else {
+              console.info(`[cron] benchmarks period=${r.period} published=${r.published} answered=${r.answered}/${r.total}`);
+            }
+          } catch (e) { console.error('[cron] benchmark publish failed', e); }
         }
         // The 04:50 UTC Refer & Earn payout auto-approval sweep was removed
         // with Stripe Connect in the referrals redesign. Referral rewards are

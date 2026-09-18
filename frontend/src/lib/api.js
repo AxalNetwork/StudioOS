@@ -491,6 +491,42 @@ export async function request(path, options = {}) {
           } catch { /* noop */ }
         }
       }
+      // D136 — the compliance freeze, announced wherever it is met. `requireAdmin`
+      // refuses every non-GET from a frozen admin account with 423 and
+      // `code: 'admin_frozen'` (`util/authErrors.ts`), and the body already
+      // carries the notice that caused it — the gate had the row in hand, so
+      // nothing here has to go and ask.
+      //
+      // WHY THIS EXISTS BESIDE THE BANNER ON /admin/my-licence. That page
+      // explains the state where it can be acted on; this explains it at the
+      // moment of the refusal, wherever the admin happened to be. Without it a
+      // frozen administrator's every click produces whatever generic error the
+      // page prints, which is the shape D107's branch-side 423 already shipped
+      // in and which `423` appearing nowhere in `frontend/src` measured.
+      //
+      // The throw below is unchanged, so every page's own catch still receives
+      // the structured error — the same contract the 402 branch above keeps.
+      if (res.status === 423 && err && err.code === 'admin_frozen' && typeof window !== 'undefined') {
+        try {
+          window.dispatchEvent(new CustomEvent('studioos:admin_frozen', {
+            detail: { notice: err.notice || null, message: msg },
+          }));
+        } catch { /* noop */ }
+      }
+      // D142 — THE BRANCH TWIN, and the reason it did not exist until now is
+      // the whole defect. `requireBranchNotSuspended` threw a bare Error, so
+      // its 423 shipped as `{detail}` alone and this strict `code` check could
+      // never have matched it — which is why `423` appearing nowhere in
+      // `frontend/src` was measurable at all, and why three places in the repo
+      // claimed a frozen-branch banner had shipped when nothing could key one.
+      // `since` and `reason` are HQ's own, pushed with the licence copy.
+      if (res.status === 423 && err && err.code === 'branch_suspended' && typeof window !== 'undefined') {
+        try {
+          window.dispatchEvent(new CustomEvent('studioos:branch_suspended', {
+            detail: { since: err.since || null, reason: err.reason || null, message: msg },
+          }));
+        } catch { /* noop */ }
+      }
       // BLOCK-AUTH-03 — step-up gate. Prompt for a fresh TOTP via the global
       // modal, then retry the ORIGINAL request once. `__steppedUp` guards
       // against an infinite loop; we never intercept the step-up call itself.
@@ -1827,6 +1863,14 @@ export const api = {
     request(`/admin/contracts/templates/store/${encodeURIComponent(slug)}`, { method: 'PUT', body: JSON.stringify(payload) }),
   adminTemplateStoreDelete: (slug) =>
     request(`/admin/contracts/templates/store/${encodeURIComponent(slug)}`, { method: 'DELETE' }),
+  // D147 — push the library to every branch. THE WHOLE LIBRARY, not one
+  // template: a per-template push can add and update but can never say "this
+  // one is gone", so a withdrawn template would stay offerable on every branch
+  // forever. The response carries one row per branch in the fan-out's three
+  // states, and `branches: []` when none is bound — which is the true answer
+  // today, not an error.
+  adminTemplatesPublish: () =>
+    request('/admin/contracts/templates/publish', { method: 'POST' }),
   // Task #9 — IRS-style forms catalog + on-the-fly PDF preview/download.
   adminListForms: () => request('/admin/forms'),
   // Returns { blob, url } for the rendered form PDF. The caller owns the
@@ -1877,11 +1921,38 @@ export const api = {
   // The territory licence the caller administers, or 404. Migration 190 —
   // licence_admins is what makes "which licence is this admin's?" answerable.
   myLicence: () => request('/licence/mine'),
+  // D134 — these three are how an admin account is opened and closed. `add`
+  // promotes and binds in one audited step and needs `{ email, admin_role,
+  // reason }`; `remove` refuses with 409 `still_an_admin` until the account has
+  // been demoted, which is `adminDemoteAdmin` below. All three sit behind the
+  // super admin's write bar, so a 403 here can mean step-up rather than refusal.
   licenceAdmins: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}/admins`),
   licenceAdminAdd: (uid, data) =>
     request(`/admin/licences/${encodeURIComponent(uid)}/admins`, { method: 'POST', body: JSON.stringify(data) }),
   licenceAdminRemove: (uid, userId) =>
     request(`/admin/licences/${encodeURIComponent(uid)}/admins/${userId}`, { method: 'DELETE' }),
+  // Removing the admin role is deliberately NOT a role edit: `adminUpdateRole`
+  // refuses an admin target with `admin_demotion_disabled` and still does. The
+  // account lands in `exploring`, the platform's holding state, and keeps its
+  // licence binding until it is detached separately.
+  adminDemoteAdmin: (userId, reason) =>
+    request(`/admin/users/${userId}/demote-admin`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  // D135 — the compliance ladder. HQ's three are on the licence router behind
+  // the write bar; the addressee's two are on `/licence`, which is NOT an admin
+  // router — that is what stops the freeze locking somebody out of the one
+  // action that lifts it.
+  licenceNotices: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}/notices`),
+  licenceNoticeIssue: (uid, data) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/notices`, { method: 'POST', body: JSON.stringify(data) }),
+  licenceNoticeReview: (uid, noticeUid, data) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/notices/${encodeURIComponent(noticeUid)}/review`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  myNotices: () => request('/licence/notices'),
+  myNoticeRespond: (noticeUid, response) =>
+    request(`/licence/notices/${encodeURIComponent(noticeUid)}/respond`, {
+      method: 'POST', body: JSON.stringify({ response }),
+    }),
   // Task #14 — forward signed PDF to legal partner(s).
   adminForwardContract: (id, data) =>
     request(`/legal/esign/${id}/forward`, { method: 'POST', body: JSON.stringify(data) }),
@@ -1943,7 +2014,12 @@ export const api = {
   // writes also need a TOTP session with a recent step-up, the bar
   // impersonation sets (routes/admin_super_admins.ts).
   superAdmins: () => request('/admin/super-admins'),
-  superAdminGrant: (userId) => request(`/admin/super-admins/${userId}`, { method: 'POST' }),
+  // D133 — `transfer` is the holder handing the platform on. The elevation is
+  // capped at one, and with one holder revoke refuses three ways, so without
+  // this flag the grant would be permanently unreachable rather than merely
+  // guarded. The server does both writes in one batch.
+  superAdminGrant: (userId, { transfer = false } = {}) =>
+    request(`/admin/super-admins/${userId}${transfer ? '?transfer=1' : ''}`, { method: 'POST' }),
   superAdminRevoke: (userId) => request(`/admin/super-admins/${userId}`, { method: 'DELETE' }),
   // Task #7 — admin-managed OAuth client credentials per provider.
   adminListIntegrationKeys: () => request('/admin/integration-keys'),
@@ -2510,6 +2586,12 @@ export const api = {
   monitoringRateLimits: (minutes = 60) => request(`/monitoring/rate-limits?minutes=${minutes}`),
   monitoringErrors: (limit = 50) => request(`/monitoring/errors?limit=${limit}`),
   monitoringAnomalies: () => request('/monitoring/anomalies'),
+  // D157 — the caller's OWN privileged actions. Deliberately NOT a filter on
+  // `/analytics/audit`, which is super-admin-only because it joins `users` and
+  // renders other admins by name: the subject here is bound from the session,
+  // so there is no parameter that could name somebody else.
+  monitoringMyAudit: (limit = 25, offset = 0) =>
+    request(`/monitoring/analytics/audit/mine?limit=${limit}&offset=${offset}`),
   monitoringThroughput: () => request('/monitoring/throughput'),
   monitoringCleanup: () => request('/monitoring/cleanup', { method: 'POST' }),
   // Task #1 (AX) — admin AI router usage rollup (per-day spend, fallback
@@ -2551,11 +2633,18 @@ export const api = {
   // caller sent before the menu existed and what a page with no stored choice
   // sends now. The worker validates it against the task's `alternates` and
   // refuses an unlisted one rather than substituting — see aiRouter.ts.
-  aiWorkspaceExplain: ({ workspace, zone, coverage, model }) =>
+  //
+  // D154 — `branch` is what makes H13 rule 4 true rather than false. It is the
+  // scope the PAGE read in, not a filter: when it is present the coverage
+  // lines being sent are one branch's figures, so the route writes an audit
+  // row saying a named branch was read back. Omitted means nothing privileged
+  // happened and nothing is logged, which is what D150 correctly refused to
+  // pretend otherwise about.
+  aiWorkspaceExplain: ({ workspace, zone, coverage, model, branch }) =>
     request('/ai/workspace/explain', {
       method: 'POST',
       timeoutMs: 60_000,
-      body: JSON.stringify({ workspace, zone, coverage, model }),
+      body: JSON.stringify({ workspace, zone, coverage, model, branch }),
     }),
 
   // ---------- Monitoring → Analytics (admin, Task #3 / Task #13) ----------
@@ -2574,6 +2663,15 @@ export const api = {
     _analyticsRead(`/monitoring/analytics/financial?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}&currency=${encodeURIComponent(currency)}`),
   analyticsTechnical: (from, to) =>
     _analyticsRead(`/monitoring/analytics/technical?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}`),
+  // D161 — traffic split by branch. SUPER ADMIN ONLY, and deliberately a
+  // separate method rather than a `?branch=` on `analyticsTechnical` above:
+  // that one is `requireAdmin`, and on this platform a plain admin is a branch
+  // admin, so attributing traffic to a named branch there would hand every
+  // branch admin every other branch's figures. Returns `{available, reason,
+  // as_of, rows}` — `available: false` is "the metrics store could not be
+  // read", which is not a count of zero.
+  analyticsTrafficByBranch: (from, to) =>
+    _analyticsRead(`/monitoring/analytics/traffic-by-branch?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}`),
   analyticsManagement: (from, to, currency = '') =>
     _analyticsRead(`/monitoring/analytics/management?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}&currency=${encodeURIComponent(currency)}`),
   analyticsBackfillSnapshots: (days = 7) =>
@@ -2942,7 +3040,34 @@ export const api = {
   licences: () => request('/admin/licences'),
   // HQ · Home. One payload for the franchisor's overview; the page's tenant
   // switcher narrows it client-side and sends nothing back (routes/admin_hq.ts).
-  hqOverview: () => request('/admin/hq/overview'),
+  //
+  // D153 — `branch` is the ONE argument that changes what the server READS
+  // rather than what the page shows. With it the route performs a single
+  // private-link read of that branch and answers a deliberately smaller
+  // payload — `{scope, branches: [one], branches_coverage}` and none of HQ's
+  // own platform fields — because H12's overlay is one branch's figures, not a
+  // platform payload with a filter drawn over it. No new method: the route is
+  // the same one, so `check-api-drift` has nothing to say.
+  hqOverview: (branch) => {
+    const b = String(branch || '').trim();
+    return request(`/admin/hq/overview${b ? `?branch=${encodeURIComponent(b)}` : ''}`);
+  },
+  // D138 — H9 · Team. Every administrator, filtered SERVER-SIDE on role with no
+  // LIMIT, with the licence each holds, their rung on the compliance ladder and
+  // the super-admin badge. `q` is not a filter on that list — it is what HQ
+  // ASKS EACH BRANCH, because a branch's accounts live on the branch's own
+  // database and cannot be listed from here (D.2). The returned roster is
+  // complete, so the page narrows it in the browser; that is honest here and was
+  // the defect in `SuperAdminHolders`, where the browser filtered a PAGE.
+  // D153 — `branch` scopes the read the same way it does on `hqOverview`, and
+  // with the same consequence: HQ's own roster is not narrowed, it is not read.
+  hqAdmins: (q, branch) => {
+    const s = String(q || '').trim();
+    const b = String(branch || '').trim();
+    const qs = [b ? `branch=${encodeURIComponent(b)}` : '', s ? `q=${encodeURIComponent(s)}` : '']
+      .filter(Boolean).join('&');
+    return request(`/admin/hq/admins${qs ? `?${qs}` : ''}`);
+  },
   // HQ · Revenue (canvas H5). D1 only — open disputes come from Stripe
   // through adminBillingListDisputes, read separately so an outage there
   // costs one zone rather than the page.
@@ -3041,6 +3166,17 @@ export const api = {
   // rate. The three blocks S1 draws that have no source arrive as
   // `unavailable`, each with its own reason, rather than as a silent gap.
   branchHome: () => request('/branch/home'),
+  // D147 — HQ's master contract library as this branch holds it. A COPY: the
+  // payload carries HQ's `pushed_at`, and `not_carried` names what deliberately
+  // does not travel (the document bodies, and an archived-version state HQ's own
+  // library cannot produce) so the page never has to remember the reason.
+  branchTemplates: () => request('/branch/templates'),
+  // D148 — this territory's own figures, and the anonymised median HQ pushed.
+  // Two kinds of number on one payload and they are not interchangeable: the
+  // stats are facts about this branch, the benchmark is a COPY with HQ's
+  // `pushed_at` and its own `n_branches`. `unavailable` names the three stats
+  // S6 draws that have no branch-side source.
+  branchInsights: () => request('/branch/insights'),
   branchEscalate: (data) =>
     request('/branch/escalations', { method: 'POST', body: JSON.stringify(data || {}) }),
   licenceCreate: (data) => request('/admin/licences', { method: 'POST', body: JSON.stringify(data || {}) }),
@@ -4828,6 +4964,12 @@ export const spinoutLab = {
   cohort: () => request('/spinout-lab/cohort'),
   // Public — real hero stats (companies built, total raised by graduates).
   stats: () => request('/spinout-lab/stats'),
+  // Public — the six live values the Programme Brief prints, and only those
+  // (D141). The brief's tracks, tools, gates and jurisdictions are the
+  // programme's own description and come from `lib/spinoutBrief.js` and
+  // `lib/spinoutLabArsenal.js`; a route serving those too would be a store
+  // invented so a page could look dynamic.
+  brief: () => request('/spinout-lab/brief'),
   // Signed in only — which cohort companies cleared which gate, and when.
   // Deliberately gate-level and not milestone-level: `week` is already public
   // on /cohort, so this adds a timestamp to a transition whose state is

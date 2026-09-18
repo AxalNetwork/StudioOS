@@ -23,8 +23,48 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
+
+/**
+ * `licence_events` WITH ITS REAL CHECK, read off the migrations rather than
+ * retyped (D139).
+ *
+ * THIS FIXTURE USED TO DECLARE `event TEXT NOT NULL` AND NOTHING MORE, and that
+ * is why the suite was green while the route was broken. `POST /:uid/contract`
+ * writes the event `contract_instantiated`, which migration 187's CHECK did not
+ * admit — so on real D1 the contract row landed and the route then answered
+ * 400. A fixture that omits the constraint it is testing under cannot fail on a
+ * value the real constraint rejects, which is the same class as an assertion
+ * that cannot fail. `compliance_ladder_d135.test.ts` states the rule it kept:
+ * "The CHECK is migration 187's, copied rather than relaxed."
+ *
+ * 266 widens the CHECK, so the DDL is assembled from BOTH files: 187's table
+ * with 266's replacement when it exists. Reading them rather than retyping is
+ * what makes this test fail if either changes.
+ */
+function licenceEventsDdl(): string {
+  const read = (f: string) => readFileSync(
+    resolve(process.cwd(), `cloudflare-worker/sql/migrations/${f}`), 'utf8',
+  );
+  // 266 rebuilds the table; its CREATE is the current shape. Fall back to 187's
+  // only if 266 is ever removed, so this never silently loses the constraint.
+  for (const [file, marker] of [
+    ['266_licence_event_contract.sql', 'CREATE TABLE IF NOT EXISTS licence_events_266'],
+    ['187_territory_licences.sql', 'CREATE TABLE IF NOT EXISTS licence_events'],
+  ] as const) {
+    let sql: string;
+    try { sql = read(file); } catch { continue; }
+    const at = sql.indexOf(marker);
+    if (at < 0) continue;
+    const end = sql.indexOf(');', at);
+    assert.ok(end > at, `${file}: the licence_events CREATE does not terminate`);
+    return sql.slice(at, end + 2).replace('licence_events_266', 'licence_events');
+  }
+  throw new Error('neither 187 nor 266 declares licence_events — re-point this fixture');
+}
 
 import adminLicences from '../src/routes/admin_licences.ts';
 import {
@@ -154,8 +194,7 @@ const SCHEMA = `
     country_code TEXT NOT NULL UNIQUE, created_at TEXT DEFAULT (datetime('now')));
   CREATE TABLE licence_seats (id INTEGER PRIMARY KEY AUTOINCREMENT, licence_id INTEGER NOT NULL,
     seat_type TEXT NOT NULL, seats_licensed INTEGER NOT NULL DEFAULT 0);
-  CREATE TABLE licence_events (id INTEGER PRIMARY KEY AUTOINCREMENT, licence_id INTEGER NOT NULL,
-    event TEXT NOT NULL, detail_json TEXT, note TEXT, actor_user_id INTEGER, created_at TEXT);
+  ${licenceEventsDdl()}
   CREATE TABLE licence_admins (id INTEGER PRIMARY KEY AUTOINCREMENT, licence_id INTEGER NOT NULL,
     user_id INTEGER NOT NULL UNIQUE, admin_role TEXT NOT NULL DEFAULT 'principal',
     created_at TEXT DEFAULT (datetime('now')));

@@ -6,8 +6,14 @@
  *
  * NOT GATED ON SUSPENSION, AND THIS IS THE IMPORTANT ONE. Every other write on
  * a suspended branch answers 423 through `requireBranchNotSuspended` (D107) —
- * but PR 5 shipped the frozen-branch banner whose stated appeal path *is* an
- * escalation. Gating this route would lock the one door out of the freeze, and
+ * but the frozen-branch banner's stated appeal path *is* an escalation.
+ *
+ * D142 — that sentence used to credit PR 5 with shipping that banner. PR 5 did
+ * not: the branch 423 carried no machine-readable `code` until D142, so nothing
+ * client-side could key a banner on it, and `423` appeared nowhere in
+ * `frontend/src` at all. The banner exists now (`components/BranchSuspendedBar`
+ * and the Locked list on `/admin/my-licence`), which is what makes the rest of
+ * this paragraph true rather than aspirational. Gating this route would lock the one door out of the freeze, and
  * it would do it silently: the banner would keep telling a branch admin to
  * appeal, and the appeal button would keep answering 423. So a suspended
  * branch can still raise, and the lane says its licence is suspended rather

@@ -53,12 +53,22 @@ test('the page reads two endpoints and writes through one, and nothing else', ()
   assert.deepEqual(calls, ['hqGovernance', 'hqSecurityForceReauth', 'hqSecurityOverview']);
 });
 
-test('the four zones with no store render Not recorded in their own zone, from the payload\'s reason', () => {
-  for (const key of ['security_events', 'ai_safety', 'sanctions', 'backup_dr']) {
+test('the three zones with no store render Not recorded in their own zone, from the payload\'s reason', () => {
+  // D152 — IT WAS FOUR, AND `ai_safety` DID NOT BELONG IN THE LIST. Its
+  // refusal claimed no guardrail, flagged-output or token-anomaly counter was
+  // stored; two of those three clauses were false, and the verdict rollup was
+  // already drawn on `AiUsageTab` one click away. So this guard was holding a
+  // false claim in place — the eighth time in this programme that a test
+  // pinning a refusal had to be re-aimed the day the refusal stopped being
+  // true. The zone's own assertions moved to `hq_governance_h7.test.mjs`,
+  // which owns H7's guardrail panel; what stays here is the THREE that are
+  // still genuinely absent, and the proof AI safety is not among them.
+  for (const key of ['security_events', 'sanctions', 'backup_dr']) {
     assert.match(ROUTE, new RegExp(`${key}: absent\\(`), `${key} must come back { available: false, reason }`);
   }
+  assert.doesNotMatch(ROUTE, /ai_safety: absent\(/,
+    'the AI-safety zone went back to refusing a store the platform has');
   assert.match(PAGE, /<Absent block=\{ready \? data\.security_events : null\}/);
-  assert.match(PAGE, /<Absent block=\{ready \? data\.ai_safety : null\}/);
   assert.match(PAGE, /<Absent block=\{ready \? data\.backup_dr : null\}/);
   assert.match(PAGE, /label="Sanctions review" value=\{null\}/);
   assert.match(PAGE, /label="Failed sign-ins" value=\{null\}/, 'no security_events means no failed-sign-in count');

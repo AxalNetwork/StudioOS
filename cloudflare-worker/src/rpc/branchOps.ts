@@ -310,11 +310,18 @@ export async function applyLicenceCopy(
   };
   const pushedAt = s('pushed_at') || nowIso();
   await env.DB.prepare(
+    // D137 — the five columns migration 265 adds ride here, because a column
+    // the push does not bind is a column that stays NULL however many times HQ
+    // pushes. `registered_address`, `signatory_name`, `signatory_title`,
+    // `term_years` and `terminated_at` are the five `MyLicencePage` reads and
+    // the copy never carried.
     `INSERT INTO branch_licence
        (id, licence_uid, licence_ref, legal_entity, brand_name, territory, status, seats_json,
         revenue_share_bps, token_split_bps, annual_fee_cents, currency, term_start, term_end,
-        renewal_at, template_version, suspended_at, suspended_note, pushed_at, updated_at)
-     VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        renewal_at, template_version, suspended_at, suspended_note,
+        registered_address, signatory_name, signatory_title, term_years, terminated_at,
+        pushed_at, updated_at)
+     VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
      ON CONFLICT(id) DO UPDATE SET
        licence_uid = excluded.licence_uid, licence_ref = excluded.licence_ref,
        legal_entity = excluded.legal_entity, brand_name = excluded.brand_name,
@@ -324,13 +331,18 @@ export async function applyLicenceCopy(
        term_start = excluded.term_start, term_end = excluded.term_end,
        renewal_at = excluded.renewal_at, template_version = excluded.template_version,
        suspended_at = excluded.suspended_at, suspended_note = excluded.suspended_note,
+       registered_address = excluded.registered_address,
+       signatory_name = excluded.signatory_name, signatory_title = excluded.signatory_title,
+       term_years = excluded.term_years, terminated_at = excluded.terminated_at,
        pushed_at = excluded.pushed_at, updated_at = datetime('now')`,
   ).bind(
     s('licence_uid') ?? '', s('licence_ref'), s('legal_entity'), s('brand_name'),
     s('territory') ?? '', s('status') ?? 'active', s('seats_json'),
     n('revenue_share_bps'), n('token_split_bps'), n('annual_fee_cents'), s('currency'),
     s('term_start'), s('term_end'), s('renewal_at'), s('template_version'),
-    s('suspended_at'), s('suspended_note'), pushedAt,
+    s('suspended_at'), s('suspended_note'),
+    s('registered_address'), s('signatory_name'), s('signatory_title'),
+    n('term_years'), s('terminated_at'), pushedAt,
   ).run();
   return { applied: true, branch, as_of: pushedAt };
 }
@@ -487,6 +499,152 @@ export async function applyPromoCeiling(
     String(c.pushed_at), new Date().toISOString(),
   ).run();
   return { ok: true };
+}
+
+/**
+ * Store the master template library HQ pushed, as a dated copy (migration 268,
+ * D147).
+ *
+ * THE WHOLE LIBRARY IS ONE PUSH, AND THAT IS WHAT MAKES WITHDRAWAL POSSIBLE.
+ * `applyPromoCeiling` above upserts one row and can stop there because there is
+ * only ever one. A library is a SET, so a push that only ever inserted and
+ * updated would leave a template HQ archived-and-removed on the branch forever,
+ * and the branch would go on offering a document HQ has withdrawn. So the write
+ * is a reload — empty, then insert what HQ sent — in one `DB.batch`, which runs
+ * as a single transaction: the DELETE only takes effect if every INSERT after
+ * it does, so a push that fails part-way leaves the previous library standing
+ * rather than an empty picker.
+ *
+ * AN EMPTY PUSH IS A REAL PUSH. HQ sending zero templates means HQ's library is
+ * empty, which is a true statement about HQ and must reach the branch; the row
+ * this writes into `branch_templates_sync` is what lets the page tell "HQ has
+ * nothing" apart from "HQ has never pushed". Those are different sentences and
+ * only one of them is about HQ.
+ *
+ * `pushed_at` IS HQ'S STAMP, never this database's write time — migration 256's
+ * rule, so an "as of" never gets younger than the fact it reports.
+ */
+export async function applyTemplateCopy(
+  env: Env,
+  p: { templates: Array<Record<string, unknown>>; pushed_at: string },
+): Promise<{ ok: true; stored: number; withdrawn: number }> {
+  if (!branchOf(env)) throw new Error('publishTemplate is only live on a branch');
+
+  const pushedAt = String(p?.pushed_at || new Date().toISOString());
+  const now = new Date().toISOString();
+
+  // Coerced at the boundary, the way every other apply* here does it: the
+  // caller is another Worker in the same account, which makes it trusted for
+  // authorisation and not for arithmetic.
+  const rows = (Array.isArray(p?.templates) ? p.templates : [])
+    .map((t) => ({
+      slug: String((t as any)?.slug || '').trim().slice(0, 120),
+      title: String((t as any)?.title || '').trim().slice(0, 300),
+      category: String((t as any)?.category || '').trim().slice(0, 40) || null,
+      version: Math.max(1, Math.trunc(Number((t as any)?.version) || 1)),
+    }))
+    .filter((t) => t.slug && t.title);
+
+  // WHAT FELL OUT OF THE PUSH, COMPUTED AS A SET DIFFERENCE IN JS.
+  //
+  // Two SQL forms were tried first and both are wrong here. `DELETE … WHERE
+  // slug NOT IN (…)` builds its placeholder list with `${…}`, which lands in
+  // the query TEXT where no binding protects it — `check-sql-prepare` refuses
+  // it, correctly. And `DELETE … WHERE updated_at < ?` against this push's own
+  // stamp looks exact and is not: two pushes inside the same millisecond share
+  // a stamp, the comparison is false for every row, and NOTHING is withdrawn.
+  // That is a silently inert sweep, and the test that caught it was flaky
+  // rather than failing — which is worse than either.
+  //
+  // So the write is a reload — empty the table, insert what HQ sent — and the
+  // count is arithmetic on two sets. `DB.batch` runs its statements in one
+  // transaction, so a push that fails part-way rolls back rather than leaving
+  // the picker empty; the DELETE can only take effect if every INSERT after it
+  // does too.
+  const existing = await env.DB.prepare('SELECT slug FROM branch_templates').all<{ slug: string }>();
+  const incoming = new Set(rows.map((t) => t.slug));
+  const withdrawn = (existing.results || []).filter((r) => !incoming.has(String(r.slug))).length;
+
+  const statements = [
+    env.DB.prepare('DELETE FROM branch_templates'),
+    ...rows.map((t) => env.DB.prepare(
+      `INSERT INTO branch_templates (slug, title, category, version, pushed_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).bind(t.slug, t.title, t.category, t.version, pushedAt, now)),
+    // The sync row, so "HQ pushed an empty library" is distinguishable from
+    // "HQ has never pushed". In the SAME batch as the library: a stamp that
+    // survived a failed library write would date a library that is not there.
+    env.DB.prepare(
+      `INSERT INTO branch_templates_sync (id, pushed_at, count, updated_at)
+       VALUES (1, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         pushed_at = excluded.pushed_at, count = excluded.count, updated_at = excluded.updated_at`,
+    ).bind(pushedAt, rows.length, now),
+  ];
+
+  await env.DB.batch(statements);
+  return { ok: true, stored: rows.length, withdrawn };
+}
+
+
+/**
+ * Store the anonymised benchmarks HQ pushed, as a dated copy (migration 256,
+ * D148).
+ *
+ * MIGRATION 256 CREATED THIS TABLE AND NOTHING EVER WROTE TO IT (#252). The
+ * shape is `applyTemplateCopy`'s above and for the same reason: a benchmark set
+ * is a SET, so a push that only upserted could never retire a metric HQ stopped
+ * publishing — and a metric HQ withheld because it fell below the k-threshold
+ * is exactly the one that must disappear from the screen rather than linger at
+ * its last value. The write is a reload of THIS PERIOD, in one `DB.batch`.
+ *
+ * SCOPED TO THE PERIOD, NOT THE WHOLE TABLE. `branch_benchmarks` is keyed on
+ * `metric_key` alone (migration 256), so a period is a property of the row
+ * rather than part of its identity: HQ publishes one period at a time and the
+ * table holds the latest. Deleting only this period's rows would therefore
+ * leave last quarter's medians standing beside this quarter's under the same
+ * keys — which is not a thing the primary key allows. So the reload clears the
+ * table and writes what HQ sent, and `period` is what the screen prints beside
+ * the tick.
+ *
+ * `pushed_at` IS HQ'S STAMP, never this database's write time — migration 256's
+ * own rule, so a median's age is the age of the computation and not of the row.
+ */
+export async function applyBenchmarks(
+  env: Env,
+  p: { rows: Array<Record<string, unknown>>; period: string; pushed_at: string },
+): Promise<{ ok: true; stored: number }> {
+  if (!branchOf(env)) throw new Error('applyBenchmarks is only live on a branch');
+
+  const pushedAt = String(p?.pushed_at || new Date().toISOString());
+  const now = new Date().toISOString();
+  const period = String(p?.period || '');
+
+  const rows = (Array.isArray(p?.rows) ? p.rows : [])
+    .map((r) => ({
+      metric_key: String((r as any)?.metric_key || '').trim().slice(0, 80),
+      label: String((r as any)?.label || '').trim().slice(0, 200),
+      median_value: Number((r as any)?.median_value),
+      unit: String((r as any)?.unit || '').trim().slice(0, 40),
+      n_branches: Math.trunc(Number((r as any)?.n_branches) || 0),
+      period: String((r as any)?.period || period).trim().slice(0, 20),
+    }))
+    // A ROW WITHOUT ITS `n` IS DROPPED, not stored with a zero. The count is
+    // what lets the screen say "of N branches" instead of implying a population
+    // it does not know — migration 256 says so in as many words — so a median
+    // that arrives without one is not publishable at all.
+    .filter((r) => r.metric_key && Number.isFinite(r.median_value) && r.n_branches > 0);
+
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM branch_benchmarks'),
+    ...rows.map((r) => env.DB.prepare(
+      `INSERT INTO branch_benchmarks
+         (metric_key, label, median_value, unit, n_branches, period, pushed_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(r.metric_key, r.label, r.median_value, r.unit, r.n_branches, r.period, pushedAt, now)),
+  ]);
+
+  return { ok: true, stored: rows.length };
 }
 
 /* ------------------------------------------------------------------ *
@@ -1024,6 +1182,26 @@ export async function moveAccountOut(
     throw new Error(
       `rpc: account ${targetId} is already deactivated on ${branch}. If a previous move did not `
       + 'finish, invite them on the destination rather than moving them out again.',
+    );
+  }
+
+  // D133 — AN ADMINISTRATOR IS NOT MOVED, THEY ARE UNBOUND, and the refusal
+  // lives HERE rather than only on the HQ route. Today the only thing stopping
+  // this is `admin_support_sessions.ts`'s `requireSuperAdmin`, which is a
+  // property of one caller rather than of the operation: an entrypoint is
+  // "callable by any Worker in the account" (`rpc/index.ts`), so a control that
+  // exists only at the route is a control the RPC does not have.
+  //
+  // AND IT IS THE WRONG TOOL EVEN FOR THE SUPER ADMIN. Deactivating a branch's
+  // administrator would leave `licence_admins` pointing at a dormant account
+  // and the subsidiary with nobody able to sign in — the licence-side unbind is
+  // what handles that, deliberately and with the demote step in front of it.
+  // `openSupportSession` already refuses an elevated target for the sibling
+  // reason; this is the same refusal one tier down.
+  if (String(target.role).toLowerCase() === 'admin') {
+    throw new Error(
+      `rpc: account ${targetId} administers ${branch}. An administrator is unbound from their `
+      + 'licence at HQ, not moved out as an ordinary account.',
     );
   }
 

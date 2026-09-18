@@ -27,7 +27,12 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { pctFromBps, inZone } from '../src/pages/branch/BranchHome.jsx';
+import { pctFromBps } from '../src/pages/branch/BranchHome.jsx';
+// D140 — `inZone` moved to `lib/zoneTime.js` when S4's cohort calendar became
+// its second caller. Re-pointed rather than deleted: these assertions are the
+// ones that pin the zone as a REQUIRED argument, and they are worth the same
+// wherever the function lives. The page still uses it, asserted below.
+import { inZone } from '../src/lib/zoneTime.js';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 
@@ -85,7 +90,14 @@ test('/branch is a page now, not a notice promising six blocks', () => {
   const at = APP.indexOf('path="/branch"');
   assert.ok(at > 0, '/branch must still be a registered route');
   const row = APP.slice(at, at + 160);
-  assert.ok(row.includes('<BranchHome />'), '/branch must render the page');
+  // D151 — PINNED TO THE COMPONENT, NOT TO THE PROP-LESS SPELLING. This read
+  // `includes('<BranchHome />')`, so passing the route a prop failed a guard
+  // about which component it renders — a fact the prop does not change. The
+  // boundary check is what keeps it honest: `<BranchHome` alone would also
+  // match a longer name like `<BranchHomeLegacy`.
+  const open = row.indexOf('<BranchHome');
+  assert.ok(open >= 0 && /[\s/>]/.test(row[open + '<BranchHome'.length] || ''),
+    '/branch must render the page');
   assert.ok(
     !row.includes('BranchZonePending'),
     '/branch still renders the pending notice, which promises three blocks this PR ships',
@@ -229,16 +241,59 @@ test('the page mounts the honesty components with props they declare', () => {
   // so an honest state can render WITHOUT its reason — on the two components
   // whose entire job is to be the honest state.
   const honesty = raw('frontend/src/ui/Honesty.jsx');
+  // D137 — NO REGEX BUILT FROM DATA (Semgrep 6112), and the stronger assertion
+  // is the reason rather than the alert. The query was wrong about ReDoS — the
+  // two names come from the literal object below — and right that the pattern
+  // was weak: `[^}]*` stopped at the FIRST `}`, so a destructured prop whose
+  // default is an object (`{ reason = {} }`) truncated the list and the guard
+  // silently checked only its head. Balancing the braces reads the whole
+  // signature and needs no pattern at all.
   const propsOf = (name) => {
-    const m = honesty.match(new RegExp(`export function ${name}\\(\\{([^}]*)\\}`));
-    assert.ok(m, `${name} must still be a destructuring component`);
-    return m[1].split(',').map((s) => s.trim().split(/[=:]/)[0].trim()).filter(Boolean);
+    const head = `export function ${name}({`;
+    const at = honesty.indexOf(head);
+    assert.ok(at >= 0, `${name} must still be a destructuring component`);
+    let depth = 1;
+    let i = at + head.length;
+    for (; i < honesty.length && depth > 0; i += 1) {
+      if (honesty[i] === '{') depth += 1;
+      else if (honesty[i] === '}') depth -= 1;
+    }
+    assert.equal(depth, 0, `${name}'s destructured prop list is unterminated`);
+    // Split on top-level commas only, for the same reason: a nested default
+    // would otherwise contribute its own commas as if they were prop names.
+    const inner = honesty.slice(at + head.length, i - 1);
+    const parts = [];
+    let nest = 0;
+    let start = 0;
+    for (let k = 0; k < inner.length; k += 1) {
+      const ch = inner[k];
+      if (ch === '{' || ch === '[' || ch === '(') nest += 1;
+      else if (ch === '}' || ch === ']' || ch === ')') nest -= 1;
+      else if (ch === ',' && nest === 0) { parts.push(inner.slice(start, k)); start = k + 1; }
+    }
+    parts.push(inner.slice(start));
+    return parts.map((s) => s.trim().split(/[=:]/)[0].trim()).filter(Boolean);
+  };
+  // The same claim the `<${name}\\b([^>]*)>` regex made, as a literal scan. The
+  // word-boundary check is explicit so `<Unreadable` cannot match a longer
+  // component name that starts with it.
+  const usagesOf = (name) => {
+    const out = [];
+    const open = `<${name}`;
+    for (let at = PAGE_CODE.indexOf(open); at >= 0; at = PAGE_CODE.indexOf(open, at + 1)) {
+      const after = PAGE_CODE[at + open.length];
+      if (after && /[\w$]/.test(after)) continue;
+      const end = PAGE_CODE.indexOf('>', at);
+      if (end < 0) continue;
+      out.push(PAGE_CODE.slice(at + open.length, end));
+    }
+    return out;
   };
   const allowed = { Unrecorded: propsOf('Unrecorded'), Unreadable: propsOf('Unreadable') };
   for (const [name, ok] of Object.entries(allowed)) {
-    const re = new RegExp(`<${name}\\b([^>]*)>`, 'g');
-    for (const m of PAGE_CODE.matchAll(re)) {
-      for (const attr of m[1].matchAll(/([a-zA-Z][\w-]*)=/g)) {
+    assert.ok(ok.length > 0, `${name} parsed as declaring no props — the scan is broken, not the page`);
+    for (const attrs of usagesOf(name)) {
+      for (const attr of attrs.matchAll(/([a-zA-Z][\w-]*)=/g)) {
         assert.ok(
           ok.includes(attr[1]),
           `<${name}> is passed "${attr[1]}", which it does not declare — React drops it, so the `

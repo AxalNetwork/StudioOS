@@ -38,6 +38,7 @@ import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, Unrecorded, Unreadable, titleCase } from '../../ui';
 import BranchZone from './BranchZone';
+import { branchLabel } from '../../lib/shellRole';
 
 const UNAVAILABLE = Symbol('unavailable');
 
@@ -92,7 +93,13 @@ export default function BranchAccounts({ user }) {
   const [asked, setAsked] = useState(false);
   const debounce = useRef(null);
 
-  const brand = user?.branch?.name || user?.branch?.code || null;
+  // D151 — ONE NAME FOR THE BRANCH. This line was the first copy and
+  // `BranchZone`'s scope sentence would have been the second, so the
+  // derivation moved to `lib/shellRole.js` beside `branchOfUser`, which
+  // already answers questions about the same `/me.branch` object. The
+  // FALLBACK stays here, because a fallback is a human-written sentence
+  // (D117's split) and the two callers word theirs differently.
+  const brand = branchLabel(user);
 
   const loadLicence = useCallback(() => {
     setLicence(null);
@@ -186,6 +193,7 @@ export default function BranchAccounts({ user }) {
   return (
     <BranchZone
       workspace="Accounts"
+      user={user}
       stance="Read-only summary of this territory's accounts"
       coverage={coverage}
       coverageNote={coverage.length ? undefined

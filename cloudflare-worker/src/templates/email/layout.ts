@@ -13,6 +13,11 @@ import { footerFor, SENDER_POSTAL, shell } from '../../services/email/inviteChro
 export type TemplateCategory =
   | 'security' | 'billing' | 'contract' | 'deal'
   | 'advisor' | 'calendar' | 'system' | 'marketing'
+  // D135 — the compliance ladder's mail. `notify()` has carried a `compliance`
+  // category since Task #163 (deliberately NOT critical: a deadline is exactly
+  // what quiet hours and the digest exist for), and this type did not, so a
+  // notice routed through `notify()` had no template category to land in.
+  | 'compliance'
   | 'partner' | 'spinout' | 'dd' | 'account';
 
 export type TemplateSeverity = 'info' | 'warning' | 'critical';

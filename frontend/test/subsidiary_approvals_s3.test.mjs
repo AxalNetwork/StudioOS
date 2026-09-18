@@ -127,7 +127,10 @@ test('the page is wired: api methods, route, and the branch tier', () => {
     'the lane read method is gone or points elsewhere');
   assert.match(API, /branchEscalate: \(data\) =>/, 'the raise method is gone');
   assert.match(APP, /path="\/branch\/approvals"/, 'the route is not registered');
-  assert.match(APP, /<BranchApprovals \/>/, 'the page is not mounted');
+  // D151 — props left open. This pinned the prop-less spelling, so the route
+  // gaining `user` (so the rail can name its branch) failed a guard about
+  // whether the page is mounted at all — which the prop does not change.
+  assert.match(APP, /<BranchApprovals[\s/]/, 'the page is not mounted');
   // Mounted under its OWN prefix, not /api/admin: it is not an HQ console
   // route and must not inherit that surface's gates.
   assert.match(INDEX, /app\.route\('\/api\/branch', branchEscalationRoutes\)/,

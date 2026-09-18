@@ -65,7 +65,10 @@ test('every name is derived from the code, and the shared dataset is not', () =>
   ]) assert.ok(src.includes(want), `the rendered config is missing: ${want}`);
 
   // Shared by design — the HQ statements and the anonymised median are
-  // computed across branches from one dataset, indexed by BRANCH_CODE.
+  // computed across branches from one dataset, with the branch carried on
+  // every row as a blob (D161). This comment used to say "indexed by
+  // BRANCH_CODE", which was D105's claim and was never built: the sole index
+  // is the route, because the first index is the sampling key.
   assert.ok(src.includes('dataset = "studioos_metrics"'), 'the Analytics Engine dataset must NOT be renamed per branch');
   assert.ok(src.includes('AE_DATASET = "studioos_metrics"'));
 });
