@@ -231,15 +231,6 @@ export default function FounderBuildKpi() {
   const metCount = judged.filter((v) => v.met).length;
 
   const linkFor = (path) => `${path}${projectId ? `?project_id=${projectId}` : ''}`;
-  const selectProject = (value) => {
-    const id = Number(value);
-    setProjectId(id);
-    setSearchParams((old) => {
-      const next = new URLSearchParams(old);
-      next.set('project_id', String(id));
-      return next;
-    }, { replace: true });
-  };
 
   return (
     <main className="fb-kpi" data-testid="founder-build-kpi">
