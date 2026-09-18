@@ -20,7 +20,13 @@
  *     replaced rather than transformed, and the guard re-checks it.
  *   · `analytics_engine_datasets` — NOT renamed. One dataset across every
  *     branch is the design (the HQ statements and the anonymised median are
- *     computed from it), with `BRANCH_CODE` as the index.
+ *     computed from it), with the branch carried on every row as a BLOB.
+ *     D161 corrected this line: it used to say "with `BRANCH_CODE` as the
+ *     index", restating a claim D105 made and nothing built. The branch is a
+ *     blob rather than an index because the FIRST INDEX IS THE SAMPLING KEY,
+ *     and the sampling key is the route — moving it would make samples either
+ *     side of the change incomparable and lose route-level sampling fairness.
+ *     So the dataset is shared and FILTERABLE by branch, not indexed by it.
  *   · `triggers` — trimmed to the two cadences a branch needs. The platform
  *     content crons (market-intel connectors, persona digests) would otherwise
  *     run N times over the same external sources.
