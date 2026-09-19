@@ -5,7 +5,7 @@
  * axalFit.ts plus a domain skill axis and the 5 Axal values.
  */
 import type { Question } from '../questionBank.ts';
-import { buildFitBank, axalValueRows, archetypeTraitRows } from './fitShared.ts';
+import { buildFitBank, axalValueRows, archetypeModuleRows } from './fitShared.ts';
 
 export const FIT_ADVISOR_BANK: Question[] = buildFitBank('advisor', [
   // ---- domain_expertise -----------------------------------------------
@@ -38,8 +38,8 @@ export const FIT_ADVISOR_BANK: Question[] = buildFitBank('advisor', [
   { key: 'val_universalism', prompt: 'How much do fairness and the wider impact of the companies you help matter to you?', hint: '0 = not important to me, 5 = very important.', measures: { value_dim: 'schwartz_universalism' } },
   { key: 'val_self_direction', prompt: 'How much do you value advisoring on your own terms rather than to a set curriculum?', hint: '0 = not important to me, 5 = very important.', measures: { value_dim: 'schwartz_self_direction' } },
   { key: 'val_achievement', prompt: 'How much does seeing the founders you back succeed measurably drive you?', hint: '0 = not important to me, 5 = very important.', measures: { value_dim: 'schwartz_achievement' } },
-  // ---- archetype traits ----------------------------------------------
-  ...archetypeTraitRows(),
+  // ---- archetype traits + illustration sex ---------------------------
+  ...archetypeModuleRows('advisor'),
   // ---- Axal values ----------------------------------------------------
   ...axalValueRows(),
 ]);

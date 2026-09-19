@@ -1,8 +1,9 @@
 /**
  * Task #19 — Best-Fit. Shared builder for the conversational fit banks.
  *
- * Each fit bank delivers behavioral 0–5 `scale` questions, one per turn, inside
- * the Personal Advisor (human tone, "no wrong answers"). Question ids follow
+ * Each fit bank delivers behavioral 0–5 `scale` questions (plus one select for
+ * illustration sex), one per turn, inside the Personal Advisor (human tone, "no
+ * wrong answers"). Question ids follow
  * `fit.<FitPersona>.<key>`; `fitMeasuresIndex()` parses the persona from that
  * prefix (NOT from `Question.persona`) so the coach bank can ride inside the
  * advisor conversation. Each question is tagged with a `measures` map consumed by
@@ -17,7 +18,8 @@
  * don't need manifest coverage. Importance is `low` so they trail the persona's
  * onboarding questions without disturbing the existing ranking / anti-repeat.
  */
-import type { Question, FitMeasures, FitPersona } from '../questionBank.ts';
+import type { Question, FitMeasures, FitPersona, Importance, ValidateKind } from '../questionBank.ts';
+import { ARCHETYPE_PRESENTATION_OPTIONS } from '../../archetypePresentation.ts';
 
 const SCALE_HINT = 'No wrong answers — rate 0 (not at all) to 5 (completely).';
 
@@ -26,6 +28,10 @@ export interface FitRowSpec {
   prompt: string;
   hint?: string;
   measures: FitMeasures;
+  input_kind?: Question['input_kind'];
+  options?: string[];
+  validate?: ValidateKind;
+  importance?: Importance;
 }
 
 /**
@@ -41,9 +47,10 @@ export function buildFitBank(persona: FitPersona, rows: FitRowSpec[]): Question[
     section: 'FIT',
     prompt: r.prompt,
     hint: r.hint ?? SCALE_HINT,
-    input_kind: 'scale',
-    validate: 'scale',
-    importance: 'low',
+    input_kind: r.input_kind ?? 'scale',
+    options: r.options,
+    validate: r.validate ?? (r.input_kind === 'select' ? 'select' : 'scale'),
+    importance: r.importance ?? 'low',
     skip_allowed: true,
     page_target: '/dashboard',
     doc_anchor: 'getting-started/personas',
@@ -52,15 +59,17 @@ export function buildFitBank(persona: FitPersona, rows: FitRowSpec[]): Question[
 }
 
 /**
- * Task #45 — Archetype trait probes, asked of every persona. Four generic
- * behavioural leanings (builder / visionary / connector / operator) that the
- * nearest-centroid classifier in services/archetypeScoring.ts maps to a
- * role-specific archetype. Kept generic so every bank shares one compact,
- * diagnostic set — the archetype module only needs 3 of the 4 answered to
- * classify confidently, so this is deliberately small, not a survey.
+ * Task #45 — Archetype trait probes, asked of every persona. Three angles on
+ * each of the four behavioural leanings (builder / visionary / connector /
+ * operator) that the nearest-centroid classifier in services/archetypeScoring.ts
+ * maps to a role-specific archetype. Extra probes per axis average together, so
+ * a single noisy self-rating cannot swing the classification. Adaptive
+ * selection still stops once the module floor is met — this is headroom, not a
+ * forced survey.
  */
 export function archetypeTraitRows(): FitRowSpec[] {
   return [
+    // ---- builder (3) ------------------------------------------------------
     {
       key: 'arch_builder',
       prompt: 'How much do you gravitate to hands-on making — building the thing yourself rather than directing from above?',
@@ -68,11 +77,37 @@ export function archetypeTraitRows(): FitRowSpec[] {
       measures: { archetype_trait: 'builder' },
     },
     {
+      key: 'arch_builder_fix',
+      prompt: 'When something is broken, how often do you fix it yourself before handing it off?',
+      hint: '0 = I assign it immediately, 5 = I get my hands on it first.',
+      measures: { archetype_trait: 'builder' },
+    },
+    {
+      key: 'arch_builder_craft',
+      prompt: 'How much of your credibility comes from having made the thing with your own hands?',
+      hint: '0 = my credibility is direction and judgment, 5 = it is craft I have personally done.',
+      measures: { archetype_trait: 'builder' },
+    },
+    // ---- visionary (3) ----------------------------------------------------
+    {
       key: 'arch_visionary',
       prompt: 'How much of your energy goes to the long-range picture and narrative versus the immediate task in front of you?',
       hint: '0 = focused on the next task, 5 = focused on the long-range vision.',
       measures: { archetype_trait: 'visionary' },
     },
+    {
+      key: 'arch_visionary_pull',
+      prompt: 'How strongly do you pull people toward a future that is not fully specified yet?',
+      hint: '0 = I wait until the plan is concrete, 5 = I recruit to a picture that is still forming.',
+      measures: { archetype_trait: 'visionary' },
+    },
+    {
+      key: 'arch_visionary_bet',
+      prompt: 'How often do you choose the bigger story over the safer next step?',
+      hint: '0 = I take the safer increment, 5 = I bet on the larger narrative.',
+      measures: { archetype_trait: 'visionary' },
+    },
+    // ---- connector (3) ----------------------------------------------------
     {
       key: 'arch_connector',
       prompt: 'How central are people and relationships to how you create value — do you win mostly through your network?',
@@ -80,11 +115,183 @@ export function archetypeTraitRows(): FitRowSpec[] {
       measures: { archetype_trait: 'connector' },
     },
     {
+      key: 'arch_connector_doors',
+      prompt: 'How naturally do you open doors, make introductions, and bring the right people together?',
+      hint: '0 = that is not how I work, 5 = that is a core move of mine.',
+      measures: { archetype_trait: 'connector' },
+    },
+    {
+      key: 'arch_connector_first_call',
+      prompt: 'When you are stuck, how often is your first move to call someone rather than sit with the problem alone?',
+      hint: '0 = I sit with it myself, 5 = I reach for a person first.',
+      measures: { archetype_trait: 'connector' },
+    },
+    // ---- operator (3) -----------------------------------------------------
+    {
       key: 'arch_operator',
       prompt: 'How much do you rely on process, systems, and discipline rather than improvising as you go?',
       hint: '0 = I improvise, 5 = I run on process and systems.',
       measures: { archetype_trait: 'operator' },
     },
+    {
+      key: 'arch_operator_cadence',
+      prompt: 'How much do you insist on cadence, checklists, and clear owners so the work runs without heroics?',
+      hint: '0 = I am fine with heroics, 5 = I install cadence so heroics are rare.',
+      measures: { archetype_trait: 'operator' },
+    },
+    {
+      key: 'arch_operator_gap',
+      prompt: 'How strongly do you feel the need to install a process when one is missing?',
+      hint: '0 = missing process does not bother me, 5 = I cannot leave a gap un-systemed.',
+      measures: { archetype_trait: 'operator' },
+    },
+  ];
+}
+
+/**
+ * Illustration sex for the archetype sprite. Select, not a 0–5 scale — the
+ * write-router stores `m` / `f` / `both` on user_settings.archetype_sex.
+ * Counted in the Archetype profiling module so it is asked with the trait
+ * probes, but it does not load a trait axis.
+ */
+export function archetypePresentationRow(): FitRowSpec {
+  return {
+    key: 'arch_illustration',
+    prompt: 'Your archetype is drawn as a pixel-art character. Should we draw you as a man or a woman?',
+    hint: 'This only chooses the illustration — you can change it any time in Settings → Profile details.',
+    input_kind: 'select',
+    options: [...ARCHETYPE_PRESENTATION_OPTIONS],
+    validate: 'select',
+    measures: { archetype_presentation: true },
+  };
+}
+
+/**
+ * Role-flavoured situational probes — one per distinctive lean of that
+ * persona's four archetypes. Still tagged with a single shared trait so they
+ * average into the same centroid space as the generic probes.
+ */
+export function archetypePersonaRows(persona: FitPersona): FitRowSpec[] {
+  switch (persona) {
+    case 'founder':
+      return [
+        {
+          key: 'arch_fo_independent',
+          prompt: 'How independently do you make the call even when the room disagrees?',
+          hint: '0 = I wait for consensus, 5 = I will take the unpopular call.',
+          measures: { archetype_trait: 'builder' },
+        },
+        {
+          key: 'arch_fo_breakout',
+          prompt: 'How willing are you to move faster than the process can keep up, if it gets you a breakout?',
+          hint: '0 = process first, 5 = breakout first.',
+          measures: { archetype_trait: 'visionary' },
+        },
+        {
+          key: 'arch_fo_mission_pull',
+          prompt: 'How much do you convert people by making them feel the mission, not just the product?',
+          hint: '0 = the product does the converting, 5 = the mission does.',
+          measures: { archetype_trait: 'connector' },
+        },
+        {
+          key: 'arch_fo_systems',
+          prompt: 'How much of your week is spent installing systems that still work when you are not in the room?',
+          hint: '0 = almost none, 5 = that is a large part of how I build.',
+          measures: { archetype_trait: 'operator' },
+        },
+      ];
+    case 'investor':
+      return [
+        {
+          key: 'arch_inv_sleeves',
+          prompt: 'How often do you roll up your sleeves beside a founder rather than staying at board altitude?',
+          hint: '0 = board altitude, 5 = in the work with them.',
+          measures: { archetype_trait: 'builder' },
+        },
+        {
+          key: 'arch_inv_thesis',
+          prompt: 'How much do you invest from a written thesis rather than from who is in the room?',
+          hint: '0 = relationships lead, 5 = the thesis leads.',
+          measures: { archetype_trait: 'visionary' },
+        },
+        {
+          key: 'arch_inv_doors',
+          prompt: 'How much of your value after the cheque is opening doors and compounding relationships?',
+          hint: '0 = the cheque is the value, 5 = the network is the value.',
+          measures: { archetype_trait: 'connector' },
+        },
+        {
+          key: 'arch_inv_process',
+          prompt: 'How strictly do you stick to allocation process even when a deal is exciting?',
+          hint: '0 = excitement can override process, 5 = process holds.',
+          measures: { archetype_trait: 'operator' },
+        },
+      ];
+    case 'partner':
+      return [
+        {
+          key: 'arch_pt_trenches',
+          prompt: 'How much of your work happens in the trenches, delivering, not just talking?',
+          hint: '0 = I advise, 5 = I deliver beside them.',
+          measures: { archetype_trait: 'builder' },
+        },
+        {
+          key: 'arch_pt_momentum',
+          prompt: 'How much do you turn early momentum into a growth motion rather than a one-off win?',
+          hint: '0 = I land the win, 5 = I install the motion.',
+          measures: { archetype_trait: 'visionary' },
+        },
+        {
+          key: 'arch_pt_people',
+          prompt: 'How much of your impact is lining up the right people to a plan?',
+          hint: '0 = I do the work myself, 5 = I align the right people.',
+          measures: { archetype_trait: 'connector' },
+        },
+        {
+          key: 'arch_pt_machinery',
+          prompt: 'How much of what you leave behind is durable machinery, not a one-off win?',
+          hint: '0 = a win for this week, 5 = machinery that outlasts the engagement.',
+          measures: { archetype_trait: 'operator' },
+        },
+      ];
+    case 'advisor':
+      return [
+        {
+          key: 'arch_mt_craft',
+          prompt: 'How much of what you share is deep craft you have personally mastered?',
+          hint: '0 = I mostly hold space and ask, 5 = I teach a craft I have done.',
+          measures: { archetype_trait: 'builder' },
+        },
+        {
+          key: 'arch_mt_perspective',
+          prompt: 'How much of your value is perspective and judgment at the hard moments, not hours of doing?',
+          hint: '0 = I do the hours, 5 = I bring judgment when it counts.',
+          measures: { archetype_trait: 'visionary' },
+        },
+        {
+          key: 'arch_mt_beside',
+          prompt: 'How much do you coach session by session, beside the person, rather than from a distance?',
+          hint: '0 = at a distance, 5 = beside them, session by session.',
+          measures: { archetype_trait: 'connector' },
+        },
+        {
+          key: 'arch_mt_honest',
+          prompt: 'How firmly do you keep commitments honest even when it strains the relationship?',
+          hint: '0 = I protect the relationship first, 5 = honesty holds even when it is hard.',
+          measures: { archetype_trait: 'operator' },
+        },
+      ];
+    default:
+      return [];
+  }
+}
+
+/** Every archetype-module row for a persona (traits + illustration + role probes). */
+export function archetypeModuleRows(persona: FitPersona): FitRowSpec[] {
+  return [
+    ...archetypeTraitRows(),
+    ...archetypePersonaRows(persona),
+    archetypePresentationRow(),
   ];
 }
 

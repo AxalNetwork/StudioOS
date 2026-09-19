@@ -9,7 +9,7 @@ export default {
       overview:
         "Settings is organized into nine tabs covering everything from your profile to advanced developer toggles. Each tab saves on change; some require a confirmation step (email change, account deletion).",
       howto: [
-        'Profile — name, headline, avatar, timezone, locale, pronouns, and your public profile slug.',
+        'Profile — name, headline, avatar, timezone, locale, pronouns, archetype character, and your public profile slug.',
         'Account — email change, account deletion request, data export.',
         'Security — TOTP setup, recovery codes, active sessions, password-less login configuration.',
         'Notifications — per-channel email and in-app toggles plus quiet hours and digest cadence.',

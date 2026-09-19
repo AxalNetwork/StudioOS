@@ -7,7 +7,7 @@
  * (Mission-First / Speed-First / Risk-Seeking / Hyper-Growth / Autonomy).
  */
 import type { Question } from '../questionBank.ts';
-import { buildFitBank, axalValueRows, archetypeTraitRows } from './fitShared.ts';
+import { buildFitBank, axalValueRows, archetypeModuleRows } from './fitShared.ts';
 
 export const FIT_FOUNDER_BANK: Question[] = buildFitBank('founder', [
   // ---- vision_clarity -------------------------------------------------
@@ -46,8 +46,8 @@ export const FIT_FOUNDER_BANK: Question[] = buildFitBank('founder', [
   { key: 'skill_engineering', prompt: 'How strong is your own hands-on engineering — could you build or credibly lead the build of the product?', hint: '0 = not my strength, 5 = deep engineering strength.', measures: { skill_axis: 'engineering' } },
   { key: 'skill_design', prompt: 'How strong is your product/design sense — shaping something people find intuitive and want to use?', hint: '0 = not my strength, 5 = a real strength.', measures: { skill_axis: 'design' } },
   { key: 'skill_finance_ops', prompt: 'How comfortable are you running the numbers and operations — budgets, runway, hiring plans, cadence?', hint: '0 = not my strength, 5 = a real strength.', measures: { skill_axis: 'finance_ops' } },
-  // ---- archetype traits ----------------------------------------------
-  ...archetypeTraitRows(),
+  // ---- archetype traits + illustration sex ---------------------------
+  ...archetypeModuleRows('founder'),
   // ---- Axal values ----------------------------------------------------
   ...axalValueRows(),
 ]);

@@ -191,6 +191,24 @@ test('routeAnswer: rubric-only answer saves without a structured table write', a
 });
 
 // ── validation ─────────────────────────────────────────────────────────────
+test('routeAnswer: illustration sex select writes user_settings.archetype_sex', async () => {
+  const env = makeEnv();
+  const res = await routeAnswer(env, USER, 'fit.founder.arch_illustration', 'A woman');
+  assert.equal(res.status, 'saved');
+  assert.equal(res.saved_to?.table, 'user_settings');
+  assert.equal(res.saved_to?.column, 'archetype_sex');
+  const row = await env.DB.prepare(
+    `SELECT archetype_sex FROM user_settings WHERE user_id = ?`,
+  ).bind(USER.id).first<{ archetype_sex: string }>();
+  assert.equal(row?.archetype_sex, 'f');
+});
+
+test('routeAnswer: illustration sex rejects a scale number', async () => {
+  const env = makeEnv();
+  const res = await routeAnswer(env, USER, 'fit.founder.arch_illustration', '4');
+  assert.equal(res.status, 'invalid');
+});
+
 test('routeAnswer: non-integer / out-of-range fit answers are invalid', async () => {
   const env = makeEnv();
   const e = founderEntry((m) => !!m.axal_value);

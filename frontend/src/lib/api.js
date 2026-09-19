@@ -723,7 +723,7 @@ export const api = {
   updateCorporateProfile: (patch) => request('/settings/profile/corporate', { method: 'PUT', body: JSON.stringify(patch) }),
 
   // AE-1 (Task #1) — tabbed Settings aliases. /identity merges
-  // user_settings (timezone/locale/pronouns/profile_slug + display_name +
+  // user_settings (timezone/locale/pronouns/archetype_sex/profile_slug + display_name +
   // headline) with personal-profile fields (full_legal_name/DOB/
   // nationality). /details is the address+phone+tax slice of the personal
   // profile. /legal-entity is the corporate-profile alias.

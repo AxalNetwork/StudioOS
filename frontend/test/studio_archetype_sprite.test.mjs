@@ -52,7 +52,7 @@ test('studio compact archetype does not use the 300px two-column grid', () => {
   assert.doesNotMatch(fitCode, /md:grid-cols-\[300px/);
   assert.match(fitCode, /<ArchetypeCard state=\{results\} fitState=\{fit\} audience=\{audience\} compact \/>/);
   assert.match(fitCode, /max-w-\[180px\]/);
-  assert.match(fitCode, /<ArchetypePair slug=\{latest\.slug\} compact \/>/);
+  assert.match(fitCode, /<ArchetypeArt slug=\{latest\.slug\} sex=\{sex\} compact \/>/);
 });
 
 test('full archetype holds the pair in a 280px column, not 300px', () => {
@@ -60,11 +60,23 @@ test('full archetype holds the pair in a 280px column, not 300px', () => {
   assert.match(fitCode, /max-w-\[240px\]/);
 });
 
-test('the studio card renders the female and male sprites as a pair', () => {
+test('the studio card renders the matching sex sprite, or the pair when unknown', () => {
+  assert.match(fitCode, /function ArchetypeArt\(\{ slug, sex, compact = false \}\)/);
+  assert.match(fitCode, /if \(sex === 'm' \|\| sex === 'f'\)/);
   assert.match(fitCode, /variant="f"/);
   assert.match(fitCode, /variant="m"/);
   assert.match(fitCode, /grid grid-cols-2 gap-2 items-end/);
   assert.match(fitCode, /data-testid="archetype-sprites"/);
+  assert.match(fitCode, /fitData\?\.archetype_sex/);
+});
+
+test('Settings profile details can set archetype_sex independently of pronouns', () => {
+  const settings = codeOnly(read('../src/pages/SettingsPage.jsx'));
+  assert.match(settings, /label="Archetype character"/);
+  assert.match(settings, /save\(\{ archetype_sex: e\.target\.value \|\| null \}\)/);
+  assert.match(settings, /<option value="m">Man<\/option>/);
+  assert.match(settings, /<option value="f">Woman<\/option>/);
+  assert.match(settings, /<option value="both">Show both<\/option>/);
 });
 
 test('sprites stay pixelated, contained, feet on the floor, and hide on 404', () => {

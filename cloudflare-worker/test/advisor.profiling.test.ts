@@ -31,19 +31,19 @@ import {
 // axalFit/bestFit signal), but the completion card is scoped to the primary
 // advisor bank so a advisor's effort is comparable to other personas (Task #41).
 const EXPECTED: Record<string, number> = {
-  founder: 33,
-  investor: 29,
-  partner: 28,
-  advisor: 30, // advisor primary bank — coach bank excluded from the completion card
+  founder: 46,
+  investor: 42,
+  partner: 41,
+  advisor: 43, // advisor primary bank — coach bank excluded from the completion card
 };
 
 // Every persona's profiling bank must offer all four modules with enough
 // questions to satisfy each module's confidence floor (Task #45).
 const EXPECTED_SECTIONS: Record<string, Record<string, number>> = {
-  founder:  { skills: 7, work_values: 5, archetype: 4, axal_fit: 17 },
-  investor: { skills: 5, work_values: 5, archetype: 4, axal_fit: 15 },
-  partner:  { skills: 5, work_values: 4, archetype: 4, axal_fit: 15 },
-  advisor:   { skills: 5, work_values: 4, archetype: 4, axal_fit: 17 },
+  founder:  { skills: 7, work_values: 5, archetype: 17, axal_fit: 17 },
+  investor: { skills: 5, work_values: 5, archetype: 17, axal_fit: 15 },
+  partner:  { skills: 5, work_values: 4, archetype: 17, axal_fit: 15 },
+  advisor:   { skills: 5, work_values: 4, archetype: 17, axal_fit: 17 },
 };
 
 test('profilingBankFor returns the fit.* bank sized per persona', () => {
@@ -117,12 +117,31 @@ test('every persona offers all four modules at their expected sizes (Task #45)',
   }
 });
 
+test('archetype module has three probes per trait, role flavour, and illustration sex', () => {
+  const founder = profilingBankFor('founder' as Persona);
+  const traits = founder.filter((q) => q.measures?.archetype_trait);
+  const byTrait = {};
+  for (const q of traits) {
+    const t = q.measures.archetype_trait;
+    byTrait[t] = (byTrait[t] || 0) + 1;
+  }
+  for (const t of ['builder', 'visionary', 'connector', 'operator']) {
+    assert.ok(byTrait[t] >= 4, `founder must offer ≥4 ${t} probes (3 shared + 1 role), got ${byTrait[t]}`);
+  }
+  const illustration = founder.find((q) => q.id === 'fit.founder.arch_illustration');
+  assert.ok(illustration, 'founder bank must ask illustration sex');
+  assert.equal(illustration.input_kind, 'select');
+  assert.ok(illustration.measures.archetype_presentation);
+  assert.ok(illustration.options.includes('A man'));
+  assert.ok(illustration.options.includes('A woman'));
+});
+
 test('advisor completion card is scoped to the primary bank, but coach is still delivered in-conversation (Task #41)', () => {
   // The card counts ONLY the advisor's primary fit bank — no coach questions —
   // so a advisor reaches "Profiling complete" with the same effort as other
   // personas (17, == partner) instead of ~double (was 34).
   const card = profilingBankFor('advisor' as Persona);
-  assert.equal(card.length, 30);
+  assert.equal(card.length, 43);
   assert.ok(card.some((q) => q.id.startsWith('fit.advisor.')), 'card must contain the advisor fit bank');
   assert.ok(card.every((q) => !q.id.startsWith('fit.coach.')), 'coach questions must NOT count toward the advisor card');
 

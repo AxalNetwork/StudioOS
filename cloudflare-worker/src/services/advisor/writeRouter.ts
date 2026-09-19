@@ -20,6 +20,8 @@ import type { Env } from '../../types';
 import type { User } from '../../types';
 import { questionById, mapRoleAnswer, DYNAMIC_ID_RE, FIT_ID_RE } from './questionBank.ts';
 import { ensureTaxonomyVersionColumns, getTaxonomyVersion } from '../taxonomyVersion.ts';
+import { parseArchetypeSex } from '../archetypePresentation.ts';
+import { upsertUserSettings } from '../userSettings.ts';
 
 export type WriteStatus = 'saved' | 'skipped' | 'paywalled' | 'failed' | 'noop' | 'needs_evidence' | 'invalid';
 
@@ -504,7 +506,9 @@ async function resolveValueDimensionId(env: Env, slug: string): Promise<number |
  *   - `skill_axis` → user_skills  (self_level = raw, representative skill, raw>0)
  *   - `value_dim`  → user_values  (raw 0..5 → -2..+2, confidence-blended)
  * `rubric_category` / `red_flag` carry no structured write (computeFit reads
- * them from field_sources). Returns `invalid` for a non-integer-0..5 answer.
+ * them from field_sources). `archetype_presentation` is a select (man / woman /
+ * both) written to user_settings.archetype_sex. Returns `invalid` for a
+ * non-integer-0..5 scale answer or an unrecognised illustration choice.
  */
 async function routeFitAnswer(
   env: Env,
@@ -514,6 +518,27 @@ async function routeFitAnswer(
 ): Promise<WriteResult> {
   const m = q.measures;
   if (!m) return { status: 'noop' };
+
+  // Illustration sex is a select (man / woman / both), not a 0–5 scale.
+  if (m.archetype_presentation) {
+    const sex = parseArchetypeSex(value);
+    if (!sex) {
+      return {
+        status: 'invalid',
+        error: 'schema_validation_failed',
+        hint: 'Please choose "A man", "A woman", or "Show both for now".',
+        evidence_kind: 'free_text',
+        field: q.id,
+        open_url: q.page_target || undefined,
+      };
+    }
+    try {
+      await upsertUserSettings(env, user.id, { archetype_sex: sex });
+    } catch (e) {
+      return { status: 'failed', error: (e as Error).message };
+    }
+    return { status: 'saved', saved_to: { table: 'user_settings', column: 'archetype_sex', id: user.id, page_url: '/settings' } };
+  }
 
   const n = Number(value);
   if (!Number.isInteger(n) || n < 0 || n > 5) {

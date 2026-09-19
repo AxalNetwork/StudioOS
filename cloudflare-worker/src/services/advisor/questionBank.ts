@@ -79,6 +79,9 @@ export interface FitMeasures {
   // services/archetypeScoring.ts ARCHETYPE_TRAITS) the answer loads. Feeds the
   // nearest-centroid archetype classifier + the Archetype profiling module.
   archetype_trait?: string;
+  // Illustration sex for the pixel-art sprite (`m` / `f` / `both`). Select
+  // answer, not a 0–5 scale; write-router stores it on user_settings.
+  archetype_presentation?: boolean;
   red_flag?: { key: string; at_or_below: number };
 }
 
@@ -134,12 +137,13 @@ export const BANK_SIZE_TARGETS = {
   // (not enforced by scripts/check-advisor-bank-drift.mjs, which scans only the
   // 6 manifest banks). Each covers its full axalFit RUBRIC + the 5 Axal values,
   // PLUS (Task #45) enough Skills (≥5 radar axes), Work-values (≥4 dimensions),
-  // and Archetype-trait (4 traits) questions to reach per-module confidence.
+  // and Archetype-trait (12 shared + 4 role probes + illustration sex) questions
+  // to reach per-module confidence.
   // Adaptive selection means a user answers only the minimum, not all of these.
-  fitFounder: 32,
-  fitInvestor: 28,
-  fitPartner: 27,
-  fitAdvisor: 29,
+  fitFounder: 45,
+  fitInvestor: 41,
+  fitPartner: 40,
+  fitAdvisor: 42,
   fitCoach: 17, // coach rides in the advisor conversation; skills/values/archetype
                 // stay on the advisor bank so they're never asked twice.
   // Explorer Problem/Challenge Discovery — one 12-question track per persona
@@ -352,10 +356,11 @@ export function profilingBankFor(persona: Persona): Question[] {
 /**
  * Which profiling section a fit question belongs to. Single-bucket, priority
  * ordered so the section totals partition the bank exactly:
- *   archetype_trait → Archetype (feeds the nearest-centroid classifier)
- *   skill_axis      → Skills (feeds the 8-axis radar)
- *   value_dim       → Work values (feeds the 15-dimension values vector)
- *   otherwise       → Axal Fit & values (rubric_category + the 5 Axal values)
+ *   archetype_trait         → Archetype (feeds the nearest-centroid classifier)
+ *   archetype_presentation  → Archetype (illustration sex, not a trait axis)
+ *   skill_axis              → Skills (feeds the 8-axis radar)
+ *   value_dim               → Work values (feeds the 15-dimension values vector)
+ *   otherwise               → Axal Fit & values (rubric_category + the 5 Axal values)
  *
  * Archetype wins over skill/value so a question authored to classify the user's
  * archetype (even if it also nudges a radar axis) is counted where the operator
@@ -363,7 +368,7 @@ export function profilingBankFor(persona: Persona): Question[] {
  */
 export function profilingSectionForQuestion(q: Question): ProfilingSectionKey {
   const m = q.measures;
-  if (m?.archetype_trait) return 'archetype';
+  if (m?.archetype_trait || m?.archetype_presentation) return 'archetype';
   if (m?.skill_axis) return 'skills';
   if (m?.value_dim) return 'work_values';
   return 'axal_fit';

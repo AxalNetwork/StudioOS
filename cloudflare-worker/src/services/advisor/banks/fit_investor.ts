@@ -6,7 +6,7 @@
  * prompts are authored so 5 = the dimension's `pole_high`.
  */
 import type { Question } from '../questionBank.ts';
-import { buildFitBank, axalValueRows, archetypeTraitRows } from './fitShared.ts';
+import { buildFitBank, axalValueRows, archetypeModuleRows } from './fitShared.ts';
 
 export const FIT_INVESTOR_BANK: Question[] = buildFitBank('investor', [
   // ---- thesis_fit -----------------------------------------------------
@@ -39,8 +39,8 @@ export const FIT_INVESTOR_BANK: Question[] = buildFitBank('investor', [
   { key: 'val_achievement', prompt: 'How much does demonstrable success and being measurably right drive you?', hint: '0 = not important to me, 5 = very important.', measures: { value_dim: 'schwartz_achievement' } },
   { key: 'val_benevolence', prompt: 'How much do you weigh the welfare of the founders and teams you back, not just returns?', hint: '0 = not important to me, 5 = very important.', measures: { value_dim: 'schwartz_benevolence' } },
   { key: 'val_universalism', prompt: 'How much do broader impact and fairness factor into what you choose to fund?', hint: '0 = not important to me, 5 = very important.', measures: { value_dim: 'schwartz_universalism' } },
-  // ---- archetype traits ----------------------------------------------
-  ...archetypeTraitRows(),
+  // ---- archetype traits + illustration sex ---------------------------
+  ...archetypeModuleRows('investor'),
   // ---- Axal values ----------------------------------------------------
   ...axalValueRows(),
 ]);

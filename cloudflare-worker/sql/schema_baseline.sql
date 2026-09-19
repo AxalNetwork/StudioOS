@@ -4873,7 +4873,7 @@ CREATE TABLE user_settings (
   sidebar_default TEXT DEFAULT 'expanded',
   feature_flags TEXT DEFAULT '{}',
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-, dismissed_explainers TEXT NOT NULL DEFAULT '[]', matching_opt_in INTEGER DEFAULT 0);
+, dismissed_explainers TEXT NOT NULL DEFAULT '[]', matching_opt_in INTEGER DEFAULT 0, archetype_sex TEXT);
 
 CREATE TABLE user_skills (
         id           INTEGER PRIMARY KEY AUTOINCREMENT,
