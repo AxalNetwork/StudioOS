@@ -8,7 +8,6 @@ import SignalFilterBar from '../components/signals/SignalFilterBar';
 import SignalKPIStrip from '../components/signals/SignalKPIStrip';
 import SignalEvidencePanel from '../components/signals/SignalEvidencePanel';
 import { AdvisorWorkspaceShell } from './advisor/AdvisorWorkspaceShell';
-import ZoneToolbar from '../workspaces/ZoneToolbar';
 import { reportError } from '../lib/log';
 
 /**

@@ -7481,9 +7481,20 @@ anywhere in the output, `OAUTH_CALLBACK_BASE_URL` included.
 **The Analytics Engine dataset is shared.** Every other resource is per
 branch, which is the isolation the whole design rests on, but the HQ
 statements and the anonymised median in the subsidiary Insights screen are
-computed *across* branches. One dataset indexed by `BRANCH_CODE` is what makes
-those two numbers possible without a cross-branch read; renaming it per branch
-would have quietly removed them.
+computed *across* branches. One dataset carrying the branch on every row is
+what makes those two numbers possible without a cross-branch read; renaming it
+per branch would have quietly removed them.
+
+> **CORRECTED BY D161.** This paragraph said "one dataset **indexed by**
+> `BRANCH_CODE`", and that was never built — the sole index was the route
+> (`middleware/observability.ts`), and the reader had no branch predicate, so
+> every per-branch AE query returned nothing for as long as the sentence
+> stood. D161 builds the dimension, and deliberately as a **blob** rather than
+> an index: the first index is the sampling key and the sampling key is the
+> route, so moving it would make samples either side of the change
+> incomparable and lose the route-level sampling fairness it exists for. The
+> dataset is therefore shared and **filterable** by branch, not indexed by it —
+> which is what the two numbers above actually need.
 
 **Crons are trimmed to two.** HQ declares six cadences, four of which pull
 external market-intelligence sources and send platform digests. Copied
@@ -13108,3 +13119,858 @@ the point of writing them: `lic.territories?.length || 0` would have rendered
 *"0 territories held"* for a licence copy that arrived without the array — a
 claim about this branch's licence that nothing measured. Both zero-defaults are
 gone. **No migration — 269 stays free.**
+
+---
+
+## D156 — three audit tables were append-only by convention; migration 269 makes the database say so
+
+**Task #236, the first of F.8's standalone improvements.** F.8 item 1 asked for
+immutability triggers on the audit stores. Measured before building — the
+seventeenth time in this programme that measuring a filed item corrected it —
+**three of F.8's items are stale and one is genuinely unbuilt**, and the reading
+of two of them was mine to correct:
+
+| F.8 item | measured against the code, 2026-09-18 |
+| --- | --- |
+| **1 · immutability triggers** | **genuinely unbuilt.** No `BEFORE UPDATE`/`BEFORE DELETE` trigger exists on `admin_audit_log`, `impersonation_sessions` or `licence_events`. The only trigger in the repo is `sql/historical/lp_investors_seal.sql`, which is the precedent this copies |
+| 7 · `requireAdmin` on `/monitoring/throughput` | **stale.** `routes/monitoring.ts:255-258` already refuses anyone outside `admin`/`partner`/`investor`; the route's own heading calls it *"operator-visible limited stats"* and that is what it is |
+| 7 · retire the `admin_news.ts` twin | **stale, and my own first reading of it was wrong.** I reported it as carrying zero handlers. The scan matched `^r\.`; this router's const is `adminNews`. It registers **11** handlers, documented in its own header, and is mounted at `index.ts:742`. There is no twin to retire |
+| 7 · step-up on `/impersonate-sessions/:id/end` | **refused with the measurement.** The UPDATE is bounded `AND admin_user_id = ?`, so an admin can only close their own session; it is the client's best-effort close on exit, and a step-up in front of it would leave sessions permanently open — which is precisely the state D122 was written to end |
+
+### The defect: "immutable" was a description of the writers' habits
+
+HQ's Security page renders all three stores and the feed is described as
+immutable. Measured repo-wide, across `.ts`, `.py`, `.mjs`, `.js` and `.sql`:
+
+| table | INSERT | UPDATE | DELETE |
+| --- | --- | --- | --- |
+| `admin_audit_log` | **33** | **0** | **0** |
+| `licence_events` | **2** | **0** | **0** |
+| `impersonation_sessions` | **2** | **2** | **0** |
+
+So nothing in the repo rewrites an audit row. What was missing is anything that
+would **refuse** one. `frontend/test/territory_licences.test.mjs` holds a
+source-scan over `licence_events` — *"a contract dispute is exactly when an
+overwritten history is useless"* — and that scan is structurally blind to a
+`wrangler d1 execute`, a queue job reaching `DB.prepare()` directly, or any
+writer that does not live in the file it reads. **A lexical scan of the source
+cannot see a write that is not in the source.** Migration 269 moves the
+guarantee into the only place it can hold against every writer.
+
+### The third table cannot take the same seal, and that is the finding
+
+`impersonation_sessions` has exactly one legitimate mutation: stamping
+`ended_at` on a session that is still open, written by `routes/admin.ts:1699`
+(the operator's own exit) and by `util/supportSessionSweep.ts:91` (**D122**'s
+sweep, for the branch rows HQ's route can never match because
+`admin_user_id = 0`). Both are guarded `ended_at IS NULL`.
+
+**A blanket UPDATE seal here would have broken D122** and left every branch
+support session reading `not closed` on HQ's Security page for ever — the exact
+defect D122 exists to fix, reintroduced by the migration meant to strengthen the
+same table. So that table gets a `WHEN`-guarded seal instead, permitting the
+close and refusing everything else: no re-closing a session whose end time has
+already been reported to the supervised party, no re-opening one, and no
+rewriting who supported whom, when it started, or the typed reason.
+
+### The guard was half-exempt, and migration 269 is what found it
+
+`scripts/check-sql-migrations.mjs` refused this migration on
+**`ROLLBACK / END`** — on the line that closes a trigger body its own comment
+(`:27-29`) says is legal: *"`BEGIN` also opens a TRIGGER body, and a trigger is
+perfectly legal in a migration."* The carve-out was written for the opener and
+not for the closer, so a trigger was legal to open and illegal to close. It went
+unnoticed because **269 is the first migration in the repo to install one**.
+
+Fixed in this same PR, on D143's precedent (`due_at` joined `TTL_COLUMN` in the
+PR that created the column): a `stripTriggerBodies` pass excises
+`CREATE TRIGGER … END;` spans before the scan — **strictly stronger** than
+exempting the keyword, because outside a trigger `END;` stays refused, and that
+is the statement that aborted migration 200's deploy. The widening is asserted
+in both directions in `frontend/test/migration_column_shapes.test.mjs`, which
+the guard's own header names as the place for exactly that, on its stated
+principle that *a widening no test exercises is a widening nobody notices*.
+
+### Verification
+
+**15 mutations, 15 caught** — and one escaped first, on my own assertion rather
+than on the code. `M8` dropped `OR NEW.ended_at IS NULL` from the `WHEN` clause
+and nothing failed, because the re-open test acts on a **closed** row, which the
+neighbouring `OLD.ended_at IS NOT NULL` conjunct catches either way. The conjunct
+guards a different case — an update that touches an open session and leaves it
+open — and that case had no test. An assertion that cannot fail on the mutation
+it exists for is not a guard, so the test was written rather than the conjunct
+dropped.
+
+The guard is a real `node:sqlite` test applying the migration file **verbatim off
+disk**; restating the trigger bodies in the test would test the copy. Foreign
+keys stay **on**, with stub parents, so a row that could not exist in production
+cannot exist in the fixture either.
+
+**No new `/api/*` method, no route change, no SPA change.** Migration **269** is
+used; **270 is free**.
+
+**A note for anyone rebuilding a sealed table.** SQLite cannot `ALTER` a CHECK,
+so widening one means create-copy-drop-rename — which is what migration 266 did
+to `licence_events`. `DROP TABLE` drops its triggers with it. Any future rebuild
+of a table sealed here must re-run 269's statements at the end of its own
+migration, or the seal silently disappears. That is stated in the migration
+header and asserted by the guard, so a rebuild that forgets fails the build.
+
+---
+
+## D157 — D132 closed a question that only needed narrowing: an admin could not read their own record
+
+**Task #236, F.8 item 7's self-audit read.** The second of the standalone
+improvements, and the second in a row where the filed item was right and the
+measurement changed its shape.
+
+### The defect
+
+D132 raised `/analytics/audit`, `/analytics/audit/export.csv` and
+`/analytics/exports/recent` to `requireSuperAdmin`, and its reasoning is
+correct and still stands, in its own words at `monitoring_analytics.ts:233-239`:
+
+> *"this reads OTHER ADMINS' activity. The rows are `admin_audit_log a LEFT
+> JOIN users u ON u.id = a.admin_user_id`, so a plain admin was reading every
+> other admin's export history by name and email."*
+
+But that **closed** a question rather than narrowing it. *"What have I done"* is
+not *"what has my peer done"*, and after D132 an administrator could not see
+their own privileged-action record at all — on a platform whose Security page
+describes that record as the thing an operator is accountable to.
+
+**Narrowed rather than reversed**, which is the D111 pattern D154 applied to
+rule 4 one decision earlier. The three refusals D132 made are untouched, and
+`self_audit_d157.test.ts` asserts all three still hold rather than assuming it.
+
+### Why `requireAdmin` is the right gate, from this file's own rule
+
+The file's header already wrote the test, before this route existed:
+
+> *"a route that reaches `admin_audit_log a LEFT JOIN users u` is a cross-admin
+> read whatever it renders, and gating some of them is gating none of them.
+> Keep new routes here on `requireAdmin` unless they cross that line too."*
+
+`GET /analytics/audit/mine` does not cross it. There is **no join to `users`**,
+because the caller is the only subject and there is no other person's name to
+render. And the subject is **not an input**: `admin_user_id` is bound from
+`adminUser.id` and the query string is never consulted for it, so there is no
+parameter that could name somebody else. That is the **structural** form of
+D132's rule rather than a validated form of it — nothing to validate, because
+nothing is read.
+
+So the header's count stays **three**, and the header now says so explicitly.
+
+### Three things the code decided against the obvious reading
+
+1. **No action filter, on `admin_security.ts`'s precedent rather than
+   `/audit`'s.** `/audit` admits `ALLOWED_ACTIONS = ['analytics_export',
+   'subscription_plan_update']` — two of the many actions written to this table.
+   HQ's own feed deliberately admits all of them, and `hq_security.test.mjs:130`
+   pins exactly that: *"the audit zone reads every action, not the two the
+   monitoring read allows."* An administrator's own record is the same kind of
+   thing: showing them two of their actions and silently dropping the rest
+   would be a feed that is wrong about the one subject it has. The guard asserts
+   the difference **both ways** — `/audit/mine` has no filter and `/audit` still
+   does — so it is a real divergence between two handlers rather than a property
+   nothing could break.
+2. **A tenth producer with no reader, at the index level.**
+   `idx_admin_audit_user_ts(admin_user_id, exported_at DESC)` is created by
+   `ensureAdminAuditLogTable` and **no read uses its leading column** — both
+   existing reads pass `adminUserId: null` into `buildAuditWhere`. The index was
+   built for exactly this query and had no caller. The `ORDER BY` matches its
+   second column so it applies whole, and that is asserted.
+3. **The page states what it does NOT show.** A feed of privileged actions that
+   does not say whose it is invites being read as the platform's, which is the
+   claim D132 closed. The scope is **echoed by the server** and rendered, and
+   the page says in one line that another administrator's record is not readable
+   here and never was for this tier — so a reader who wonders gets the reason
+   rather than a silence.
+
+### The unreadable state is not the empty one
+
+`admin_audit_log` is lazily bootstrapped, so its absence is a state this read can
+genuinely meet — the #204 class, one surface up. A failed read renders its own
+reason and the sentence *"This is not a claim that you have taken no privileged
+actions"*; an empty one says nothing was recorded. Two different states, drawn
+differently, which is this programme's most repeated correction.
+
+### One correction the guard made to itself, before it ran
+
+The first draft asserted the cross-admin rule by **counting two totals** — join
+statements against `requireSuperAdmin` calls — and they are not one to one:
+each gated handler runs **two** joined queries, items and count, so the
+arithmetic was wrong (5 against 3) while the rule it meant was right. It now
+**sweeps every handler in the file** and asserts that any handler joining
+`users` gates on the elevation, which says the actual thing and catches a fourth
+added later. A second draft then built its handler slicer as a `new RegExp` from
+data — the shape Semgrep has flagged three times in this repo — and took the
+literal form instead, which also fixed a real hole: the slicer matched `r.get('`
+only and silently skipped the file's one POST handler.
+
+### Verification
+
+`test:drift` exit 0 from a redirected log. **14 mutations, 14 caught.** No
+migration — **270 stays free.** One new `/api/*` method with its route in the
+same commit, so `check-api-drift` is satisfied. `frontend/src` moves, so `docs/`
+is rebuilt by the root build.
+
+---
+
+## D158 — the guardrail category was computed on every guarded turn and thrown away
+
+**Task #276, filed from D152's own research and built here.** The third of
+#236's standalone improvements, after D156 and D157.
+
+### The defect
+
+`services/advisor/guardrails.ts:122-138` — `classifyInput` runs llama-guard and
+parses its reply into `{ blocked, score, category }`, where `category` is the
+**S-code naming which rule fired** (`out.split('\n')[1]`, e.g. `s1`, `s10`), or
+one of `empty` / `safe` / `router_failed` / `error`.
+
+Measured repo-wide before anything was written:
+
+| where the category went | measured |
+| --- | --- |
+| `routes/advisor.ts:891`, `:1895` | the 422 response body — **the only two consumers** |
+| `TurnAudit` | **no field** |
+| `advisor_turn_audit`, migration 043 **and** the runtime bootstrap | **no column, in either** |
+| `guardrail_category` / `refusal_category` in any migration | **zero** |
+
+So **which rule fired was unrecoverable the moment the response was sent.** HQ
+could count *that* a guardrail blocked a turn — D152 shipped those counters —
+and could never say *what for*, on the one screen whose subject is AI safety.
+**Eleventh producer-with-no-store** in this programme.
+
+### The twelfth stale refusal, and the first this codebase filed against itself
+
+`admin_security.ts`'s `AI_SAFETY_NOT_COUNTED` carried a row reading *"Which
+guardrail rule fired … no store has a column for it"*, rendered on HQ's Security
+page. D152 wrote that row from this very measurement. **D158 makes it false**,
+so it is **removed rather than reworded**, and both guards pinning it were
+re-aimed — one of which stated the premise outright: *"a row carrying an `n`
+here would be a per-category count invented for a column no table has."*
+Migration 270 gives the table that column.
+
+Every previous instance of this class was a refusal that outlived a fact
+somebody else had changed. This is the first where the codebase filed the gap,
+and the filing is what got it closed.
+
+### The trap, and it is the #183/#202 class
+
+`advisor_turn_audit` has **two definitions**: migration 043's lineage and
+`ensureAuditSchema`'s `CREATE TABLE IF NOT EXISTS`. **A CREATE-IF-NOT-EXISTS
+cannot add a column to a table that already exists**, so migration 270 alone
+would have left the bootstrap stale and the resulting shape would depend on
+which ran first — the `metrics_snapshots` collision that cost two PRs to unwind.
+Both move in the same commit: the bootstrap's `CREATE` gains the column *and* a
+PRAGMA-guarded `ADD COLUMN`, copying `ensureGuardrailColumns` in that same file
+rather than inventing an idiom. **A test builds both shapes and asserts their
+column sets are equal** — the property nobody had been checking.
+
+### Three things decided against the obvious reading
+
+1. **The field is REQUIRED on `TurnAudit`, not optional.** There are **seventeen**
+   `writeTurnAudit` call sites; **seven** have a `safety` result in scope and ten
+   do not. An optional field would let an eighteenth be added with the category
+   silently missing. Required, **the typechecker refuses the call** — a guard
+   that cannot be forgotten to run. The rule it enforces is *the category travels
+   with the score*, asserted in both directions.
+2. **`rules` and `states` are returned apart.** An S-code is a rule that fired;
+   `safe` / `empty` / `router_failed` / `error` describe the classification
+   itself. Mixing them would put *"the router failed"* in a list headed *"what
+   tripped the guard"* — and a router failure is the guard **not running**.
+3. **Nothing is backfilled, and `unclassified` is its own figure.** Production
+   holds **121 rows, 8 carrying a refusal**, none with a category because none
+   was stored. Those read **unknown**; a null rendered as `safe` would be a
+   verdict nothing reached, which is the defect class this programme keeps
+   deleting. The page says so in words rather than leaving a silent gap between
+   the breakdown and `blocked`.
+
+### Deliberately not done
+
+- **The raw model output is not stored.** `classifyInput` already narrows it to a
+  short token; persisting the completion would put user-adjacent text in an audit
+  table, which is the opposite of what redaction exists for.
+- **Not split by branch.** That absence keeps its own row: neither
+  `ai_usage_logs` nor `advisor_turn_audit` carries a branch column, and this
+  change does not add one.
+
+### Verification
+
+`test:drift` exit 0 from a redirected log. **12 mutations, 12 caught** — including
+a migration that backfills existing rows as `safe`, a bootstrap that loses the
+repairing `ALTER`, and putting the stale refusal row back. Real `node:sqlite`
+fixtures, applying migration 270 **verbatim off disk** against a table built in
+its pre-270 shape. Migration **270** is used; **271 is free**.
+
+---
+
+## D159
+
+**One `logAdminAction`, and the two copies that dropped the audit write.**
+(F.8 item 7's "one `logAdminAction`", task #278)
+
+### The defect
+
+`logAdminAction` was declared **four times** with the same five-parameter
+signature, and the four did not do the same thing:
+
+| copy | writes |
+| --- | --- |
+| `routes/admin_exploring.ts:83` | `activity_logs` **+** `admin_audit_log` |
+| `routes/admin_partners.ts:46` | `activity_logs` **+** `admin_audit_log` |
+| `routes/admin_advisor_audit.ts:37` | `activity_logs` **only** |
+| `services/matchAudit.ts` | `activity_logs` **only** |
+
+`matchAudit.ts`'s own header said it *"mirrors admin_advisor_audit.ts
+::logAdminAction (same columns)"*. That was true, and it is exactly how it
+inherited the gap.
+
+**What it cost is not bookkeeping.** HQ's H7 governance feed
+(`routes/admin_security.ts` `GET /governance`) unions four stores, and an
+action reaches it two ways only: from `admin_audit_log`, which
+`FEED_AUDIT_ALL_SQL` reads **unfiltered**, or from `activity_logs` — but that
+arm is `WHERE l.action IN (?,?,?,?,?,?,?,?)` against `ACTOR_SIDE_ACTIONS`, a
+fixed list of eight (`role_changed`, `user_toggled`, four KYC actions, two
+contract actions). So **four privileged admin actions reached neither arm**:
+
+- `advisor_shadow_cleared` — an admin clears a user's AI-safety shadow flag
+- `advisor_locked` / `advisor_unlocked` — an admin locks or unlocks an advisor
+- `match_list_generated` — an admin generates a match list over people
+
+They were invisible on the one screen whose entire subject is privileged
+actions, and `/security/overview`'s `audit.total` undercounted by exactly them.
+**D156 sealed `admin_audit_log` against UPDATE and DELETE three days earlier;
+a row that never arrives gets nothing from that seal.**
+
+### What lands
+
+`cloudflare-worker/src/services/adminAudit.ts` — one exported helper, in
+`services/` and not `util/` on `util/README.md`'s own line about domain
+knowledge. The four call-site files import it and delete their copies. It
+imports `ensureAdminAuditLogTable` from `routes/admin.ts`; a service reaching
+into routes has **ten precedents** here (`services/catalog.ts`,
+`services/promos.ts` → `routes/billing`) and `routes/admin.ts` imports neither
+audit service, so there is no cycle.
+
+**The bootstrap moves in with it.** The two copies that did write to
+`admin_audit_log` swallowed failure under a bare catch reading *"admin_audit_log
+may not exist in some envs"* — while `ensureAdminAuditLogTable` exists precisely
+so that it does, and nine other writers call it first. The catch was hiding a
+condition its own neighbour already fixes. It is kept only for what is
+genuinely best-effort: an audit write must never be the reason an admin action
+fails **after it has happened**.
+
+### The correction the build made, which is the sharper half
+
+The plan said the key naming a subject was `target_user_id` **unanimously**.
+Measured across all eleven call sites, five name a person and it is
+`target_user_id` in **four of the five**. The fifth,
+`partner_firm_link_set` (`routes/admin_partners.ts`), passed **`user_id`** — so
+attaching a person to a partner firm would have been recorded with **no subject
+at all**: the quiet version of this same bug, surviving the fix for it. D159
+renames that one key, and a guard pins the spelling, because a convention that
+is only four-fifths true is not a convention — it is a coincidence with a
+counter-example already in the tree. Nothing parses `admin_audit_log.filters_json`
+by key (the parsers are all on the unrelated `publications` table), checked
+before renaming.
+
+**The target is filled at all**, which neither surviving copy did: they bound
+three columns, so every row they wrote had a blank Target on a feed that
+`LEFT JOIN users t ON t.id = a.viewed_user_id` to render one. Validation mirrors
+the callers' own (`Number.isFinite(uid) && uid > 0`) rather than being stricter
+— a helper that silently dropped a target its caller had already validated would
+be this same bug again, one layer down.
+
+### Verification
+
+`test:drift` exit 0 read as the exit code from a redirected log. **No migration
+— 271 stays free.** No new `/api/*` method, no `frontend/src` change, so `docs/`
+does not move. **9 mutations, 9 caught**, one only after the mutation itself was
+corrected: the first M6 *added* a second audit write instead of collapsing the
+two try blocks, so the row still landed and the assertion correctly still
+passed — the mutation was wrong, not the guard.
+
+**Two of my own assertions were wrong before they ran, and both are recorded
+rather than quietly fixed.** The fixture reported *"activity_logs did not
+receive the action"* because `activity_logs` carries
+`project_id INTEGER REFERENCES projects(id)` and the fixture had no `projects`
+stub — a failure the helper **swallows by design**, so the test was reporting a
+defect that was its own. And the convention scan used a 400-character window
+that reached past each call into the `return c.json({ ok: true, user_id: uid })`
+below it, reporting four violations that were not violations — **the same
+overreach as D147's**, now bounded by matching parentheses instead, with a
+mutation that reverts it to the window and must fail.
+
+---
+
+## D160
+
+**A raw ISO bind met a bare timestamp comparison, and the window lost a day.**
+(#253 — D125's timestamp audit, second half: the bound-parameter blind spot)
+
+### The defect
+
+`scripts/check-timestamp-comparisons.mjs` watches for a bare TTL column compared
+against the clock, and its own header states what it cannot see:
+
+> *"A column compared against a BOUND PARAMETER (`created_at >= ?`) is the same
+> defect and is invisible here, because the format lives at the bind site. That
+> is how `rpc/branchOps.ts` came to drop every row dated on a quarter's first
+> day. Finding those needs the bind traced, which is a different tool."*
+
+Traced. SQLite compares TEXT lexically, and three bind shapes reach these
+queries — only one is wrong:
+
+| bind | value | against `datetime('now')` storage |
+| --- | --- | --- |
+| `.toISOString()` | `2026-08-19T12:44:00.000Z` | ❌ **wrong** |
+| `…slice(0,19).replace('T',' ')` | `2026-08-19 12:44:00` | ✅ exact |
+| `…slice(0,10)` | `2026-08-19` | ✅ correct by prefix alignment |
+
+At index 10 the raw ISO has `'T'` (0x54) where the column has `' '` (0x20), so
+**every row dated on the bind's own date sorts below it and is dropped**, while
+later dates pass. A thirty-day window quietly returns twenty-nine.
+
+`market_intel.ts` already documented this hazard and already fixed it in its
+Citations query — `WHERE datetime(created_at) >= datetime(?)`, with a comment
+spelling out the `T` separator. Three queries 650 lines below it did not.
+
+### What the sweep corrected about the filing
+
+The plan named three sites. Measured, the picture is both narrower and wider:
+
+- **Narrower.** Of 47 grep candidates, most are correct. `aiRouter.ts` (D152's
+  guardrail counters and D158's category breakdown) and `aiSpend.ts` normalise
+  with `.replace('T', ' ')`; `admin_revenue.ts`'s `quarterOf` emits bare dates,
+  which are correct by prefix alignment; and `branchOps.ts:553` is a **comment**,
+  not a comparison — the lexical-scan trap again.
+- **Wider.** The new guard found **seven more** the manual sampling missed, in
+  `advisors.ts`, `portfolio.ts`, `wellbeing.ts`, `market_intel/extractors` and
+  `xAggregator.ts`. That it found defects its author had not is the strongest
+  evidence it works.
+
+Every `created_at` in the schema is SQL-format — **308 columns** default to
+`datetime('now')` or `CURRENT_TIMESTAMP`, and **zero** INSERTs write one from a
+JS ISO string — so all of them are real.
+
+### What lands
+
+24 comparisons across six files wrapped as `datetime(col) … datetime(?)`, and
+`cloudflare-worker/test/iso_bind_comparisons_d160.test.ts`.
+
+**It deliberately does not require every comparison to be wrapped.** 46 sites
+bind against a bare timestamp column and all but the ten fixed here are correct.
+A blanket rule would mean rewriting 36 working queries — churn on correct code,
+and a diff nobody can review for the lines that matter. The rule fires only where
+a **raw ISO bind** and a **bare comparison** meet.
+
+The cost of wrapping is that an index on the column cannot serve the predicate.
+Accepted, and stated rather than discovered: these are analytics reads over small
+tables, and the Citations query set that precedent already.
+
+### The guard corrected itself before it shipped
+
+Its first draft carried a `(?<!datetime\()` lookbehind — *skip it if the COLUMN
+is wrapped* — which is the wrong test, and would have waved through a real
+defect. **The placeholder side is what decides it**: `col >= datetime(?)` is
+correct even with a raw ISO bind, because `datetime()` normalises the bind to the
+column's format; `datetime(col) >= ?` is still broken, because the left becomes
+SQL format while the right stays ISO. The lookbehind is gone and an assertion
+pins the half-wrapped form as a defect.
+
+### Verification
+
+`test:drift` exit 0 from a redirected log — frontend 2703, worker 3480 (3477 pass
++ the 3 pre-existing environment-gated skips), retention 35, zero `not ok`. Worker
+typecheck, `check-sql-prepare`, `check-sqlite-dialect` and
+`check-timestamp-comparisons` exit 0. **3 mutations, 3 caught** — reverting a fix,
+blinding the classifier so its assertion cannot fail, and restoring the bad
+lookbehind. No migration; **271 stays free**. No `frontend/src` change.
+
+---
+
+## D161
+
+**The branch dimension D105 justified sharing a dataset for was never written,
+and the config var that would have let a preview read its own writes had no
+reader.** (#277 — D105's half-built premise)
+
+### The defect, both halves
+
+**D105 traded isolation for a capability that did not exist.** Every other
+Cloudflare resource is per branch; the Analytics Engine dataset alone is
+shared, and the reason given was that *"One dataset indexed by `BRANCH_CODE` is
+what makes those two numbers possible without a cross-branch read."* Measured:
+the repo's only `writeDataPoint` (`middleware/observability.ts`) wrote
+`indexes: [path]` and carried **no branch code in any index, blob or double**,
+and the reader (`services/analyticsReports.ts`) hardcoded `FROM
+studioos_metrics` with **no branch dimension at all**. So the write-side half
+of D105's own justification was never built and every per-branch AE query
+returned nothing — a decision record stating a capability that did not exist,
+which is the class this programme has now deleted a dozen times.
+
+**And `AE_DATASET` was a producer with no reader, which already cost
+something.** The generated branch configs have written it since D105, whose own
+comment says it exists so *"the SQL-API reader"* stops *"hardcoding HQ's"* —
+and `AE_DATASET` had **zero hits anywhere in `cloudflare-worker/`**, the `Env`
+type included. Meanwhile `[env.preview]` writes `studioos_metrics_preview`
+(`wrangler.toml`) while the reader queried `studioos_metrics`, so **a preview
+deployment's AE reads could not see its own writes** — invisible, because a
+failed read returns `null` and silently falls back to D1 `system_metrics`.
+
+### A blob, not an index — and D105's sentence is corrected rather than satisfied
+
+Three reasons, in order:
+
+1. **The first index is the sampling key**, and the sampling key is the route.
+   Making the branch an index changes it for every request on the platform, so
+   samples either side of the change stop being comparable and route-level
+   sampling fairness — the reason `path` is the key — is lost.
+2. **The blob slots are a stated contract** (*"must match SQL reads in
+   analyticsReports.ts"*), so appending after the last used slot breaks nothing.
+   blob1–blob5 are unchanged; blob6 is new.
+3. **The decisive one.** `AnalyticsEngineDataPoint.indexes` is typed
+   `((ArrayBuffer | string) | null)[]` — an **unbounded** array — so a second
+   index *typechecks*, and the write site swallows failures with a
+   `console.warn`. If the runtime rejects a second index the failure is silent
+   and unverifiable from here. **The blob design does not depend on that fact,
+   which is the point of choosing it.**
+
+**How many indexes AE accepts per data point could not be read from this
+environment**, in six attempts across two channels: the Cloudflare docs MCP
+returns empty for every phrasing tried, and `developers.cloudflare.com` is
+`EGRESS_BLOCKED` by this environment's proxy. Recorded as unreadable rather
+than asserted from memory.
+
+So D105's paragraph now says what is true — the dataset is shared and
+**filterable** by branch, not indexed by it — corrected in **all three** places
+that restated the false claim (`DECISIONS.md`, `scripts/lib/branchConfig.mjs`,
+`scripts/lib/branchConfig.test.mjs`). Fixing one and leaving two is exactly how
+this class survives.
+
+### The gate is the design, not a detail of it
+
+`/monitoring/analytics/technical` and `/management` are **`requireAdmin`**, and
+on this platform's tier model a plain admin **is** a branch admin. Today those
+routes return platform-wide **aggregates with no branch attribution**, which a
+branch admin may defensibly see. Letting the branch dimension flow through them
+would turn an aggregate into **per-branch attribution** — every branch admin
+reading every other branch's traffic, the exact isolation the branch programme
+exists to create. That file's header already states D133's rule: *a route that
+reaches a cross-admin read is one whatever it renders, and gating some of them
+is gating none of them.*
+
+So the rule is narrow and costs nothing:
+
+> **The dimension is WRITTEN on every request. The per-branch SPLIT is
+> super-admin-only. The existing platform-wide aggregate on `requireAdmin` does
+> not change at all.**
+
+Zero behaviour change for every admin who is not the holder is the property
+that makes this safe to ship ahead of the first branch being provisioned.
+
+### The throw on the hot path, reasoned about rather than inherited
+
+`branchOf(env)` **throws** on a malformed `BRANCH_CODE`, deliberately
+(`util/branch.ts`): *"A branch Worker that quietly ran as HQ would serve HQ's
+console over branch data, and every request failing loudly is the safer of the
+two."* That is a throw on every request's metrics write, so it needed an
+argument rather than a habit. It is safe here structurally: the AE write
+already sits inside its own `try/catch` that warns and continues, so a
+malformed code costs **a dropped metric, not a failed request** — correct,
+because such a deployment is already failing loudly at boot
+(`assertBranchAppUrl`) and on every authed path. `env.BRANCH_CODE` is
+deliberately **not** read raw, which would write a garbage dimension verbatim.
+
+### What lands
+
+| path | change |
+| --- | --- |
+| `middleware/observability.ts` | the one `writeDataPoint` appends `branchOf(env) \|\| 'hq'` as **blob6**; `indexes` untouched. Also drops an `as unknown as` cast working around `Env.ANALYTICS`, which is properly declared, and makes the `MiddlewareHandler` import type-only — the file was the only middleware importing it as a value, and that is what kept the module from loading under the test runner |
+| `types.ts` | `Env` gains **`AE_DATASET`**, defaulting to `studioos_metrics` so HQ is unchanged |
+| `services/analyticsReports.ts` | `aeDataset(env)` gives the var its reader; `aeSql(env, sqlText)` consolidates the one fetch shape; **`loadTrafficByBranch`** is the split, returning `available/reason/as_of/rows` |
+| `routes/monitoring_analytics.ts` | `/traffic-by-branch` on **`requireSuperAdmin`**. `/technical` and `/management` unchanged, with the reason stated in place |
+| `frontend/src/lib/api.js`, `pages/hq/PlatformPage.jsx` | one method and its HQ consumer, in the same commit so `check-api-drift` is satisfied |
+| `test/ae_branch_dimension_d161.test.ts` | new |
+
+**No migration — 271 stays free.** No new store.
+
+### Two states that must not render alike
+
+An empty split has two entirely different causes — **no branch has traffic**,
+or **AE could not be read at all** — and `loadTrafficByBranch` returns them
+differently (`available: true` with no rows, against `available: false` with a
+reason naming the store). The surface renders them as different sentences,
+neither of them a zero. That is the rule this programme has applied since D107
+and D129, and the reason the unreadable path is exercised by three separate
+fixtures rather than assumed.
+
+### An optional branch predicate was written first, and deleted before it shipped
+
+`loadTechnicalFromAnalyticsEngine` briefly gained an optional branch filter.
+Nothing would have called it — the split answers the per-branch question by
+**grouping**, not filtering — so it was a producer with no reader, which is the
+shape this entry exists to correct. Removing it also deleted the only path by
+which a caller-supplied value could reach AE SQL, and that matters: the AE SQL
+API takes `text/plain` and has **no binding mechanism at all**, so every value
+in those queries is interpolated. The interpolation surface is now enumerated
+and pinned by a test — only the configured dataset name and the parsed range
+reach it — and `BRANCH_CODE_RE` is shown to **refuse** a quote-bearing value
+rather than escape it.
+
+### Verification
+
+`test:drift` exit 0 read as the exit code from a redirected log. **13
+mutations, 13 caught** — one only after the assertion it exposed was
+strengthened. On the worker: the branch tidied into `indexes`; the branch
+written into blob1; `env.BRANCH_CODE` read raw; the split served on
+`requireAdmin` (the one this change exists for); the dataset hardcoded back
+over `AE_DATASET`; the branch dimension added to the `requireAdmin` aggregate;
+an unreadable store rendered as an available empty list; a caller-influenced
+value interpolated into the `text/plain` SQL. On the surface: the unreadable
+state drawn as a zero; the empty-but-readable sentence deleted; the one-row
+clarification dropped; the zone removed; a `?branch=` grown on the
+`requireAdmin` method. Every anchor asserted unique before it was applied,
+every mutation proved to have changed bytes, every restore from a **snapshot**
+and verified byte-identical.
+
+**The one escape, and it is the D147 lesson again.** "The empty-but-readable
+sentence deleted" passed at first, because the Deployments zone four hundred
+lines up renders *"an empty registry, not an unreadable one"* — so a whole-file
+match on that phrase held with this zone's own sentence gone outright. An
+assertion a NEIGHBOURING zone can satisfy is not an assertion about this one.
+The check is now bounded at both ends to the traffic zone's own markup, and the
+mutation is caught.
+
+**The absent-branch case is exercised, not assumed**, and it is two cases: with
+zero branches provisioned every row carries `hq` and the split renders exactly
+one group, and separately AE may be unreadable in three distinct ways. **A
+preview-shaped fixture proves the dataset fix** — `AE_DATASET` pointed at
+`studioos_metrics_preview`, with both AE queries asserted to name it and to
+carry no trace of the hardcoded name.
+
+---
+
+## D162
+
+**The bound-parameter rule stops being a typed list of six, and four
+entitlement reads stop losing a day.** (#253 — D125's timestamp audit, the
+remainder D160 left)
+
+### What D160 left, and why a list was always going to leave it
+
+D160 closed D125's stated blind spot — a raw `.toISOString()` bind meeting a
+bare timestamp comparison, which drops every row dated on the bind's own date,
+because SQLite compares TEXT lexically and index 10 is `'T'` (0x54) against
+`' '` (0x20). It watched **six column names, chosen by hand**. Measured against
+the wider vocabulary those six miss **four live sites in three files**, every
+one of them money- or entitlement-adjacent:
+
+| site | column | what it did |
+| --- | --- | --- |
+| `routes/news.ts` | `article_submission_log.submitted_at` | the three-per-week submission limit **under-counted**, so an author whose earlier submission fell on the window's own date got a fourth |
+| `routes/wellbeing.ts` (the count) | `expert_profile_views.viewed_at` | the free-tier monthly cap **under-counted**, so views taken on the 1st were free |
+| `routes/wellbeing.ts` (the already-seen check) | the same column | a founder who viewed an expert **on the 1st** was told they had not, and was charged a second unit for it |
+| `services/xAggregator.ts` | `market_intel_indexes.computed_at` | `safeHasMIChart` answered **false** for a chart computed on the period's first day — the same wrong answer its own header records the previous version always giving |
+
+**The two wellbeing sites pull OPPOSITE ways on the same day**, which is why
+the class is worth stating rather than assuming understood. On the 1st of a
+month the paid cap both **leaks** (the count misses views, so the quota reads
+low) and **over-charges** (the already-seen check misses the prior view, so one
+expert costs two units) — on one request path, from one date boundary. Fixing
+either alone leaves the cap wrong in the other direction.
+
+### The rule, and it needs no list
+
+The defect is not "a raw ISO bind". It is a raw ISO bind meeting a column
+**SQLite itself wrote**. A column declared `DEFAULT (datetime('now'))` or
+`DEFAULT CURRENT_TIMESTAMP` holds `YYYY-MM-DD HH:MM:SS`; a column with no
+default holds whatever JavaScript bound, which in this codebase is ISO — and
+ISO against ISO is consistent. So the schema already knows which is which, and
+`test/_sqlFormatColumns.mjs` asks it instead of curating a list.
+
+It separates the seven measured candidates perfectly. The three with a clock
+default are exactly the three broken columns; the four without are exactly the
+four struck — `advisor_office_hour_slots.starts_at` (no default, bound verbatim
+from the request), `legal_obligations.expires_at` and `pairwise_ndas.valid_until`
+(written `.toISOString()`; **D125 struck these explicitly**), and
+`users.mi_digest_paused_until`, whose own comment already documented it as ISO
+and said comparing as strings is safe.
+
+### Three things proving the subsumption found, none of which a list would have
+
+D160's scan stays, as a backstop against the derivation silently returning
+nothing — and proving it is subsumed rather than claiming it turned up all
+three of these:
+
+1. **`paid_at` has no DDL default and IS SQL-format**, set with
+   `datetime('now')` or `CURRENT_TIMESTAMP` at four sites
+   (`services/incorporations.ts` ×2, `services/orders.ts`, `routes/network.ts`).
+   A schema-only rule would have called a money column clear. The derivation
+   reads the code's clock writes as well.
+2. **The clock-write rule had to be TABLE-AWARE, and its first draft was not.**
+   Attributing a clock write to every table at once looked like the safe
+   direction — err toward flagging — and it is not: `expires_at` is written
+   with the clock on one table and with `.toISOString()` on `legal_obligations`,
+   so the table-agnostic set demanded a rewrite of the very query D125 examined
+   and struck. **A false positive here costs churn on correct code, which D125
+   refused by name.**
+3. **Two of D160's six names are declared by nothing at all.** `occurred_at`
+   has zero occurrences in the baseline, in any migration and in any runtime
+   bootstrap; a standalone `recorded_at` likewise (the only such text in the
+   tree is `outcome_recorded_at`, a different column its own word boundary
+   correctly does not match). A hand list can carry a name nothing has ever
+   declared and never fail for it — which is the whole argument, arrived at by
+   measurement rather than by preference.
+
+### What lands
+
+| path | change |
+| --- | --- |
+| `routes/news.ts`, `routes/wellbeing.ts` ×2, `services/xAggregator.ts` | four comparisons wrapped `datetime(col) >= datetime(?)` |
+| `test/_sqlFormatColumns.mjs` | **new** — the derivation, plus `rawIsoNames` lifted out of D160's test file so one definition serves both and importing one test file no longer re-registers its tests inside another's run |
+| `test/iso_bind_comparisons_d160.test.ts` | imports `rawIsoNames` instead of declaring it; its scan and its three unit tests are otherwise untouched |
+| `test/iso_bind_sql_columns_d162.test.ts` | **new** |
+
+**No migration — 271 stays free.** No `frontend/src` change, so no `docs/`
+rebuild. Wrapping costs the column's index for that predicate, accepted for the
+reason D160 accepted it and stated rather than discovered: these are small
+tables read once per request, and a correct count beats a fast wrong one.
+
+### Verification
+
+`test:drift` exit 0 read as the exit code from a redirected log. **7 mutations,
+7 caught**: each of the four comparisons un-wrapped; the half-wrapped form (a
+normalised column against a raw ISO bind, which is still the defect); the DDL
+derivation made to return nothing, which must fail the subsumption assertion
+rather than let the sweep pass **vacuously**; and the clock-write rule made
+table-agnostic again, which must fail the assertion that one table's clock
+write cannot make another table's column look SQL-format. Every anchor asserted
+unique before it was applied, every mutation proved to have changed bytes,
+every restore from a **snapshot** and verified byte-identical.
+
+---
+
+## D163
+
+**HQ's own branch-targeting acts survive the branch going dark.**
+
+Every HQ→branch push reports whether it LANDED as its own field and never
+throws — the D111 rule `services/licencePush.ts:13-19` states outright, and it
+is right: HQ's ledger is the record, and a 502 for an unreachable branch would
+make an operator re-enter a decision that is already stored.
+
+**But that report is per-call and ephemeral.** It reaches the operator who made
+the call, in that one response, and nothing keeps it. HQ's D1 records the
+transition; it does not record that the branch refused the copy, or that no
+Worker answered. So the question an outage post-mortem actually asks — *which
+branch was unreachable, and which of HQ's own acts against it failed while it
+was* — had no store that could answer it. D161 named this as its own next step
+and built the prerequisite: the branch dimension on the Analytics Engine write.
+
+### The finding the whole design turns on
+
+**`HqEntrypoint` is exported BY THE BRANCH** (`rpc/index.ts:41`). It is the
+class HQ calls, and it runs on the branch's own `env`. So a `writeDataPoint`
+placed inside those handlers — the obvious home for it — would be lost in
+exactly the case the mirror exists to survive. The write belongs at **HQ's call
+site, in HQ's isolate**, recording what HQ OBSERVED rather than what the branch
+managed to say.
+
+Analytics Engine is the one store that satisfies both halves: every deployment
+already writes to it (D105's shared dataset), and it does not live on the
+branch whose silence is the thing being recorded.
+
+### The one that would have corrupted two live reports
+
+Neither existing AE reader filtered by row kind, because until now there was
+only one kind. Without a predicate, a mirror row appears in
+`loadTechnicalFromAnalyticsEngine` as an endpoint named `hq:branch_action`
+(`GROUP BY blob1`) and is counted into a branch's `hits` in
+`loadTrafficByBranch` (`GROUP BY blob6`) — **both figures on a live HQ screen.**
+So both queries gain `AND blob1 LIKE '/%'` in this same commit.
+
+It matches on **blob1 rather than index1** for a verifiability reason rather
+than a performance one: blob1 is the slot both queries already project and
+group by, so a WHERE over it is a demonstrated construct in this repo, and
+`developers.cloudflare.com` is `EGRESS_BLOCKED` from this environment, so an
+untested one could not be confirmed. An HTTP row's blob1 always starts `/api/`
+(`middleware/observability.ts:26` meters nothing else); the sentinel cannot
+collide with it.
+
+### Security · Governance is NOT the home, and that was measured
+
+`admin_security.ts`'s feed is stated three times in the live code to be HQ's
+own record of what HQ did, and not a branch's to show — the file header (quoted
+at `frontend/src/pages/hq/SecurityPage.jsx:55-56`), the rail row at `:379`, and
+`tenant_reason` at `admin_security.ts:664`. That is a deliberate boundary, not
+an oversight, and this decision does not touch it. It does not need to: the
+mirror carries **only HQ's own acts**, grouped by which branch they concerned —
+the same thing `licence_events` already does with `brand_name`, which that file
+calls "the one column that is real here, and only here."
+
+### What lands
+
+| path | change |
+| --- | --- |
+| `cloudflare-worker/src/services/auditMirror.ts` | **new** — `mirrorBranchAction(env, action, outcome, code)`. Synchronous (`writeDataPoint` is fire-and-forget, so it costs the request nothing), own try/catch, `console.warn` only, never throws |
+| `cloudflare-worker/src/services/licencePush.ts` | `pushLicenceToBranch` mirrors at its three code-carrying exits — **one edit, six callers** (`admin_licences.ts` ×5 and `services/complianceLadder.ts:307`) |
+| `cloudflare-worker/src/routes/admin_support_sessions.ts` | `openSupportSession`, `moveAccountOut`, `inviteAccount` — the move mirrors against **whichever end** is unbound, never both |
+| `cloudflare-worker/src/routes/admin_escalations.ts` | the escalation-answer push |
+| `cloudflare-worker/src/routes/admin_statements.ts` | the promo-ceiling push |
+| `cloudflare-worker/src/services/analyticsReports.ts` | `loadBranchActionMirror`, plus the two `HTTP_ROWS_ONLY` guards above |
+| `cloudflare-worker/src/routes/admin_deployments.ts` | `GET /deployments` gains a `branch_actions` block beside `registry_available` and `dispatch_available` — **no new `/api/*` method** |
+| `frontend/src/pages/hq/PlatformPage.jsx` | the Deployments zone renders it per branch, with the unreadable state said **once** |
+
+**The row shape**, aligned with the per-request row rather than packed tight:
+`index1` and `blob1` the sentinel, `blob2` action, `blob3` outcome, `blob6` the
+branch — **the same slot** `observability.ts:126` uses — and no doubles.
+
+**No migration; AE is not D1. 271 stays free.**
+
+### Three calls made rather than asked, each cheap to reverse
+
+1. **The mirror carries no identity at all** — no actor id, no email, no reason
+   text. HQ's own D1 holds the actor authoritatively
+   (`admin_audit_log.admin_user_id`, `licence_events.actor_user_id`) and is
+   always readable, because it is HQ's. The mirror exists for the one dimension
+   D1 cannot give; identity in a shared analytics store would add exposure and
+   no information. *Strike it and the actor id rides in double3, the slot the
+   per-request row already uses for `user_id`.*
+2. **A licence with no deployment is not mirrored at all.** It has no branch, so
+   there is no branch the act concerns, and a row with an empty branch would put
+   a non-branch in the per-branch grouping. `not_deployed` is kept for the
+   narrower, real case: a deployment row exists and no Worker is bound to it.
+3. **The two fan-out pushes are excluded** — `applyBenchmarks`
+   (`services/branchBenchmarks.ts:220`) and `publishTemplate`
+   (`routes/admin_contracts.ts:1382`) broadcast to every branch rather than
+   targeting one, so they are a different row shape: one per branch per publish,
+   off the `fanOut` result array. Filed, not built.
+
+**And one refused with its measurement:** a genuine unreachable-vs-refused
+split. Every call site collapses those two into one `catch` today
+(`licencePush.ts:180-182` and the four others), so `failed` collapses them here
+too rather than claiming a distinction its own inputs cannot make.
+
+### Verification
+
+`test:drift` exit 0 read as the exit code from a redirected log. **8 mutations,
+8 caught** — the exclusion predicate dropped from **both** readers (which fails
+two assertions, one per report, read off the SQL on the WIRE rather than out of
+the source, so a predicate written but not sent still fails); the branch moved
+out of blob6; the `BRANCH_CODE_RE` refusal removed; the AE write allowed to
+throw; and on the surface, the zone-level unreadable sentence deleted, the
+server's reason replaced by one written on the page, the nothing-recorded guard
+dropped, and a count given a `|| 0` fallback. Every anchor asserted unique
+before it was applied, every restore from a **snapshot** and verified
+byte-identical.
+
+**One thing the build corrected in its own test.** The first fixture returned a
+bare array where `aeSql` unwraps `{ data }`, so the populated-read assertion
+measured zero rows and failed — correctly. A fixture shaped differently from
+the thing it stands in for is how a test passes against its own mistake, and
+this one failed instead.

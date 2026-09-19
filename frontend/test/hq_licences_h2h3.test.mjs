@@ -33,7 +33,7 @@ import { fileURLToPath } from 'node:url';
 
 import { EU_27, EU_CODES, coverageCells, renewalPipeline, sortCells } from '../src/lib/licenceCoverage.js';
 import { DEPLOY_TIMELINE, deployProgress } from '../src/lib/deployTimeline.js';
-import { codeOnly } from './_codeOnly.mjs';
+import { codeOnly, codeOnlyJsx } from './_codeOnly.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -462,4 +462,123 @@ test('the provisioning status and the live read are rendered as two chips, never
     assert.match(src, /\bstatus\b/, `${name} must render the provisioning status`);
   }
   assert.match(PLATFORM, /registry_available/, 'an unreadable registry is not zero branches');
+});
+
+/* ── D161 · Platform → Traffic by branch ───────────────────────────── */
+
+// The JSX comments are stripped here as well as the block ones: this zone's
+// markup EXPLAINS the states it draws, and an assertion satisfied by that
+// explanation rather than by the render is not an assertion.
+const PLATFORM_JSX = codeOnlyJsx(read('frontend/src/pages/hq/PlatformPage.jsx'));
+
+test('the branch traffic split is its own read, on its own method', () => {
+  // Its own `useState`/loader, not a field on the platform summary: it goes out
+  // to Analytics Engine over the network and fails differently, so an
+  // unreadable metrics store must not empty the keys, jobs or deployments
+  // halves of this page.
+  assert.match(PLATFORM_JSX, /api\.analyticsTrafficByBranch\(/);
+  assert.match(PLATFORM_JSX, /data-testid="hq-traffic-by-branch"/);
+  assert.match(API, /analyticsTrafficByBranch:\s*\(from, to\)/);
+  assert.match(API, /\/monitoring\/analytics\/traffic-by-branch\?from=/);
+  // And it is a SEPARATE method from the platform-wide aggregate, deliberately:
+  // that one is requireAdmin, and a plain admin is a branch admin here, so
+  // attributing traffic to a named branch through it would show every branch
+  // admin every other branch's figures.
+  assert.match(API, /analyticsTechnical:\s*\(from, to\)/,
+    'the aggregate keeps its own method and its own gate');
+  assert.ok(!/analyticsTechnical:[\s\S]{0,200}branch=/.test(API),
+    'the requireAdmin aggregate must not grow a ?branch= parameter');
+});
+
+/**
+ * The traffic zone's own markup, bounded at both ends.
+ *
+ * WHY THIS IS A SLICE AND NOT A WHOLE-FILE SCAN, learned the hard way one
+ * mutation ago: the Deployments zone four hundred lines above renders "an empty
+ * registry, not an unreadable one", so a whole-file match on that phrase passed
+ * with THIS zone's empty-state sentence deleted outright. An assertion a
+ * neighbouring zone can satisfy is not an assertion about this one.
+ */
+function trafficZone() {
+  const from = PLATFORM_JSX.indexOf('Traffic by branch');
+  assert.ok(from > 0, 'the zone must exist');
+  const to = PLATFORM_JSX.indexOf('Feature flags', from);
+  assert.ok(to > from, 'and must sit before Feature flags, which is what bounds this slice');
+  return PLATFORM_JSX.slice(from, to);
+}
+
+test('could not read and no traffic are two different renders, and neither is a zero', () => {
+  // The rule since D107/D129, on the surface this time. An empty split has two
+  // entirely different causes and a page that drew both as 0 would be making a
+  // claim nothing measured.
+  const zone = trafficZone();
+  assert.match(zone, /traffic === UNAVAILABLE/, 'the request itself can fail');
+  assert.match(zone, /traffic\.available === false/, 'and so can the store behind it');
+  assert.match(zone, /<Absent reason=\{traffic\.reason\}/,
+    "the server's own sentence is rendered, never one written here");
+  assert.match(zone, /answered and holds no request[\s\S]{0,80}not an unreadable one/,
+    'and the empty-but-readable case says so in its own words, in THIS zone');
+  // The ban this page already enforces everywhere else, applied to the new zone.
+  assert.ok(!/\|\|\s*0/.test(zone), 'no figure on this zone falls back to 0');
+});
+
+test('one row does not read as one branch out of several', () => {
+  // The state of the platform today: zero branches provisioned, so every row
+  // carries `hq` and the split renders exactly one group. Drawn without this,
+  // a single row reads as a fan-out that found one answer.
+  assert.match(PLATFORM_JSX, /traffic\.rows\.length === 1 && traffic\.rows\[0\]\.branch === 'hq'/);
+  assert.match(PLATFORM_JSX, /this is one deployment, not one branch out of several/);
+});
+
+/* ── D163 · Platform → Deployments carries HQ's own acts ───────────── */
+
+/**
+ * The Deployments zone's own markup, bounded at both ends.
+ *
+ * Bounded for the reason the traffic zone above states in its own words: a
+ * whole-file scan on this page is satisfiable by a neighbouring zone, and an
+ * assertion a neighbour can satisfy is not an assertion about this one.
+ */
+function deploymentsZone() {
+  const from = PLATFORM_JSX.indexOf('one row per branch');
+  assert.ok(from > 0, 'the zone must exist');
+  const to = PLATFORM_JSX.indexOf('Traffic by branch', from);
+  assert.ok(to > from, 'and must sit before Traffic by branch, which is what bounds this slice');
+  return PLATFORM_JSX.slice(from, to);
+}
+
+test('the mirror rides the deployments payload — no second method, no drift entry', () => {
+  // D150's lesson, applied rather than re-learned: this page already fetches
+  // /admin/deployments, and the mirror is a block on that payload. A parallel
+  // fetch would be a second request for one zone, and would owe check-api-drift
+  // a new method for a read the page already makes.
+  assert.match(deploymentsZone(), /deps\.branch_actions/);
+  assert.ok(!/analyticsBranchActions|branch-actions/.test(API),
+    'no new /api/* method is introduced for this');
+});
+
+test('an unreadable telemetry store is said ONCE, not once per branch', () => {
+  const zone = deploymentsZone();
+  // Repeating it per row would read as every branch being unreachable, which
+  // is the conflation `live_state` exists to prevent — and the reason
+  // admin_security.ts states this rule for its own tenant column.
+  assert.match(zone, /branch_actions_available === false/);
+  assert.match(zone, /data-testid="hq-branch-actions-absent"/);
+  const perRow = zone.match(/data-testid=\{`hq-branch-actions-\$\{d\.code\}`\}/g) || [];
+  assert.equal(perRow.length, 1, 'one per-branch list, keyed by the branch');
+  const absent = zone.match(/hq-branch-actions-absent/g) || [];
+  assert.equal(absent.length, 1, 'and exactly one unreadable sentence for the whole zone');
+});
+
+test("the server's own reason is rendered, and no figure falls back to 0", () => {
+  const zone = deploymentsZone();
+  assert.match(zone, /\{deps\.branch_actions_reason\}/,
+    "the reason comes from the payload, never a sentence written on the page");
+  assert.ok(!/\|\|\s*0/.test(zone), 'no count on this zone falls back to 0');
+});
+
+test('a branch with nothing recorded draws nothing, which is not an absent state', () => {
+  // The absence of an act is not a claim worth drawing; the store being
+  // unreadable is, and the zone says that separately above.
+  assert.match(PLATFORM_JSX, /actionsForBranch\(deps\.branch_actions, d\.code\)\.length > 0/);
 });

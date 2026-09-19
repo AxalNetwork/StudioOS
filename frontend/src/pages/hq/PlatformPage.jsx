@@ -26,6 +26,22 @@ const UNAVAILABLE = Symbol('unavailable');
 const num = (v) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Number(v).toLocaleString());
 const day = (v) => (v ? String(v).slice(0, 16).replace('T', ' ') : null);
 
+/**
+ * D163 — HQ's own acts against ONE branch, from the telemetry mirror.
+ *
+ * The rows arrive grouped by (branch, action, outcome); this narrows them to
+ * one branch and puts the failures first, because the reason this exists is to
+ * answer what HQ tried while a branch was not answering. A branch with nothing
+ * recorded returns an empty list and the row simply says nothing — the absence
+ * of an act is not a state worth drawing, unlike the store being unreadable,
+ * which the zone says once above.
+ */
+function actionsForBranch(rows, code) {
+  return (rows || [])
+    .filter((r) => r.branch === code)
+    .sort((a, b) => (a.outcome === 'ok' ? 1 : 0) - (b.outcome === 'ok' ? 1 : 0));
+}
+
 /** The four job states, and the one colour each earns. */
 const JOB_TONE = {
   failed: 'border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/20',
@@ -82,6 +98,21 @@ export default function PlatformPage() {
     api.deployments().then(setDeps, (e) => { reportError('hq-deployments', e); setDeps(UNAVAILABLE); });
   }, []);
   useEffect(() => { loadDeps(); }, [loadDeps]);
+
+  // D161 — traffic by branch, its own read for the same reason `deps` is: it
+  // goes out to Analytics Engine over the network and fails differently from
+  // both the platform summary and the registry. A third `useState` rather than
+  // a field on either, so an unreadable metrics store cannot empty the keys,
+  // jobs or deployments halves of this page.
+  const [traffic, setTraffic] = useState(null);
+  const loadTraffic = useCallback(() => {
+    setTraffic(null);
+    api.analyticsTrafficByBranch('', '').then(setTraffic, (e) => {
+      reportError('hq-platform:trafficByBranch', e);
+      setTraffic(UNAVAILABLE);
+    });
+  }, []);
+  useEffect(() => { loadTraffic(); }, [loadTraffic]);
 
   const ready = data && data !== UNAVAILABLE;
   const integrations = ready ? data.integrations : null;
@@ -279,9 +310,36 @@ export default function PlatformPage() {
                         {!d.d1_jurisdiction && d.location_hint ? ` · hinted ${d.location_hint.toUpperCase()} (not guaranteed)` : ''}
                         {d.status_note ? ` · ${d.status_note}` : ''}
                       </div>
+                      {/* D163 — WHAT HQ TRIED, beside what the branch says
+                          now. `live_state` is this instant; these are the last
+                          thirty days, and they survive the branch being down
+                          because they were never stored on it. */}
+                      {actionsForBranch(deps.branch_actions, d.code).length > 0 && (
+                        <ul
+                          className="mt-1 space-y-0.5 text-[11px] text-axal-faint"
+                          data-testid={`hq-branch-actions-${d.code}`}
+                        >
+                          {actionsForBranch(deps.branch_actions, d.code).map((a) => (
+                            <li key={`${a.action}:${a.outcome}`}>
+                              <span className={a.outcome === 'ok' ? '' : 'text-amber-700 dark:text-amber-400'}>
+                                {String(a.action || '').replace(/_/g, ' ')} · {a.outcome === 'not_deployed' ? 'no binding' : a.outcome}
+                              </span>
+                              {' · '}{num(a.count)}× {a.last_at ? `· last ${day(a.last_at)}` : ''}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </li>
                   ))}
                 </ul>
+              )}
+              {/* SAID ONCE, NOT PER ROW. An unreadable telemetry store is one
+                  fact about HQ's own instrumentation; repeating it on every
+                  branch would read as every branch being unreachable. */}
+              {deps && deps !== UNAVAILABLE && deps.branch_actions_available === false && (
+                <p className="mt-2 text-[11.5px] leading-relaxed text-axal-faint" data-testid="hq-branch-actions-absent">
+                  <b>HQ&rsquo;s own acts against these branches.</b> {deps.branch_actions_reason}
+                </p>
               )}
               {deps && deps !== UNAVAILABLE && deps.dispatch_available === false && (
                 <p className="mt-2.5 text-[11.5px] leading-relaxed text-axal-muted">
@@ -292,6 +350,63 @@ export default function PlatformPage() {
                 <p className="mt-1.5 text-[11.5px] text-axal-faint">
                   {deps.coverage.answered} of {deps.coverage.total} branches answered.
                 </p>
+              )}
+            </Zone>
+
+            {/* D161 — the branch dimension's reader. D105 justified sharing
+                one Analytics Engine dataset across every branch on the grounds
+                it was "indexed by BRANCH_CODE"; it never was, so until now no
+                per-branch figure existed to draw. The dimension now rides in
+                blob6 of every request, and this is where HQ reads it.
+
+                SUPER ADMIN ONLY, deliberately. `/monitoring/analytics/technical`
+                is `requireAdmin` and stays a platform-wide aggregate, because a
+                plain admin is a branch admin and attributing traffic to a named
+                branch there would show every branch admin every other branch's
+                figures. */}
+            <Zone title="Traffic by branch" sub="one row per deployment that served a request">
+              {traffic === UNAVAILABLE ? (
+                <Unreadable
+                  what="Traffic by branch"
+                  claim="This is not a claim that no branch served traffic."
+                  onRetry={loadTraffic}
+                />
+              ) : traffic === null ? (
+                <p className="text-[12.5px] text-axal-muted">Reading the metrics store…</p>
+              ) : traffic.available === false ? (
+                <Absent reason={traffic.reason} />
+              ) : (traffic.rows || []).length === 0 ? (
+                <p className="text-[12.5px] leading-relaxed text-axal-muted">
+                  The metrics store answered and holds no request in this window. That is an empty
+                  result, not an unreadable one.
+                </p>
+              ) : (
+                <>
+                  <ul className="divide-y divide-axal-hairline" data-testid="hq-traffic-by-branch">
+                    {traffic.rows.map((t) => (
+                      <li key={t.branch} className="flex items-baseline justify-between gap-3 py-2 text-[12.5px]">
+                        <span className="min-w-0 truncate">
+                          <span className="font-semibold">{t.branch === 'hq' ? 'HQ' : t.branch}</span>
+                          <span className="text-axal-muted tabular-nums"> · {num(t.hits)} requests</span>
+                        </span>
+                        <span className="shrink-0 tabular-nums text-axal-faint">
+                          {num(t.p95_ms)}ms p95 · {t.error_rate_pct}% 5xx
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  {/* With no branch provisioned every row carries `hq`, so say
+                      so rather than letting a single row read as a fan-out. */}
+                  {traffic.rows.length === 1 && traffic.rows[0].branch === 'hq' && (
+                    <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">
+                      Only HQ has served traffic. Each branch appears here once its Worker is deployed
+                      and answering — this is one deployment, not one branch out of several.
+                    </p>
+                  )}
+                  <p className="mt-1.5 text-[11px] text-axal-faint">
+                    Read {day(traffic.as_of)}.
+                  </p>
+                </>
               )}
             </Zone>
 

@@ -287,4 +287,28 @@ test('the sibling guard permits exactly one pragma, and refuses the rest', async
     ['BEGIN', 'COMMIT']);
   // Prose may name them; only statements count.
   assert.deepEqual(bannedIn('-- this file used to open with BEGIN; and close with COMMIT;\nSELECT 1;'), []);
+
+  // D156 — A TRIGGER BODY OPENS WITH `BEGIN` AND CLOSES WITH `END;`, AND BOTH
+  // ARE LEGAL. The carve-out used to cover only the opener, so migration 269
+  // was refused on the line that closes the body. This is the widening, and the
+  // file's own header says a widening no test exercises is one nobody notices —
+  // so it is asserted in both directions rather than left to the guard's word.
+  const TRIGGER = [
+    'CREATE TRIGGER IF NOT EXISTS t_seal',
+    'BEFORE UPDATE ON t',
+    'BEGIN',
+    "    SELECT RAISE(ABORT, 't is append-only.');",
+    'END;',
+  ].join('\n');
+  assert.deepEqual(bannedIn(TRIGGER), [],
+    'a trigger body must be permitted — its BEGIN/END is not a transaction');
+  // Outside a trigger, both are still what aborted migration 200.
+  assert.deepEqual(bannedIn('END;\nSELECT 1;'), ['ROLLBACK / END'],
+    'a bare END; is still a transaction statement');
+  // And a real transaction statement AFTER a complete trigger is still caught,
+  // which is what proves the excision stops at the body rather than running on.
+  assert.deepEqual(bannedIn(`${TRIGGER}\nCOMMIT;`), ['COMMIT'],
+    'the trigger excision must not swallow the statements after it');
+  assert.deepEqual(bannedIn(`BEGIN;\n${TRIGGER}`), ['BEGIN'],
+    'a transaction opened before a trigger is still caught');
 });

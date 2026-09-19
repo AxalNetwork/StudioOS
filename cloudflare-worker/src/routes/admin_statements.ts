@@ -34,6 +34,7 @@ import {
   drawStatement, quarterKey, PERIOD_RE, STATEMENT_STREAMS, type StreamFigure,
 } from '../services/statements';
 import { branchByCode } from '../services/branches';
+import { mirrorBranchAction } from '../services/auditMirror';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -429,6 +430,15 @@ r.put('/promo-ceilings/:uid', async (c) => {
         pushed = { ok: false, reason: `The branch did not accept the push: ${(e as Error).message}` };
       }
     }
+    // D163 — `dep` absent means no deployment at all, so there is no branch
+    // this concerns and the helper no-ops on the undefined code. A dep row with
+    // no binding is the narrower, real `not_deployed`.
+    mirrorBranchAction(
+      c.env,
+      'promo_ceiling_pushed',
+      !binding ? 'not_deployed' : (pushed.ok ? 'ok' : 'failed'),
+      dep?.code,
+    );
 
     return c.json({ licence_uid: licenceUid, period, ceiling_cents: ceiling, currency, pushed });
   } catch (e) { return mapError(c, e); }

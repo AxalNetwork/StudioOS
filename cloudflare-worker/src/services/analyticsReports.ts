@@ -11,6 +11,7 @@
  */
 import type { Env } from '../types';
 import { getSQL } from '../db';
+import { MIRROR_KIND } from './auditMirror';
 import {
   loadPlanPriceMap, priceFor, ensureSubscriptionPlansSchema,
   loadFxRates, convertFromUsd,
@@ -722,29 +723,61 @@ export interface TechnicalReport {
 // the caller falls back to D1 `system_metrics`. Uses the SQL HTTP endpoint
 // (`api.cloudflare.com/.../analytics_engine/sql`) — see wrangler.toml's
 // `[[analytics_engine_datasets]]` block for the dataset name.
-async function loadTechnicalFromAnalyticsEngine(
+/**
+ * D161 — the dataset name, read from config rather than hardcoded.
+ *
+ * `AE_DATASET` has been written into every generated branch config since D105
+ * (`scripts/lib/branchConfig.mjs`), whose comment says it exists so "the
+ * SQL-API reader" stops "hardcoding HQ's" — and until now nothing read it,
+ * because the query below carried `FROM studioos_metrics` as a literal. That
+ * was not merely untidy: `[env.preview]` writes to `studioos_metrics_preview`
+ * (wrangler.toml), so a preview deployment's reads could not see its own
+ * writes, and the mismatch was invisible because a failed read returns null
+ * and silently falls back to D1 `system_metrics`.
+ *
+ * It is a NAME, never a tier discriminator — every branch points at the same
+ * shared dataset, which is D105's design, with the branch carried per row.
+ */
+function aeDataset(env: Env): string {
+  return env.AE_DATASET || 'studioos_metrics';
+}
+
+/**
+ * D163 — THE TWO REPORTS BELOW COUNT HTTP ROWS ONLY, AND SAYING SO IS NOT
+ * OPTIONAL.
+ *
+ * The dataset is shared (D105) and, since D163, carries a second kind of row:
+ * one HQ act against one branch, written by `services/auditMirror.ts`. Neither
+ * query below filtered by row kind, because until now there was only one kind
+ * — so without this predicate a mirror row would appear in the technical
+ * report as an endpoint named `hq:branch_action`, and would be counted into a
+ * branch's `hits` in the traffic split. Both are figures on a live HQ screen.
+ *
+ * It matches on blob1 rather than index1 deliberately: blob1 is the slot both
+ * queries already project and group by, so a WHERE over it is a demonstrated
+ * construct in this repo, and the Cloudflare docs are unreachable from this
+ * environment (EGRESS_BLOCKED) to verify an untested one. An HTTP row's blob1
+ * is always a path starting `/api/` (`middleware/observability.ts:26` only
+ * meters those), and the mirror's is the `MIRROR_KIND` sentinel, so the two
+ * cannot collide.
+ */
+const HTTP_ROWS_ONLY = "blob1 LIKE '/%'";
+
+/**
+ * D161 — the AE SQL call, in one place because there are now two queries.
+ *
+ * Returns the rows, or `null` for EVERY failure: unconfigured credentials, a
+ * non-OK response, a throw. Callers must treat `null` as "could not read" and
+ * NOT as "no traffic" — those are different claims and the surfaces render
+ * them differently.
+ */
+async function aeSql(
   env: Env,
-  range: DateRange,
-): Promise<TechnicalReport['by_route'] | null> {
+  sqlText: string,
+): Promise<Array<Record<string, unknown>> | null> {
   const accountId = env.CLOUDFLARE_ACCOUNT_ID;
   const token = env.CLOUDFLARE_AE_API_TOKEN;
   if (!accountId || !token) return null;
-  // AE timestamps are stored in UTC; bound by range.from/to as date-only.
-  const sqlText = `
-    SELECT blob1 AS endpoint,
-           COUNT() AS hits,
-           AVG(double1) AS avg_latency_ms,
-           QUANTILEMERGE(0.5, double1) AS p50,
-           QUANTILEMERGE(0.95, double1) AS p95,
-           QUANTILEMERGE(0.99, double1) AS p99,
-           SUMIF(1, double2 >= 500) AS errors_5xx
-    FROM studioos_metrics
-    WHERE timestamp >= toDateTime('${range.fromIso}')
-      AND timestamp <= toDateTime('${range.toIso}')
-    GROUP BY blob1
-    ORDER BY hits DESC
-    LIMIT 25
-  `.trim();
   try {
     const res = await fetch(
       `https://api.cloudflare.com/client/v4/accounts/${accountId}/analytics_engine/sql`,
@@ -756,7 +789,55 @@ async function loadTechnicalFromAnalyticsEngine(
     );
     if (!res.ok) return null;
     const json = await res.json() as { data?: Array<Record<string, unknown>> };
-    const data = Array.isArray(json.data) ? json.data : [];
+    return Array.isArray(json.data) ? json.data : [];
+  } catch {
+    return null;
+  }
+}
+
+async function loadTechnicalFromAnalyticsEngine(
+  env: Env,
+  range: DateRange,
+): Promise<TechnicalReport['by_route'] | null> {
+  // D161 — NO BRANCH PREDICATE HERE, DELIBERATELY, AND THIS IS THE SECOND
+  // TIME THAT IS THE RIGHT ANSWER.
+  //
+  // The gate reason first: this feeds `/monitoring/analytics/technical` and
+  // `/management`, both `requireAdmin`, and a plain admin is a branch admin on
+  // this platform. What it returns is a platform-wide aggregate with no branch
+  // attribution — which a branch admin may defensibly see, and which a
+  // `?branch=` would turn into every branch admin reading every other branch's
+  // traffic.
+  //
+  // And the simpler reason: an optional `branch` argument was written here
+  // first and had NO CALLER — `loadTrafficByBranch` answers the per-branch
+  // question by grouping, not by filtering. A parameter no reader uses is the
+  // producer-with-no-reader shape this very PR exists to correct, so it was
+  // removed rather than shipped dead. Its removal also deletes the only place
+  // a caller-supplied value would have reached AE SQL, which matters because
+  // the AE SQL API takes `text/plain` and has no binding mechanism at all:
+  // every value in these queries is interpolated. There is now none to escape.
+  //
+  // AE timestamps are stored in UTC; bound by range.from/to as date-only.
+  const sqlText = `
+    SELECT blob1 AS endpoint,
+           COUNT() AS hits,
+           AVG(double1) AS avg_latency_ms,
+           QUANTILEMERGE(0.5, double1) AS p50,
+           QUANTILEMERGE(0.95, double1) AS p95,
+           QUANTILEMERGE(0.99, double1) AS p99,
+           SUMIF(1, double2 >= 500) AS errors_5xx
+    FROM ${aeDataset(env)}
+    WHERE timestamp >= toDateTime('${range.fromIso}')
+      AND timestamp <= toDateTime('${range.toIso}')
+      AND ${HTTP_ROWS_ONLY}
+    GROUP BY blob1
+    ORDER BY hits DESC
+    LIMIT 25
+  `.trim();
+  {
+    const data = await aeSql(env, sqlText);
+    if (data === null) return null;
     if (data.length === 0) return null;
     return data.map(r => {
       const hits = num(r.hits as number);
@@ -772,9 +853,148 @@ async function loadTechnicalFromAnalyticsEngine(
         error_rate_pct: hits > 0 ? Number(((errs / hits) * 100).toFixed(2)) : 0,
       };
     });
-  } catch {
-    return null;
   }
+}
+
+/** D161 — one branch's traffic, as HQ reads it. */
+export interface BranchTrafficRow {
+  branch: string;
+  hits: number;
+  avg_latency_ms: number;
+  p95_ms: number;
+  errors_5xx: number;
+  error_rate_pct: number;
+}
+
+/**
+ * D161 — traffic split BY BRANCH, for HQ only.
+ *
+ * WHY THIS IS A SEPARATE FUNCTION AND NOT A FLAG ON `loadTechnical`.
+ * `/monitoring/analytics/technical` and `/monitoring/analytics/management` are
+ * `requireAdmin`, and on this platform's tier model a plain admin IS a branch
+ * admin. Today those routes return platform-wide AGGREGATES with no branch
+ * attribution, which a branch admin may defensibly see. Letting the branch
+ * dimension through them would turn an aggregate into per-branch attribution —
+ * every branch admin reading every other branch's traffic, which is precisely
+ * what the branch programme exists to prevent. `monitoring_analytics.ts`'s own
+ * header states the rule D133 set: gating some of these reads and not others
+ * is gating none of them. So the split lives behind `requireSuperAdmin` and
+ * the existing aggregate is left exactly as it was.
+ *
+ * `available: false` carries a REASON and is not a zero. An empty split has
+ * two entirely different causes — no branch has traffic, or AE could not be
+ * read at all — and a caller that rendered both as "0" would be making a claim
+ * nothing measured.
+ */
+export async function loadTrafficByBranch(
+  env: Env,
+  range: DateRange,
+): Promise<{ available: boolean; reason?: string; as_of: string; rows: BranchTrafficRow[] }> {
+  const as_of = new Date().toISOString();
+  const sqlText = `
+    SELECT blob6 AS branch,
+           COUNT() AS hits,
+           AVG(double1) AS avg_latency_ms,
+           QUANTILEMERGE(0.95, double1) AS p95,
+           SUMIF(1, double2 >= 500) AS errors_5xx
+    FROM ${aeDataset(env)}
+    WHERE timestamp >= toDateTime('${range.fromIso}')
+      AND timestamp <= toDateTime('${range.toIso}')
+      AND ${HTTP_ROWS_ONLY}
+    GROUP BY blob6
+    ORDER BY hits DESC
+    LIMIT 50
+  `.trim();
+  const data = await aeSql(env, sqlText);
+  if (data === null) {
+    return {
+      available: false,
+      reason: 'The metrics store could not be read, so this is not a count of zero — '
+        + 'Analytics Engine is unconfigured or did not answer.',
+      as_of,
+      rows: [],
+    };
+  }
+  const rows = data.map(r => {
+    const hits = num(r.hits as number);
+    const errs = num(r.errors_5xx as number);
+    return {
+      branch: str(r.branch as string) || 'hq',
+      hits,
+      avg_latency_ms: Math.round(num(r.avg_latency_ms as number)),
+      p95_ms: Math.round(num(r.p95 as number)),
+      errors_5xx: errs,
+      error_rate_pct: hits > 0 ? Number(((errs / hits) * 100).toFixed(2)) : 0,
+    };
+  });
+  return { available: true, as_of, rows };
+}
+
+/** D163 — one branch, and how HQ's own acts against it went. */
+export interface BranchActionRow {
+  branch: string;
+  action: string;
+  outcome: string;
+  count: number;
+  last_at: string | null;
+}
+
+/**
+ * D163 — HQ's own branch-targeting acts, grouped by branch and outcome.
+ *
+ * WHAT THIS IS NOT. It is not a second copy of the audit trail, and it is not
+ * a window into a branch's own console. Every row here was written by HQ,
+ * about an act HQ performed, recording only whether the branch it targeted
+ * answered — see `services/auditMirror.ts` for what is deliberately absent
+ * from it (actor, email, reason: all held authoritatively in HQ's own D1).
+ * The governance feed's stated scope is untouched by it.
+ *
+ * `available: false` CARRIES A REASON AND IS NOT AN EMPTY LIST. `aeSql`
+ * returns `null` for unconfigured credentials, a non-OK response and a throw
+ * alike; "HQ has pushed nothing" and "the telemetry store could not be read"
+ * are different claims and the surface renders them differently — the rule
+ * `loadTrafficByBranch` states one function up.
+ */
+export async function loadBranchActionMirror(
+  env: Env,
+  range: DateRange,
+): Promise<{ available: boolean; reason?: string; as_of: string; rows: BranchActionRow[] }> {
+  const as_of = new Date().toISOString();
+  const sqlText = `
+    SELECT blob6 AS branch,
+           blob2 AS action,
+           blob3 AS outcome,
+           COUNT() AS n,
+           MAX(timestamp) AS last_at
+    FROM ${aeDataset(env)}
+    WHERE timestamp >= toDateTime('${range.fromIso}')
+      AND timestamp <= toDateTime('${range.toIso}')
+      AND blob1 = '${MIRROR_KIND}'
+    GROUP BY blob6, blob2, blob3
+    ORDER BY last_at DESC
+    LIMIT 200
+  `.trim();
+  const data = await aeSql(env, sqlText);
+  if (data === null) {
+    return {
+      available: false,
+      reason: 'The telemetry store could not be read, so this is not "HQ has pushed nothing" — '
+        + 'Analytics Engine is unconfigured or did not answer.',
+      as_of,
+      rows: [],
+    };
+  }
+  return {
+    available: true,
+    as_of,
+    rows: data.map((r) => ({
+      branch: str(r.branch as string) || 'hq',
+      action: str(r.action as string),
+      outcome: str(r.outcome as string),
+      count: num(r.n as number),
+      last_at: r.last_at ? str(r.last_at as string) : null,
+    })),
+  };
 }
 
 export async function loadTechnical(env: Env, range: DateRange): Promise<TechnicalReport> {

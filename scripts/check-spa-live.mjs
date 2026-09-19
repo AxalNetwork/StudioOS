@@ -395,20 +395,18 @@ async function checkRoute(base, route, assetSink) {
         problems.push('body is not an HTML document');
       }
       if (problems.length === 0) {
-        // `assetSink` is an intentionally optional parameter (see the doc comment
-        // above `checkRoute`): the current caller always passes a `Set`, but a
-        // future caller that only wants pass/fail without asset collection can
-        // omit it. Static analysis only sees today's single call site and reads
-        // this guard as always-true — it's deliberate defensive handling of an
-        // optional argument, not dead code.
+        // `assetSink` is intentionally optional: callers that don't care about
+        // asset collection may omit it. Normalize to a no-op sink so this path
+        // stays safe without a redundant truthiness guard.
+        const sink = assetSink ?? { add() {} };
         // The apex root is a `shell: false` route (a healthy HTML response is
         // all this checker asserts there), a leniency from when a separate
         // marketing site answered `/` on the apex and its asset manifest could
         // not be mixed with the Worker's. Both hosts' `/` now come from the
         // Worker's assets binding, but only `shell: true` routes feed the
         // asset checks, so the split is kept.
-        if (assetSink && route.shell) {
-          for (const ref of extractAssetRefs(body)) assetSink.add(ref);
+        if (route.shell) {
+          for (const ref of extractAssetRefs(body)) sink.add(ref);
         }
         return null;
       }

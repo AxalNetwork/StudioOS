@@ -293,7 +293,16 @@ test('the move route never folds the invitation into its own success', () => {
   const src = read('cloudflare-worker/src/routes/admin_support_sessions.ts');
   const at = src.indexOf("r.post('/branches/:code/accounts/:userId/move'");
   assert.ok(at > 0, 'the move route is gone');
-  const handler = src.slice(at, at + 6000);
+  // BOUNDED AT THE ROUTE'S REAL END, NOT A CHARACTER COUNT. This was
+  // `at + 6000` and the handler grew past it (D163 added two lines), so the
+  // last assertion below — the one about `records_note` — started reading a
+  // window that stopped 300 characters short of the thing it names, and failed
+  // on code that was correct. A magic-number window silently stops covering
+  // what it claims to; the next route declaration, or the end of the file, is
+  // the boundary that cannot drift.
+  const rest = src.slice(at);
+  const end = rest.slice(1).search(/\nr\.(post|get|patch|delete)\(/);
+  const handler = end === -1 ? rest : rest.slice(0, end + 1);
 
   // Both bindings resolved BEFORE either is called: closing the source when the
   // destination is not bound would be half a move that cannot complete.

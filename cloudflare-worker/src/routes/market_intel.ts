@@ -1027,13 +1027,22 @@ async function buildPersonasPayload(env: Env): Promise<PlatformPersonasPayload> 
 
   // 5. Activity composite — events-per-active-user per role + top feature.
   const activity_composite = await safe(async () => {
+    // D160 — BOTH SIDES WRAPPED IN datetime(), and the reason is measured.
+    // `cutoff` is a raw ISO string (`2026-08-19T12:44:00.000Z`) while
+    // `activity_logs.created_at` and `users.created_at` are
+    // `DEFAULT (datetime('now'))` — `2026-08-19 12:44:00`. A lexical TEXT
+    // compare hits index 10 first: ' ' (0x20) against 'T' (0x54), so EVERY
+    // row dated on the cutoff's own date sorts below it and is dropped, while
+    // later dates pass. The window silently returned one day short at its
+    // leading edge. The Citations query 650 lines above already documents this
+    // and already wraps both sides; these three did not.
     const cutoff = new Date(Date.now() - 30 * 86_400_000).toISOString();
     const events = (await env.DB.prepare(
       `SELECT u.role AS role,
               COUNT(*) AS events,
               COUNT(DISTINCT a.user_id) AS active_users
          FROM activity_logs a JOIN users u ON u.id = a.user_id
-        WHERE a.created_at >= ? AND u.is_active = 1
+        WHERE datetime(a.created_at) >= datetime(?) AND u.is_active = 1
         GROUP BY u.role`,
     ).bind(cutoff).all<{ role: string; events: number; active_users: number }>()).results || [];
     const rows = events.filter((r) => Number(r.active_users || 0) >= PERSONAS_KMIN).map((r) => ({
@@ -1044,7 +1053,7 @@ async function buildPersonasPayload(env: Env): Promise<PlatformPersonasPayload> 
     const top = (await env.DB.prepare(
       `SELECT u.role AS role, a.action AS action, COUNT(DISTINCT a.user_id) AS n
          FROM activity_logs a JOIN users u ON u.id = a.user_id
-        WHERE a.created_at >= ? AND u.is_active = 1
+        WHERE datetime(a.created_at) >= datetime(?) AND u.is_active = 1
         GROUP BY u.role, a.action`,
     ).bind(cutoff).all<{ role: string; action: string; n: number }>()).results || [];
     const byRole = new Map<string, { role: string; action: string; n: number }>();
@@ -1100,13 +1109,22 @@ async function buildPersonasPayload(env: Env): Promise<PlatformPersonasPayload> 
 
   // 7. New signups trend — weekly counts by role over last 12 weeks.
   const signups_trend = await safe(async () => {
+    // D160 — BOTH SIDES WRAPPED IN datetime(), and the reason is measured.
+    // `cutoff` is a raw ISO string (`2026-08-19T12:44:00.000Z`) while
+    // `activity_logs.created_at` and `users.created_at` are
+    // `DEFAULT (datetime('now'))` — `2026-08-19 12:44:00`. A lexical TEXT
+    // compare hits index 10 first: ' ' (0x20) against 'T' (0x54), so EVERY
+    // row dated on the cutoff's own date sorts below it and is dropped, while
+    // later dates pass. The window silently returned one day short at its
+    // leading edge. The Citations query 650 lines above already documents this
+    // and already wraps both sides; these three did not.
     const cutoff = new Date(Date.now() - 12 * 7 * 86_400_000).toISOString();
     const rows = (await env.DB.prepare(
       `SELECT strftime('%Y-%W', created_at) AS week,
               role,
               COUNT(*) AS n
          FROM users
-        WHERE created_at >= ?
+        WHERE datetime(created_at) >= datetime(?)
         GROUP BY week, role
         ORDER BY week ASC`,
     ).bind(cutoff).all<{ week: string; role: string; n: number }>()).results || [];

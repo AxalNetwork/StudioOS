@@ -2586,6 +2586,12 @@ export const api = {
   monitoringRateLimits: (minutes = 60) => request(`/monitoring/rate-limits?minutes=${minutes}`),
   monitoringErrors: (limit = 50) => request(`/monitoring/errors?limit=${limit}`),
   monitoringAnomalies: () => request('/monitoring/anomalies'),
+  // D157 — the caller's OWN privileged actions. Deliberately NOT a filter on
+  // `/analytics/audit`, which is super-admin-only because it joins `users` and
+  // renders other admins by name: the subject here is bound from the session,
+  // so there is no parameter that could name somebody else.
+  monitoringMyAudit: (limit = 25, offset = 0) =>
+    request(`/monitoring/analytics/audit/mine?limit=${limit}&offset=${offset}`),
   monitoringThroughput: () => request('/monitoring/throughput'),
   monitoringCleanup: () => request('/monitoring/cleanup', { method: 'POST' }),
   // Task #1 (AX) — admin AI router usage rollup (per-day spend, fallback
@@ -2657,6 +2663,15 @@ export const api = {
     _analyticsRead(`/monitoring/analytics/financial?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}&currency=${encodeURIComponent(currency)}`),
   analyticsTechnical: (from, to) =>
     _analyticsRead(`/monitoring/analytics/technical?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}`),
+  // D161 — traffic split by branch. SUPER ADMIN ONLY, and deliberately a
+  // separate method rather than a `?branch=` on `analyticsTechnical` above:
+  // that one is `requireAdmin`, and on this platform a plain admin is a branch
+  // admin, so attributing traffic to a named branch there would hand every
+  // branch admin every other branch's figures. Returns `{available, reason,
+  // as_of, rows}` — `available: false` is "the metrics store could not be
+  // read", which is not a count of zero.
+  analyticsTrafficByBranch: (from, to) =>
+    _analyticsRead(`/monitoring/analytics/traffic-by-branch?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}`),
   analyticsManagement: (from, to, currency = '') =>
     _analyticsRead(`/monitoring/analytics/management?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}&currency=${encodeURIComponent(currency)}`),
   analyticsBackfillSnapshots: (days = 7) =>
