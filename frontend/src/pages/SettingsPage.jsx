@@ -27,6 +27,8 @@ import AuthorCard from '../components/AuthorCard';
 // the email-verification page).
 import TotpEnrollment from '../components/TotpEnrollment';
 import { appOrigin } from '../lib/branchHost';
+import { toUtcInstant } from '../lib/notices';
+import DsrOutcomeNotice from '../components/DsrOutcomeNotice';
 
 // Task #4 (Y-2) — small reusable trust score on the profile surface so
 // the user can see their compliance posture without bouncing to the
@@ -390,7 +392,7 @@ export default function SettingsPage() {
               <InvestorMyThesisCard flash={flash} role={data?.role} />
               <InvestorThesisEditorCard flash={flash} role={data?.role} />
               <MarketIntelContributionCard flash={flash} />
-              <PrivacySection data={data} patch={patch} flash={flash} reload={() => api.getSettings().then(setData)} hideAccountDelete />
+              <PrivacySection data={data} patch={patch} flash={flash} />
             </>
           )}
           {safeActive === 'notifications' && (
@@ -2776,7 +2778,7 @@ const PUBLIC_PROFILE_DEFAULTS = {
   advisor:   { name: true, bio: true, headshot: true, socials: false },
 };
 
-function PrivacySection({ data, patch, flash, reload, hideAccountDelete }) {
+function PrivacySection({ data, patch, flash }) {
   const role = (data.role || 'founder').toLowerCase();
   const defaults = PUBLIC_PROFILE_DEFAULTS[role] || PUBLIC_PROFILE_DEFAULTS.admin;
   const saved = data.privacy_prefs?.public_profile || {};
@@ -2785,8 +2787,6 @@ function PrivacySection({ data, patch, flash, reload, hideAccountDelete }) {
     ...PUBLIC_PROFILE_FIELDS_COMMON,
     ...(PUBLIC_PROFILE_FIELDS_BY_ROLE[role] || []),
   ];
-  const [exporting, setExporting] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const setVisible = (key, value) => {
@@ -2804,53 +2804,6 @@ function PrivacySection({ data, patch, flash, reload, hideAccountDelete }) {
       setTimeout(() => setCopied(false), 1500);
     } catch {
       flash('Copy failed — select & copy manually', 'error');
-    }
-  };
-
-  const exportData = async () => {
-    setExporting(true);
-    try {
-      const blob = await api.exportMyData();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `axal-data-export-${data.uid || data.id}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      flash('Export downloaded');
-    } catch (e) {
-      flash(e.message || 'Export failed', 'error');
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const requestDelete = async () => {
-    if (!window.confirm('Submit an account deletion request? Our team will reach out within 7 days to confirm.')) return;
-    setDeleting(true);
-    try {
-      const res = await api.requestAccountDeletion();
-      flash(res.message || 'Deletion request submitted');
-      reload();
-    } catch (e) {
-      flash(e.message || 'Failed to submit request', 'error');
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  const cancelDelete = async () => {
-    setDeleting(true);
-    try {
-      await api.cancelAccountDeletion();
-      flash('Deletion request cancelled');
-      reload();
-    } catch (e) {
-      flash(e.message || 'Failed to cancel', 'error');
-    } finally {
-      setDeleting(false);
     }
   };
 
@@ -2884,28 +2837,6 @@ function PrivacySection({ data, patch, flash, reload, hideAccountDelete }) {
         </p>
       </Card>
 
-      {!hideAccountDelete && (
-        <Card title="Your data" description="Download everything we know about you, or request deletion.">
-          <div className="flex flex-wrap gap-3">
-            <button onClick={exportData} disabled={exporting}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 hover:border-gray-400 text-gray-800 dark:text-gray-200 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
-              <Download size={14} /> {exporting ? 'Preparing…' : 'Download my data'}
-            </button>
-            {data.deletion_requested_at ? (
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-amber-700">Deletion requested {new Date(data.deletion_requested_at).toLocaleDateString()}</span>
-                <button onClick={cancelDelete} disabled={deleting}
-                  className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancel request</button>
-              </div>
-            ) : (
-              <button onClick={requestDelete} disabled={deleting}
-                className="px-4 py-2 border border-red-200 hover:border-red-400 text-red-700 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
-                <Trash2 size={14} /> Request account deletion
-              </button>
-            )}
-          </div>
-        </Card>
-      )}
     </>
   );
 }
@@ -3378,7 +3309,7 @@ function AccountDeletionCard({ data, flash, reload }) {
         </button>
         {data.deletion_requested_at ? (
           <div className="flex items-center gap-3">
-            <span className="text-xs text-amber-700">Deletion requested {new Date(data.deletion_requested_at).toLocaleDateString()}</span>
+            <span className="text-xs text-amber-700">Deletion requested {new Date(toUtcInstant(data.deletion_requested_at)).toLocaleDateString()}</span>
             <button onClick={cancelDelete} disabled={deleting}
               className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancel request</button>
           </div>
@@ -3389,6 +3320,15 @@ function AccountDeletionCard({ data, flash, reload }) {
           </button>
         )}
       </div>
+      {/*
+        D169 — ONLY WHILE NOTHING IS OPEN, which is the whole point: the amber
+        line above IS the current state when a request is live, and the closed
+        row behind it is then a PREVIOUS ask. Rendering both would put a stale
+        denial beside a request the subject has just filed again — asking twice
+        after a refusal opens a new row and leaves the old outcome in place, so
+        this is reachable rather than theoretical.
+      */}
+      {!data.deletion_requested_at && <DsrOutcomeNotice outcome={data.dsr_outcome} />}
     </Card>
   );
 }
