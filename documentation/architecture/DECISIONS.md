@@ -14176,3 +14176,172 @@ the thing it operated on was deleted rather than pinning a refusal.
 
 **No migration — 271 stays free.** No new `/api/*` method; the Trust Center
 change removes a call.
+
+## D165
+
+**HQ could sign out everybody or nobody, and three revokes promised something
+the strict comparison never gave them.**
+
+`POST /api/admin/security/force-reauth` was `UPDATE users SET jwt_min_iat = ?
+WHERE is_active = 1` and it was the only revoke HQ had. So signing out one
+compromised administrator meant signing out **every account on every tenant,
+including the operator's own session** — which in a real incident makes the safe
+action the one nobody is willing to take.
+
+The primitive was already per-account and had been since NICE-AUTH-04:
+`bumpJwtMinIat(env, userId)` writes one row, and `getCurrentUser` re-reads that
+row's floor on every request. What was missing was a door. `POST
+/admin/security/force-reauth/:userId` is that door, behind the same bar as the
+bulk route, with a reason ≥ `MIN_REASON` stored with the act and the target
+named in the audit row.
+
+### The `+1`, which is the part nobody would have found by reading
+
+`getCurrentUser` compares `tokenIat < minIat` — **strictly**. So a token whose
+`iat` equals the floor **survives**. Two writers knew that and said so in a
+comment; three did not:
+
+| writer | floor | what its own copy claims |
+| --- | --- | --- |
+| `bumpJwtMinIat` | `floor(now) + 1` | — |
+| `admin_security.ts` bulk revoke | `floor(now) + 1` | *"+1s so tokens issued in this same second are bounced too"* |
+| `settings.ts` `/sessions/revoke-all` | `floor(now) + 1` | *"+1s so that even tokens issued in this same second (rounding) get bounced"* |
+| `settings.ts` email-change revoke | **`floor(now)`** | activity log: *"all sessions invalidated"* |
+| `settings.ts` post-recovery TOTP re-enrolment | **`floor(now)`** | *"the lower-assurance session minted at recovery time is invalidated"* |
+| `settings.ts` TOTP repair | **`floor(now)`** | response: *"Your existing sessions have been signed out."* |
+
+So on three security paths a token minted in the **same wall-clock second** as
+its own revocation stayed valid, and two of the three told the user in their own
+words that it had not. One second later the floor is indistinguishable from a
+correct one, so the gap never shows in a manual test and never shows in a log.
+
+**This is why the consolidation is a bug fix rather than deduplication.** The
+rule lived in a comment and was re-typed by hand four times; three of the four
+re-typings dropped it. `jwtMinIatFloor()` is now the one definition of the floor
+and `bumpJwtMinIat` the one definition of the write, and the D165 test proves the
+fix **behaviourally** — the floor goes into a real database and is then run
+through `getCurrentUser`'s own comparison, because a source scan for `+ 1` shows
+the character is present and cannot show that a token minted this second bounces.
+
+**One site deliberately does not call the helper.** The post-recovery
+re-enrolment clears `recovery_step_up_due_at` and writes the floor in ONE
+statement; splitting that to reuse `bumpJwtMinIat` would open a window where the
+step-up nag is cleared and the weak session is still valid. It shares
+`jwtMinIatFloor()` instead and says so in place, and the guard permits exactly
+one inline write and asserts it is that one.
+
+### Two more consolidations, each a copy this repo had already decided against
+
+- **The write bar was hand-rolled for the fourth time.** The bulk route inlined
+  `requireFactor(c,'totp')` → `requireStepUp(c)` → `requireSuperAdmin(c)` while
+  `requireSuperAdminWriteBar` bundles exactly those three, in that order, with
+  the argument for the order in its own docblock. Three copies is how one of
+  them comes to check two.
+- **It wrote a raw `INSERT INTO admin_audit_log`** instead of `logAdminAction`
+  — the third such copy, and the one **D159 missed**. The governance row is
+  byte-identical; what the shared writer *adds* is the `activity_logs` row D159
+  requires, and what it *removes* is a failure mode: a bare `await …run()`
+  throws, so a failed audit turned a **completed** platform-wide sign-out into a
+  500 and told the operator their act had not happened.
+
+**`bumpJwtMinIat`'s docstring was false**, and that is why the drift survived:
+it said `/settings/sessions/revoke-all` shared the helper while `settings.ts`
+inlined the UPDATE four times. A sentence asserting a consolidation had happened
+is what stopped anyone checking. It now names its five real callers and the one
+documented exception, and a test reads it.
+
+### Three guards re-aimed, and the third went the other way
+
+Two pre-existing guards pinned the **mechanisms** being consolidated, so both
+failed on a change that strengthened what they exist to protect — the tenth and
+eleventh instance of this class, and each re-aim is stronger than what it
+replaced:
+
+- `super_admin.test.ts` matched the three gates as adjacent source text *inside
+  the handler* — pinning the fourth hand-rolled copy of a shared helper, and it
+  would have gone on passing while a fifth route composed the same three in the
+  wrong order. It now asserts the route takes the bar, and asserts the **bar's
+  own composition where it is defined**, which covers all five callers.
+- `hq_security.test.mjs` counted handlers against the literal `await
+  requireSuperAdmin(c)` and made the two revoke routes look ungated, although
+  `requireSuperAdminWriteBar` satisfies that rule *more*. It counts both doors
+  now. Its scan was also a **slice to end of file**, and D165 put a second
+  `/force-reauth` handler in that file — the D147/D161 failure exactly, so both
+  handlers' scans are bounded at both ends.
+
+**The third went the other way, and that is worth recording.**
+`hq_team_h9.test.mjs` bans `new Date(` outright, for SQL-format stamps that V8
+reads as the reader's local time. The first draft of the Sessions cell rendered
+`new Date(revoked_at * 1000)` — **epoch seconds, which are unambiguous**, so the
+guard fired for a reason that did not apply. It was still right: the operator has
+just pressed the button, so the second adds nothing, and a clock rendered
+client-side beside an act whose authoritative stamp is the audit row invites
+being read *as* that stamp. **The code changed, not the guard** — a blanket ban
+is what catches the next real SQL stamp, and weakening it to admit this case
+would have spent that.
+
+### The control's surface, and why it is scoped for free
+
+The per-row revoke goes on **HQ · Team** (D138's supervision surface), on the
+reason + acknowledge shape `SecurityPage`'s bulk control already uses, with one
+form open at a time rather than one per row.
+
+It is drawn **only on HQ-held rows**, and that is structural rather than a
+condition: `AdminRow` renders only when there is no view-as overlay, and a
+branch's hits render as a list, not as rows of this table. That matters because
+the route writes **HQ's** `users` table — a branch admin's account lives in the
+branch's own database, so the same button on a branch hit could only ever refuse,
+which is the `still_an_admin` mistake D134 named and what D153's overlay copy
+already promises.
+
+**A distinct action name.** `security_force_reauth_user`, not the bulk route's
+`security_force_reauth`: signing out one account and signing out the platform are
+different acts with different blast radii, and one name for both would flatten
+exactly the distinction the governance feed exists to show. The per-user row also
+carries `viewed_user_id`, so the feed can name who was signed out.
+
+**Filed, not folded in:** the audit feed tones a force-reauth as a plain `note`
+(`action.includes('export') ? 'warn' : 'note'`), so a platform-wide sign-out
+renders less loudly than a CSV export. That is a judgement about the feed's
+rendering, not about this route.
+
+### The gap this PR fell into, which is D164's other half
+
+CodeQL flagged an unused `nowSec` on this PR's own diff: consolidating the
+email-change revoke onto `bumpJwtMinIat` moved the write into the helper and
+left the floor it used to bind assigned to a local nothing read. Correct
+finding — and the interesting part is that **every local check passed.**
+
+D164 armed `noUnusedLocals` in `frontend/tsconfig.json` and `no-unused-vars` in
+`eslint.config.mjs`. Both are scoped to the SPA, so after eighteen
+unused-declaration alerts were swept, **`cloudflare-worker/src` still had no
+unused-local check of any kind.** The same lever closes it, and measuring the
+cost turned up a second finding and a third blind spot:
+
+| finding | what it was |
+| --- | --- |
+| `settings.ts` `nowSec` (TS6133) | D165's own, above |
+| `positions.ts` `User` (TS6196) | **pre-existing** — a type imported and used nowhere |
+
+The second one is the argument for the flag rather than a cost of it, because
+`check-unused-imports.mjs` **does** reach this tree and still could not see it.
+Its detection is `^import\s+(?:[\w$]+\s*,\s*)?\{` — the brace must follow the
+keyword, or a default import and a comma must come first — so in
+`import type { Env, User }` the word `type` sits exactly where the brace has to
+be. **`import type { … }` is invisible to that regex by construction**, a third
+blind spot beside the two D164 measured.
+
+Widening the regex is deliberately NOT the fix: `import type` is TypeScript-only,
+so `noUnusedLocals` on both tsconfigs already covers every file that can contain
+one, and it decides by scope analysis rather than by pattern — the argument
+`eslint.config.mjs` makes at length for preferring a real checker to a fourth
+bespoke script. With both findings cleared, `tsc` reports zero.
+
+**And the first measurement of that cost was wrong, which is recorded rather
+than quietly corrected.** It said "exactly one", because it grepped a CLI run
+for `TS6133` — an unused *local* — while an unused *type* is `TS6196`. Putting
+the flag in the config reported both. A grep scoped to one diagnostic code is
+how a cost looks smaller than it is.
+
+**No migration — `jwt_min_iat` already exists, and 271 stays free.** One new
+`/api/*` method with its route in the same commit.

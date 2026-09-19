@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Users, ShieldCheck, Search, Loader2 } from 'lucide-react';
+import { Users, ShieldCheck, Search, Loader2, AlertTriangle, LogOut } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, Unrecorded, Unreadable } from '../../ui';
@@ -97,10 +97,96 @@ function rungDetail(row) {
   return null;
 }
 
-function AdminRow({ row, ladderReadable, licencesReadable }) {
+/**
+ * D165 — the per-account revoke, on the reason + acknowledge shape
+ * `SecurityPage.jsx`'s bulk force-reauth already uses. Two things about WHERE it
+ * is drawn are load-bearing rather than incidental:
+ *
+ * ONLY ON THE HQ-HELD GROUP, and that is structural rather than a condition.
+ * `AdminRow` is rendered only when there is no view-as overlay, and a branch's
+ * hits render as a plain list, not as rows of this table. That matters because
+ * the route behind this button writes HQ's `users` table: a branch admin's
+ * account lives in the BRANCH's database, so a Sign-out control on a branch hit
+ * could only ever refuse — the `still_an_admin` mistake D134 named. It is absent
+ * there rather than disabled, which is also what the overlay's own copy promises.
+ *
+ * ONE FORM, NOT ONE PER ROW. The reason and the acknowledgement belong to the act,
+ * not to the table, so the selected row expands and everything else stays a
+ * button. A form per row would mean fifty reason fields, forty-nine of them
+ * holding nothing.
+ */
+function RevokeForm({ row, onDone, onCancel }) {
+  const [reason, setReason] = useState('');
+  const [ack, setAck] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const who = row.name || row.email;
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api.hqForceReauthUser(row.user_id, reason.trim());
+      onDone(res);
+    } catch (err) {
+      reportError('hq-team:revoke', err);
+      const msg = String(err?.message || err || 'Request failed');
+      // The same translation the bulk control makes: a bare "TOTP required" is
+      // the server's word for a session minted the wrong way, and it reads as a
+      // fault rather than as the one thing the operator has to do about it.
+      setError(msg === 'TOTP required'
+        ? 'This needs a session signed in with your authenticator app. Sign out and back in with a code, then try again.'
+        : msg);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-2 py-2" data-testid="hq-team-revoke-form">
+      <label className="block text-[11px] font-semibold text-axal-muted">
+        Reason · required, stored with the action
+        <input
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder={`e.g. ${who} reported a lost laptop`}
+          className="mt-1 w-full max-w-xl rounded-md border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] font-normal text-axal-ink dark:bg-gray-900"
+        />
+      </label>
+      <label className="flex items-start gap-2 text-[11.5px] text-axal-muted">
+        <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5" />
+        <span>
+          I understand this signs {who} out of every session on every device. It does not deactivate
+          the account, change their role, or touch anyone else.
+        </span>
+      </label>
+      {error && <p role="alert" className="text-[12px] text-red-700 dark:text-red-300">{error}</p>}
+      <div className="flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={busy || !ack || reason.trim().length < 8}
+          className="inline-flex items-center gap-1.5 rounded-md border-[1.5px] border-red-700 bg-white px-3 py-1.5 text-[12px] font-bold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-500 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/30"
+        >
+          {busy ? <Loader2 size={13} className="animate-spin" /> : <AlertTriangle size={13} />} Sign {who} out
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-md px-2 py-1.5 text-[12px] font-semibold text-axal-muted hover:text-axal-ink"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function AdminRow({ row, ladderReadable, licencesReadable, open, onOpen, onCancel, onDone, done }) {
   const rung = RUNG[row.rung] || RUNG.clear;
   const detail = rungDetail(row);
   return (
+    <>
     <tr className="border-t border-axal-hairline align-top" data-testid="hq-team-row">
       <td className="py-2 pr-3">
         <div className="flex items-center gap-1.5">
@@ -163,14 +249,49 @@ function AdminRow({ row, ladderReadable, licencesReadable }) {
       <td className="py-2 pr-3 text-[12px] text-axal-muted">
         {Number(row.is_active) === 1 ? 'Active' : 'Deactivated'}
       </td>
-      <td className="py-2 text-[12px] text-axal-muted" data-testid="hq-team-last-active">
+      <td className="py-2 pr-3 text-[12px] text-axal-muted" data-testid="hq-team-last-active">
         {row.last_active_at ? String(row.last_active_at).slice(0, 10) : (
           <Unrecorded reason="This account has not made an authenticated request since the last-active stamp was added.">
             Never
           </Unrecorded>
         )}
       </td>
+      <td className="py-2 text-[12px]" data-testid="hq-team-sessions">
+        {done ? (
+          // NO CLOCK HERE, and the guard that caught the first draft was right for
+          // a reason it does not actually name. `hq_team_h9`'s ban on `new Date(`
+          // is written for SQL-format stamps, which V8 reads as the reader's LOCAL
+          // time; `revoked_at` is epoch SECONDS, which is unambiguous, so this was
+          // not that defect. It was still the wrong thing to draw: the operator
+          // just pressed the button, so the second adds nothing, and a clock
+          // rendered client-side beside an act whose authoritative stamp is the
+          // audit row invites being read AS that stamp. The fact is the whole
+          // message.
+          <span role="status" className="text-[11.5px] text-amber-800 dark:text-amber-300">
+            Signed out
+          </span>
+        ) : open ? (
+          <span className="text-[11.5px] text-axal-faint">Below &darr;</span>
+        ) : (
+          <button
+            type="button"
+            onClick={onOpen}
+            data-testid="hq-team-revoke"
+            className="inline-flex items-center gap-1 rounded-md border border-axal-hairline px-2 py-1 text-[11.5px] font-semibold text-axal-muted hover:border-red-700 hover:text-red-700 dark:hover:border-red-500 dark:hover:text-red-300"
+          >
+            <LogOut size={11} /> Sign out
+          </button>
+        )}
+      </td>
     </tr>
+    {open && (
+      <tr className="bg-axal-hairline/20" data-testid="hq-team-revoke-row">
+        <td colSpan={7} className="px-1">
+          <RevokeForm row={row} onDone={onDone} onCancel={onCancel} />
+        </td>
+      </tr>
+    )}
+    </>
   );
 }
 
@@ -178,6 +299,13 @@ export default function HqTeamTable({ reloadKey = 0 }) {
   const [data, setData] = useState(undefined); // undefined = loading, null = unreadable
   const [error, setError] = useState(null);
   const [typed, setTyped] = useState('');
+  // D165 — ONE row's form is open at a time, and what came back per row is kept
+  // so the cell can report the act rather than silently returning to a button.
+  // Neither is persisted: a revoke is an act, not a preference, and a stale
+  // "Signed out" chip surviving a reload would be a claim about a session state
+  // this page never re-read.
+  const [revokeFor, setRevokeFor] = useState(null);
+  const [revoked, setRevoked] = useState({});
   const [asked, setAsked] = useState('');
   // D153 / H12 frame 2 — the same scope the shell bar names. Under it the
   // route reads ONE branch and does not read HQ's roster at all, so the
@@ -312,12 +440,26 @@ export default function HqTeamTable({ reloadKey = 0 }) {
                 <th className="pb-1 pr-3">Licence</th>
                 <th className="pb-1 pr-3">Compliance</th>
                 <th className="pb-1 pr-3">State</th>
-                <th className="pb-1">Last active</th>
+                <th className="pb-1 pr-3">Last active</th>
+                <th className="pb-1">Sessions</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
-                <AdminRow key={row.user_id} row={row} ladderReadable={ladderReadable} licencesReadable={licencesReadable} />
+                <AdminRow
+                  key={row.user_id}
+                  row={row}
+                  ladderReadable={ladderReadable}
+                  licencesReadable={licencesReadable}
+                  open={revokeFor === row.user_id}
+                  done={revoked[row.user_id]}
+                  onOpen={() => setRevokeFor(row.user_id)}
+                  onCancel={() => setRevokeFor(null)}
+                  onDone={(res) => {
+                    setRevoked((prev) => ({ ...prev, [row.user_id]: res }));
+                    setRevokeFor(null);
+                  }}
+                />
               ))}
             </tbody>
           </table>

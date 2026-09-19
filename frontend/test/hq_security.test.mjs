@@ -108,16 +108,63 @@ test('every read is super-admin only and the write carries the impersonation bar
   // when /governance landed. Counting handlers and gates and comparing them
   // says the actual thing and needs no edit next time.
   const handlers = ROUTE.match(/^r\.(get|post|put|patch|delete)\(/gm) || [];
-  const gates = ROUTE.match(/await requireSuperAdmin\(c\)/g) || [];
-  assert.ok(handlers.length >= 3, `expected at least three handlers, found ${handlers.length}`);
+  // D165 COUNTS BOTH DOORS TO THE ELEVATION, because there are now two and the
+  // second is the stricter one. `requireSuperAdminWriteBar` ends in
+  // `requireSuperAdmin` and adds a TOTP-minted session and a recent step-up in
+  // front of it, so a handler taking the bar satisfies this rule MORE than one
+  // taking the bare gate. Counting only the bare spelling would have made the
+  // two revoke routes look ungated — the assertion failing on the consolidation
+  // it should have been indifferent to.
+  const gates = ROUTE.match(/await requireSuperAdmin(?:WriteBar)?\(c\)/g) || [];
+  assert.ok(handlers.length >= 4, `expected at least four handlers, found ${handlers.length}`);
   assert.equal(gates.length, handlers.length, 'every handler gates on the elevation');
-  const write = ROUTE.slice(ROUTE.indexOf("r.post('/force-reauth'"));
-  assert.ok(write.indexOf("requireFactor(c, 'totp')") < write.indexOf('requireStepUp(c)'), 'factor before step-up');
-  assert.ok(write.indexOf('requireStepUp(c)') < write.indexOf('requireSuperAdmin(c)'), 'step-up before the elevation');
+
+  // Bounded to the bulk handler's own body. It used to be a slice to END OF FILE,
+  // and D165 put a second `/force-reauth` handler in this file — a slice past its
+  // own handler can be satisfied by the next one, which is the D147/D161 failure.
+  const bulkAt = ROUTE.indexOf("r.post('/force-reauth'");
+  assert.ok(bulkAt > 0, 'the platform-wide revoke is no longer registered');
+  const after = ROUTE.slice(bulkAt + 22);
+  const nextRoute = /\nr\.(get|post|put|patch|delete)\(/.exec(after);
+  const write = after.slice(0, nextRoute ? nextRoute.index : after.length);
+
+  // THE THREE GATES MOVED, THEY DID NOT GO. This asserted `requireFactor` before
+  // `requireStepUp` before `requireSuperAdmin` as adjacent text in this handler —
+  // a fourth hand-rolled copy of `requireSuperAdminWriteBar`, which already
+  // existed. The order is now asserted once where the bar is DEFINED
+  // (`cloudflare-worker/test/super_admin.test.ts`), which covers all five callers
+  // instead of this one; what belongs here is that this route takes it.
+  assert.match(write, /await requireSuperAdminWriteBar\(c\)/, 'the bulk revoke must take the shared write bar');
   assert.match(write, /code: 'reason_required'/);
   assert.match(write, /UPDATE users SET jwt_min_iat = \? WHERE is_active = 1/, 'the per-account primitive, over every active account');
   assert.match(write, /'security_force_reauth'/, 'recorded in admin_audit_log');
-  assert.ok(write.indexOf('INSERT INTO admin_audit_log') > write.indexOf('UPDATE users SET jwt_min_iat'), 'audit after the action it records');
+  assert.ok(write.indexOf('logAdminAction') > write.indexOf('UPDATE users SET jwt_min_iat'),
+    'audit after the action it records');
+});
+
+test('HQ can sign out ONE account, and the control is drawn only where it can run', () => {
+  // The defect: the only revoke was `WHERE is_active = 1`, so signing out one
+  // compromised admin meant signing out every account on every tenant.
+  const oneAt = ROUTE.indexOf("r.post('/force-reauth/:userId'");
+  assert.ok(oneAt > 0, 'the per-account revoke route is gone');
+  assert.ok(oneAt < ROUTE.indexOf("r.post('/force-reauth'"),
+    'the specific route must be registered before the general one, so the bulk handler\'s own '
+    + 'assertions are not satisfied by this one\'s body');
+
+  // The SPA half. The control lives on HQ · Team rather than here, because that
+  // page is already one row per admin and already super-admin gated.
+  const team = read('frontend/src/pages/hq/HqTeamTable.jsx');
+  assert.match(team, /api\.hqForceReauthUser\(row\.user_id, reason\.trim\(\)\)/,
+    'the row action does not reach the per-account route');
+  assert.match(team, /reason\.trim\(\)\.length < 8/,
+    'the reason floor the server enforces is not mirrored, so the button offers a refusal');
+
+  // AND ONLY ON HQ-HELD ROWS. `bumpJwtMinIat` writes HQ's `users` table; a branch
+  // admin's account lives in the branch's own database, so the same button on a
+  // branch hit could only ever refuse. That is structural rather than a condition
+  // — branch hits render as a list, not as AdminRow — and this pins it.
+  assert.ok(!/hq-team-revoke[\s\S]{0,400}b\.data/.test(team),
+    'a revoke control reached the branch group, where the route it calls cannot act');
 });
 
 test('the security router is mounted before the /api/admin catch-all', () => {

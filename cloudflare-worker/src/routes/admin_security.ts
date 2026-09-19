@@ -40,7 +40,8 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { IMPERSONATION_EXPIRY_MINUTES, requireFactor, requireStepUp, requireSuperAdmin } from '../auth';
+import { IMPERSONATION_EXPIRY_MINUTES, requireSuperAdmin, requireSuperAdminWriteBar, bumpJwtMinIat } from '../auth';
+import { logAdminAction } from '../services/adminAudit';
 import { loadGuardrailCounters } from '../services/aiRouter';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -721,10 +722,79 @@ r.get('/governance', async (c) => {
   });
 });
 
+/**
+ * ONE ACCOUNT, which is the whole point: until D165 the only revoke HQ had was
+ * the platform-wide one below, so signing out a single compromised admin meant
+ * signing out EVERY account on every tenant — and in a real incident the safe
+ * action is then the one nobody is willing to take.
+ *
+ * The primitive was already per-account. `bumpJwtMinIat` writes one row and
+ * `getCurrentUser` re-reads that row's floor on every request, so one bump
+ * invalidates exactly that account's tokens. What was missing was a door.
+ *
+ * SAME BAR AS THE BULK ROUTE, and deliberately not a lower one. Signing one
+ * admin out is a smaller act than signing everyone out, so a cheaper gate would
+ * be defensible — and it would be wrong: this is the route an attacker who has
+ * an admin session would reach for to lock the real holder out. `requireFactor`
+ * + `requireStepUp` is what makes a stolen session unable to use it.
+ */
+r.post('/force-reauth/:userId', async (c) => {
+  const actor = await requireSuperAdminWriteBar(c);
+
+  const uid = Number(c.req.param('userId'));
+  if (!Number.isFinite(uid) || uid <= 0) {
+    return c.json({ error: 'A numeric user id is required.', code: 'invalid_target' }, 400);
+  }
+
+  let reason = '';
+  try { reason = String((await c.req.json())?.reason ?? '').trim(); } catch { reason = ''; }
+  if (reason.length < MIN_REASON) {
+    return c.json({
+      error: `A reason of at least ${MIN_REASON} characters is required. It is stored with the action.`,
+      code: 'reason_required',
+    }, 400);
+  }
+
+  // REFUSE AN ABSENT TARGET rather than reporting a revoke of nobody. The UPDATE
+  // would succeed with `changes: 0` and the audit row would name a user id that
+  // joins to no one, which reads in HQ's feed as an act against a person who
+  // does not exist.
+  const target = await c.env.DB.prepare(
+    'SELECT id, email, name FROM users WHERE id = ?',
+  ).bind(uid).first<{ id: number; email: string; name: string | null }>();
+  if (!target) {
+    return c.json({ error: 'No account holds that id.', code: 'user_not_found' }, 404);
+  }
+
+  const revokedAt = await bumpJwtMinIat(c.env, uid);
+
+  // `target_user_id` is the key `logAdminAction` reads for `viewed_user_id`, and
+  // it is what lets the governance feed's LEFT JOIN name WHO was signed out.
+  // Spelt `user_id` it would record the act with a blank Target, silently —
+  // which is why D159's guard refuses that spelling at every call site.
+  await logAdminAction(c.env, actor.id, actor.email, 'security_force_reauth_user', {
+    reason,
+    target_user_id: uid,
+    revoked_at: revokedAt,
+  });
+
+  return c.json({
+    ok: true,
+    user_id: uid,
+    email: target.email,
+    revoked_at: revokedAt,
+    message: `${target.name || target.email} has been signed out of every session. They will need to sign in again.`,
+  });
+});
+
 r.post('/force-reauth', async (c) => {
-  await requireFactor(c, 'totp');
-  await requireStepUp(c);
-  const actor = await requireSuperAdmin(c);
+  // D165 — three hand-rolled gates became the shared bar. `requireSuperAdminWriteBar`
+  // composes requireFactor('totp') -> requireStepUp -> requireSuperAdmin in that
+  // order, with the argument for the order in its own docblock; this route was the
+  // fourth copy of those three lines, and three copies is how one of them comes to
+  // check only two. The order is now pinned where it is DEFINED rather than in each
+  // copy, which is the stronger place for it.
+  const actor = await requireSuperAdminWriteBar(c);
 
   let reason = '';
   try { reason = String((await c.req.json())?.reason ?? '').trim(); } catch { reason = ''; }
@@ -743,9 +813,17 @@ r.post('/force-reauth', async (c) => {
   ).bind(nowSec).run();
   const affected = Number(result.meta?.changes ?? 0);
 
-  await c.env.DB.prepare(
-    'INSERT INTO admin_audit_log (admin_user_id, action, filters_json) VALUES (?, ?, ?)',
-  ).bind(actor.id, 'security_force_reauth', JSON.stringify({ reason, affected, revoked_at: nowSec })).run();
+  // D165 — was a raw INSERT into admin_audit_log, which is the third copy D159
+  // set out to end and missed. `filters_json` carries the same payload, so the
+  // governance row is unchanged; what the shared writer adds is the `activity_logs`
+  // row D159 requires of every privileged action, and what it REMOVES is a way for
+  // this handler to fail after the fact: a bare `await ...run()` throws, so a failed
+  // audit write turned a completed platform-wide sign-out into a 500 and told the
+  // operator their act had not happened. `logAdminAction` warns and continues,
+  // because a recorded act must never be undone by its own telemetry.
+  await logAdminAction(c.env, actor.id, actor.email, 'security_force_reauth', {
+    reason, affected, revoked_at: nowSec,
+  });
 
   return c.json({
     ok: true,

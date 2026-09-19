@@ -927,13 +927,54 @@ export async function requireSuperAdminWriteBar(c: Context<{ Bindings: Env }>): 
 }
 
 /**
+ * The floor a sign-out-everywhere must write, and THE `+1` IS THE WHOLE POINT.
+ *
+ * `getCurrentUser` compares `tokenIat < minIat` — **strictly** (see the minIat
+ * check above). So a token whose `iat` EQUALS the floor survives. Write a bare
+ * `Math.floor(Date.now() / 1000)` and every token minted in that same wall-clock
+ * second stays valid, which is precisely the session a revoke is racing: the one
+ * just issued. One second later the floor is indistinguishable from a correct
+ * one, so the gap never shows up in a manual test and never shows up in a log.
+ *
+ * D165 EXTRACTED THIS BECAUSE THREE SITES HAD ALREADY LOST IT. The rule was
+ * stated in a comment on `POST /settings/sessions/revoke-all` and re-typed by
+ * hand at three more `jwt_min_iat` writers in the same file — the email-change
+ * revoke, the post-recovery TOTP re-enrolment and the TOTP repair — and all
+ * three re-typed it WITHOUT the `+1`, while their own copy told the user "all
+ * sessions invalidated". Arithmetic that must not vary is arithmetic with one
+ * definition; that is this function, and it is exported so the one site that
+ * cannot call `bumpJwtMinIat` (it writes a second column atomically) can still
+ * share the floor rather than re-typing it a fifth time.
+ */
+export function jwtMinIatFloor(): number {
+  return Math.floor(Date.now() / 1000) + 1;
+}
+
+/**
  * NICE-AUTH-04 — sign-out-everywhere primitive. Bumps users.jwt_min_iat so
  * every JWT issued at or before now is rejected on its next request (see the
- * minIat check in getCurrentUser). Returns the new epoch-seconds floor. Shared
- * by POST /api/auth/sign-out-everywhere and POST /api/settings/sessions/revoke-all.
+ * minIat check in getCurrentUser). Returns the new epoch-seconds floor.
+ *
+ * ITS CALLERS, WHICH THIS DOCSTRING USED TO GET WRONG. It said it was shared by
+ * `POST /api/auth/sign-out-everywhere` and `POST /api/settings/sessions/revoke-all`.
+ * The first was true; the second was not — `settings.ts` inlined the same UPDATE
+ * instead, so a sentence claiming the consolidation had happened was the reason
+ * nobody noticed it had not. D165 made it true and it is now:
+ *
+ *   routes/auth.ts        POST /api/auth/sign-out-everywhere
+ *   routes/settings.ts    POST /api/settings/sessions/revoke-all
+ *                         POST /api/settings/email/revoke      (email-change revoke)
+ *                         POST /api/settings/2fa/totp/repair   (re-pairing)
+ *   routes/admin_security.ts  POST /api/admin/security/force-reauth/:userId
+ *
+ * ONE SITE DELIBERATELY DOES NOT CALL IT — the post-recovery TOTP re-enrolment
+ * in `settings.ts`, which clears `recovery_step_up_due_at` and writes this floor
+ * in ONE statement. Splitting that into two writes to reuse this helper would
+ * open a window where the step-up nag is cleared and the lower-assurance session
+ * is still valid. It shares `jwtMinIatFloor()` instead, and says so in place.
  */
 export async function bumpJwtMinIat(env: Env, userId: number): Promise<number> {
-  const nowSec = Math.floor(Date.now() / 1000) + 1;
+  const nowSec = jwtMinIatFloor();
   await env.DB.prepare('UPDATE users SET jwt_min_iat = ? WHERE id = ?').bind(nowSec, userId).run();
   return nowSec;
 }

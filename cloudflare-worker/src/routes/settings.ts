@@ -22,7 +22,7 @@ import * as QRCode from 'qrcode';
 import type { Env, UserSessionRow } from '../types';
 import { decodeJwt } from 'jose';
 import { getSQL } from '../db';
-import { requireAuth, hashToken, generateToken, selectJwt } from '../auth';
+import { requireAuth, hashToken, generateToken, selectJwt, bumpJwtMinIat, jwtMinIatFloor } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { hasTotpConfigured, loadTotp, persistNewTotpEnrolment } from '../services/authTotp';
 import { loadSms, getUserFactors, setUserFactor } from '../services/authSms';
@@ -515,8 +515,16 @@ settings.post('/email-change/revoke', async (c) => {
   }
   await sql`UPDATE email_change_requests SET revoked_at = datetime('now') WHERE id = ${rec.id}`;
   // Bump min_iat so any tokens minted under the new email are forced out.
-  const nowSec = Math.floor(Date.now() / 1000);
-  await sql`UPDATE users SET jwt_min_iat = ${nowSec} WHERE id = ${rec.user_id}`;
+  //
+  // D165 — this was an inlined copy of `bumpJwtMinIat` WITHOUT its `+1`, and the
+  // activity_logs line two statements below says "all sessions invalidated". The
+  // comparison in getCurrentUser is a strict `<`, so a token minted in this same
+  // second was NOT invalidated and the record said it was. The helper is the
+  // one definition of both the floor and the write. Nothing here reads the
+  // returned floor — this handler answers with the reverted email, not a stamp —
+  // so the call is not assigned. CodeQL caught the binding this left behind on
+  // the first draft; see the worker tsconfig for why nothing local did.
+  await bumpJwtMinIat(c.env, rec.user_id);
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
             VALUES ('email_change_revoked',
                     ${`Email change revoked: ${rec.new_email} -> ${rec.old_email}; all sessions invalidated`},
@@ -595,7 +603,16 @@ settings.post('/totp/re-enrol/confirm', async (c) => {
   // Clear the step-up nag AND bump jwt_min_iat so the lower-assurance
   // session minted at recovery time is invalidated (forces a fresh
   // login with the new TOTP, which lands at factor='totp').
-  const nowSec = Math.floor(Date.now() / 1000);
+  //
+  // D165 — THE ONE SITE THAT DOES NOT CALL `bumpJwtMinIat`, deliberately. These
+  // two columns move together in ONE statement: clearing the step-up nag while
+  // the lower-assurance session is still valid is exactly the state this write
+  // exists to leave behind, so splitting it in two to reuse the helper would
+  // trade a real atomicity guarantee for a tidier call site. What it DOES share
+  // is `jwtMinIatFloor()` — this site had re-typed the arithmetic and dropped
+  // the `+1`, so the session minted at recovery time survived if it was minted
+  // in the same second as its own invalidation.
+  const nowSec = jwtMinIatFloor();
   await sql`UPDATE users
             SET recovery_step_up_due_at = NULL,
                 jwt_min_iat = ${nowSec}
@@ -746,8 +763,10 @@ settings.post('/totp/repair', async (c) => {
   await persistNewTotpEnrolment(c.env, user.id, newSecret, totpRow.recoveryHashes);
   try { await setUserFactor(c.env, user.id, 'totp'); } catch {}
   // Invalidate existing sessions — the user is about to scan a new QR.
-  const nowSec = Math.floor(Date.now() / 1000);
-  await sql`UPDATE users SET jwt_min_iat = ${nowSec} WHERE id = ${user.id}`;
+  //
+  // D165 — the third inlined copy that dropped the `+1`, on a handler whose own
+  // response says "Your existing sessions have been signed out."
+  await bumpJwtMinIat(c.env, user.id);
   // Task #50 — clear the step-up deadline once the user has re-paired
   // their authenticator. The cool-off is intentionally NOT cleared
   // (the spec ties it to time, not factor enrolment) but the auto-
@@ -781,9 +800,10 @@ settings.post('/sessions/revoke-all', async (c) => {
   await ensureSchema(c.env);
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
-  // +1s so that even tokens issued in this same second (rounding) get bounced.
-  const nowSec = Math.floor(Date.now() / 1000) + 1;
-  await sql`UPDATE users SET jwt_min_iat = ${nowSec} WHERE id = ${user.id}`;
+  // D165 — this site was the only one of four that had the `+1`, and its comment
+  // is where the rule was written down. Both now live in `bumpJwtMinIat`, so the
+  // rule cannot be re-typed correctly here and wrongly three handlers up again.
+  const nowSec = await bumpJwtMinIat(c.env, user.id);
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
             VALUES ('sessions_revoked_all', 'User revoked all active sessions from /settings',
                     ${user.email}, ${user.id})`;

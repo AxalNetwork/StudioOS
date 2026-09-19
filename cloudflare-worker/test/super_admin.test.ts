@@ -300,15 +300,78 @@ test('the HQ overview is super-admin only, mounted before the catch-all, and say
   assert.ok(idx.indexOf("app.route('/api/admin/hq', adminHq)") < idx.indexOf("app.route('/api/admin', admin)"));
 });
 
+/**
+ * ONE HANDLER'S OWN TEXT, bounded at both ends.
+ *
+ * This existed as `src.slice(src.indexOf(route))` — a slice to END OF FILE — and
+ * D165 added a second `/force-reauth` handler beside the first. A slice that runs
+ * past its own handler can be satisfied by the NEXT one, which is the D147/D161
+ * failure exactly: an assertion a neighbour can satisfy is not an assertion about
+ * this one. Bounded to the next top-level route registration or the export.
+ */
+function handlerBody(src: string, opening: string): string {
+  const at = src.indexOf(opening);
+  assert.ok(at >= 0, `${opening} is no longer registered`);
+  const rest = src.slice(at + opening.length);
+  const ends = [/\nr\.(get|post|put|patch|delete)\(/.exec(rest)?.index, rest.indexOf('\nexport default')]
+    .filter((n): n is number => typeof n === 'number' && n >= 0);
+  return rest.slice(0, ends.length ? Math.min(...ends) : rest.length);
+}
+
 test('force re-auth is behind the impersonation bar, needs a reason, and is audited', () => {
   const src = read('cloudflare-worker/src/routes/admin_security.ts');
   assert.doesNotMatch(src, /\brequireAdmin\b/);
-  const write = src.slice(src.indexOf("r.post('/force-reauth'"));
-  assert.match(write, /await requireFactor\(c, 'totp'\);\s+await requireStepUp\(c\);\s+const actor = await requireSuperAdmin\(c\);/);
+
+  // D165 RE-AIMED THIS, and the re-aim is the point rather than an accommodation.
+  // It used to match the three gates as adjacent SOURCE TEXT inside this handler:
+  //
+  //   await requireFactor(c, 'totp'); await requireStepUp(c);
+  //   const actor = await requireSuperAdmin(c);
+  //
+  // That is a copy of `requireSuperAdminWriteBar`, which already existed and
+  // already carried the argument for the order — so the assertion was pinning the
+  // FOURTH hand-rolled copy of a shared helper, and would have gone on passing
+  // while a fifth route composed the same three in the wrong order. Asserting the
+  // route takes the bar, and asserting the bar's own composition where it is
+  // DEFINED, covers every caller instead of this one.
+  const write = handlerBody(src, "r.post('/force-reauth'");
+  assert.match(write, /await requireSuperAdminWriteBar\(c\)/,
+    'the platform-wide revoke must take the shared write bar, not a private copy of its three gates');
   assert.match(write, /code: 'reason_required'/);
-  assert.match(write, /INSERT INTO admin_audit_log \(admin_user_id, action, filters_json\)/);
+
+  const auth = read('cloudflare-worker/src/auth.ts');
+  const bar = auth.slice(auth.indexOf('export async function requireSuperAdminWriteBar'));
+  assert.match(bar.slice(0, 400),
+    /await requireFactor\(c, 'totp'\);\s+await requireStepUp\(c\);\s+return await requireSuperAdmin\(c\);/,
+    'the bar must still be TOTP-minted, then a recent step-up, then the elevation, in that order');
+
+  // And the audit through the one writer rather than a raw INSERT — the third
+  // copy D159 set out to end and missed.
+  assert.match(write, /await logAdminAction\(c\.env, actor\.id, actor\.email, 'security_force_reauth'/,
+    'the governance row must go through logAdminAction, which also writes activity_logs');
+  assert.doesNotMatch(write, /INSERT INTO admin_audit_log/,
+    'a raw audit INSERT is back in this handler; it can throw, and a failed audit would turn a '
+    + 'completed platform-wide sign-out into a 500');
+
   const idx = read('cloudflare-worker/src/index.ts');
   assert.ok(idx.indexOf("app.route('/api/admin/security', adminSecurity)") < idx.indexOf("app.route('/api/admin', admin)"));
+});
+
+test('the per-account revoke exists, takes the same bar, and names its subject', () => {
+  // The defect D165 closed: the only revoke was platform-wide, so signing out one
+  // compromised admin meant signing out every account on every tenant.
+  const src = read('cloudflare-worker/src/routes/admin_security.ts');
+  const one = handlerBody(src, "r.post('/force-reauth/:userId'");
+  assert.match(one, /await requireSuperAdminWriteBar\(c\)/, 'same bar as the bulk revoke');
+  assert.match(one, /code: 'reason_required'/, 'a reason is stored with this act too');
+  assert.match(one, /code: 'user_not_found'/, 'an absent target is refused, not reported as a revoke of nobody');
+  assert.match(one, /await bumpJwtMinIat\(c\.env, uid\)/, 'it uses the per-account primitive');
+  assert.doesNotMatch(one, /WHERE is_active = 1/,
+    'the per-account route must never widen to every active account — that is the bug it exists to fix');
+  // `target_user_id` is the only key logAdminAction reads for viewed_user_id.
+  // Spelt `user_id` the act would be recorded with a blank Target, silently.
+  assert.match(one, /target_user_id: uid/,
+    'the subject must ride across so HQ\'s feed can name who was signed out');
 });
 
 test('the SPA reaches the console through api.js', () => {

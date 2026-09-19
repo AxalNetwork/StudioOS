@@ -1,5 +1,50 @@
 {
+  // `noUnusedLocals` (D165) — THE WORKER HALF OF THE GAP D164 CLOSED ON THE SPA,
+  // and it was demonstrated rather than predicted.
+  //
+  // D164 armed `noUnusedLocals` in `frontend/tsconfig.json` and `no-unused-vars`
+  // in `eslint.config.mjs`. Both are scoped to the SPA — the ESLint glob is
+  // `frontend/src/**/*.{js,jsx}` and that tsconfig includes `frontend/src` only —
+  // so after eighteen unused-declaration alerts were swept, `cloudflare-worker/src`
+  // still had **no unused-local check of any kind**. `check-unused-imports.mjs`
+  // reaches this tree but sees only imports and `const {` destructures, never a
+  // plain `const x = …`.
+  //
+  // D165 produced the first instance that gap let through, in its own diff:
+  // consolidating a `jwt_min_iat` write into `bumpJwtMinIat` left the floor it
+  // used to bind assigned to a local nothing read. Every local check passed;
+  // CodeQL caught it on the PR, which is the slow way round.
+  //
+  // TWO findings across the whole worker, and the second one is the argument for
+  // the flag rather than a cost of it. The first was D165's own binding above.
+  // The second was pre-existing: `routes/positions.ts` imported the type `User`
+  // and used it nowhere.
+  //
+  // THAT ONE NAMES A THIRD BLIND SPOT, beside the two D164 measured.
+  // `check-unused-imports.mjs` DOES reach this tree, and still could not see it:
+  // its detection is `^import\s+(?:[\w$]+\s*,\s*)?\{`, which needs the brace
+  // straight after the keyword (or a default import and a comma first), so in
+  // `import type { Env, User }` the word `type` sits exactly where the brace has
+  // to be. **`import type { … }` is invisible to that regex by construction.**
+  // Widening the regex is the wrong fix and is deliberately not done: `import
+  // type` is TypeScript-only, so this flag — on both tsconfigs — already covers
+  // every file that can contain one, and it decides by scope analysis rather
+  // than by pattern. That is the argument `eslint.config.mjs` makes at length
+  // for preferring a real checker to a third bespoke script.
+  //
+  // With both cleared, `tsc` reports zero. One line, on a check `test:drift`
+  // already runs as `test:types`.
+  //
+  // (The first measurement of this said "exactly one", because it grepped the
+  // CLI run for TS6133 — an unused LOCAL — and an unused type is TS6196. The
+  // flag in the config reports both; a grep scoped to one code was the reason
+  // the count looked smaller than it was.)
+  //
+  // `noUnusedParameters` stays OFF, as on the SPA and for its reason: it flags
+  // positional handler parameters that cannot be dropped without changing what
+  // the rest bind to.
   "compilerOptions": {
+    "noUnusedLocals": true,
     "target": "ES2022",
     "module": "ES2022",
     "moduleResolution": "bundler",
