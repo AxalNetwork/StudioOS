@@ -90,7 +90,14 @@ fi
 # ---------- 2. Provision throwaway DB -------------------------------
 STEP="create_db"
 log "creating throwaway DB ${TARGET_DB}"
-wrangler d1 create "${TARGET_DB}" >/dev/null
+# --jurisdiction eu IS LOAD-BEARING, and its absence is what D167 found.
+# Production (`studioos-db`) is EU-resident account-side; a jurisdiction is
+# fixed at creation and cannot be changed after. Drilling the restore into a
+# database created without the flag proved the backup was importable while
+# rehearsing a shape that, followed for real, would land production data
+# outside the EU. branch-provision.yml already passes this flag when it
+# creates a branch database; the drill now does too.
+wrangler d1 create "${TARGET_DB}" --jurisdiction eu >/dev/null
 
 # ---------- 3. Restore ---------------------------------------------
 STEP="restore"

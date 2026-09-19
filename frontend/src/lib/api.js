@@ -2592,7 +2592,6 @@ export const api = {
   // so there is no parameter that could name somebody else.
   monitoringMyAudit: (limit = 25, offset = 0) =>
     request(`/monitoring/analytics/audit/mine?limit=${limit}&offset=${offset}`),
-  monitoringThroughput: () => request('/monitoring/throughput'),
   monitoringCleanup: () => request('/monitoring/cleanup', { method: 'POST' }),
   // Task #1 (AX) — admin AI router usage rollup (per-day spend, fallback
   // rate, p50/p95 latency, top 10 most expensive users).
