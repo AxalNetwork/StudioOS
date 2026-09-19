@@ -2,9 +2,12 @@
  * Task #44 — Gamified Assessment: admin authoring routes (design §7.2).
  *
  * Mounted at /api/admin/assessment, BEFORE the catch-all /api/admin router
- * (same mount-before-catch-all precedence as admin_events / admin_news). Every
- * handler is requireAdmin and (in prod) sits behind the /api/admin/* Cf-Access
- * perimeter applied in index.ts.
+ * (same mount-before-catch-all precedence as admin_events / admin_articles).
+ * Every handler is requireAdmin, and that is the WHOLE gate: this used to
+ * claim a `/api/admin/*` Cf-Access perimeter "applied in index.ts", which is
+ * the one file that records its removal — Task #33 took it out because the
+ * Access app is apex-only while the SPA uses a relative API base, so
+ * app.axal.vc/api/admin/* could not carry the assertion header.
  *
  * Surface: CRUD + version + publish/archive for games / chapters / items /
  * archetypes / badges; preview a game (plays without writing results);

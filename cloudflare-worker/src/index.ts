@@ -49,7 +49,6 @@ import adminX from './routes/admin_x';
 import adminSlack from './routes/admin_slack';
 // Task #2 — News with author proposals + admin queue.
 import newsRoutes from './routes/news';
-import adminNews from './routes/admin_news';
 import articlesRoutes from './routes/articles';
 import adminArticles from './routes/admin_articles';
 import teamPublic from './routes/team_public';
@@ -737,10 +736,13 @@ app.route('/api/admin/x', adminX);
 // per-channel test action. Mounted BEFORE catch-all /api/admin so the
 // /api/admin/slack/* routes resolve here.
 app.route('/api/admin/slack', adminSlack);
-// Task #2 — News admin queue. Mounted BEFORE catch-all /api/admin so the
-// nested /api/admin/news/* routes resolve here.
-app.route('/api/admin/news', adminNews);
-// Task #1 (Articles) — same mount-before-catch-all precedence as News.
+// Task #1 (Articles) — the admin review queue over `articles`. Mounted BEFORE
+// catch-all /api/admin so the nested /api/admin/articles/* routes resolve here.
+//
+// D166 RETIRED `/api/admin/news`, which was mounted here and read the SAME
+// table. It was not a redundant alias: its publish handler accepted
+// `in_review` as well as `approved`, so an admin could skip the recorded
+// approve step entirely. The path now 404s rather than falling through.
 app.route('/api/admin/articles', adminArticles);
 // Task #11 (II) — Admin billing actions (Stripe refunds). Mounted BEFORE the
 // catch-all /api/admin so /api/admin/billing/* resolves here, not in the

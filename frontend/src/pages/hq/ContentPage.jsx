@@ -3,12 +3,14 @@
  *
  * THE SUBTITLE IS A THIRD OUT OF DATE, and this page says so rather than
  * drawing the pipeline as though it had been built. Checking the premise:
- * `admin_news.ts` reads the SAME `articles` table and already answers with
- * a `Deprecation` header pointing at `/api/admin/articles`, so news is not
- * a third system — it is a deprecated alias, and a third of the
- * unification has already happened. What is left is two stores with two
- * meanings of "published": an article is editorial and goes through review;
- * a publication is an audience-and-section digest.
+ * news was never a third store — the `/api/admin/news` queue read the SAME
+ * `articles` table behind a `Deprecation` header — and D166 retired it
+ * outright, because its publish handler accepted `in_review` and so let an
+ * admin skip the recorded approve step the surviving queue enforces. A
+ * third of the unification is therefore done rather than announced. What is
+ * left is two stores with two meanings of "published": an article is
+ * editorial and goes through review; a publication is an
+ * audience-and-section digest.
  *
  * Merging them is a migration and a product decision, not a read. So the
  * page shows both honestly and states where they still disagree.

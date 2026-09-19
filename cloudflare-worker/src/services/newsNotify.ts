@@ -1,16 +1,23 @@
 /**
  * Task #2 — News article notifications.
  *
- * Wraps `services/notify.ts` for the seven state-transition events
- * defined in the task spec table:
+ * TWO events, not the seven Task #2 specified:
  *
  *   author_submitted    → author confirmation
  *   admin_submitted     → every admin (queue alert)
- *   author_in_review    → author when admin starts review
- *   author_changes_requested
- *   author_approved
- *   author_published
- *   author_rejected
+ *
+ * D166 NARROWED THIS UNION, and the reason is worth keeping. The other five
+ * — `author_in_review`, `author_changes_requested`, `author_approved`,
+ * `author_published`, `author_rejected` — were every one of them fired from
+ * `routes/admin_news.ts` and from nowhere else. That router was retired for
+ * skipping the recorded approve step, so the five kinds it alone reached had
+ * no caller left: a producer with no reader, and a header that would have
+ * gone on claiming seven. `routes/news.ts` keeps the two above, which are
+ * the author's own submit path and are untouched by the retirement.
+ *
+ * The review transitions have not been lost — they belong to
+ * `services/articleNotify.ts`, which the surviving `/api/admin/articles`
+ * queue fires. That file carries the full seven.
  *
  * Email + in-app for the author; in-app + email for admins on submit.
  */
@@ -19,12 +26,7 @@ import { notify } from './notify';
 
 export type NewsNotifyKind =
   | 'author_submitted'
-  | 'admin_submitted'
-  | 'author_in_review'
-  | 'author_changes_requested'
-  | 'author_approved'
-  | 'author_published'
-  | 'author_rejected';
+  | 'admin_submitted';
 
 interface Args {
   articleId: number;
@@ -54,32 +56,21 @@ const TITLES: Record<NewsNotifyKind, (a: Args) => { title: string; body: string 
     title: 'New article awaiting review',
     body: `“${a.title}” was just submitted and is waiting for an admin reviewer.`,
   }),
-  author_in_review: (a) => ({
-    title: 'Your article is being reviewed',
-    body: `An admin has started reviewing “${a.title}”.`,
-  }),
-  author_changes_requested: (a) => ({
-    title: 'Changes requested on your article',
-    body: `An admin requested changes on “${a.title}”${a.reason ? `: ${a.reason}` : '.'}`,
-  }),
-  author_approved: (a) => ({
-    title: 'Article approved',
-    body: `“${a.title}” was approved and is ready to be published.`,
-  }),
-  author_published: (a) => ({
-    title: 'Article published',
-    body: `“${a.title}” is now live on /news/${a.slug}.`,
-  }),
-  author_rejected: (a) => ({
-    title: 'Article rejected',
-    body: `“${a.title}” was rejected${a.reason ? `: ${a.reason}` : '.'} You can iterate from the saved draft.`,
-  }),
 };
 
 export async function notifyNews(env: Env, kind: NewsNotifyKind, args: Args): Promise<void> {
   const { title, body } = TITLES[kind](args);
   if (kind === 'admin_submitted') {
-    const link = `/admin/news/${args.articleId}`;
+    // THIS LINK WAS 404ING, and the fix is its own change rather than a
+    // consequence of D166's delete. `/admin/news` is an exact-path
+    // <Navigate> in App.jsx with no wildcard, so `/admin/news/<id>` never
+    // matched a route — and it was already broken while `admin_news.ts`
+    // still existed, because the SPA never had a per-id page for it.
+    // `articleNotify.ts` solved this on the articles side and its comment
+    // says why: the admin queue route is `/admin/articles` with no per-id
+    // route, and the queue page surfaces the specific article through its
+    // own selection state.
+    const link = `/admin/articles`;
     const recipients = await admins(env);
     for (const uid of recipients) {
       try {

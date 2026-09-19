@@ -12,13 +12,16 @@
  *   articles              The real editorial store. draft → submitted →
  *                         in_review → changes_requested → approved →
  *                         published, with rejected off to the side.
- *   news                  NOT a third system any more. `admin_news.ts` reads
- *                         the SAME `articles` table and already answers with
- *                         `Deprecation: true` and a `Link: </api/admin/articles>;
- *                         rel="successor-version"`. A third of the
- *                         unification the canvas asks for has already
- *                         happened, and drawing it as outstanding would
- *                         misreport the repo's own state.
+ *   news                  GONE, as of D166. It was never a third store — the
+ *                         retired `admin_news.ts` read the SAME `articles`
+ *                         table behind a `Deprecation: true` header — but it
+ *                         was not harmless either: its publish handler
+ *                         accepted `in_review`, so the approval gate on
+ *                         `/api/admin/articles` could be walked around by
+ *                         calling the deprecated path. A third of the
+ *                         unification the canvas asks for is therefore
+ *                         DONE rather than merely announced, and drawing it
+ *                         as outstanding would misreport the repo's state.
  *   admin_publications    A genuinely separate store (migration 045) with its
  *                         own status column and its own meaning of
  *                         "published" — an audience-and-section digest, not
@@ -147,10 +150,10 @@ r.get('/summary', async (c) => {
     unified_pipeline_reason:
       'Articles and publications are still two stores with two meanings of "published": an article '
       + 'is editorial and goes through review, a publication is an audience-and-section digest. News '
-      + 'is no longer a third — `admin_news.ts` reads the articles table and already answers with a '
-      + 'Deprecation header pointing at /api/admin/articles. Merging the remaining two is a migration '
-      + 'and a product decision, not a read, so this page reports both rather than showing a pipeline '
-      + 'that does not exist.',
+      + 'is not a third — the deprecated /api/admin/news queue was retired in D166, so there is one '
+      + 'admin queue over the articles table rather than two. Merging the remaining two is a '
+      + 'migration and a product decision, not a read, so this page reports both rather than showing '
+      + 'a pipeline that does not exist.',
 
     // Localisation, which the artboard's header counts.
     //

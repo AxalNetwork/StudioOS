@@ -13134,7 +13134,7 @@ of two of them was mine to correct:
 | --- | --- |
 | **1 · immutability triggers** | **genuinely unbuilt.** No `BEFORE UPDATE`/`BEFORE DELETE` trigger exists on `admin_audit_log`, `impersonation_sessions` or `licence_events`. The only trigger in the repo is `sql/historical/lp_investors_seal.sql`, which is the precedent this copies |
 | 7 · `requireAdmin` on `/monitoring/throughput` | **stale.** `routes/monitoring.ts:255-258` already refuses anyone outside `admin`/`partner`/`investor`; the route's own heading calls it *"operator-visible limited stats"* and that is what it is |
-| 7 · retire the `admin_news.ts` twin | **stale, and my own first reading of it was wrong.** I reported it as carrying zero handlers. The scan matched `^r\.`; this router's const is `adminNews`. It registers **11** handlers, documented in its own header, and is mounted at `index.ts:742`. There is no twin to retire |
+| 7 · retire the `admin_news.ts` twin | **~~stale~~ — SUPERSEDED BY D166, and this row was wrong twice over.** The first reading called the file dead: the scan matched `^r\.` while this router's const is `adminNews`, so it reported zero handlers against a real **11**. Correcting that was right; stopping there was not. *"It is alive"* is an argument that retiring it is **not free** — it is not an argument that there is nothing to retire, and this row never quoted the handler that decides it. `admin_news.ts:194` accepted `['approved','in_review']` at publish where `admin_articles.ts:206` requires `approved` exactly, under the comment *"No skipping straight from in_review → published, even by an admin."* D166 retired it |
 | 7 · step-up on `/impersonate-sessions/:id/end` | **refused with the measurement.** The UPDATE is bounded `AND admin_user_id = ?`, so an admin can only close their own session; it is the client's best-effort close on exit, and a step-up in front of it would leave sessions permanently open — which is precisely the state D122 was written to end |
 
 ### The defect: "immutable" was a description of the writers' habits
@@ -14345,3 +14345,169 @@ how a cost looks smaller than it is.
 
 **No migration — `jwt_min_iat` already exists, and 271 stays free.** One new
 `/api/*` method with its route in the same commit.
+
+---
+
+## D166
+
+**A "deprecated alias" was an approval-gate bypass, and D156 ruled it away on a
+handler count.**
+
+`/api/admin/news` and `/api/admin/articles` declared **11 handlers each over
+identical paths**, both reading the same `articles` table, both gated by plain
+`await requireAdmin(c)`. Their `transition()` tables matched verbatim. The whole
+divergence sat in two handlers, and one line of it was not cosmetic:
+
+| | `admin_news.ts:194` | `admin_articles.ts:206` |
+| --- | --- | --- |
+| publish gate | `if (!['approved', 'in_review'].includes(row.status))` | `if (row.status !== 'approved')` |
+
+The canonical route's comment, three lines above its own gate: *"Approval gate:
+publish requires explicit /approve first. No skipping straight from in_review →
+published, even by an admin."* The other path let exactly that happen.
+
+**Severity, stated so this entry does not overclaim.** Both publish handlers are
+`requireAdmin`, so **no role boundary is crossed and this is not privilege
+escalation.** What the twin removed is the *recorded approve step*: an article
+could go `in_review → published` with nobody having called `/approve`. It is
+workflow- and audit-integrity, and it is filed as that.
+
+### The `use('*')` that reads like a gate and is not one
+
+`admin_news.ts:35` is `adminNews.use('*', …)`, which looks like a perimeter until
+you read its first statement: `await next()`. It runs the handler, then rebuilds
+the response to stamp RFC 8594 `Deprecation: true` and a `Link: …
+rel="successor-version"` header. It blocks nothing. So the bypass was reachable
+by any admin who knew the path — which is what every document describing the file
+as "a deprecated alias with no SPA caller" quietly assumed away. **Having no
+caller in our own frontend is not unreachability.**
+
+### Six more differences, every one a silent loss
+
+| | `admin_news.ts` | `admin_articles.ts` |
+| --- | --- | --- |
+| publish 409 body | `{error, status}` | `{error, status, expected: 'approved'}` |
+| publish follower fan-out | absent | `notifyAuthorFollowers` (Task #66) |
+| publish cache-bust | `bustEdgeCache(env, slug, id)` | `bustArticleEdgeCache(env, slug, id, row.author_user_id)` |
+| unpublish revision snapshot | absent (a tell-tale `void admin;`) | `snapshotRevision(…, 'manual')` |
+| unpublish author notice | absent | `notifyArticle('author_changes_requested', …)` |
+| unpublish cache-bust | `bustEdgeCache` | `bustArticleEdgeCache` |
+
+So publishing through the twin skipped the approve step, told no follower, and
+**left the author's own page cached**.
+
+### What supersedes D156, and the shape of that error
+
+D156's row read: *"stale, and my own first reading of it was wrong. I reported it
+as carrying zero handlers. The scan matched `^r\.`; this router's const is
+`adminNews`. It registers 11 handlers … There is no twin to retire."*
+
+The correction inside it was right — the scan genuinely missed the const. The
+**conclusion drawn from the correction** does not follow. "It is alive" is an
+argument that retiring it is *not free*; it is not an argument that there is
+nothing to retire, and it is the opposite of reassuring once the publish handler
+is read. D156 never quoted it. **A count answers how much code there is and
+never what it does.**
+
+### The delete strands two things, and nothing in the repo could have caught them
+
+This is the finding the blast-radius sweep missed and this entry exists to
+record, because shipping it would have made D166 an instance of the class it
+closes:
+
+- **`bustEdgeCache` (`services/newsRender.ts`) had exactly two callers, both in
+  the retired module.** An **exported** function with no caller is invisible to
+  `noUnusedLocals` — armed on the worker one PR ago, in D165 — because it is not
+  a local; and invisible to `check-unused-imports`, because nothing imports it to
+  be unused. Deleting it loses nothing: Task #3 had already made
+  `bustArticleEdgeCache` a strict superset that busts the deprecated `/api/news*`
+  edge keys alongside the `/api/articles*` ones, and the new guard asserts that
+  superset rather than assuming it.
+- **Five of `NewsNotifyKind`'s seven members became unreachable.**
+  `author_in_review`, `author_changes_requested`, `author_approved`,
+  `author_published` and `author_rejected` were fired only from
+  `admin_news.ts:132` and `:206`. `routes/news.ts` keeps `author_submitted` and
+  `admin_submitted` — the author's own submit path — and nothing else. The
+  header claiming *"the seven state-transition events"* would have gone on
+  claiming it. The review transitions are not lost: `services/articleNotify.ts`
+  carries the full seven for the queue that survives, and the guard asserts
+  **that** too, since narrowing one union while the other had quietly lost a kind
+  would be a real regression rather than a tidy-up.
+
+### The dead deep link is fixed HERE, and it is not a consequence of the delete
+
+`newsNotify.ts` emailed every admin a link to `/admin/news/${articleId}` on
+submission. That 404s, and did so before this PR: `App.jsx:2200` is an
+exact-path `<Navigate>` with no wildcard, so the deep link never matched a route.
+It is tempting to read the retirement as fixing it. **It does not** — that kind
+is fired from `routes/news.ts:384`, which D166 does not touch, so the link would
+have survived the delete untouched. It points at `/admin/articles` now, carrying
+`articleNotify.ts`'s own comment: the admin queue has no per-id route and
+surfaces the specific article through its own selection state.
+
+### Two stale claims corrected while the files were open
+
+Both routers' headers said they sat *"inside the existing `/api/admin/*`
+Cf-Access perimeter"*. **There is no such perimeter.** Task #33 removed it, and
+the removal is recorded in `index.ts` directly above the `/api/admin` mounts: the
+Access app is configured on the apex while the SPA uses a relative API base, so
+`app.axal.vc/api/admin/*` could not carry the `Cf-Access-Jwt-Assertion` header
+and `requireCfAccess()` fail-closed with 403 for every legitimate admin.
+`requireAdmin` is not the inner half of a perimeter — it is the whole gate, which
+is precisely why the publish divergence mattered. `admin_articles.ts` and
+`admin_assessment.ts` are corrected here because this PR was already editing
+their headers; four more files carry a variant of the claim
+(`admin_telegram.ts`, `jobs_public.ts`, `network_public.ts`, `events_public.ts`)
+and are **filed, not folded in**.
+
+### Three assertions of one premise, and only ONE of them fails loudly
+
+The plan for this PR said there was a single tripwire and named the other
+candidate as a header comment. **That was wrong, and the way it was wrong is
+the finding.** Three places assert "news is not a third system", and they
+divide into two kinds:
+
+- **It reads the file.** `frontend/test/hq_content_platform_h6.test.mjs:77-79`
+  did `raw('…/routes/admin_news.ts')` and asserted `FROM articles` and
+  `Deprecation` on its contents. The delete makes that throw ENOENT — loud,
+  unmissable, impossible to ship past.
+- **It reads the SENTENCE.** `hq_content_platform_h6.test.mjs:70-73` and
+  `cloudflare-worker/test/admin_content_platform.test.ts:183` both match
+  `/News is no longer a third/` against `admin_content.ts`'s
+  `unified_pipeline_reason` — **a live API response body the SPA renders**,
+  which says news "already answers with a Deprecation header". Nothing about
+  deleting the router changes that string. Had the wording not moved with the
+  delete, **both would have gone on passing while the product told operators
+  that a router which no longer exists is answering requests.**
+
+The second file was missed by the blast-radius sweep for a reason worth
+writing down: the sweep searched for the name `admin_news`, and that file's
+assertion does not contain it — it matches a prose fragment of the reason. **A
+grep for the symbol cannot find a guard that pins a sentence about the
+symbol.** It surfaced only because the drift suite ran, which is the argument
+for reading the exit code of the whole suite rather than the files you expected
+to touch.
+
+Both sentence-readers now pin the retirement and explicitly refuse the alias
+wording, so neither can drift back to describing a live deprecated alias. A
+guard that keeps passing on a sentence the code made false is this programme's
+recurring defect, and here it sat one layer above the defect being fixed.
+
+### What stays, deliberately
+
+**`App.jsx:2200`'s `/admin/news → /admin/articles` SPA redirect.** It is a
+different route from the worker one, an admin with the old URL bookmarked still
+lands on the queue, and `admin_route_reachability.test.mjs` pins
+`REDIRECTS === ['/admin/news']`. **`routes/news.ts` and the public `/api/news*`
+surface** are untouched: the author-facing news path is not the admin queue, and
+`bustArticleEdgeCache` still busts its edge keys.
+
+**`scripts/sql-prepare-baseline.json`'s entry went too, and that was optional.**
+`check-sql-prepare.mjs` exits 1 only on *added* entries and merely reports ones
+that have gone. It is removed because a ledger is only worth reading if every
+line still points at something, not because anything failed.
+
+**No migration — 271 stays free. No new `/api/*` method**; eleven are removed,
+and `check-api-drift` harvests every `request()` call in `api.js` rather than
+only `api.*` properties, so the module and the namespace had to go in one commit
+or the build fails.
