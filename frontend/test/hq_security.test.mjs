@@ -43,14 +43,21 @@ test('the Security row sits between Support and Settings, and /admin/security is
   assert.match(line, /hqOnly\(/, 'an admin without the elevation gets the notice');
 });
 
-test('the page reads two endpoints and writes through one, and nothing else', () => {
+test('the page reads two endpoints and writes through two, and nothing else', () => {
   // WAS one read. Canvas H7's feed is a second: it is filtered server-side
   // over a merged page of sixty rows from four stores, so it cannot ride on
   // the overview payload and cannot be filtered in the browser. The point of
   // this assertion is unchanged — the page reaches for NOTHING else, and a
   // page that starts calling a fifth endpoint has grown a second job.
+  //
+  // D168 ADDED THE SECOND WRITE, and this guard failing was correct rather
+  // than inconvenient. Closing a data-subject request is an act on a zone
+  // this page already owned and already rendered; what it is not is a second
+  // job, which is the property the list exists to pin. So the name and the
+  // list move together — loosening the `deepEqual` into a membership check
+  // would have kept the test green and thrown away everything it was for.
   const calls = [...new Set([...PAGE.matchAll(/api\.(\w+)\(/g)].map((m) => m[1]))].sort();
-  assert.deepEqual(calls, ['hqGovernance', 'hqSecurityForceReauth', 'hqSecurityOverview']);
+  assert.deepEqual(calls, ['hqCloseDsrRequest', 'hqGovernance', 'hqSecurityForceReauth', 'hqSecurityOverview']);
 });
 
 test('the three zones with no store render Not recorded in their own zone, from the payload\'s reason', () => {
@@ -95,8 +102,33 @@ test('an unreadable store is reported, not zeroed, on both sides', () => {
 });
 
 test('the deletion clock is statutory, computed server-side, and unknown when unparseable', () => {
-  assert.match(ROUTE, /const DSR_CLOCK_DAYS = 30;/);
-  assert.match(ROUTE, /days_left: elapsedDays === null \? null : DSR_CLOCK_DAYS - elapsedDays/);
+  // D168 RE-AIMED THIS, AND WHAT IT FOUND IS WORTH THE COMMENT.
+  //
+  // It used to pin two literals in the route: `const DSR_CLOCK_DAYS = 30;`
+  // and the exact text `days_left: elapsedDays === null ? null :
+  // DSR_CLOCK_DAYS - elapsedDays`. That is a text match on a DECLARATION —
+  // the D164 `investor_shell` class — and it was wrong in both directions at
+  // once. It failed on a correct refactor (moving the arithmetic into a
+  // service so it could be tested at all), and it never covered the half of
+  // the arithmetic that matters: `elapsedDays` was computed on the LINE ABOVE,
+  // which this guard did not read, so turning `86400000` into `3600000` would
+  // have made every request read twenty-four times more overdue and nothing
+  // here would have moved.
+  //
+  // So the property is pinned instead: ONE definition of the clock, the route
+  // computing `days_left` through the helper, and the page rendering the
+  // unknown state. The arithmetic's BEHAVIOUR — counting down, going negative
+  // when overdue, null for an unparseable stamp, and both sides of the 14-day
+  // amber edge — is exercised against real values in
+  // `cloudflare-worker/test/dsr_close_d168.test.ts`, which is the only place
+  // it can actually fail.
+  const SERVICE = read('cloudflare-worker/src/services/dsrRequests.ts');
+  assert.match(SERVICE, /export const DSR_CLOCK_DAYS = 30;/,
+    'the statutory clock is no longer 30 days, or no longer defined in the service');
+  assert.doesNotMatch(ROUTE, /const DSR_CLOCK_DAYS\s*=/,
+    'the route declares its own copy of the clock — two copies, and one of them will drift');
+  assert.match(ROUTE, /days_left: dsrDaysLeft\(/,
+    'the route computes days_left inline again, where no test can reach it');
   assert.match(PAGE, /d\.days_left === null \? <Unrecorded>clock unknown<\/Unrecorded>/);
 });
 
