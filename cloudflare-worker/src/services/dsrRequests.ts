@@ -186,3 +186,70 @@ export async function loadDsrHistory(env: Env): Promise<DsrHistory> {
     };
   }
 }
+
+export type DsrClosedRow = { outcome: string; closed_at: string | null; close_reason: string | null };
+export type DsrOwnOutcome =
+  | { available: true; last_closed: DsrClosedRow | null }
+  | { available: false; reason: string };
+
+/**
+ * D169 — WHAT THE SUBJECT IS TOLD, on the screen where they asked.
+ *
+ * THE DEFECT THIS CLOSES. `users.deletion_requested_at` is the open flag and
+ * `closeDsrRequest` clears it, so the moment HQ decides, Settings' amber
+ * "Deletion requested <date>" line simply DISAPPEARS. The subject asked,
+ * waited out a statutory clock, and the screen returns to as if they never
+ * asked. D168's close does write them an `activity_logs` row, so the outcome
+ * reaches the Cmd+K recent feed — capped at 20 rows, on a surface nobody
+ * checks for this. A denial that vanishes silently is the worst of the three
+ * outcomes, and this is the read that stops it.
+ *
+ * THE SUBJECT'S OWN ROW, not HQ's rollup. `loadDsrHistory` above is the
+ * cross-subject GROUP BY that HQ's list needs; this is one subject's terminal
+ * state, so it is a different query rather than a filter over that one — and
+ * it rides `idx_dsr_requests_user(user_id, …)`.
+ *
+ * `outcome` IS THE DISCRIMINATOR between HQ's decision and the subject's own
+ * withdrawal, and `closed_by_user_id` is deliberately not selected for it:
+ * `withdrawn` is writable only by `withdrawDsrRequest`, since HQ's route gates
+ * on `isHqDsrOutcome` and that list omits it. A second column to say the same
+ * thing would be a second thing that can disagree.
+ *
+ * NO OUTCOME IS FILTERED OUT, and the reason is a bug that filtering causes.
+ * Hiding `withdrawn` because the subject already knows they cancelled would
+ * surface the NEXT row down — so someone who was denied, asked again and then
+ * withdrew would be shown the OLD denial as their current state. One row, the
+ * last one, whatever it says.
+ *
+ * UNREADABLE IS NOT "NEVER ASKED" (#204, and `loadDsrHistory`'s own rule).
+ * `dsr_requests` arrives with migration 272 and has no runtime bootstrap, so a
+ * database behind on migrations has no table — and rendering that as silence
+ * would reproduce the exact defect above, on the exact screen, for the subject
+ * whose request WAS decided.
+ */
+export async function loadOwnDsrOutcome(env: Env, userId: number): Promise<DsrOwnOutcome> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT outcome, closed_at, close_reason
+         FROM dsr_requests
+        WHERE user_id = ? AND outcome IS NOT NULL
+        ORDER BY closed_at DESC, id DESC
+        LIMIT 1`,
+    ).bind(userId).first<{ outcome: string; closed_at: string | null; close_reason: string | null }>();
+    if (!row) return { available: true, last_closed: null };
+    return {
+      available: true,
+      last_closed: {
+        outcome: row.outcome,
+        closed_at: row.closed_at ?? null,
+        close_reason: row.close_reason ?? null,
+      },
+    };
+  } catch (e) {
+    return {
+      available: false,
+      reason: 'The record of any earlier deletion request could not be read just now, so what was decided '
+        + `is unknown — not "nothing was". Migration 272 creates it. (${(e as Error).message})`,
+    };
+  }
+}

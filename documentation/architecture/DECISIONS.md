@@ -14795,3 +14795,106 @@ nobody can check, which is the rule `scripts/sql-prepare-baseline.json` already
 states for its own. Mutation-checked three ways, including by putting this PR's
 actual collision back: `271_dsr_requests.sql` beside `271_archetype_sex.sql`
 now fails the suite.
+
+## D169
+
+**A decision the subject was never shown — the amber line vanished the moment
+HQ made one, and the only place the outcome surfaced was a feed twenty rows
+deep.**
+
+D168 gave HQ the power to close a data-subject request and deliberately left
+this half unbuilt, filed rather than folded in. This is that half.
+
+`users.deletion_requested_at` is the **open flag**, and `closeDsrRequest`
+clears it in the same batch that records the outcome — correctly, because it is
+what stops HQ's amber list showing a request that has been decided. The
+consequence on the other tier is that the subject's own Settings page loses its
+*"Deletion requested &lt;date&gt;"* line at exactly that moment, with nothing in
+its place. The subject asked, waited out a GDPR Art. 12(3) clock, and the
+screen returned to as if they had never asked.
+
+It is not quite silent: D168's close writes an `activity_logs` row addressed to
+the subject, and `routes/activity.ts` `GET /recent` reads it, so the outcome
+does reach the Cmd+K palette's recent feed — **capped at 20 rows, on a surface
+nobody opens to find out whether their erasure request was refused.** A denial
+that vanishes is the worst of the three outcomes, so `settings.ts`'s GET now
+carries the subject's last closed row and the deletion card renders it in the
+slot the amber line vacates.
+
+**`loadOwnDsrOutcome` is a separate query, not a filter over `loadDsrHistory`.**
+That one is HQ's cross-subject `GROUP BY`; this is one subject's terminal state,
+and it rides `idx_dsr_requests_user`. It inherits the rule that matters:
+**unreadable is not "nothing was decided"** (#204). Migration 272 carries no
+runtime bootstrap, so a database behind on migrations genuinely has no table —
+and rendering that as silence would reproduce the very defect this entry closes,
+on the very screen, for the subject whose request *was* decided.
+
+**No outcome is filtered out, and the reason is a bug that filtering causes.**
+Hiding `withdrawn` on the grounds that the subject already knows they cancelled
+would surface the *next* row down — so someone denied, who asked again and then
+withdrew, would be shown the **old denial** as their current state. One row, the
+last one, whatever it says. `outcome` is also the whole discriminator between
+HQ's decision and the subject's own act: `withdrawn` is writable only by
+`withdrawDsrRequest`, because HQ's route gates on `isHqDsrOutcome` and that list
+omits it. `closed_by_user_id` is deliberately **not** selected for it — a second
+column saying the same thing is a second thing that can disagree.
+
+**The judgement call, stated so it is cheap to reverse: the reason HQ typed is
+shown to the subject verbatim.** It is written to be read by a regulator and the
+subject is the person it is about, so withholding it would mean HQ recording a
+justification the only affected party cannot see. *Strike it and the subject
+sees the outcome and its date, with the reason staying HQ-side.*
+
+**And it renders only while nothing is open**, which is not a detail: asking
+again after a refusal opens a new row and leaves the old outcome in place, so
+rendering both would put a stale denial beside a request the subject has just
+filed. The amber line owns the live state; this owns the terminal one.
+
+**Not built: an email.** `notify()` is the only honest fan-out and this would
+need a template and a category decision. The screen and the feed are what D169
+covers, and the entry says so rather than letting the gap read as an oversight.
+
+### The "duplicate block" was not one block rendered twice — one of them never rendered
+
+The plan for this entry said `SettingsPage.jsx` drew the deletion control in two
+places and that the second copy should *collapse into the first*. Measured, that
+is wrong in a way that would have done real damage:
+
+| | component | tab | renders? |
+| --- | --- | --- | --- |
+| the live one | `AccountDeletionCard` | **Account** | ✅ |
+| the other | `PrivacySection`'s `{!hideAccountDelete && …}` | Security & privacy | ❌ **never** |
+
+`PrivacySection` has exactly **one** call site and it **always** passes
+`hideAccountDelete`, so that branch was structurally unreachable. Both were born
+in the same commit — `02c6a12b1`, the tabbed-Settings split — which created the
+new card for the Account tab and **suppressed** the old copy rather than
+deleting it. Following the plan literally would have collapsed the **live**
+control into the **dead** one: deleting the working Request/Cancel buttons and
+putting this notice where nobody would ever see it.
+
+That is the D147/D161/D164 class a fourth time, from yet another angle: **a
+claim whose scope was what a grep matched, not what renders.** The dead branch
+is deleted here, and deleting it stranded six declarations — which is exactly
+what D164's two newly-armed rules (`noUnusedLocals` and the scoped
+`no-unused-vars`) are for. They named every one, including a seventh thing I had
+got wrong in the other direction: I removed `flash` from the signature too, and
+the guard caught that `copyPublicUrl` still uses it. The guards did the scoping,
+not my reading of the file.
+
+### A stamp that has been mis-parsed since the line shipped
+
+`deletion_requested_at` is written `datetime('now')` — SQL
+`YYYY-MM-DD HH:MM:SS` — and both copies of the amber line did a bare
+`new Date()` on it. That shape is not in the `Date` grammar: **V8 reads it as
+the reader's LOCAL time and other engines return `NaN`**, so "Deletion requested
+&lt;date&gt;" has been a day out for readers west of UTC, or blank, since it
+shipped. Pre-existing, in the exact line this change edits, and identical to the
+bug the new notice would otherwise have shipped with — so both now go through
+`toUtcInstant` (`lib/notices.js`), which D136 wrote and D138 lifted for exactly
+this. A sixth local copy of that fix is what the lib README's rule forbids.
+
+**No migration** — 272 shipped with D168 and **273 is the next free number**.
+**No new `/api/*` method**: the field rides the settings payload the page
+already fetches, so `check-api-drift` has nothing to say, and a second fetch for
+it would be a second round trip and a new entry for the drift gate to police.

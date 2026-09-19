@@ -49,7 +49,7 @@ import {
   updateProfileBackground,
 } from '../services/profileExpansion';
 import { hashEmail } from '../util/hashEmail';
-import { openDsrRequest, withdrawDsrRequest } from '../services/dsrRequests';
+import { openDsrRequest, withdrawDsrRequest, loadOwnDsrOutcome } from '../services/dsrRequests';
 import { MATCHING_MIN_COMPLETION_PCT } from '../services/matchingConsent';
 import {
   LinkedInImportError,
@@ -241,6 +241,13 @@ const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
   await sql.end();
   if (rows.length === 0) return c.json({ error: 'User not found' }, 404);
   const u = rows[0];
+  // D169 — WHAT WAS DECIDED, for the subject, on the screen where they asked.
+  // `deletion_requested_at` above is the OPEN flag and HQ's close clears it,
+  // so without this the amber line vanishes the moment a decision is made and
+  // the page reads as if no request was ever filed. Its own availability state
+  // rather than a bare value: an unreadable ledger is not "nothing was
+  // decided" (#204). No new `/api/*` method is owed — it rides this payload.
+  const dsrOutcome = await loadOwnDsrOutcome(c.env, user.id);
   return c.json({
     integrations: integrationsList,
     id: u.id,
@@ -265,6 +272,7 @@ const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
     privacy_prefs: safeJson(u.privacy_prefs, { public_profile: { name: true, bio: true, headshot: true, socials: false } }),
     role_prefs: safeJson(u.role_prefs, {}),
     deletion_requested_at: u.deletion_requested_at || null,
+    dsr_outcome: dsrOutcome,
     pending_email_change: pendingChange[0] ? {
       new_email: pendingChange[0].new_email,
       requested_at: pendingChange[0].requested_at,
