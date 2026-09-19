@@ -10,7 +10,7 @@
  * admin/investor bypass the studio gate and are narrowed here via canViewLpData.
  */
 import { Hono } from 'hono';
-import type { Env, User } from '../types';
+import type { Env } from '../types';
 import { requireAuth, requireAdmin, canViewLpData } from '../auth';
 import { mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import {

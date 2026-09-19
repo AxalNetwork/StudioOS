@@ -520,8 +520,11 @@ settings.post('/email-change/revoke', async (c) => {
   // activity_logs line two statements below says "all sessions invalidated". The
   // comparison in getCurrentUser is a strict `<`, so a token minted in this same
   // second was NOT invalidated and the record said it was. The helper is the
-  // one definition of both the floor and the write.
-  const nowSec = await bumpJwtMinIat(c.env, rec.user_id);
+  // one definition of both the floor and the write. Nothing here reads the
+  // returned floor — this handler answers with the reverted email, not a stamp —
+  // so the call is not assigned. CodeQL caught the binding this left behind on
+  // the first draft; see the worker tsconfig for why nothing local did.
+  await bumpJwtMinIat(c.env, rec.user_id);
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
             VALUES ('email_change_revoked',
                     ${`Email change revoked: ${rec.new_email} -> ${rec.old_email}; all sessions invalidated`},

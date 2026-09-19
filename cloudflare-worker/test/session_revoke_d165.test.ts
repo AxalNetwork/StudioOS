@@ -153,6 +153,21 @@ test('the floor has ONE definition, and every writer shares it', () => {
     'the combined write re-typed the arithmetic instead of sharing the floor');
 });
 
+test('the worker checks its own unused locals, which is how this PR found it did not', () => {
+  // D165 consolidated a `jwt_min_iat` write into `bumpJwtMinIat` and left the
+  // floor it used to bind assigned to a local nothing read. Every local check
+  // passed: `no-unused-vars` and the other `noUnusedLocals` are both scoped to
+  // the SPA, and `check-unused-imports.mjs` sees only imports and `const {`
+  // destructures. CodeQL caught it on the PR instead, which is the slow way.
+  const cfg = read('cloudflare-worker/tsconfig.json');
+  assert.match(cfg, /"noUnusedLocals":\s*true/,
+    'the worker stopped checking its own unused locals — the gap that let D165\'s own '
+    + 'dead binding through every check but CodeQL');
+  // NOT `noUnusedParameters`, for the SPA's reason: it flags positional handler
+  // parameters that cannot be dropped without changing what the rest bind to.
+  assert.doesNotMatch(cfg, /"noUnusedParameters":\s*true/);
+});
+
 test('the helper docstring names its real callers', () => {
   // It claimed `/settings/sessions/revoke-all` shared it while settings.ts
   // inlined the UPDATE four times — a sentence asserting a consolidation had

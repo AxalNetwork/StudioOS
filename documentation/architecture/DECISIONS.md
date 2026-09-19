@@ -14305,5 +14305,43 @@ carries `viewed_user_id`, so the feed can name who was signed out.
 renders less loudly than a CSV export. That is a judgement about the feed's
 rendering, not about this route.
 
+### The gap this PR fell into, which is D164's other half
+
+CodeQL flagged an unused `nowSec` on this PR's own diff: consolidating the
+email-change revoke onto `bumpJwtMinIat` moved the write into the helper and
+left the floor it used to bind assigned to a local nothing read. Correct
+finding — and the interesting part is that **every local check passed.**
+
+D164 armed `noUnusedLocals` in `frontend/tsconfig.json` and `no-unused-vars` in
+`eslint.config.mjs`. Both are scoped to the SPA, so after eighteen
+unused-declaration alerts were swept, **`cloudflare-worker/src` still had no
+unused-local check of any kind.** The same lever closes it, and measuring the
+cost turned up a second finding and a third blind spot:
+
+| finding | what it was |
+| --- | --- |
+| `settings.ts` `nowSec` (TS6133) | D165's own, above |
+| `positions.ts` `User` (TS6196) | **pre-existing** — a type imported and used nowhere |
+
+The second one is the argument for the flag rather than a cost of it, because
+`check-unused-imports.mjs` **does** reach this tree and still could not see it.
+Its detection is `^import\s+(?:[\w$]+\s*,\s*)?\{` — the brace must follow the
+keyword, or a default import and a comma must come first — so in
+`import type { Env, User }` the word `type` sits exactly where the brace has to
+be. **`import type { … }` is invisible to that regex by construction**, a third
+blind spot beside the two D164 measured.
+
+Widening the regex is deliberately NOT the fix: `import type` is TypeScript-only,
+so `noUnusedLocals` on both tsconfigs already covers every file that can contain
+one, and it decides by scope analysis rather than by pattern — the argument
+`eslint.config.mjs` makes at length for preferring a real checker to a fourth
+bespoke script. With both findings cleared, `tsc` reports zero.
+
+**And the first measurement of that cost was wrong, which is recorded rather
+than quietly corrected.** It said "exactly one", because it grepped a CLI run
+for `TS6133` — an unused *local* — while an unused *type* is `TS6196`. Putting
+the flag in the config reported both. A grep scoped to one diagnostic code is
+how a cost looks smaller than it is.
+
 **No migration — `jwt_min_iat` already exists, and 271 stays free.** One new
 `/api/*` method with its route in the same commit.
