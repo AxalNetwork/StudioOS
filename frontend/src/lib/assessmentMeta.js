@@ -209,6 +209,15 @@ export function valueLabel(slug) { return VALUE_SPECTRUMS[slug]?.label || humani
 export function skillLabel(slug) { return SKILL_AXES[slug] || humanize(slug); }
 export function archetypeMeta(slug) { return ARCHETYPES[slug] || null; }
 
+// Pixel-art sprite served from `frontend/public/archetypes/{slug}.png`.
+// Only known ARCHETYPES keys resolve — unknown or unsafe slugs return null
+// so a bad slug cannot become a path.
+export function archetypeIllustration(slug) {
+  const key = String(slug || '').trim();
+  if (!ARCHETYPES[key]) return null;
+  return `/archetypes/${key}.png`;
+}
+
 // ── XP / level curve (mirrors assessmentScoring.ts::levelForXp) ──────────────
 export function levelForXp(xp) {
   return Math.floor(Math.sqrt(Math.max(0, Number(xp) || 0) / 100)) + 1;
