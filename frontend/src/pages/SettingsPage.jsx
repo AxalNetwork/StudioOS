@@ -3286,7 +3286,7 @@ function ProfileExtrasCard({ flash }) {
   const tzOptions = COMMON_TIMEZONES.includes(tz) ? COMMON_TIMEZONES : [tz, ...COMMON_TIMEZONES];
 
   return (
-    <Card title="Profile details" description="Locale, timezone, pronouns, and your public profile URL.">
+    <Card title="Profile details" description="Locale, timezone, pronouns, archetype character, and your public profile URL.">
       <div className="grid sm:grid-cols-2 gap-3">
         <Field label="Timezone" hint="Used for digests and quiet hours.">
           <select value={tz} onChange={e => save({ timezone: e.target.value })} disabled={busy} className={inputCls}>
@@ -3306,6 +3306,15 @@ function ProfileExtrasCard({ flash }) {
             onChange={e => setRow({ ...row, pronouns: e.target.value })}
             onBlur={() => save({ pronouns: row.pronouns || null })}
             placeholder="they/them" className={inputCls} />
+        </Field>
+        <Field label="Archetype character"
+          hint="Chooses the man or woman pixel-art on your Profile & Fit card. The advisor also asks this.">
+          <select value={row.archetype_sex || ''} onChange={e => save({ archetype_sex: e.target.value || null })} disabled={busy} className={inputCls}>
+            <option value="">Choose…</option>
+            <option value="m">Man</option>
+            <option value="f">Woman</option>
+            <option value="both">Show both</option>
+          </select>
         </Field>
         <Field label="Public profile slug"
           hint="2–40 lowercase letters, numbers, or hyphens. Becomes /u/<slug>.">

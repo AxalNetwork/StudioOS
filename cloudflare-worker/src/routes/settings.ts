@@ -1079,6 +1079,7 @@ function pickProfile(row: UserSettingsRow) {
     timezone: row.timezone,
     locale: row.locale,
     pronouns: row.pronouns,
+    archetype_sex: row.archetype_sex ?? null,
     profile_slug: row.profile_slug,
   };
 }
@@ -1181,6 +1182,7 @@ settings.put('/profile', async (c) => {
   if ('timezone' in body) patch.timezone = body.timezone;
   if ('locale' in body) patch.locale = body.locale;
   if ('pronouns' in body) patch.pronouns = body.pronouns;
+  if ('archetype_sex' in body) patch.archetype_sex = body.archetype_sex;
   if ('profile_slug' in body) patch.profile_slug = body.profile_slug;
   try {
     const row = await upsertUserSettings(c.env, user.id, patch);
@@ -1262,7 +1264,7 @@ settings.put('/profile/personal', async (c) => {
 // the read path. profile_completion_pct is recomputed inside those helpers
 // and returned in every response.
 const IDENTITY_PERSONAL_KEYS = ['display_name','headline','full_legal_name','date_of_birth','nationality'] as const;
-const IDENTITY_SETTINGS_KEYS = ['pronouns','profile_slug','timezone','locale'] as const;
+const IDENTITY_SETTINGS_KEYS = ['pronouns','archetype_sex','profile_slug','timezone','locale'] as const;
 const DETAILS_PERSONAL_KEYS = [
   'tax_residency_country','tax_id_number','phone_e164',
   'address_line1','address_line2','city','state_or_region','postal_code','country',
@@ -1277,6 +1279,7 @@ function pickIdentity(
     display_name: personal.display_name,
     headline: personal.headline,
     pronouns: settingsRow.pronouns,
+    archetype_sex: settingsRow.archetype_sex ?? null,
     profile_slug: settingsRow.profile_slug,
     timezone: settingsRow.timezone,
     locale: settingsRow.locale,

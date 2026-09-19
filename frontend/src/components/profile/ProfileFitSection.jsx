@@ -183,11 +183,24 @@ function ArchetypeSprite({ slug, variant = 'm', compact = false }) {
 
 function ArchetypePair({ slug, compact = false }) {
   return (
-    <div className="grid grid-cols-2 gap-2 items-end" data-testid="archetype-sprites">
+    <div className="grid grid-cols-2 gap-2 items-end" data-testid="archetype-sprites" data-sex="both">
       <ArchetypeSprite slug={slug} variant="f" compact={compact} />
       <ArchetypeSprite slug={slug} variant="m" compact={compact} />
     </div>
   );
+}
+
+// Show the matching sex sprite when we know it (advisor question, Settings,
+// or he/him · she/her pronouns). Unknown / they/them / "show both" keeps the pair.
+function ArchetypeArt({ slug, sex, compact = false }) {
+  if (sex === 'm' || sex === 'f') {
+    return (
+      <div data-testid="archetype-sprites" data-sex={sex}>
+        <ArchetypeSprite slug={slug} variant={sex} compact={compact} />
+      </div>
+    );
+  }
+  return <ArchetypePair slug={slug} compact={compact} />;
 }
 
 // ── Archetype ─────────────────────────────────────────────────────────────────
@@ -215,6 +228,9 @@ function ArchetypeCard({ state, fitState, className, audience = 'founder', compa
       const meta = archetypeMeta(latest.slug);
       const pct = latest.confidence != null ? Math.round(Number(latest.confidence) * 100) : null;
       const title = latest.label || meta?.label || latest.slug;
+      const sex = fitData?.archetype_sex === 'm' || fitData?.archetype_sex === 'f' || fitData?.archetype_sex === 'both'
+        ? fitData.archetype_sex
+        : 'both';
       const copy = (
         <>
           {meta?.tagline && (
@@ -234,7 +250,7 @@ function ArchetypeCard({ state, fitState, className, audience = 'founder', compa
 
       body = compact ? (
         <div className="flex min-w-0 flex-col gap-3">
-          <ArchetypePair slug={latest.slug} compact />
+          <ArchetypeArt slug={latest.slug} sex={sex} compact />
           <div>
             <div className="pf-lbl text-[10.5px] text-[#7c3aed] dark:text-violet-300 mb-1">Primary archetype</div>
             <div className="flex items-baseline justify-between gap-2">
@@ -249,7 +265,7 @@ function ArchetypeCard({ state, fitState, className, audience = 'founder', compa
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-[26px] items-start">
           <div className="min-w-0">
-            <ArchetypePair slug={latest.slug} />
+            <ArchetypeArt slug={latest.slug} sex={sex} />
             <div className="mt-3">
               <div className="pf-lbl text-[10.5px] text-[#7c3aed] dark:text-violet-300 mb-2">Primary archetype</div>
               <div className="text-[22px] font-extrabold tracking-[-0.02em] leading-tight text-[#27272a] dark:text-gray-100">{title}</div>
