@@ -102,8 +102,17 @@ test('the feed is a union of four stores, not the one Y2 read', () => {
   // moved the problem — each store is now read by two statements, so
   // renaming one of the pair still left the other matching. Reading the set
   // means a renamed table shows up as an unexpected NAME, wherever it is.
+  // D165 — SCANNED OVER CODE, NOT PROSE, and that closes a hole as well as a
+  // false positive. A comment in the route file reading "the governance feed's
+  // LEFT JOIN name WHO was signed out" put `name` in this set and failed correct
+  // code — but the same blindness runs the other way and is the serious half: a
+  // real `FROM activity_logs` could be DELETED and this assertion would still
+  // pass on a comment that merely mentions it. `codeOnly` is what the rest of
+  // this file already reads its sources through; the SQL scan was the one that
+  // did not. Same class as D152's banned-word scan that could not tell a rule
+  // from its violation.
   const tables = new Set(
-    [...ROUTE.matchAll(/\b(?:FROM|JOIN)\s+([a-z_]+)/g)].map((m) => m[1]),
+    [...codeOnly(ROUTE).matchAll(/\b(?:FROM|JOIN)\s+([a-z_]+)/g)].map((m) => m[1]),
   );
   assert.deepEqual([...tables].sort(), [
     // The feed's four stores…

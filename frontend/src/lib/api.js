@@ -3095,6 +3095,17 @@ export const api = {
     request(`/admin/security/governance?filter=${encodeURIComponent(filter || 'all')}`),
   hqSecurityForceReauth: (reason) =>
     request('/admin/security/force-reauth', { method: 'POST', body: JSON.stringify({ reason }) }),
+  // D165 — ONE account, not every account. Same bar as the bulk revoke above
+  // (TOTP + a recent step-up + the elevation), and the reason is stored with the
+  // action the same way. It is a separate method rather than an optional argument
+  // on the one above because the two are different acts with different blast
+  // radii, and an argument that turns "sign out everyone" into "sign out this
+  // person" by its presence is a call site nobody can read.
+  hqForceReauthUser: (userId, reason) =>
+    request(`/admin/security/force-reauth/${encodeURIComponent(userId)}`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
   licence: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}`),
   licenceTerritories: () => request('/admin/licences/territories'),
   // D110 — H3 step 6. Asks GitHub to run branch-provision.yml and writes the
