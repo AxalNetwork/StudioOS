@@ -14636,3 +14636,138 @@ document must agree rather than covering for each other. Re-run after the
 re-aim: **12 mutations, 12 caught.**
 
 **No migration — 271 stays free. No new `/api/*` method**; one is removed.
+
+---
+
+## D168
+
+**HQ watched a statutory clock and had no way to stop it — and nothing in
+either test tree had ever asserted a line of that screen.**
+
+`users.deletion_requested_at` is written by **the subject and nobody else**:
+`settings.ts` `POST /account/delete-request` sets it, `POST
+/account/delete-request/cancel` clears it. HQ *reads* it —
+`admin_security.ts` `GET /overview` selects every row that has it, computes
+`days_left` against `DSR_CLOCK_DAYS = 30` under a comment that is exactly
+right (*"GDPR Art. 12(3): one month from receipt. Counted from the request,
+not from triage."*), and `SecurityPage.jsx` renders it as an **amber** zone
+with `Nd overdue` in red and a headline count of requests *"inside deadline
+pressure"*.
+
+And `admin_security.ts` declared **four handlers** — two GETs and the two
+force-reauth POSTs. **None of them could fulfil, deny or close a request.**
+The only way a row ever left HQ's list was the subject cancelling their own
+request. That is the producer-with-no-actor shape this programme has closed a
+dozen times, and the first instance where the thing with no actor is a **legal
+deadline**.
+
+### The second finding, and my first statement of it was wrong
+
+I reported that **nothing** guarded this surface, on a `grep -rl
+'hq-dsr\|Data subject\|dsr'` over both test trees that returned nothing. The
+grep was case-sensitive and the guard spells it `DSR_CLOCK_DAYS`, so it missed
+`frontend/test/hq_security.test.mjs:97`, which does pin the clock. Correcting
+that rather than leaving it, because the true finding is sharper than the one
+I claimed.
+
+**The clock was HALF-pinned, and the pinned half was the spelling.** That
+guard matched two literals in the route: `const DSR_CLOCK_DAYS = 30;` and the
+exact text `days_left: elapsedDays === null ? null : DSR_CLOCK_DAYS -
+elapsedDays`. It never read the line ABOVE, where `elapsedDays` was computed —
+so **turning `86400000` into `3600000` would have made every request read
+twenty-four times more overdue and nothing would have moved.** A text match on
+a declaration, the D164 `investor_shell` class, wrong in both directions at
+once: blind to the arithmetic that matters, and failing on the correct
+refactor that finally made it testable.
+
+So `dsrDaysLeft` moved into `services/dsrRequests.ts` and is exercised against
+real values — counting down, going negative when overdue, `null` for an
+unparseable stamp, and **both sides of the 14-day amber edge**. *The first
+draft of that boundary assertion was itself a day out and failed on correct
+code*, which is the argument for pinning an edge from both sides rather than
+one. The old guard is re-aimed at the property: one definition of the clock,
+the route computing through the helper, the page rendering the unknown state.
+
+What was genuinely unguarded is everything else on the zone — the controls
+(there were none), the render's claims, and the distinction between an
+unreadable ledger and a subject who has never asked.
+
+So the arithmetic was **extracted into `services/dsrRequests.ts` as
+`dsrDaysLeft`** and is now exercised against both sides of its real edge: 15
+days elapsed leaves 15 (outside the 14-day amber band), 16 leaves 14 (inside).
+*The first draft of that assertion put the edge a day out and failed on correct
+code* — which is the argument for pinning a boundary from both sides rather
+than one.
+
+### What "fulfilled" means, stated everywhere it could be misread
+
+**There is no `DELETE FROM users`, no `deleted_at` and no anonymisation
+anywhere in this codebase**, and D168 does not invent one: erasure needs a
+retention and legal-hold policy nobody has written. So `fulfilled` **records
+that the manual erasure was carried out**. It performs none.
+
+That is said in the migration header, in the service, in the route's response
+message, and on the button itself — and it is asserted, because an audit row
+implying a deletion that did not happen is worse than the gap it closes. The
+zone's existing sentence *"erasure itself is still a manual act"* is
+**narrowed rather than deleted** (the D111 pattern): it stays true and gets
+sharper, because HQ can now record that the act was done.
+
+### `withdrawn` is the subject's, and HQ may not write it
+
+Migration 271's CHECK admits three outcomes; `HQ_DSR_OUTCOMES` admits **two**.
+A withdrawal is written by the subject's own cancel handler, with
+`closed_by_user_id` left NULL. An operator closing a request as withdrawn
+would be recording that the subject changed their mind when they did not —
+a false statement in the one store that exists to be trusted. The control is
+not drawn and the server refuses the value.
+
+### The store, and why it is not columns
+
+`users` is at D1's 100-column cap — the reason `super_admins` is a side table
+at all (D35, migration 199) — and a request is an **event with a lifecycle
+that recurs**: a subject denied once may ask again, which a column set cannot
+carry. `dsr_requests` is migration 264's shape one ladder over.
+
+**`users.deletion_requested_at` stays authoritative for "open"**, which is
+what lets rows predating 271 keep working with no backfill: the close
+**derives** the ledger row from the timestamp already stored. That is carrying
+a fact the database holds, not the backfill D136 refused — that one would have
+written an acceptance nobody gave. A partial unique index on
+`user_id WHERE outcome IS NULL` makes "at most one open request per subject"
+structural rather than a rule three handlers each have to remember, and it
+matches the `COALESCE` the request handler already used.
+
+**Both halves move in one `DB.batch`.** If the flag cleared and the record did
+not, the request would vanish from HQ's list with nothing saying what was
+decided — so the batch throws and the route answers 503 with the reason,
+rather than clearing the flag on its own.
+
+### Consolidated rather than copied, and the reason is testability
+
+The ledger has three writers in two route files. Written three times one of
+them would eventually forget to move the flag, so `openDsrRequest`,
+`withdrawDsrRequest`, `closeDsrRequest`, `loadDsrHistory` and `dsrDaysLeft`
+live in one service — which is also what lets the assertions run the real
+writes against a `node:sqlite` database built from **migration 271 itself**,
+sliced off disk. A hand-written fixture that omitted the CHECK or the partial
+index would be testing a shape production does not have, which is the defect
+D139 found in the contract fixture.
+
+The subject's two handlers call it **best-effort**: a member must be able to
+request and to cancel whatever state HQ's ledger is in. An unreadable ledger
+on the READ path reports `ledger_available: false` and the page renders
+*earlier requests unknown* — never 0, because "this subject has never asked
+before" is a claim and an unreadable store has not made it (#204, on a screen
+where a third ask read as a first changes a decision).
+
+### Deliberately not built
+
+**The subject's own view of the outcome beyond their activity feed.** The
+close writes an `activity_logs` row addressed to the subject, which
+`routes/activity.ts` `GET /recent` already reads — so the outcome reaches them
+with no new surface. A dedicated panel in their Settings is a separate change
+and is filed rather than folded in.
+
+**No migration beyond 271, which is the first use of it** — 272 is now the
+next free number.

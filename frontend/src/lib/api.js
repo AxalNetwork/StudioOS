@@ -3105,6 +3105,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ reason }),
     }),
+  // D168 — close a data-subject erasure request. `outcome` is 'fulfilled' or
+  // 'denied' and the server admits no third value from HQ: a withdrawal is the
+  // subject's own act, recorded when they cancel. `fulfilled` records that the
+  // MANUAL erasure was carried out — this platform performs none, and the
+  // server's own message says so rather than letting the word imply otherwise.
+  hqCloseDsrRequest: (userId, outcome, reason) =>
+    request(`/admin/security/dsr/${encodeURIComponent(userId)}/close`, {
+      method: 'POST',
+      body: JSON.stringify({ outcome, reason }),
+    }),
   licence: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}`),
   licenceTerritories: () => request('/admin/licences/territories'),
   // D110 — H3 step 6. Asks GitHub to run branch-provision.yml and writes the

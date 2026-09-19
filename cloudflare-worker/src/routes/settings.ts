@@ -49,6 +49,7 @@ import {
   updateProfileBackground,
 } from '../services/profileExpansion';
 import { hashEmail } from '../util/hashEmail';
+import { openDsrRequest, withdrawDsrRequest } from '../services/dsrRequests';
 import { MATCHING_MIN_COMPLETION_PCT } from '../services/matchingConsent';
 import {
   LinkedInImportError,
@@ -818,6 +819,21 @@ settings.post('/account/delete-request', async (c) => {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
   await sql`UPDATE users SET deletion_requested_at = COALESCE(deletion_requested_at, datetime('now')) WHERE id = ${user.id}`;
+  // D168 — OPEN THE LEDGER ROW HQ CAN LATER CLOSE. Until migration 271 there
+  // was nothing to close: the column above was the whole record, HQ could
+  // read it and had no way to act on it, so the only way a request ever left
+  // HQ's list was the cancel below. Runs AFTER the UPDATE because it reads
+  // that column, which is what gives the clock one value rather than two.
+  //
+  // BEST-EFFORT, DELIBERATELY. A database that has not applied 271 has no
+  // table, and a member must not be unable to request erasure because HQ's
+  // ledger is behind. The request is recorded either way — the column is what
+  // HQ reads — and the close route derives the missing row from it.
+  try {
+    await openDsrRequest(c.env, user.id);
+  } catch (e) {
+    console.warn('[settings] dsr_requests open failed', (e as Error).message);
+  }
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
             VALUES ('account_deletion_requested',
                     'User requested account deletion via /settings (manual review required)',
@@ -831,6 +847,19 @@ settings.post('/account/delete-request/cancel', async (c) => {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
   await sql`UPDATE users SET deletion_requested_at = NULL WHERE id = ${user.id}`;
+  // D168 — `withdrawn` IS THE SUBJECT'S OWN OUTCOME, and it is the one HQ's
+  // close route refuses to write: an operator recording a withdrawal would be
+  // saying the subject changed their mind when they did not. So it is written
+  // here, where that is true, and `closed_by_user_id` stays NULL because
+  // naming an operator would record an act nobody performed.
+  //
+  // Best-effort for the same reason as the request above: a member must be
+  // able to cancel whatever state HQ's ledger is in.
+  try {
+    await withdrawDsrRequest(c.env, user.id);
+  } catch (e) {
+    console.warn('[settings] dsr_requests withdraw failed', (e as Error).message);
+  }
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
             VALUES ('account_deletion_cancelled', 'User cancelled their pending deletion request',
                     ${user.email}, ${user.id})`;

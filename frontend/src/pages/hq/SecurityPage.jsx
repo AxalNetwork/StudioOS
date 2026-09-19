@@ -293,6 +293,104 @@ function ForceReauth({ onDone }) {
   );
 }
 
+/**
+ * D168 — one open erasure request, and the two outcomes HQ may record.
+ *
+ * WHY THIS EXISTS. Before it, this zone rendered a statutory clock in amber,
+ * turned it red when it ran out, and offered nothing: the only way a row left
+ * the list was the subject cancelling their own request. HQ watched a legal
+ * deadline it could not stop.
+ *
+ * `withdrawn` IS NOT OFFERED, and the server refuses it too. A withdrawal is
+ * the subject's act, recorded when they cancel in their own Settings; a
+ * control here would let an operator record that someone changed their mind
+ * when they did not.
+ *
+ * `Fulfilled` RECORDS A MANUAL ACT, IT DOES NOT PERFORM ONE — the platform
+ * erases nothing, and the button's own note says so. A control labelled as if
+ * it deleted the account would be the `still_an_admin` mistake D134 named, in
+ * the one place where the lie is also a compliance record.
+ */
+function DsrClose({ row, onDone }) {
+  const [outcome, setOutcome] = useState('');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.hqCloseDsrRequest(row.id, outcome, reason.trim());
+      onDone?.();
+    } catch (err) {
+      const msg = String(err?.message || err || 'Request failed');
+      setError(msg === 'TOTP required'
+        ? 'This needs a session signed in with your authenticator app. Sign out and back in with a code, then try again.'
+        : msg);
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!outcome) {
+    return (
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5" data-testid="hq-dsr-actions">
+        <button
+          type="button"
+          onClick={() => setOutcome('fulfilled')}
+          className="rounded-md border border-axal-hairline bg-white px-2 py-1 text-[11px] font-semibold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
+        >
+          Record as fulfilled
+        </button>
+        <button
+          type="button"
+          onClick={() => setOutcome('denied')}
+          className="rounded-md border border-axal-hairline bg-white px-2 py-1 text-[11px] font-semibold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
+        >
+          Record as denied
+        </button>
+      </div>
+    );
+  }
+  return (
+    <form onSubmit={submit} className="mt-1.5 space-y-1.5" data-testid="hq-dsr-close-form">
+      <p className="text-[11px] leading-relaxed text-axal-muted">
+        {outcome === 'fulfilled'
+          ? 'This records that the erasure was carried out. It does not erase anything — the platform performs no deletion, so what you are recording is the manual act.'
+          : 'This records a refusal, with your reason stored against it. The subject can make a new request.'}
+      </p>
+      <label className="block text-[11px] font-semibold text-axal-muted">
+        Reason · required, stored with the action
+        <input
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder={outcome === 'fulfilled'
+            ? 'e.g. records purged from D1 and R2 on 2026-09-19, ticket DSR-14'
+            : 'e.g. retained under an open legal hold, ticket DSR-15'}
+          className="mt-1 w-full rounded-md border border-axal-hairline bg-white px-2.5 py-1.5 text-[12px] font-normal text-axal-ink dark:bg-gray-900"
+        />
+      </label>
+      {error && <p role="alert" className="text-[11.5px] text-red-700 dark:text-red-300">{error}</p>}
+      <div className="flex items-center gap-1.5">
+        <button
+          type="submit"
+          disabled={busy || reason.trim().length < 8}
+          className="inline-flex items-center gap-1.5 rounded-md border-[1.5px] border-amber-700 bg-white px-2.5 py-1 text-[11px] font-bold text-amber-800 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-500 dark:bg-gray-900 dark:text-amber-300 dark:hover:bg-amber-950/30"
+        >
+          {busy ? <Loader2 size={12} className="animate-spin" /> : null} Close as {outcome}
+        </button>
+        <button
+          type="button"
+          onClick={() => { setOutcome(''); setError(null); }}
+          className="rounded-md px-2 py-1 text-[11px] font-semibold text-axal-faint hover:text-axal-ink dark:hover:text-gray-100"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
 export default function HqSecurityPage() {
   const [data, setData] = useState(null);
   const load = useCallback(() => {
@@ -449,11 +547,30 @@ export default function HqSecurityPage() {
               {ready && dsr.length > 0 && (
                 <ul className="space-y-1.5" data-testid="hq-dsr">
                   {dsr.map((d) => (
-                    <li key={d.id} className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-white px-3 py-2 text-[12px] dark:border-amber-900 dark:bg-gray-900">
-                      <span className="min-w-0 truncate"><b>{d.name || d.email}</b> <span className="text-axal-faint">· {titleCase(d.role)} · erasure</span></span>
-                      <span className={`shrink-0 font-bold tabular-nums ${d.days_left === null ? 'text-axal-faint' : d.days_left < 0 ? 'text-red-700 dark:text-red-300' : d.days_left <= 14 ? 'text-amber-800 dark:text-amber-300' : 'text-axal-ink dark:text-white'}`}>
-                        {d.days_left === null ? <Unrecorded>clock unknown</Unrecorded> : d.days_left < 0 ? `${num(-d.days_left)}d overdue` : `${num(d.days_left)}d left`}
-                      </span>
+                    <li key={d.id} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-[12px] dark:border-amber-900 dark:bg-gray-900">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="min-w-0 truncate"><b>{d.name || d.email}</b> <span className="text-axal-faint">· {titleCase(d.role)} · erasure</span></span>
+                        <span className={`shrink-0 font-bold tabular-nums ${d.days_left === null ? 'text-axal-faint' : d.days_left < 0 ? 'text-red-700 dark:text-red-300' : d.days_left <= 14 ? 'text-amber-800 dark:text-amber-300' : 'text-axal-ink dark:text-white'}`}>
+                          {d.days_left === null ? <Unrecorded>clock unknown</Unrecorded> : d.days_left < 0 ? `${num(-d.days_left)}d overdue` : `${num(d.days_left)}d left`}
+                        </span>
+                      </div>
+                      {/* D168 — HAS THIS SUBJECT ASKED BEFORE? `prior_requests` is
+                          null, never 0, when the ledger could not be read: "never
+                          asked before" is a claim, and an unreadable store has not
+                          made it. A third ask read as a first is the thing this
+                          line exists to prevent. */}
+                      {d.prior_requests === null ? (
+                        <p className="mt-0.5 text-[11px] text-axal-faint" data-testid="hq-dsr-history-unreadable">
+                          <Unrecorded>earlier requests unknown</Unrecorded>
+                        </p>
+                      ) : d.prior_requests > 0 ? (
+                        <p className="mt-0.5 text-[11px] text-axal-faint" data-testid="hq-dsr-history">
+                          {num(d.prior_requests)} earlier request{d.prior_requests === 1 ? '' : 's'}
+                          {d.last_outcome ? ` · last ${d.last_outcome}` : ''}
+                          {d.last_outcome_at ? ` on ${String(d.last_outcome_at).slice(0, 10)}` : ''}
+                        </p>
+                      ) : null}
+                      <DsrClose row={d} onDone={load} />
                     </li>
                   ))}
                 </ul>
@@ -461,7 +578,8 @@ export default function HqSecurityPage() {
               {!ready && data !== UNAVAILABLE && <p className="text-[12px] text-axal-faint">Loading…</p>}
               <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
                 The clock is statutory — one month from receipt, not from triage. Requests come from each account&apos;s own
-                Settings; erasure itself is still a manual act.
+                Settings; <b>erasure itself is still a manual act</b>, and closing a request here records that act rather
+                than performing one. A withdrawal is the subject&apos;s own and is recorded when they cancel.
               </p>
             </Zone>
 
