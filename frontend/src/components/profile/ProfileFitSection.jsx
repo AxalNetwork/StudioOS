@@ -156,19 +156,19 @@ function ValuesLeanCard({ state, className, audience = 'founder' }) {
   return <CardShell title={audience === 'founder' ? 'Values graph' : 'Values'} className={className}>{body}</CardShell>;
 }
 
-// Pixel-art sprite for an archetype slug. Studio's 3-column band is ~400px
-// wide, so compact is a 180px box (radar is 210). Full profile is 240px.
-// Light tile in both themes so a white/transparent PNG stays readable.
-// Missing files hide the box rather than leaving a hole.
-function ArchetypeSprite({ slug, compact = false }) {
-  const src = archetypeIllustration(slug);
+// Pixel-art sprite for one gender of an archetype. Studio's 3-column band
+// is ~400px, so each of the male/female pair is a 180px box (radar is 210).
+// Light tile in both themes so a white PNG stays readable. Missing files
+// hide that slot rather than leaving a hole.
+function ArchetypeSprite({ slug, variant = 'm', compact = false }) {
+  const src = archetypeIllustration(slug, variant);
   const [failed, setFailed] = useState(false);
   if (!src || failed) return null;
-  const box = compact ? 'h-[180px] w-[180px]' : 'h-[240px] w-[240px]';
+  const box = compact ? 'w-full max-w-[180px] aspect-square' : 'w-full max-w-[240px] aspect-square';
   return (
     <div
       className={`${box} mx-auto shrink-0 overflow-hidden rounded-[16px] bg-[#f8f7fb] dark:bg-[#ece8f5] border border-[#ece8f5] dark:border-[#d4cce8] flex items-end justify-center`}
-      data-testid="archetype-sprite"
+      data-testid={`archetype-sprite-${variant}`}
     >
       <img
         src={src}
@@ -177,6 +177,15 @@ function ArchetypeSprite({ slug, compact = false }) {
         decoding="async"
         onError={() => setFailed(true)}
       />
+    </div>
+  );
+}
+
+function ArchetypePair({ slug, compact = false }) {
+  return (
+    <div className="grid grid-cols-2 gap-2 items-end" data-testid="archetype-sprites">
+      <ArchetypeSprite slug={slug} variant="f" compact={compact} />
+      <ArchetypeSprite slug={slug} variant="m" compact={compact} />
     </div>
   );
 }
@@ -225,7 +234,7 @@ function ArchetypeCard({ state, fitState, className, audience = 'founder', compa
 
       body = compact ? (
         <div className="flex min-w-0 flex-col gap-3">
-          <ArchetypeSprite key={latest.slug} slug={latest.slug} compact />
+          <ArchetypePair slug={latest.slug} compact />
           <div>
             <div className="pf-lbl text-[10.5px] text-[#7c3aed] dark:text-violet-300 mb-1">Primary archetype</div>
             <div className="flex items-baseline justify-between gap-2">
@@ -238,9 +247,9 @@ function ArchetypeCard({ state, fitState, className, audience = 'founder', compa
           {copy}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-[26px] items-start">
+        <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-[26px] items-start">
           <div className="min-w-0">
-            <ArchetypeSprite key={latest.slug} slug={latest.slug} />
+            <ArchetypePair slug={latest.slug} />
             <div className="mt-3">
               <div className="pf-lbl text-[10.5px] text-[#7c3aed] dark:text-violet-300 mb-2">Primary archetype</div>
               <div className="text-[22px] font-extrabold tracking-[-0.02em] leading-tight text-[#27272a] dark:text-gray-100">{title}</div>

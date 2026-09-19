@@ -8,16 +8,17 @@
  * box that matches the radar (210px), not a second column that does not
  * fit.
  *
- * Compact (every /studio home) is a vertical 180px sprite. Full /profile
- * is 240px beside the copy. Paths come from archetypeIllustration, which
- * only resolves known ARCHETYPES slugs so a bad slug cannot become a path.
- * Missing PNGs hide the box.
+ * Compact (every /studio home) stacks a 180px female/male pair. Full
+ * /profile is 240px beside the copy. Paths come from
+ * archetypeIllustration(slug, 'm'|'f'), which only resolves known
+ * ARCHETYPES slugs so a bad slug cannot become a path. Missing PNGs hide
+ * that slot.
  *
  * Run with:  node --test frontend/test/studio_archetype_sprite.test.mjs
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { codeOnly } from './_codeOnly.mjs';
 
@@ -39,10 +40,10 @@ test('every ARCHETYPES key is a path-safe slug', () => {
   }
 });
 
-test('archetypeIllustration maps known slugs and rejects everything else', () => {
-  assert.match(metaCode, /export function archetypeIllustration\(slug\)/);
+test('archetypeIllustration maps known slugs to male and female paths', () => {
+  assert.match(metaCode, /export function archetypeIllustration\(slug, variant = 'm'\)/);
   assert.match(metaCode, /if \(!ARCHETYPES\[key\]\) return null;/);
-  assert.match(metaCode, /return `\/archetypes\/\$\{key\}\.png`;/);
+  assert.match(metaCode, /return female \? `\/archetypes\/\$\{key\}_f\.png` : `\/archetypes\/\$\{key\}\.png`;/);
   assert.doesNotMatch(metaCode, /\$\{slug\}/,
     'the path must use the ARCHETYPES-checked key, not the raw argument');
 });
@@ -50,12 +51,20 @@ test('archetypeIllustration maps known slugs and rejects everything else', () =>
 test('studio compact archetype does not use the 300px two-column grid', () => {
   assert.doesNotMatch(fitCode, /md:grid-cols-\[300px/);
   assert.match(fitCode, /<ArchetypeCard state=\{results\} fitState=\{fit\} audience=\{audience\} compact \/>/);
-  assert.match(fitCode, /h-\[180px\] w-\[180px\]/);
+  assert.match(fitCode, /max-w-\[180px\]/);
+  assert.match(fitCode, /<ArchetypePair slug=\{latest\.slug\} compact \/>/);
 });
 
-test('full archetype is 240px beside copy, not 300px', () => {
-  assert.match(fitCode, /md:grid-cols-\[240px_1fr\]/);
-  assert.match(fitCode, /h-\[240px\] w-\[240px\]/);
+test('full archetype holds the pair in a 280px column, not 300px', () => {
+  assert.match(fitCode, /md:grid-cols-\[280px_1fr\]/);
+  assert.match(fitCode, /max-w-\[240px\]/);
+});
+
+test('the studio card renders the female and male sprites as a pair', () => {
+  assert.match(fitCode, /variant="f"/);
+  assert.match(fitCode, /variant="m"/);
+  assert.match(fitCode, /grid grid-cols-2 gap-2 items-end/);
+  assert.match(fitCode, /data-testid="archetype-sprites"/);
 });
 
 test('sprites stay pixelated, contained, feet on the floor, and hide on 404', () => {
@@ -65,6 +74,15 @@ test('sprites stay pixelated, contained, feet on the floor, and hide on 404', ()
   assert.match(fitCode, /if \(!src \|\| failed\) return null;/);
   assert.match(fitCode, /dark:bg-\[#ece8f5\]/,
     'dark mode must keep a light tile so a white/transparent sprite stays visible');
+});
+
+test('public/archetypes has the female and male pair for every slug', () => {
+  const dir = fileURLToPath(new URL('../public/archetypes/', import.meta.url));
+  for (const slug of ARCHETYPE_KEYS) {
+    assert.equal(existsSync(`${dir}${slug}_f.png`), true, `missing ${slug}_f.png`);
+    if (slug === 'pt_embedded_operator') continue;
+    assert.equal(existsSync(`${dir}${slug}.png`), true, `missing ${slug}.png`);
+  }
 });
 
 test('every studio home still mounts ProfileFitSection compact', () => {
