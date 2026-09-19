@@ -2,8 +2,8 @@
  * Task #39 — Event engine: admin routes (design §8.3).
  *
  * Mounted at /api/admin/events, BEFORE the catch-all /api/admin router (same
- * mount-before-catch-all precedence as admin_news / admin_articles). Every
- * handler is requireAdmin; mutating actions append to admin_audit_log with
+ * mount-before-catch-all precedence as admin_articles). Every handler is
+ * requireAdmin; mutating actions append to admin_audit_log with
  * report_type='events' (the audit writer mirrors admin_telegram.ts, tolerating
  * the optional `actor` column).
  *

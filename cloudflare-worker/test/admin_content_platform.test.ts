@@ -5,9 +5,11 @@
  * pipeline replacing three systems", and checking that premise before
  * building is what shaped both endpoints:
  *
- *   - News is NOT a third system. `admin_news.ts` reads the same `articles`
- *     table and already answers with a Deprecation header. A third of the
- *     unification has happened; reporting it as outstanding would be wrong
+ *   - News is NOT a third system. The `/api/admin/news` queue read the same
+ *     `articles` table behind a Deprecation header, and D166 retired it
+ *     outright — it accepted `in_review` at publish, so the approval gate on
+ *     `/api/admin/articles` could be walked around by calling it. A third of
+ *     the unification is DONE; reporting it as outstanding would be wrong
  *     about the repo's own state.
  *   - The master template library the artboard draws in this zone already
  *     exists at `/admin/contracts`. Two pages over one store drift apart, so
@@ -180,7 +182,20 @@ test('publications are reported as the SECOND vocabulary, not merged into the fi
   assert.match(String(r.body.unified_pipeline_reason), /two stores with two meanings/);
   // And the reason says the part that is already done, or the page misreports
   // the repo's own state as worse than it is.
-  assert.match(String(r.body.unified_pipeline_reason), /News is no longer a third/);
+  //
+  // D166 RE-AIMED THIS, and finding it was the point. Two files assert this
+  // premise against the same live response STRING — here and
+  // frontend/test/hq_content_platform_h6.test.mjs — and a third asserted it
+  // by reading routes/admin_news.ts, which the delete made throw ENOENT.
+  // Only that third one fails loudly when the router goes. These two keep
+  // passing on whatever the sentence happens to say, so had the wording not
+  // moved with the delete, the product would have gone on telling operators
+  // that a router which no longer exists "already answers with a Deprecation
+  // header". The assertion now pins the retirement and explicitly refuses
+  // the alias wording, so it cannot drift back.
+  assert.match(String(r.body.unified_pipeline_reason), /News is not a third/);
+  assert.doesNotMatch(String(r.body.unified_pipeline_reason), /Deprecation header pointing at/,
+    'the reason describes admin_news as a live deprecated alias again');
 });
 
 test('the template library is pointed at, not rebuilt', async () => {

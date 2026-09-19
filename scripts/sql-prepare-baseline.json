@@ -122,7 +122,6 @@
     "setClause @ services/profileExpansion.ts": 1,
     "setClauses @ routes/pipeline.ts": 1,
     "sets @ routes/admin_articles.ts": 2,
-    "sets @ routes/admin_news.ts": 2,
     "sets @ routes/articles.ts": 1,
     "sets @ routes/news.ts": 1,
     "sets @ services/marketAssumptions.ts": 1,

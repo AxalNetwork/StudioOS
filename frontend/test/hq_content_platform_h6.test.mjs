@@ -4,10 +4,10 @@
  * THE ARTBOARD'S SUBTITLE IS THE THING THIS FILE MOSTLY GUARDS. It reads
  * "one pipeline replacing three systems", and the temptation on a page
  * called Content is to draw that pipeline as though it had been built. It
- * has not, and it is not three either: `admin_news.ts` reads the same
- * `articles` table and already answers with a Deprecation header, so news
- * is a deprecated alias rather than a third system. What is left is two
- * stores with two meanings of "published".
+ * has not, and it is not three either: news was never a separate store —
+ * the `/api/admin/news` queue read the same `articles` table — and D166
+ * RETIRED it, so there is now one admin queue over that table rather than
+ * two. What is left is two stores with two meanings of "published".
  *
  * Two more claims the pages must not make: the master template library is a
  * LINK to the page that owns it rather than a second copy over the same
@@ -17,7 +17,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 
@@ -66,17 +66,30 @@ test('both pages draw what the artboard draws', () => {
 test('the unified pipeline is NOT claimed, and news is not called a third system', () => {
   // The whole premise check. Getting this wrong in either direction is a
   // false statement: claiming the pipeline exists, or reporting news as
-  // outstanding when the repo already collapsed it into articles.
+  // outstanding when the repo has already retired it.
   assert.match(CROUTE, /unified_pipeline_available: false/,
     'the route claims a unified pipeline exists');
-  assert.match(CROUTE, /News is no longer a third/,
-    'the reason does not record that news is already collapsed into articles');
+  assert.match(CROUTE, /News is not a third/,
+    'the reason does not record that news is no longer a separate queue');
   assert.match(C, /data\.unified_pipeline_reason/, 'the page does not show why the two are still two');
-  // And the claim is verifiable rather than asserted: news really does read
-  // the same table and really does ship the deprecation header.
-  const NEWS = raw('cloudflare-worker/src/routes/admin_news.ts');
-  assert.match(NEWS, /FROM articles/, 'admin_news no longer reads the articles table — recheck the premise');
-  assert.match(NEWS, /Deprecation/, 'admin_news no longer announces itself as deprecated');
+
+  // D166 RE-AIMED BOTH HALVES OF THIS TEST, and the second half is why it
+  // needed saying. The premise used to be verified by READING
+  // `routes/admin_news.ts` and asserting it read `FROM articles` behind a
+  // `Deprecation` header. Deleting that file makes the read throw ENOENT, so
+  // that half fails loudly and cannot be missed.
+  //
+  // The half above CANNOT: it scans `admin_content.ts`'s reason string, which
+  // is a live API response body the SPA renders. Had the wording not moved
+  // with the delete, this test would have gone on passing while the product
+  // told operators that a retired router "already answers with a Deprecation
+  // header". A guard that keeps passing on a sentence the code made false is
+  // the defect this whole PR is about, one layer up — so the reason is
+  // asserted to describe the retirement rather than the alias.
+  assert.doesNotMatch(CROUTE, /Deprecation header pointing at/,
+    'the reason still describes admin_news as a live deprecated alias');
+  assert.ok(!existsSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_news.ts')),
+    'routes/admin_news.ts is back — D166 retired it for accepting in_review at publish');
 });
 
 test('the template library is linked, not rebuilt', () => {

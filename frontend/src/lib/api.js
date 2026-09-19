@@ -4866,30 +4866,6 @@ export const news = {
     request(`/news/${id}/cover`, { method: 'POST', body: JSON.stringify({ data_uri: dataUri }) }),
 };
 
-export const adminNews = {
-  queue: ({ status, limit = 50, offset = 0 } = {}) => {
-    const qs = new URLSearchParams();
-    if (status) qs.set('status', status);
-    qs.set('limit', String(limit));
-    qs.set('offset', String(offset));
-    return request(`/admin/news/queue?${qs.toString()}`);
-  },
-  get: (id) => request(`/admin/news/${id}`),
-  startReview: (id) => request(`/admin/news/${id}/start-review`, { method: 'POST', body: '{}' }),
-  requestChanges: (id, reason) =>
-    request(`/admin/news/${id}/request-changes`, { method: 'POST', body: JSON.stringify({ reason }) }),
-  reject: (id, reason) =>
-    request(`/admin/news/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
-  approve: (id) => request(`/admin/news/${id}/approve`, { method: 'POST', body: '{}' }),
-  publish: (id) => request(`/admin/news/${id}/publish`, { method: 'POST', body: '{}' }),
-  unpublish: (id) => request(`/admin/news/${id}/unpublish`, { method: 'POST', body: '{}' }),
-  addComment: (id, body, anchor) =>
-    request(`/admin/news/${id}/comments`, { method: 'POST', body: JSON.stringify({ body, anchor }) }),
-  resolveComment: (cid, resolved) =>
-    request(`/admin/news/comments/${cid}`, { method: 'PUT', body: JSON.stringify({ resolved }) }),
-  deleteComment: (cid) => request(`/admin/news/comments/${cid}`, { method: 'DELETE' }),
-};
-
 // Task #1 — Articles (author + admin queue). Mirrors `news` but uses
 // the /api/articles surface (role filter, by-author endpoint, sectors).
 export const articles = {
