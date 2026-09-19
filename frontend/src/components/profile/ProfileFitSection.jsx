@@ -3,7 +3,7 @@ import { Loader2, AlertCircle, Lock } from 'lucide-react';
 import { api, assessment } from '../../lib/api';
 import SkillRadar from '../play/SkillRadar';
 import { openPaywall } from '../PaywallModal';
-import { archetypeMeta, humanize } from '../../lib/assessmentMeta';
+import { archetypeIllustration, archetypeMeta, humanize } from '../../lib/assessmentMeta';
 
 function CardShell({ title, badge, className = '', children, action }) {
   return (
@@ -156,8 +156,42 @@ function ValuesLeanCard({ state, className, audience = 'founder' }) {
   return <CardShell title={audience === 'founder' ? 'Values graph' : 'Values'} className={className}>{body}</CardShell>;
 }
 
+// Pixel-art sprite for one gender of an archetype. Studio's 3-column band
+// is ~400px, so each of the male/female pair is a 180px box (radar is 210).
+// Light tile in both themes so a white PNG stays readable. Missing files
+// hide that slot rather than leaving a hole.
+function ArchetypeSprite({ slug, variant = 'm', compact = false }) {
+  const src = archetypeIllustration(slug, variant);
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) return null;
+  const box = compact ? 'w-full max-w-[180px] aspect-square' : 'w-full max-w-[240px] aspect-square';
+  return (
+    <div
+      className={`${box} mx-auto shrink-0 overflow-hidden rounded-[16px] bg-[#f8f7fb] dark:bg-[#ece8f5] border border-[#ece8f5] dark:border-[#d4cce8] flex items-end justify-center`}
+      data-testid={`archetype-sprite-${variant}`}
+    >
+      <img
+        src={src}
+        alt=""
+        className="pf-sprite h-full w-full object-contain object-bottom"
+        decoding="async"
+        onError={() => setFailed(true)}
+      />
+    </div>
+  );
+}
+
+function ArchetypePair({ slug, compact = false }) {
+  return (
+    <div className="grid grid-cols-2 gap-2 items-end" data-testid="archetype-sprites">
+      <ArchetypeSprite slug={slug} variant="f" compact={compact} />
+      <ArchetypeSprite slug={slug} variant="m" compact={compact} />
+    </div>
+  );
+}
+
 // ── Archetype ─────────────────────────────────────────────────────────────────
-function ArchetypeCard({ state, fitState, className, audience = 'founder' }) {
+function ArchetypeCard({ state, fitState, className, audience = 'founder', compact = false }) {
   const { data, error } = state;
   const fitData = fitState?.data;
   let body;
@@ -180,15 +214,47 @@ function ArchetypeCard({ state, fitState, className, audience = 'founder' }) {
     } else {
       const meta = archetypeMeta(latest.slug);
       const pct = latest.confidence != null ? Math.round(Number(latest.confidence) * 100) : null;
-      
-      body = (
-        <div className="grid grid-cols-1 md:grid-cols-[300px_1fr] gap-[26px] items-start">
-          <div>
-            <div className="rounded-[16px] p-[20px] text-white mb-3" style={{ background: 'linear-gradient(140deg, #6d28d9, #7c3aed)' }}>
-              <div className="pf-lbl text-[10.5px] text-[#d6bcfa] mb-2">Primary archetype</div>
-              <div className="text-[22px] font-extrabold tracking-[-0.02em] leading-tight">{latest.label || meta?.label || latest.slug}</div>
+      const title = latest.label || meta?.label || latest.slug;
+      const copy = (
+        <>
+          {meta?.tagline && (
+            <div>
+              <div className="pf-lbl text-[#15803d] dark:text-green-500 mb-[9px]">Core approach</div>
+              <div className="text-[12.5px] text-[#3f3f46] dark:text-gray-300 leading-[1.5]">{meta.tagline}</div>
             </div>
-            <div className="flex gap-[10px]">
+          )}
+          {meta?.description && (
+            <div>
+              <div className="pf-lbl text-[#b45309] dark:text-amber-500 mb-[9px]">Description</div>
+              <div className="text-[12.5px] text-[#3f3f46] dark:text-gray-300 leading-[1.5]">{meta.description}</div>
+            </div>
+          )}
+        </>
+      );
+
+      body = compact ? (
+        <div className="flex min-w-0 flex-col gap-3">
+          <ArchetypePair slug={latest.slug} compact />
+          <div>
+            <div className="pf-lbl text-[10.5px] text-[#7c3aed] dark:text-violet-300 mb-1">Primary archetype</div>
+            <div className="flex items-baseline justify-between gap-2">
+              <div className="text-[18px] font-extrabold tracking-[-0.02em] leading-tight text-[#27272a] dark:text-gray-100">{title}</div>
+              <div className="pf-mono shrink-0 text-[12px] font-bold text-[#7c3aed] dark:text-violet-300">
+                {pct != null ? `${pct}%` : 'N/A'}
+              </div>
+            </div>
+          </div>
+          {copy}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-[26px] items-start">
+          <div className="min-w-0">
+            <ArchetypePair slug={latest.slug} />
+            <div className="mt-3">
+              <div className="pf-lbl text-[10.5px] text-[#7c3aed] dark:text-violet-300 mb-2">Primary archetype</div>
+              <div className="text-[22px] font-extrabold tracking-[-0.02em] leading-tight text-[#27272a] dark:text-gray-100">{title}</div>
+            </div>
+            <div className="flex gap-[10px] mt-3">
               <div className="flex-1 border border-[#f0f0f3] dark:border-gray-800 rounded-[12px] p-[13px]">
                 <div className="pf-lbl text-[10px] text-[#a1a1aa] mb-1">Confidence</div>
                 <div className="pf-mono text-[14px] font-bold text-[#27272a] dark:text-gray-100">
@@ -197,20 +263,8 @@ function ArchetypeCard({ state, fitState, className, audience = 'founder' }) {
               </div>
             </div>
           </div>
-          
           <div className="flex flex-col gap-4 border-t border-[#f0f0f3] dark:border-gray-800 md:border-0 pt-4 md:pt-0">
-            {meta?.tagline && (
-              <div>
-                <div className="pf-lbl text-[#15803d] dark:text-green-500 mb-[9px]">Core approach</div>
-                <div className="text-[12.5px] text-[#3f3f46] dark:text-gray-300 leading-[1.5]">{meta.tagline}</div>
-              </div>
-            )}
-            {meta?.description && (
-              <div>
-                <div className="pf-lbl text-[#b45309] dark:text-amber-500 mb-[9px]">Description</div>
-                <div className="text-[12.5px] text-[#3f3f46] dark:text-gray-300 leading-[1.5]">{meta.description}</div>
-              </div>
-            )}
+            {copy}
           </div>
         </div>
       );
@@ -589,12 +643,13 @@ export default function ProfileFitSection({ className = '', compact = false, stu
           .pf-mono { font-family: 'Roboto Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
           .pf-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
           .pf-card { border-radius: 16px; box-shadow: 0 1px 2px rgba(24,24,27,.03); }
+          .pf-sprite { image-rendering: pixelated; }
           @keyframes pfFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
         `}</style>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-[14px] items-start" data-testid={`${audience}-assessment-band`}>
           <SkillsRadarCard state={radar} audience={audience} />
           <ValuesLeanCard state={values} audience={audience} />
-          <ArchetypeCard state={results} fitState={fit} audience={audience} />
+          <ArchetypeCard state={results} fitState={fit} audience={audience} compact />
         </div>
       </section>
     );
@@ -606,6 +661,7 @@ export default function ProfileFitSection({ className = '', compact = false, stu
         .pf-mono { font-family: 'Roboto Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
         .pf-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
         .pf-card { border-radius: 16px; box-shadow: 0 1px 2px rgba(24,24,27,.03); }
+        .pf-sprite { image-rendering: pixelated; }
         @keyframes pfFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
       `}</style>
       
