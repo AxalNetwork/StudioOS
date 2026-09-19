@@ -819,13 +819,13 @@ settings.post('/account/delete-request', async (c) => {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
   await sql`UPDATE users SET deletion_requested_at = COALESCE(deletion_requested_at, datetime('now')) WHERE id = ${user.id}`;
-  // D168 — OPEN THE LEDGER ROW HQ CAN LATER CLOSE. Until migration 271 there
+  // D168 — OPEN THE LEDGER ROW HQ CAN LATER CLOSE. Until migration 272 there
   // was nothing to close: the column above was the whole record, HQ could
   // read it and had no way to act on it, so the only way a request ever left
   // HQ's list was the cancel below. Runs AFTER the UPDATE because it reads
   // that column, which is what gives the clock one value rather than two.
   //
-  // BEST-EFFORT, DELIBERATELY. A database that has not applied 271 has no
+  // BEST-EFFORT, DELIBERATELY. A database that has not applied 272 has no
   // table, and a member must not be unable to request erasure because HQ's
   // ledger is behind. The request is recorded either way — the column is what
   // HQ reads — and the close route derives the missing row from it.
@@ -1108,6 +1108,7 @@ function pickProfile(row: UserSettingsRow) {
     timezone: row.timezone,
     locale: row.locale,
     pronouns: row.pronouns,
+    archetype_sex: row.archetype_sex ?? null,
     profile_slug: row.profile_slug,
   };
 }
@@ -1210,6 +1211,7 @@ settings.put('/profile', async (c) => {
   if ('timezone' in body) patch.timezone = body.timezone;
   if ('locale' in body) patch.locale = body.locale;
   if ('pronouns' in body) patch.pronouns = body.pronouns;
+  if ('archetype_sex' in body) patch.archetype_sex = body.archetype_sex;
   if ('profile_slug' in body) patch.profile_slug = body.profile_slug;
   try {
     const row = await upsertUserSettings(c.env, user.id, patch);
@@ -1291,7 +1293,7 @@ settings.put('/profile/personal', async (c) => {
 // the read path. profile_completion_pct is recomputed inside those helpers
 // and returned in every response.
 const IDENTITY_PERSONAL_KEYS = ['display_name','headline','full_legal_name','date_of_birth','nationality'] as const;
-const IDENTITY_SETTINGS_KEYS = ['pronouns','profile_slug','timezone','locale'] as const;
+const IDENTITY_SETTINGS_KEYS = ['pronouns','archetype_sex','profile_slug','timezone','locale'] as const;
 const DETAILS_PERSONAL_KEYS = [
   'tax_residency_country','tax_id_number','phone_e164',
   'address_line1','address_line2','city','state_or_region','postal_code','country',
@@ -1306,6 +1308,7 @@ function pickIdentity(
     display_name: personal.display_name,
     headline: personal.headline,
     pronouns: settingsRow.pronouns,
+    archetype_sex: settingsRow.archetype_sex ?? null,
     profile_slug: settingsRow.profile_slug,
     timezone: settingsRow.timezone,
     locale: settingsRow.locale,

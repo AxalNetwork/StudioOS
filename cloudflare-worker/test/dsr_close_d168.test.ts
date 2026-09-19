@@ -15,7 +15,7 @@
  * second request after a denial opens a NEW row instead of being swallowed by
  * the unique index, or that an unreadable ledger reports itself instead of
  * reading as "nobody ever asked" — and those four are the whole claim. So the
- * writes run against a real node:sqlite database built from MIGRATION 271
+ * writes run against a real node:sqlite database built from MIGRATION 272
  * ITSELF, sliced off disk: a hand-written fixture that omitted the CHECK or
  * the partial unique index would be testing a shape production does not have,
  * which is the failure D139 found in the contract fixture.
@@ -41,7 +41,7 @@ const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
 const SECURITY = read('cloudflare-worker/src/routes/admin_security.ts');
 const SETTINGS = read('cloudflare-worker/src/routes/settings.ts');
 const SERVICE = read('cloudflare-worker/src/services/dsrRequests.ts');
-const MIGRATION = read('cloudflare-worker/sql/migrations/271_dsr_requests.sql');
+const MIGRATION = read('cloudflare-worker/sql/migrations/272_dsr_requests.sql');
 
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
@@ -75,7 +75,7 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
   return d1;
 }
 
-/** The real 271, so the CHECK and the partial unique index are the ones that ship. */
+/** The real 272, so the CHECK and the partial unique index are the ones that ship. */
 function fresh(withLedger = true) {
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys = ON');
@@ -188,7 +188,7 @@ test('asking twice while one is open is a no-op, not a second clock', async () =
   assert.equal(requestedAtOf(db, 1), '2026-09-01 09:00:00');
 });
 
-test('a request made before migration 271 is derived on close, carrying its ORIGINAL clock', async () => {
+test('a request made before migration 272 is derived on close, carrying its ORIGINAL clock', async () => {
   const { db, env } = fresh();
   // The migration-day case: a timestamp on `users`, no ledger row. Nothing is
   // backfilled — the close carries the fact the database already holds, which
@@ -240,12 +240,12 @@ test('the history reports how often each subject asked — and its own failure',
 test('an UNREADABLE ledger says so — it does not report that nobody ever asked', async () => {
   // #204's lesson, on a screen where it changes a decision: a third request
   // read as a first is a different judgement from a third read as a third.
-  const { env } = fresh(false); // migration 271 not applied
+  const { env } = fresh(false); // migration 272 not applied
   const h = await loadDsrHistory(env);
   assert.equal(h.available, false, 'a missing ledger read as an empty one');
   if (h.available) return;
   assert.match(h.reason, /not zero/i, 'the reason does not say the counts are unknown rather than zero');
-  assert.match(h.reason, /271/, 'the reason does not name the migration that creates the table');
+  assert.match(h.reason, /272/, 'the reason does not name the migration that creates the table');
 });
 
 test('NOTHING moves when the ledger cannot be written', async () => {
@@ -302,7 +302,7 @@ test('the member\'s own two handlers write the ledger, best-effort', () => {
   }
 });
 
-test('migration 271 enforces one OPEN request per subject, and admits three outcomes', () => {
+test('migration 272 enforces one OPEN request per subject, and admits three outcomes', () => {
   // The partial index is what makes "ask twice" a no-op rather than a rule the
   // handlers each have to remember, and the CHECK is wider than what HQ may
   // write on purpose.

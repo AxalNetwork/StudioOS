@@ -14715,7 +14715,7 @@ sharper, because HQ can now record that the act was done.
 
 ### `withdrawn` is the subject's, and HQ may not write it
 
-Migration 271's CHECK admits three outcomes; `HQ_DSR_OUTCOMES` admits **two**.
+Migration 272's CHECK admits three outcomes; `HQ_DSR_OUTCOMES` admits **two**.
 A withdrawal is written by the subject's own cancel handler, with
 `closed_by_user_id` left NULL. An operator closing a request as withdrawn
 would be recording that the subject changed their mind when they did not —
@@ -14730,7 +14730,7 @@ that recurs**: a subject denied once may ask again, which a column set cannot
 carry. `dsr_requests` is migration 264's shape one ladder over.
 
 **`users.deletion_requested_at` stays authoritative for "open"**, which is
-what lets rows predating 271 keep working with no backfill: the close
+what lets rows predating 272 keep working with no backfill: the close
 **derives** the ledger row from the timestamp already stored. That is carrying
 a fact the database holds, not the backfill D136 refused — that one would have
 written an acceptance nobody gave. A partial unique index on
@@ -14749,7 +14749,7 @@ The ledger has three writers in two route files. Written three times one of
 them would eventually forget to move the flag, so `openDsrRequest`,
 `withdrawDsrRequest`, `closeDsrRequest`, `loadDsrHistory` and `dsrDaysLeft`
 live in one service — which is also what lets the assertions run the real
-writes against a `node:sqlite` database built from **migration 271 itself**,
+writes against a `node:sqlite` database built from **migration 272 itself**,
 sliced off disk. A hand-written fixture that omitted the CHECK or the partial
 index would be testing a shape production does not have, which is the defect
 D139 found in the contract fixture.
@@ -14769,5 +14769,29 @@ close writes an `activity_logs` row addressed to the subject, which
 with no new surface. A dedicated panel in their Settings is a separate change
 and is filed rather than folded in.
 
-**No migration beyond 271, which is the first use of it** — 272 is now the
-next free number.
+**Migration 272, and it was 271 until the day it merged.** `271_archetype_sex.sql`
+landed on `main` from #662 while this branch was open, so the DSR ledger was
+renumbered before merge — this repo's stated rule on collision, and worth
+taking even though the runner tolerates a duplicate prefix
+(`scripts/lib/migrationPlan.mjs:62` sorts by number then filename precisely
+because `011_`, `068_`, `118_` and `259_` are already doubled, and adding a
+fifth would be adding to a list the tooling calls out as something it has to
+work around). **273 is now the next free number.**
+
+### And the guard that should have caught the collision watched two numbers
+
+`frontend/test/partner_delivery_stores.test.mjs` already held the rule, in its
+own words — *"two files numbered N order by filename, which is not a decision
+anyone made"* — and enforced it against `[208, 209]`, the two its author was
+adding at the time. So the rule was stated correctly and checked against two
+instances of it. Every other number was unwatched, and one duly collided.
+
+That is the D147/D161/D164 class again, from a third angle: **an assertion
+scoped to the instances that existed when it was written cannot see the next
+one.** It is widened here to a named ledger of the four numbers that are
+genuinely doubled (`011`, `068`, `118`, `259`), refusing both a fifth duplicate
+and a *stale* entry — a line that no longer points at two real files is a line
+nobody can check, which is the rule `scripts/sql-prepare-baseline.json` already
+states for its own. Mutation-checked three ways, including by putting this PR's
+actual collision back: `271_dsr_requests.sql` beside `271_archetype_sex.sql`
+now fails the suite.

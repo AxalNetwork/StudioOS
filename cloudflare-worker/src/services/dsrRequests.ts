@@ -1,5 +1,5 @@
 /**
- * D168 — the data-subject request ledger (migration 271).
+ * D168 — the data-subject request ledger (migration 272).
  *
  * WHY THIS IS A SERVICE AND NOT THREE COPIES IN THREE HANDLERS. The ledger has
  * three writers — the subject's request, the subject's cancel, and HQ's close —
@@ -27,7 +27,7 @@
 import type { Env } from '../types';
 
 /**
- * The outcomes HQ MAY RECORD — which is not the whole CHECK in migration 271.
+ * The outcomes HQ MAY RECORD — which is not the whole CHECK in migration 272.
  *
  * `withdrawn` is deliberately absent: it is the SUBJECT'S own act, written by
  * their cancel handler through `withdrawDsrRequest` below. An operator closing
@@ -109,7 +109,7 @@ export async function withdrawDsrRequest(env: Env, userId: number): Promise<void
  * strictly worse than failing, so this throws and the caller says why.
  *
  * Statement 1 DERIVES the open row when there is none. A request made before
- * migration 271 has a timestamp on `users` and no ledger row, and carrying the
+ * migration 272 has a timestamp on `users` and no ledger row, and carrying the
  * fact the database already holds is a different act from the backfill D136
  * refused — that one would have written an acceptance nobody gave.
  */
@@ -150,7 +150,7 @@ export async function closeDsrRequest(
 /**
  * WHAT EACH SUBJECT HAS ASKED BEFORE — and its failure is its own state.
  *
- * `dsr_requests` arrives with migration 271 and carries no runtime bootstrap
+ * `dsr_requests` arrives with migration 272 and carries no runtime bootstrap
  * (migration 264's shape), so a database that has not applied it has no table.
  * "This subject has never asked before" is a CLAIM; an unreadable store has
  * not made it. Returning zeros here would be the #204 defect — a cheerful
@@ -182,7 +182,7 @@ export async function loadDsrHistory(env: Env): Promise<DsrHistory> {
     return {
       available: false,
       reason: 'The request ledger could not be read, so how often each subject has asked before is unknown — '
-        + `not zero. Migration 271 creates it. (${(e as Error).message})`,
+        + `not zero. Migration 272 creates it. (${(e as Error).message})`,
     };
   }
 }

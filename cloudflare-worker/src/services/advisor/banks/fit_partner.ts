@@ -5,7 +5,7 @@
  * network/GTM skill axes and the 5 Axal values.
  */
 import type { Question } from '../questionBank.ts';
-import { buildFitBank, axalValueRows, archetypeTraitRows } from './fitShared.ts';
+import { buildFitBank, axalValueRows, archetypeModuleRows } from './fitShared.ts';
 
 export const FIT_PARTNER_BANK: Question[] = buildFitBank('partner', [
   // ---- strategic_alignment --------------------------------------------
@@ -36,8 +36,8 @@ export const FIT_PARTNER_BANK: Question[] = buildFitBank('partner', [
   { key: 'val_benevolence', prompt: 'How much does genuinely helping the teams you work with drive you, beyond the engagement?', hint: '0 = not important to me, 5 = very important.', measures: { value_dim: 'schwartz_benevolence' } },
   { key: 'val_self_direction', prompt: 'How much do you value the freedom to work in your own way rather than to a fixed brief?', hint: '0 = not important to me, 5 = very important.', measures: { value_dim: 'schwartz_self_direction' } },
   { key: 'val_universalism', prompt: 'How much do fairness and broader impact shape which engagements you take on?', hint: '0 = not important to me, 5 = very important.', measures: { value_dim: 'schwartz_universalism' } },
-  // ---- archetype traits ----------------------------------------------
-  ...archetypeTraitRows(),
+  // ---- archetype traits + illustration sex ---------------------------
+  ...archetypeModuleRows('partner'),
   // ---- Axal values ----------------------------------------------------
   ...axalValueRows(),
 ]);

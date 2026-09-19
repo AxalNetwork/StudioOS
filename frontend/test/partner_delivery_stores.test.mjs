@@ -159,12 +159,57 @@ test('consent is a state that can be withdrawn, not a flag that can vanish', () 
   }
 });
 
+// The four numbers that are already doubled, each with the files that hold
+// them. D168 WIDENED THIS FROM A TWO-NUMBER CHECK, and the reason is the whole
+// argument for a ledger over a list: the assertion below used to read
+// `for (const n of [208, 209])`, so it stated the rule correctly and enforced
+// it only against the two instances its author happened to be adding. A
+// collision on any other number was invisible — and one duly happened. On the
+// day D168 was open, `271_archetype_sex.sql` merged to `main` from #662 while
+// this branch already carried `271_dsr_requests.sql`; nothing in the suite
+// said so, and the duplicate would have shipped. The runner tolerates it
+// (`scripts/lib/migrationPlan.mjs:62` sorts by number then filename precisely
+// because of the four below), so tolerating it is not the failure — shipping
+// an ordering nobody chose is.
+//
+// A named ledger rather than a count, and it refuses a STALE entry too: a line
+// that no longer points at two real files is a line nobody can check, which is
+// the rule `scripts/sql-prepare-baseline.json` states for its own.
+const KNOWN_DUPLICATE_NUMBERS = {
+  '011': ['011_sms_2fa.sql', '011_subscription_tiers.sql'],
+  '068': ['068_news_articles.sql', '068_x_twitter.sql'],
+  '118': ['118_captable_scenario_variants.sql', '118_project_product_demo.sql'],
+  '259': ['259_hq_escalations.sql', '259_licence_contracts.sql'],
+};
+
 test('the migration numbers are free and in order', () => {
   const files = readdirSync(DIR).filter((f) => f.endsWith('.sql'));
   const nums = files.map((f) => Number(f.slice(0, 3))).filter(Number.isFinite);
   for (const n of [208, 209]) {
     assert.equal(nums.filter((x) => x === n).length, 1,
       `two files numbered ${n} order by filename, which is not a decision anyone made`);
+  }
+
+  // NO FIFTH DUPLICATE. Every number is used once, except the four above.
+  const byNumber = new Map();
+  for (const f of files) {
+    const k = f.slice(0, 3);
+    if (!byNumber.has(k)) byNumber.set(k, []);
+    byNumber.get(k).push(f);
+  }
+  for (const [k, group] of [...byNumber].sort()) {
+    if (group.length === 1) continue;
+    assert.deepEqual(group.sort(), KNOWN_DUPLICATE_NUMBERS[k],
+      `migration ${k} is used by ${group.length} files and is not one of the four `
+      + 'historical duplicates. Renumber the new one before merge — the runner '
+      + 'orders same-numbered files by filename, which is not a decision anyone made.');
+  }
+  // …and the ledger itself stays true: an entry whose files are gone or were
+  // renumbered is a line that can no longer fail, which is worse than no line.
+  for (const [k, expected] of Object.entries(KNOWN_DUPLICATE_NUMBERS)) {
+    assert.deepEqual((byNumber.get(k) || []).sort(), expected,
+      `KNOWN_DUPLICATE_NUMBERS['${k}'] no longer describes the tree — `
+      + 'drop the entry rather than leaving a line nobody can check.');
   }
   // THIS USED TO ASSERT `Math.max(...nums) === 209`, and that was a bad
   // assertion however true it was when written: it said "these are the newest

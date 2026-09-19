@@ -204,7 +204,7 @@ r.get('/overview', async (c) => {
   ).all<{ id: number; email: string; name: string; role: string; deletion_requested_at: string }>();
 
   // D168 — WHAT EACH SUBJECT HAS ASKED BEFORE. `users.deletion_requested_at`
-  // is still the one source of "open" (see migration 271), so the list above
+  // is still the one source of "open" (see migration 272), so the list above
   // is unchanged; this read only adds history, and a repeat request has to be
   // visible as one or HQ reads a third ask as a first. Its unreadable state is
   // its own — see `loadDsrHistory`, which is where the reason for that lives.
@@ -928,7 +928,7 @@ r.post('/dsr/:userId/close', async (c) => {
   } catch (e) {
     return c.json({
       error: 'The request ledger could not be written, so nothing was changed — the request is still open. '
-        + `Migration 271 creates \`dsr_requests\`. (${(e as Error).message})`,
+        + `Migration 272 creates \`dsr_requests\`. (${(e as Error).message})`,
       code: 'ledger_unavailable',
     }, 503);
   }
