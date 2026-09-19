@@ -146,16 +146,6 @@ export default function FounderRaiseStatus() {
   const blockerCount = Array.isArray(roundInfo.blockers) ? roundInfo.blockers.length : (Number.isFinite(Number(roundInfo.blockers)) ? Number(roundInfo.blockers) : null);
   const openDate = round?.open_date || round?.opened_at || round?.start_date;
 
-  const chooseProject = (value) => {
-    const id = Number(value);
-    setProjectId(id);
-    setSearchParams((old) => {
-      const next = new URLSearchParams(old);
-      next.set('project_id', String(id));
-      return next;
-    }, { replace: true });
-  };
-
   return <main className="fr-status" data-testid="founder-raise-status">
     <div className="fr-status-shell">
       <section className="fr-status-main">

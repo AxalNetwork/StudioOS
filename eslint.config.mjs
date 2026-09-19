@@ -38,21 +38,23 @@
  * below and because it names the specific failure, which a generic
  * `'useState' is not defined` does not.
  *
- * THE GAP THIS DOES NOT CLOSE: `frontend/src`'s 27 `.ts`/`.tsx` files.
- * The glob below is `{js,jsx}` because espree cannot parse TypeScript, and the
- * usual answer — "`tsc --noEmit` already refuses an undefined name" — is not
- * available here: `test:types` compiles `cloudflare-worker` ONLY, and the SPA
- * has no tsconfig at all. Vite strips those types without checking them. So
- * those 27 files are guarded against this bug class only by the 14 hook names
- * `check-react-hook-imports.mjs` knows.
+ * THE GAP THIS FILE DOES NOT REACH: `frontend/src`'s `.ts`/`.tsx` files. The
+ * glob below is `{js,jsx}` because espree cannot parse TypeScript, and that has
+ * not changed. What HAS changed is the sentence this paragraph used to carry —
+ * "the SPA has no tsconfig at all" — which stopped being true at #201/D96:
+ * `frontend/tsconfig.json` exists and runs as `test:types:frontend`, inside
+ * `test:drift`. So those files are type-checked, and an undefined name in them
+ * is a compile error rather than something only the 14 hook names in
+ * `check-react-hook-imports.mjs` would catch.
  *
- * The gap is real and currently empty: a probe tsconfig over those files
- * reports 15 errors and **zero** TS2304 ("cannot find name"), so nothing is
- * undefined in them today. Closing it properly means a frontend `tsc --noEmit`,
- * which means first resolving those 15 — a miscategorised template pair, a
- * timeline handed `{year, event}` where it wants `{date, label}`, an `.initials`
- * read off a `{name}` object. Each is a judgement about deck output rather than
- * a lint fix, so it is its own task instead of being bolted onto this one.
+ * D164 made that tsconfig carry the unused half too, with `noUnusedLocals`.
+ * The division of labour across the three checks is now clean, and each covers
+ * what the others structurally cannot:
+ *
+ *   this config          `.js`/`.jsx` — undefined names, and unused ones
+ *   frontend tsconfig    `.ts`/`.tsx` — both, via tsc
+ *   check-unused-imports five trees this config never sees, imports and
+ *                        destructured locals, including the worker and tests
  */
 import globals from 'globals';
 
@@ -117,6 +119,59 @@ export default [
     },
     rules: {
       'no-undef': 'error',
+      /**
+       * D164 — the other half of the same bug class, and the reason eighteen
+       * CodeQL "unused variable" alerts got through at once.
+       *
+       * `check-unused-imports.mjs` covers a name IMPORTED or DESTRUCTURED and
+       * never used; its detection is `const\s*(?=\{)`, a lookahead that
+       * REQUIRES a brace, so a plain `const Foo = …` or `function Foo()` is
+       * invisible to it by construction. Scope analysis is what separates a
+       * declaration nobody reads from one read in a sibling closure, and that
+       * is this linter's job, not a regex's — the same argument the `no-undef`
+       * docblock above makes, pointed the other way.
+       *
+       * FOUR SCOPING DECISIONS, each one measured rather than defaulted. Run
+       * bare, this rule reports 523 findings; every exclusion below is here
+       * because the alternative is worse, not because the number was too big.
+       *
+       *   args: 'none' — 78 findings, almost all positional React callback
+       *     parameters (`(event, index) => …` using only `index`). You cannot
+       *     drop a leading parameter without changing what the rest bind to,
+       *     so the rule would demand renames that buy nothing.
+       *
+       *   caughtErrors: 'none' — `catch {}` without a binding is already the
+       *     house style; flagging `catch (e)` where `e` goes unread would push
+       *     people to drop the binding they may want when debugging.
+       *
+       *   ignoreRestSiblings: true — THE ONE THAT WOULD HAVE CAUSED A BUG.
+       *     `const { plan, tier, investor_tier, ...rest } = metadata` names
+       *     those three ONLY to omit them from `rest`; the binding being unread
+       *     is the entire point. Deleting them, as an autofix proposed, would
+       *     silently carry the keys through — a behaviour change dressed as
+       *     cleanup. `AdminPage.jsx` and `NeedsBoardPage.jsx` both use the
+       *     idiom with a comment saying why.
+       *
+       *   varsIgnorePattern '^(React|_)$' — 425 of the 523 are the identifier
+       *     `React`, the legacy `import React from 'react'` that 446 files
+       *     still carry although both the Vite plugin and tsconfig use the
+       *     automatic JSX runtime. Removing them is a codemod and its own PR,
+       *     so this is a SCOPING decision awaiting that work, not a
+       *     suppression — and `check-unused-imports.mjs:18` already declines
+       *     default imports for a related reason. `_` is the throwaway binding
+       *     in `for (const _ of str) n++`, where the syntax requires a name
+       *     and the value is genuinely not wanted.
+       *
+       * What survives all four is 20 real findings, which is why this ships
+       * with no baseline file: a ledger holding entries the same commit
+       * deletes is a file that exists only to be deleted again.
+       */
+      'no-unused-vars': ['error', {
+        args: 'none',
+        caughtErrors: 'none',
+        ignoreRestSiblings: true,
+        varsIgnorePattern: '^(React|_)$',
+      }],
     },
   },
   {

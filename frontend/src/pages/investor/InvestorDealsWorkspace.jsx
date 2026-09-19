@@ -58,9 +58,14 @@ function SectionHeading({ id, title, detail, filters = [], actions = [] }) {
   );
 }
 
+// D164 — `zone` is still in the signature and is no longer READ. It fed a
+// `shows(section)` predicate that nothing called, so this component had already
+// stopped filtering by zone before the prop went unread; deleting the dead
+// predicate makes that visible rather than causing it. The four /deals/* zones
+// each render their own page now (#189-A), which is where the filtering lives.
+// The prop stays because callers pass it; removing it from the signature is a
+// change to this component's contract and belongs with whoever wants it gone.
 export default function InvestorDealsWorkspace({ embedded = false, zone = null }) {
-  const known = zone === 'pipeline' || zone === 'screening' || zone === 'commit' || zone === 'closing';
-  const shows = (section) => !known || zone === section;
   const navigate = useNavigate();
   const [state, setState] = useState({ deals: [], invitations: [] });
   const [loading, setLoading] = useState(true);

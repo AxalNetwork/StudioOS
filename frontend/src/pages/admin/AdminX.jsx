@@ -771,6 +771,12 @@ export default function AdminX() {
   );
 }
 
+// D164 armed `no-unused-vars`, which reads this function the same way the
+// codeql pragma below already described it. The directive has to be the line
+// IMMEDIATELY before the declaration — put an explanation between the two and
+// it silently targets the comment instead, which is how an inert directive
+// happens. This one is LIVE: delete it and `npm run lint:undef` fails.
+// eslint-disable-next-line no-unused-vars -- paused feature, preserved verbatim
 function AdminXFull() { // codeql[js/unused-local-variable] -- deliberately unreferenced while the feature is paused; see the re-enable plan in the comment above the default export. Preserved verbatim, not dead code.
   const [tab, setTab] = useState('accounts');
   const [accounts, setAccounts] = useState([]);

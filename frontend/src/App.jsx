@@ -175,9 +175,9 @@ const MyLicencePage = lazy(() => import('./pages/subsidiary/MyLicencePage'));
 const BranchSettings = lazy(() => import('./pages/branch/BranchSettings'));
 const BranchApprovals = lazy(() => import('./pages/branch/BranchApprovals'));
 // The frame every /branch/* route below renders in, and the branch tier's one
-// Worker AI rail mount (D126). Lazy like its siblings so the rail and its price
-// lookup stay out of the entry bundle for the visitors who never see a branch.
-const BranchZone = lazy(() => import('./pages/branch/BranchZone'));
+// Worker AI rail mount (D126). `BranchZone` is NOT lazily imported here: every
+// branch page wraps ITSELF in it — see the notes on the branch routes below —
+// so a second binding in this file had no route to serve and was removed.
 const BranchAccounts = lazy(() => import('./pages/branch/BranchAccounts'));
 const BranchHome = lazy(() => import('./pages/branch/BranchHome'));
 const BranchPrograms = lazy(() => import('./pages/branch/BranchPrograms'));

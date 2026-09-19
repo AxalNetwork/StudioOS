@@ -128,16 +128,6 @@ export default function FounderRaiseLegal() {
         : rows;
   const query = projectId ? `?project_id=${projectId}` : '';
 
-  const chooseProject = (value) => {
-    const id = Number(value);
-    setProjectId(id);
-    setParams((old) => {
-      const next = new URLSearchParams(old);
-      next.set('project_id', String(id));
-      return next;
-    }, { replace: true });
-  };
-
   return <main className="fr-capital" data-testid="founder-raise-legal">
     <div className="fr-capital-shell">
       <section className="fr-capital-main">

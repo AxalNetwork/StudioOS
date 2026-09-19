@@ -132,16 +132,6 @@ export default function FounderRaiseCapital() {
   const safeTotal = safes.length ? safes.reduce((sum, safe) => sum + (Number(safe.amount) || 0), 0) : null;
   const waterfall = result?.waterfall || null;
 
-  const selectProject = (value) => {
-    const id = Number(value);
-    setProjectId(id);
-    setParams((old) => {
-      const next = new URLSearchParams(old);
-      next.set('project_id', String(id));
-      return next;
-    }, { replace: true });
-  };
-
   return <main className="fr-capital" data-testid="founder-raise-capital">
     <div className="fr-capital-shell">
       <section className="fr-capital-main">

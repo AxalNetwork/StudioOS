@@ -13974,3 +13974,205 @@ bare array where `aeSql` unwraps `{ data }`, so the populated-read assertion
 measured zero rows and failed — correctly. A fixture shaped differently from
 the thing it stands in for is how a test passes against its own mistake, and
 this one failed instead.
+
+---
+
+## D164
+
+**Eighteen unused declarations, one sweep, and the two guards that could not see
+any of them.**
+
+Eighteen Copilot-autofix PRs opened against `main` within a day of each other,
+every one deleting a declaration CodeQL had found unreferenced, every one a
+draft, every one red on the same stale-`docs/` gate. Resolved one at a time that
+is eighteen merge-rebuild-CI cycles — and **seven of them delete adjacent blocks
+of one file**, `frontend/src/decks/templates/axal_spinout_demoday_app.tsx`, so
+each one merging re-conflicts the other six. `Dashboard.jsx` and
+`FounderRaisePitch.jsx` pair the same way.
+
+So they land as one commit. What made that the right shape is not the CI
+arithmetic, though: it is that **every one of the autofixes is right about the
+symbol and incomplete about the residue**, and no single-symbol PR can see it.
+
+### What one sweep can do that eighteen cannot
+
+Each deletion strands a comment describing the thing deleted. Five did:
+
+- **`axal_spinout_demoday_app.tsx:372-375`, the sharpest.** It said eight slides
+  render their index *"via `<Eyebrow>`"*. **Zero do** — seven take it from
+  `<HeadRow>`, three inline the markup, and `SlideCover` carries none. The
+  sentence was already false; deleting `Eyebrow` and leaving it would have told
+  the next reader that a component which no longer exists is load-bearing for
+  eight slides.
+- **`PartnerBucketRoutes.jsx:178-183`** — six lines explaining why
+  `PartnerEngagements` takes no `embedded` prop, about a binding this commit
+  removes.
+- **`buildDeck.js:324`** — *"Mirrors the in-app `Avatar`"*, a cross-reference
+  about to point at nothing.
+- **`TrustCenterPage.jsx`'s file header** — *"legacy KYB / Accreditation / NDA
+  cards consume the older `/trust/summary` endpoint shape"*. All three cards are
+  gone and the page no longer calls that endpoint.
+- **`eslint.config.mjs:42-47`** — *"the SPA has no tsconfig at all"*, untrue
+  since #201/D96 created `frontend/tsconfig.json`.
+
+### Three of the twenty findings would have been WRONG to delete
+
+This is why the sweep verified each symbol instead of trusting the scanner.
+
+1. **`{ plan, tier, investor_tier, ...rest }` and `{ project_id, ...patch }` are
+   omit-by-destructuring.** The bindings exist *in order to be unread* — naming
+   them is what keeps the keys out of `rest`. Deleting them, which is what an
+   unused-variable fix means, would have carried the keys through: a behaviour
+   change dressed as cleanup, in a subscription-taxonomy selector and a need
+   patch. Both sites carry a comment saying exactly this. The answer is
+   `ignoreRestSiblings: true`, not an edit.
+2. **`AdminXFull` is deliberately preserved** with a re-enable plan three lines
+   above it and a `codeql[js/unused-local-variable]` pragma on its own line
+   saying so. It keeps its parked state and gains the ESLint dialect of the same
+   claim.
+3. **`_` in `for (const _ of str) n++`** is a throwaway binding the syntax
+   requires. Covered by the ignore pattern, not removed.
+
+### The one that was a cost, not dead code
+
+**#639 proposed `const [legacy, setLegacy]` → `const [, setLegacy]`**, keeping
+the setter. That would have kept `api.getTrustSummary()` alive as the **only
+caller of `/trust/summary` in the entire frontend** — a route that runs
+`requireAuth`, `ensureTrustSchema`, `seedObligations` and two D1 reads
+(`routes/trust.ts:600-632`) **on every Trust Center load**, for a payload stored
+in a state nothing read. Every field had already been repointed: `role`, `score`
+and `obligations` to `/trust/me`, the NDA card to `/nda/required` after its rows
+turned out to be the wrong shape, and `kyb`/`accreditation` are hardcoded `null`
+server-side, which is why their cards were deleted. So the whole read goes, not
+the binding.
+
+**The route itself stays**, with the canary at
+`frontend/test/trust_center_contract.test.mjs:93-96` that asserts those nulls as
+the premise for the card deletion. Retiring it server-side is its own decision;
+this commit stops paying for it on every page load and says so in the file.
+
+### Why nothing in the repo could see any of this
+
+| check | why it missed them |
+| --- | --- |
+| `check-unused-imports.mjs` | its detection is `const\s*(?=\{)` (`:266`) — a lookahead that **requires** a brace, so `const Foo = …` is invisible by construction, and the file has no `function` handling at all. Its own header scopes it to two shapes: a named import and a destructured local |
+| `eslint.config.mjs` | `no-unused-vars` was not configured — the config is deliberately `no-undef` only — **and** its glob is `{js,jsx}`, so it never reached the `.tsx` file holding seven of the eighteen |
+| `frontend/tsconfig.json` | existed since #201 and checked types only |
+
+Both gaps close in this commit, and the division of labour is now clean: this
+config takes `.js`/`.jsx`, the frontend tsconfig takes `.ts`/`.tsx`, and
+`check-unused-imports.mjs` takes the five trees neither reaches — the worker,
+`scripts/` and both test trees — for the two shapes it was written for.
+
+**`"noUnusedLocals": true`** was free: `tsc --noEmit` was already clean, and
+with the flag it reported exactly seven errors, all TS6133, all in the one deck
+template, zero across the other 26 TS files. `noUnusedParameters` is **not** set
+— it adds 11 findings, all positional callback parameters.
+
+**`no-unused-vars`** is scoped four ways, and the numbers are why. Bare, it
+reports **523**. `args: 'none'` drops 78 positional React-callback parameters
+you cannot remove without rebinding the rest. `caughtErrors: 'none'` leaves
+`catch (e)` alone. `ignoreRestSiblings: true` is finding 1 above.
+`varsIgnorePattern: '^(React|_)$'` drops **425** — the legacy
+`import React from 'react'` that 446 files still carry although both the Vite
+plugin and the tsconfig use the automatic JSX runtime. That is one codemod
+awaiting its own PR, so it is a **scoping decision, not a suppression**, and
+`check-unused-imports.mjs:18` already declines default imports for a related
+reason.
+
+**What survives all four is 20 real findings, which is why there is no baseline
+file.** `scripts/inline-project-pickers-baseline.json` argues in its own note
+that a ledger is kept empty on purpose; one holding twenty entries this same
+commit deletes would exist only to be deleted again.
+
+### Three cascades the guards caught, which is the point of having them
+
+Deleting a dead declaration can orphan its only input, and each of these would
+have become the *next* round of alerts:
+
+- `isOperator` was the only reader of `operator_workspace` in Dashboard's
+  destructure — caught by `check-unused-imports.mjs`, which does cover that
+  shape;
+- `Title` was the only consumer of `Ed`, which was the only consumer of
+  `EdProps` — caught by `noUnusedLocals`, and it bottoms out there:
+  `Editable` has 21 live uses and `OnEdit` is read by `SlideProps`;
+- `shows` was the only reader of `known` in `InvestorDealsWorkspace` — and since
+  `shows` itself had no callers, **that component had already stopped filtering
+  by zone**. Deleting the pair makes that visible rather than causing it; the
+  four `/deals/*` zones each render their own page since #189-A. The `zone` prop
+  stays in the signature, now accepted and unread, because removing it is a
+  change to the component's contract.
+
+`Title`, `Ed` and `EdProps` had **no autofix PR**: `noUnusedLocals` found them
+the moment it was armed, which is the guard paying for itself inside its own
+commit.
+
+### Deliberately filed, not folded in
+
+- **`/trust/summary` server-side**, above.
+- **`EngagementsPage`'s orphaned `view` prop, and the guard gap behind it.**
+  `PartnerOperationsWorkspace.jsx:46` passes `embedded`, which the page never
+  reads — exactly the seam `advisor_network_zones.test.mjs:261` exists to catch,
+  except its scanner walks only `frontend/src/workspaces`, so a shell living
+  under `pages/` is invisible to it. The same latent bug sits at
+  `AdvisorAdvisoryWorkspace.jsx:47`. Widening that scanner is its own PR.
+- **The 425 legacy `React` imports**, above.
+
+### Verification
+
+`test:drift` exit 0 read as the exit code from a redirected log. **12 mutations,
+12 caught**, every restore from a snapshot and verified byte-identical.
+
+Four of the twelve mutate the **config** rather than the source, which is the
+only honest way to test an ignore pattern: dropping `React` from it must surface
+the legacy imports (it did — **425**, independently reproducing the figure the
+scoping decision was made on), dropping `_` must surface the throwaway binding,
+dropping `ignoreRestSiblings` must flag the omit idiom, and dropping
+`noUnusedLocals` must let the same dead `.tsx` const through. Adding an unused
+`React` import to a source file **cannot** test the pattern — 446 files already
+import React, so a second one is a duplicate binding and a syntax error, and the
+first draft of the harness failed for exactly that wrong reason before it was
+corrected.
+
+Two more pin the shape from the other side: an unused **non-rest** destructured
+name must still fail, so `ignoreRestSiblings` is not a blanket exemption; and
+removing `AdminXFull`'s disable directive must fail, so that directive is live
+rather than joining the inert `no-console` ones this repo already carries. Its
+placement matters and the first attempt got it wrong: an explanation between
+`eslint-disable-next-line` and the declaration makes the directive target the
+comment, which is how an inert directive happens.
+
+### A guard failed, and it was right to — one assertion could not fail for the defect it names
+
+`investor_shell.test.mjs` refused the `shows`/`known` deletion, asserting *"the
+investor Deals page must narrow to the zone it was given"*. Read rather than
+worked around, it is the strongest finding here:
+
+- the assertion is `assert.match(page, /const shows = \(section\) => …/)` — a
+  **source-text match on the DECLARATION**. It never asserts the predicate is
+  called;
+- `no-unused-vars`, newly armed, proves it never was;
+- and **twenty lines above, the same test asserts the four stage sections are
+  GONE from that file**, because ID1–ID4 moved each onto its own route. The
+  file's own closing comment agrees: *"All four decision panels are gone. This
+  file now draws only what no artboard does: the deal-invitation queue."* One
+  `<section>` remains.
+
+So the two assertions contradicted each other, and the text match was the one
+that could not tell a working predicate from a declared-and-uninvoked one —
+only scope analysis can, which is the whole argument for arming the rule. The
+narrowing had already stopped happening when its subject was removed; deleting
+the predicate makes that visible rather than causing it.
+
+Re-aimed at the property that is load-bearing now: the page renders **exactly
+one** section, so the stacking defect the test is named for cannot recur without
+a second appearing — and if one does, the failure message says the narrowing has
+to come back with it. Mutation-checked: adding a second `<SectionHeading>` fails
+it, which the old assertion would have passed.
+
+Fourth instance of a guard needing to be re-aimed the day its premise changed
+(D150, D152, D158), and the first where the guard pinned a **mechanism** after
+the thing it operated on was deleted rather than pinning a refusal.
+
+**No migration — 271 stays free.** No new `/api/*` method; the Trust Center
+change removes a call.

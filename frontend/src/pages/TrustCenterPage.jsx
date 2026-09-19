@@ -4,9 +4,13 @@
  * Accreditation / Agreements / Sanctions). Drives a Trust score 0-100 from
  * /api/trust/me and shows per-pair NDA flow on the Agreements tab.
  *
- * Backwards compat: legacy KYB / Accreditation / NDA cards consume the older
- * /trust/summary endpoint shape so investor and partner flows that already
- * shipped continue to work; new tabs add the matrix + agreements view on top.
+ * THIS PAGE NO LONGER READS /trust/summary. It once did, for backwards compat
+ * with legacy KYB / Accreditation / NDA cards built on that endpoint's shape.
+ * All three are gone: the first two were unreachable (see the note above
+ * `KybCard`) and the NDA card was repointed at /nda/required, whose rows are
+ * the shape it actually reads. The endpoint still ships with the worker and is
+ * still pinned by a canary in trust_center_contract.test.mjs; nothing in the
+ * SPA calls it.
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -1089,7 +1093,6 @@ function tabsForRole(role, obligations) {
  */
 export default function TrustCenterPage({ chromeless = false }) {
   const [matrix, setMatrix] = useState(null);   // /api/trust/me
-  const [legacy, setLegacy] = useState(null);   // /api/trust/summary (old)
   const [requiredNdas, setRequiredNdas] = useState([]); // /api/trust/nda/required
   const [kyc, setKyc] = useState(null);         // /api/kyc/status — READ ONLY here
   const [err, setErr] = useState(null);
@@ -1108,25 +1111,29 @@ export default function TrustCenterPage({ chromeless = false }) {
   async function load() {
     setErr(null);
     try {
-      // /api/trust/me is the canonical obligation matrix; /trust/summary
-      // continues to feed the legacy KYB/Accred/NDA cards. Both calls are
+      // /api/trust/me is the canonical obligation matrix. Every call here is
       // resilient — we render whatever loaded successfully.
       // GET /nda/required was already being called here and its result THROWN
       // AWAY — `try { await api.getRequiredNdas(); } catch {}` — while the NDA
       // card was fed `summary.ndas`, which is pairwise_ndas rows in a different
-      // shape. It is a third settled promise now, and the card reads it.
+      // shape. It is a settled promise now, and the card reads it.
       // `api.kycStatus()` is the same call `<KycVerification />` makes at
       // `/kyc`. It joins the settled set rather than getting its own effect so
       // one failed read still leaves the rest of the page standing — the
       // partial-failure resilience the contract test pins.
-      const [m, s, n, k] = await Promise.allSettled([
+      // `/trust/summary` WAS A FOURTH CALL HERE AND IS GONE. Every field it
+      // returned had already been repointed — role, score and obligations to
+      // /trust/me, the NDA card to /nda/required — and its `kyb` and
+      // `accreditation` are hardcoded null server-side, so their cards were
+      // deleted. Its result was stored in a `legacy` state nothing read, which
+      // meant the page paid requireAuth + ensureTrustSchema + seedObligations
+      // and two D1 reads on EVERY load for a payload it discarded in full.
+      const [m, n, k] = await Promise.allSettled([
         api.trustMe(),
-        api.getTrustSummary(),
         api.getRequiredNdas(),
         api.kycStatus(),
       ]);
       if (m.status === 'fulfilled') setMatrix(m.value); else setMatrix({ obligations: [], role });
-      if (s.status === 'fulfilled') setLegacy(s.value); else setLegacy({ ndas: [] });
       setRequiredNdas(n.status === 'fulfilled' ? (n.value?.items || []) : []);
       setKyc(k.status === 'fulfilled' ? k.value : null);
     } catch (e) {

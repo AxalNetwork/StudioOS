@@ -198,10 +198,9 @@ export default function Dashboard({ activeRole, authUser }) {
     />
   );
 
-  const { user, operator_workspace, notifications, role_view } = data;
+  const { user, notifications, role_view } = data;
 
   const isInvestor = role_view === 'investor';
-  const isOperator = role_view === 'founder' || role_view === 'admin' || (operator_workspace?.assigned_tasks?.length > 0);
   const unreadNotifs = notifications?.length || 0;
 
   if ((activeRole || role_view) === 'founder') {
@@ -558,11 +557,6 @@ function Card({ title, icon: Icon, link, linkLabel, children }) {
       {children}
     </div>
   );
-}
-
-function PriorityDot({ p }) {
-  const c = p === 'high' ? 'bg-red-500' : p === 'medium' ? 'bg-amber-500' : 'bg-gray-400';
-  return <span className={`w-2 h-2 rounded-full ${c} flex-shrink-0`} />;
 }
 
 function RoleBadge({ role }) {

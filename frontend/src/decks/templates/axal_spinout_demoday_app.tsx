@@ -191,133 +191,6 @@ const Txt: React.FC<TxtProps> = ({
   </div>
 );
 
-interface EdProps extends Omit<TxtProps, 'children'> {
-  value: any; path: string; editable?: boolean; onEdit?: OnEdit; placeholder?: string;
-}
-const Ed: React.FC<EdProps> = ({
-  l, t, w, h, size, bold, color, align, valign, spacing, lh, italic, face,
-  value, path, editable, onEdit, placeholder, style, z,
-}) => (
-  <div style={boxStyle(l, t, w, h, valign, z != null ? { zIndex: z } : undefined)}>
-    <Editable
-      as="div" value={String(value ?? '')} path={path} editable={editable} onEdit={onEdit}
-      placeholder={placeholder}
-      style={{
-        width: '100%', textAlign: align || 'left', fontFamily: face || FF, fontSize: pt(size),
-        fontWeight: bold ? 700 : 400, color, letterSpacing: spacing != null ? pt(spacing) : undefined,
-        lineHeight: lh ?? 1.1, fontStyle: italic ? 'italic' : undefined, ...style,
-      }} />
-  </div>
-);
-
-const Rect: React.FC<{
-  l: number; t: number; w: number; h: number; fill?: string; line?: string | false;
-  lineW?: number; r?: number; shadow?: boolean; z?: number;
-}> = ({ l, t, w, h, fill = K.white, line = K.line, lineW = 1, r = 0.08, shadow = true, z }) => (
-  <div style={{
-    position: 'absolute', left: inch(l), top: inch(t), width: inch(w), height: inch(h),
-    background: fill, borderRadius: inch(r),
-    border: line === false ? 'none' : `${pt(lineW)}px solid ${line}`,
-  boxShadow: shadow ? '0 1px 3px rgba(23,19,33,0.035)' : undefined, zIndex: z,
-  }} />
-);
-
-const Oval: React.FC<{
-  l: number; t: number; d: number; fill: string; line?: string; lineW?: number;
-  children?: React.ReactNode; shadow?: boolean; z?: number;
-}> = ({ l, t, d, fill, line, lineW = 1, children, shadow, z }) => (
-  <div style={{
-    position: 'absolute', left: inch(l), top: inch(t), width: inch(d), height: inch(d),
-    borderRadius: '50%', background: fill,
-    border: line ? `${pt(lineW)}px solid ${line}` : 'none',
-    boxShadow: shadow ? '2px 2px 9px rgba(0,0,0,0.10)' : undefined,
-    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: z,
-  }}>{children}</div>
-);
-
-// Circular avatar: shows a profile photo cropped to a circle when a URL is
-// present and loads, otherwise falls back to the initials monogram (also used
-// when the image errors out, so a dead URL never shows a broken-image icon).
-const Avatar: React.FC<{
-  l: number; t: number; d: number; photo?: string; initials: string;
-  fill: string; fontSize: number; textColor: string; z?: number;
-}> = ({ l, t, d, photo, initials, fill, fontSize, textColor, z }) => {
-  const [errored, setErrored] = React.useState(false);
-  const showPhoto = !!photo && !errored;
-  return (
-    <div style={{
-      position: 'absolute', left: inch(l), top: inch(t), width: inch(d), height: inch(d),
-      borderRadius: '50%', background: fill, overflow: 'hidden', zIndex: z,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }}>
-      {showPhoto ? (
-        <img
-          src={photo} alt={initials} onError={() => setErrored(true)}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-        />
-      ) : (
-        <span style={{ fontFamily: FF, fontWeight: 700, fontSize: pt(fontSize), color: textColor }}>{initials}</span>
-      )}
-    </div>
-  );
-};
-
-// Progress / funnel bar: a track with a filled portion.
-const Bar: React.FC<{ l: number; t: number; w: number; h: number; pct: number; fill: string; track?: string }> = ({
-  l, t, w, h, pct, fill, track = K.panel2,
-}) => (
-  <>
-    <div style={{ position: 'absolute', left: inch(l), top: inch(t), width: inch(w), height: inch(h), background: track, borderRadius: inch(h / 2) }} />
-    <div style={{ position: 'absolute', left: inch(l), top: inch(t), width: inch(w * Math.max(0, Math.min(1, pct))), height: inch(h), background: fill, borderRadius: inch(h / 2) }} />
-  </>
-);
-
-const StatusDot: React.FC<{ status: Status; d: number }> = ({ status, d }) => {
-  const px = inch(d);
-  if (status === 'done') {
-    return (
-      <div style={{ width: px, height: px, borderRadius: '50%', background: K.done, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <svg width={px * 0.55} height={px * 0.55} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-      </div>
-    );
-  }
-  if (status === 'active') {
-    return (
-      <div style={{ width: px, height: px, borderRadius: '50%', background: K.active, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ width: px * 0.34, height: px * 0.34, borderRadius: '50%', background: '#fff' }} />
-      </div>
-    );
-  }
-  return <div style={{ width: px, height: px, borderRadius: '50%', background: '#fff', border: `${pt(1.5)}px solid ${K.faint}` }} />;
-};
-
-const StepIcon: React.FC<{ name: string; d: number; color: string }> = ({ name, d, color }) => {
-  const s = inch(d);
-  const p = { width: s, height: s, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
-  switch (name) {
-    case 'ingest': return <svg {...p}><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M4 21h16" /></svg>;
-    case 'score': return <svg {...p}><path d="M21 12a9 9 0 1 1-9-9" /><path d="M12 12 17 8" /><circle cx="12" cy="12" r="1.4" fill={color} stroke="none" /></svg>;
-    case 'monitor': return <svg {...p}><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg>;
-    case 'act': return <svg {...p}><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" /></svg>;
-    default: return null;
-  }
-};
-
-const Eyebrow: React.FC<{ label: string; idx: string; dark?: boolean }> = ({ label, idx, dark }) => (
-  <>
-    <Txt l={ML} t={0.5} w={8} h={0.3} size={11} bold color={K.accent} spacing={1.5} valign="middle">
-      {String(label).toUpperCase()}
-    </Txt>
-    <Txt l={W - MARGIN - 3} t={0.5} w={3} h={0.3} size={11} bold align="right" valign="middle" spacing={1} color={dark ? K.dfaint : K.faint}>
-      {idx} / 11
-    </Txt>
-  </>
-);
-
-const Title: React.FC<{ text: any; path: string; editable?: boolean; onEdit?: OnEdit; w?: number }> = ({ text, path, editable, onEdit, w }) => (
-  <Ed l={ML} t={1.05} w={w || 11.5} h={0.95} size={27} bold color={K.ink} lh={1.04} valign="top" value={text} path={path} editable={editable} onEdit={onEdit} />
-);
-
 const Footer: React.FC<{ brand: any; dark?: boolean }> = ({ brand, dark }) => {
   const col = dark ? K.dfaint : K.faint;
   // Every slide mounts this, so an absent `brand` block took the whole deck
@@ -382,9 +255,10 @@ const initialsOf = (s: any, n = 2) =>
     .map((w) => w[0]).join('').slice(0, n).toUpperCase();
 
 /* Header row for the rebuilt slides: eyebrow · provenance · slide index.
- * The design carries only eyebrow + provenance, but the eight slides still on
- * the absolute path show "NN / 11" via <Eyebrow>; dropping it from three of
- * eleven would read as a rendering bug while paging through the deck. */
+ * The design carries only eyebrow + provenance, but every slide that is not the
+ * cover shows "NN / 11", so dropping it from a few would read as a rendering
+ * bug while paging through the deck. Seven slides take it from here; Ask,
+ * ProductDemo and DealReadiness inline the same markup themselves. */
 const HeadRow: React.FC<{ eyebrow: any; idx: any; right?: React.ReactNode; mb?: number }> = ({
   eyebrow, idx, right, mb = 22,
 }) => (
