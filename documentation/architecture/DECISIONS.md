@@ -14511,3 +14511,128 @@ line still points at something, not because anything failed.
 and `check-api-drift` harvests every `request()` call in `api.js` rather than
 only `api.*` properties, so the module and the namespace had to go in one commit
 or the build fails.
+
+---
+
+## D167
+
+**The RPO we commit to is the backup cadence, not the recovery point — and the
+monthly drill rehearsed a restore that would land production data outside the
+EU.**
+
+`DEPLOY.md` §3 ends on a sentence nothing finished: *"Rollback reverts the
+worker. It does not revert D1."* So for a data incident — a bad bulk write, a
+deletion nobody meant — the runbook stopped exactly where the operator needed
+it. `documentation/operations/D1_RECOVERY.md` is the other half.
+
+### What the measurement changed, and two of these were wrong in the plan
+
+**1 · Time Travel is in-place, and that is the whole argument for preferring
+it.** Read off `wrangler --help` at **4.131.0** rather than recalled, because
+the Cloudflare docs are `EGRESS_BLOCKED` from this environment — the same
+block that stopped #277 four times, hit twice more here:
+
+```
+wrangler d1 time-travel restore <database> --timestamp <unix|RFC3339>
+```
+
+`<database>` is **positional and is the database being restored**. There is no
+target argument; the command acts on that database, remotely, in place. So
+nothing is created — which is why this path cannot lose the jurisdiction, and
+why it is the primary one.
+
+**2 · `INCIDENT_RESPONSE.md` committed to an RPO of "24 hours (daily
+backups)".** That is the *export cadence* (`backup-d1.yml`, cron `10 2 * * *`),
+not the recovery point. Time Travel restores to an instant within the last 30
+days, so for damage inside that window the recovery point is the instant the
+operator picks. **The 24-hour figure is kept, repositioned as the fallback** —
+it is exactly right for damage older than 30 days or a database that is gone
+rather than wrong, and deleting it would replace one wrong commitment with
+another.
+
+**3 · The jurisdiction hazard is measured from the live account, not inferred
+from a grep — and the plan's evidence for it was stale.** The plan said "zero
+`jurisdiction` hits repo-wide". That stopped being true when D109 shipped
+`branch-provision.yml`, which passes `--jurisdiction` in ten places. The
+substance survives and is sharper read the right way round:
+
+| | |
+| --- | --- |
+| `studioos-db` | `"jurisdiction": "eu"` |
+| every other database in the account | `null` |
+| `wrangler.toml` | no `jurisdiction` key at all |
+| `restore-d1.sh` | none |
+
+A jurisdiction is fixed at creation and cannot be changed after. So the repo
+demonstrably **knows how** to pass the flag — it does so when provisioning a
+branch — and the recovery path does not. That is a gap, not an unknown.
+
+**4 · THE FINDING, and it is live rather than latent.** `dr-drill.sh:93` ran
+`wrangler d1 create "${TARGET_DB}"` with **no `--jurisdiction`**, on the 1st of
+every month. The drill therefore proved the backup was present, recent and
+importable — all real — while rehearsing a restore into a **non-EU** database.
+An operator following the shape the drill validates, in a real incident, would
+recover production data into the wrong jurisdiction with no way to move it.
+**That one flag is the only executable change in this PR**, and the guard
+asserts it on the create line rather than anywhere in the file.
+
+**5 · `restore-d1.sh`'s default target does not exist, which is a stronger
+claim than the plan's.** The plan said the `REPLACE_WITH_PREVIEW_D1_ID`
+placeholder in `wrangler.toml` made it unrunnable. Measured, the placeholder is
+the symptom: wrangler resolves a target **by name**, and `studioos-db-preview`
+is simply **not among the account's six D1 databases**. It was never created.
+`INCIDENT_RESPONSE.md`'s RTO row promised *"a one-liner against a
+freshly-provisioned preview DB"*; nothing provisions one, and that row is
+corrected too.
+
+**6 · `dr-drill.sh` re-implements the import rather than calling
+`restore-d1.sh`** — `d1 create`, `d1 execute --file`, `d1 delete`, none of them
+through the script an operator is told to use. The two can drift, and the drill
+is the one that runs. Recorded rather than unified: merging them is a change to
+a live monthly workflow and is its own decision.
+
+### The guard hazard was narrower than the plan feared, and saying so matters
+
+The plan flagged `check-folder-docs`'s TRUTH rule as a hazard for a runbook
+made of commands, because it harvests backticked paths **inside fenced code
+blocks too** (`:206-213`, added after a route README cited a file that has
+never existed). True — but the rule only reads `<dir>/README.md` for dirs in
+`DOCUMENTED`, and **`documentation/operations` is not in that list**. So the
+runbook itself is never scanned. The only place D167 must satisfy TRUTH is the
+row added to `documentation/README.md`, and `CITED_EXT` does not include `.sh`
+or `.yml` either. Stating the real scope stops the next writer contorting a
+runbook around a rule that does not reach it.
+
+### Riding along — the two one-line touches item 1 dissolved into
+
+**`api.monitoringThroughput` is deleted.** One occurrence in all of
+`frontend/src` — its own declaration. A producer with no reader, and invisible
+to both guards D164 armed, because an `api.js` method is an object property
+rather than an unused variable.
+
+**`/monitoring/throughput`'s wider gate is NOT changed**, and the reason is now
+written at the route. D156 ruled the item stale and it has been re-opened
+twice since as "the one route in this file that is not `requireAdmin`". Its
+nine siblings are admin-gated because they return per-user, per-firm or
+per-branch figures; this one returns two bare `COUNT(*)`s over an hour with no
+attribution, so it never reaches the cross-admin shape D133's rule covers. The
+comment cites both decisions so a fourth pass does not re-derive them.
+
+### One mutation escaped, and it is the D147/D161 class for the third time
+
+The guard's first draft asserted the runbook names the two commands with a
+whole-file `BOOK.includes('wrangler d1 time-travel restore')`. Renaming the
+**synopsis** to `wrangler d1 restore-point` — a command wrangler does not have
+— **passed**, because the worked example forty lines below still spelt it
+correctly. That is exactly D147's finding and D161's: *an assertion a
+NEIGHBOURING occurrence can satisfy is not an assertion about this one.* It is
+worse here than in either of those, because the synopsis is the authoritative
+statement of the command surface and the thing an operator reads first under
+time pressure.
+
+Re-aimed: the command assertion is bounded to the synopsis fence at both ends,
+and the worked examples are asserted **separately**, so the two halves of the
+document must agree rather than covering for each other. Re-run after the
+re-aim: **12 mutations, 12 caught.**
+
+**No migration — 271 stays free. No new `/api/*` method**; one is removed.

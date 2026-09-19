@@ -4,8 +4,26 @@
 #
 # Operator-runnable D1 restore. Walks the user through importing a
 # nightly backup file (`backup-YYYY-MM-DD.sql`) into a target D1
-# database. The default target is the `--preview` DB so you can verify
-# the restore before flipping prod.
+# database.
+#
+# READ documentation/operations/D1_RECOVERY.md FIRST. This is the SECOND
+# recovery path, not the first: `wrangler d1 time-travel restore` rewinds the
+# live database in place to any instant in the last 30 days, loses far less,
+# and creates nothing. Use this script only for damage older than that window,
+# or for a database that is gone rather than wrong.
+#
+# TWO THINGS ABOUT THE DEFAULT TARGET (D167):
+#
+#   1. `studioos-db-preview` DOES NOT EXIST in the account — measured, not
+#      assumed. wrangler resolves a target by NAME, so this default does not
+#      fail on the `REPLACE_WITH_PREVIEW_D1_ID` placeholder still sitting in
+#      wrangler.toml; it fails because the database was never created. Pass an
+#      explicit target you have just created.
+#
+#   2. CREATE IT WITH `--jurisdiction eu`. Production is EU-resident
+#      account-side and that fact is in no config file, so a database created
+#      without the flag is not EU-resident and cannot be moved afterwards.
+#      Verify with `wrangler d1 info <db> --json` before importing.
 #
 # Required env (or interactive prompts):
 #   CLOUDFLARE_ACCOUNT_ID   — accountId from `wrangler whoami`

@@ -188,9 +188,15 @@ finish technical mitigation.
 
 | Metric | Target | How we hit it |
 |--------|--------|---------------|
-| **Recovery Time Objective (RTO)** | **4 hours** | Single-region R2 + D1; restore script is a one-liner against a freshly-provisioned preview DB; worker rollback is sub-minute. |
-| **Recovery Point Objective (RPO)** | **24 hours** (daily backups) | Daily 02:10 UTC `wrangler d1 export` → R2. Monthly DR drill validates the restore path. |
-| **WAL streaming** (aspirational) | Not committed | D1 does not currently expose WAL streaming to customers. When it does, we'll cut RPO to 5 min. Tracked in the roadmap. |
+| **Recovery Time Objective (RTO)** | **4 hours** | Worker rollback is sub-minute. For data, `wrangler d1 time-travel restore` acts on the live database in place — no provisioning step. The backup-file path needs a database created first: **there is no standing preview DB**, contrary to what this row claimed until D167. |
+| **Recovery Point Objective (RPO)** | **point-in-time, within 30 days** | **Corrected in D167.** This row read "24 hours (daily backups)", which is the *export cadence*, not the recovery point. D1 Time Travel restores to an instant within the last 30 days, so for damage inside that window the recovery point is the instant you choose. **24 hours is the fallback**, and it applies only where Time Travel cannot: damage older than 30 days, or a database that is gone rather than wrong. |
+| **Daily export → R2** | 02:10 UTC | `backup-d1.yml` runs `wrangler d1 export` into `studioos-backups`, keyed per database. The monthly DR drill imports the latest one. This is the fallback path above, not the primary one. |
+| **WAL streaming** (aspirational) | Not committed | D1 does not expose WAL streaming to customers. Time Travel is the point-in-time capability this row was waiting on, so the gap it describes is narrower than it was — but it is a restore, not a stream, and nothing here replicates continuously. |
+
+**The recovery runbook is [`D1_RECOVERY.md`](D1_RECOVERY.md)**, which also names
+the one hazard these targets do not: production is EU-resident account-side,
+that fact appears in no config file, and a restore that *creates* a database
+without `--jurisdiction eu` silently lands the data outside the EU.
 
 A SEV-1 that exceeds the **4-hour RTO** triggers an automatic
 post-mortem with the RTO breach noted as an action item.
