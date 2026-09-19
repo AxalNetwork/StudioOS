@@ -22,6 +22,19 @@
   //
   // `checkJs` stays OFF on purpose: this types one import, it does not quietly
   // make the SPA's JavaScript a type-check target.
+  //
+  // `noUnusedLocals` (D164) is what closes the OTHER half of the gap this file
+  // was created for. Eighteen CodeQL "unused variable" alerts landed at once,
+  // seven of them in one `.tsx` file, and nothing in the repo could see them:
+  // `check-unused-imports.mjs` only matches `const {` destructures, and
+  // `eslint.config.mjs` is globbed `{js,jsx}`. This flag costs nothing — with
+  // the dead declarations swept, `tsc` reports zero across all 27 files — and
+  // it is the cheapest lever available, being one line on a check already
+  // wired into `test:drift`.
+  //
+  // `noUnusedParameters` is deliberately NOT set: it adds 11 findings that are
+  // all positional callback parameters, the same class `eslint.config.mjs`
+  // excludes with `args: 'none'` and for the same reason.
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
@@ -29,6 +42,7 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "strict": true,
+    "noUnusedLocals": true,
     "allowJs": true,
     "checkJs": false,
     "skipLibCheck": true,

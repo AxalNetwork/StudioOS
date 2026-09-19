@@ -133,7 +133,6 @@ export default function FounderResearchDesk() {
   const pulseLoaded = Object.hasOwn(records, 'pulse');
   const roundsLoaded = Object.hasOwn(records, 'rounds');
   const companiesLoaded = Object.hasOwn(records, 'companies');
-  const documentsLoaded = Object.hasOwn(records, 'documents');
   const signalsLoaded = Object.hasOwn(records, 'signals');
 
   return <main className="a7-research" data-testid="founder-research-desk">

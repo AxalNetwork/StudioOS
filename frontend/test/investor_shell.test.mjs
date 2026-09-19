@@ -286,9 +286,26 @@ test('an investor never gets two headings, two pill rows or two rails on one pag
     'the Deals shell must pass embedded and the zone slug');
   assert.doesNotMatch(dealsShell, /scrollIntoView/,
     'the Deals shell scrolls to a section again instead of rendering only that section');
-  assert.match(codeOnly(read(`${investorDir}/InvestorDealsWorkspace.jsx`)),
-    /const shows = \(section\) => !known \|\| zone === section;/,
-    'the investor Deals page must narrow to the zone it was given');
+  // WAS a match on `const shows = (section) => !known || zone === section;`,
+  // and D164 re-aimed it, because that assertion had stopped being able to fail
+  // for the defect it names. Two things were true at once: this same test
+  // asserts twenty lines up that the four stage sections are GONE from this
+  // file (ID1–ID4 moved each onto its own route), and the page draws exactly
+  // one section — the invitation queue. So there was nothing left to narrow,
+  // `shows` was never called, and a source scan for its DECLARATION could not
+  // see that. A predicate declared and uninvoked passes a text match exactly
+  // like a working one; only scope analysis separates them, which is what
+  // armed `no-unused-vars` and found it.
+  //
+  // The invariant that IS load-bearing is the one below: this page draws a
+  // single section, so the stacking defect this test's name describes cannot
+  // recur without a second one appearing. If that happens, zone narrowing has
+  // to come back WITH it — and this assertion is what says so.
+  const dealsBody = codeOnly(read(`${investorDir}/InvestorDealsWorkspace.jsx`));
+  const sectionHeads = [...dealsBody.matchAll(/<SectionHeading\b/g)].length;
+  assert.equal(sectionHeads, 1,
+    `InvestorDealsWorkspace draws ${sectionHeads} sections, not 1 — if it stacks sections again `
+    + 'it must narrow to the zone it was given, which it no longer does at all');
   // `embedded` AND the zone. The second half is the fix for the defect this
   // test's own name half-describes: the page renders all three sections
   // stacked, so mounted without a slug it drew the identical body on all three

@@ -24,7 +24,6 @@ import { api } from '../../lib/api';
 // "Delivery · Ship the work" on a Pipeline route. Mounting its feature pages
 // directly removes the doubled chrome and the wrong-bucket header together,
 // and leaves /partner/operations/* exactly as it was.
-const PartnerEngagements = lazy(() => import('../../pages/partner/operations/EngagementsPage'));
 const PerksPage = lazy(() => import('../../pages/PerksPage'));
 const ServiceCatalogPage = lazy(() => import('../../pages/ServiceCatalogPage'));
 // Pipeline · analytics used to mount `PartnerInsightsPage` — Demand Insights,
@@ -174,13 +173,6 @@ function Loading() {
  * on its `mine` tab only when `isPartner`, so every admin opening
  * /offers/catalog got the public marketplace grid under the Catalog heading and
  * never saw the LEDGER body at all.
- *
- * `PartnerEngagements` takes no `embedded`, and that is deliberate rather than
- * an oversight: it draws no heading and no rail of its own — its host has
- * always supplied both — so there is nothing for the flag to suppress. The
- * class guard in `advisor_network_zones.test.mjs` catches a component handed
- * `embedded` that never reads it, and it caught this one; a prop that does
- * nothing reads as a seam that has been dealt with when it has not.
  *
  * TWO ZONES ONCE RESOLVED HERE BY ACCIDENT, and the trail is worth keeping.
  * Pipeline · retainers and Delivery · health both fell through to the
