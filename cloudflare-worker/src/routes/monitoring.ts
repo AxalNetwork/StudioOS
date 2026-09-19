@@ -251,6 +251,19 @@ Detected anomalies: ${anomalies.length === 0 ? 'none' : anomalies.map(a => `${a.
 });
 
 // ---------- /throughput (operator-visible limited stats) ----------
+//
+// THE WIDER GATE IS DELIBERATE, AND D156 ALREADY RULED ON IT — twice re-opened
+// as "the one route in this file that is not requireAdmin", so the reason is
+// written here rather than re-derived a third time. Its nine siblings are
+// `requireAdmin` because they return per-user, per-firm or per-branch figures.
+// This one returns two bare COUNT(*)s over a one-hour window with no user,
+// firm or branch attribution, so it never reaches the cross-admin shape D133's
+// rule covers. Widening the gate would cost partner and investor operators a
+// figure that discloses nothing about anyone.
+//
+// Its SPA method was deleted in D167: `api.monitoringThroughput` had zero
+// callers. The route stays because the figures are real and operator-facing;
+// a reader can be added without touching this gate.
 monitoring.get('/throughput', async (c) => {
   const user = await requireAuth(c);
   if (user.role !== 'admin' && user.role !== 'partner' && user.role !== 'investor') {
