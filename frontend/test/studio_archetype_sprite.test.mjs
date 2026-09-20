@@ -121,4 +121,6 @@ test('compact scored card is one hit target to the full archetype page', () => {
     'compact /studio stays on pixel sprites — cinematic banners belong on the full page');
   assert.doesNotMatch(fitCode, /md:grid-cols-\[300px/,
     'compact must not reintroduce the overflowing two-column grid');
+  assert.match(fitCode, /meta\?\.summary/,
+    'compact /studio uses the short summary, not the full description');
 });

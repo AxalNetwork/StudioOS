@@ -64,12 +64,41 @@ test('the full page shows locked ARCHETYPES copy and a back link', () => {
   assert.match(pageCode, /data-testid="archetype-strengths"/);
   assert.match(pageCode, /data-testid="archetype-blindspots"/);
   assert.match(pageCode, /data-testid="archetype-complements"/);
+  assert.match(pageCode, /data-testid="archetype-matching"/);
   assert.match(pageCode, /meta\?\.strengths/);
   assert.match(pageCode, /meta\?\.blindSpots/);
   assert.match(pageCode, /meta\?\.complements/);
+  assert.match(pageCode, /meta\?\.matching/);
+  assert.match(pageCode, /Who you match with/);
   assert.match(pageCode, /to="\/studio"/);
   assert.match(pageCode, /Back to studio/);
   assert.match(pageCode, /Answer a few archetype questions in the advisor to reveal your archetype/);
+});
+
+test('every archetype has a complete profile: summary, description, matching', () => {
+  assert.equal(ARCHETYPE_KEYS.length, 16, 'four archetypes per licence');
+  const summaries = [...meta.matchAll(/^\s+summary: '/gm)];
+  const descriptions = [...meta.matchAll(/^\s+description: '/gm)];
+  const leans = [...meta.matchAll(/^\s+lean: '/gm)];
+  const matching = [...meta.matchAll(/^\s+matching: \[/gm)];
+  const whys = [...meta.matchAll(/why: '/g)];
+  assert.equal(summaries.length, 16, 'every slug needs a compact summary');
+  assert.equal(descriptions.length, 16, 'every slug needs a full description');
+  assert.equal(leans.length, 16, 'every slug needs a trait lean');
+  assert.equal(matching.length, 16, 'every slug needs a matching set');
+  assert.ok(whys.length >= 16 * 4, `matching needs a why per pair, got ${whys.length}`);
+  for (const slug of ARCHETYPE_KEYS) {
+    const start = meta.indexOf(`  ${slug}: {`);
+    assert.ok(start >= 0, slug);
+    const rest = meta.slice(start);
+    const end = rest.indexOf('\n  };') >= 0 ? rest.indexOf('\n  },') : rest.indexOf('\n};');
+    const block = rest.slice(0, end > 0 ? end : 4000);
+    assert.match(block, /summary: '/, `${slug} summary`);
+    assert.match(block, /description: '[^']{180,}/, `${slug} description must be a full paragraph`);
+    assert.match(block, /matching: \[/, `${slug} matching`);
+    const strengthItems = [...block.matchAll(/^\s+'[^']+',$/gm)];
+    assert.ok(strengthItems.length >= 10, `${slug} needs ≥4 strengths and ≥4 blind spots plus complements`);
+  }
 });
 
 test('/studio/archetype is a real SPA route with the studio guard', () => {
