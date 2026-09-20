@@ -22,31 +22,56 @@ permissions:
 #
 # Findings show up in the Security tab via SARIF upload. To stop running
 # Semgrep entirely, delete this file — no other workflow depends on it.
+#
+# WHAT THIS JOB'S RED/GREEN MEANS, because it used to mean nothing.
+# Findings do NOT fail it: there are ~40 standing ones and the SARIF upload
+# is how they are reported, not the exit code. A SCANNER THAT COULD NOT RUN
+# does fail it, and then nothing is uploaded. See the two comments below —
+# the second is the one that matters.
 jobs:
   scan:
     name: Scan
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # The scan itself takes ~4m40s on this repo and the rule packs grow. A
+    # timeout is a cancellation, and a cancelled job used to still reach the
+    # upload below (`always()` runs on cancel) — so the cap was one of the
+    # paths that could wipe the alert history. Headroom is free; keep it.
+    timeout-minutes: 20
     container:
-      image: semgrep/semgrep:latest
+      # PINNED BY DIGEST, like every `uses:` in this directory. `:latest`
+      # moved the scanner under us twice — GOTCHAS.md records both as finding
+      # counts changing with no repo change at all.
+      #
+      # THE PIN IS HALF THE STORY. The three `--config p/...` packs below are
+      # still fetched from semgrep.dev at run time, so this narrows ruleset
+      # drift to the engine and does not close it. Closing it needs the packs
+      # vendored into the repo, which is its own decision.
+      image: semgrep/semgrep@sha256:34ab619bf1391a24bfda3f05debd0d8a6ce3093c2d5f9d39cfc00f83c1397823  # 1.176.1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Run semgrep (public OSS rules)
         # Path exclusions for generated/pasted trees live in the ROOT-ANCHORED
-        # .semgrepignore (/docs/, /attached_assets/) which semgrep reads from
-        # the working directory. We deliberately avoid `--exclude docs` here:
-        # bare `--exclude` matches by basename project-wide and would also
-        # strip real source dirs (frontend/src/pages/docs, .../lib/docs).
+        # .semgrepignore (/docs/, /attached_assets/, and three more) which
+        # semgrep reads from the working directory. We deliberately avoid
+        # `--exclude docs` here: bare `--exclude` matches by basename
+        # project-wide and would also strip real source dirs
+        # (frontend/src/pages/docs, .../lib/docs).
+        #
+        # NO `--error`, AND THAT IS THE POINT. With it semgrep exits 1 on any
+        # finding, so this step ended EVERY run with
+        # `##[error]Process completed with exit code 1` — including the runs
+        # where it had just printed "Scan completed successfully". A crash and
+        # the steady state printed the same line, so the exit code carried no
+        # information. Measured on semgrep 1.176.1 without it: findings -> 0,
+        # no findings -> 0, fatal/bad config -> 7, unreachable registry -> 2.
         run: |
           semgrep scan \
             --config p/default \
             --config p/security-audit \
             --config p/secrets \
-            --sarif --output semgrep.sarif \
-            --error
-        continue-on-error: true
+            --sarif --output semgrep.sarif
       # Semgrep's console output and its SARIF output disagree about inline
-      # suppressions. The run above prints e.g. "44 findings" (suppressed ones
+      # suppressions. The run above prints e.g. "40 findings" (suppressed ones
       # dropped), but the SARIF it wrote still contains every `# nosemgrep:`
       # finding, tagged `"suppressions": [{"kind": "inSource"}]`. GitHub code
       # scanning opens an alert for those anyway — which is why annotated lines
@@ -54,18 +79,32 @@ jobs:
       # alerts with the silencing comment visible in the reported snippet.
       #
       # Strip them so the upload matches the finding count semgrep reported.
-      # Runs on `always()` because the scan step exits 1 whenever `--error`
-      # fires, which is exactly when there is a SARIF worth filtering.
       - name: Drop nosemgrep-suppressed results from SARIF
-        if: always()
         run: |
           # `semgrep` is itself a Python console script, so this image ships an
           # interpreter. Resolve it rather than hardcoding `python3`, since the
-          # image tag is `latest` and its layout is not ours to depend on.
+          # image layout is not ours to depend on.
           PY="$(command -v python3 || command -v python)"
           "$PY" scripts/strip-suppressed-sarif.py semgrep.sarif
+      # NO `if: always()` ON EITHER OF THESE TWO STEPS, and it is the whole
+      # safety property of this job.
+      #
+      # A SARIF upload REPLACES this tool's alert set for the ref: every alert
+      # absent from the payload is closed as "fixed". And a fatally-failed
+      # semgrep still writes a SARIF — measured on 1.176.1, a bad config exits
+      # 7 having written a structurally VALID file, `runs[0].tool.driver.name`
+      # = "Semgrep OSS", with zero results. That payload is indistinguishable
+      # from a legitimate clean scan, so no amount of inspecting the file can
+      # tell them apart: ONLY THE EXIT CODE CAN. Uploading it would silently
+      # resolve every open Semgrep alert on the strength of a scan that never
+      # ran.
+      #
+      # So both steps take the default `if: success()`. A scan that failed,
+      # was cancelled, or timed out stops here, the job goes red, and the
+      # existing alerts are left alone. (A scan that dies before writing
+      # anything was already safe: strip-suppressed-sarif.py prints "nothing
+      # to filter" and the upload then fails on the missing file.)
       - name: Upload SARIF
         uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
-        if: always()
         with:
           sarif_file: semgrep.sarif

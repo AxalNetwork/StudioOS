@@ -14898,3 +14898,90 @@ this. A sixth local copy of that fix is what the lib README's rule forbids.
 **No new `/api/*` method**: the field rides the settings payload the page
 already fetches, so `check-api-drift` has nothing to say, and a second fetch for
 it would be a second round trip and a new entry for the drift gate to police.
+
+---
+
+## D170
+
+**The Semgrep workflow's exit code carried no information, and its upload step
+would have closed every alert it had ever opened.**
+
+`.github/workflows/semgrep.yml` ran the scan with `--error` under
+`continue-on-error: true`, with `if: always()` on the two steps after it. Those
+are not three independent settings; they are one knot, and each half hides the
+other:
+
+- `--error` means *exit 1 if there are findings*. This repo has ~40 standing
+  findings, so **every run** ended `##[error]Process completed with exit code 1`
+  — including the runs where semgrep had just printed *"Scan completed
+  successfully"*. A crash and the steady state printed the same line.
+- `continue-on-error: true` rewrites the step's **conclusion** to `success`, so
+  the default `if: success()` on later steps stays true. `if: always()` was
+  therefore redundant with it rather than a workaround for `--error` — which
+  matters, because it means **removing only one of the two leaves the path fully
+  open via the other**.
+
+### What that path was, and it is measured rather than argued
+
+A SARIF upload **replaces** a tool's alert set for the ref: every alert absent
+from the payload is closed as *fixed*. And a fatally-failed semgrep still writes
+a SARIF. Measured against semgrep 1.176.1, the version the new digest pins:
+
+| case | exit | SARIF |
+| --- | --- | --- |
+| findings, valid config | 0 | results present |
+| no findings, valid config | 0 | `results: []`, **`rules: 1`** |
+| bad config | **7** | written, valid, `results: []`, **`rules: []`** |
+| **one** bad config among good ones | **7** | written, valid, `results: []`, **`rules: []`** |
+| unreachable registry | 2 | **no SARIF** |
+
+So a crashed scan produced a structurally valid, schema-clean SARIF naming
+`Semgrep OSS` as its driver, which `continue-on-error` + `always()` sent
+straight to `upload-sarif`. The timeout made it reachable without any crash at
+all: `always()` fires on **cancellation** too, and `timeout-minutes` was 10
+against a scan already taking 4m37s.
+
+**Nothing in the payload separates the two, and the obvious field lies.**
+`invocations[0].executionSuccessful` is `true` on the crash output. The only
+honest in-payload signal is `tool.driver.rules` — empty after a crash, non-empty
+after a genuinely clean scan — and the only reliable signal at all is the exit
+code.
+
+### What lands
+
+`--error`, `continue-on-error: true` and both `if: always()` come out together;
+`timeout-minutes` goes 10 → 20. Findings exit 0 and are reported through the
+SARIF upload as before — **zero change to what a green check means for
+findings**. A scanner that could not run exits non-zero, fails the job, and the
+strip and upload steps are skipped, so the existing alerts are left alone.
+
+The container is pinned by digest —
+`semgrep/semgrep@sha256:34ab619b… # 1.176.1` — which was the only unpinned
+reference in `.github/workflows/`, against ~30 SHA-pinned `uses:` lines.
+`GOTCHAS.md` had already filed it as twice-diagnosed ruleset drift.
+
+### The two things deliberately NOT done
+
+**No refusal added to `scripts/strip-suppressed-sarif.py`.** A
+`tool.driver.rules`-empty check would be genuinely fireable — that is the one
+field that separates the payloads — but it is not *reachable* once the exit code
+is respected: every failure mode above exits non-zero and now fails the job one
+step earlier. What it would defend against is a future edit re-adding
+`always()`, and that is what `frontend/test/semgrep_workflow.test.mjs` pins, in
+CI, on every PR. The measurement is recorded in `GOTCHAS.md` so it is a one-line
+change if belt-and-braces is ever wanted.
+
+**No `category:` on the upload.** A category creates a *second* code-scanning
+configuration for this tool; the ~40 existing alerts belong to the unnamed one
+and would be orphaned rather than migrated.
+
+**The rule packs stay unpinned, and this entry says so rather than letting the
+digest read as more than it is.** The three `p/…` packs are still fetched from
+`semgrep.dev` per run, so finding counts can still move with no repo change.
+Vendoring them is the only real fix and could not be done from the build
+environment: `semgrep.dev:443` is a proxy policy denial (`CONNECT tunnel failed,
+403`).
+
+**No migration** — nothing touches D1, and **273 is still the next free number.**
+**No new `/api/*` method** and no `frontend/src` change, so neither
+`check-api-drift` nor `check-docs-fresh` has anything to say.
