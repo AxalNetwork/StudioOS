@@ -19,9 +19,15 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const routes = read('cloudflare-worker/src/routes/research.ts');
+const handlers = read('cloudflare-worker/src/routes/research.ts');
+const sheetService = read('cloudflare-worker/src/services/fundSheets.ts');
+// Sheets sync writes the same owner-scoped table from a service module. A
+// statement that forgot its WHERE would be just as bad there, so both files
+// are one corpus for the owner filter.
+const routes = `${handlers}\n${sheetService}`;
 const funds = read('cloudflare-worker/sql/migrations/216_research_funds.sql');
 const bench = read('cloudflare-worker/sql/migrations/217_research_benchmarks.sql');
+const sheetMig = read('cloudflare-worker/sql/migrations/274_research_fund_sheets.sql');
 
 /**
  * Every `DB.prepare(`…`)` template in the file, whole.
@@ -205,4 +211,39 @@ test('fund money is cents', () => {
   assert.match(funds, /cheque_min_cents INTEGER/);
   assert.match(funds, /cheque_max_cents INTEGER/);
   assert.doesNotMatch(funds, /cheque_(min|max)_usd/);
+});
+
+test('the sheets link is one per owner and every statement names that owner', () => {
+  assert.match(sheetMig, /owner_user_id INTEGER NOT NULL UNIQUE/);
+  const found = touching(routes, 'research_fund_sheet_links');
+  assert.ok(found.length > 0, 'no prepared statement names research_fund_sheet_links');
+  for (const stmt of found.filter((t) => !/^\s*INSERT/i.test(t.trim()))) {
+    assert.match(stmt, /owner_user_id = \?/,
+      'a research_fund_sheet_links statement reads without narrowing to its owner');
+  }
+  for (const stmt of found.filter((t) => /^\s*INSERT/i.test(t.trim()))) {
+    assert.match(stmt, /owner_user_id/);
+  }
+});
+
+test('sheets OAuth tokens are a separate table keyed on the signed-in user', () => {
+  assert.match(sheetMig, /CREATE TABLE IF NOT EXISTS google_sheets_oauth_tokens/);
+  assert.doesNotMatch(sheetService, /google_oauth_tokens/,
+    'sheets sync must not read or write the calendar token table');
+  const found = touching(routes, 'google_sheets_oauth_tokens');
+  assert.ok(found.length > 0, 'no prepared statement names google_sheets_oauth_tokens');
+  for (const stmt of found.filter((t) => !/^\s*INSERT/i.test(t.trim()))) {
+    assert.match(stmt, /user_id = \?/,
+      'a google_sheets_oauth_tokens statement is not keyed on the signed-in user');
+  }
+});
+
+test('calendar consent still does not ask for spreadsheets', () => {
+  const calendar = read('cloudflare-worker/src/services/calendar.ts');
+  const scopes = calendar.slice(
+    calendar.indexOf('const GOOGLE_SCOPES'),
+    calendar.indexOf('const MICROSOFT_SCOPES'),
+  );
+  assert.doesNotMatch(scopes, /spreadsheets/,
+    'adding Sheets to the calendar consent screen forces every connected calendar to re-consent');
 });

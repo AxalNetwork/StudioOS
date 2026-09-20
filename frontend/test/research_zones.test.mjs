@@ -553,3 +553,14 @@ test('a cheque range that is not recorded is not a cheque of nothing', () => {
   assert.match(code, /return lo \|\| hi \|\| null;/,
     'a range with one end recorded must still show that end');
 });
+
+test('funds offers Sheets sync in the body, not as a fourth canvas op', () => {
+  const code = codeOnly(funds);
+  assert.match(code, /function SheetsSyncCard/, 'the Sheets card is gone from the funds zone');
+  assert.match(code, /Pull from Axal/, 'the pull control is gone');
+  assert.match(code, /Push to Axal/, 'the push control is gone');
+  assert.match(code, /it never deletes one/, 'push must still say it does not delete');
+  assert.match(code, /Google Sheets is not configured on this server yet/,
+    'an unconfigured Worker must render as an honest empty, not as a Connect button that cannot finish');
+  assert.match(code, /blank is not zero/, 'the sheet copy must keep blank cheques distinct from zero');
+});
