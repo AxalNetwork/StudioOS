@@ -27,7 +27,12 @@ export default function DsrOutcomeNotice({ outcome }) {
   if (!outcome) return null;
   if (outcome.available === false) {
     return (
-      <p data-testid="dsr-outcome-unreadable" className="mt-3 text-xs text-gray-600 dark:text-gray-300">
+      <p
+        data-testid="dsr-outcome-unreadable"
+        role="status"
+        aria-live="polite"
+        className="mt-3 text-xs text-gray-600 dark:text-gray-300"
+      >
         {outcome.reason}
       </p>
     );
@@ -56,7 +61,11 @@ export default function DsrOutcomeNotice({ outcome }) {
         : `Axal VC HQ closed your erasure request as ${last.outcome}`;
 
   return (
-    <div data-testid="dsr-outcome" data-outcome={last.outcome}
+    <div
+      data-testid="dsr-outcome"
+      data-outcome={last.outcome}
+      role="status"
+      aria-live="polite"
       className={`mt-3 rounded-lg border px-3 py-2 ${mine
         ? 'border-gray-400 dark:border-gray-600'
         : 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20'}`}>
