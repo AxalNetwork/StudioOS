@@ -62,6 +62,10 @@ function makeEnv(): Env {
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       taxonomy_version TEXT,
       PRIMARY KEY (user_id, dimension_id));
+    CREATE TABLE user_settings (
+      user_id INTEGER NOT NULL PRIMARY KEY,
+      archetype_sex TEXT
+    );
   `);
 
   // Seed the 8 radar axes + one representative skill each.
