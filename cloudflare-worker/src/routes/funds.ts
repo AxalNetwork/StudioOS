@@ -294,12 +294,35 @@ funds.get('/:id', async (c) => {
   });
 });
 
+/**
+ * May this caller read THIS fund's LPA body?
+ *
+ * ONE definition, read by the metadata route and by the download route below.
+ * Two copies of an entitlement check is how a download route ends up more
+ * permissive than the screen that links to it — and the download is the half
+ * that hands over the text.
+ *
+ * Admin, or an LP of this fund on the same predicate every other LP surface
+ * uses, so a legacy LP is not refused the agreement they signed. The claim is
+ * scoped to this fund: the read that justifies the write was about this fund
+ * alone.
+ */
+async function mayReadLpa(env: Env, user: any, fundId: number): Promise<boolean> {
+  if (user?.role === 'admin') return true;
+  await claimLpRowsByEmail(env, Number(user?.id), user?.email, fundId);
+  const scope = lpMembershipScope(user);
+  const isLP = await env.DB.prepare(
+    `SELECT 1 AS yes FROM limited_partners lp WHERE lp.fund_id = ? AND ${scope.sql} LIMIT 1`
+  ).bind(fundId, ...scope.binds).first<{ yes: number }>();
+  return !!isLP;
+}
+
 funds.get('/:id/lpa', async (c) => {
   // Security #8 — storage cleanup:
-  // The LPA body is NEVER inlined in the JSON response, regardless of
-  // viewer role. Admins/LPs of this fund get `file_key` so the body can
-  // be fetched via a separate download path; non-LPs get metadata only
-  // (no `file_key`) so they can't even attempt a download.
+  // The LPA body is NEVER inlined in this JSON response, whatever the viewer's
+  // role. An admin or an LP of this fund learns that a body EXISTS and fetches
+  // it from `/:id/lpa/download`, which re-checks the same entitlement; a
+  // non-LP gets metadata only.
   const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'), 10);
   const f = await Funds.getById(c.env, id);
@@ -309,38 +332,92 @@ funds.get('/:id/lpa', async (c) => {
   ).bind(f.lpa_doc_id).first();
   if (!doc) return c.json({ error: 'doc not found' }, 404);
 
-  // Strip the inline body for everyone. `file_sha256` is admin-only
-  // legal-proof material; admins keep it.
-  const { content: _content, file_sha256, ...rest } = doc;
-  let safeDoc: any = { ...rest };
-  if (user.role === 'admin') {
-    safeDoc.file_sha256 = file_sha256;
+  // The inline body comes off for everyone, before any branch below.
+  const { content, ...rest } = doc;
+  const safeDoc: any = { ...rest };
+
+  if (!(await mayReadLpa(c.env, user, id))) {
+    // Non-LP, non-admin: metadata only, minus the one column on this table
+    // that points AT a body.
+    //
+    // D174 — WHAT THIS USED TO DESTRUCTURE, AND WHY IT WAS THEATRE. It read
+    // `const { file_key, file_size, file_content_type, ...meta }`, under a
+    // comment saying it dropped the first of those so a non-LP could not
+    // attempt a download. Measured against production: `legal_documents` has
+    // twelve columns and not one of those three is among them, and nothing
+    // has ever written them — so it removed nothing, and the comment
+    // described a defence that never had anything to defend. `file_url` is
+    // the column that does exist, and it is the one worth withholding.
+    const { file_url, ...meta } = safeDoc;
+    return c.json({ ok: true, doc: meta, redacted: true });
   }
 
-  if (user.role !== 'admin') {
-    // The LPA is the fund's constitutional document; an LP is entitled to read
-    // their own. Same predicate as everywhere else, so a legacy LP is not
-    // refused the agreement they signed. Claim scoped to this fund — the read
-    // that justifies the write was about this fund alone.
-    await claimLpRowsByEmail(c.env, Number(user.id), user.email, id);
-    const scope = lpMembershipScope(user as any);
-    const isLP = await c.env.DB.prepare(
-      `SELECT 1 AS yes FROM limited_partners lp WHERE lp.fund_id = ? AND ${scope.sql} LIMIT 1`
-    ).bind(id, ...scope.binds).first<{ yes: number }>();
-    if (!isLP) {
-      // Non-LP, non-admin: drop `file_key` so they cannot attempt a
-      // download; return non-sensitive metadata only.
-      const { file_key, file_size, file_content_type, ...meta } = safeDoc;
-      return c.json({ ok: true, doc: meta, redacted: true });
-    }
+  // Admin or LP.
+  //
+  // D174 — WHY THIS REPORTS A BODY RATHER THAN MINTING A LINK, and it is a
+  // correction to this route's own TODO as much as to its output. The TODO
+  // said to port the FastAPI contract-minting flow into the worker so the
+  // LPADrawer's `Download LPA` button would have a `content_url` to hit. That
+  // port HAD shipped — the signed-download minter is used by dd, research,
+  // jobs, admin_contracts and data_room — and minting here still could not
+  // have worked: that minter binds an R2 object key, and an LPA is not in R2.
+  // Its body is `legal_documents.content`, inline text written by the
+  // `lpa_generation` queue job. So the TODO named a mechanism that was never
+  // going to fit this document, and following it would have shipped a mint
+  // whose guard is false on every row that exists.
+  //
+  // The button is served the way this repo already serves an authenticated
+  // download — `api.downloadDataRoom`'s shape, whose own comment gives the
+  // reason: a plain `<a>` click cannot set the session's header, so the SPA
+  // fetches the blob and clicks it client-side. That re-checks entitlement on
+  // every hit, where a signed token in a URL is replayable for its window.
+  //
+  // WHAT THE DRAWER SHOWED BEFORE ANY OF THIS. No `content_url` was ever sent
+  // to anyone, so `FundsPage.jsx` fell to its `content_url`-absent branch for
+  // EVERY reader and told an LP who had just passed the check above — and
+  // every admin — "you are not an LP of this fund". A false claim about
+  // entitlement, shown to exactly the two audiences who have it.
+  const hasBody = typeof content === 'string' && content.trim().length > 0;
+  return c.json({ ok: true, doc: safeDoc, content_available: hasBody });
+});
+
+funds.get('/:id/lpa/download', async (c) => {
+  // The body, for a reader `mayReadLpa` allows — the one place it leaves the
+  // database. It is never inlined in the metadata response above, so a drawer
+  // that merely opens has not handed over the agreement.
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'), 10);
+  const f = await Funds.getById(c.env, id);
+  if (!f?.lpa_doc_id) return c.json({ error: 'No LPA on file yet' }, 404);
+  if (!(await mayReadLpa(c.env, user, id))) {
+    return c.json({ error: 'You are not an LP of this fund.', code: 'lpa_not_entitled' }, 403);
   }
-  // Admin or LP: return metadata + file_key. Frontend should issue a
-  // download via a short-lived signed URL endpoint (TODO: port the
-  // FastAPI `/api/files/contracts/{token}` minting flow into the worker
-  // so the LPADrawer's `Download LPA` button has a `content_url` to
-  // hit). Until then, this response is correct-by-default — no body
-  // leaks via JSON.
-  return c.json({ ok: true, doc: safeDoc });
+  const row = await c.env.DB.prepare(
+    `SELECT content, version FROM legal_documents WHERE id = ?`
+  ).bind(f.lpa_doc_id).first<{ content: string | null; version: number | null }>();
+  const body = typeof row?.content === 'string' ? row.content : '';
+  if (!body.trim()) {
+    // Deliberately a different answer from the 403 above: "we have nothing to
+    // give you" and "you may not have it" are different facts about one click,
+    // and collapsing them is the defect D174 exists to correct.
+    return c.json({ error: 'No LPA body is stored for this fund.', code: 'lpa_no_body' }, 404);
+  }
+  // Recorded because this is the fund's constitutional document leaving the
+  // store. Best-effort by construction — `logActivity` swallows its own
+  // failures, and a download must not fail because its audit row did.
+  await logActivity(c.env, Number(user.id), 'fund_lpa_downloaded', {
+    entityType: 'vc_fund', entityId: id, metadata: { doc_id: f.lpa_doc_id },
+  });
+  // Built from two integers and never from stored text: a filename carrying a
+  // quote or a newline would rewrite the response headers.
+  const filename = `lpa-fund-${id}-v${Number(row?.version) || 1}.txt`;
+  return new Response(body, {
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Cache-Control': 'no-store',
+    },
+  });
 });
 
 funds.post('/', async (c) => {
