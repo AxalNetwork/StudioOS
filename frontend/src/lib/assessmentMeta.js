@@ -221,6 +221,32 @@ export function archetypeIllustration(slug, variant = 'm') {
   return female ? `/archetypes/${key}_f.png` : `/archetypes/${key}.png`;
 }
 
+// Cinematic 21:9 banners for the full archetype page (not the compact /studio
+// preview, which stays on the pixel sprites above).
+//   /archetypes/banners/{slug}.webp     male
+//   /archetypes/banners/{slug}_f.webp   female
+export function archetypeBanner(slug, variant = 'm') {
+  const key = String(slug || '').trim();
+  if (!ARCHETYPES[key]) return null;
+  const female = variant === 'f' || variant === 'female';
+  return female ? `/archetypes/banners/${key}_f.webp` : `/archetypes/banners/${key}.webp`;
+}
+
+export function archetypeLicenceTitle(audience = 'founder') {
+  if (audience === 'investor') return 'Investor archetype';
+  if (audience === 'advisor') return 'Advisor archetype';
+  if (audience === 'partner') return 'Partner/Operator archetype';
+  return 'Founder archetype';
+}
+
+export function archetypeAudienceFromRole(role) {
+  const r = String(role || '').toLowerCase();
+  if (r === 'investor') return 'investor';
+  if (r === 'advisor' || r === 'mentor') return 'advisor';
+  if (r === 'partner') return 'partner';
+  return 'founder';
+}
+
 // ── XP / level curve (mirrors assessmentScoring.ts::levelForXp) ──────────────
 export function levelForXp(xp) {
   return Math.floor(Math.sqrt(Math.max(0, Number(xp) || 0) / 100)) + 1;
