@@ -107,3 +107,18 @@ test('every studio home still mounts ProfileFitSection compact', () => {
   assert.match(advisor, /<ProfileFitSection compact studio audience="advisor"/);
   assert.match(partner, /<ProfileFitSection compact studio audience="partner"/);
 });
+
+test('compact scored card is one hit target to the full archetype page', () => {
+  assert.match(fitCode, /to=\{clickable \? '\/studio\/archetype' : undefined\}/);
+  assert.match(fitCode, /clickable = Boolean\(compact && latest\)/);
+  assert.match(fitCode, /<Link to=\{to\} className=\{cls\}/);
+  assert.match(fitCode, /View full card →/);
+  assert.match(fitCode, />Preview<\/span>/);
+  assert.match(fit, /\.pf-card-hit \{/);
+  assert.match(fit, /\.pf-card-hit:hover \{ transform: translateY\(-2px\); border-color: var\(--arch-accent, #7c3aed\); \}/);
+  assert.match(fit, /\.pf-card-hit:focus-visible \{ outline: 2px solid #7c3aed/);
+  assert.doesNotMatch(fitCode, /archetypeBanner/,
+    'compact /studio stays on pixel sprites — cinematic banners belong on the full page');
+  assert.doesNotMatch(fitCode, /md:grid-cols-\[300px/,
+    'compact must not reintroduce the overflowing two-column grid');
+});

@@ -1,21 +1,33 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { Loader2, AlertCircle, Lock } from 'lucide-react';
 import { api, assessment } from '../../lib/api';
 import SkillRadar from '../play/SkillRadar';
 import { openPaywall } from '../PaywallModal';
-import { archetypeIllustration, archetypeMeta, humanize } from '../../lib/assessmentMeta';
+import { archetypeIllustration, archetypeLicenceTitle, archetypeMeta, humanize } from '../../lib/assessmentMeta';
 
-function CardShell({ title, badge, className = '', children, action }) {
-  return (
-    <div className={`pf-card p-[22px] bg-white dark:bg-gray-900 border border-[#ececf1] dark:border-gray-700 animate-[pfFade_0.4s_ease-out] ${className}`}>
+function CardShell({ title, badge, className = '', children, action, to, accent, testId }) {
+  const hit = Boolean(to);
+  const cls = `pf-card p-[22px] bg-white dark:bg-gray-900 border border-[#ececf1] dark:border-gray-700 animate-[pfFade_0.4s_ease-out] ${hit ? 'pf-card-hit' : ''} ${className}`;
+  const style = accent ? { '--arch-accent': accent } : undefined;
+  const inner = (
+    <>
       <div className="flex items-center justify-between mb-[14px]">
         <h4 className="pf-lbl text-[#a1a1aa] dark:text-gray-400">{title}</h4>
         {badge}
         {action || null}
       </div>
       {children}
-    </div>
+    </>
   );
+  if (hit) {
+    return (
+      <Link to={to} className={cls} style={style} data-testid={testId || 'archetype-preview-card'}>
+        {inner}
+      </Link>
+    );
+  }
+  return <div className={cls} style={style} data-testid={testId}>{inner}</div>;
 }
 
 function Nudge({ children }) {
@@ -207,93 +219,101 @@ function ArchetypeArt({ slug, sex, compact = false }) {
 function ArchetypeCard({ state, fitState, className, audience = 'founder', compact = false }) {
   const { data, error } = state;
   const fitData = fitState?.data;
+  const conv = fitData?.archetype && fitData.archetype.slug
+    ? { slug: fitData.archetype.slug, label: fitData.archetype.label, confidence: fitData.archetype.confidence }
+    : null;
+  let latest = conv;
+  if (!latest) {
+    const list = (Array.isArray(data?.results) ? data.results : []).filter((r) => r.archetype_slug);
+    const g = list.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0))[0] || null;
+    if (g) latest = { slug: g.archetype_slug, label: g.archetype_label, confidence: null };
+  }
+  const meta = latest ? archetypeMeta(latest.slug) : null;
+  const clickable = Boolean(compact && latest);
+
   let body;
   if (error && !fitData) {
     body = <ErrorNote>Couldn’t load your archetype. {error}</ErrorNote>;
   } else if (!data && !fitData) {
     body = <div className="py-6 flex justify-center text-gray-400"><Loader2 className="animate-spin" size={18} /></div>;
+  } else if (!latest) {
+    body = <Nudge>Answer a few archetype questions in the advisor to reveal your archetype.</Nudge>;
   } else {
-    const conv = fitData?.archetype && fitData.archetype.slug
-      ? { slug: fitData.archetype.slug, label: fitData.archetype.label, confidence: fitData.archetype.confidence }
-      : null;
-    let latest = conv;
-    if (!latest) {
-      const list = (Array.isArray(data?.results) ? data.results : []).filter((r) => r.archetype_slug);
-      const g = list.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0))[0] || null;
-      if (g) latest = { slug: g.archetype_slug, label: g.archetype_label, confidence: null };
-    }
-    if (!latest) {
-      body = <Nudge>Answer a few archetype questions in the advisor to reveal your archetype.</Nudge>;
-    } else {
-      const meta = archetypeMeta(latest.slug);
-      const pct = latest.confidence != null ? Math.round(Number(latest.confidence) * 100) : null;
-      const title = latest.label || meta?.label || latest.slug;
-      const sex = fitData?.archetype_sex === 'm' || fitData?.archetype_sex === 'f' || fitData?.archetype_sex === 'both'
-        ? fitData.archetype_sex
-        : 'both';
-      const copy = (
-        <>
-          {meta?.tagline && (
-            <div>
-              <div className="pf-lbl text-[#15803d] dark:text-green-500 mb-[9px]">Core approach</div>
-              <div className="text-[12.5px] text-[#3f3f46] dark:text-gray-300 leading-[1.5]">{meta.tagline}</div>
-            </div>
-          )}
-          {meta?.description && (
-            <div>
-              <div className="pf-lbl text-[#b45309] dark:text-amber-500 mb-[9px]">Description</div>
-              <div className="text-[12.5px] text-[#3f3f46] dark:text-gray-300 leading-[1.5]">{meta.description}</div>
-            </div>
-          )}
-        </>
-      );
-
-      body = compact ? (
-        <div className="flex min-w-0 flex-col gap-3">
-          <ArchetypeArt slug={latest.slug} sex={sex} compact />
+    const pct = latest.confidence != null ? Math.round(Number(latest.confidence) * 100) : null;
+    const title = latest.label || meta?.label || latest.slug;
+    const sex = fitData?.archetype_sex === 'm' || fitData?.archetype_sex === 'f' || fitData?.archetype_sex === 'both'
+      ? fitData.archetype_sex
+      : 'both';
+    const copy = (
+      <>
+        {meta?.tagline && (
           <div>
-            <div className="pf-lbl text-[10.5px] text-[#7c3aed] dark:text-violet-300 mb-1">Primary archetype</div>
-            <div className="flex items-baseline justify-between gap-2">
-              <div className="text-[18px] font-extrabold tracking-[-0.02em] leading-tight text-[#27272a] dark:text-gray-100">{title}</div>
-              <div className="pf-mono shrink-0 text-[12px] font-bold text-[#7c3aed] dark:text-violet-300">
+            <div className="pf-lbl text-[#15803d] dark:text-green-500 mb-[9px]">Core approach</div>
+            <div className="text-[12.5px] text-[#3f3f46] dark:text-gray-300 leading-[1.5]">{meta.tagline}</div>
+          </div>
+        )}
+        {meta?.description && (
+          <div>
+            <div className="pf-lbl text-[#b45309] dark:text-amber-500 mb-[9px]">Description</div>
+            <div className="text-[12.5px] text-[#3f3f46] dark:text-gray-300 leading-[1.5]">{meta.description}</div>
+          </div>
+        )}
+      </>
+    );
+
+    body = compact ? (
+      <div className="flex min-w-0 flex-col gap-3">
+        <ArchetypeArt slug={latest.slug} sex={sex} compact />
+        <div>
+          <div className="pf-lbl text-[10.5px] text-[#7c3aed] dark:text-violet-300 mb-1">Primary archetype</div>
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="text-[18px] font-extrabold tracking-[-0.02em] leading-tight text-[#27272a] dark:text-gray-100">{title}</div>
+            <div className="pf-mono shrink-0 text-[12px] font-bold text-[#7c3aed] dark:text-violet-300">
+              {pct != null ? `${pct}%` : 'N/A'}
+            </div>
+          </div>
+        </div>
+        {copy}
+        <div className="pf-lbl text-[#7c3aed] dark:text-violet-300 pt-1">View full card →</div>
+      </div>
+    ) : (
+      <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-[26px] items-start">
+        <div className="min-w-0">
+          <ArchetypeArt slug={latest.slug} sex={sex} />
+          <div className="mt-3">
+            <div className="pf-lbl text-[10.5px] text-[#7c3aed] dark:text-violet-300 mb-2">Primary archetype</div>
+            <div className="text-[22px] font-extrabold tracking-[-0.02em] leading-tight text-[#27272a] dark:text-gray-100">{title}</div>
+          </div>
+          <div className="flex gap-[10px] mt-3">
+            <div className="flex-1 border border-[#f0f0f3] dark:border-gray-800 rounded-[12px] p-[13px]">
+              <div className="pf-lbl text-[10px] text-[#a1a1aa] mb-1">Confidence</div>
+              <div className="pf-mono text-[14px] font-bold text-[#27272a] dark:text-gray-100">
                 {pct != null ? `${pct}%` : 'N/A'}
               </div>
             </div>
           </div>
+        </div>
+        <div className="flex flex-col gap-4 border-t border-[#f0f0f3] dark:border-gray-800 md:border-0 pt-4 md:pt-0">
           {copy}
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-[26px] items-start">
-          <div className="min-w-0">
-            <ArchetypeArt slug={latest.slug} sex={sex} />
-            <div className="mt-3">
-              <div className="pf-lbl text-[10.5px] text-[#7c3aed] dark:text-violet-300 mb-2">Primary archetype</div>
-              <div className="text-[22px] font-extrabold tracking-[-0.02em] leading-tight text-[#27272a] dark:text-gray-100">{title}</div>
-            </div>
-            <div className="flex gap-[10px] mt-3">
-              <div className="flex-1 border border-[#f0f0f3] dark:border-gray-800 rounded-[12px] p-[13px]">
-                <div className="pf-lbl text-[10px] text-[#a1a1aa] mb-1">Confidence</div>
-                <div className="pf-mono text-[14px] font-bold text-[#27272a] dark:text-gray-100">
-                  {pct != null ? `${pct}%` : 'N/A'}
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-col gap-4 border-t border-[#f0f0f3] dark:border-gray-800 md:border-0 pt-4 md:pt-0">
-            {copy}
-          </div>
-        </div>
-      );
-    }
+      </div>
+    );
   }
-  const archetypeTitle = audience === 'investor'
-    ? 'Investor archetype'
-    : audience === 'advisor'
-      ? 'Advisor archetype'
-      : audience === 'partner'
-        ? 'Partner/Operator archetype'
-      : 'Founder archetype';
-  return <CardShell title={archetypeTitle} className={className}>{body}</CardShell>;
+  const previewChip = clickable ? (
+    <span className="pf-lbl text-[10px] tracking-[0.08em] text-[#7c3aed] dark:text-violet-300 border border-[#ede9fe] dark:border-violet-800 rounded-full px-[10px] py-[3px]">Preview</span>
+  ) : null;
+  return (
+    <CardShell
+      title={archetypeLicenceTitle(audience)}
+      className={className}
+      to={clickable ? '/studio/archetype' : undefined}
+      accent={clickable ? (meta?.accent || '#7c3aed') : undefined}
+      badge={previewChip}
+      testId={clickable ? 'archetype-preview-card' : undefined}
+    >
+      {body}
+    </CardShell>
+  );
 }
 
 // ── Completion % ──────────────────────────────────────────────────────────────
@@ -660,6 +680,9 @@ export default function ProfileFitSection({ className = '', compact = false, stu
           .pf-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
           .pf-card { border-radius: 16px; box-shadow: 0 1px 2px rgba(24,24,27,.03); }
           .pf-sprite { image-rendering: pixelated; }
+          .pf-card-hit { text-decoration: none; color: inherit; display: block; cursor: pointer; transition: transform .15s ease, border-color .15s ease; }
+          .pf-card-hit:hover { transform: translateY(-2px); border-color: var(--arch-accent, #7c3aed); }
+          .pf-card-hit:focus-visible { outline: 2px solid #7c3aed; outline-offset: 2px; }
           @keyframes pfFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
         `}</style>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-[14px] items-start" data-testid={`${audience}-assessment-band`}>
@@ -678,6 +701,9 @@ export default function ProfileFitSection({ className = '', compact = false, stu
         .pf-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
         .pf-card { border-radius: 16px; box-shadow: 0 1px 2px rgba(24,24,27,.03); }
         .pf-sprite { image-rendering: pixelated; }
+        .pf-card-hit { text-decoration: none; color: inherit; display: block; cursor: pointer; transition: transform .15s ease, border-color .15s ease; }
+        .pf-card-hit:hover { transform: translateY(-2px); border-color: var(--arch-accent, #7c3aed); }
+        .pf-card-hit:focus-visible { outline: 2px solid #7c3aed; outline-offset: 2px; }
         @keyframes pfFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
       `}</style>
       
