@@ -14998,11 +14998,54 @@ form never appeared in GitHub Issues. The first diagnosis was
 `GITHUB_ACCESS_TOKEN` unset — **wrong**. The token was set, org-approved, and
 the admin panel's **Test** button passed.
 
-**The measurement that reframed it.** `AxalNetwork/StudioOS` has contained
-exactly **one** real issue in its entire history — `#305`, hand-made,
-2026-08-17. Every other number is a pull request. So the mirror had **never
-once worked**, across months of tickets, and every surface in the product
-reported health.
+**The measurement that reframed it** — *and it was wrong; the corrected
+version is below and is sharper.* The sweep run during the build reported
+that `AxalNetwork/StudioOS` had contained exactly **one** real issue in its
+entire history (`#305`, called hand-made), and concluded the mirror had
+**never once worked**. Every surface in the product reported health
+regardless, which is the part that held.
+
+### Correction — the mirror did work, twice, and then stopped
+
+Re-measured against **production D1** once 273 was applied, which is the
+first time the two sides could be joined:
+
+| ticket | created | mirrored |
+| --- | --- | --- |
+| 1 | 2026-04-16 11:55 | no |
+| 2 | 2026-04-16 13:24 | **yes → issue #3** |
+| 3 | 2026-04-17 11:10 | **yes → issue #4** |
+| 4–10 | 2026-07-05 → 2026-09-20 | **no — seven in a row** |
+
+Issues `#3` and `#4` are real issues, each created **within one second** of
+its ticket row — that one-second join is what makes them the mirror's own
+work rather than a coincidence. So the mirror worked for about a day in
+April, and has failed on every ticket since **5 July**, five months, up to
+and including the test ticket filed at 16:50Z on the day of the fix. `#305`
+is also not hand-made: it is `github-actions[bot]`.
+
+**Both halves of the original sweep were wrong** — the count and the
+authorship — and the likely cause is a filter that saw only open issues
+(`#3` and `#4` are closed). The lesson is the one this programme keeps
+relearning from the other side: **a sweep that returns a suspiciously round
+"never" deserves the same scepticism as a green check**. It was not caught
+by review; it was caught by joining it to a second store.
+
+**Nothing in the fix changes.** Every defect below is independent of how
+often the mirror worked: the probe read metadata, the failure had no column,
+the sync could not backfill, `/help` discarded the response. What changes is
+the **diagnosis of the cause**: not "never configured" but *a credential
+that lapsed*, which is exactly the failure a metadata probe is blind to,
+since `Metadata: Read` survives on a token that has lost everything else.
+The write test is what will now say so out loud.
+
+**Migration `273`'s own header carries the superseded sentence and is
+deliberately NOT edited.** `scripts/migrate-d1.mjs:492` compares each file's
+checksum against the ledger and warns on drift; editing an applied
+migration — even only its comment — would print that warning on every
+deploy from now on, which is how people learn to ignore warnings. An applied
+migration is immutable, comments included; this entry is where its claim is
+corrected.
 
 ### Why the Test was green
 

@@ -106,10 +106,13 @@ r.put('/', async (c) => {
  * 403-ing forever. The panel's own copy said "Needs Issues: Read and write"
  * and nothing checked it.
  *
- * Measured 2026-09-20: AxalNetwork/StudioOS held exactly one real issue in
- * its whole history, hand-made, while the panel reported a healthy
- * connection. A check that cannot fail on the bug it exists for is
- * decoration.
+ * Measured against production D1 after the fix shipped: the mirror worked
+ * on 16-17 April 2026 (two tickets became issues #3 and #4, one second
+ * apart from their rows) and has failed on EVERY ticket since 5 July --
+ * seven in a row over five months, while the panel reported a healthy
+ * connection throughout. A working window that closed is what a credential
+ * expiring looks like, and it is precisely what the metadata probe could
+ * not see. A check that cannot fail on the bug it exists for is decoration.
  *
  * So each capability is now named and reported separately:
  *

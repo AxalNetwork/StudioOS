@@ -8,9 +8,14 @@
  * `GET /repos/{owner}/{repo}` — repository METADATA. A fine-grained PAT
  * carries Metadata: Read automatically and cannot have it removed, so that
  * probe answers 200 for a token with no Issues permission whatsoever.
- * Measured against the repo the same day: exactly ONE real issue had ever
- * existed in its history, hand-made. The mirror had never worked and every
- * surface said it had.
+ *
+ * Measured against production D1 once the fix was live: the mirror DID work,
+ * on 16-17 April 2026 -- two tickets became issues #3 and #4, each created
+ * within a second of its row -- and then failed on every ticket from 5 July
+ * onward, seven in a row over five months. So this is a credential that
+ * lapsed behind a probe that could not see it, which is worse than one that
+ * was never set: the panel had been green through the whole working period
+ * and stayed green through the whole broken one.
  *
  * Each test below pins one of the paths that was silent. They are source
  * assertions rather than live calls because the failure was structural — a
