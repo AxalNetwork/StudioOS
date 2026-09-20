@@ -53,14 +53,14 @@ export default function ArchetypeCardPage({ activeRole }) {
 
   useEffect(() => {
     let alive = true;
-    const wire = (p, set, scope) => p
+    const wire = (p, set, onErr) => p
       .then((d) => { if (alive) set({ data: d, error: '' }); })
       .catch((e) => {
-        reportError(scope, e);
+        onErr(e);
         if (alive) set({ data: null, error: e?.message || 'Failed to load' });
       });
-    wire(api.bestFit.me(), setFit, 'ArchetypeCard:bestFit');
-    wire(assessment.myResults(), setResults, 'ArchetypeCard:results');
+    wire(api.bestFit.me(), setFit, (e) => reportError('ArchetypeCard:bestFit', e));
+    wire(assessment.myResults(), setResults, (e) => reportError('ArchetypeCard:results', e));
     return () => { alive = false; };
   }, []);
 
