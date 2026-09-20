@@ -15274,10 +15274,20 @@ is what the next run does.
    different bugs — one is ours, one is a dashboard setting no code change can
    reach — and the log could not separate them. **This is why thirty-nine red
    runs never said what was wrong.**
-2. **A refusal did not stop the run.** It fell through into the full
-   `ROW_BUDGET_MS` and `SEND_BUDGET_MS` polls — most of the 3m42s — and then
-   reported the foregone absence as the outage shape. The 429 branch has always
-   exited early for exactly this reason; every other refusal now does too.
+2. **A refusal did not stop the run**, and run #39's own timestamps price it
+   exactly:
+
+   ```
+   18:20:03.4  check-magic-link-insert: /magic/start returned 403
+   18:23:21.6    ✓ start_latency: /magic/start answered in 166ms (budget 5000ms)
+   18:23:21.6    ✗ token_row_written: … exactly how the outage presented
+   ```
+
+   **Three minutes and eighteen seconds — 89% of the 3m42s run — spent polling
+   D1 for a row that could not exist, after the refusal was already known and
+   logged.** Then it reported that foregone absence as the outage shape. The
+   429 branch has always exited early for exactly this reason; every other
+   refusal now does too.
 3. **There was no verdict for "the endpoint refused us."** With only three, a
    refusal became two false ✗s while the one that passed made the endpoint look
    healthy.
