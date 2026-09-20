@@ -15120,3 +15120,84 @@ durably do anything. Its own concern. `admin_github.ts` also still writes no
 
 **Migration 273 is used; 274 is the next free number.** `frontend/src` moves,
 so `docs/` is rebuilt.
+
+## D172
+
+**A `failed` GitHub mirror told the reader exactly what broke, and never told
+an admin where to go fix it.**
+
+**2026-09-20. Reported live, hours after D171 shipped:** *"Still nothing
+appears in issue when I send a new ticket."* Measured against production D1
+rather than assumed:
+
+```sql
+SELECT id, created_at, github_sync_status, github_sync_error
+FROM tickets WHERE id = 11;
+-- 11 | 2026-09-20 18:56:31 | failed | Resource not accessible by personal access token
+```
+
+**This was not a regression.** It is the exact defect D171 exists to surface,
+working as built, on a token that is still broken. `Resource not accessible
+by personal access token` is GitHub's own text for a 403 — the same shape
+`admin_github.ts`'s write test reports — and a third confirmation, after
+issues #3/#4 and the seven-ticket run, that the credential which worked in
+April has not been fixed. Both frontend surfaces — `PersonalAdvisor.jsx`'s
+`handleTicketFiled` and `TicketsPage.jsx`'s `submit()` — read
+`github_sync_status`/`github_sync_error` and told the reader honestly that
+the ticket would not appear on the board, with the reason. D171's own fix was
+confirmed working end to end by this report, not undermined by it.
+
+### The asymmetry, found by reading both branches side by side
+
+The sibling `not_configured` branch, in both files, already told an admin
+*where to go*:
+
+> *"...set GITHUB_ACCESS_TOKEN as a Worker secret to turn it on"* (PersonalAdvisor)
+> *"...set it up in Admin Console → GitHub Sync"* (TicketsPage)
+
+The `failed` branch — the one that actually fires here, and a **worse** state
+than unconfigured (a token that exists and was refused, not one that was
+never set) — showed the raw GitHub error string and stopped. Honest, but not
+actionable: nothing in either message said an admin could do anything about
+it, or where. Both branches sit a few lines apart in the same function; the
+gap was not a hypothesis, it was a comparison.
+
+### What lands
+
+Inside the existing `if (status === 'failed')` block in each file, an
+admin-gated sentence is appended naming **Admin Console → GitHub Sync** and
+**Test issue creation** by its shipped label:
+
+> *"An admin can look into it in Admin Console → GitHub Sync — Test issue
+> creation there will say exactly what the token is missing."*
+
+`PersonalAdvisor.jsx` gates it on `user?.role === 'admin'`, the same
+condition the `not_configured` branch two lines down already uses.
+`TicketsPage.jsx` gated it on `isAdmin` — and building it surfaced a small,
+pre-existing, unrelated formatting gap worth fixing in the same edit: unlike
+`PersonalAdvisor.jsx`, this file never normalised a trailing period onto
+GitHub's raw error text before concatenating further copy, so appending the
+pointer directly produced a run-on ("...token An admin can..."). Both files
+now share the same shape — compute the sentence, normalise the reason's
+trailing punctuation, then conditionally append the pointer inside an
+`if (isAdmin)` block — rather than `TicketsPage.jsx` alone carrying a ternary.
+
+**No error-text classification.** The pointer is the same sentence for every
+`failed` cause, because GitHub's error prose is not a contract this repo
+controls, and the shipped Test issue creation button already does the real
+classification (403 names the missing permission by name; 410 names Issues
+being disabled). The chat message's job is only to send an admin to the tool
+that says more, not to duplicate its judgement.
+
+### What this does not touch
+
+The credential. Regenerating or re-scoping the GitHub token with **Issues:
+Read and write**, saving it in Admin Console → GitHub Sync, and confirming
+with **Test issue creation** remain entirely the user's own action, unchanged
+from what D171 already said. Once that passes, ticket 11 — the sole
+unmirrored row past the ones already known from D171's own history — can be
+recovered through the existing backfill (`POST /api/tickets/sync
+{backfill:true}`) rather than re-filed by hand.
+
+**No migration** (274 stays free), **no new `/api/*` method**, no schema
+change. `frontend/src` moves in both files, so `docs/` is rebuilt.

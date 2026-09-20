@@ -142,6 +142,36 @@ test('the /help ticket form no longer discards the sync outcome', () => {
   assert.match(src, /status === 'not_configured' && isAdmin/);
 });
 
+test('a failed mirror on TicketsPage also points an admin at where to fix it, and only an admin', () => {
+  // D172. `failed` is a WORSE state than `not_configured` here too, and the
+  // `not_configured` branch two lines down already names a secret and a
+  // place to set it while `failed` used to just relay the raw GitHub error
+  // and stop. Bounded to the `if (status === 'failed')` block only, so a
+  // pointer that actually lives in the `not_configured` branch cannot
+  // satisfy this.
+  const src = at(TICKETS_PAGE);
+  const start = src.indexOf("if (status === 'failed') {");
+  assert.ok(start > 0, 'the failed branch moved or was renamed');
+  const nextBranch = src.indexOf("} else if (status === 'not_configured'", start);
+  assert.ok(nextBranch > start, 'the not_configured branch moved or was renamed');
+  const block = src.slice(start, nextBranch);
+
+  assert.match(block, /Admin Console → GitHub Sync/,
+    'a failed mirror gives no admin a pointer to where to fix it');
+  assert.match(block, /Test issue creation/,
+    'the pointer does not name the control that actually diagnoses the token');
+
+  // Not merely present in the branch: the pointer text must sit AFTER a
+  // nested `if (isAdmin)` gate within this same block — the PersonalAdvisor
+  // shape one file over. A pointer spliced in before the gate, or with the
+  // gate deleted outright, both leave every reader seeing it.
+  const gateAt = block.indexOf('if (isAdmin) {');
+  assert.ok(gateAt > 0, 'the failed branch is not gated on isAdmin at all');
+  const pointerAt = block.indexOf('Admin Console → GitHub Sync');
+  assert.ok(pointerAt > gateAt,
+    'the pointer sentence sits outside the isAdmin gate, so every reader sees it');
+});
+
 test('the admin panel offers the write test and says why the read test is not enough', () => {
   const src = at(ADMIN_PAGE);
   assert.match(src, /data-testid="github-write-test"/, 'the write probe needs a control, or nobody can run it');
