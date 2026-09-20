@@ -142,6 +142,33 @@ test('an UNREADABLE ledger renders its own reason — it never renders as silenc
     'and it must not guess at an outcome it could not read');
 });
 
+test('both rendered branches are live regions, so the outcome is announced and not just drawn', () => {
+  // #669. This notice APPEARS after the page has loaded — the subject is
+  // already reading the Account tab when their deletion request's outcome
+  // arrives, and a screen reader is told nothing by a div that quietly
+  // materialises. `role="status"` plus `aria-live="polite"` is what makes it
+  // announced without interrupting.
+  //
+  // Both branches, because they are two separate elements and the defect is
+  // per-element: the unreadable-ledger paragraph is the one a subject is MOST
+  // likely to meet without seeing it, since it replaces an outcome they were
+  // waiting for with a reason they were not.
+  const outcome = render({
+    available: true,
+    last_closed: { outcome: 'denied', closed_at: '2026-09-19 16:23:16', close_reason: 'Retention obligation.' },
+  });
+  const unreadable = render({ available: false, reason: 'The record could not be read just now.' });
+
+  for (const [name, html] of [['the outcome', outcome], ['the unreadable ledger', unreadable]]) {
+    assert.match(html, /role="status"/, `${name} is not announced — it renders silently into the page`);
+    assert.match(html, /aria-live="polite"/, `${name} has no aria-live, so role="status" alone may not announce it`);
+  }
+  // The testids are what the page and its other assertions find these by, so
+  // they must survive alongside the new attributes rather than be replaced.
+  assert.match(outcome, /data-testid="dsr-outcome"/);
+  assert.match(unreadable, /data-testid="dsr-outcome-unreadable"/);
+});
+
 // -------------------------------------------------------------- structural
 
 test('the notice is mounted, and ONLY while no request is open', () => {
