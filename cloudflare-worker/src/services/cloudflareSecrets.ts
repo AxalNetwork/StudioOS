@@ -103,8 +103,28 @@ export async function setSecret(env: Env, name: string, value: string): Promise<
     // Network / fetch failure — never includes a token value.
     return { ok: false, status: 0, code: 'cf_api_failed', error: `network: ${String(e?.message || e).slice(0, 200)}` };
   }
-  if (res.ok) return { ok: true, status: res.status };
   const body = await res.text().catch(() => '');
+  if (res.ok) {
+    // A 200 IS NOT A WRITE. The Cloudflare v4 API answers HTTP 200 with
+    // `{"success": false, "errors": [...]}` for a whole class of refusals,
+    // so checking `res.ok` alone reports a green "saved" toast for a secret
+    // that was never written — and the admin then spends their time
+    // debugging the feature instead of the credential. Parse the envelope
+    // and believe `success`, not the status line.
+    //
+    // A body that will not parse is treated as a PASS on purpose: the write
+    // is far more likely to have landed than not, and failing closed on an
+    // unparseable-but-2xx response would refuse working saves.
+    try {
+      const parsed = JSON.parse(body) as { success?: boolean; errors?: Array<{ code?: number; message?: string }> };
+      if (parsed && parsed.success === false) {
+        const first = Array.isArray(parsed.errors) ? parsed.errors[0] : null;
+        const detail = first?.message ? String(first.message).slice(0, 200) : 'the API reported success:false with no message';
+        return { ok: false, status: res.status, code: 'cf_api_failed', error: `cloudflare refused the write: ${detail}` };
+      }
+    } catch { /* unparseable 2xx — see above */ }
+    return { ok: true, status: res.status };
+  }
   return classifyError(res.status, body);
 }
 
