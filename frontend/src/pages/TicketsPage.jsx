@@ -245,6 +245,10 @@ export default function TicketsPage() {
   const [form, setForm] = useState({ title: '', description: '', priority: 'medium', type: 'task' });
   const [submitting, setSubmitting] = useState(false);
   const [loadError, setLoadError] = useState(null);
+  // Set from POST /api/tickets' own github_sync_status. Survives the form
+  // closing, because the thing it reports happened to the ticket that just
+  // left the form.
+  const [syncNotice, setSyncNotice] = useState(null);
 
   const user = safeReadJSON('user', {});
   const isAdmin = user.role === 'admin';
@@ -302,7 +306,34 @@ export default function TicketsPage() {
     if (!form.title.trim()) return alert('Please enter a ticket title.');
     setSubmitting(true);
     try {
-      await api.createTicket(form);
+      // THE RESPONSE WAS DISCARDED HERE, AND THAT WAS THE WHOLE DEFECT ON
+      // THIS SURFACE. `POST /api/tickets` has always returned
+      // `github_sync_status` — synced | failed | not_configured — and on a
+      // failure a `github_sync_error` naming the cause. This form threw all
+      // of it away, so a ticket that never reached the issue tracker looked
+      // exactly like one that did, to admin and founder alike. The Eadwyn
+      // panel reports it; the page people are actually pointed at did not.
+      //
+      // Same two-audience split the advisor uses: a `failed` mirror is said
+      // to EVERYONE, because anyone expecting the ticket on the board needs
+      // to know it will not appear; `not_configured` is said only to an
+      // admin, because it names a deployment secret a founder cannot act on.
+      const res = await api.createTicket(form);
+      const status = res?.github_sync_status || null;
+      const reason = String(res?.github_sync_error || '').trim();
+      if (status === 'failed') {
+        setSyncNotice({
+          tone: 'warn',
+          text: `Your ticket is saved, but it did not reach the GitHub issue tracker, so it will not appear on the board there${reason ? `: ${reason}` : '.'}`,
+        });
+      } else if (status === 'not_configured' && isAdmin) {
+        setSyncNotice({
+          tone: 'warn',
+          text: 'Your ticket is saved. The GitHub mirror is not configured in this environment, so no issue was opened — set it up in Admin Console → GitHub Sync.',
+        });
+      } else {
+        setSyncNotice(null);
+      }
       setShowForm(false);
       setForm({ title: '', description: '', priority: 'medium', type: 'task' });
       load();
@@ -390,6 +421,15 @@ export default function TicketsPage() {
             <button onClick={submit} disabled={submitting} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-sm text-white font-medium transition-colors disabled:opacity-50">{submitting ? 'Submitting...' : 'Submit Ticket'}</button>
             <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition-colors dark:text-gray-300">Cancel</button>
           </div>
+        </div>
+      )}
+
+      {syncNotice && (
+        <div
+          data-testid="ticket-sync-notice"
+          className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200"
+        >
+          {syncNotice.text}
         </div>
       )}
 

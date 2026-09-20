@@ -95,30 +95,161 @@ r.put('/', async (c) => {
   return c.json(resp);
 });
 
+/**
+ * WHY THIS ROUTE REPORTS THREE VERDICTS AND NOT ONE "Connected".
+ *
+ * It used to make a single call — `GET /repos/{owner}/{repo}` — and answer
+ * `ok: true, "Connected to <repo>."` on a 200. **A fine-grained PAT carries
+ * Metadata: Read automatically and that permission cannot be removed**, so
+ * that probe returned 200 for a token with no Issues access whatsoever. The
+ * panel went green, the badge read "Connected", and `POST /issues` went on
+ * 403-ing forever. The panel's own copy said "Needs Issues: Read and write"
+ * and nothing checked it.
+ *
+ * Measured 2026-09-20: AxalNetwork/StudioOS held exactly one real issue in
+ * its whole history, hand-made, while the panel reported a healthy
+ * connection. A check that cannot fail on the bug it exists for is
+ * decoration.
+ *
+ * So each capability is now named and reported separately:
+ *
+ *   reachable        GET /repos/{o}/{r}        — Metadata: Read. Proves the
+ *                                                repo exists and the token
+ *                                                can see it. NOTHING MORE.
+ *   issues_readable  GET /repos/{o}/{r}/issues — the Issues permission was
+ *                                                granted at all, rather than
+ *                                                the token being metadata-only.
+ *   can_write        only a real create proves it — see below.
+ *
+ * ON `can_write` AND WHY IT IS 'unproven' BY DEFAULT. A cheap probe was
+ * considered and rejected on measurement: POSTing a deliberately invalid
+ * issue body and treating 422 as "authorised, payload merely bad". That
+ * requires GitHub to evaluate authorisation BEFORE payload validation, and
+ * that ordering could not be confirmed. Shipping it would have re-created
+ * the exact defect above — a check that passes regardless. So the default
+ * says plainly that write is unproven, and `{ write: true }` runs the only
+ * thing that settles it: create a real issue and immediately close it.
+ */
 r.post('/test', async (c) => {
   await requireAdmin(c);
   const env = c.env;
   if (!env.GITHUB_ACCESS_TOKEN || !env.GITHUB_REPO_OWNER || !env.GITHUB_REPO_NAME) {
-    return c.json({ ok: false, reachable: false, http_status: null, detail: 'GitHub is not fully configured (token, owner, repo required).' });
+    return c.json({
+      ok: false, reachable: false, issues_readable: false, can_write: false, http_status: null,
+      detail: 'GitHub is not fully configured (token, owner, repo required).',
+    });
   }
   const repoFull = `${env.GITHUB_REPO_OWNER}/${env.GITHUB_REPO_NAME}`;
+  const gh = (path: string, init: RequestInit = {}) => fetch(`https://api.github.com/repos/${repoFull}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${env.GITHUB_ACCESS_TOKEN}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'Content-Type': 'application/json',
+      'User-Agent': 'StudioOS-Worker',
+      ...(init.headers || {}),
+    },
+  });
+
   let resp: Response;
   try {
-    resp = await fetch(`https://api.github.com/repos/${repoFull}`, {
-      headers: {
-        Authorization: `Bearer ${env.GITHUB_ACCESS_TOKEN}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-        'User-Agent': 'StudioOS-Worker',
-      },
-    });
+    resp = await gh('');
   } catch (e: any) {
-    return c.json({ ok: false, reachable: false, http_status: null, detail: `Network error: ${String(e?.message || e).slice(0, 200)}` });
+    return c.json({
+      ok: false, reachable: false, issues_readable: false, can_write: false, http_status: null,
+      detail: `Network error: ${String(e?.message || e).slice(0, 200)}`,
+    });
   }
-  if (resp.status === 200) return c.json({ ok: true, reachable: true, http_status: 200, detail: `Connected to ${repoFull}.`, repo: repoFull });
-  if (resp.status === 404) return c.json({ ok: false, reachable: true, http_status: 404, detail: `Repo ${repoFull} not found, or the token lacks access to it.` });
-  if (resp.status === 401 || resp.status === 403) return c.json({ ok: false, reachable: true, http_status: resp.status, detail: 'GitHub rejected the token (check it has Issues read/write on the repo).' });
-  return c.json({ ok: false, reachable: true, http_status: resp.status, detail: `GitHub returned HTTP ${resp.status}.` });
+  if (resp.status !== 200) {
+    const detail = resp.status === 404
+      ? `Repo ${repoFull} not found, or the token lacks access to it.`
+      : (resp.status === 401 || resp.status === 403)
+        ? 'GitHub rejected the token.'
+        : `GitHub returned HTTP ${resp.status}.`;
+    return c.json({ ok: false, reachable: false, issues_readable: false, can_write: false, http_status: resp.status, detail });
+  }
+
+  // Issues: Read. A fine-grained token cannot hold write without read, so a
+  // failure here is conclusive — no write either — while a pass still does
+  // not establish write.
+  let issuesReadable = false;
+  let issuesStatus: number | null = null;
+  try {
+    const ir = await gh('/issues?per_page=1');
+    issuesStatus = ir.status;
+    issuesReadable = ir.status === 200;
+  } catch { /* leave false */ }
+
+  let wantWrite = false;
+  try { wantWrite = !!(await c.req.json())?.write; } catch { /* no body: reads only */ }
+
+  if (!wantWrite) {
+    return c.json({
+      ok: issuesReadable,
+      reachable: true,
+      issues_readable: issuesReadable,
+      issues_http_status: issuesStatus,
+      can_write: 'unproven',
+      http_status: 200,
+      repo: repoFull,
+      detail: issuesReadable
+        ? `Reached ${repoFull} and can read its issues. This does NOT prove the token can CREATE one — run the write test to settle that.`
+        : `Reached ${repoFull}, but could not read its issues (HTTP ${issuesStatus}). The token is missing the Issues permission, so the ticket mirror cannot work.`,
+    });
+  }
+
+  // THE ONLY CHECK THAT SETTLES IT. Creates a real issue and closes it, so
+  // the capability is exercised exactly as `createIssue` exercises it.
+  let created: any = null;
+  try {
+    const cr = await gh('/issues', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: 'StudioOS connection test',
+        body: 'Opened by the StudioOS admin GitHub Sync write test, and closed immediately. Safe to ignore.',
+      }),
+    });
+    const data: any = await cr.json().catch(() => null);
+    if (!cr.ok) {
+      const detail = cr.status === 403
+        ? 'The token reached the repo but may not create issues — it needs Issues: Read and write.'
+        : cr.status === 410
+          ? 'Issues are disabled on this repository, so nothing can be mirrored to it.'
+          : `GitHub refused the create with HTTP ${cr.status}: ${data?.message || 'no message'}.`;
+      return c.json({
+        ok: false, reachable: true, issues_readable: issuesReadable, can_write: false,
+        http_status: cr.status, repo: repoFull, detail,
+      });
+    }
+    created = data;
+  } catch (e: any) {
+    return c.json({
+      ok: false, reachable: true, issues_readable: issuesReadable, can_write: false, http_status: null,
+      detail: `Network error during the write test: ${String(e?.message || e).slice(0, 200)}`,
+    });
+  }
+
+  // Best-effort close. The write is already proven by this point, so a
+  // failure to close is reported beside the pass rather than turning it into
+  // a failure — leaving the issue open is untidy, not wrong.
+  let closed = false;
+  try {
+    const cl = await gh(`/issues/${created.number}`, { method: 'PATCH', body: JSON.stringify({ state: 'closed' }) });
+    closed = cl.ok;
+  } catch { /* reported below */ }
+
+  return c.json({
+    ok: true,
+    reachable: true,
+    issues_readable: issuesReadable,
+    can_write: true,
+    http_status: 201,
+    repo: repoFull,
+    test_issue_number: created.number,
+    test_issue_closed: closed,
+    detail: `Created and ${closed ? 'closed' : 'COULD NOT CLOSE'} issue #${created.number} on ${repoFull}. The ticket mirror has everything it needs.${closed ? '' : ' Close it by hand.'}`,
+  });
 });
 
 r.delete('/', async (c) => {

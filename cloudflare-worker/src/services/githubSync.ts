@@ -204,6 +204,17 @@ export async function ensureTicketSyncSchema(env: Env): Promise<void> {
     // Stale-event guard: the issue's updated_at as of the last applied
     // inbound event; older deliveries are dropped instead of reverting state.
     `ALTER TABLE tickets ADD COLUMN github_updated_at TEXT`,
+    // Migration 273. THESE THREE MUST STAY IN STEP WITH THAT FILE — a column
+    // that exists in one definition and not the other gives a database whose
+    // shape depends on which ran first, which is the metrics_snapshots
+    // collision (#183, #202) all over again.
+    //
+    // Every column above records a mirror that SUCCEEDED. These record that
+    // one was attempted and what came back, so a failure outlives the one
+    // HTTP response it used to live in and a retry has something to select.
+    `ALTER TABLE tickets ADD COLUMN github_sync_status TEXT`,
+    `ALTER TABLE tickets ADD COLUMN github_sync_error TEXT`,
+    `ALTER TABLE tickets ADD COLUMN github_sync_attempted_at TEXT`,
   ];
   for (const stmt of alters) {
     try { await db.prepare(stmt).run(); } catch { /* column exists */ }
@@ -218,6 +229,12 @@ export async function ensureTicketSyncSchema(env: Env): Promise<void> {
       payload_hash TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`).run();
+  } catch { /* ignore */ }
+  try {
+    // Migration 273's index. Same stay-in-step rule as the columns above.
+    await db.prepare(
+      `CREATE INDEX IF NOT EXISTS idx_tickets_sync_status ON tickets(github_sync_status, created_at DESC)`,
+    ).run();
   } catch { /* ignore */ }
 }
 
