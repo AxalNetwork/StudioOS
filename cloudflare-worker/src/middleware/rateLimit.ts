@@ -413,7 +413,7 @@ export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
         // Default = fail-open (continue); buckets marked `failClosed` instead
         // reject with 503 so a KV failure can't be used to bypass an
         // abuse-prone limiter. Either way it is observable.
-        console.error(`[ratelimit] KV bumpCounter failed bucket=${b.name} failClosed=${!!b.failClosed}`, e);
+        console.error('[ratelimit] KV bumpCounter failed', { bucket: b.name, failClosed: !!b.failClosed }, e);
         // A STALL CONDEMNS THE WHOLE NAMESPACE, NOT JUST THIS BUCKET. Once a
         // deadline has expired there is no reason to believe the next bucket's
         // read will answer, so we decide the request here from what the
