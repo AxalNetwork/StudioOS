@@ -93,15 +93,25 @@
         };
         navigator.serviceWorker.getRegistrations().then(function (regs) {
           var hadSW = regs && regs.length > 0;
-          regs.forEach(function (r) { try { r.unregister(); } catch (e) {} });
-          if (window.caches && caches.keys) {
-            caches.keys().then(function (keys) {
-              var pending = keys.map(function (k) { return caches.delete(k); });
-              Promise.all(pending).then(function () {
-                if (hadSW) killOnce();
+          // Unregister is awaited before caches are touched — firing it and
+          // moving straight to caches.keys() raced the unregistration against
+          // whatever ran next, the same ordering bug lib/reloadGuard.js's own
+          // note (above) warns about one script up.
+          var unregs = (regs || []).map(function (r) {
+            try { return r.unregister(); } catch (e) { return Promise.resolve(false); }
+          });
+          Promise.all(unregs).then(function () {
+            if (window.caches && caches.keys) {
+              caches.keys().then(function (keys) {
+                var pending = keys.map(function (k) { return caches.delete(k); });
+                Promise.all(pending).then(function () {
+                  if (hadSW) killOnce();
+                });
               });
-            });
-          }
+            } else if (hadSW) {
+              killOnce();
+            }
+          });
         });
       } catch (e) { /* no-op */ }
     })();
