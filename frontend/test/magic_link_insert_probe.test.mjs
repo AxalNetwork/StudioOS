@@ -27,7 +27,7 @@ import { resolve, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import {
-  TEMPLATE_KEY, maxIdOf, missingConfig, readEnvelope, redactError,
+  TEMPLATE_KEY, describeRefusal, maxIdOf, missingConfig, readEnvelope, redactError,
   sendPollDone, sendRowOf, sendVerdict, verdicts,
 } from '../../scripts/check-magic-link-insert.mjs';
 import { withoutSafeComments } from '../../scripts/check-unused-imports.mjs';
@@ -165,20 +165,24 @@ test('both schedules together stay inside the per-address rate limit', () => {
 });
 
 // ---------------------------------------------------------------------------
-// The three verdicts
+// The four verdicts
 
 test('a fast endpoint that commits nothing still fails', () => {
-  // The outage's exact shape: the request never reached its INSERT.
-  const { rows, ok } = verdicts({ startMs: 180, rowFound: false, rowMs: NaN, sendRow: SENT, startBudgetMs: 5000 });
+  // The outage's exact shape: the request never reached its INSERT. The 202 is
+  // what makes it that shape rather than D173's — an endpoint that ACCEPTED the
+  // request and then wrote nothing is the bug; one that refused it is not.
+  const { rows, ok } = verdicts({ startMs: 180, startStatus: 202, rowFound: false, rowMs: NaN, sendRow: SENT, startBudgetMs: 5000 });
   assert.equal(ok, false);
   const by = Object.fromEntries(rows.map((r) => [r.key, r]));
   assert.equal(by.start_latency.ok, true, 'the endpoint was fast and should say so');
+  assert.equal(by.endpoint_accepted.ok, true, 'a 202 is acceptance');
   assert.equal(by.token_row_written.ok, false);
+  assert.equal(by.token_row_written.skipped, undefined, 'an accepted request must be CHECKED, not skipped');
   assert.match(by.token_row_written.detail, /did not reach its INSERT/);
 });
 
-test('all three verdicts are required, and the boundary is inclusive', () => {
-  const base = { startMs: 200, rowFound: true, rowMs: 400, sendRow: SENT, startBudgetMs: 5000, sendBudgetMs: 180_000 };
+test('all four verdicts are required, and the boundary is inclusive', () => {
+  const base = { startMs: 200, startStatus: 202, rowFound: true, rowMs: 400, sendRow: SENT, startBudgetMs: 5000, sendBudgetMs: 180_000 };
   assert.equal(verdicts(base).ok, true);
   assert.equal(verdicts({ ...base, startMs: 5001 }).ok, false, 'a slow start passed');
   assert.equal(verdicts({ ...base, startMs: 5000 }).ok, true, 'exactly at budget is within it');
@@ -186,29 +190,232 @@ test('all three verdicts are required, and the boundary is inclusive', () => {
   assert.equal(verdicts({ ...base, sendRow: null }).ok, false, 'a missing send passed');
   assert.equal(verdicts({ ...base, sendRow: { status: 'queued' } }).ok, false, 'an undelivered send passed');
   assert.deepEqual(verdicts(base).rows.map((r) => r.key),
-    ['start_latency', 'token_row_written', 'mail_send_recorded']);
+    ['start_latency', 'endpoint_accepted', 'token_row_written', 'mail_send_recorded']);
+});
+
+test('an unreported status is not a pass', () => {
+  // Omitting `startStatus` entirely must fail, exactly as omitting `sendRow`
+  // does, so a caller that forgets to pass what the endpoint answered cannot
+  // quietly restore the pre-D173 behaviour of reporting a refusal as a finding
+  // about the INSERT.
+  const base = { startMs: 200, rowFound: true, rowMs: 400, sendRow: SENT, startBudgetMs: 5000, sendBudgetMs: 180_000 };
+  assert.equal(verdicts(base).ok, false, 'an absent startStatus passed');
+  assert.equal(verdicts({ ...base, startStatus: undefined }).ok, false, 'an undefined startStatus passed');
+  assert.equal(verdicts({ ...base, startStatus: null }).ok, false, 'a null startStatus passed');
+  assert.equal(verdicts({ ...base, startStatus: 200 }).ok, false, 'a non-202 2xx passed');
+  assert.equal(verdicts({ ...base, startStatus: '202' }).ok, false, 'a stringified status passed');
 });
 
 test('a send that was never looked up is not a pass', () => {
   // Omitting the argument entirely must fail, so adding a caller that forgets
   // to poll the send log cannot quietly restore the old two-verdict behaviour.
-  const base = { startMs: 200, rowFound: true, rowMs: 400, startBudgetMs: 5000, sendBudgetMs: 180_000 };
+  const base = { startMs: 200, startStatus: 202, rowFound: true, rowMs: 400, startBudgetMs: 5000, sendBudgetMs: 180_000 };
   assert.equal(verdicts(base).ok, false, 'an absent sendRow passed');
   assert.equal(verdicts({ ...base, sendRow: undefined }).ok, false, 'an undefined sendRow passed');
 });
 
 test('a missing latency measurement is never within budget', () => {
   for (const bad of [NaN, undefined, null, 'fast']) {
-    assert.equal(verdicts({ startMs: bad, rowFound: true, rowMs: 1, sendRow: SENT, startBudgetMs: 5000 }).ok, false,
-      `startMs=${String(bad)} passed`);
+    const { rows, ok } = verdicts({ startMs: bad, startStatus: 202, rowFound: true, rowMs: 1, sendRow: SENT, startBudgetMs: 5000 });
+    assert.equal(ok, false, `startMs=${String(bad)} passed`);
+    // It must fail on the LATENCY verdict, not merely fall out of the overall
+    // pass because some other row is unhappy — otherwise this assertion would
+    // survive the latency check being deleted outright.
+    const by = Object.fromEntries(rows.map((r) => [r.key, r]));
+    assert.equal(by.start_latency.ok, false, `startMs=${String(bad)} was judged within budget`);
   }
 });
 
 test('rowFound must be exactly true, not merely truthy', () => {
   for (const v of ['yes', 1, {}, [], 'false']) {
-    assert.equal(verdicts({ startMs: 1, rowFound: v, rowMs: 1, sendRow: SENT, startBudgetMs: 9 }).ok, false,
+    assert.equal(verdicts({ startMs: 1, startStatus: 202, rowFound: v, rowMs: 1, sendRow: SENT, startBudgetMs: 9 }).ok, false,
       `rowFound=${JSON.stringify(v)} passed`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// D173 — a refusal is its own verdict, and the body is what makes it diagnosable
+//
+// Thirty-nine runs of this workflow failed reporting `token_row_written: ✗ …
+// which is exactly how the outage presented`. The endpoint had answered 403 in
+// 166ms and never been given the chance to reach an INSERT. These tests pin the
+// two halves of the fix: the refusal is CAPTURED with enough detail to tell a
+// Worker 403 from an edge 403, and the downstream verdicts stop claiming to
+// have checked something they could not.
+
+test('an edge refusal is read as the edge, and says which headers say so', () => {
+  const r = describeRefusal({
+    status: 403,
+    headers: {
+      'Content-Type': 'text/html; charset=UTF-8',
+      Server: 'cloudflare',
+      'CF-RAY': '8d2fa1b2c3d4e5f6-CDG',
+    },
+    body: '<!DOCTYPE html><html><body>Sorry, you have been blocked</body></html>',
+  });
+  assert.equal(r.origin, 'edge');
+  // The identifying marks must all reach the line, or the reading cannot be
+  // checked by the person reading it.
+  assert.match(r.line, /status 403/);
+  assert.match(r.line, /content-type text\/html/);
+  assert.match(r.line, /server cloudflare/);
+  assert.match(r.line, /cf-ray 8d2fa1b2c3d4e5f6-CDG/);
+  assert.match(r.reading, /WAF|bot/i, 'the edge reading does not name what to go and look at');
+  assert.match(r.snippet, /blocked/, 'the body was dropped — it is the evidence');
+});
+
+test('a worker refusal is read as the worker, and points at our own gates', () => {
+  const r = describeRefusal({
+    status: 403,
+    headers: { 'content-type': 'application/json', 'cf-ray': '8d2fa1b2c3d4e5f6-CDG' },
+    body: '{"error":"forbidden"}',
+  });
+  assert.equal(r.origin, 'worker');
+  assert.match(r.reading, /routes\/auth\.ts/, 'the worker reading does not name the file to read');
+  // A cf-ray is on EVERY Cloudflare-fronted response, our own Worker's
+  // included, so it must not on its own drag the reading to the edge.
+  assert.equal(
+    describeRefusal({ status: 400, headers: { 'cf-ray': 'x' }, body: '{"detail":"bad email"}' }).origin,
+    'worker',
+    'a cf-ray outvoted our own JSON error shape',
+  );
+});
+
+test('an unrecognised refusal says so rather than guessing', () => {
+  // Cloudflare's plaintext firewall page is a real shape and it is NEITHER our
+  // JSON nor HTML. Reporting it as `unknown` with the body printed is the
+  // honest answer; inventing a rule per Cloudflare body shape is how a reading
+  // becomes a guess, which is the defect this whole change exists to end.
+  const plain = describeRefusal({
+    status: 403,
+    headers: { 'content-type': 'text/plain; charset=UTF-8', 'cf-ray': 'abc-CDG' },
+    body: 'error code: 1020',
+  });
+  assert.equal(plain.origin, 'unknown');
+  assert.match(plain.reading, /read the snippet/i);
+  assert.match(plain.snippet, /error code: 1020/, 'the one readable fact was dropped');
+  // JSON-shaped but unparseable, and JSON that is not our error shape, both
+  // stay unknown rather than being claimed as ours.
+  assert.equal(describeRefusal({ status: 500, headers: {}, body: '{not json' }).origin, 'unknown');
+  assert.equal(describeRefusal({ status: 500, headers: {}, body: '{"ok":false}' }).origin, 'unknown');
+  // A refusal with no body at all still reports its status.
+  const bare = describeRefusal({ status: 502, headers: null, body: '' });
+  assert.equal(bare.snippet, null, 'an empty body became an empty-looking snippet rather than nothing');
+  assert.equal(bare.line, 'status 502');
+});
+
+test('the refusal body is redacted before it reaches a public CI log', () => {
+  // Same rule as `last_error`, for the same reason: this prints into a log
+  // anyone who can read the repo can read. An error page that echoed the
+  // request would otherwise put a live sign-in link there.
+  const fake = 'not-a-real-token-not-a-real-token';
+  const r = describeRefusal({
+    status: 403,
+    headers: { 'content-type': 'text/html' },
+    body: `<p>blocked:\n  https://axal.vc/api/auth/magic/verify?token=${fake}</p>`,
+  });
+  assert.ok(!r.snippet.includes(fake), 'the token survived into the refusal snippet');
+  assert.ok(!r.snippet.includes('axal.vc/api/auth/magic/verify'), 'the verify URL survived');
+  assert.match(r.snippet, /url removed/);
+  // Whitespace is collapsed, so the 200-character budget carries words rather
+  // than the indentation of an HTML error page.
+  assert.ok(!/\n/.test(r.snippet), 'the snippet kept its newlines');
+  assert.ok(r.snippet.length <= 201, 'the snippet is unbounded');
+});
+
+test('headers are read from a real Headers object as well as a plain one', () => {
+  // The script passes `res.headers`, a `Headers` instance with `.get` and no
+  // enumerable keys; every fixture here passes a plain object. A reader that
+  // only handled one of the two would work in tests and see nothing in CI.
+  const h = new Headers({ 'content-type': 'text/html', 'cf-ray': 'abc-CDG', server: 'cloudflare' });
+  const r = describeRefusal({ status: 403, headers: h, body: '<html>no</html>' });
+  assert.equal(r.origin, 'edge', 'a Headers instance was read as having no headers');
+  assert.equal(r.cfRay, 'abc-CDG');
+});
+
+test('a refused request does NOT report the outage shape', () => {
+  // The headline defect. Both downstream verdicts must read NOT CHECKED and be
+  // marked `skipped`, so the report stops sending a reader to routes/auth.ts
+  // for an INSERT that was never reachable.
+  const refusal = describeRefusal({
+    status: 403,
+    headers: { 'content-type': 'text/html', 'cf-ray': 'abc-CDG' },
+    body: '<html>blocked</html>',
+  });
+  const { rows, ok } = verdicts({
+    startMs: 166, startStatus: 403, refusal,
+    rowFound: false, rowMs: NaN, sendRow: null, sendMs: NaN,
+    startBudgetMs: 5000, sendBudgetMs: 180_000,
+  });
+  assert.equal(ok, false, 'a refused request passed');
+
+  const by = Object.fromEntries(rows.map((r) => [r.key, r]));
+  // The endpoint was genuinely fast. Saying otherwise would be the same class
+  // of false finding in the other direction.
+  assert.equal(by.start_latency.ok, true, '166ms against a 5000ms budget is not slow');
+  assert.equal(by.endpoint_accepted.ok, false);
+  assert.equal(by.token_row_written.skipped, true, 'the INSERT verdict was reported as a finding, not as not-checked');
+  assert.equal(by.mail_send_recorded.skipped, true, 'the send verdict was reported as a finding, not as not-checked');
+  assert.match(by.token_row_written.detail, /NOT CHECKED/);
+  assert.match(by.mail_send_recorded.detail, /NOT CHECKED/);
+
+  // The exact sentence that misled for thirty-nine runs must be nowhere in a
+  // refused report.
+  const all = rows.map((r) => r.detail).join('\n');
+  assert.ok(!/exactly how the outage presented/.test(all),
+    'a refused request still claims the outage shape — this is the defect D173 exists to fix');
+  assert.ok(!/never reached its own INSERT/.test(all),
+    'a refused request still blames the send errand');
+
+  // And the refusal's own evidence reaches the report, or the run is no more
+  // diagnosable than the thirty-nine that came before it.
+  assert.match(by.endpoint_accepted.detail, /REFUSED/);
+  assert.match(by.endpoint_accepted.detail, /status 403/);
+  assert.match(by.endpoint_accepted.detail, /cf-ray abc-CDG/, 'the cf-ray did not reach the verdict line');
+  assert.match(by.endpoint_accepted.detail, /blocked/, 'the body did not reach the verdict line');
+  assert.match(by.endpoint_accepted.detail, /WAF|bot/i, 'the reading did not reach the verdict line');
+});
+
+test('a skipped verdict denies the pass on its own', () => {
+  // `skipped` rows carry `ok: false` today, so this could pass for the wrong
+  // reason. Assert the property directly: a row that is skipped must not be
+  // countable as a pass even if it were marked ok.
+  const rows = [{ key: 'a', ok: true }, { key: 'b', ok: true, skipped: true }];
+  assert.equal(rows.every((r) => r.ok && !r.skipped), false);
+  // And the script derives its overall verdict that way rather than on `ok`
+  // alone — read from source, because a skipped-but-ok row cannot be produced
+  // through the public shape.
+  assert.match(read(INSERT_SCRIPT), /rows\.every\(\(r\) => r\.ok && !r\.skipped\)/,
+    'the overall pass no longer excludes skipped rows');
+});
+
+test('a non-2xx is read for its body, and the run stops there', () => {
+  const src = read(INSERT_SCRIPT);
+
+  // 1 · the body is actually captured. Without this the verdict has nothing to
+  // report and the whole change is decoration.
+  const startBlock = src.slice(src.indexOf('/api/auth/magic/start'), src.indexOf('let rowFound'));
+  assert.ok(startBlock.length > 200, 'could not bound the /magic/start block');
+  assert.match(startBlock, /if \(res\.status !== 202\) \{/, 'the non-202 branch is gone');
+  assert.match(startBlock, /await res\.text\(\)/, 'the refusal body is never read');
+  assert.match(startBlock, /describeRefusal\(\{ status: res\.status, headers: res\.headers/,
+    'the refusal is built without the headers that identify the responder');
+
+  // 2 · a refusal exits BEFORE the polls. Falling through burned three minutes
+  // waiting for a row that cannot exist, and then reported its absence as the
+  // outage. Positions, not presence: the guard existing below the poll would
+  // satisfy a plain `match`.
+  const guardAt = src.indexOf('if (startStatus !== 202) {');
+  const pollAt = src.indexOf('const rowDeadline');
+  assert.ok(guardAt > 0, 'the refusal no longer ends the run');
+  assert.ok(pollAt > 0, 'could not find the token poll');
+  assert.ok(guardAt < pollAt, 'the refusal guard sits AFTER the row poll — a refused run still polls D1 for a row that cannot exist');
+  assert.match(src.slice(guardAt, pollAt), /process\.exit\(1\)/, 'the refusal path does not fail the run');
+
+  // 3 · and it reports through the same printer as the happy path, so the two
+  // exits cannot disagree about what a verdict looks like.
+  assert.match(src.slice(guardAt, pollAt), /report\(verdicts\(\{/, 'the refusal path builds its own report');
+  assert.match(src, /r\.skipped \? '–' : r\.ok \? '✓' : '✗'/, 'a skipped verdict prints as a failure again');
 });
 
 // ---------------------------------------------------------------------------
@@ -316,7 +523,7 @@ test('the probe claims the Gmail handoff and disclaims arrival', () => {
 
   // It must not borrow the mailbox probe's verdict names: `mail_delivered`
   // would claim the inbox, `sign_in_completed` the session.
-  const keys = verdicts({ startMs: 1, rowFound: true, rowMs: 1, sendRow: SENT, startBudgetMs: 9 }).rows.map((r) => r.key);
+  const keys = verdicts({ startMs: 1, startStatus: 202, rowFound: true, rowMs: 1, sendRow: SENT, startBudgetMs: 9 }).rows.map((r) => r.key);
   assert.ok(!keys.includes('mail_delivered'), 'it claims a verdict it cannot reach');
   assert.ok(!keys.includes('sign_in_completed'), 'it claims a verdict it cannot reach');
   assert.ok(keys.includes('mail_send_recorded'), 'the send verdict is gone');
@@ -564,6 +771,18 @@ test('only a passing probe is green, and the two failures are told apart', () =>
   // starting point rather than a puzzle.
   assert.match(broke.summary, /stuck at `queued`/, 'the failure summary does not name the silent-send shape');
   assert.match(broke.summary, /last_error/, 'the failure summary does not say where the cause is recorded');
+  // D173 — the refusal shape. Without it the summary offers three diagnoses,
+  // none of which is the one that was actually true for thirty-nine runs, and
+  // it sends a reader to `routes/auth.ts` for a bug that is not there.
+  assert.match(broke.summary, /endpoint_accepted/, 'the failure summary omits the refusal verdict');
+  assert.match(broke.summary, /refused at the door/i, 'the summary does not name the refusal as its own shape');
+  assert.match(broke.summary, /NOT CHECKED/, 'the summary does not say the downstream verdicts go unchecked on a refusal');
+  assert.match(broke.summary, /cf-ray/, 'the summary does not name the header that identifies the responder');
+  assert.match(broke.summary, /WAF/, 'the summary does not say where to look when the EDGE refused it');
+  // And it must say plainly that the edge case is not ours to fix in code,
+  // because that is what stops the next reader hunting a Worker bug.
+  assert.match(broke.summary, /no code change in this repo can fix it/i,
+    'the summary lets an edge refusal read as a bug in this codebase');
 
   // Anything unplanned — a step killed before it wrote its output, an exit code
   // from something else — is not a pass.
@@ -582,6 +801,25 @@ test('the probe step publishes its exit code, and the report reads it via env', 
   const report = wf.slice(wf.indexOf('name: Report the outcome'));
   assert.doesNotMatch(report.slice(report.indexOf('run:')), /\$\{\{/,
     'a workflow expression is interpolated into the report shell');
+});
+
+test('the workflow header names every verdict the code actually produces', () => {
+  // DERIVED, NOT TYPED. The header used to read "THREE VERDICTS" and list
+  // three; D173 added a fourth and the header is exactly the kind of prose
+  // that outlives its fact. Reading the keys out of `verdicts()` means a fifth
+  // one cannot be added without the header gaining a line.
+  const keys = verdicts({
+    startMs: 1, startStatus: 202, rowFound: true, rowMs: 1, sendRow: SENT, startBudgetMs: 9,
+  }).rows.map((r) => r.key);
+  const header = read(INSERT_WF).split('\non:')[0];
+  assert.ok(header.length > 500, 'could not bound the workflow header comment');
+  for (const k of keys) {
+    assert.ok(header.includes(k), `the workflow header does not name the ${k} verdict`);
+  }
+  // And the count in the heading must match, or the heading is the stale claim.
+  const words = { 3: 'THREE', 4: 'FOUR', 5: 'FIVE', 6: 'SIX' };
+  assert.ok(header.includes(`${words[keys.length]} VERDICTS:`),
+    `the header does not say ${words[keys.length]} VERDICTS — the probe now reports ${keys.length}`);
 });
 
 test('it can be dispatched by hand, and it stays on a schedule', () => {

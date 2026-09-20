@@ -5,8 +5,12 @@ name: magic-link insert probe
 # cannot run until a Gmail OAuth app exists. This one asks for a link and then
 # looks in production D1 — and D1 turns out to hold more than the token row.
 #
-# THREE VERDICTS:
+# FOUR VERDICTS:
 #   start_latency       /magic/start answered under budget. The reported symptom.
+#   endpoint_accepted   it answered **202**, i.e. it took the request at all. See
+#                       the D173 paragraph below — this one was added after
+#                       thirty-nine runs failed without ever saying the endpoint
+#                       had refused them.
 #   token_row_written   a `magic_link_tokens` row appeared. Exactly where the
 #                       outage died: D74's diagnosis found four rows, newest
 #                       2026-08-03, and the failing attempt wrote none, so the
@@ -18,7 +22,18 @@ name: magic-link insert probe
 #                       the queue consumer marks it `sent` only when the Gmail API
 #                       took it, and `failed` with a `last_error` otherwise.
 #
-# WHY THE THIRD ONE EXISTS. Without it this probe would pass on a login that sends
+# WHY THE SECOND ONE EXISTS, AND IT IS A CORRECTION (D173). Every run of this
+# workflow up to #39 failed, and the ones that got far enough to report anything
+# said `token_row_written: ✗ … which is exactly how the outage presented` —
+# pointing squarely at D74's bug. It was not that. The line above it read
+# `/magic/start returned 403`, the endpoint had answered in 166ms (`start_latency`
+# PASSED), and the request was simply turned away at the door. Two verdicts were
+# reported as findings about the sign-in flow when nothing about the flow had been
+# exercised. A refusal is now its own verdict, printed with the response body and
+# the `cf-ray`/`server`/`content-type` that say WHO refused, and the two
+# downstream verdicts report NOT CHECKED rather than failed.
+#
+# WHY THE FOURTH ONE EXISTS. Without it this probe would pass on a login that sends
 # no email at all: D74 moved the send to `waitUntil`, so the token row commits and
 # the mail is a separate errand that can die in silence. That silence is legible in
 # `email_send_log` — a row stuck at `queued`, or `failed` with a named cause.
@@ -129,16 +144,28 @@ jobs:
               exit 1
               ;;
             *)
-              echo "::error title=Magic-link flow broken::The endpoint was slow, committed no token row, or the mail was never sent — the step log names which."
+              echo "::error title=Magic-link flow broken::The endpoint refused the request, was slow, committed no token row, or never sent the mail — the step log names which."
               {
                 echo '### Magic-link insert probe: FAILED'
                 echo
-                echo 'The step log names which verdict failed:'
+                echo 'The step log names which verdict failed. **Read `endpoint_accepted` first** — if it'
+                echo 'failed, the two below it will read `– NOT CHECKED`, and nothing about the sign-in flow'
+                echo 'was exercised at all.'
                 echo
                 echo '- `start_latency` — the endpoint is slow again; the reported #168 symptom.'
-                echo '- `token_row_written` — **the request did not reach its INSERT.** This is exactly how the'
-                echo '  outage presented: `magic_link_tokens` stopped gaining rows while the browser waited 30s.'
-                echo '  Read the gates ahead of the INSERT in `cloudflare-worker/src/routes/auth.ts`.'
+                echo '- `endpoint_accepted` — **the request was refused at the door, not by the flow.** The'
+                echo '  probe prints the status, the response body and the `cf-ray` / `server` /'
+                echo '  `content-type` headers, because a 403 from this Worker and a 403 from the Cloudflare'
+                echo '  edge are the same three digits and completely different bugs. A JSON body in our own'
+                echo '  error shape means the Worker refused it — read the gates in'
+                echo '  `cloudflare-worker/src/routes/auth.ts`. An HTML body with a `cf-ray` means the EDGE'
+                echo '  refused it before the Worker ran, so check the WAF and Bot Fight Mode rules for this'
+                echo '  zone: a GitHub Actions datacenter IP POSTing to `/api/auth/*` is exactly what bot'
+                echo '  protection targets, and no code change in this repo can fix it.'
+                echo '- `token_row_written` — **the request was accepted and did not reach its INSERT.** This'
+                echo '  is exactly how the outage presented: `magic_link_tokens` stopped gaining rows while'
+                echo '  the browser waited 30s. Read the gates ahead of the INSERT in'
+                echo '  `cloudflare-worker/src/routes/auth.ts`.'
                 echo '- `mail_send_recorded` — **the token row exists but no mail was sent.** A login that looks'
                 echo '  healthy and delivers nothing. The detail says which of the three shapes it is:'
                 echo '  no `email_send_log` row at all (the `waitUntil` errand never reached its own INSERT),'

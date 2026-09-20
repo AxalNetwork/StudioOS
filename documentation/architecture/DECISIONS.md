@@ -15201,3 +15201,130 @@ recovered through the existing backfill (`POST /api/tickets/sync
 
 **No migration** (274 stays free), **no new `/api/*` method**, no schema
 change. `frontend/src` moves in both files, so `docs/` is rebuilt.
+
+---
+
+## D173
+
+**Thirty-nine runs of the magic-link insert probe reported the D74 outage. The
+endpoint had refused them at the door and the log could not say so.**
+
+**2026-09-20.** The Actions history for `magic-link-insert-probe.yml` is
+thirty-nine runs, all red. Measured against run `35528697005`'s job log rather
+than inferred from the count:
+
+```
+env:
+  MAGIC_PROBE_EMAIL: ***            ← SET. Every earlier note saying otherwise is stale.
+  baseline: highest token row id 0, highest auth_magic_link send-log id 0
+check-magic-link-insert: /magic/start returned 403
+  ✓ start_latency: /magic/start answered in 166ms (budget 5000ms)
+  ✗ token_row_written: no new magic_link_tokens row — the request did not
+    reach its INSERT, which is exactly how the outage presented
+  ✗ mail_send_recorded: … the send errand never reached its own INSERT
+PROBE_CODE: 1
+```
+
+**Two of those three lines are false, and the false ones are the confident
+ones.** Nothing about the sign-in flow was exercised: the request was turned
+away before it reached anything. The probe then polled production D1 for three
+minutes for a row that could not exist and reported its absence as D74's bug,
+by name.
+
+**The durations date the change and rule out a one-off.** Runs #34–#36 fail in
+19–23 seconds — the fast `PROBE_CODE=2` "could not run" bail. Runs #37, #38 and
+#39 all fail at **3m42s**. So `MAGIC_PROBE_EMAIL` was set between those two
+groups, the probe has genuinely been running since, and every run since has hit
+the same wall.
+
+### Two things follow, and the second is the finding
+
+**1 · #168's reported symptom is not what is failing.** `start_latency` PASSES
+at 166ms against a 5000ms budget. Whatever is wrong, it is not the 30-second
+hang D74 fixed, and no run of this probe has ever said so because the verdict
+that would have said it did not exist.
+
+**2 · The 403 cannot come from this Worker.** Every `403` in
+`cloudflare-worker/src/` was swept, and none can apply to an unauthenticated
+`POST /api/auth/magic/start`:
+
+| candidate | why it cannot be this |
+| --- | --- |
+| the handler itself, `routes/auth.ts:1182-1240` | **no 403 path at all** — its refusals are 429 (rate), 400 (bad email), 500 (insert failed), 202 |
+| `middleware/csrf.ts:73` | returns `next()` when there is no auth cookie, and the probe sends none. Its own docblock calls auth-bootstrap routes "naturally exempt" |
+| `middleware/cfAccess.ts` | its two 403s are mounted only on `/api/kyc/admin/:userId/document*` (`index.ts:920-921`) |
+| Turnstile | called on `/register` (`auth.ts:298`) and `/login` (`auth.ts:721`), **not** `/magic/start` |
+
+That points at Cloudflare's own edge — a WAF rule or Bot Fight Mode refusing a
+GitHub Actions datacenter IP POSTing to an auth endpoint before the Worker
+runs. Consistent with `check-spa-live.mjs` passing from the same runner: that
+one GETs HTML; this one POSTs to `/api/auth/*`, which is exactly what bot
+protection targets.
+
+**This is inference by elimination, not proof, and saying so is the point.**
+The body was never captured, so the two 403s cannot be told apart from any
+log this repo has. Making that decidable is the deliverable; naming the cause
+is what the next run does.
+
+### The three defects, all in `scripts/check-magic-link-insert.mjs`
+
+1. **A non-2xx logged its status and nothing else.** No body, no `cf-ray`, no
+   `server`, no `content-type`. An edge 403 (an HTML challenge page) and a
+   Worker 403 (`{error}` JSON) are the same three digits and completely
+   different bugs — one is ours, one is a dashboard setting no code change can
+   reach — and the log could not separate them. **This is why thirty-nine red
+   runs never said what was wrong.**
+2. **A refusal did not stop the run.** It fell through into the full
+   `ROW_BUDGET_MS` and `SEND_BUDGET_MS` polls — most of the 3m42s — and then
+   reported the foregone absence as the outage shape. The 429 branch has always
+   exited early for exactly this reason; every other refusal now does too.
+3. **There was no verdict for "the endpoint refused us."** With only three, a
+   refusal became two false ✗s while the one that passed made the endpoint look
+   healthy.
+
+### What lands
+
+| path | change |
+| --- | --- |
+| `scripts/check-magic-link-insert.mjs` | `describeRefusal()` — captures the body (whitespace-collapsed, redacted, bounded) plus `content-type`/`server`/`cf-ray`, and reads them into `edge` / `worker` / `unknown` |
+| same | a fourth verdict, **`endpoint_accepted`**, between latency and the INSERT |
+| same | a refusal **exits early**, and the two downstream verdicts become `skipped` — printed `–`, detailed `NOT CHECKED`, never `✗` |
+| same | one `report()` printer, because there are now two exit paths and the file's own rule is that the report is derived once so it cannot contradict itself |
+| `.github/workflows/magic-link-insert-probe.yml` | the header says four verdicts; the `*)` summary arm gains the refusal shape and says plainly that an edge refusal is not fixable from this repo |
+| `frontend/test/magic_link_insert_probe.test.mjs` | the refusal classification, the redaction, and that a refused run reports neither `exactly how the outage presented` nor `never reached its own INSERT` |
+
+**No worker change, no migration (274 stays free), no `/api/*` method, no
+`frontend/src`** — so no `docs/` rebuild is owed.
+
+### The reading is deliberately conservative, and that is a choice
+
+`origin` is `edge` only for an HTML body carrying a `cf-ray`, and `worker` only
+for JSON in our own `{error}`/`{detail}` shape. Everything else — including
+Cloudflare's plaintext `error code: 1020` firewall page — reads **`unknown`**
+with the body printed. A `cf-ray` alone proves nothing: the edge stamps it on
+the Worker's own responses too, which is why it is never the deciding signal.
+*Strike this and the reader pattern-matches Cloudflare's block-page bodies,
+which is more specific and is how a reading becomes the confident guess this
+entry exists to correct.*
+
+### What this deliberately does NOT do
+
+**It does not add a bypass to get through the edge.** The probe can now say
+what is wrong; if the answer is a Cloudflare rule, the fix is in the dashboard
+and the honest thing is to say so rather than ship code that pretends
+otherwise.
+
+*If a bypass is wanted later it is a security decision, not a config tweak:* a
+skip keyed on **User-Agent** is spoofable by anyone and this is an auth
+endpoint, so the safer form is a custom rule skipping bot protection only for
+requests carrying a **secret header**, scoped to that one path. Either way it
+widens who may hammer `/magic/start`, which is what the rate limiter is for.
+Decide it after the body says whether a bypass is even the right answer.
+
+### And #168 still does not close on this
+
+`magic-link-probe.yml` — the mailbox round-trip — remains the only check that
+can, per D79 and D80, and it still needs the Gmail OAuth trio. What changed is
+that `MAGIC_PROBE_EMAIL`, the one secret the insert probe needed, now exists,
+so the cheaper half genuinely runs. D78's "until all four exist" line stands:
+three of the four are still missing.
