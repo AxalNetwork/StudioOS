@@ -5334,11 +5334,15 @@ function GithubSyncPanel() {
     } finally { setSaving(false); }
   };
 
-  const onTest = async () => {
+  // `write` runs the only probe that settles whether the token may CREATE an
+  // issue. The read-only test cannot: a fine-grained PAT's Metadata: Read is
+  // automatic and unremovable, so reaching the repo proves nothing about
+  // Issues, and this panel used to call that "Connected".
+  const onTest = async (write = false) => {
     setTesting(true);
     setTestResult(null);
     try {
-      const r = await api.adminTestGithub();
+      const r = await api.adminTestGithub(write);
       setTestResult(r);
       showToast({ kind: r.ok ? 'ok' : 'err', msg: r.detail || (r.ok ? 'Connected.' : 'Connection failed.') });
     } catch (e) {
@@ -5428,17 +5432,31 @@ function GithubSyncPanel() {
             className="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 inline-flex items-center gap-1.5">
             {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Save
           </button>
-          <button onClick={onTest} disabled={testing || !cfg?.has_token}
-            title={cfg?.has_token ? 'Verify the token can reach the repo' : 'Configure a token first'}
+          <button onClick={() => onTest(false)} disabled={testing || !cfg?.has_token}
+            title={cfg?.has_token ? 'Reach the repo and read its issues — does NOT prove the token can create one' : 'Configure a token first'}
             className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 disabled:opacity-50 inline-flex items-center gap-1.5">
-            {testing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Test connection
+            {testing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Test read access
+          </button>
+          <button onClick={() => onTest(true)} disabled={testing || !cfg?.has_token}
+            data-testid="github-write-test"
+            title={cfg?.has_token ? 'Create a real issue and close it — the only check that proves the mirror can work' : 'Configure a token first'}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 disabled:opacity-50 inline-flex items-center gap-1.5">
+            {testing ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Test issue creation
           </button>
         </div>
+        <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">
+          Read access is not enough to mirror a ticket. A fine-grained token always carries
+          Metadata&nbsp;: Read, so reaching this repo proves nothing about creating issues —
+          only <strong>Test issue creation</strong> does, and it opens one real issue and closes it.
+        </p>
 
         {testResult && (
           <div className={`mt-3 text-xs px-3 py-2 rounded-lg border ${testResult.ok ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
             {testResult.ok ? <CheckCircle2 size={13} className="inline mr-1 -mt-0.5" /> : <XCircle size={13} className="inline mr-1 -mt-0.5" />}
             {testResult.detail}
+            {testResult.can_write === 'unproven' && (
+              <span className="block mt-1 opacity-80">Issue creation: not tested.</span>
+            )}
           </div>
         )}
       </div>

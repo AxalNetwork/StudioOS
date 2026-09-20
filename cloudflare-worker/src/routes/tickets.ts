@@ -80,11 +80,84 @@ tickets.post('/sync', async (c) => {
     }
   }
 
+  // THE BACKFILL, AND WHY IT IS NOT AUTOMATIC.
+  //
+  // The loop above selects `github_issue_number IS NOT NULL`, so it can only
+  // REFRESH tickets that already mirrored. Every ticket filed while the
+  // mirror was misconfigured has no issue and no way to get one — the sync
+  // button silently skipped exactly the rows that needed it most.
+  //
+  // It reports before it acts. `unsynced_count` comes back on every call, so
+  // an admin can see there is a backlog without doing anything; creating the
+  // issues needs an explicit `{ backfill: true }`. That asymmetry is
+  // deliberate: this writes to a public repository, an issue cannot be
+  // deleted through the API once created, and a burst of them is not
+  // something to trigger by loading a page.
+  let unsyncedCount = 0;
+  let backfilled = 0;
+  const backfillErrors: Array<{ id: number; error: string }> = [];
+  if (user.role === 'admin') {
+    const pending = await sql`SELECT * FROM tickets WHERE github_issue_number IS NULL ORDER BY created_at ASC`;
+    unsyncedCount = pending.length;
+
+    let wantBackfill = false;
+    try { wantBackfill = !!(await c.req.json())?.backfill; } catch { /* no body: report only */ }
+
+    if (wantBackfill && githubConfigured(c.env)) {
+      // Bounded per call so one click cannot open an unbounded number of
+      // issues; the count that comes back tells the caller whether to run
+      // it again.
+      for (const ticket of pending.slice(0, 25)) {
+        const body = `${ticket.description || ''}\n\n---\n**Submitted by:** ${ticket.submitted_by || 'User'}\n**Priority:** ${ticket.priority}\n**Type:** ${ticket.type || 'task'}\n**Source:** StudioOS (backfilled)\n\n${syncMarker(ticket.id)}`;
+        const gh = await createIssue(c.env, {
+          title: ticket.title,
+          body,
+          labels: labelsForTicket({ type: ticket.type, priority: ticket.priority }),
+        });
+        if (gh.ok && gh.data?.number) {
+          const snap = labelSnapshot(gh.data);
+          await sql`UPDATE tickets
+                       SET github_issue_number = ${gh.data.number}, github_issue_url = ${gh.data.html_url},
+                           github_labels = ${snap.labels}, github_assignees = ${snap.assignees},
+                           github_sync_status = 'synced', github_sync_error = NULL,
+                           github_sync_attempted_at = datetime('now')
+                     WHERE id = ${ticket.id}`;
+          await recordSyncEvent(c.env, {
+            ticketId: ticket.id, issueNumber: gh.data.number, direction: 'outbound',
+            eventKey: `out:backfill:ticket-${ticket.id}`,
+            payloadHash: await sha256Hex(`${ticket.title}|${ticket.priority}|${ticket.type}`),
+          });
+          backfilled++;
+        } else {
+          const err = gh.error || 'github_create_failed';
+          backfillErrors.push({ id: ticket.id, error: err });
+          await sql`UPDATE tickets
+                       SET github_sync_status = 'failed', github_sync_error = ${err},
+                           github_sync_attempted_at = datetime('now')
+                     WHERE id = ${ticket.id}`;
+          // One bad ticket must not abandon the rest of the batch, and the
+          // first error is usually the same error for all of them — so stop
+          // after the batch rather than after the first, and report each.
+        }
+      }
+      unsyncedCount -= backfilled;
+    }
+  }
+
   const updatedRows = user.role === 'admin'
     ? await sql`SELECT * FROM tickets ORDER BY created_at DESC`
     : await sql`SELECT * FROM tickets WHERE user_id = ${user.id} ORDER BY created_at DESC`;
   await sql.end();
-  return c.json({ tickets: updatedRows, synced: updates.length });
+  return c.json({
+    tickets: updatedRows,
+    synced: updates.length,
+    // Present on every call, so "nothing ever mirrored" is visible without
+    // having to ask for a backfill to find out.
+    unsynced_count: unsyncedCount,
+    github_configured: githubConfigured(c.env),
+    ...(backfilled ? { backfilled } : {}),
+    ...(backfillErrors.length ? { backfill_errors: backfillErrors } : {}),
+  });
 });
 
 tickets.post('/', async (c) => {
@@ -121,8 +194,28 @@ tickets.post('/', async (c) => {
       });
     } else {
       githubSyncError = gh.error || 'github_create_failed';
-      console.warn('[tickets] github issue create failed', githubSyncError);
+      // The status is kept beside the message because they answer different
+      // questions and only one of them is in `gh.error`: a bare "Not Found"
+      // cannot be told apart from a typo'd repo name, while 403 vs 404 vs 410
+      // names the remedy (permission / visibility / Issues disabled).
+      console.warn('[tickets] github issue create failed', gh.status, githubSyncError);
     }
+  }
+
+  // RECORD THE ATTEMPT, whichever way it went. Until migration 273 this
+  // outcome existed only in the response body below, so a failed mirror was
+  // unrecoverable the moment the caller discarded it — and `/help`'s own form
+  // discards it. Best-effort by design: the ticket is already committed and a
+  // failure to write the RECORD of a failure must not turn a saved ticket
+  // into a 500.
+  try {
+    await sql`UPDATE tickets
+                 SET github_sync_status = ${githubIssue ? 'synced' : (githubConfigured(c.env) ? 'failed' : 'not_configured')},
+                     github_sync_error = ${githubSyncError},
+                     github_sync_attempted_at = datetime('now')
+               WHERE id = ${ticket.id}`;
+  } catch (e) {
+    console.warn('[tickets] recording github sync status failed', (e as Error).message);
   }
 
   // Phase 1 (2026-05-26) — surface new tickets in #axal-review. Best-effort:

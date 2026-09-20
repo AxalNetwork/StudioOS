@@ -140,6 +140,7 @@ function routesForHost(base) {
     { path: '/about', shell: true },
     { path: '/dashboard', shell: true },
     { path: '/studio', shell: true },
+    { path: '/studio/archetype', shell: true },
     { path: '/login', shell: true },
     { path: '/articles', shell: true },
     { path: `/articles/${encodeURIComponent(SLUG)}`, shell: true },

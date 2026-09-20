@@ -117,15 +117,25 @@
         };
         navigator.serviceWorker.getRegistrations().then(function (regs) {
           var hadSW = regs && regs.length > 0;
-          regs.forEach(function (r) { try { r.unregister(); } catch (e) {} });
-          if (window.caches && caches.keys) {
-            caches.keys().then(function (keys) {
-              var pending = keys.map(function (k) { return caches.delete(k); });
-              Promise.all(pending).then(function () {
-                if (hadSW) killOnce();
+          // Unregister is awaited before caches are touched — firing it and
+          // moving straight to caches.keys() raced the unregistration against
+          // whatever ran next, the same ordering bug lib/reloadGuard.js's own
+          // note (above) warns about one script up.
+          var unregs = (regs || []).map(function (r) {
+            try { return r.unregister(); } catch (e) { return Promise.resolve(false); }
+          });
+          Promise.all(unregs).then(function () {
+            if (window.caches && caches.keys) {
+              caches.keys().then(function (keys) {
+                var pending = keys.map(function (k) { return caches.delete(k); });
+                Promise.all(pending).then(function () {
+                  if (hadSW) killOnce();
+                });
               });
-            });
-          }
+            } else if (hadSW) {
+              killOnce();
+            }
+          });
         });
       } catch (e) { /* no-op */ }
     })();
@@ -253,25 +263,25 @@
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" /></noscript>
   <!-- Turnstile is loaded on-demand (frontend/src/lib/turnstile.js) only by the
        few forms that render a widget, instead of globally on every page. -->
-  <script data-cfasync="false" type="module" crossorigin src="/assets/index-C313bg2w.js"></script>
+  <script data-cfasync="false" type="module" crossorigin src="/assets/index-BLKvLkFe.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-Dd_uD5pT.js">
-  <link rel="modulepreload" crossorigin href="/assets/react-vendor-D5i28JsH.js">
+  <link rel="modulepreload" crossorigin href="/assets/react-vendor-CGHMw-tA.js">
   <link rel="modulepreload" crossorigin href="/assets/storage-ChyEodSE.js">
   <link rel="modulepreload" crossorigin href="/assets/log-D_nJCzG8.js">
-  <link rel="modulepreload" crossorigin href="/assets/createLucideIcon-DqDXbR12.js">
-  <link rel="modulepreload" crossorigin href="/assets/activity-DR29D6En.js">
-  <link rel="modulepreload" crossorigin href="/assets/bookmark-H1tf67Ft.js">
-  <link rel="modulepreload" crossorigin href="/assets/brain-DM1A1jRl.js">
-  <link rel="modulepreload" crossorigin href="/assets/briefcase-DQ65FH9a.js">
-  <link rel="modulepreload" crossorigin href="/assets/calendar-B4OOAxOp.js">
-  <link rel="modulepreload" crossorigin href="/assets/check-BvGt9Qjv.js">
-  <link rel="modulepreload" crossorigin href="/assets/circle-user-EYc5F4lT.js">
-  <link rel="modulepreload" crossorigin href="/assets/gauge-yj0iMbDM.js">
-  <link rel="modulepreload" crossorigin href="/assets/lock-KqGSZh70.js">
-  <link rel="modulepreload" crossorigin href="/assets/x-pKeCbJOJ.js">
-  <link rel="modulepreload" crossorigin href="/assets/api-D9_rdyFg.js">
+  <link rel="modulepreload" crossorigin href="/assets/createLucideIcon-UgJhqLpB.js">
+  <link rel="modulepreload" crossorigin href="/assets/activity-oEAwy8Ms.js">
+  <link rel="modulepreload" crossorigin href="/assets/bookmark-BNNz5X_k.js">
+  <link rel="modulepreload" crossorigin href="/assets/brain-eENeBcz8.js">
+  <link rel="modulepreload" crossorigin href="/assets/briefcase-Cp230U5K.js">
+  <link rel="modulepreload" crossorigin href="/assets/calendar-Na7Elv3e.js">
+  <link rel="modulepreload" crossorigin href="/assets/check-Di9xwb7Z.js">
+  <link rel="modulepreload" crossorigin href="/assets/circle-user-DVLyJcFP.js">
+  <link rel="modulepreload" crossorigin href="/assets/gauge-Ck-6y8aV.js">
+  <link rel="modulepreload" crossorigin href="/assets/lock-ClL2pors.js">
+  <link rel="modulepreload" crossorigin href="/assets/x-cy5J0nNg.js">
+  <link rel="modulepreload" crossorigin href="/assets/api-dhIdrOHQ.js">
   <link rel="modulepreload" crossorigin href="/assets/cookieConsent-DMkmq8q4.js">
-  <link rel="stylesheet" crossorigin href="/assets/index-DFA0m6X0.css">
+  <link rel="stylesheet" crossorigin href="/assets/index-Bv63oPFw.css">
 </head>
 <body class="bg-white text-gray-900">
   <div id="root">

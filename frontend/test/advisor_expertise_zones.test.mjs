@@ -206,29 +206,6 @@ test('a failed read is not rendered as an empty store', () => {
   }
 });
 
-/**
- * Every `<ZoneBody …>` opening tag under pages/advisor, as raw source. The
- * tag spans several lines at most call sites, so this balances angle brackets
- * at brace depth 0 rather than reading a line.
- */
-function zoneBodyTags(code) {
-  const tags = [];
-  let at = code.indexOf('<ZoneBody');
-  while (at !== -1) {
-    let depth = 0;
-    let end = at;
-    for (let i = at; i < code.length; i += 1) {
-      const ch = code[i];
-      if (ch === '{') depth += 1;
-      else if (ch === '}') depth -= 1;
-      else if (ch === '>' && depth === 0) { end = i; break; }
-    }
-    tags.push(code.slice(at, end + 1));
-    at = code.indexOf('<ZoneBody', end + 1);
-  }
-  return tags;
-}
-
 test('no zone holds `loading` true past its own error', () => {
   // THE BUG THIS PINS SHUT, which shipped and was reported from production as
   // /expertise/profile spinning forever: a `loading` expression that ORs a

@@ -48,7 +48,7 @@ const ddl = (sql) => sql.replace(/^\s*--[^\n]*$/gm, '').replace(/\s--[^\n]*$/gm,
 const DDL = ddl(ALL);
 
 /** Table names each file creates. */
-const created = [...ALL.matchAll(/CREATE TABLE IF NOT EXISTS (\w+)/g)].map((m) => m[1]);
+const created = [...DDL.matchAll(/CREATE TABLE IF NOT EXISTS (\w+)/g)].map((m) => m[1]);
 
 test('every zone that had no store now has one', () => {
   // Named per zone rather than as a count, so a table quietly dropped from a

@@ -44,7 +44,7 @@ function safe(label: string, friendly: string, handler: (c: any) => Promise<any>
     } catch (e: any) {
       const msg = e?.message || '';
       if (msg === 'Unauthorized' || msg === 'Forbidden') throw e;
-      console.error(`[CAL:${label}]`, msg, e?.stack || '');
+      console.error('[CAL]', label, msg, e?.stack || '');
       return c.json({ error: friendly }, 500);
     }
   };

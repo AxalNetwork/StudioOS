@@ -55,6 +55,37 @@ test('a failed mirror is said to whoever filed the ticket, with its reason', () 
   assert.match(PANEL, /\$\{reason\}/, 'the reason is read but never shown');
 });
 
+test('a failed mirror points an admin at where to fix it, and only an admin', () => {
+  // D172. `failed` is a WORSE state than `not_configured` — a token that
+  // exists and was refused, not one that was never set — and yet its
+  // sibling `not_configured` branch already names a secret and a place to
+  // set it while this one used to just show the raw GitHub error and stop.
+  // Bounded to the `if (status === 'failed')` block only, the same window
+  // the test above establishes exists — its own opening line to the next
+  // `else if` — so a pointer that actually lives in the `not_configured`
+  // branch (which already names GITHUB_ACCESS_TOKEN) cannot satisfy this.
+  const start = PANEL.indexOf("if (status === 'failed') {");
+  assert.ok(start > 0, 'the failed branch moved or was renamed');
+  const nextBranch = PANEL.indexOf("} else if (status === 'not_configured'", start);
+  assert.ok(nextBranch > start, 'the not_configured branch moved or was renamed');
+  const block = PANEL.slice(start, nextBranch);
+
+  assert.match(block, /Admin Console → GitHub Sync/,
+    'a failed mirror gives no admin a pointer to where to fix it');
+  assert.match(block, /Test issue creation/,
+    'the pointer does not name the control that actually diagnoses the token');
+
+  // Not merely present in the branch: the pointer must sit AFTER a nested
+  // role gate within this same block. A pointer any reader sees is noise to
+  // a founder who cannot act on it — the same argument this file already
+  // makes for `not_configured` two tests down.
+  const gateAt = block.indexOf("user?.role === 'admin'");
+  assert.ok(gateAt > 0, 'the failed branch is not gated on role at all');
+  const pointerAt = block.indexOf('Admin Console → GitHub Sync');
+  assert.ok(pointerAt > gateAt,
+    'the pointer sentence sits outside the admin gate, so every reader sees it');
+});
+
 test('an unconfigured mirror is said only to the person who can configure it', () => {
   assert.match(PANEL, /status === 'not_configured' && user\?\.role === 'admin'/,
     'either every founder is told about a missing deployment secret, or no admin is');

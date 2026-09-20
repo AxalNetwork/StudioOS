@@ -387,6 +387,34 @@ test('every automatic reload in index.html is bounded by a listed guard key', ()
   }
 });
 
+test('the service-worker killer awaits every unregister before touching caches', () => {
+  // THE RACE. `regs.forEach(r => r.unregister())` fires each unregister and
+  // moves on without waiting for any of them — so caches.keys() (and the
+  // reload it can lead to, through killOnce) could run while a registration
+  // was still mid-unregister. `unregister()` returns a Promise; the fix
+  // collects them and `Promise.all`s the batch before doing anything else,
+  // the same ordering the boot watchdog two blocks below already uses.
+  const html = read('frontend/index.html');
+  const blocks = inlineScriptBodies(html).map((b) => codeOnly(b));
+  const killer = blocks.find((b) => b.includes('KILL_KEY'));
+  assert.ok(killer, 'expected the dev service-worker killer script block');
+
+  const unregisterAt = killer.indexOf('.unregister()');
+  assert.ok(unregisterAt > -1, 'the killer must still call unregister()');
+  // The array-building `.map(r => ... r.unregister() ...)` comes first in
+  // source; the `Promise.all(` that awaits it is the FIRST one after that
+  // point. A second, later Promise.all wraps the cache deletes — this must
+  // find the unregister one, not that one.
+  const promiseAllAt = killer.indexOf('Promise.all(', unregisterAt);
+  assert.ok(promiseAllAt > unregisterAt,
+    'unregister() must be collected into an array and awaited via a Promise.all, ' +
+    'never fired with a bare forEach and left unwaited');
+
+  const cachesAt = killer.indexOf('caches.keys()');
+  assert.ok(cachesAt > promiseAllAt,
+    'caches.keys() must run inside the unregister Promise.all\'s .then(), never before it');
+});
+
 test('dev is detected once, and never from the host or the port', () => {
   const html = codeOnly(read('frontend/index.html'));
 

@@ -10,11 +10,24 @@
  * it turns out to see much more than "a row was written":
  *
  *   1. `start_latency`     — `/magic/start` answered under budget. The symptom.
- *   2. `token_row_written` — a `magic_link_tokens` row appeared. That is exactly
+ *   2. `endpoint_accepted` — it answered **202**, i.e. it took the request. See
+ *      the paragraph below: this one was added after thirty-nine runs failed
+ *      without ever saying the endpoint had refused them.
+ *   3. `token_row_written` — a `magic_link_tokens` row appeared. That is exactly
  *      where the outage died: D74's diagnosis found four rows, newest
  *      2026-08-03, and the failing attempt wrote NONE, proving the request never
  *      reached the INSERT that `/magic/start` performs before anything else.
- *   3. `mail_send_recorded` — **the mail was handed to Gmail and accepted.**
+ *   4. `mail_send_recorded` — **the mail was handed to Gmail and accepted.**
+ *
+ * WHY THE SECOND ONE EXISTS, AND IT IS A CORRECTION (D173). Runs #1-#39 of this
+ * workflow all failed, and the ones that actually ran reported
+ * `token_row_written: ✗ … which is exactly how the outage presented` — pointing
+ * at D74's bug. It was not that. The line above it read `/magic/start returned
+ * 403`, the endpoint had answered in 166ms (`start_latency` PASSED), and the
+ * request was simply refused at the door. Two verdicts were reported as findings
+ * about the sign-in flow when nothing about the flow had been exercised at all.
+ * Now a refusal is its own verdict and the two downstream ones report NOT
+ * CHECKED, on the same "cannot" vs "did not" rule the exit codes below follow.
  *
  * WHY THE THIRD ONE EXISTS. The first version of this probe asserted 1 and 2 and
  * then printed "NOT CHECKED HERE: delivery", on the belief that the `waitUntil`
@@ -116,6 +129,69 @@ export function redactError(raw) {
 }
 
 /**
+ * What the endpoint answered, when it answered anything other than 202.
+ *
+ * WHY THIS PRINTS A BODY, AND WHY THAT IS THE WHOLE POINT (D173). For
+ * thirty-nine runs the only thing logged about a refusal was its STATUS:
+ * `/magic/start returned 403`. A 403 from this Worker and a 403 from the
+ * Cloudflare edge refusing a CI datacenter IP are the same three digits and
+ * entirely different bugs — one is ours to fix in `routes/auth.ts`, the other
+ * is a WAF rule nobody can see from here — and the log could not tell them
+ * apart. The body and the three headers that identify the responder are what
+ * separate them, so they are captured.
+ *
+ * The body goes through `redactError` — the same sanitiser `last_error` uses,
+ * for the same reason: this lands in a PUBLIC CI log. Whitespace is collapsed
+ * first so the 200-character budget carries words rather than the indentation
+ * of an HTML error page.
+ *
+ * `origin` is a READING, not a fact, and is deliberately conservative, because
+ * a confident wrong diagnosis is what this whole change exists to stop:
+ *   worker   the body parses as JSON carrying `error` or `detail` — our shape
+ *   edge     HTML, carrying a `cf-ray`, not JSON — Cloudflare answered it
+ *   unknown  anything else. The snippet is there to be read by a human.
+ * Note `cf-ray` alone proves nothing: the edge stamps it on Worker responses
+ * too. It only means "edge" together with an HTML body that is not ours.
+ */
+export function describeRefusal({ status, headers, body }) {
+  const get = (name) => {
+    if (!headers) return null;
+    if (typeof headers.get === 'function') return headers.get(name);
+    const hit = Object.keys(headers).find((k) => k.toLowerCase() === name);
+    return hit ? headers[hit] : null;
+  };
+  const contentType = get('content-type');
+  const server = get('server');
+  const cfRay = get('cf-ray');
+
+  const flat = String(body ?? '').replace(/\s+/g, ' ').trim();
+  const snippet = flat ? redactError(flat) : null;
+
+  let origin = 'unknown';
+  if (/^[{[]/.test(flat)) {
+    try {
+      const parsed = JSON.parse(flat);
+      if (parsed && (parsed.error !== undefined || parsed.detail !== undefined)) origin = 'worker';
+    } catch { /* not JSON after all — stays unknown, which is the honest answer */ }
+  } else if (cfRay && /html/i.test(contentType || '')) {
+    origin = 'edge';
+  }
+
+  const marks = [`status ${status}`];
+  if (contentType) marks.push(`content-type ${contentType}`);
+  if (server) marks.push(`server ${server}`);
+  if (cfRay) marks.push(`cf-ray ${cfRay}`);
+
+  const reading = origin === 'edge'
+    ? 'Reads as the Cloudflare EDGE, not the Worker (HTML, with a cf-ray). No Worker 403 path can reach an unauthenticated POST to this route, so a WAF or bot rule is the first thing to check.'
+    : origin === 'worker'
+      ? 'Reads as the WORKER itself — a JSON body in our own error shape. Read the gates in cloudflare-worker/src/routes/auth.ts.'
+      : 'Could not tell edge from Worker — read the snippet.';
+
+  return { status, contentType, server, cfRay, snippet, origin, line: marks.join(' · '), reading };
+}
+
+/**
  * The send half of the report, derived from the log row this run caused.
  *
  * Four outcomes, kept apart because each sends a reader to different code:
@@ -151,15 +227,27 @@ export function sendVerdict({ row, sendMs, sendBudgetMs }) {
 }
 
 /**
- * The three verdicts, derived in one place so the report cannot contradict
+ * The four verdicts, derived in one place so the report cannot contradict
  * itself.
  *
  * Deliberately the same shape as the mailbox probe's `verdicts`, so a reader who
  * knows one knows the other — but with its own keys, because claiming
  * `mail_delivered` here would be a lie: this sees acceptance, not arrival.
+ *
+ * `startStatus` IS REQUIRED AND OMITTING IT MUST FAIL, for exactly the reason
+ * `sendRow` already works that way: a caller that forgets to pass what the
+ * endpoint answered must not quietly restore the old behaviour of reporting a
+ * refusal as a finding about the INSERT.
+ *
+ * WHEN THE ENDPOINT REFUSED, THE DOWNSTREAM TWO ARE `skipped`, NOT FAILED.
+ * Nothing was written and no mail was queued because nothing was accepted —
+ * reporting those as ✗ findings is the "cannot" dressed as "did not" that this
+ * file refuses everywhere else (see `readEnvelope`, `sendRowOf`, exit code 2).
+ * A skipped row still denies the overall pass; it just stops pointing a reader
+ * at `routes/auth.ts` for a bug that is not there.
  */
-export function verdicts({ startMs, rowFound, rowMs, sendRow, sendMs, startBudgetMs, sendBudgetMs }) {
-  const send = sendVerdict({ row: sendRow, sendMs, sendBudgetMs });
+export function verdicts({ startMs, startStatus, refusal, rowFound, rowMs, sendRow, sendMs, startBudgetMs, sendBudgetMs }) {
+  const accepted = startStatus === 202;
   const rows = [
     {
       key: 'start_latency',
@@ -169,6 +257,39 @@ export function verdicts({ startMs, rowFound, rowMs, sendRow, sendMs, startBudge
         : '/magic/start did not answer',
     },
     {
+      key: 'endpoint_accepted',
+      ok: accepted,
+      detail: accepted
+        ? '/magic/start accepted the request (202)'
+        : refusal
+          ? `/magic/start REFUSED the request — ${refusal.line}${refusal.snippet ? ` — ${refusal.snippet}` : ''}. ${refusal.reading}`
+          : startStatus === undefined || startStatus === null
+            ? '/magic/start did not answer, so nothing was accepted'
+            : `/magic/start answered ${startStatus}, not 202`,
+    },
+  ];
+
+  if (!accepted) {
+    rows.push(
+      {
+        key: 'token_row_written',
+        ok: false,
+        skipped: true,
+        detail: 'NOT CHECKED — the request was refused before it could reach an INSERT. This is NOT the outage shape; see endpoint_accepted',
+      },
+      {
+        key: 'mail_send_recorded',
+        ok: false,
+        skipped: true,
+        detail: 'NOT CHECKED — nothing was accepted, so no mail could be queued',
+      },
+    );
+    return { rows, ok: false };
+  }
+
+  const send = sendVerdict({ row: sendRow, sendMs, sendBudgetMs });
+  rows.push(
+    {
       key: 'token_row_written',
       ok: rowFound === true,
       detail: rowFound === true
@@ -176,8 +297,8 @@ export function verdicts({ startMs, rowFound, rowMs, sendRow, sendMs, startBudge
         : 'no new magic_link_tokens row — the request did not reach its INSERT, which is exactly how the outage presented',
     },
     { key: 'mail_send_recorded', ok: send.ok, detail: send.detail },
-  ];
-  return { rows, ok: rows.every((r) => r.ok) };
+  );
+  return { rows, ok: rows.every((r) => r.ok && !r.skipped) };
 }
 
 /**
@@ -312,6 +433,33 @@ async function sendLogRow(accountId, uuid, address, sinceId) {
   return { ok: true, row };
 }
 
+/**
+ * Print the verdict block.
+ *
+ * ONE PRINTER, because there are now two exit paths — refused at the door, and
+ * ran to the end — and the file's own rule is that the report is derived in one
+ * place so it cannot contradict itself.
+ *
+ * A `skipped` row prints `–`, never `✗`: it was not checked, and marking it
+ * failed is what sent a reader to `routes/auth.ts` for a bug that was not
+ * there. The arrival caveat is printed only when the run actually reached the
+ * mail — after a refusal it would be answering a question nobody got to ask.
+ */
+function report({ rows, ok }) {
+  const refused = rows.some((r) => r.skipped);
+  for (const r of rows) {
+    console.log(`  ${r.skipped ? '–' : r.ok ? '✓' : '✗'} ${r.key}: ${r.detail}`);
+  }
+  if (!refused) {
+    console.log('  NOT CHECKED HERE: that the mail ARRIVED. Gmail accepting a message is not an');
+    console.log('  inbox — a bounce, a spam file or a wrong address all follow acceptance — and');
+    console.log('  nothing here follows the link or asserts a session. check-magic-link-live.mjs');
+    console.log('  does both, and stays the probe that can close #168.');
+  }
+  if (!ok) console.error('check-magic-link-insert: FAILED.');
+  else console.log('check-magic-link-insert: OK — the endpoint answers, commits its token row, and Gmail accepted the mail.');
+}
+
 async function main() {
   const missing = missingConfig();
   if (missing.length) {
@@ -346,6 +494,8 @@ async function main() {
   console.log(`  baseline: highest token row id ${before.id}, highest ${TEMPLATE_KEY} send-log id ${beforeSend.id}`);
 
   let startMs = NaN;
+  let startStatus = null;
+  let refusal = null;
   try {
     const t0 = Date.now();
     const res = await fetch(`${HOST}/api/auth/magic/start`, {
@@ -355,16 +505,39 @@ async function main() {
       body: JSON.stringify({ email: address }),
     });
     startMs = Date.now() - t0;
+    startStatus = res.status;
     if (res.status === 429) {
       console.error('check-magic-link-insert: rate-limited (429). magic-start allows 3 per 900s per address.');
       console.error('  This probe and the mailbox probe share that address — widen the schedules, never the limit.');
       process.exit(1);
     }
-    if (!res.ok && res.status !== 202) {
-      console.error(`check-magic-link-insert: /magic/start returned ${res.status}`);
+    if (res.status !== 202) {
+      // READ THE BODY. The status alone cost thirty-nine runs the diagnosis:
+      // see `describeRefusal`. A body that cannot be read is not fatal — the
+      // status and headers still say plenty — so this never throws upward.
+      const body = await res.text().catch(() => '');
+      refusal = describeRefusal({ status: res.status, headers: res.headers, body });
+      console.error(`check-magic-link-insert: /magic/start REFUSED — ${refusal.line}`);
+      if (refusal.snippet) console.error(`  body: ${refusal.snippet}`);
+      console.error(`  ${refusal.reading}`);
     }
   } catch (e) {
     console.error(`check-magic-link-insert: /magic/start threw — ${e.message}`);
+  }
+
+  // A REFUSAL ENDS THE RUN HERE, and that is a fix, not a shortcut. Polling D1
+  // for three minutes after the request was turned away proves nothing — the
+  // row cannot exist — and the old code did exactly that, then reported the
+  // absence as `token_row_written: ✗ … exactly how the outage presented`. The
+  // 429 branch above has always exited early for the same reason; every other
+  // refusal now does too.
+  if (startStatus !== 202) {
+    report(verdicts({
+      startMs, startStatus, refusal,
+      rowFound: false, rowMs: NaN, sendRow: null, sendMs: NaN,
+      startBudgetMs: START_BUDGET_MS, sendBudgetMs: SEND_BUDGET_MS,
+    }));
+    process.exit(1);
   }
 
   let rowFound = false;
@@ -401,21 +574,12 @@ async function main() {
     await sleep(POLL_MS);
   }
 
-  const { rows, ok } = verdicts({
-    startMs, rowFound, rowMs, sendRow, sendMs,
+  const result = verdicts({
+    startMs, startStatus, refusal, rowFound, rowMs, sendRow, sendMs,
     startBudgetMs: START_BUDGET_MS, sendBudgetMs: SEND_BUDGET_MS,
   });
-  for (const r of rows) console.log(`  ${r.ok ? '✓' : '✗'} ${r.key}: ${r.detail}`);
-  console.log('  NOT CHECKED HERE: that the mail ARRIVED. Gmail accepting a message is not an');
-  console.log('  inbox — a bounce, a spam file or a wrong address all follow acceptance — and');
-  console.log('  nothing here follows the link or asserts a session. check-magic-link-live.mjs');
-  console.log('  does both, and stays the probe that can close #168.');
-
-  if (!ok) {
-    console.error('check-magic-link-insert: FAILED.');
-    process.exit(1);
-  }
-  console.log('check-magic-link-insert: OK — the endpoint answers, commits its token row, and Gmail accepted the mail.');
+  report(result);
+  if (!result.ok) process.exit(1);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {

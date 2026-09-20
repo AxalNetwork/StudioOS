@@ -143,7 +143,7 @@ export async function runDailyKvSnapshot(env: Env): Promise<{ ok: number; failed
         failed += 1;
       }
     } catch (e) {
-      console.error(`[backup] KV snapshot failed for ${name}:`, e);
+      console.error('[backup] KV snapshot failed', name, e);
       failed += 1;
     }
   }
@@ -185,6 +185,6 @@ export async function writeBackupHeartbeat(
   try {
     await bucket.put(key, payload, { httpMetadata: { contentType: 'application/json' } });
   } catch (e) {
-    console.warn(`[backup] heartbeat write failed (${key})`, e);
+    console.warn('[backup] heartbeat write failed', key, e);
   }
 }

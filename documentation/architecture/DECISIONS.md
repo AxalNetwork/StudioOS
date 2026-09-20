@@ -14898,3 +14898,630 @@ this. A sixth local copy of that fix is what the lib README's rule forbids.
 **No new `/api/*` method**: the field rides the settings payload the page
 already fetches, so `check-api-drift` has nothing to say, and a second fetch for
 it would be a second round trip and a new entry for the drift gate to police.
+
+---
+
+## D170
+
+**The Semgrep workflow's exit code carried no information, and its upload step
+would have closed every alert it had ever opened.**
+
+`.github/workflows/semgrep.yml` ran the scan with `--error` under
+`continue-on-error: true`, with `if: always()` on the two steps after it. Those
+are not three independent settings; they are one knot, and each half hides the
+other:
+
+- `--error` means *exit 1 if there are findings*. This repo has ~40 standing
+  findings, so **every run** ended `##[error]Process completed with exit code 1`
+  — including the runs where semgrep had just printed *"Scan completed
+  successfully"*. A crash and the steady state printed the same line.
+- `continue-on-error: true` rewrites the step's **conclusion** to `success`, so
+  the default `if: success()` on later steps stays true. `if: always()` was
+  therefore redundant with it rather than a workaround for `--error` — which
+  matters, because it means **removing only one of the two leaves the path fully
+  open via the other**.
+
+### What that path was, and it is measured rather than argued
+
+A SARIF upload **replaces** a tool's alert set for the ref: every alert absent
+from the payload is closed as *fixed*. And a fatally-failed semgrep still writes
+a SARIF. Measured against semgrep 1.176.1, the version the new digest pins:
+
+| case | exit | SARIF |
+| --- | --- | --- |
+| findings, valid config | 0 | results present |
+| no findings, valid config | 0 | `results: []`, **`rules: 1`** |
+| bad config | **7** | written, valid, `results: []`, **`rules: []`** |
+| **one** bad config among good ones | **7** | written, valid, `results: []`, **`rules: []`** |
+| unreachable registry | 2 | **no SARIF** |
+
+So a crashed scan produced a structurally valid, schema-clean SARIF naming
+`Semgrep OSS` as its driver, which `continue-on-error` + `always()` sent
+straight to `upload-sarif`. The timeout made it reachable without any crash at
+all: `always()` fires on **cancellation** too, and `timeout-minutes` was 10
+against a scan already taking 4m37s.
+
+**Nothing in the payload separates the two, and the obvious field lies.**
+`invocations[0].executionSuccessful` is `true` on the crash output. The only
+honest in-payload signal is `tool.driver.rules` — empty after a crash, non-empty
+after a genuinely clean scan — and the only reliable signal at all is the exit
+code.
+
+### What lands
+
+`--error`, `continue-on-error: true` and both `if: always()` come out together;
+`timeout-minutes` goes 10 → 20. Findings exit 0 and are reported through the
+SARIF upload as before — **zero change to what a green check means for
+findings**. A scanner that could not run exits non-zero, fails the job, and the
+strip and upload steps are skipped, so the existing alerts are left alone.
+
+The container is pinned by digest —
+`semgrep/semgrep@sha256:34ab619b… # 1.176.1` — which was the only unpinned
+reference in `.github/workflows/`, against ~30 SHA-pinned `uses:` lines.
+`GOTCHAS.md` had already filed it as twice-diagnosed ruleset drift.
+
+### The two things deliberately NOT done
+
+**No refusal added to `scripts/strip-suppressed-sarif.py`.** A
+`tool.driver.rules`-empty check would be genuinely fireable — that is the one
+field that separates the payloads — but it is not *reachable* once the exit code
+is respected: every failure mode above exits non-zero and now fails the job one
+step earlier. What it would defend against is a future edit re-adding
+`always()`, and that is what `frontend/test/semgrep_workflow.test.mjs` pins, in
+CI, on every PR. The measurement is recorded in `GOTCHAS.md` so it is a one-line
+change if belt-and-braces is ever wanted.
+
+**No `category:` on the upload.** A category creates a *second* code-scanning
+configuration for this tool; the ~40 existing alerts belong to the unnamed one
+and would be orphaned rather than migrated.
+
+**The rule packs stay unpinned, and this entry says so rather than letting the
+digest read as more than it is.** The three `p/…` packs are still fetched from
+`semgrep.dev` per run, so finding counts can still move with no repo change.
+Vendoring them is the only real fix and could not be done from the build
+environment: `semgrep.dev:443` is a proxy policy denial (`CONNECT tunnel failed,
+403`).
+
+**No migration** — nothing touches D1, and **273 is still the next free number.**
+**No new `/api/*` method** and no `frontend/src` change, so neither
+`check-api-drift` nor `check-docs-fresh` has anything to say.
+
+---
+
+## D171
+
+**The ticket→GitHub mirror could not say it had failed, and the button built
+to check it could not fail either.**
+
+**2026-09-20. Reported live:** a ticket filed from the Eadwyn "File ticket"
+form never appeared in GitHub Issues. The first diagnosis was
+`GITHUB_ACCESS_TOKEN` unset — **wrong**. The token was set, org-approved, and
+the admin panel's **Test** button passed.
+
+**The measurement that reframed it** — *and it was wrong; the corrected
+version is below and is sharper.* The sweep run during the build reported
+that `AxalNetwork/StudioOS` had contained exactly **one** real issue in its
+entire history (`#305`, called hand-made), and concluded the mirror had
+**never once worked**. Every surface in the product reported health
+regardless, which is the part that held.
+
+### Correction — the mirror did work, twice, and then stopped
+
+Re-measured against **production D1** once 273 was applied, which is the
+first time the two sides could be joined:
+
+| ticket | created | mirrored |
+| --- | --- | --- |
+| 1 | 2026-04-16 11:55 | no |
+| 2 | 2026-04-16 13:24 | **yes → issue #3** |
+| 3 | 2026-04-17 11:10 | **yes → issue #4** |
+| 4–10 | 2026-07-05 → 2026-09-20 | **no — seven in a row** |
+
+Issues `#3` and `#4` are real issues, each created **within one second** of
+its ticket row — that one-second join is what makes them the mirror's own
+work rather than a coincidence. So the mirror worked for about a day in
+April, and has failed on every ticket since **5 July**, five months, up to
+and including the test ticket filed at 16:50Z on the day of the fix. `#305`
+is also not hand-made: it is `github-actions[bot]`.
+
+**Both halves of the original sweep were wrong** — the count and the
+authorship — and the likely cause is a filter that saw only open issues
+(`#3` and `#4` are closed). The lesson is the one this programme keeps
+relearning from the other side: **a sweep that returns a suspiciously round
+"never" deserves the same scepticism as a green check**. It was not caught
+by review; it was caught by joining it to a second store.
+
+**Nothing in the fix changes.** Every defect below is independent of how
+often the mirror worked: the probe read metadata, the failure had no column,
+the sync could not backfill, `/help` discarded the response. What changes is
+the **diagnosis of the cause**: not "never configured" but *a credential
+that lapsed*, which is exactly the failure a metadata probe is blind to,
+since `Metadata: Read` survives on a token that has lost everything else.
+The write test is what will now say so out loud.
+
+**Migration `273`'s own header carries the superseded sentence and is
+deliberately NOT edited.** `scripts/migrate-d1.mjs:492` compares each file's
+checksum against the ledger and warns on drift; editing an applied
+migration — even only its comment — would print that warning on every
+deploy from now on, which is how people learn to ignore warnings. An applied
+migration is immutable, comments included; this entry is where its claim is
+corrected.
+
+### Why the Test was green
+
+`routes/admin_github.ts`'s `POST /test` probed **`GET /repos/{owner}/{repo}`**
+— repository *metadata*. **A fine-grained PAT carries `Metadata: Read`
+automatically and the permission cannot be removed**, so that probe returns
+200 for a token holding no Issues access at all. The panel printed
+*"Connected to AxalNetwork/StudioOS."*, the badge went green, and
+`POST /issues` went on refusing. The panel's own copy said *"Needs Issues:
+Read and write"* and nothing checked it. **A check that cannot fail on the
+bug it exists for is decoration** — the rule this repo has applied a dozen
+times, here applied to a check of our own.
+
+The test now reports three named verdicts rather than one "Connected":
+`reachable` (metadata), `issues_readable` (the Issues permission exists at
+all), and `can_write` — which **defaults to the string `'unproven'`** and is
+settled only by `{ write: true }`, which creates a real issue and closes it.
+
+**A cheaper probe was designed, measured, and REJECTED — and the rejection is
+the part worth keeping.** The idea was to `POST /issues` with a deliberately
+invalid body and read **422** as *"authorised, payload merely bad"*, since
+that creates nothing. It requires GitHub to evaluate authorisation **before**
+payload validation. That ordering could not be confirmed: every attempt to
+test the unauthorised path from this environment returned 422, including one
+with a garbage token and one with **no `Authorization` header at all** — which
+is not GitHub's behaviour but the egress proxy's, since it demonstrably
+rewrites this session's GitHub traffic (it refuses the search API with a
+message of its own). So the evidence was **confounded, not supportive**, and
+shipping the probe would have re-created the exact defect above. Recorded
+rather than quietly dropped, because the next person will have the same idea.
+
+### The five silent paths beside it
+
+1. **The outcome had nowhere to live.** Every `github_*` column on `tickets`
+   records a mirror that *succeeded*; the failure had no column. `github_sync_error`
+   existed only in one HTTP response body — and `/help`'s own form discarded
+   it. **Migration 273** adds `github_sync_status`, `github_sync_error`,
+   `github_sync_attempted_at`, mirrored in `ensureTicketSyncSchema` because a
+   column in one definition and not the other is the `metrics_snapshots`
+   collision (#183, #202) again.
+2. **`POST /tickets/sync` could not backfill.** It selected
+   `github_issue_number IS NOT NULL`, so it refreshed only tickets that had
+   already mirrored and **silently skipped exactly the rows that needed it**.
+   Every ticket filed while the mirror was broken was stranded with no path to
+   GitHub. It now returns `unsynced_count` on every call and, for an admin
+   passing `{ backfill: true }`, creates the missing issues in bounded batches
+   of 25. **It reports before it acts**: this writes to a public repository and
+   an issue cannot be deleted through the API.
+3. **`setSecret()` believed the status line.** The Cloudflare v4 API answers
+   **HTTP 200 with `{"success": false}`** for a class of refusals, and only
+   `res.ok` was checked — so a secret that was never written produced a green
+   "saved" toast. It now parses the envelope. An unparseable 2xx still passes,
+   deliberately: failing closed there would refuse working saves.
+4. **`/help`'s ticket form threw the whole response away.** A failed mirror
+   was invisible there to admin and founder alike, while the Eadwyn panel
+   reported it honestly — the page people are pointed at was the silent one.
+   It now uses the same two-audience split: a `failed` mirror is said to
+   everyone, `not_configured` only to an admin, because it names a deployment
+   secret a founder cannot act on.
+5. **The panel had no control for the one check that settles it.** The write
+   probe exists now as its own button, beside a sentence saying why reaching
+   the repo proves nothing.
+
+### Filed, not fixed here
+
+`PUT /admin/github` pushes `GITHUB_REPO_OWNER` / `GITHUB_REPO_NAME` as Worker
+**secrets**, while `wrangler.toml:156-157,443-444` declares them as plain
+`[vars]` — so the next CI deploy silently reverts any admin edit to those two
+fields. Harmless today because the values match, but those inputs do not
+durably do anything. Its own concern. `admin_github.ts` also still writes no
+`admin_audit_log` row, unlike `admin_integration_keys.ts`.
+
+**Migration 273 is used; 274 is the next free number.** `frontend/src` moves,
+so `docs/` is rebuilt.
+
+## D172
+
+**A `failed` GitHub mirror told the reader exactly what broke, and never told
+an admin where to go fix it.**
+
+**2026-09-20. Reported live, hours after D171 shipped:** *"Still nothing
+appears in issue when I send a new ticket."* Measured against production D1
+rather than assumed:
+
+```sql
+SELECT id, created_at, github_sync_status, github_sync_error
+FROM tickets WHERE id = 11;
+-- 11 | 2026-09-20 18:56:31 | failed | Resource not accessible by personal access token
+```
+
+**This was not a regression.** It is the exact defect D171 exists to surface,
+working as built, on a token that is still broken. `Resource not accessible
+by personal access token` is GitHub's own text for a 403 — the same shape
+`admin_github.ts`'s write test reports — and a third confirmation, after
+issues #3/#4 and the seven-ticket run, that the credential which worked in
+April has not been fixed. Both frontend surfaces — `PersonalAdvisor.jsx`'s
+`handleTicketFiled` and `TicketsPage.jsx`'s `submit()` — read
+`github_sync_status`/`github_sync_error` and told the reader honestly that
+the ticket would not appear on the board, with the reason. D171's own fix was
+confirmed working end to end by this report, not undermined by it.
+
+### The asymmetry, found by reading both branches side by side
+
+The sibling `not_configured` branch, in both files, already told an admin
+*where to go*:
+
+> *"...set GITHUB_ACCESS_TOKEN as a Worker secret to turn it on"* (PersonalAdvisor)
+> *"...set it up in Admin Console → GitHub Sync"* (TicketsPage)
+
+The `failed` branch — the one that actually fires here, and a **worse** state
+than unconfigured (a token that exists and was refused, not one that was
+never set) — showed the raw GitHub error string and stopped. Honest, but not
+actionable: nothing in either message said an admin could do anything about
+it, or where. Both branches sit a few lines apart in the same function; the
+gap was not a hypothesis, it was a comparison.
+
+### What lands
+
+Inside the existing `if (status === 'failed')` block in each file, an
+admin-gated sentence is appended naming **Admin Console → GitHub Sync** and
+**Test issue creation** by its shipped label:
+
+> *"An admin can look into it in Admin Console → GitHub Sync — Test issue
+> creation there will say exactly what the token is missing."*
+
+`PersonalAdvisor.jsx` gates it on `user?.role === 'admin'`, the same
+condition the `not_configured` branch two lines down already uses.
+`TicketsPage.jsx` gated it on `isAdmin` — and building it surfaced a small,
+pre-existing, unrelated formatting gap worth fixing in the same edit: unlike
+`PersonalAdvisor.jsx`, this file never normalised a trailing period onto
+GitHub's raw error text before concatenating further copy, so appending the
+pointer directly produced a run-on ("...token An admin can..."). Both files
+now share the same shape — compute the sentence, normalise the reason's
+trailing punctuation, then conditionally append the pointer inside an
+`if (isAdmin)` block — rather than `TicketsPage.jsx` alone carrying a ternary.
+
+**No error-text classification.** The pointer is the same sentence for every
+`failed` cause, because GitHub's error prose is not a contract this repo
+controls, and the shipped Test issue creation button already does the real
+classification (403 names the missing permission by name; 410 names Issues
+being disabled). The chat message's job is only to send an admin to the tool
+that says more, not to duplicate its judgement.
+
+### What this does not touch
+
+The credential. Regenerating or re-scoping the GitHub token with **Issues:
+Read and write**, saving it in Admin Console → GitHub Sync, and confirming
+with **Test issue creation** remain entirely the user's own action, unchanged
+from what D171 already said. Once that passes, ticket 11 — the sole
+unmirrored row past the ones already known from D171's own history — can be
+recovered through the existing backfill (`POST /api/tickets/sync
+{backfill:true}`) rather than re-filed by hand.
+
+**No migration** (274 stays free), **no new `/api/*` method**, no schema
+change. `frontend/src` moves in both files, so `docs/` is rebuilt.
+
+---
+
+## D173
+
+**Thirty-nine runs of the magic-link insert probe reported the D74 outage. The
+endpoint had refused them at the door and the log could not say so.**
+
+**2026-09-20.** The Actions history for `magic-link-insert-probe.yml` is
+thirty-nine runs, all red. Measured against run `35528697005`'s job log rather
+than inferred from the count:
+
+```
+env:
+  MAGIC_PROBE_EMAIL: ***            ← SET. Every earlier note saying otherwise is stale.
+  baseline: highest token row id 0, highest auth_magic_link send-log id 0
+check-magic-link-insert: /magic/start returned 403
+  ✓ start_latency: /magic/start answered in 166ms (budget 5000ms)
+  ✗ token_row_written: no new magic_link_tokens row — the request did not
+    reach its INSERT, which is exactly how the outage presented
+  ✗ mail_send_recorded: … the send errand never reached its own INSERT
+PROBE_CODE: 1
+```
+
+**Two of those three lines are false, and the false ones are the confident
+ones.** Nothing about the sign-in flow was exercised: the request was turned
+away before it reached anything. The probe then polled production D1 for three
+minutes for a row that could not exist and reported its absence as D74's bug,
+by name.
+
+**The durations date the change and rule out a one-off.** Runs #34–#36 fail in
+19–23 seconds — the fast `PROBE_CODE=2` "could not run" bail. Runs #37, #38 and
+#39 all fail at **3m42s**. So `MAGIC_PROBE_EMAIL` was set between those two
+groups, the probe has genuinely been running since, and every run since has hit
+the same wall.
+
+### Two things follow, and the second is the finding
+
+**1 · #168's reported symptom is not what is failing.** `start_latency` PASSES
+at 166ms against a 5000ms budget. Whatever is wrong, it is not the 30-second
+hang D74 fixed, and no run of this probe has ever said so because the verdict
+that would have said it did not exist.
+
+**2 · The 403 cannot come from this Worker.** Every `403` in
+`cloudflare-worker/src/` was swept, and none can apply to an unauthenticated
+`POST /api/auth/magic/start`:
+
+| candidate | why it cannot be this |
+| --- | --- |
+| the handler itself, `routes/auth.ts:1182-1240` | **no 403 path at all** — its refusals are 429 (rate), 400 (bad email), 500 (insert failed), 202 |
+| `middleware/csrf.ts:73` | returns `next()` when there is no auth cookie, and the probe sends none. Its own docblock calls auth-bootstrap routes "naturally exempt" |
+| `middleware/cfAccess.ts` | its two 403s are mounted only on `/api/kyc/admin/:userId/document*` (`index.ts:920-921`) |
+| Turnstile | called on `/register` (`auth.ts:298`) and `/login` (`auth.ts:721`), **not** `/magic/start` |
+
+That points at Cloudflare's own edge — a WAF rule or Bot Fight Mode refusing a
+GitHub Actions datacenter IP POSTing to an auth endpoint before the Worker
+runs. Consistent with `check-spa-live.mjs` passing from the same runner: that
+one GETs HTML; this one POSTs to `/api/auth/*`, which is exactly what bot
+protection targets.
+
+**This is inference by elimination, not proof, and saying so is the point.**
+The body was never captured, so the two 403s cannot be told apart from any
+log this repo has. Making that decidable is the deliverable; naming the cause
+is what the next run does.
+
+### The three defects, all in `scripts/check-magic-link-insert.mjs`
+
+1. **A non-2xx logged its status and nothing else.** No body, no `cf-ray`, no
+   `server`, no `content-type`. An edge 403 (an HTML challenge page) and a
+   Worker 403 (`{error}` JSON) are the same three digits and completely
+   different bugs — one is ours, one is a dashboard setting no code change can
+   reach — and the log could not separate them. **This is why thirty-nine red
+   runs never said what was wrong.**
+2. **A refusal did not stop the run**, and run #39's own timestamps price it
+   exactly:
+
+   ```
+   18:20:03.4  check-magic-link-insert: /magic/start returned 403
+   18:23:21.6    ✓ start_latency: /magic/start answered in 166ms (budget 5000ms)
+   18:23:21.6    ✗ token_row_written: … exactly how the outage presented
+   ```
+
+   **Three minutes and eighteen seconds — 89% of the 3m42s run — spent polling
+   D1 for a row that could not exist, after the refusal was already known and
+   logged.** Then it reported that foregone absence as the outage shape. The
+   429 branch has always exited early for exactly this reason; every other
+   refusal now does too.
+3. **There was no verdict for "the endpoint refused us."** With only three, a
+   refusal became two false ✗s while the one that passed made the endpoint look
+   healthy.
+
+### What lands
+
+| path | change |
+| --- | --- |
+| `scripts/check-magic-link-insert.mjs` | `describeRefusal()` — captures the body (whitespace-collapsed, redacted, bounded) plus `content-type`/`server`/`cf-ray`, and reads them into `edge` / `worker` / `unknown` |
+| same | a fourth verdict, **`endpoint_accepted`**, between latency and the INSERT |
+| same | a refusal **exits early**, and the two downstream verdicts become `skipped` — printed `–`, detailed `NOT CHECKED`, never `✗` |
+| same | one `report()` printer, because there are now two exit paths and the file's own rule is that the report is derived once so it cannot contradict itself |
+| `.github/workflows/magic-link-insert-probe.yml` | the header says four verdicts; the `*)` summary arm gains the refusal shape and says plainly that an edge refusal is not fixable from this repo |
+| `frontend/test/magic_link_insert_probe.test.mjs` | the refusal classification, the redaction, and that a refused run reports neither `exactly how the outage presented` nor `never reached its own INSERT` |
+
+**No worker change, no migration (274 stays free), no `/api/*` method, no
+`frontend/src`** — so no `docs/` rebuild is owed.
+
+### The reading is deliberately conservative, and that is a choice
+
+`origin` is `edge` only for an HTML body carrying a `cf-ray`, and `worker` only
+for JSON in our own `{error}`/`{detail}` shape. Everything else — including
+Cloudflare's plaintext `error code: 1020` firewall page — reads **`unknown`**
+with the body printed. A `cf-ray` alone proves nothing: the edge stamps it on
+the Worker's own responses too, which is why it is never the deciding signal.
+*Strike this and the reader pattern-matches Cloudflare's block-page bodies,
+which is more specific and is how a reading becomes the confident guess this
+entry exists to correct.*
+
+### What this deliberately does NOT do
+
+**It does not add a bypass to get through the edge.** The probe can now say
+what is wrong; if the answer is a Cloudflare rule, the fix is in the dashboard
+and the honest thing is to say so rather than ship code that pretends
+otherwise.
+
+*If a bypass is wanted later it is a security decision, not a config tweak:* a
+skip keyed on **User-Agent** is spoofable by anyone and this is an auth
+endpoint, so the safer form is a custom rule skipping bot protection only for
+requests carrying a **secret header**, scoped to that one path. Either way it
+widens who may hammer `/magic/start`, which is what the rate limiter is for.
+Decide it after the body says whether a bypass is even the right answer.
+
+### And #168 still does not close on this
+
+`magic-link-probe.yml` — the mailbox round-trip — remains the only check that
+can, per D79 and D80, and it still needs the Gmail OAuth trio. What changed is
+that `MAGIC_PROBE_EMAIL`, the one secret the insert probe needed, now exists,
+so the cheaper half genuinely runs. D78's "until all four exist" line stands:
+three of the four are still missing.
+
+---
+
+## D174
+
+**#236's F.8 remainder is finished — and the sweep that closed it found the LP
+drawer telling an LP they were not an LP.**
+
+**2026-09-20.** Two parts: a close-out, and the one live defect the close-out
+turned up.
+
+### Part 1 — #236 closes, and four of its entries were wrong
+
+Measured against the code rather than against the backlog's own prose, on this
+repo's standing rule that an audit finding is true as of its date and is not a
+live bug until re-checked.
+
+| F.8 item | measured | evidence |
+| --- | --- | --- |
+| native rate-limit binding | **buildable, still refused** | zero `[[ratelimits]]` / `[[unsafe.bindings]]` in any of the three wrangler files. `middleware/rateLimit.ts` is 464 lines carrying a per-bucket `failClosed` policy (`:26-29`), a 2s KV deadline whose own comment says it *"is what makes the policy below reachable"* (`:398-399`), and a `logBlock` audit writer. The native binding exposes none of the three |
+| branch provisioning | **blocked** — credentials | `infra/branches/` is `README.md` + `_example.json` (`"status": "example"`). `.github/workflows/README.md:23`: `branch-provision.yml` **"Has never run"** |
+| DO jurisdictions · partner directory · `backup-d1.yml` matrix | **blocked** — all downstream of a first branch | as above |
+| Cloudflare Access on `/hq` | **blocked** — dashboard | the only two `requireCfAccess()` mounts in the worker are `index.ts:920-921`, both KYC documents. `index.ts:699-705` records the Task #33 removal and why |
+| rollback / gradual deployments | **blocked** — widened `CLOUDFLARE_API_TOKEN` | already at `DECISIONS.md:12444-12447`; `PlatformPage.jsx:141` says so on screen |
+
+**Four corrections, each measured:**
+
+1. **The D1 Time Travel runbook is DONE.** The backlog lists it as outstanding.
+   `documentation/operations/D1_RECOVERY.md` **is** that runbook — §2 at `:34`,
+   commands verified against wrangler 4.131. D167 shipped it.
+2. **The HQ partner directory names symbols that exist nowhere.**
+   `publishPartnerListing` and `partner_firm_branches` have **zero hits
+   repo-wide**, `.md` and `.sql` included. F.5's table listed them as
+   specified-but-unbuilt RPC methods; they were never specified anywhere this
+   repo can see.
+3. **The rate-limit binding has no recorded decision, and the code names a
+   different destination.** A case-insensitive sweep of all 464 lines of
+   `rateLimit.ts` for `todo|fixme|xxx|hack` returns **nothing**, and its one
+   forward-looking comment (`:299-303`) says *"swap this for a Durable Object
+   token-bucket or D1 transactional counter"* — not the native binding.
+4. **"Step-up on `impersonate-sessions/:id/end`" is STRUCK, not built.**
+   `/extend` takes `requireFactor('totp')` → `requireStepUp` → `requireAdmin`
+   (`admin.ts:1652-1654`); `/end` takes plain `requireAdmin` (`:1694-1695`).
+   The asymmetry is real and **correct**: the statement is scoped
+   `WHERE admin_user_id = ?` (`:1699`), so an admin can close only their own
+   session, and closing one is the safe direction. A fresh step-up demanded to
+   END a session would strand sessions open — the `not closed` red card D122
+   exists to prevent. Worst case for a plain admin session: it ends an
+   impersonation early.
+
+### Part 2 — the LP drawer, and it was broken three ways
+
+`GET /funds/:id/lpa` returned the document and **never a `content_url`**, under
+a TODO to *"port the FastAPI `/api/files/contracts/{token}` minting flow into
+the worker"*. **That port had already shipped** — `mintDownloadToken`
+(`services/signedDownload.ts:87`) is called by `dd.ts:916`, `research.ts:336`,
+`jobs.ts:308`, `admin_contracts.ts:1120` and `data_room.ts:219`, and
+`/api/files/dl/:token` is mounted at `index.ts:840`. Only this route never
+caught up.
+
+So `FundsPage.jsx` fell to its `content_url`-absent branch for **every**
+reader:
+
+> *Content redacted (you are not an LP of this fund).*
+
+An LP who had just passed the server's own `isLP` check read that. So did every
+admin. **A false claim about entitlement, made to the two audiences who have
+it** — the "cannot" dressed as "did not" this programme refuses everywhere
+else, here aimed at the reader rather than at a verdict.
+
+**The second defect is independent of the first.** The drawer did
+`setDoc(r.doc)`, and everything the page needed to branch on is a **sibling**
+of `doc` in the payload, not a property of it. Fixing only the server would
+have changed nothing on screen: the page discarded the envelope on arrival.
+
+**A third stale claim, in the same component.** The drawer said *"Backend
+returns a short-lived signed URL (~5 min)"*. It returned no URL at all.
+
+### THE CORRECTION — the fix this was planned with could never have fired
+
+The plan approved for this entry said: mint on the entitled path, return
+`content_url`, and guard the mint with `if (!safeDoc.file_key)` so a row with
+no stored file gets its own state rather than borrowing the entitlement
+sentence. That was built, verified, and **wrong**, and the measurement that
+says so was taken before it shipped rather than after.
+
+**`legal_documents` has no `file_key` column.** Not in
+`sql/schema_baseline.sql:2670`, not in any migration, and not in production —
+read read-only from `studioos-db` on 2026-09-20, `pragma_table_info` returns
+**twelve columns**: `id, deal_id, type, status, content, file_url,
+generated_by, signed_by, version, created_at, updated_at, fund_id`. Nothing
+has ever written one. `mintDownloadToken` binds an **R2 object key**; an LPA is
+not in R2. Its body is `content`, inline text written by the `lpa_generation`
+queue job (`queueWorker.ts:289`) from `ai-workers/lpa.ts`.
+
+So the guard would have been **false on every row that exists**, the mint was
+unreachable code, and the only visible change would have been a different
+sentence under a button that still never renders. The TODO named a mechanism
+that was never going to fit this document — which is why "the port already
+shipped, so just call it" was the wrong conclusion to draw from it.
+
+**Two more things the same read settled.** The non-LP branch destructured
+`const { file_key, file_size, file_content_type, ...meta }` under a comment
+saying it dropped the first so a non-LP *"cannot even attempt a download"* — a
+redaction naming three columns that have never existed, beside a comment
+describing a defence that never had anything to defend. And the admin-only
+`file_sha256` re-add was the same: no such column, so it set `undefined` and
+`JSON.stringify` dropped it. `file_url` is the column on this table that
+actually points at a body, and it is now the one withheld.
+
+**Production sizing, measured the same way:** one fund, one
+`legal_documents` row with its `content` populated and `file_url` empty, and
+**zero `limited_partners` rows**. So the one reader who can reach the entitled
+branch today is an admin — and before this entry, that admin was being told
+they were not an LP of the fund they administer.
+
+### What actually ships
+
+| path | change |
+| --- | --- |
+| `routes/funds.ts` | **`mayReadLpa(env, user, fundId)`** — one definition of who may read this fund's LPA, asked by both routes below |
+| same | `GET /:id/lpa` reports **`content_available`** instead of a link, strips `content` before any branch, and withholds `file_url` from a non-LP |
+| same | **`GET /:id/lpa/download`** — new; streams `content` as `text/plain` with `Content-Disposition: attachment`, 403 `lpa_not_entitled` for a non-LP, 404 `lpa_no_body` for an empty record, and one best-effort `activity_logs` row |
+| `lib/api.js` | **`downloadFundLpa(id)`** on `downloadDataRoom`'s shape |
+| `pages/FundsPage.jsx` | the envelope is kept; three states; a busy flag and a failure line on the button |
+
+**Why a download route rather than a signed token, now that the token cannot
+be used.** `api.downloadDataRoom` already states the reason a plain `<a>` will
+not do: *"FastAPI (dev preview) authenticates via the Bearer header only — a
+plain `<a>` click can't set that — so fetch the blob with auth headers and
+trigger a client-side download."* Following that gives something the token
+design could not: **entitlement is re-checked on the hit that hands over the
+text**, where a signed URL is a bearer anyone holding it can replay for its
+whole window. The body still never rides the metadata response, so opening the
+drawer is not the same act as taking the agreement.
+
+**One definition, and it is the control rather than tidiness.** Two copies of
+an entitlement check is how a download route ends up more permissive than the
+screen that links to it — and the download is the half that hands over the
+text. `mayReadLpa` is declared once, both routes call it, and the guard refuses
+either route carrying its own `FROM limited_partners`.
+
+**The filename is built from two integers** (`lpa-fund-<id>-v<version>.txt`).
+It is interpolated into a response header, so a value carrying a quote or a
+newline would rewrite one; nothing the database stores reaches it.
+
+**No migration (274 stays free), no new `request()` method** — the download is
+a raw authenticated `fetch`, so `check-api-drift` has nothing to say, and its
+route ships in the same commit regardless.
+
+### The guards, and the three things they taught
+
+**Two files, because they answer different questions.**
+`cloudflare-worker/test/fund_lpa_reader_states_d174.test.ts` drives the real
+router against real in-memory SQLite for **four readers** — admin, a linked
+LP, a legacy LP claimed by address, and a non-LP — plus a record with no body
+and a fund with no LPA at all. Its fixture creates `legal_documents` **verbatim
+from the baseline**, twelve columns and no `file_key`, because adding one by
+hand is the single thing that would have hidden this defect: it would make the
+mint fire in the test and never in production.
+`frontend/test/fund_lpa_download_d174.test.mjs` keeps what a single response
+cannot show — one predicate, no second membership query, the body leaving by
+one door only, and the page's three states.
+
+1. **An assertion that cannot fail is not a guard, and this entry's own first
+   draft had one.** The structural test asserted *"the TODO is deleted, not
+   reworded"* over source run through `withoutSafeComments`. The original TODO
+   was an indented whole-line `//` comment — exactly what that helper blanks —
+   so the assertion could not fail on the one shape it existed for. **Measured:
+   the mutation restoring that TODO verbatim ESCAPED.** A bound excluding only
+   the note caught it; the assertion was then dropped anyway, because what
+   matters is that the route reports a body and references no `file_key`, and
+   both of those can fail on their own defect.
+2. **A lexical scan cannot tell a rule from its violation** — the fourth
+   instance in this programme. The handler's notes have to quote the TODO and
+   the FastAPI path they removed; the drawer's note quotes `setDoc(r.doc)` to
+   say what it replaced. A raw scan is satisfied by the explanation.
+3. **A bound that stops inside the thing it is bounding reads as a pass.** The
+   drawer's first branch wraps a button and its error line in a fragment, so
+   `indexOf('</>')` stopped inside branch one and never reached the `redacted`
+   arm — the entitlement assertion passed without reading what it names. The
+   bound is the outer fragment's own indentation now.
+
+**18 mutations applied, 18 caught, 0 escaped**, and the split is the argument
+for having both files: the predicate returning `true` for everyone, and an
+audit write able to fail a download, are caught **only** by the behavioural
+suite — a source scan cannot see either.

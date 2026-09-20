@@ -158,7 +158,7 @@ export async function loadOauthCreds(
       console.warn(`[providerOauthKeys] decrypt failed for ${providerKey} — treating as unconfigured`);
     }
   } catch (e) {
-    console.warn(`[providerOauthKeys] DB read failed for ${providerKey}`, e);
+    console.warn('[providerOauthKeys] DB read failed', providerKey, e);
   }
 
   cache.set(providerKey, { value: null, exp: now + CACHE_TTL_MS });

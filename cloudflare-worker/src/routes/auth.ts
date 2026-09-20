@@ -127,7 +127,7 @@ function safe(label: string, friendlyError: string, handler: (c: any) => Promise
       return await handler(c);
     } catch (e: any) {
       const msg = e?.message || String(e);
-      console.error(`[AUTH:${label}] unhandled error:`, msg, e?.stack || '');
+      console.error('[AUTH] unhandled error', label, msg, e?.stack || '');
       const hit = SAFE_ERROR_CODES.find(s => s.re.test(msg));
       if (hit) {
         return c.json({ error: hit.hint, code: hit.code }, 500);
