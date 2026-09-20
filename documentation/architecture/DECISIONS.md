@@ -15338,3 +15338,190 @@ can, per D79 and D80, and it still needs the Gmail OAuth trio. What changed is
 that `MAGIC_PROBE_EMAIL`, the one secret the insert probe needed, now exists,
 so the cheaper half genuinely runs. D78's "until all four exist" line stands:
 three of the four are still missing.
+
+---
+
+## D174
+
+**#236's F.8 remainder is finished — and the sweep that closed it found the LP
+drawer telling an LP they were not an LP.**
+
+**2026-09-20.** Two parts: a close-out, and the one live defect the close-out
+turned up.
+
+### Part 1 — #236 closes, and four of its entries were wrong
+
+Measured against the code rather than against the backlog's own prose, on this
+repo's standing rule that an audit finding is true as of its date and is not a
+live bug until re-checked.
+
+| F.8 item | measured | evidence |
+| --- | --- | --- |
+| native rate-limit binding | **buildable, still refused** | zero `[[ratelimits]]` / `[[unsafe.bindings]]` in any of the three wrangler files. `middleware/rateLimit.ts` is 464 lines carrying a per-bucket `failClosed` policy (`:26-29`), a 2s KV deadline whose own comment says it *"is what makes the policy below reachable"* (`:398-399`), and a `logBlock` audit writer. The native binding exposes none of the three |
+| branch provisioning | **blocked** — credentials | `infra/branches/` is `README.md` + `_example.json` (`"status": "example"`). `.github/workflows/README.md:23`: `branch-provision.yml` **"Has never run"** |
+| DO jurisdictions · partner directory · `backup-d1.yml` matrix | **blocked** — all downstream of a first branch | as above |
+| Cloudflare Access on `/hq` | **blocked** — dashboard | the only two `requireCfAccess()` mounts in the worker are `index.ts:920-921`, both KYC documents. `index.ts:699-705` records the Task #33 removal and why |
+| rollback / gradual deployments | **blocked** — widened `CLOUDFLARE_API_TOKEN` | already at `DECISIONS.md:12444-12447`; `PlatformPage.jsx:141` says so on screen |
+
+**Four corrections, each measured:**
+
+1. **The D1 Time Travel runbook is DONE.** The backlog lists it as outstanding.
+   `documentation/operations/D1_RECOVERY.md` **is** that runbook — §2 at `:34`,
+   commands verified against wrangler 4.131. D167 shipped it.
+2. **The HQ partner directory names symbols that exist nowhere.**
+   `publishPartnerListing` and `partner_firm_branches` have **zero hits
+   repo-wide**, `.md` and `.sql` included. F.5's table listed them as
+   specified-but-unbuilt RPC methods; they were never specified anywhere this
+   repo can see.
+3. **The rate-limit binding has no recorded decision, and the code names a
+   different destination.** A case-insensitive sweep of all 464 lines of
+   `rateLimit.ts` for `todo|fixme|xxx|hack` returns **nothing**, and its one
+   forward-looking comment (`:299-303`) says *"swap this for a Durable Object
+   token-bucket or D1 transactional counter"* — not the native binding.
+4. **"Step-up on `impersonate-sessions/:id/end`" is STRUCK, not built.**
+   `/extend` takes `requireFactor('totp')` → `requireStepUp` → `requireAdmin`
+   (`admin.ts:1652-1654`); `/end` takes plain `requireAdmin` (`:1694-1695`).
+   The asymmetry is real and **correct**: the statement is scoped
+   `WHERE admin_user_id = ?` (`:1699`), so an admin can close only their own
+   session, and closing one is the safe direction. A fresh step-up demanded to
+   END a session would strand sessions open — the `not closed` red card D122
+   exists to prevent. Worst case for a plain admin session: it ends an
+   impersonation early.
+
+### Part 2 — the LP drawer, and it was broken three ways
+
+`GET /funds/:id/lpa` returned the document and **never a `content_url`**, under
+a TODO to *"port the FastAPI `/api/files/contracts/{token}` minting flow into
+the worker"*. **That port had already shipped** — `mintDownloadToken`
+(`services/signedDownload.ts:87`) is called by `dd.ts:916`, `research.ts:336`,
+`jobs.ts:308`, `admin_contracts.ts:1120` and `data_room.ts:219`, and
+`/api/files/dl/:token` is mounted at `index.ts:840`. Only this route never
+caught up.
+
+So `FundsPage.jsx` fell to its `content_url`-absent branch for **every**
+reader:
+
+> *Content redacted (you are not an LP of this fund).*
+
+An LP who had just passed the server's own `isLP` check read that. So did every
+admin. **A false claim about entitlement, made to the two audiences who have
+it** — the "cannot" dressed as "did not" this programme refuses everywhere
+else, here aimed at the reader rather than at a verdict.
+
+**The second defect is independent of the first.** The drawer did
+`setDoc(r.doc)`, and everything the page needed to branch on is a **sibling**
+of `doc` in the payload, not a property of it. Fixing only the server would
+have changed nothing on screen: the page discarded the envelope on arrival.
+
+**A third stale claim, in the same component.** The drawer said *"Backend
+returns a short-lived signed URL (~5 min)"*. It returned no URL at all.
+
+### THE CORRECTION — the fix this was planned with could never have fired
+
+The plan approved for this entry said: mint on the entitled path, return
+`content_url`, and guard the mint with `if (!safeDoc.file_key)` so a row with
+no stored file gets its own state rather than borrowing the entitlement
+sentence. That was built, verified, and **wrong**, and the measurement that
+says so was taken before it shipped rather than after.
+
+**`legal_documents` has no `file_key` column.** Not in
+`sql/schema_baseline.sql:2670`, not in any migration, and not in production —
+read read-only from `studioos-db` on 2026-09-20, `pragma_table_info` returns
+**twelve columns**: `id, deal_id, type, status, content, file_url,
+generated_by, signed_by, version, created_at, updated_at, fund_id`. Nothing
+has ever written one. `mintDownloadToken` binds an **R2 object key**; an LPA is
+not in R2. Its body is `content`, inline text written by the `lpa_generation`
+queue job (`queueWorker.ts:289`) from `ai-workers/lpa.ts`.
+
+So the guard would have been **false on every row that exists**, the mint was
+unreachable code, and the only visible change would have been a different
+sentence under a button that still never renders. The TODO named a mechanism
+that was never going to fit this document — which is why "the port already
+shipped, so just call it" was the wrong conclusion to draw from it.
+
+**Two more things the same read settled.** The non-LP branch destructured
+`const { file_key, file_size, file_content_type, ...meta }` under a comment
+saying it dropped the first so a non-LP *"cannot even attempt a download"* — a
+redaction naming three columns that have never existed, beside a comment
+describing a defence that never had anything to defend. And the admin-only
+`file_sha256` re-add was the same: no such column, so it set `undefined` and
+`JSON.stringify` dropped it. `file_url` is the column on this table that
+actually points at a body, and it is now the one withheld.
+
+**Production sizing, measured the same way:** one fund, one
+`legal_documents` row with its `content` populated and `file_url` empty, and
+**zero `limited_partners` rows**. So the one reader who can reach the entitled
+branch today is an admin — and before this entry, that admin was being told
+they were not an LP of the fund they administer.
+
+### What actually ships
+
+| path | change |
+| --- | --- |
+| `routes/funds.ts` | **`mayReadLpa(env, user, fundId)`** — one definition of who may read this fund's LPA, asked by both routes below |
+| same | `GET /:id/lpa` reports **`content_available`** instead of a link, strips `content` before any branch, and withholds `file_url` from a non-LP |
+| same | **`GET /:id/lpa/download`** — new; streams `content` as `text/plain` with `Content-Disposition: attachment`, 403 `lpa_not_entitled` for a non-LP, 404 `lpa_no_body` for an empty record, and one best-effort `activity_logs` row |
+| `lib/api.js` | **`downloadFundLpa(id)`** on `downloadDataRoom`'s shape |
+| `pages/FundsPage.jsx` | the envelope is kept; three states; a busy flag and a failure line on the button |
+
+**Why a download route rather than a signed token, now that the token cannot
+be used.** `api.downloadDataRoom` already states the reason a plain `<a>` will
+not do: *"FastAPI (dev preview) authenticates via the Bearer header only — a
+plain `<a>` click can't set that — so fetch the blob with auth headers and
+trigger a client-side download."* Following that gives something the token
+design could not: **entitlement is re-checked on the hit that hands over the
+text**, where a signed URL is a bearer anyone holding it can replay for its
+whole window. The body still never rides the metadata response, so opening the
+drawer is not the same act as taking the agreement.
+
+**One definition, and it is the control rather than tidiness.** Two copies of
+an entitlement check is how a download route ends up more permissive than the
+screen that links to it — and the download is the half that hands over the
+text. `mayReadLpa` is declared once, both routes call it, and the guard refuses
+either route carrying its own `FROM limited_partners`.
+
+**The filename is built from two integers** (`lpa-fund-<id>-v<version>.txt`).
+It is interpolated into a response header, so a value carrying a quote or a
+newline would rewrite one; nothing the database stores reaches it.
+
+**No migration (274 stays free), no new `request()` method** — the download is
+a raw authenticated `fetch`, so `check-api-drift` has nothing to say, and its
+route ships in the same commit regardless.
+
+### The guards, and the three things they taught
+
+**Two files, because they answer different questions.**
+`cloudflare-worker/test/fund_lpa_reader_states_d174.test.ts` drives the real
+router against real in-memory SQLite for **four readers** — admin, a linked
+LP, a legacy LP claimed by address, and a non-LP — plus a record with no body
+and a fund with no LPA at all. Its fixture creates `legal_documents` **verbatim
+from the baseline**, twelve columns and no `file_key`, because adding one by
+hand is the single thing that would have hidden this defect: it would make the
+mint fire in the test and never in production.
+`frontend/test/fund_lpa_download_d174.test.mjs` keeps what a single response
+cannot show — one predicate, no second membership query, the body leaving by
+one door only, and the page's three states.
+
+1. **An assertion that cannot fail is not a guard, and this entry's own first
+   draft had one.** The structural test asserted *"the TODO is deleted, not
+   reworded"* over source run through `withoutSafeComments`. The original TODO
+   was an indented whole-line `//` comment — exactly what that helper blanks —
+   so the assertion could not fail on the one shape it existed for. **Measured:
+   the mutation restoring that TODO verbatim ESCAPED.** A bound excluding only
+   the note caught it; the assertion was then dropped anyway, because what
+   matters is that the route reports a body and references no `file_key`, and
+   both of those can fail on their own defect.
+2. **A lexical scan cannot tell a rule from its violation** — the fourth
+   instance in this programme. The handler's notes have to quote the TODO and
+   the FastAPI path they removed; the drawer's note quotes `setDoc(r.doc)` to
+   say what it replaced. A raw scan is satisfied by the explanation.
+3. **A bound that stops inside the thing it is bounding reads as a pass.** The
+   drawer's first branch wraps a button and its error line in a fragment, so
+   `indexOf('</>')` stopped inside branch one and never reached the `redacted`
+   arm — the entitlement assertion passed without reading what it names. The
+   bound is the outer fragment's own indentation now.
+
+**18 mutations applied, 18 caught, 0 escaped**, and the split is the argument
+for having both files: the predicate returning `true` for everyone, and an
+audit write able to fail a download, are caught **only** by the behavioural
+suite — a source scan cannot see either.

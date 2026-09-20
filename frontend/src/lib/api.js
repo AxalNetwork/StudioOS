@@ -2787,6 +2787,48 @@ export const api = {
   fundsCreateV2: (data) => request('/funds', { method: 'POST', body: JSON.stringify(data) }),
   fundsRegenerateLpa: (id) => request(`/funds/${id}/regenerate-lpa`, { method: 'POST' }),
   fundsLpa: (id) => request(`/funds/${id}/lpa`),
+  // D174 — the LPA body is a download, not a field on the response above.
+  //
+  // `fundsLpa` reports only whether a body EXISTS (`content_available`), so
+  // opening the drawer never hands over the agreement. This is the click, and
+  // it is `downloadDataRoom`'s shape for the reason that method already
+  // states: a plain `<a>` click cannot set the session's Authorization
+  // header, so the blob is fetched with it and clicked client-side. The
+  // server re-checks LP membership on this hit — it does not trust the
+  // drawer's earlier answer.
+  downloadFundLpa: async (id) => {
+    const token = localStorage.getItem('token');
+    const res = await fetch(`${BASE}/funds/${id}/lpa/download`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      // The server distinguishes "you may not have it" (403) from "there is
+      // nothing to give you" (404), and the drawer says which — so the
+      // detail is carried rather than flattened into one failure sentence.
+      let detail = res.statusText || 'Download failed';
+      try {
+        const err = await res.json();
+        detail = err?.error || err?.detail || detail;
+      } catch {
+        // Not JSON — keep statusText rather than inventing a reason.
+      }
+      const e = new Error(detail);
+      e.status = res.status;
+      throw e;
+    }
+    const blob = await res.blob();
+    const filename = (res.headers.get('Content-Disposition') || '')
+      .match(/filename="?([^"]+)"?/)?.[1] || `lpa-fund-${id}.txt`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
   fundsCapitalCallV2: (id, amount_cents, note) =>
     request(`/funds/${id}/capital-call`, { method: 'POST', body: JSON.stringify({ amount_cents, note }) }),
   fundsLpsList: (id) => request(`/funds/${id}/lps`),
