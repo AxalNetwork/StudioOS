@@ -14985,3 +14985,95 @@ environment: `semgrep.dev:443` is a proxy policy denial (`CONNECT tunnel failed,
 **No migration** — nothing touches D1, and **273 is still the next free number.**
 **No new `/api/*` method** and no `frontend/src` change, so neither
 `check-api-drift` nor `check-docs-fresh` has anything to say.
+
+---
+
+## D171
+
+**The ticket→GitHub mirror could not say it had failed, and the button built
+to check it could not fail either.**
+
+**2026-09-20. Reported live:** a ticket filed from the Eadwyn "File ticket"
+form never appeared in GitHub Issues. The first diagnosis was
+`GITHUB_ACCESS_TOKEN` unset — **wrong**. The token was set, org-approved, and
+the admin panel's **Test** button passed.
+
+**The measurement that reframed it.** `AxalNetwork/StudioOS` has contained
+exactly **one** real issue in its entire history — `#305`, hand-made,
+2026-08-17. Every other number is a pull request. So the mirror had **never
+once worked**, across months of tickets, and every surface in the product
+reported health.
+
+### Why the Test was green
+
+`routes/admin_github.ts`'s `POST /test` probed **`GET /repos/{owner}/{repo}`**
+— repository *metadata*. **A fine-grained PAT carries `Metadata: Read`
+automatically and the permission cannot be removed**, so that probe returns
+200 for a token holding no Issues access at all. The panel printed
+*"Connected to AxalNetwork/StudioOS."*, the badge went green, and
+`POST /issues` went on refusing. The panel's own copy said *"Needs Issues:
+Read and write"* and nothing checked it. **A check that cannot fail on the
+bug it exists for is decoration** — the rule this repo has applied a dozen
+times, here applied to a check of our own.
+
+The test now reports three named verdicts rather than one "Connected":
+`reachable` (metadata), `issues_readable` (the Issues permission exists at
+all), and `can_write` — which **defaults to the string `'unproven'`** and is
+settled only by `{ write: true }`, which creates a real issue and closes it.
+
+**A cheaper probe was designed, measured, and REJECTED — and the rejection is
+the part worth keeping.** The idea was to `POST /issues` with a deliberately
+invalid body and read **422** as *"authorised, payload merely bad"*, since
+that creates nothing. It requires GitHub to evaluate authorisation **before**
+payload validation. That ordering could not be confirmed: every attempt to
+test the unauthorised path from this environment returned 422, including one
+with a garbage token and one with **no `Authorization` header at all** — which
+is not GitHub's behaviour but the egress proxy's, since it demonstrably
+rewrites this session's GitHub traffic (it refuses the search API with a
+message of its own). So the evidence was **confounded, not supportive**, and
+shipping the probe would have re-created the exact defect above. Recorded
+rather than quietly dropped, because the next person will have the same idea.
+
+### The five silent paths beside it
+
+1. **The outcome had nowhere to live.** Every `github_*` column on `tickets`
+   records a mirror that *succeeded*; the failure had no column. `github_sync_error`
+   existed only in one HTTP response body — and `/help`'s own form discarded
+   it. **Migration 273** adds `github_sync_status`, `github_sync_error`,
+   `github_sync_attempted_at`, mirrored in `ensureTicketSyncSchema` because a
+   column in one definition and not the other is the `metrics_snapshots`
+   collision (#183, #202) again.
+2. **`POST /tickets/sync` could not backfill.** It selected
+   `github_issue_number IS NOT NULL`, so it refreshed only tickets that had
+   already mirrored and **silently skipped exactly the rows that needed it**.
+   Every ticket filed while the mirror was broken was stranded with no path to
+   GitHub. It now returns `unsynced_count` on every call and, for an admin
+   passing `{ backfill: true }`, creates the missing issues in bounded batches
+   of 25. **It reports before it acts**: this writes to a public repository and
+   an issue cannot be deleted through the API.
+3. **`setSecret()` believed the status line.** The Cloudflare v4 API answers
+   **HTTP 200 with `{"success": false}`** for a class of refusals, and only
+   `res.ok` was checked — so a secret that was never written produced a green
+   "saved" toast. It now parses the envelope. An unparseable 2xx still passes,
+   deliberately: failing closed there would refuse working saves.
+4. **`/help`'s ticket form threw the whole response away.** A failed mirror
+   was invisible there to admin and founder alike, while the Eadwyn panel
+   reported it honestly — the page people are pointed at was the silent one.
+   It now uses the same two-audience split: a `failed` mirror is said to
+   everyone, `not_configured` only to an admin, because it names a deployment
+   secret a founder cannot act on.
+5. **The panel had no control for the one check that settles it.** The write
+   probe exists now as its own button, beside a sentence saying why reaching
+   the repo proves nothing.
+
+### Filed, not fixed here
+
+`PUT /admin/github` pushes `GITHUB_REPO_OWNER` / `GITHUB_REPO_NAME` as Worker
+**secrets**, while `wrangler.toml:156-157,443-444` declares them as plain
+`[vars]` — so the next CI deploy silently reverts any admin edit to those two
+fields. Harmless today because the values match, but those inputs do not
+durably do anything. Its own concern. `admin_github.ts` also still writes no
+`admin_audit_log` row, unlike `admin_integration_keys.ts`.
+
+**Migration 273 is used; 274 is the next free number.** `frontend/src` moves,
+so `docs/` is rebuilt.
