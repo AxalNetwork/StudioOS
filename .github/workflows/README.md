@@ -11,7 +11,7 @@ Task #48.
 | `ci.yml` | Frontend build, worker typecheck, API↔Worker drift, dev-backend import smoke, npm + pip audits | push/PR to `main` | none (uses `GITHUB_TOKEN` only) |
 | `codeql.yml` | CodeQL static analysis for TypeScript + Python | push/PR to `main`, weekly cron | none. **Requires** GitHub Advanced Security enabled on the repo AND the "Default setup" CodeQL toggled OFF in Settings → Code security & analysis (otherwise GitHub auto-runs a second "Code Quality: Push on main" CodeQL that conflicts). |
 | `gitleaks.yml` | Full-history secret scan with project allowlist | push/PR to `main` | none. Uses the free OSS CLI, not the paid `gitleaks/gitleaks-action`. |
-| `semgrep.yml` | Static analysis with public OSS rule packs (`p/default`, `p/security-audit`, `p/secrets`) | push/PR to `main`, weekly cron | none. To switch on Semgrep AppSec Platform integration (paid), set `SEMGREP_APP_TOKEN` and change `semgrep scan` to `semgrep ci`. |
+| `semgrep.yml` | Static analysis with public OSS rule packs (`p/default`, `p/security-audit`, `p/secrets`). **Findings do not fail this job** — the SARIF upload is the reporting channel and ~40 findings stand. A scanner that could not run *does* fail it, and then nothing is uploaded, because an upload replaces the tool's whole alert set and a resultless SARIF closes every open alert as fixed (D170). Scanner pinned by digest; the rule packs are still fetched live | push/PR to `main`, weekly cron | none. To switch on Semgrep AppSec Platform integration (paid), set `SEMGREP_APP_TOKEN` and change `semgrep scan` to `semgrep ci`. |
 | `backup-d1.yml` | Daily D1 export to R2 backup bucket | daily cron | `CLOUDFLARE_API_TOKEN` (scopes: **D1 export/read + R2 object write**), `CLOUDFLARE_ACCOUNT_ID`. Both must be **repository** secrets — these jobs declare no `environment:`, so environment-scoped secrets are invisible to them. |
 | `dr-drill.yml` | Monthly disaster-recovery dry-run | monthly cron | same as `backup-d1.yml`. |
 | `beta-readiness-reaudit.yml` | Monthly beta-readiness checklist re-audit | monthly cron | none. |
@@ -62,7 +62,18 @@ Task #48.
 
 ## Action version pinning policy
 
-We pin to major-version tags (e.g. `actions/checkout@v4`) for
-GitHub-published actions and to full commit SHAs for third-party
-actions. Do NOT use floating refs like `@main` or unreleased majors
+Every action is pinned to a **full commit SHA with a trailing `# vN`
+comment**, regardless of publisher — `actions/checkout@3d3c42e5… # v7`,
+`github/codeql-action/analyze@cdf488f5… # v4`. (This paragraph used to say
+major-version tags for GitHub-published actions; that had not been the
+practice here for some time.) The comment says which release the SHA is,
+the SHA says what actually runs.
+
+**Container images under `container:` follow the same rule, by digest plus
+a trailing `# <version>` comment** — `semgrep/semgrep@sha256:34ab619b… #
+1.176.1`. A moving tag is a floating ref: `:latest` is banned here for the
+same reason `@main` is, and it had already changed a Semgrep finding count
+with no repo change twice before it was pinned (D170).
+
+Do NOT use floating refs like `@main`, `:latest`, or unreleased majors
 (e.g. `@v5` for `actions/checkout` doesn't exist as of 2026-05-21).
