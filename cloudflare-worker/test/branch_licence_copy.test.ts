@@ -331,7 +331,7 @@ test('HQ never reads the copy, even when one is present', async () => {
   assert.equal(body.source, undefined, 'HQ must never stamp a response as a copy');
 });
 
-test('the four platform-content cadences are gated on HQ in the scheduled handler', () => {
+test('the three platform-content cadences are gated on HQ in the scheduled handler', () => {
   // Source-parsed because the alternative is booting the cron. The claim
   // being pinned is narrow and exact: the cron TRIM in the generated branch
   // config does not stop any of these — a branch keeps `* * * * *` and every
@@ -343,11 +343,22 @@ test('the four platform-content cadences are gated on HQ in the scheduled handle
 
   const gated = [
     /if \(hqCadences && now\.getUTCHours\(\) === 4 && now\.getUTCMinutes\(\) === 20\) \{\s*\n\s*try \{\s*\n\s*const \{ runRefresh \}/,
-    /if \(hqCadences && now\.getUTCDay\(\) === 1 && now\.getUTCHours\(\) === 9 && now\.getUTCMinutes\(\) === 0\) \{[\s\S]{0,140}sendPlatformPersonasDigest/,
     /if \(hqCadences && \[0, 6, 12, 18\]\.includes\(now\.getUTCHours\(\)\)/,
     /if \(hqCadences\) \{\s*\n\s*try \{\s*\n\s*const \{ sendMarketIntelDigests \}/,
   ];
+  // D175 — THE COUNT LIVES IN AN ASSERTION, NOT ONLY IN THE TEST'S NAME.
+  // It was in the title alone when the personas digest was retired, so
+  // dropping its regex left a test called "the four" checking three. That is
+  // the `sidebarConfig.js` shape D146 had to correct — a number in prose above
+  // a list that no longer matches it. A fourth cadence added later must move
+  // this figure and the title together.
+  assert.equal(gated.length, 3, 'the cadence count moved; update the title in the same edit');
   for (const re of gated) assert.match(src, re, `a platform-content cadence lost its HQ gate: ${re}`);
+
+  // D175 — and the retired one must stay retired. The personas weekly digest
+  // was the fourth cadence; deleting the block without this assertion would
+  // let a later edit re-add the fan-out with no gate and nothing would notice.
+  assert.doesNotMatch(src, /sendPlatformPersonasDigest/, 'the retired personas digest cron is back (D175)');
 
   // And the other direction: branch-local work is NOT gated. A gate that
   // swallowed the queue drain or the trust sweeps would leave every branch
