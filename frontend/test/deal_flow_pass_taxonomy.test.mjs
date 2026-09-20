@@ -20,7 +20,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import {
-  PASS_TAXONOMY, PASS_REASON_UNRECORDED, passReasonLabel, passReasonRevisit,
+  PASS_TAXONOMY, passReasonLabel, passReasonRevisit,
   SLA_PRESETS, DEFAULT_SLA, slaPreset, slaBand, fmtPct, fmtDays, NOT_RECORDED,
 } from '../src/lib/dealFlow.js';
 
