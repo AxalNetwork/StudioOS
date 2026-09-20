@@ -322,10 +322,15 @@ export default function TicketsPage() {
       const status = res?.github_sync_status || null;
       const reason = String(res?.github_sync_error || '').trim();
       if (status === 'failed') {
-        setSyncNotice({
-          tone: 'warn',
-          text: `Your ticket is saved, but it did not reach the GitHub issue tracker, so it will not appear on the board there${reason ? `: ${reason}` : '.'}`,
-        });
+        let syncText = `Your ticket is saved, but it did not reach the GitHub issue tracker, so it will not appear on the board there${reason ? `: ${reason}` : '.'}`;
+        // The reason is GitHub's own error prose and does not always end in
+        // punctuation — normalise before appending the admin pointer below,
+        // or the two sentences run together with no separator between them.
+        if (reason && !/[.!?]$/.test(reason)) syncText += '.';
+        if (isAdmin) {
+          syncText += ' An admin can look into it in Admin Console → GitHub Sync — Test issue creation there will say exactly what the token is missing.';
+        }
+        setSyncNotice({ tone: 'warn', text: syncText });
       } else if (status === 'not_configured' && isAdmin) {
         setSyncNotice({
           tone: 'warn',
