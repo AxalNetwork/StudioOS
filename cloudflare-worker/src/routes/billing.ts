@@ -1327,7 +1327,7 @@ async function safeEnsure(name: string, fn: () => Promise<void>): Promise<void> 
   try {
     await fn();
   } catch (e) {
-    console.warn(`[billing] webhook ensure ${name} skipped:`, (e as Error).message);
+    console.warn('[billing] webhook ensure skipped', name, (e as Error).message);
   }
 }
 

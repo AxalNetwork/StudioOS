@@ -422,7 +422,7 @@ dd.post('/cases/:uid/scan', async (c) => {
       const meta = CONNECTORS.find(m => m.key === q.connector);
       if (!meta) continue;
       try { await processConnector(c.env, q.id, caseId, meta, subjectLabel, ownerUserId, caseUid); }
-      catch (e) { console.warn(`[dd] connector ${q.connector} failed:`, (e as Error).message); }
+      catch (e) { console.warn('[dd] connector failed', q.connector, (e as Error).message); }
     }
     try {
       const sql2 = getSQL(c.env);

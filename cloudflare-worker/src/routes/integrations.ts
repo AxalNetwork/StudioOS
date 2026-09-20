@@ -419,7 +419,7 @@ integrations.post('/connect', async (c) => {
       try {
         c.executionCtx.waitUntil(
           impl.postConnect(c, user, row).catch((e: Error) => {
-            console.warn(`[integrations] postConnect failed for ${key}:`, e.message);
+            console.warn('[integrations] postConnect failed', key, e.message);
           }),
         );
       } catch { /* executionCtx may be missing in some test contexts */ }
@@ -1045,7 +1045,7 @@ integrations.get('/oauth/:provider/callback', async (c) => {
           try {
             c.executionCtx.waitUntil(
               impl.postConnect(c, user, row).catch((e: Error) => {
-                console.warn(`[integrations] postConnect (oauth_callback) failed for ${provider}:`, e.message);
+                console.warn('[integrations] postConnect (oauth_callback) failed', provider, e.message);
               }),
             );
           } catch { /* executionCtx may be missing in some test contexts */ }
