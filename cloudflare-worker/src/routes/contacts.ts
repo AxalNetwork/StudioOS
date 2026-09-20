@@ -229,7 +229,7 @@ async function ensureSchema(env: Env): Promise<void> {
     for (const [col, decl] of [['pro_rata_reserved', 'REAL'], ['pre_money', 'REAL']] as const) {
       if (!have.has(col)) {
         try { await env.DB.prepare(`ALTER TABLE raise_rounds ADD COLUMN ${col} ${decl}`).run(); }
-        catch (e) { console.warn(`[contacts] ALTER raise_rounds.${col} failed (likely already applied)`, e); }
+        catch (e) { console.warn('[contacts] ALTER raise_rounds column failed (likely already applied)', col, e); }
       }
     }
   } catch (e) { console.warn('[contacts] raise_rounds round-manager bootstrap failed', e); }
@@ -239,7 +239,7 @@ async function ensureSchema(env: Env): Promise<void> {
     for (const [col, decl] of [['close_id', 'INTEGER'], ['commit_status', 'TEXT'], ['instrument', 'TEXT']] as const) {
       if (!have.has(col)) {
         try { await env.DB.prepare(`ALTER TABLE raise_prospects ADD COLUMN ${col} ${decl}`).run(); }
-        catch (e) { console.warn(`[contacts] ALTER raise_prospects.${col} failed (likely already applied)`, e); }
+        catch (e) { console.warn('[contacts] ALTER raise_prospects column failed (likely already applied)', col, e); }
       }
     }
   } catch (e) { console.warn('[contacts] raise_prospects round-manager bootstrap failed', e); }
@@ -275,7 +275,7 @@ async function ensureSchema(env: Env): Promise<void> {
     for (const [col, decl] of [['utm_json', 'TEXT'], ['referrer', 'TEXT']] as const) {
       if (!have.has(col)) {
         try { await env.DB.prepare(`ALTER TABLE contacts ADD COLUMN ${col} ${decl}`).run(); }
-        catch (e) { console.warn(`[contacts] ALTER ${col} failed (likely already applied)`, e); }
+        catch (e) { console.warn('[contacts] ALTER contacts column failed (likely already applied)', col, e); }
       }
     }
   } catch (e) { console.warn('[contacts] attribution bootstrap failed', e); }

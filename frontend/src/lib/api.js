@@ -2043,7 +2043,11 @@ export const api = {
   adminGetGithubConfig: () => request('/admin/github'),
   adminSaveGithubConfig: (body) =>
     request('/admin/github', { method: 'PUT', body: JSON.stringify(body || {}) }),
-  adminTestGithub: () => request('/admin/github/test', { method: 'POST' }),
+  // `write` opts into the create-and-close probe. Without it the route
+  // reports can_write:'unproven' rather than pretending a metadata read
+  // proved the token may open an issue.
+  adminTestGithub: (write = false) =>
+    request('/admin/github/test', { method: 'POST', body: JSON.stringify({ write: !!write }) }),
   adminDeleteGithubConfig: () => request('/admin/github', { method: 'DELETE' }),
   // `overrideReason`, when given, asks the server to assign a role that the
   // binding-agreement gate would otherwise refuse. It is NOT a formality: the
@@ -3104,6 +3108,16 @@ export const api = {
     request(`/admin/security/force-reauth/${encodeURIComponent(userId)}`, {
       method: 'POST',
       body: JSON.stringify({ reason }),
+    }),
+  // D168 — close a data-subject erasure request. `outcome` is 'fulfilled' or
+  // 'denied' and the server admits no third value from HQ: a withdrawal is the
+  // subject's own act, recorded when they cancel. `fulfilled` records that the
+  // MANUAL erasure was carried out — this platform performs none, and the
+  // server's own message says so rather than letting the word imply otherwise.
+  hqCloseDsrRequest: (userId, outcome, reason) =>
+    request(`/admin/security/dsr/${encodeURIComponent(userId)}/close`, {
+      method: 'POST',
+      body: JSON.stringify({ outcome, reason }),
     }),
   licence: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}`),
   licenceTerritories: () => request('/admin/licences/territories'),

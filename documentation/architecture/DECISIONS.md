@@ -14636,3 +14636,487 @@ document must agree rather than covering for each other. Re-run after the
 re-aim: **12 mutations, 12 caught.**
 
 **No migration — 271 stays free. No new `/api/*` method**; one is removed.
+
+---
+
+## D168
+
+**HQ watched a statutory clock and had no way to stop it — and nothing in
+either test tree had ever asserted a line of that screen.**
+
+`users.deletion_requested_at` is written by **the subject and nobody else**:
+`settings.ts` `POST /account/delete-request` sets it, `POST
+/account/delete-request/cancel` clears it. HQ *reads* it —
+`admin_security.ts` `GET /overview` selects every row that has it, computes
+`days_left` against `DSR_CLOCK_DAYS = 30` under a comment that is exactly
+right (*"GDPR Art. 12(3): one month from receipt. Counted from the request,
+not from triage."*), and `SecurityPage.jsx` renders it as an **amber** zone
+with `Nd overdue` in red and a headline count of requests *"inside deadline
+pressure"*.
+
+And `admin_security.ts` declared **four handlers** — two GETs and the two
+force-reauth POSTs. **None of them could fulfil, deny or close a request.**
+The only way a row ever left HQ's list was the subject cancelling their own
+request. That is the producer-with-no-actor shape this programme has closed a
+dozen times, and the first instance where the thing with no actor is a **legal
+deadline**.
+
+### The second finding, and my first statement of it was wrong
+
+I reported that **nothing** guarded this surface, on a `grep -rl
+'hq-dsr\|Data subject\|dsr'` over both test trees that returned nothing. The
+grep was case-sensitive and the guard spells it `DSR_CLOCK_DAYS`, so it missed
+`frontend/test/hq_security.test.mjs:97`, which does pin the clock. Correcting
+that rather than leaving it, because the true finding is sharper than the one
+I claimed.
+
+**The clock was HALF-pinned, and the pinned half was the spelling.** That
+guard matched two literals in the route: `const DSR_CLOCK_DAYS = 30;` and the
+exact text `days_left: elapsedDays === null ? null : DSR_CLOCK_DAYS -
+elapsedDays`. It never read the line ABOVE, where `elapsedDays` was computed —
+so **turning `86400000` into `3600000` would have made every request read
+twenty-four times more overdue and nothing would have moved.** A text match on
+a declaration, the D164 `investor_shell` class, wrong in both directions at
+once: blind to the arithmetic that matters, and failing on the correct
+refactor that finally made it testable.
+
+So `dsrDaysLeft` moved into `services/dsrRequests.ts` and is exercised against
+real values — counting down, going negative when overdue, `null` for an
+unparseable stamp, and **both sides of the 14-day amber edge**. *The first
+draft of that boundary assertion was itself a day out and failed on correct
+code*, which is the argument for pinning an edge from both sides rather than
+one. The old guard is re-aimed at the property: one definition of the clock,
+the route computing through the helper, the page rendering the unknown state.
+
+What was genuinely unguarded is everything else on the zone — the controls
+(there were none), the render's claims, and the distinction between an
+unreadable ledger and a subject who has never asked.
+
+So the arithmetic was **extracted into `services/dsrRequests.ts` as
+`dsrDaysLeft`** and is now exercised against both sides of its real edge: 15
+days elapsed leaves 15 (outside the 14-day amber band), 16 leaves 14 (inside).
+*The first draft of that assertion put the edge a day out and failed on correct
+code* — which is the argument for pinning a boundary from both sides rather
+than one.
+
+### What "fulfilled" means, stated everywhere it could be misread
+
+**There is no `DELETE FROM users`, no `deleted_at` and no anonymisation
+anywhere in this codebase**, and D168 does not invent one: erasure needs a
+retention and legal-hold policy nobody has written. So `fulfilled` **records
+that the manual erasure was carried out**. It performs none.
+
+That is said in the migration header, in the service, in the route's response
+message, and on the button itself — and it is asserted, because an audit row
+implying a deletion that did not happen is worse than the gap it closes. The
+zone's existing sentence *"erasure itself is still a manual act"* is
+**narrowed rather than deleted** (the D111 pattern): it stays true and gets
+sharper, because HQ can now record that the act was done.
+
+### `withdrawn` is the subject's, and HQ may not write it
+
+Migration 272's CHECK admits three outcomes; `HQ_DSR_OUTCOMES` admits **two**.
+A withdrawal is written by the subject's own cancel handler, with
+`closed_by_user_id` left NULL. An operator closing a request as withdrawn
+would be recording that the subject changed their mind when they did not —
+a false statement in the one store that exists to be trusted. The control is
+not drawn and the server refuses the value.
+
+### The store, and why it is not columns
+
+`users` is at D1's 100-column cap — the reason `super_admins` is a side table
+at all (D35, migration 199) — and a request is an **event with a lifecycle
+that recurs**: a subject denied once may ask again, which a column set cannot
+carry. `dsr_requests` is migration 264's shape one ladder over.
+
+**`users.deletion_requested_at` stays authoritative for "open"**, which is
+what lets rows predating 272 keep working with no backfill: the close
+**derives** the ledger row from the timestamp already stored. That is carrying
+a fact the database holds, not the backfill D136 refused — that one would have
+written an acceptance nobody gave. A partial unique index on
+`user_id WHERE outcome IS NULL` makes "at most one open request per subject"
+structural rather than a rule three handlers each have to remember, and it
+matches the `COALESCE` the request handler already used.
+
+**Both halves move in one `DB.batch`.** If the flag cleared and the record did
+not, the request would vanish from HQ's list with nothing saying what was
+decided — so the batch throws and the route answers 503 with the reason,
+rather than clearing the flag on its own.
+
+### Consolidated rather than copied, and the reason is testability
+
+The ledger has three writers in two route files. Written three times one of
+them would eventually forget to move the flag, so `openDsrRequest`,
+`withdrawDsrRequest`, `closeDsrRequest`, `loadDsrHistory` and `dsrDaysLeft`
+live in one service — which is also what lets the assertions run the real
+writes against a `node:sqlite` database built from **migration 272 itself**,
+sliced off disk. A hand-written fixture that omitted the CHECK or the partial
+index would be testing a shape production does not have, which is the defect
+D139 found in the contract fixture.
+
+The subject's two handlers call it **best-effort**: a member must be able to
+request and to cancel whatever state HQ's ledger is in. An unreadable ledger
+on the READ path reports `ledger_available: false` and the page renders
+*earlier requests unknown* — never 0, because "this subject has never asked
+before" is a claim and an unreadable store has not made it (#204, on a screen
+where a third ask read as a first changes a decision).
+
+### Deliberately not built
+
+**The subject's own view of the outcome beyond their activity feed.** The
+close writes an `activity_logs` row addressed to the subject, which
+`routes/activity.ts` `GET /recent` already reads — so the outcome reaches them
+with no new surface. A dedicated panel in their Settings is a separate change
+and is filed rather than folded in.
+
+**Migration 272, and it was 271 until the day it merged.** `271_archetype_sex.sql`
+landed on `main` from #662 while this branch was open, so the DSR ledger was
+renumbered before merge — this repo's stated rule on collision, and worth
+taking even though the runner tolerates a duplicate prefix
+(`scripts/lib/migrationPlan.mjs:62` sorts by number then filename precisely
+because `011_`, `068_`, `118_` and `259_` are already doubled, and adding a
+fifth would be adding to a list the tooling calls out as something it has to
+work around). **273 is now the next free number.**
+
+### And the guard that should have caught the collision watched two numbers
+
+`frontend/test/partner_delivery_stores.test.mjs` already held the rule, in its
+own words — *"two files numbered N order by filename, which is not a decision
+anyone made"* — and enforced it against `[208, 209]`, the two its author was
+adding at the time. So the rule was stated correctly and checked against two
+instances of it. Every other number was unwatched, and one duly collided.
+
+That is the D147/D161/D164 class again, from a third angle: **an assertion
+scoped to the instances that existed when it was written cannot see the next
+one.** It is widened here to a named ledger of the four numbers that are
+genuinely doubled (`011`, `068`, `118`, `259`), refusing both a fifth duplicate
+and a *stale* entry — a line that no longer points at two real files is a line
+nobody can check, which is the rule `scripts/sql-prepare-baseline.json` already
+states for its own. Mutation-checked three ways, including by putting this PR's
+actual collision back: `271_dsr_requests.sql` beside `271_archetype_sex.sql`
+now fails the suite.
+
+## D169
+
+**A decision the subject was never shown — the amber line vanished the moment
+HQ made one, and the only place the outcome surfaced was a feed twenty rows
+deep.**
+
+D168 gave HQ the power to close a data-subject request and deliberately left
+this half unbuilt, filed rather than folded in. This is that half.
+
+`users.deletion_requested_at` is the **open flag**, and `closeDsrRequest`
+clears it in the same batch that records the outcome — correctly, because it is
+what stops HQ's amber list showing a request that has been decided. The
+consequence on the other tier is that the subject's own Settings page loses its
+*"Deletion requested &lt;date&gt;"* line at exactly that moment, with nothing in
+its place. The subject asked, waited out a GDPR Art. 12(3) clock, and the
+screen returned to as if they had never asked.
+
+It is not quite silent: D168's close writes an `activity_logs` row addressed to
+the subject, and `routes/activity.ts` `GET /recent` reads it, so the outcome
+does reach the Cmd+K palette's recent feed — **capped at 20 rows, on a surface
+nobody opens to find out whether their erasure request was refused.** A denial
+that vanishes is the worst of the three outcomes, so `settings.ts`'s GET now
+carries the subject's last closed row and the deletion card renders it in the
+slot the amber line vacates.
+
+**`loadOwnDsrOutcome` is a separate query, not a filter over `loadDsrHistory`.**
+That one is HQ's cross-subject `GROUP BY`; this is one subject's terminal state,
+and it rides `idx_dsr_requests_user`. It inherits the rule that matters:
+**unreadable is not "nothing was decided"** (#204). Migration 272 carries no
+runtime bootstrap, so a database behind on migrations genuinely has no table —
+and rendering that as silence would reproduce the very defect this entry closes,
+on the very screen, for the subject whose request *was* decided.
+
+**No outcome is filtered out, and the reason is a bug that filtering causes.**
+Hiding `withdrawn` on the grounds that the subject already knows they cancelled
+would surface the *next* row down — so someone denied, who asked again and then
+withdrew, would be shown the **old denial** as their current state. One row, the
+last one, whatever it says. `outcome` is also the whole discriminator between
+HQ's decision and the subject's own act: `withdrawn` is writable only by
+`withdrawDsrRequest`, because HQ's route gates on `isHqDsrOutcome` and that list
+omits it. `closed_by_user_id` is deliberately **not** selected for it — a second
+column saying the same thing is a second thing that can disagree.
+
+**The judgement call, stated so it is cheap to reverse: the reason HQ typed is
+shown to the subject verbatim.** It is written to be read by a regulator and the
+subject is the person it is about, so withholding it would mean HQ recording a
+justification the only affected party cannot see. *Strike it and the subject
+sees the outcome and its date, with the reason staying HQ-side.*
+
+**And it renders only while nothing is open**, which is not a detail: asking
+again after a refusal opens a new row and leaves the old outcome in place, so
+rendering both would put a stale denial beside a request the subject has just
+filed. The amber line owns the live state; this owns the terminal one.
+
+**Not built: an email.** `notify()` is the only honest fan-out and this would
+need a template and a category decision. The screen and the feed are what D169
+covers, and the entry says so rather than letting the gap read as an oversight.
+
+### The "duplicate block" was not one block rendered twice — one of them never rendered
+
+The plan for this entry said `SettingsPage.jsx` drew the deletion control in two
+places and that the second copy should *collapse into the first*. Measured, that
+is wrong in a way that would have done real damage:
+
+| | component | tab | renders? |
+| --- | --- | --- | --- |
+| the live one | `AccountDeletionCard` | **Account** | ✅ |
+| the other | `PrivacySection`'s `{!hideAccountDelete && …}` | Security & privacy | ❌ **never** |
+
+`PrivacySection` has exactly **one** call site and it **always** passes
+`hideAccountDelete`, so that branch was structurally unreachable. Both were born
+in the same commit — `02c6a12b1`, the tabbed-Settings split — which created the
+new card for the Account tab and **suppressed** the old copy rather than
+deleting it. Following the plan literally would have collapsed the **live**
+control into the **dead** one: deleting the working Request/Cancel buttons and
+putting this notice where nobody would ever see it.
+
+That is the D147/D161/D164 class a fourth time, from yet another angle: **a
+claim whose scope was what a grep matched, not what renders.** The dead branch
+is deleted here, and deleting it stranded six declarations — which is exactly
+what D164's two newly-armed rules (`noUnusedLocals` and the scoped
+`no-unused-vars`) are for. They named every one, including a seventh thing I had
+got wrong in the other direction: I removed `flash` from the signature too, and
+the guard caught that `copyPublicUrl` still uses it. The guards did the scoping,
+not my reading of the file.
+
+### A stamp that has been mis-parsed since the line shipped
+
+`deletion_requested_at` is written `datetime('now')` — SQL
+`YYYY-MM-DD HH:MM:SS` — and both copies of the amber line did a bare
+`new Date()` on it. That shape is not in the `Date` grammar: **V8 reads it as
+the reader's LOCAL time and other engines return `NaN`**, so "Deletion requested
+&lt;date&gt;" has been a day out for readers west of UTC, or blank, since it
+shipped. Pre-existing, in the exact line this change edits, and identical to the
+bug the new notice would otherwise have shipped with — so both now go through
+`toUtcInstant` (`lib/notices.js`), which D136 wrote and D138 lifted for exactly
+this. A sixth local copy of that fix is what the lib README's rule forbids.
+
+**No migration** — 272 shipped with D168 and **273 is the next free number**.
+**No new `/api/*` method**: the field rides the settings payload the page
+already fetches, so `check-api-drift` has nothing to say, and a second fetch for
+it would be a second round trip and a new entry for the drift gate to police.
+
+---
+
+## D170
+
+**The Semgrep workflow's exit code carried no information, and its upload step
+would have closed every alert it had ever opened.**
+
+`.github/workflows/semgrep.yml` ran the scan with `--error` under
+`continue-on-error: true`, with `if: always()` on the two steps after it. Those
+are not three independent settings; they are one knot, and each half hides the
+other:
+
+- `--error` means *exit 1 if there are findings*. This repo has ~40 standing
+  findings, so **every run** ended `##[error]Process completed with exit code 1`
+  — including the runs where semgrep had just printed *"Scan completed
+  successfully"*. A crash and the steady state printed the same line.
+- `continue-on-error: true` rewrites the step's **conclusion** to `success`, so
+  the default `if: success()` on later steps stays true. `if: always()` was
+  therefore redundant with it rather than a workaround for `--error` — which
+  matters, because it means **removing only one of the two leaves the path fully
+  open via the other**.
+
+### What that path was, and it is measured rather than argued
+
+A SARIF upload **replaces** a tool's alert set for the ref: every alert absent
+from the payload is closed as *fixed*. And a fatally-failed semgrep still writes
+a SARIF. Measured against semgrep 1.176.1, the version the new digest pins:
+
+| case | exit | SARIF |
+| --- | --- | --- |
+| findings, valid config | 0 | results present |
+| no findings, valid config | 0 | `results: []`, **`rules: 1`** |
+| bad config | **7** | written, valid, `results: []`, **`rules: []`** |
+| **one** bad config among good ones | **7** | written, valid, `results: []`, **`rules: []`** |
+| unreachable registry | 2 | **no SARIF** |
+
+So a crashed scan produced a structurally valid, schema-clean SARIF naming
+`Semgrep OSS` as its driver, which `continue-on-error` + `always()` sent
+straight to `upload-sarif`. The timeout made it reachable without any crash at
+all: `always()` fires on **cancellation** too, and `timeout-minutes` was 10
+against a scan already taking 4m37s.
+
+**Nothing in the payload separates the two, and the obvious field lies.**
+`invocations[0].executionSuccessful` is `true` on the crash output. The only
+honest in-payload signal is `tool.driver.rules` — empty after a crash, non-empty
+after a genuinely clean scan — and the only reliable signal at all is the exit
+code.
+
+### What lands
+
+`--error`, `continue-on-error: true` and both `if: always()` come out together;
+`timeout-minutes` goes 10 → 20. Findings exit 0 and are reported through the
+SARIF upload as before — **zero change to what a green check means for
+findings**. A scanner that could not run exits non-zero, fails the job, and the
+strip and upload steps are skipped, so the existing alerts are left alone.
+
+The container is pinned by digest —
+`semgrep/semgrep@sha256:34ab619b… # 1.176.1` — which was the only unpinned
+reference in `.github/workflows/`, against ~30 SHA-pinned `uses:` lines.
+`GOTCHAS.md` had already filed it as twice-diagnosed ruleset drift.
+
+### The two things deliberately NOT done
+
+**No refusal added to `scripts/strip-suppressed-sarif.py`.** A
+`tool.driver.rules`-empty check would be genuinely fireable — that is the one
+field that separates the payloads — but it is not *reachable* once the exit code
+is respected: every failure mode above exits non-zero and now fails the job one
+step earlier. What it would defend against is a future edit re-adding
+`always()`, and that is what `frontend/test/semgrep_workflow.test.mjs` pins, in
+CI, on every PR. The measurement is recorded in `GOTCHAS.md` so it is a one-line
+change if belt-and-braces is ever wanted.
+
+**No `category:` on the upload.** A category creates a *second* code-scanning
+configuration for this tool; the ~40 existing alerts belong to the unnamed one
+and would be orphaned rather than migrated.
+
+**The rule packs stay unpinned, and this entry says so rather than letting the
+digest read as more than it is.** The three `p/…` packs are still fetched from
+`semgrep.dev` per run, so finding counts can still move with no repo change.
+Vendoring them is the only real fix and could not be done from the build
+environment: `semgrep.dev:443` is a proxy policy denial (`CONNECT tunnel failed,
+403`).
+
+**No migration** — nothing touches D1, and **273 is still the next free number.**
+**No new `/api/*` method** and no `frontend/src` change, so neither
+`check-api-drift` nor `check-docs-fresh` has anything to say.
+
+---
+
+## D171
+
+**The ticket→GitHub mirror could not say it had failed, and the button built
+to check it could not fail either.**
+
+**2026-09-20. Reported live:** a ticket filed from the Eadwyn "File ticket"
+form never appeared in GitHub Issues. The first diagnosis was
+`GITHUB_ACCESS_TOKEN` unset — **wrong**. The token was set, org-approved, and
+the admin panel's **Test** button passed.
+
+**The measurement that reframed it** — *and it was wrong; the corrected
+version is below and is sharper.* The sweep run during the build reported
+that `AxalNetwork/StudioOS` had contained exactly **one** real issue in its
+entire history (`#305`, called hand-made), and concluded the mirror had
+**never once worked**. Every surface in the product reported health
+regardless, which is the part that held.
+
+### Correction — the mirror did work, twice, and then stopped
+
+Re-measured against **production D1** once 273 was applied, which is the
+first time the two sides could be joined:
+
+| ticket | created | mirrored |
+| --- | --- | --- |
+| 1 | 2026-04-16 11:55 | no |
+| 2 | 2026-04-16 13:24 | **yes → issue #3** |
+| 3 | 2026-04-17 11:10 | **yes → issue #4** |
+| 4–10 | 2026-07-05 → 2026-09-20 | **no — seven in a row** |
+
+Issues `#3` and `#4` are real issues, each created **within one second** of
+its ticket row — that one-second join is what makes them the mirror's own
+work rather than a coincidence. So the mirror worked for about a day in
+April, and has failed on every ticket since **5 July**, five months, up to
+and including the test ticket filed at 16:50Z on the day of the fix. `#305`
+is also not hand-made: it is `github-actions[bot]`.
+
+**Both halves of the original sweep were wrong** — the count and the
+authorship — and the likely cause is a filter that saw only open issues
+(`#3` and `#4` are closed). The lesson is the one this programme keeps
+relearning from the other side: **a sweep that returns a suspiciously round
+"never" deserves the same scepticism as a green check**. It was not caught
+by review; it was caught by joining it to a second store.
+
+**Nothing in the fix changes.** Every defect below is independent of how
+often the mirror worked: the probe read metadata, the failure had no column,
+the sync could not backfill, `/help` discarded the response. What changes is
+the **diagnosis of the cause**: not "never configured" but *a credential
+that lapsed*, which is exactly the failure a metadata probe is blind to,
+since `Metadata: Read` survives on a token that has lost everything else.
+The write test is what will now say so out loud.
+
+**Migration `273`'s own header carries the superseded sentence and is
+deliberately NOT edited.** `scripts/migrate-d1.mjs:492` compares each file's
+checksum against the ledger and warns on drift; editing an applied
+migration — even only its comment — would print that warning on every
+deploy from now on, which is how people learn to ignore warnings. An applied
+migration is immutable, comments included; this entry is where its claim is
+corrected.
+
+### Why the Test was green
+
+`routes/admin_github.ts`'s `POST /test` probed **`GET /repos/{owner}/{repo}`**
+— repository *metadata*. **A fine-grained PAT carries `Metadata: Read`
+automatically and the permission cannot be removed**, so that probe returns
+200 for a token holding no Issues access at all. The panel printed
+*"Connected to AxalNetwork/StudioOS."*, the badge went green, and
+`POST /issues` went on refusing. The panel's own copy said *"Needs Issues:
+Read and write"* and nothing checked it. **A check that cannot fail on the
+bug it exists for is decoration** — the rule this repo has applied a dozen
+times, here applied to a check of our own.
+
+The test now reports three named verdicts rather than one "Connected":
+`reachable` (metadata), `issues_readable` (the Issues permission exists at
+all), and `can_write` — which **defaults to the string `'unproven'`** and is
+settled only by `{ write: true }`, which creates a real issue and closes it.
+
+**A cheaper probe was designed, measured, and REJECTED — and the rejection is
+the part worth keeping.** The idea was to `POST /issues` with a deliberately
+invalid body and read **422** as *"authorised, payload merely bad"*, since
+that creates nothing. It requires GitHub to evaluate authorisation **before**
+payload validation. That ordering could not be confirmed: every attempt to
+test the unauthorised path from this environment returned 422, including one
+with a garbage token and one with **no `Authorization` header at all** — which
+is not GitHub's behaviour but the egress proxy's, since it demonstrably
+rewrites this session's GitHub traffic (it refuses the search API with a
+message of its own). So the evidence was **confounded, not supportive**, and
+shipping the probe would have re-created the exact defect above. Recorded
+rather than quietly dropped, because the next person will have the same idea.
+
+### The five silent paths beside it
+
+1. **The outcome had nowhere to live.** Every `github_*` column on `tickets`
+   records a mirror that *succeeded*; the failure had no column. `github_sync_error`
+   existed only in one HTTP response body — and `/help`'s own form discarded
+   it. **Migration 273** adds `github_sync_status`, `github_sync_error`,
+   `github_sync_attempted_at`, mirrored in `ensureTicketSyncSchema` because a
+   column in one definition and not the other is the `metrics_snapshots`
+   collision (#183, #202) again.
+2. **`POST /tickets/sync` could not backfill.** It selected
+   `github_issue_number IS NOT NULL`, so it refreshed only tickets that had
+   already mirrored and **silently skipped exactly the rows that needed it**.
+   Every ticket filed while the mirror was broken was stranded with no path to
+   GitHub. It now returns `unsynced_count` on every call and, for an admin
+   passing `{ backfill: true }`, creates the missing issues in bounded batches
+   of 25. **It reports before it acts**: this writes to a public repository and
+   an issue cannot be deleted through the API.
+3. **`setSecret()` believed the status line.** The Cloudflare v4 API answers
+   **HTTP 200 with `{"success": false}`** for a class of refusals, and only
+   `res.ok` was checked — so a secret that was never written produced a green
+   "saved" toast. It now parses the envelope. An unparseable 2xx still passes,
+   deliberately: failing closed there would refuse working saves.
+4. **`/help`'s ticket form threw the whole response away.** A failed mirror
+   was invisible there to admin and founder alike, while the Eadwyn panel
+   reported it honestly — the page people are pointed at was the silent one.
+   It now uses the same two-audience split: a `failed` mirror is said to
+   everyone, `not_configured` only to an admin, because it names a deployment
+   secret a founder cannot act on.
+5. **The panel had no control for the one check that settles it.** The write
+   probe exists now as its own button, beside a sentence saying why reaching
+   the repo proves nothing.
+
+### Filed, not fixed here
+
+`PUT /admin/github` pushes `GITHUB_REPO_OWNER` / `GITHUB_REPO_NAME` as Worker
+**secrets**, while `wrangler.toml:156-157,443-444` declares them as plain
+`[vars]` — so the next CI deploy silently reverts any admin edit to those two
+fields. Harmless today because the values match, but those inputs do not
+durably do anything. Its own concern. `admin_github.ts` also still writes no
+`admin_audit_log` row, unlike `admin_integration_keys.ts`.
+
+**Migration 273 is used; 274 is the next free number.** `frontend/src` moves,
+so `docs/` is rebuilt.

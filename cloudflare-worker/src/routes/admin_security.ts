@@ -11,6 +11,8 @@
  *                         the four stores that actually record one
  *   POST /force-reauth    sign every active account out, everywhere, with a
  *                         typed reason; recorded in admin_audit_log
+ *   POST /dsr/:userId/close   close a data-subject erasure request as
+ *                         fulfilled or denied, with a typed reason (D168)
  *
  * WHAT IS REAL HERE. The admin action audit (`admin_audit_log`, every action,
  * newest first — the existing /monitoring/audit read allows two actions only);
@@ -43,14 +45,16 @@ import type { Env } from '../types';
 import { IMPERSONATION_EXPIRY_MINUTES, requireSuperAdmin, requireSuperAdminWriteBar, bumpJwtMinIat } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
 import { loadGuardrailCounters } from '../services/aiRouter';
+import {
+  HQ_DSR_OUTCOMES, isHqDsrOutcome, loadDsrHistory, closeDsrRequest, dsrDaysLeft, DSR_CLOCK_DAYS,
+} from '../services/dsrRequests';
 
 const r = new Hono<{ Bindings: Env }>();
 
 const IMPERSONATION_LIMIT = 25;
 const SESSION_WINDOW_DAYS = 30;
-/** GDPR Art. 12(3): one month from receipt. Counted from the request, not from triage. */
-const DSR_CLOCK_DAYS = 30;
 const MIN_REASON = 8;
+
 
 type Absent = { available: false; reason: string };
 const absent = (reason: string): Absent => ({ available: false, reason });
@@ -198,16 +202,30 @@ r.get('/overview', async (c) => {
       WHERE deletion_requested_at IS NOT NULL
       ORDER BY deletion_requested_at ASC`,
   ).all<{ id: number; email: string; name: string; role: string; deletion_requested_at: string }>();
+
+  // D168 — WHAT EACH SUBJECT HAS ASKED BEFORE. `users.deletion_requested_at`
+  // is still the one source of "open" (see migration 272), so the list above
+  // is unchanged; this read only adds history, and a repeat request has to be
+  // visible as one or HQ reads a third ask as a first. Its unreadable state is
+  // its own — see `loadDsrHistory`, which is where the reason for that lives.
+  const ledger = await loadDsrHistory(env);
+  const ledgerAvailable = ledger.available;
+  const ledgerReason = ledger.available ? null : ledger.reason;
+
   const now = Date.now();
   const dsr = (dsrRows.results || []).map((u) => {
-    const requested = parseSqlTs(u.deletion_requested_at);
-    const elapsedDays = Number.isNaN(requested) ? null : Math.floor((now - requested) / 86400000);
+    const seen = ledger.available ? ledger.byUser.get(u.id) : undefined;
     return {
       id: u.id, email: u.email, name: u.name, role: u.role,
       requested_at: u.deletion_requested_at,
       // null when the timestamp cannot be parsed: an unknown clock is not a
-      // clock at zero.
-      days_left: elapsedDays === null ? null : DSR_CLOCK_DAYS - elapsedDays,
+      // clock at zero. The arithmetic lives in the service so it can fail a
+      // test — it had never had one.
+      days_left: dsrDaysLeft(parseSqlTs(u.deletion_requested_at), now),
+      // null rather than 0 whenever the ledger could not be read — see above.
+      prior_requests: ledgerAvailable ? (seen?.prior ?? 0) : null,
+      last_outcome: ledgerAvailable ? (seen?.outcome ?? null) : null,
+      last_outcome_at: ledgerAvailable ? (seen?.closed_at ?? null) : null,
     };
   });
 
@@ -217,7 +235,12 @@ r.get('/overview', async (c) => {
     sessions,
     mfa: { admins_total: Number(admins?.total) || 0, admins_with_mfa: Number(admins?.with_mfa) || 0 },
     kyc,
-    dsr: { clock_days: DSR_CLOCK_DAYS, rows: dsr },
+    dsr: {
+      clock_days: DSR_CLOCK_DAYS,
+      rows: dsr,
+      ledger_available: ledgerAvailable,
+      ...(ledgerReason ? { ledger_reason: ledgerReason } : {}),
+    },
     security_events: absent(
       'No security_events ledger exists. Failed sign-ins, step-ups, permission grants and exports are not '
       + 'collected into one feed; the admin action audit below is the only trail, and it records admin actions only.',
@@ -830,6 +853,111 @@ r.post('/force-reauth', async (c) => {
     affected,
     revoked_at: nowSec,
     message: 'Every active account has been signed out everywhere, including yours. Sign in again with your authenticator.',
+  });
+});
+
+/**
+ * D168 — CLOSE A DATA-SUBJECT REQUEST.
+ *
+ * THE DEFECT THIS EXISTS FOR. Before this route, `users.deletion_requested_at`
+ * was written only by the subject (routes/settings.ts request and cancel),
+ * read here against a statutory 30-day clock, and rendered by SecurityPage in
+ * amber with an overdue count — and this file declared four handlers, none of
+ * which could act on one. The only way a row left HQ's list was the subject
+ * cancelling. HQ watched a legal deadline it had no way to stop.
+ *
+ * SAME BAR AS FORCE RE-AUTH, and for a reason of its own rather than by
+ * symmetry: closing a request stops a statutory clock and writes the record
+ * a regulator would read. A cheaper gate would make the one act whose whole
+ * value is its trustworthiness the easiest one in this file to perform.
+ *
+ * BOTH HALVES MOVE IN ONE BATCH. The ledger row and `users.deletion_requested_at`
+ * are the record and the open flag; if either moved alone they would disagree,
+ * and the disagreement would be invisible — one screen would show a closed
+ * request still open, or an open request nobody can see. If the batch cannot
+ * run, NOTHING moves and the refusal says why: clearing the flag with no
+ * record is strictly worse than failing.
+ */
+r.post('/dsr/:userId/close', async (c) => {
+  const actor = await requireSuperAdminWriteBar(c);
+
+  const uid = Number(c.req.param('userId'));
+  if (!Number.isFinite(uid) || uid <= 0) {
+    return c.json({ error: 'A numeric user id is required.', code: 'invalid_target' }, 400);
+  }
+
+  let body: Record<string, unknown> = {};
+  try { body = (await c.req.json()) as Record<string, unknown>; } catch { body = {}; }
+  const outcome = String(body?.outcome ?? '').trim();
+  const reason = String(body?.reason ?? '').trim();
+
+  if (!isHqDsrOutcome(outcome)) {
+    return c.json({
+      error: `Outcome must be one of ${HQ_DSR_OUTCOMES.join(' or ')}. A withdrawal is the subject's own act and `
+        + 'is recorded when they cancel, not by HQ.',
+      code: 'invalid_outcome',
+    }, 400);
+  }
+  if (reason.length < MIN_REASON) {
+    return c.json({
+      error: `A reason of at least ${MIN_REASON} characters is required. It is stored with the action.`,
+      code: 'reason_required',
+    }, 400);
+  }
+
+  // REFUSE AN ABSENT TARGET rather than reporting a close of nobody — the same
+  // rule /force-reauth/:userId states above, and it bites harder here: the
+  // audit row would name a subject who does not exist against a statutory act.
+  const target = await c.env.DB.prepare(
+    'SELECT id, email, name, deletion_requested_at FROM users WHERE id = ?',
+  ).bind(uid).first<{ id: number; email: string; name: string | null; deletion_requested_at: string | null }>();
+  if (!target) {
+    return c.json({ error: 'No account holds that id.', code: 'user_not_found' }, 404);
+  }
+  if (!target.deletion_requested_at) {
+    return c.json({
+      error: 'That account has no open erasure request. One may have been closed already, or the subject '
+        + 'may have cancelled it themselves.',
+      code: 'no_open_request',
+    }, 409);
+  }
+
+  const subject = target.name || target.email;
+  try {
+    await closeDsrRequest(c.env, { userId: uid, actorUserId: actor.id, outcome, reason });
+  } catch (e) {
+    return c.json({
+      error: 'The request ledger could not be written, so nothing was changed — the request is still open. '
+        + `Migration 272 creates \`dsr_requests\`. (${(e as Error).message})`,
+      code: 'ledger_unavailable',
+    }, 503);
+  }
+
+  // `target_user_id` is the key `logAdminAction` reads for `viewed_user_id`,
+  // and it is what lets the governance feed's LEFT JOIN name the subject.
+  // Spelt `user_id` it would record a statutory act with a blank Target —
+  // which is why D159's guard refuses that spelling at every call site.
+  await logAdminAction(c.env, actor.id, actor.email, 'dsr_request_closed', {
+    reason,
+    target_user_id: uid,
+    outcome,
+  });
+
+  return c.json({
+    ok: true,
+    user_id: uid,
+    email: target.email,
+    outcome,
+    requested_at: target.deletion_requested_at,
+    // THE RESPONSE SAYS WHAT WAS AND WAS NOT DONE. `fulfilled` records that
+    // the manual erasure happened; this platform performs none, and a message
+    // implying otherwise would be the false claim the outcome list exists to
+    // avoid.
+    message: outcome === 'fulfilled'
+      ? `Recorded: ${subject}'s erasure request was fulfilled. This stops the statutory clock and records who `
+        + 'closed it and why. It does not itself erase anything — the erasure is the manual act you are recording.'
+      : `Recorded: ${subject}'s erasure request was denied, with your reason stored against it. The statutory `
+        + 'clock has stopped; they can make a new request.',
   });
 });
 
