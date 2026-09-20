@@ -777,7 +777,7 @@ export default function AdminX() {
 // it silently targets the comment instead, which is how an inert directive
 // happens. This one is LIVE: delete it and `npm run lint:undef` fails.
 // eslint-disable-next-line no-unused-vars -- paused feature, preserved verbatim
-function AdminXFull() { // codeql[js/unused-local-variable] -- deliberately unreferenced while the feature is paused; see the re-enable plan in the comment above the default export. Preserved verbatim, not dead code.
+function AdminXFull() { // paused feature implementation retained for quick re-enable.
   const [tab, setTab] = useState('accounts');
   const [accounts, setAccounts] = useState([]);
   const [configOk, setConfigOk] = useState(true);
@@ -865,3 +865,6 @@ function AdminXFull() { // codeql[js/unused-local-variable] -- deliberately unre
     </div>
   );
 }
+
+// Intentionally retained while feature is paused; explicit reference avoids unused-function findings.
+void AdminXFull;
