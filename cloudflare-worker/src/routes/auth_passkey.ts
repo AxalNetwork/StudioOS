@@ -38,7 +38,7 @@ const CHALLENGE_TTL_MIN = 5;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 function err(c: any, label: string, friendly: string, e: unknown, status = 500) {
-  console.error(`[PASSKEY:${label}]`, e);
+  console.error('[PASSKEY]', label, e);
   return c.json({ error: friendly }, status);
 }
 

@@ -1923,7 +1923,7 @@ export default {
                 console.info(`[cron] axal-search re-embed type=${type} ok=${okCount} failed=${failed} watermark=${lastOk}`);
                 await recordReembed(type, okCount, failed, 0);
               } catch (e) {
-                console.error(`[cron] axal-search re-embed ${type} failed`, e);
+                console.error('[cron] axal-search re-embed failed', type, e);
               }
             }
           } catch (e) {
