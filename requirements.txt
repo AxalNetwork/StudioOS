@@ -6,7 +6,7 @@ aiohttp==3.14.3
     # via pywebpush
 aiosignal==1.4.0
     # via aiohttp
-alembic==1.19.2
+alembic==1.20.0
     # via repl-nix-workspace
 annotated-doc==0.0.5
     # via fastapi
@@ -49,7 +49,7 @@ google-api-core==2.36.0
     # via google-api-python-client
 google-api-python-client==2.200.0
     # via repl-nix-workspace
-google-auth==2.57.1
+google-auth==2.58.0
     # via
     #   google-api-core
     #   google-api-python-client
@@ -88,7 +88,7 @@ mako==1.4.1
     # via alembic
 markupsafe==3.0.3
     # via mako
-multidict==6.7.1
+multidict==6.8.0
     # via
     #   aiohttp
     #   yarl
@@ -106,7 +106,7 @@ protobuf==7.36.1
     #   googleapis-common-protos
     #   proto-plus
     #   repl-nix-workspace
-psycopg2-binary==2.9.12
+psycopg2-binary==2.9.13
     # via repl-nix-workspace
 py-vapid==1.9.4
     # via pywebpush
@@ -123,7 +123,7 @@ pydantic==2.13.5
     #   sqlmodel
 pydantic-core==2.46.5
     # via pydantic
-pyjwt==2.13.0
+pyjwt==2.14.0
     # via repl-nix-workspace
 pyotp==2.10.0
     # via repl-nix-workspace
