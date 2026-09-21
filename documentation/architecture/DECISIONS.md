@@ -15922,3 +15922,26 @@ It does not claim the bare comparison would have shipped. It would not:
 form was verified to fail it by name. What changes here is that **the test
 whose name is "the comparison must not be format-blind" is now the thing that
 catches it**, instead of passing while another guard did the work.
+
+---
+
+## D178 — `investorPipeline.js` was 402 lines of IC fixtures nothing imported
+
+**Deleted.** `frontend/src/data/investorPipeline.js` had no importer anywhere in
+the repo: a sweep excluding `node_modules`, `docs/` and `.git` returned exactly
+two hits, neither of them an import — its own row in
+`frontend/src/data/README.md`, and a stale CodeQL alert transcript under
+`attached_assets/`.
+
+**Why it mattered beyond dead weight.** It shipped deterministic demo data
+shaped like real investment-committee records, including a member vote row
+reading `{ member: 'Leo Park', vote: 'abstain', note: 'Recused — angel in a
+competitor.' }`. The `/deals/commit` page is being built against `ic_votes`,
+whose `vote` column admits `yes | no | abstain` and carries **no recusal state
+at all**. A plausible recusal fixture listed in the folder README as live data
+is an invitation to wire demo rows into a customer's IC record — the class this
+directory's own "This is not a fixtures folder" section exists to close, and
+which it had not finished closing.
+
+The README row went with the file, because `scripts/check-folder-docs.mjs`'s
+TRUTH rule fails the build on a README citing a path that does not resolve.
