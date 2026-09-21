@@ -40,6 +40,7 @@ import {
 } from '../src/rpc/branchOps.ts';
 import { verifySecret, sha256Hex } from '../src/rpc/secret.ts';
 import { pickAuthToken } from '../src/auth.ts';
+import { expiredIso } from './_timeFixture.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel: string) => readFileSync(resolve(ROOT, rel), 'utf8');
@@ -284,25 +285,49 @@ test('an EXPIRED code refuses — the comparison must not be format-blind', asyn
   const offer = await openSupportSession(env, HQ_SECRET, {
     hq_actor_name: 'Sue Hart', target_user_id: TARGET, reason: REASON,
   });
-  // AGE THE ROW IN WHATEVER FORMAT THE WRITER CHOSE. The first version of this
-  // test overwrote `expires_at` with `datetime('now','-1 minute')` outright,
-  // which forced the SQLite format on to the row no matter what the code had
-  // written — so it proved the comparison side and was blind to the write side,
-  // and the exact bug it exists for walked straight through it. Reading the
-  // stored value and ageing it in kind is what makes the assertion able to
-  // fail: an ISO writer now yields an ISO past value, compared as TEXT against
-  // a space-separated one, which reads as LIVE and redeems.
-  const stored = String((db.prepare('SELECT expires_at FROM support_handoff_codes').get() as any).expires_at);
-  const aged = /T/.test(stored)
-    ? new Date(Date.parse(stored) - 3_600_000).toISOString()
-    : (db.prepare("SELECT datetime('now', '-1 hour') AS v").get() as any).v;
-  db.prepare('UPDATE support_handoff_codes SET expires_at = ?').run(aged);
 
-  // SAME UTC DAY, deliberately: the broken comparison only misbehaves until the
-  // date rolls over, so a test that aged the row by a day would pass either way.
-  assert.equal(aged.slice(0, 10), stored.slice(0, 10), 'the ageing crossed a UTC day');
+  // THE WRITE SIDE IS ASSERTED, NOT ADAPTED TO — and that is the correction
+  // D177 makes. Two earlier versions READ the stored value and BRANCHED on its
+  // format, under a comment claiming that was what gave the test power over the
+  // write side. It is not: branching adapts to the writer and constrains
+  // nothing. Change the INSERT to `.toISOString()` and a branching test simply
+  // takes the other branch and still passes. Migration 262 states SQL format as
+  // a requirement rather than a convention — `openSupportSession`'s own note
+  // says both sides come from one clock in one format — so it is asserted as
+  // one, in a line that fails deterministically at any hour.
+  assert.match(
+    offer.expires_at, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/,
+    'the writer no longer emits SQLite format — migration 262 requires it',
+  );
 
+  // AGE IT IN THE ADVERSARIAL FORMAT, WHICH IS THE ONE THIS WRITER DOES NOT USE.
+  // The `datetime()` wrapper exists to be right for ANY writer (D124), so the
+  // only fixture that can test it is one the writer would never produce. Ageing
+  // in the writer's own format — what this test did until D177 — compares SQL
+  // against SQL, where lexicographic order IS chronological order, so the
+  // wrapped and the bare predicate agree and a dropped wrapper is invisible at
+  // every hour. Forcing the BENIGN format was the original sin this test's
+  // comment condemned; forcing the ADVERSARIAL one is the fixture doing its job.
+  //
+  // `expiredIso` pins the value to TODAY'S UTC DATE because position 10 only
+  // decides the comparison while the date halves match — and the half that
+  // matters is `datetime('now')`'s, never the stored value's. A relative
+  // fixture broke on both counts: "an hour ago" lands on yesterday in the first
+  // hour of a UTC day, and `stored = now + 5 minutes` lands on tomorrow in the
+  // last five minutes of one, so the old same-day assertion failed against
+  // correct code for 65 minutes a day. Third caller of the helper; D124 and
+  // D125 use it for six other tables.
+  db.prepare('UPDATE support_handoff_codes SET expires_at = ?').run(expiredIso(db));
   await assert.rejects(() => redeemSupportCode(env, offer.code), /not valid/);
+
+  // AND IN THE WRITER'S OWN FORMAT — the row shape production actually makes.
+  // The same row serves both: a refused redeem's UPDATE matches nothing, so
+  // `used_at` is still NULL. No midnight pin here, deliberately: with both
+  // sides in one format there is no date-prefix invariant to protect, so
+  // `-1 hour` is correct at every hour and reads as what it is.
+  db.prepare("UPDATE support_handoff_codes SET expires_at = datetime('now', '-1 hour')").run();
+  await assert.rejects(() => redeemSupportCode(env, offer.code), /not valid/);
+
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM user_sessions').get().n, 0);
 });
 

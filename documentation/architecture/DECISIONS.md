@@ -15733,3 +15733,142 @@ and CLAUDE.md §4 notes the deploy workflow rebuilds `docs/` at deploy time, so
 the committed build is not proof about the shipped one. The cause is still open;
 what this guard changes is that **if it ever is a 404, it fails before the
 deploy instead of after it.**
+
+
+## D177
+
+**A test named "the comparison must not be format-blind" aged its fixture in
+the writer's own format, which is the one format that cannot detect
+format-blindness — and the assertion guarding that choice failed against
+correct code for 65 minutes a day.**
+
+**2026-09-21.** `cloudflare-worker/test/support_session_d120.test.ts`'s expired-code
+test was the only `not ok` in a 3566-test worker suite, red on #684 and on
+`main`, deterministically, for any run in the first hour of a UTC day. Fixing
+it found that the clock fragility was the smaller of two defects and that the
+larger one was in the design the fragility was protecting.
+
+### The reported defect, measured twice — 65 minutes a day, not 60
+
+The test aged the stored `expires_at` by an hour and asserted the ageing had
+not crossed a UTC day. Reproduced live at **00:40:44Z**, and again at
+**00:50:15Z** while the fix was being written:
+
+```
+now           2026-09-21 00:40:44
+stored (+5m)  2026-09-21 00:45:44      SUPPORT_CODE_TTL_MINUTES = 5
+aged  (-1h)   2026-09-20 23:40:44      same-day-as-stored? FALSE  ->  assertion fails
+```
+
+Sampling the boundary found **two** windows with **different causes**, where
+the task was filed with one:
+
+| now (UTC) | old fixture holds? | why |
+| --- | --- | --- |
+| 23:54:00 | yes | |
+| **23:56:00** | no | `stored = now + 5 min` lands on **tomorrow** |
+| **23:59:30** | no | same |
+| **00:00:30** | no | `aged = now - 1 h` lands on **yesterday** |
+| **00:59:30** | no | same |
+| 01:00:30 | yes | |
+
+And the assertion was aimed at the wrong operand. Format-blindness turns on
+position 10, which only decides a TEXT comparison while the two operands share
+a date prefix — and the operand the predicate compares against is
+`datetime('now')`, never `stored`. `stored` is in the future and may
+legitimately be tomorrow.
+
+### THE FINDING THAT REVERSED THE FIX: ageing in kind cannot test the thing the wrapper is for
+
+The test's own comment recorded, correctly, that an earlier version had forced
+SQLite's format on to the row *"no matter what the code had written — so it
+proved the comparison side and was blind to the write side, and the exact bug
+it exists for walked straight through it"*. The first design here honoured that
+by keeping the format branch and only replacing the relative offset with
+midnight-today. An adversarial review of that design measured what it actually
+catches, and the answer is: **not the defect in its own name.**
+
+`openSupportSession` writes `datetime('now', '+5 minutes')` — SQLite format. So
+"age it in kind" produces a SQLite-format past value, and:
+
+```
+'2026-09-21 00:00:00' > '2026-09-21 00:52:34'   ->  0     (bare)
+datetime('2026-09-21 00:00:00') > datetime('now') ->  0     (wrapped)
+```
+
+Both operands are one format, where lexicographic order **is** chronological
+order, so the wrapped and the bare predicate agree and **a dropped
+`datetime()` wrapper is invisible at every hour of every day**. Confirmed by
+mutation: with the fixture forced to the writer's format, removing the wrapper
+escapes the suite entirely.
+
+Two further things the review measured, each of which stands on its own:
+
+1. **The claimed write-side coverage does not exist in any version.** Reading
+   `stored` and BRANCHING on its format *adapts* to the writer; it constrains
+   nothing. Mutate the INSERT to `.toISOString()` and a branching test silently
+   takes the other branch and still passes.
+2. **The wrapper's guarded property is writer-independence.** D125 states it in
+   as many words — *"Only normalising the stored value fixes existing rows, and
+   it keeps working for any writer added later"* — and
+   `scripts/check-timestamp-comparisons.mjs` refuses a bare TTL column with no
+   allowlist for exactly that reason, its header noting that four sites already
+   correct because their writers emit SQLite format *"were converted anyway"*.
+   A fixture that copies the writer is structurally incapable of testing a
+   property defined as holding for every writer.
+
+**So the original sin was forcing the BENIGN format, not forcing a format.**
+Forcing the adversarial one is the fixture doing its job. That reverses this
+decision's own first design, and it is recorded rather than quietly swapped.
+
+### What ships
+
+| | |
+| --- | --- |
+| **the write side is asserted, not adapted to** | `assert.match(offer.expires_at, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)`. Migration 262 states SQLite format as a correctness requirement rather than a convention, and `openSupportSession`'s own note says both sides come from one clock in one format — so it is asserted as one, deterministically, at any hour. This is the coverage the deleted format branch only claimed |
+| **an ISO row — the adversarial probe** | `expiredIso(db)` from `_timeFixture.mjs`, its **third** caller after D124 and D125, which use it across six other tables. Pinned to today's UTC date because position 10 only decides while the date halves match |
+| **a SQLite-format row — the shape production makes** | `datetime('now','-1 hour')`, and deliberately **not** midnight-pinned: with both sides in one format there is no date-prefix invariant to protect, so an offset is correct at every hour. One row serves both halves — a refused redeem's UPDATE matches nothing, so `used_at` is still NULL |
+| **the same-day assertion is deleted, not repaired** | once the fixture is midnight-anchored it cannot fail, and an assertion that cannot fail is not a guard. Nor is it replaced by one re-asserting `expiredIso`'s own contract inside a test that is not about `expiredIso`: `_timeFixture.mjs` documents that contract and neither existing caller re-states it |
+| **no `expiredSql` sibling** | the plan proposed one beside `expiredIso`. Struck: the SQLite-format expired value now appears once, inline, and the repo's rule triggers at the third occurrence. A parallel name needing **no** midnight pin, beside one that does, is a near-twin that invites the wrong one being used |
+
+No migration — **274 stays free.** No `frontend/src` change, so no `docs/`
+rebuild. No new `/api/*` method. `check-timestamp-comparisons.mjs` scans
+`cloudflare-worker/src` only (`ROOT` is set there), so a test-file change
+cannot trip it.
+
+### Verification, and the two mutation results that had to be read rather than reported
+
+The red was shown **before** the fix and the green **after**, both inside the
+window, four minutes apart: `not ok 10` with its own message at 00:50:15Z,
+15/15 and exit 0 at 00:54:15Z. Past 01:00 the before-half is no longer
+reproducible without faking a clock, which is why it was taken first.
+
+| mutation | result |
+| --- | --- |
+| bare comparison (drop the wrapper) | **caught** — the headline, and the one the previous design missed at every hour |
+| bare column vs `CURRENT_TIMESTAMP` | **caught** |
+| delete the expiry clause | **caught** |
+| writer emits ISO instead of SQLite format | **caught**, by the new write-side assertion alone |
+| `>` inverted to `<` | **caught**, here and by two neighbouring tests |
+| a two-hour grace window added to the stored expiry | **caught** |
+
+**One mutation was withdrawn as invalid rather than reported as an escape.**
+`datetime(expires_at) > CURRENT_TIMESTAMP` escaped — correctly: measured,
+`CURRENT_TIMESTAMP` and `datetime('now')` return byte-identical strings, so
+with the left side wrapped the two predicates are the same predicate. There is
+no defect for the test to catch. (`check-timestamp-comparisons` refuses the
+spelling anyway, on the right grounds: the *unwrapped* form is broken.)
+
+**And one "escape" is a demonstration, not a miss.** Pairing the bare
+comparison with a fixture forced back to the writer's own format passes the
+suite — which is precisely the point: it is what proves the adversarial format
+is load-bearing, and it is the measured form of the argument above.
+
+### What this does not claim
+
+It does not claim the bare comparison would have shipped. It would not:
+`check-timestamp-comparisons.mjs` runs in `test:guards` on every CI run,
+`expires_at` is in its `TTL_COLUMN` list, and mutating line 1006 to the bare
+form was verified to fail it by name. What changes here is that **the test
+whose name is "the comparison must not be format-blind" is now the thing that
+catches it**, instead of passing while another guard did the work.
