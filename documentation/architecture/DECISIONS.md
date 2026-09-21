@@ -15525,3 +15525,98 @@ one door only, and the page's three states.
 for having both files: the predicate returning `true` for everyone, and an
 audit write able to fail a download, are caught **only** by the behavioural
 suite — a source scan cannot see either.
+
+---
+
+## D175
+
+**The Platform Personas weekly digest is retired — and its guard kept its count
+in the test's name, where nothing could fail on it.**
+
+**2026-09-20.** The user photographed two `MI_PERSONAS_WEEKLY_DIGEST` cards in
+their inbox — *"Platform Personas — weekly snapshot"*, six days and thirteen
+days old — and asked for the notification and its email to stop. The decision
+was **retire it entirely**: delete the producer so nobody receives another one,
+rather than narrow its audience or gate it behind a preference.
+
+### What was deleted, and the blast radius was exactly four sites
+
+A repo-wide sweep for `sendPlatformPersonasDigest|mi_personas_weekly_digest|
+personas:digest|PlatformPersonasDigest` across `.ts .tsx .js .jsx .mjs .sql .md
+.json` returned **four real sites and nothing else** — no type union, no email
+template, no label map, no SQL, no migration:
+
+| file | what went |
+| --- | --- |
+| `cloudflare-worker/src/routes/market_intel.ts` | the docblock and `sendPlatformPersonasDigest` — 58 lines. It was the last thing in the file before its own `export { MARKET_PULSE, STUDIO_BENCHMARKS }`, so the delete leaves the exports untouched |
+| `cloudflare-worker/src/index.ts` | the Monday 09:00 UTC cron block — 12 lines, self-contained, its own `try/catch` and its own dynamic import, so nothing else in the scheduled handler moves |
+| `cloudflare-worker/test/branch_licence_copy.test.ts` | one of four regexes in the `gated` array, plus the test's own title — below |
+| this file | D175 |
+
+**No migration — 274 stays free.** **No orphaned import:** the function's only
+external dependency was a function-local `await import('../services/notify')`;
+`Env` is used throughout the file and stays.
+
+### THE GUARD HELD ITS COUNT IN THE TEST'S NAME
+
+`test('the four platform-content cadences are gated on HQ in the scheduled
+handler')` — and there was no `assert.equal(gated.length, 4)` anywhere in its
+body. Dropping the personas regex leaves three, so the title had to move in the
+same edit or the repo would ship a test whose name states a count its body
+contradicts.
+
+That is the `sidebarConfig.js:88` shape D146 had to correct: *"All eight resolve
+today"* written above eleven rows. **A count in prose is a count that goes stale
+silently.** So the count did not merely move from "four" to "three" — it moved
+out of the title and into `assert.equal(gated.length, 3)`, where a fourth
+cadence added later fails the suite rather than quietly making the name wrong
+again.
+
+The guard also gained the assertion the retirement itself needs:
+`assert.doesNotMatch(src, /sendPlatformPersonasDigest/)`. Deleting a cron block
+with no assertion behind it leaves nothing to notice when a later edit re-adds
+the fan-out — and a re-add would most likely arrive without the `hqCadences`
+gate, which is the failure the surrounding test exists for.
+
+### Two things measured so they are not re-derived
+
+- **`notify()`'s `type` is a plain `string`** (`services/notify.ts:57`), not a
+  union. So deleting a producer owes no type change — and nothing validates the
+  value, which is worth knowing and is not this change's problem to fix.
+- **The KV marker needs no cleanup.** `personas:digest:<iso-week>` was written
+  with `expirationTtl: 14 * 86400`, so every marker expires on its own within a
+  fortnight. Deleting them by hand would be work with no effect.
+
+### What this deliberately does NOT do, so nothing reads as finished that is not
+
+- **The two rows already in the user's inbox survive.** Retiring the producer
+  stops new ones; it does not clear what `notifications_inbox` already holds.
+  Clearing them is a write to live production data and needs its own say-so —
+  a `DELETE FROM notifications_inbox WHERE type = 'mi_personas_weekly_digest'`
+  against `studioos-db`, which this decision does not authorise and did not run.
+- **Inert `notification_prefs` keys.** `users.notification_prefs` is a JSON blob
+  keyed by notification type (`notify.ts:135-147`, read by `resolveChannels`),
+  so any user who had toggled a channel off for this event still carries a
+  `mi_personas_weekly_digest` key pointing at a type nothing produces. Harmless
+  — `resolveChannels` only ever reads the key it is asked for — and reading how
+  many exist is a production query. Filed here, not done.
+
+**This is a producer retirement, not a data cleanup, and the entry says which.**
+
+### The measurement that corrected the plan: the worker count did not move
+
+The plan predicted the worker test count would drop by whatever the deleted
+block owned, and said to name the figure rather than let it read as a
+regression. Measured: `test:drift` **exit 0**, worker **3566 → 3566** — 3563
+pass plus the same three pre-existing environment-gated skips — frontend 2789
+and retention 35 both unchanged, **zero `not ok`**.
+
+The figure is zero, and that is the finding rather than a non-event.
+`sendPlatformPersonasDigest` **had no test of its own anywhere in the repo**:
+its only appearance outside its own definition and its one cron call site was a
+regex inside one assertion of one test, and dropping a regex from an array does
+not change a test count. So 58 lines of production code that fanned an email out
+to every Studio, Institutional, admin, partner and advisor account every Monday
+ran weekly with nothing asserting anything about it — not who it reached, not
+that it reached anyone, not that it stopped. That is how it stayed shipped long
+enough to be noticed from an inbox rather than from a test.

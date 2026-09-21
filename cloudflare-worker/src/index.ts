@@ -1761,18 +1761,6 @@ export default {
           try { await Jobs.enqueue(env, 'mi_reduce', {}); }
           catch (e) { console.error('[cron] mi_reduce enqueue failed', e); }
         }
-        // Task #4 (CF) — Platform Personas weekly digest. Mondays 09:00 UTC.
-        // Fan-outs to Studio/Institutional + admin/partner/mentor only.
-        // Idempotent via ISO-week KV marker inside the helper.
-        if (hqCadences && now.getUTCDay() === 1 && now.getUTCHours() === 9 && now.getUTCMinutes() === 0) {
-          try {
-            const { sendPlatformPersonasDigest } = await import('./routes/market_intel');
-            const r = await sendPlatformPersonasDigest(env);
-            if (!r.skipped) {
-              console.info(`[cron] personas digest scanned=${r.scanned} sent=${r.sent}`);
-            }
-          } catch (e) { console.error('[cron] personas digest failed', e); }
-        }
         // Task #2 — funnel_events retention purge at 04:20 UTC. First-party
         // funnel rows are pseudonymous but still subject to GDPR storage
         // limitation; 180 days is ample for cohort comparisons (window is
