@@ -4625,10 +4625,19 @@ export const api = {
 
     // Funds — founder-facing fund research (migration 216). Every read is
     // owner-scoped in the worker; there is no cross-user listing to call.
+    // Sheet sync is Super Admin only (`requireSuperAdmin` on the worker).
     funds: () => request('/research/funds'),
     fundCreate: (data) => request('/research/funds', { method: 'POST', body: JSON.stringify(data || {}) }),
     fundUpdate: (uid, data) => request(`/research/funds/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
     fundRemove: (uid) => request(`/research/funds/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+    fundSheetStatus: () => request('/research/funds/sheet/status'),
+    fundSheetConnect: () => request('/research/funds/sheet/connect', { method: 'POST' }),
+    fundSheetDisconnect: () => request('/research/funds/sheet', { method: 'DELETE' }),
+    fundSheetLink: (url) => request('/research/funds/sheet/link', {
+      method: 'PATCH', body: JSON.stringify({ url }),
+    }),
+    fundSheetPull: () => request('/research/funds/sheet/pull', { method: 'POST' }),
+    fundSheetPush: () => request('/research/funds/sheet/push', { method: 'POST' }),
 
     // Benchmarks (migration 217). A peer figure without its source and sample
     // size is refused by the route AND by the schema's CHECK.

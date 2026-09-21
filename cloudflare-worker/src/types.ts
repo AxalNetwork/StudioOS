@@ -85,6 +85,20 @@ export interface Env {
   // "Continue with Google" buttons.
   GOOGLE_AUTH_CLIENT_ID?: string;
   GOOGLE_AUTH_CLIENT_SECRET?: string;
+  // Dedicated Google Sheets OAuth for `/research/funds` sync. SEPARATE from
+  // the calendar client (`GOOGLE_CAL_*` / `GOOGLE_CLIENT_*`) so adding the
+  // spreadsheets scope never forces calendar users to re-consent. Resolution
+  // in `services/fundSheets.ts`: SHEETS-specific → legacy GOOGLE_CLIENT_* →
+  // calendar client as last resort (same Cloud project, different redirect
+  // URI and token table). When none resolve, the Funds page says so instead
+  // of offering a Connect button that cannot complete.
+  GOOGLE_SHEETS_CLIENT_ID?: string;
+  GOOGLE_SHEETS_CLIENT_SECRET?: string;
+  GOOGLE_SHEETS_REDIRECT_URI?: string;
+  // Calendar-specific OAuth client (Task #52). Optional; `services/calendar.ts`
+  // already reads these via `(env as any)` and falls back to GOOGLE_CLIENT_*.
+  GOOGLE_CAL_CLIENT_ID?: string;
+  GOOGLE_CAL_CLIENT_SECRET?: string;
   MICROSOFT_CLIENT_ID?: string;
   MICROSOFT_CLIENT_SECRET?: string;
   MICROSOFT_TENANT_ID?: string;
