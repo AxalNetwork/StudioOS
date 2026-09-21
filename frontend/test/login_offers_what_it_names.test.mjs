@@ -58,58 +58,99 @@ test('the blurb is derived from the live methods, and the derivation is the one 
   // that hard-codes 'Google' into the list is the original bug with extra steps.
   const decl = src.slice(src.indexOf('const alsoList'), src.indexOf('const alsoAvailable'));
   assert.ok(decl.length > 0, 'could not find the alsoList derivation');
-  assert.match(decl, /googleProbe === 'yes'/, "'Google' must be named only when the probe said yes");
+  // 2026-09-21: Google moved from conditional to UNCONDITIONAL, so naming it is
+  // true by construction rather than by a probe agreeing. The property this file
+  // exists for — never name a method that is not offered — is unchanged and now
+  // holds more strongly: the sentence and the control are both unconditional.
+  assert.match(decl, /^\s*'Google',\s*$/m, "'Google' is always offered, so it is always named");
   assert.match(decl, /passkeySupported/, "'passkey' must be named only when the browser supports one");
   // ...and the sentence must actually consume it.
   assert.match(src, /\{`? ?\$\{alsoAvailable\}/, 'the rendered sentence must interpolate alsoAvailable');
 });
 
-test('the Google probe has three states, so "not asked yet" is not rendered as "no"', () => {
-  // A boolean initialised false cannot tell those apart, and both rendered as
-  // silence. `googleAvailable` is gone on purpose.
-  assert.ok(!/googleAvailable/.test(src), 'the two-state flag is back; it cannot express "probing"');
-  assert.match(src, /useState\('probing'\)/, "the probe must start in a 'probing' state");
-  assert.match(src, /setGoogleProbe\('yes'\)/);
-  assert.match(src, /setGoogleProbe\('no'\)/);
-});
+test('there is NO pre-flight probe — the Google button is never gated on one', () => {
+  // THE DEFECT THIS FILE NOW OWNS. Until 2026-09-21 this page called
+  // /api/auth/google/start on mount and rendered the button only if that call
+  // resolved. Four unrelated things made it fail — the endpoint is rate-limited
+  // (not in RATE_LIMIT_EXEMPT, D74, and the `global` bucket is platform-wide),
+  // the probe carried a 6s deadline a phone trips, /start does a KV write and
+  // sets a cookie so it was never a safe health check, and it blocked the page
+  // on a round-trip. Measured that day: Google was configured and working (22 of
+  // 49 accounts linked, newest 2026-09-17) while the card said it was
+  // unavailable and the owner could not sign in.
+  //
+  // A capability is not predicted here. The click asks, and the server answers.
+  assert.ok(!/googleProbe/.test(src), 'the probe state is back');
+  assert.ok(!/googleAvailable/.test(src), 'the two-state probe flag is back');
+  assert.ok(!/GOOGLE_PROBE_TIMEOUT_MS/.test(src), 'the probe deadline is back');
 
-test("a refused Google probe leaves a stated absence where the button was", () => {
-  assert.match(src, /googleProbe === 'no' &&/, 'nothing is rendered for the "no" state');
-  const at = src.indexOf("googleProbe === 'no' &&");
-  const block = src.slice(at, at + 900);
-  assert.match(block, /data-testid="login-google-unavailable"/);
-  // Everything below reads the COPY, not the markup — see visibleText above.
-  const copy = visibleText(block.slice(0, block.indexOf('</div>')));
-  assert.match(copy, /unavailable/i, 'the absence must say, in words, that it is an absence');
-  // And it must say the other ways in still work — the whole reason the user
-  // was not actually locked out.
-  assert.match(copy, /passkey/i, 'the absence must point at a way in that does work');
-  assert.match(copy, /email link/i);
+  // The one that matters, and the one a state-name check would miss: the page
+  // must reach /auth/google/start ONLY from the click handler. Any other call
+  // site is a pre-flight by another name, whatever it is called.
+  const calls = [...src.matchAll(/api\.googleStartUrl\s*\(/g)].map((m) => m.index);
+  assert.equal(calls.length, 1, `expected exactly one googleStartUrl call site, found ${calls.length}`);
+  const handlerAt = src.indexOf('const continueWithGoogle');
+  assert.ok(handlerAt > 0, 'continueWithGoogle is gone');
+  const handlerEnd = src.indexOf('\n  };', handlerAt);
   assert.ok(
-    /did not confirm|did not answer/.test(copy),
-    'say which of the two it was, or that we cannot tell: "not enabled" and '
-    + '"did not answer" are different facts and the probe cannot distinguish them',
+    calls[0] > handlerAt && calls[0] < handlerEnd,
+    'googleStartUrl is called outside continueWithGoogle — that is a pre-flight probe',
+  );
+
+  // And no effect may exist whose body reaches for it.
+  assert.ok(
+    !/useEffect\([^)]*\)\s*=>\s*\{[^}]*googleStartUrl/s.test(src),
+    'an effect calls googleStartUrl — the probe is back in another shape',
   );
 });
 
-test('the probe has its own deadline, so a stall becomes an absence and not a short list', () => {
-  // Found by rendering, not by reading: with the module's default deadline the
-  // hanging case showed a silently shorter list for thirty seconds and no note.
-  // A probe whose only job is to decide what the page CLAIMS must not be allowed
-  // to leave that claim pending.
-  assert.match(src, /GOOGLE_PROBE_TIMEOUT_MS/, 'the probe has no deadline of its own');
-  const call = src.slice(src.indexOf('api.googleStartUrl({ action:'), src.indexOf("setGoogleProbe('yes')"));
-  assert.match(call, /timeoutMs: GOOGLE_PROBE_TIMEOUT_MS/, 'the probe must pass its deadline');
-  const decl = src.slice(src.indexOf('const GOOGLE_PROBE_TIMEOUT_MS'));
-  const ms = Number(decl.match(/=\s*([\d_]+)/)[1].replace(/_/g, ''));
-  assert.ok(ms > 0 && ms <= 10_000, `probe deadline is ${ms}ms — it must be well under the 30s default`);
-  // ...and the click must NOT inherit it: a person who chose Google should get
-  // the normal deadline, not the probe's.
-  const click = src.slice(src.indexOf('const continueWithGoogle'));
-  const clickCall = click.slice(0, click.indexOf('}'));
+test('the Google button is rendered unconditionally', () => {
+  // Not behind `googleProbe === 'yes'`, not behind any other flag. A button that
+  // might fail is strictly better than one that is missing: the missing one
+  // leaves the person no path in and nothing to retry.
+  const at = src.indexOf('data-testid="login-google"');
+  assert.ok(at > 0, 'the Google button lost its testid, or the button is gone');
+  // The window must be scanned WHOLE, not just at its end: a mutation that put
+  // `{googleBusy === false && (` in front of the button left the last characters
+  // before it unchanged, so an end-anchored check walked straight past it.
+  // Everything between the previous sibling and the button is a divider and a
+  // comment, so ANY conditional opener in that span is the regression.
+  const prevSibling = src.lastIndexOf(')}', at);
+  const before = src.slice(prevSibling < 0 ? Math.max(0, at - 700) : prevSibling, at);
+  // Ban BOTH conditional operators outright. A shape-specific check is not
+  // enough: `?\s*\(` was written for `cond ? (` and `{googleBusy ? null : (`
+  // walked straight past it. The real span between the previous sibling and the
+  // button is a divider and a comment — it contains no `&&` and no `?` — so any
+  // occurrence of either is a gate, whatever form it takes.
+  assert.ok(!/&&/.test(before), 'the Google button sits behind a `&&` conditional again');
+  assert.ok(!/\?/.test(before), 'the Google button sits behind a ternary again');
+  assert.match(src.slice(at - 400, at + 400), /onClick=\{continueWithGoogle\}/);
+  // The card the probe used to paint is gone with it.
   assert.ok(
-    !/GOOGLE_PROBE_TIMEOUT_MS/.test(clickCall),
-    'the probe deadline must not be applied to the real click',
+    !/login-google-unavailable/.test(src),
+    'the probe-painted "unavailable" card is back; the absence belongs at click time',
+  );
+});
+
+test('a server that genuinely refuses Google still says so — at click time', () => {
+  // The honesty rule is kept and MOVED, not dropped. /start answers 503
+  // `not_configured` when GOOGLE_AUTH_CLIENT_ID/SECRET are unset; the click
+  // handler surfaces the server's own message, and the copy map carries the
+  // sentence. That is a stated absence from the server rather than one guessed
+  // on mount by a request that fails for four other reasons.
+  assert.match(src, /GOOGLE_ERROR_COPY/, 'the callback error copy map is gone');
+  const map = src.slice(src.indexOf('const GOOGLE_ERROR_COPY'));
+  assert.match(map.slice(0, 900), /not_configured:/, 'no copy for a genuine 503');
+  const click = src.slice(src.indexOf('const continueWithGoogle'));
+  const body = click.slice(0, click.indexOf('\n  };'));
+  assert.match(body, /catch/, 'the click must catch a refusal');
+  // Scoped to the CATCH. `setError('')` at the top of the handler clears the
+  // previous error and satisfied a body-wide match, so the reporting line could
+  // be deleted outright and this still passed — a mutation proved it.
+  const catchBody = body.slice(body.indexOf('catch'));
+  assert.match(
+    catchBody, /setError\(/,
+    'a refused click must put the server\'s reason on screen, from the catch',
   );
 });
 
