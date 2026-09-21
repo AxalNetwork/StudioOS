@@ -16127,3 +16127,72 @@ importing it, so the test fails if the two ever stop agreeing. Four mutations,
 four caught: pointing the limited probe at `/api/health`; adding `/api/__smoke`
 to the exempt list; removing the named diagnosis; and unmounting the limiter
 from `/api/*`.
+
+---
+
+## D183 — "prunes less, never more" was the defect, not the safe direction
+
+**The accumulation, measured.** `docs/assets` on `main` held **964** files
+against a clean build's **597**. `scripts/build-frontend.mjs` backs the
+directory up, lets the bundler empty it, then restores a window of
+`ASSET_RETAIN_BUILDS` (3) generations — but the ledger it needs,
+`docs/.asset-retention.json`, is **gitignored on purpose**. So CI and every
+fresh clone take the no-ledger path on **every** run, and that path seeded
+**every file on disk** as one synthetic prior build. `.gitignore` described
+this in its own words as *"the safe direction (it prunes less, never more)"*.
+
+**Pruning less, never more, is exactly how a set becomes a high-water mark.**
+Each deploy re-kept everything already committed and added its own output, so
+`docs/assets` could only grow.
+
+**The fix: seed the PREVIOUS GENERATION, not the whole tree.** A generation is
+derivable from `docs/` alone with no ledger — it is the transitive closure of
+the committed shells over the chunk graph, the same walk
+`check-docs-assets-closure.mjs` already does (`scripts/lib/assetGeneration.mjs`).
+That keeps precisely what a client still holding the previous shell can ask for
+and drops generations older than it, which no committed shell references. The
+no-ledger window becomes **two builds rather than unbounded**. An unreadable or
+absent shell falls back to the old, over-broad seed rather than to nothing —
+seeding nothing would blank the page for every client mid-deploy.
+
+**Measured end to end on the no-ledger path, against `main`'s own tree:**
+
+```
+start: 964 assets
+[build] previous generation: 601 of 964 asset(s) reachable from a committed shell
+after:  601 assets
+```
+
+…and `check-docs-assets-closure` still reports **4704 references across 558
+chunks all resolve**, so nothing that any remaining shell asks for was pruned.
+
+**Two things the build corrected, each recorded rather than quietly done.**
+
+1. **The shell names its entry in a form the graph extractor cannot read.**
+   `index.html` writes `src="/assets/index-<hash>.js"` with a **leading
+   slash**, while `referencesOf`'s bare pattern requires the quote to sit
+   directly before `assets/`. The first walk returned **0 reachable of 601** —
+   the same silent-empty-walk shape the closure guard's own self-check exists
+   for. The shell gets its own extractor; the chunk-to-chunk forms still come
+   from `referencesOf`.
+2. **BACKTICKS WERE INVISIBLE, and that was a hole in D176's guard too.**
+   Rollup emits a lazy chunk as ``import(`./purify.es-<hash>.js`)`` — a
+   template literal — and a quote class of `["']` reads straight past it.
+   `purify.es-JEAr64Sr.js` was the one file of 601 that **no walk could reach**.
+   Both `BARE_REF` and `DOT_REF` now admit a backtick, so
+   `check-docs-assets-closure` can see a class of edge it never could: a chunk
+   it cannot see is a chunk it cannot report as dangling.
+
+**The ceiling.** `check-docs-assets-closure` fails when `docs/assets` exceeds
+1800 files (`DOCS_ASSET_CEILING`) — high enough that three full generations
+pass, low enough that unbounded growth is caught long before anyone reads it in
+a diff. It lives there rather than in `check-docs-fresh` because that script
+already reads the directory and counts it, and exits through several branches
+that a ceiling would have to be threaded past.
+
+**Mutations, five applied and five caught** after one escape was closed: the
+planner ignoring `seedFiles`; an empty seed meaning keep-nothing rather than
+fall-back; and both extractors losing their backtick. The shell extractor's
+backtick tolerance **escaped its first mutation** — the fixture reached it only
+through a quoted attribute — and a fixture for the inline-script form was added
+rather than the escape reported.

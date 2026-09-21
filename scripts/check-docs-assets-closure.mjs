@@ -55,8 +55,15 @@ const INDEX = path.join(ROOT, 'docs', 'index.html');
 // that produced "18 chunks reachable, 0 dangling" on a 1276-chunk tree and
 // read as a pass. `assertBothFormsSeen` below exists for exactly that, and the
 // guard's own mutation test narrows this pair to prove it fires.
-const BARE_REF = /["'](?:\.\.\/)?assets\/([A-Za-z0-9_.-]+\.(?:js|css))["']/g;
-const DOT_REF = /["']\.\/([A-Za-z0-9_.-]+\.(?:js|css))["']/g;
+//
+// BACKTICKS COUNT. Rollup emits a lazy chunk import as
+// ``import(`./purify.es-<hash>.js`)`` — a template literal, not a quoted
+// string — and a class of `["']` alone reads straight past it. Measured on the
+// committed tree: `purify.es-JEAr64Sr.js` was the one file of 601 that no walk
+// could reach, for exactly that reason, and a chunk this guard cannot see is a
+// chunk it cannot report as dangling.
+const BARE_REF = /["'`](?:\.\.\/)?assets\/([A-Za-z0-9_.-]+\.(?:js|css))["'`]/g;
+const DOT_REF = /["'`]\.\/([A-Za-z0-9_.-]+\.(?:js|css))["'`]/g;
 
 /** Every reference a chunk makes, with a tally per form for the self-check. */
 export function referencesOf(source, tally = { bare: 0, dot: 0 }) {
@@ -118,6 +125,30 @@ function main() {
       edges += 1;
       if (!present.has(ref)) dangling.push({ from: file, to: ref });
     }
+  }
+
+  // THE CEILING. A clean bundler run emits ~600 assets; the retention window
+  // keeps at most `ASSET_RETAIN_BUILDS` (3) generations, so a healthy committed
+  // tree sits well under three times that. Past it, something is accumulating
+  // rather than rotating — which is exactly what the no-ledger seed used to do
+  // (D183): CI has no ledger, so every deploy re-seeded the whole committed
+  // tree as one prior build and the set could only grow. Measured on `main`
+  // before that fix: 964 against a clean build's 597.
+  //
+  // This is a CEILING, not a target. It is set high enough that three full
+  // generations pass and low enough that unbounded growth is caught long before
+  // anyone notices it in a diff.
+  const ASSET_CEILING = Number(process.env.DOCS_ASSET_CEILING || 1800);
+  if (names.length > ASSET_CEILING) {
+    fail([
+      `✖ check-docs-assets-closure: docs/assets holds ${names.length} files, past the `
+        + `${ASSET_CEILING} ceiling.`,
+      '  A clean build emits ~600 and retention keeps at most three generations, so this is',
+      '  accumulation rather than rotation. Check that scripts/build-frontend.mjs is seeding',
+      '  the PREVIOUS GENERATION (the closure of the committed shells) and not every file on',
+      '  disk — see scripts/lib/assetGeneration.mjs and D183. Rebuild from the repo root with',
+      '  `npm run build`; running the bundler directly skips retention entirely.',
+    ]);
   }
 
   const selfCheck = assertBothFormsSeen(tally, scannable.length);

@@ -26,6 +26,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { generationFrom } from './lib/assetGeneration.mjs';
 import { planAssetRetention } from './lib/assetRetention.mjs';
 import { sourceTreeHash } from './lib/sourceTreeHash.mjs';
 
@@ -65,6 +66,47 @@ function readLedgerBuilds(p) {
 // 1. Snapshot the pre-build assets — they must survive Vite's emptyOutDir wipe.
 const prevFiles = listAssetFiles(assetsDir);
 const ledgerBuilds = readLedgerBuilds(ledgerPath);
+
+// …and the shell that references them, because it is what says which of those
+// assets belong to the PREVIOUS generation rather than to one long dead. The
+// ledger is gitignored, so CI and every fresh clone take the no-ledger path on
+// every run; seeding the whole committed tree there is what made `docs/assets`
+// grow monotonically. See lib/assetGeneration.mjs.
+//
+// EVERY shell, not just `docs/index.html`. The build prerenders ~34 route
+// shells, and a route-specific one can name a chunk the root never does; a
+// seed taken from `index.html` alone would drop those from the window and a
+// client holding that route's shell would 404 them. The union of all of them
+// is still a bounded generation.
+function prevShellSources(dir) {
+  const out = [];
+  let entries = [];
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return out; }
+  for (const e of entries) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) {
+      if (e.name !== 'assets') out.push(...prevShellSources(p));
+    } else if (e.name.endsWith('.html')) {
+      try { out.push(fs.readFileSync(p, 'utf8')); } catch { /* unreadable shell */ }
+    }
+  }
+  return out;
+}
+
+const prevGenerationSet = new Set();
+for (const html of prevShellSources(docsDir)) {
+  const { reachable } = generationFrom({ indexHtml: html, assetsDir, availableFiles: prevFiles });
+  for (const f of reachable) prevGenerationSet.add(f);
+}
+// No previous shell to read (a first build, or a docs/ without one) leaves this
+// empty, and the seed falls back to prevFiles — what it always was.
+const prevGeneration = [...prevGenerationSet];
+if (prevFiles.length > 0) {
+  console.log(
+    `[build] previous generation: ${prevGeneration.length} of ${prevFiles.length} `
+    + 'asset(s) reachable from a committed shell',
+  );
+}
 const backupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'axal-assets-'));
 for (const f of prevFiles) {
   fs.copyFileSync(path.join(assetsDir, f), path.join(backupDir, f));
@@ -87,6 +129,7 @@ if (newFiles.length === 0) {
 
 const plan = planAssetRetention({
   prevFiles,
+  seedFiles: prevGeneration,
   newFiles,
   ledgerBuilds,
   retainBuilds: RETAIN_BUILDS,
