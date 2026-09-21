@@ -16322,3 +16322,72 @@ not only the code.
 No migration; **275 stays free.** No `frontend/src` change, so no `docs/`
 rebuild. **6 mutations applied, 6 caught**, every restore verified
 byte-identical.
+
+## D185
+
+**The "Continue with Google" button stops being gated on a pre-flight probe.**
+
+Reported as *"what happened with Google login? why did you remove it"*, together
+with *"I cannot login anymore"* and *"very slow especially on the phone"*. All
+three are one defect, and nothing was removed.
+
+**The premise, checked rather than accepted.** `auth_google.ts` was last touched
+by `696ce9c29` and `LoginPage.jsx` by `f4ed04ec5`; neither deleted the control,
+and the three deploys before the report (`6dae4f570`, `03d621ba5`, `f0ee41ddf`)
+changed no `cloudflare-worker/src` and no auth file. Read-only against
+production `studioos-db`, aggregates only: **22 of 49 accounts carry a
+`user_google_links` row, the newest 2026-09-17** — four days before the report.
+So `configMissing()`'s 503 was not firing and the card's first branch, *"Google
+sign-in is not enabled on this environment"*, was **false**.
+
+**What was firing was the card's second branch, and the probe behind it.**
+`LoginPage.jsx` called `/api/auth/google/start` on mount and rendered the button
+only if that call resolved. Four unrelated things make it fail, each alone
+enough to remove the platform's most-used sign-in method with no way to retry:
+
+1. the endpoint is deliberately **not** in `RATE_LIMIT_EXEMPT` (D74), so it sits
+   behind the `ip` bucket and the **platform-wide `global` 1000/min** one —
+   exhaust that and the button disappears for every visitor simultaneously;
+2. the probe carried its own **6-second deadline**, which a slow mobile
+   connection trips: the button went missing exactly where the page was
+   slowest, which is why "it's gone" and "it's slow on the phone" were the same
+   report;
+3. `/start` is **not a read**. It mints an OAuth nonce, does a KV write under a
+   2s deadline (`STATE_KV_DEADLINE_MS`) and sets a cookie — on every page load,
+   to decide whether to draw a button. A state-mutating call used as a health
+   check is a third failure point and pure waste;
+4. it blocked the page on a round-trip at mount.
+
+**The root error is the shape, not the tuning.** A capability was being
+*predicted* by a fragile, rate-limited, state-mutating health check when the
+click answers the same question later, for free, and correctly. No deadline
+would have fixed that; a shorter one makes it worse.
+
+**So the probe is deleted and the button is unconditional**, on `/login` and on
+`/register` — the signup page carried the same probe and was worse, hiding the
+control with **no card at all**. `continueWithGoogle()` calls `/start` for real
+and surfaces the server's own message; `GOOGLE_ERROR_COPY.not_configured`
+already carried the sentence for a genuine 503. The honesty rule D56/D68 set is
+kept and **moved to where it belongs**: the absence is stated at the moment of
+the attempt, by the server, rather than guessed on mount by a request that fails
+for four other reasons. A button that might fail beats one that is missing,
+because the missing one leaves no path and nothing to retry.
+
+**`login_offers_what_it_names.test.mjs` is re-aimed, not relaxed** — the ninth
+time in this programme a guard pinning a refusal had to move the day the refusal
+stopped being true. Its durable property is unchanged and now holds by
+construction: the card may not name a method it is not offering, and both the
+sentence and the control are unconditional. Three probe-shaped tests become
+three that own the defect — no `googleStartUrl` call outside the click handler,
+no conditional in front of the button, and a click-time refusal still reported.
+
+**Three of my own assertions escaped their mutations and were strengthened
+rather than accepted:** an end-anchored window check missed a gate inserted
+earlier in the same window; a body-wide `setError(` match was satisfied by the
+`setError('')` reset at the top of the handler, so the reporting line could be
+deleted outright; and `?\s*\(` was written for one ternary shape and walked past
+`{googleBusy ? null : (`. All three now fail on every gate shape tried.
+
+No migration — **275 stays free.** No worker change and no new `/api/*` method.
+`frontend/src` moves, so `docs/` is rebuilt. Every `/login` and `/register` load
+loses one blocking request, one KV write and one cookie set.

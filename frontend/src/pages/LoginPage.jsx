@@ -37,14 +37,6 @@ const GOOGLE_ERROR_COPY = {
 
 // BLOCK-AUTH-01 — copy for the codes raised by GET /api/auth/magic/verify when
 // a magic link can't sign the user in (mirrors routes/auth.ts::fail()).
-// The probe gets its OWN deadline, much shorter than the module default. It is
-// not fetching anything the user asked for: its whole job is to decide what this
-// page may claim, and a claim that stays pending is the bug — the card would go
-// on offering a shorter list of options with nothing saying why. Six seconds is
-// long enough for a cold isolate and short enough that a stall becomes a visible
-// absence while the person is still reading the card.
-const GOOGLE_PROBE_TIMEOUT_MS = 6_000;
-
 const MAGIC_ERROR_COPY = {
   invalid: 'That sign-in link is invalid. Request a new one below.',
   expired: 'That sign-in link has expired or was already used. Request a new one below.',
@@ -76,13 +68,6 @@ export default function LoginPage() {
   const [turnstileToken, setTurnstileToken] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  // THREE STATES, NOT TWO. A boolean initialised `false` cannot tell "we have
-  // not asked yet" from "the server said no", and both rendered as a missing
-  // button under a sentence that still promised Google — which is how a
-  // 30-second outage on /api/auth/google/start reached the user as "the Google
-  // button disappeared" with nothing on screen admitting it. D56/D68 applies to
-  // a control exactly as it applies to a number: state the absence.
-  const [googleProbe, setGoogleProbe] = useState('probing'); // 'probing' | 'yes' | 'no'
   const [googleBusy, setGoogleBusy] = useState(false);
   // BLOCK-AUTH-02 — passkey state.
   const [passkeyBusy, setPasskeyBusy] = useState(false);
@@ -117,22 +102,25 @@ export default function LoginPage() {
     track('login_view');
   }, []);
 
-  // Discover whether the worker has Google OAuth configured. A failure here is
-  // NOT proof that Google is unconfigured — it is equally a worker that did not
-  // answer — so the outcome is recorded as 'no' and rendered as a stated
-  // absence below, never as a silently shorter list of options.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        await api.googleStartUrl({ action: 'signin', timeoutMs: GOOGLE_PROBE_TIMEOUT_MS });
-        if (!cancelled) setGoogleProbe('yes');
-      } catch {
-        if (!cancelled) setGoogleProbe('no');
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+  // NO PRE-FLIGHT PROBE, and that is the fix rather than an omission. This page
+  // used to call /api/auth/google/start on mount and render the button only if
+  // that call succeeded. Four unrelated things made it fail, and each one alone
+  // removed the user's primary sign-in method with no way to retry:
+  //   1. that endpoint is deliberately NOT in RATE_LIMIT_EXEMPT (D74), so it is
+  //      subject to the ip bucket AND the PLATFORM-WIDE `global` 1000/min one —
+  //      exhaust it and the button vanishes for every visitor at once;
+  //   2. the probe carried a 6s client deadline, which a slow mobile connection
+  //      trips — the button went missing exactly where the page was slowest;
+  //   3. /start is not a read. It mints an OAuth nonce, does a KV write under a
+  //      2s deadline and sets a cookie — on every page load, to draw a button;
+  //   4. it blocked the page on a round-trip at mount.
+  // Measured 2026-09-21: Google was configured and working (22 of 49 accounts
+  // linked, newest 2026-09-17) while the card claimed it was unavailable.
+  // A capability is not predicted here any more — continueWithGoogle() calls
+  // /start for real and surfaces the server's own answer, including
+  // GOOGLE_ERROR_COPY.not_configured for a genuine 503. The absence is still
+  // stated; it is stated at the moment of the attempt, by the server, rather
+  // than guessed on mount by a request that fails for four other reasons.
 
   // One-shot toast for any error the callback bounced us back with.
   useEffect(() => {
@@ -371,7 +359,7 @@ export default function LoginPage() {
   // browser without WebAuthn. Anything named here is rendered below; anything
   // rendered below is named here.
   const alsoList = [
-    ...(googleProbe === 'yes' ? ['Google'] : []),
+    'Google',
     ...(passkeySupported ? ['passkey'] : []),
     'authenticator codes',
   ];
@@ -457,43 +445,31 @@ export default function LoginPage() {
             </button>
           )}
 
-          {googleProbe === 'no' && (
-            <div
-              className="text-xs text-[#6b6577] bg-[#f6f5fa] border rounded-lg px-3 py-2"
-              style={{ borderColor: authV2.hair }}
-              data-testid="login-google-unavailable"
-            >
-              <strong className="text-[#241f38]">Continue with Google is unavailable.</strong>{' '}
-              The server did not confirm it — either Google sign-in is not enabled on this
-              environment, or it did not answer. The email link, a passkey and authenticator
-              codes all still work.
-            </div>
-          )}
-
-          {googleProbe === 'yes' && (
-            <>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-px" style={{ background: authV2.hair }} />
-                <span className="font-mono text-[10px] uppercase tracking-widest text-[#6b6577]">or</span>
-                <div className="flex-1 h-px" style={{ background: authV2.hair }} />
-              </div>
-              <button
-                type="button"
-                onClick={continueWithGoogle}
-                disabled={googleBusy}
-                className={authV2.btnSecondary}
-                style={{ borderColor: authV2.hair, background: '#fff', color: authV2.ink }}
-              >
-                <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
-                  <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
-                  <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.6 8.3 6.3 14.7z" />
-                  <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.4-4.5 2.4-7.2 2.4-5.2 0-9.6-3.3-11.2-8l-6.6 5.1C9.6 39.6 16.2 44 24 44z" />
-                  <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.6l6.2 5.2c-.4.4 6.7-4.9 6.7-14.8 0-1.3-.1-2.4-.4-3.5z" />
-                </svg>
-                {googleBusy ? 'Redirecting…' : 'Continue with Google'}
-              </button>
-            </>
-          )}
+          {/* ALWAYS RENDERED — never behind a capability probe. See the note on
+              the removed pre-flight above: a button that might fail is strictly
+              better than one that is missing, because a missing one leaves the
+              person no path and nothing to retry. */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px" style={{ background: authV2.hair }} />
+            <span className="font-mono text-[10px] uppercase tracking-widest text-[#6b6577]">or</span>
+            <div className="flex-1 h-px" style={{ background: authV2.hair }} />
+          </div>
+          <button
+            type="button"
+            onClick={continueWithGoogle}
+            disabled={googleBusy}
+            className={authV2.btnSecondary}
+            data-testid="login-google"
+            style={{ borderColor: authV2.hair, background: '#fff', color: authV2.ink }}
+          >
+            <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
+              <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
+              <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.6 8.3 6.3 14.7z" />
+              <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.4-4.5 2.4-7.2 2.4-5.2 0-9.6-3.3-11.2-8l-6.6 5.1C9.6 39.6 16.2 44 24 44z" />
+              <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.6l6.2 5.2c-.4.4 6.7-4.9 6.7-14.8 0-1.3-.1-2.4-.4-3.5z" />
+            </svg>
+            {googleBusy ? 'Redirecting…' : 'Continue with Google'}
+          </button>
 
           <button
             type="button"

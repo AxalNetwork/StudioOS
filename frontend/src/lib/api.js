@@ -667,16 +667,16 @@ export const api = {
     // records no suggested role, unlike every other signup path.
     if (params.lane) qs.set('lane', params.lane);
     const q = qs.toString();
-    // `timeoutMs` is forwarded because LoginPage calls this TWICE for different
-    // reasons: once on mount, only to find out whether the button should exist,
-    // and once when someone clicks it. The first is a probe whose answer decides
-    // what the page CLAIMS, so it needs a deadline short enough that a stalled
-    // worker becomes a stated absence rather than a silently shorter list of
-    // options — that is exactly what went wrong on 2026-09-12. The click keeps
-    // the default.
+    // NO `timeoutMs` OVERRIDE, and its removal is the point. This used to accept
+    // one because LoginPage called it TWICE — once on mount as a probe deciding
+    // whether to render the button, once on click. That probe is gone: it was
+    // rate-limited (this endpoint is deliberately NOT in RATE_LIMIT_EXEMPT, D74),
+    // carried a 6s deadline a slow mobile connection tripped, and — because
+    // /start mints a nonce, writes KV and sets a cookie — it was a state-mutating
+    // call used as a health check on every page load. Every caller now means it:
+    // the request is the sign-in, so it takes the module default deadline.
     return request(`/auth/google/start${q ? `?${q}` : ''}`, {
       headers: { accept: 'application/json' },
-      ...(params.timeoutMs !== undefined ? { timeoutMs: params.timeoutMs } : {}),
     });
   },
   getConnectedAccounts: () => request('/settings/connected-accounts'),
