@@ -15620,3 +15620,305 @@ to every Studio, Institutional, admin, partner and advisor account every Monday
 ran weekly with nothing asserting anything about it — not who it reached, not
 that it reached anyone, not that it stopped. That is how it stayed shipped long
 enough to be noticed from an inbox rather than from a test.
+
+---
+
+## D176
+
+**Nothing checked that a built chunk's references resolve — and the scan I
+reached for first reported a confident PASS while missing 2,636 edges.**
+
+**2026-09-21.** `/network` and `/expertise` were reported crashing with
+`undefined is not an object (evaluating 'e._result.default')`, and the filed
+cause was a stale-chunk theory. Investigating it turned up something separable
+and worth fixing on its own: **the repo has no check that the built module
+graph is closed**, and the ad-hoc scans used to look for one were themselves
+unreliable. This entry is that check. **It does not fix the crash** — see the
+end.
+
+### The gap, and why the existing smoke cannot see it
+
+`scripts/check-spa-live.mjs` is the only thing that looks at built assets, and
+it cannot see a broken lazy-route graph, for two independent reasons:
+
+| | |
+| --- | --- |
+| its route list is **hardcoded** (`:137-217`) | about seven shells, and **no Zone route is among them**. Every `*Zone` chunk is reached by dynamic import at click time and is named in no shell HTML |
+| `fetchAssetMeta` **cancels the response body** (`:287-291`) | deliberately, to avoid pulling 500KB bundles — so it cannot follow a single chunk→chunk edge |
+
+So it verifies `index.html`'s own references one level deep and stops. **It
+would report all-PASS on a deploy where every advisor Zone chunk 404s** —
+a failure `frontend/src/main.jsx:117-132` already names: *"a route chunk that
+404s when the user clicks — the ordinary case after a deploy."*
+
+### THE FINDING THAT DECIDED THE GUARD'S SHAPE: a narrow scan is worse than no scan
+
+This bundler emits references in **two forms**, and both are load-bearing.
+Measured on the current tree:
+
+| form | chunks using it | in the entry chunk |
+| --- | --- | --- |
+| `"assets/Name-hash.js"` | 55 | **497** |
+| `"./Name-hash.js"` | 1239 | 17 |
+
+An extractor that handles only `./` therefore **starts at an entry it cannot
+read**, the walk never expands, and it finishes quickly with a clean answer.
+That is not hypothetical, and it happened twice in one session:
+
+1. A reachability walk from `index.html` using the `./` form alone reported
+   **18 chunks reachable, 0 dangling**, on a tree of 1276. The real figure is
+   557. It read as a pass.
+2. A second, broader pass scanned all 1276 chunks and reported **10,951 edges,
+   0 dangling**, and that number was used to conclude *"the graph is closed."*
+   **The true edge count is 13,587.** The conclusion happens to survive — the
+   full scan also finds zero dangling — but **it was not established by the
+   measurement that was cited for it.** 2,636 edges were invisible to it.
+
+So the guard carries a **self-check**: both reference forms must appear in a
+non-trivial corpus, because both are in the output. A zero on either side means
+the extractor stopped seeing a whole shape of edge, and the run fails with *"this
+check refuses to report a pass it cannot stand behind"* rather than a tick. The
+self-check is re-derived from the corpus on every run, so it cannot go stale the
+way a hardcoded floor would.
+
+**Its mutation run proves the point directly.** Narrowing the extractor *and*
+removing the self-check produces `✓ … 10,951 references across 1276 chunks all
+resolve` — **exit 0, a false pass, and the very number quoted above.** Six
+mutations were applied and six caught; that pair is the seventh, kept as a
+demonstration rather than a test, because what it shows is what the absence of
+the self-check buys.
+
+### What the guard protects, and the tidy-up it refuses
+
+`docs/assets/` is **not** append-only cruft, which is the other thing this
+investigation corrected. `frontend/vite.config.js:58` sets `emptyOutDir: true`,
+so every build **wipes** `docs/` — and `scripts/build-frontend.mjs:65-103` then
+**deliberately restores a bounded window of prior builds'** hashed files,
+because a client still holding the previous `index.html` asks for the previous
+hashes right after a deploy and *"the page goes blank until a reload"*
+(`scripts/lib/assetRetention.mjs:4-14`). Verified: the ledger's union is 1319
+files and disk holds exactly 1319 — **zero orphans**.
+
+So the three copies of `RelationshipsZone` are **three generations**, each
+linked to its own `kit-*`, `ZoneToolbar-*`, `ui-*` and `api-*`. **Pruning by
+basename and keeping the newest would sever generations and manufacture exactly
+the dangling edge this guard exists to catch.** The guard's own failure message
+says so. If the window is ever shrunk, prune by whole ledger generation — and
+note that it would not shrink production anyway, because CI has no ledger and
+re-seeds from the committed tree.
+
+### The three constraints written into it
+
+- **It never builds and never writes**, reading `docs/assets/` only.
+  `check-frontend-builds.mjs:31-35` already records why: *"a check that rewrote
+  602 tracked files as a side effect of checking would be worse than the bug it
+  catches."* Sharper here, since the build wipes and restores, so a check that
+  built would rewrite every tracked file under `docs/` in order to look at them.
+- **It is inert on import** — the scan is gated on being run directly, because
+  it calls `process.exit(1)` and a bare module body would kill any test process
+  that imported its helpers *the moment the graph went bad*, which is when those
+  tests most need to run.
+- **It runs before `check-docs-fresh` and `check-frontend-builds`** in
+  `test:guards`, so a one-line finding fails before a source-tree hash or a real
+  bundler run is attempted. Its own suite pins that ordering.
+
+### What this does NOT do
+
+**It does not fix the advisor crash.** Run against today's tree it is green —
+13,587 references across 1276 chunks, all resolving — so on the committed build
+there is no dangling edge and this is not the cause of
+`e._result.default`. The crashing bytes could not be read from this environment
+(`axal.vc:443` and the PR preview Worker are both refused at CONNECT with 403),
+and CLAUDE.md §4 notes the deploy workflow rebuilds `docs/` at deploy time, so
+the committed build is not proof about the shipped one. The cause is still open;
+what this guard changes is that **if it ever is a 404, it fails before the
+deploy instead of after it.**
+
+
+## D177
+
+**A test named "the comparison must not be format-blind" aged its fixture in
+the writer's own format, which is the one format that cannot detect
+format-blindness — and the assertion guarding that choice failed against
+correct code for 65 minutes a day.**
+
+**2026-09-21.** `cloudflare-worker/test/support_session_d120.test.ts`'s expired-code
+test was the only `not ok` in a 3566-test worker suite, red on #684 and on
+`main`, deterministically, for any run in the first hour of a UTC day. Fixing
+it found that the clock fragility was the smaller of two defects and that the
+larger one was in the design the fragility was protecting.
+
+### The reported defect, measured twice — 65 minutes a day, not 60
+
+The test aged the stored `expires_at` by an hour and asserted the ageing had
+not crossed a UTC day. Reproduced live at **00:40:44Z**, and again at
+**00:50:15Z** while the fix was being written:
+
+```
+now           2026-09-21 00:40:44
+stored (+5m)  2026-09-21 00:45:44      SUPPORT_CODE_TTL_MINUTES = 5
+aged  (-1h)   2026-09-20 23:40:44      same-day-as-stored? FALSE  ->  assertion fails
+```
+
+Sampling the boundary found **two** windows with **different causes**, where
+the task was filed with one:
+
+| now (UTC) | old fixture holds? | why |
+| --- | --- | --- |
+| 23:54:00 | yes | |
+| **23:56:00** | no | `stored = now + 5 min` lands on **tomorrow** |
+| **23:59:30** | no | same |
+| **00:00:30** | no | `aged = now - 1 h` lands on **yesterday** |
+| **00:59:30** | no | same |
+| 01:00:30 | yes | |
+
+And the assertion was aimed at the wrong operand. Format-blindness turns on
+position 10, which only decides a TEXT comparison while the two operands share
+a date prefix — and the operand the predicate compares against is
+`datetime('now')`, never `stored`. `stored` is in the future and may
+legitimately be tomorrow.
+
+### THE FINDING THAT REVERSED THE FIX: ageing in kind cannot test the thing the wrapper is for
+
+The test's own comment recorded, correctly, that an earlier version had forced
+SQLite's format on to the row *"no matter what the code had written — so it
+proved the comparison side and was blind to the write side, and the exact bug
+it exists for walked straight through it"*. The first design here honoured that
+by keeping the format branch and only replacing the relative offset with
+midnight-today. An adversarial review of that design measured what it actually
+catches, and the answer is: **not the defect in its own name.**
+
+`openSupportSession` writes `datetime('now', '+5 minutes')` — SQLite format. So
+"age it in kind" produces a SQLite-format past value, and:
+
+```
+'2026-09-21 00:00:00' > '2026-09-21 00:52:34'   ->  0     (bare)
+datetime('2026-09-21 00:00:00') > datetime('now') ->  0     (wrapped)
+```
+
+Both operands are one format, where lexicographic order **is** chronological
+order, so the wrapped and the bare predicate agree and **a dropped
+`datetime()` wrapper is invisible at every hour of every day**. Confirmed by
+mutation: with the fixture forced to the writer's format, removing the wrapper
+escapes the suite entirely.
+
+Two further things the review measured, each of which stands on its own:
+
+1. **The claimed write-side coverage does not exist in any version.** Reading
+   `stored` and BRANCHING on its format *adapts* to the writer; it constrains
+   nothing. Mutate the INSERT to `.toISOString()` and a branching test silently
+   takes the other branch and still passes.
+2. **The wrapper's guarded property is writer-independence.** D125 states it in
+   as many words — *"Only normalising the stored value fixes existing rows, and
+   it keeps working for any writer added later"* — and
+   `scripts/check-timestamp-comparisons.mjs` refuses a bare TTL column with no
+   allowlist for exactly that reason, its header noting that four sites already
+   correct because their writers emit SQLite format *"were converted anyway"*.
+   A fixture that copies the writer is structurally incapable of testing a
+   property defined as holding for every writer.
+
+**So the original sin was forcing the BENIGN format, not forcing a format.**
+Forcing the adversarial one is the fixture doing its job. That reverses this
+decision's own first design, and it is recorded rather than quietly swapped.
+
+### What ships
+
+| | |
+| --- | --- |
+| **the write side is asserted, not adapted to** | `assert.match(offer.expires_at, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)`. Migration 262 states SQLite format as a correctness requirement rather than a convention, and `openSupportSession`'s own note says both sides come from one clock in one format — so it is asserted as one, deterministically, at any hour. This is the coverage the deleted format branch only claimed |
+| **an ISO row — the adversarial probe** | `expiredIso(db)` from `_timeFixture.mjs`, its **third** caller after D124 and D125, which use it across six other tables. Pinned to today's UTC date because position 10 only decides while the date halves match |
+| **a SQLite-format row — the shape production makes** | `datetime('now','-1 hour')`, and deliberately **not** midnight-pinned: with both sides in one format there is no date-prefix invariant to protect, so an offset is correct at every hour. One row serves both halves — a refused redeem's UPDATE matches nothing, so `used_at` is still NULL |
+| **the same-day assertion is deleted, not repaired** | once the fixture is midnight-anchored it cannot fail, and an assertion that cannot fail is not a guard. Nor is it replaced by one re-asserting `expiredIso`'s own contract inside a test that is not about `expiredIso`: `_timeFixture.mjs` documents that contract and neither existing caller re-states it |
+| **no `expiredSql` sibling** | the plan proposed one beside `expiredIso`. Struck: the SQLite-format expired value now appears once, inline, and the repo's rule triggers at the third occurrence. A parallel name needing **no** midnight pin, beside one that does, is a near-twin that invites the wrong one being used |
+
+No migration. **274 is NOT free — `main` took it** while this was being
+written (`274_research_fund_sheets.sql`, #682); **275 is the next free
+number.** This entry's first draft said 274 was free, which was true when
+written and false forty minutes later, and it is corrected here rather than
+left to mislead. No `frontend/src` change, so no `docs/` rebuild. No new
+`/api/*` method. `check-timestamp-comparisons.mjs` scans
+`cloudflare-worker/src` only (`ROOT` is set there), so a test-file change
+cannot trip it.
+
+### #682 FIXED THE CLOCK HALF INDEPENDENTLY, AND THIS SUPERSEDES ITS DESIGN
+
+**Found by a merge conflict, not by the plan.** While this was being built,
+**#682 merged to `main` carrying a fix to the same test** — and it shipped
+exactly the design this entry reversed: keep the format branch, anchor each
+branch to midnight-today, re-aim the same-day assertion at `today`. Two
+authors reached the same first answer independently, which is worth recording
+on its own: it is the intuitive fix, and it is incomplete for a reason that
+only shows under mutation.
+
+**What #682 got right, and is kept:** both windows close, and its assertion is
+aimed at `today` rather than at `stored`. Its comment also carries a datum
+this build did not have — a real CI run **at 23:57 UTC** that wrote
+`2026-09-21` and aged it to `2026-09-20`. That is the 23:55–00:00 window
+observed in CI by another author, independent corroboration of the second
+window measured here.
+
+**What it leaves open, and why this replaces it:** it keeps
+`assert.equal(/T/.test(aged), /T/.test(stored), 'ageing changed the writer's
+format')`, which does not merely permit ageing in kind but **pins** it. With
+today's SQLite-format writer that makes the fixture SQLite-format, both
+operands one format, and a dropped `datetime()` wrapper invisible at every
+hour — in the test whose name is *"the comparison must not be format-blind"*.
+
+**Nothing of #682's is lost.** Its `/T/`-parity assertion is subsumed by a
+strictly stronger one: this entry asserts the writer's **exact** format on the
+value `RETURNING` handed back, which fails on any drift rather than only on a
+change of T-ness. Its `today` assertion is deleted because, once the fixture
+is midnight-anchored, it cannot fail. **Cheap to reverse:** restoring #682's
+two assertions and dropping the ISO probe returns the file to `main`'s
+version, at the cost of the wrapper coverage measured above.
+
+### Verification, and the two mutation results that had to be read rather than reported
+
+The red was shown **before** the fix and the green **after**, both inside the
+window, four minutes apart: `not ok 10` with its own message at 00:50:15Z,
+15/15 and exit 0 at 00:54:15Z. Past 01:00 the before-half is no longer
+reproducible without faking a clock, which is why it was taken first.
+
+| mutation | result |
+| --- | --- |
+| bare comparison (drop the wrapper) | **caught** — the headline, and the one the previous design missed at every hour |
+| bare column vs `CURRENT_TIMESTAMP` | **caught** |
+| delete the expiry clause | **caught** |
+| writer emits ISO instead of SQLite format | **caught**, by the new write-side assertion alone |
+| `>` inverted to `<` | **caught**, here and by two neighbouring tests |
+| a two-hour grace window added to the stored expiry | **caught** |
+| a 61-minute grace window, with the SQLite-format row deleted | **blind** — and that is the point: it is what proves the second row is not a control that catches nothing. See below |
+
+**One mutation was withdrawn as invalid rather than reported as an escape.**
+`datetime(expires_at) > CURRENT_TIMESTAMP` escaped — correctly: measured,
+`CURRENT_TIMESTAMP` and `datetime('now')` return byte-identical strings, so
+with the left side wrapped the two predicates are the same predicate. There is
+no defect for the test to catch. (`check-timestamp-comparisons` refuses the
+spelling anyway, on the right grounds: the *unwrapped* form is broken.)
+
+**And one "escape" is a demonstration, not a miss.** Pairing the bare
+comparison with a fixture forced back to the writer's own format passes the
+suite — which is precisely the point: it is what proves the adversarial format
+is load-bearing, and it is the measured form of the argument above.
+
+**The second row earns its place, measured rather than asserted.** The two
+fixtures have different lifetimes: the ISO row is pinned to midnight, so it
+ages through the day and by the afternoon is hours stale; the SQLite-format row
+is always exactly an hour old. So a small grace window slipped into the
+predicate revives the fresher one and not the staler one. At 01:02Z, with
+`datetime(expires_at, '+61 minutes')` injected: **both rows catch it; the ISO
+row alone is blind.** The pair therefore covers two different mutations rather
+than one twice — which is why the SQLite-format half is a probe, not a control.
+It is worth noting that this demonstration is itself hour-dependent, in the
+opposite direction to the defect being fixed: before 01:00 the ISO row is the
+fresher of the two and the result inverts. Neither row is fragile; only this
+particular demonstration of their division of labour has a window.
+
+### What this does not claim
+
+It does not claim the bare comparison would have shipped. It would not:
+`check-timestamp-comparisons.mjs` runs in `test:guards` on every CI run,
+`expires_at` is in its `TTL_COLUMN` list, and mutating line 1006 to the bare
+form was verified to fail it by name. What changes here is that **the test
+whose name is "the comparison must not be format-blind" is now the thing that
+catches it**, instead of passing while another guard did the work.
