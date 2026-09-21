@@ -147,6 +147,13 @@ if (process.argv[2] === '--icns-loop-check-child') {
     buf.write('ic08', 8, 4, 'ascii');
     buf.writeUInt32BE(0, 12);
 
+    // READY IS SENT BEFORE THE PARSE, and the parent's hang timer starts here.
+    // Everything above — forking a node process and loading image-size — is
+    // startup, and timing it as if it were the parse is what made this test
+    // flake: on 2026-09-14 it failed once inside a full `test:drift` at
+    // duration_ms 2008 against a 2000ms bound, then passed three times alone.
+    process.send?.({ ready: true });
+
     try {
       sizeOf(buf);
       process.send?.({ ok: false, reason: 'did-not-throw' });
@@ -172,7 +179,28 @@ test('a zero-length ICNS entry returns instead of hanging', async () => {
       stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
     });
 
+    // TWO BOUNDS, ONE PER PHASE, because they measure different things.
+    //
+    // The hang bound stays 2s and still starts nothing until the child says
+    // `ready` — so a real infinite loop fails within ~2s of the parse, which is
+    // what this test exists to prove and is not relaxed. The startup bound is
+    // generous because node boot plus loading image-size under a loaded machine
+    // is not a hang, and it fails with its own message so a child that never
+    // starts is never reported as a library that never returned. A hang
+    // detector that fires on a slow fork is a flake, and a flake in a security
+    // regression test teaches people to ignore it.
+    const STARTUP_MS = 15000;
+    const PARSE_MS = 2000;
+
     let settled = false;
+    let timer = null;
+    const arm = (ms, message) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        child.kill('SIGKILL');
+        done(new Error(message));
+      }, ms);
+    };
     const done = (err) => {
       if (settled) return;
       settled = true;
@@ -181,12 +209,21 @@ test('a zero-length ICNS entry returns instead of hanging', async () => {
       else resolvePromise();
     };
 
-    const timer = setTimeout(() => {
-      child.kill('SIGKILL');
-      done(new Error('sizeOf(buf) hung in child process'));
-    }, 2000);
+    arm(STARTUP_MS, `the ICNS check child never reported ready within ${STARTUP_MS}ms — `
+      + 'it failed to start, which says nothing about whether sizeOf returns');
 
-    child.once('message', (msg) => {
+    let ready = false;
+    child.on('message', (msg) => {
+      if (msg?.ready) {
+        ready = true;
+        arm(PARSE_MS, 'sizeOf(buf) hung in child process');
+        return;
+      }
+      if (!ready) {
+        done(new Error('the ICNS check child reported a result without reporting ready first, '
+          + 'so the parse was never timed'));
+        return;
+      }
       if (!msg?.ok) {
         done(new Error(`ICNS regression check failed: ${msg?.reason || 'unknown'}`));
         return;

@@ -9,7 +9,6 @@ roadmap entries, taxonomy lists.
 | `roadmap.js` | Public roadmap entries. |
 | `network.js` | Directory categories, programme catalogue, audience/format taxonomies. |
 | `productPages.js` | Product-page copy blocks. |
-| `investorPipeline.js` | Investor pipeline stage definitions. |
 
 ## This is not a fixtures folder
 

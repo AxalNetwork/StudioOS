@@ -16,10 +16,29 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const src = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/middleware/rateLimit.ts'), 'utf8');
-const bucket = src.slice(src.indexOf("name: 'esign_send'"), src.indexOf("name: 'esign_send'") + 400);
+const at = src.indexOf("name: 'esign_send'");
+// SLICED TO THIS BUCKET'S OWN OBJECT LITERAL, NOT A FIXED CHARACTER COUNT.
+//
+// This used `src.slice(at, at + 400)`. 400 characters exceeds every bucket
+// literal in the file (they run 170–263), so the window ran past the closing
+// `},` into whatever came next — and an assertion like `scope: 'user'` can then
+// be satisfied by a NEIGHBOUR while this bucket says something else. It was not
+// wrong today only because the overshoot happened to land in comment prose;
+// reordering BUCKETS, shortening a comment or inserting a bucket would have
+// given it the hole that `rateLimit_advisor_charge.test.ts` demonstrated with a
+// mutation. Ending the slice at the literal's own `},` is correct whatever the
+// neighbours are. This changes only how the region is located; every assertion
+// below is unchanged.
+const blockEnd = src.indexOf('\n  },', at);
+const bucket = blockEnd > at ? src.slice(at, blockEnd) : '';
 
 test('the origination bucket exists and is strict', () => {
   assert.ok(src.includes("name: 'esign_send'"), 'esign_send bucket must exist');
+  assert.ok(blockEnd > at, 'the bucket declaration is unclosed, so nothing below was read');
+  // The slice must hold ONE bucket. Two would mean the window ran into a
+  // neighbour and every assertion below could be satisfied by the wrong one.
+  assert.equal((bucket.match(/name: '/g) ?? []).length, 1,
+    'the slice spans more than one bucket, so these assertions may be reading a neighbour');
   const limit = Number(/limit:\s*(\d+)/.exec(bucket)?.[1]);
   const windowSec = Number(/windowSec:\s*(\d+)/.exec(bucket)?.[1]);
   assert.ok(limit > 0 && limit <= 20, `limit ${limit} must be a real cap, not a formality`);

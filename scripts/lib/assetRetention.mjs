@@ -22,6 +22,8 @@
 /**
  * @param {object} opts
  * @param {string[]} opts.prevFiles   asset filenames present BEFORE the build (backed up)
+ * @param {string[]} [opts.seedFiles] what the no-ledger synthetic seed holds
+ *                                    (defaults to prevFiles; see below)
  * @param {string[]} opts.newFiles    asset filenames the fresh build produced
  * @param {Array<{ts:string,files:string[]}>} [opts.ledgerBuilds] prior ledger, newest-first
  * @param {number} [opts.retainBuilds] how many builds' assets to keep (default 3)
@@ -35,6 +37,7 @@
  */
 export function planAssetRetention({
   prevFiles = [],
+  seedFiles = null,
   newFiles = [],
   ledgerBuilds = [],
   retainBuilds = 3,
@@ -47,12 +50,30 @@ export function planAssetRetention({
         .map((b) => ({ ts: String(b.ts ?? ''), files: uniq(b.files) }))
     : [];
 
-  // First run with this system (no ledger yet): seed the currently-deployed
-  // assets as a synthetic prior build so they are not dropped on the first
-  // retention build — otherwise clients still holding the previous shell
-  // would break immediately.
-  if (builds.length === 0 && prevFiles.length > 0) {
-    builds.push({ ts: 'pre-retention', files: uniq(prevFiles) });
+  // No ledger yet (a fresh clone, and CI on EVERY run): seed a synthetic prior
+  // build so the assets a client on the previous shell still asks for are not
+  // dropped on the first retention build.
+  //
+  // WHAT IT SEEDS IS THE FIX. This used `prevFiles` — everything on disk — and
+  // `.gitignore` recorded the trade in its own words: "with no ledger it seeds
+  // the committed `docs/assets` as a synthetic prior build … That is the safe
+  // direction (it prunes less, never more)." Pruning less, never more, is
+  // precisely how the committed set became a high-water mark that only grows:
+  // CI has no ledger, so every deploy re-seeded the whole accumulated tree as
+  // one build worth keeping. Measured on `main`: 964 committed assets against a
+  // clean build's 597.
+  //
+  // `seedFiles` is the PREVIOUS GENERATION instead — the transitive closure of
+  // the previous `index.html` over the chunk graph (`lib/assetGeneration.mjs`),
+  // derivable from `docs/` alone with no ledger. It keeps exactly what a client
+  // holding that shell can ask for and drops generations older than it, which
+  // no reachable shell references. The no-ledger window becomes two builds
+  // rather than unbounded. It defaults to `prevFiles` so a caller that cannot
+  // compute a generation gets the old, over-broad behaviour rather than an
+  // under-broad one.
+  const seed = Array.isArray(seedFiles) && seedFiles.length > 0 ? seedFiles : prevFiles;
+  if (builds.length === 0 && seed.length > 0) {
+    builds.push({ ts: 'pre-retention', files: uniq(seed) });
   }
 
   // A rebuild that produces the SAME file set as the newest entry REPLACES it

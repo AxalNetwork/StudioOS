@@ -15922,3 +15922,277 @@ It does not claim the bare comparison would have shipped. It would not:
 form was verified to fail it by name. What changes here is that **the test
 whose name is "the comparison must not be format-blind" is now the thing that
 catches it**, instead of passing while another guard did the work.
+
+---
+
+## D178 — `investorPipeline.js` was 402 lines of IC fixtures nothing imported
+
+**Deleted.** `frontend/src/data/investorPipeline.js` had no importer anywhere in
+the repo: a sweep excluding `node_modules`, `docs/` and `.git` returned exactly
+two hits, neither of them an import — its own row in
+`frontend/src/data/README.md`, and a stale CodeQL alert transcript under
+`attached_assets/`.
+
+**Why it mattered beyond dead weight.** It shipped deterministic demo data
+shaped like real investment-committee records, including a member vote row
+reading `{ member: 'Leo Park', vote: 'abstain', note: 'Recused — angel in a
+competitor.' }`. The `/deals/commit` page is being built against `ic_votes`,
+whose `vote` column admits `yes | no | abstain` and carries **no recusal state
+at all**. A plausible recusal fixture listed in the folder README as live data
+is an invitation to wire demo rows into a customer's IC record — the class this
+directory's own "This is not a fixtures folder" section exists to close, and
+which it had not finished closing.
+
+The README row went with the file, because `scripts/check-folder-docs.mjs`'s
+TRUTH rule fails the build on a README citing a path that does not resolve.
+
+---
+
+## D179 — `codeOnly` now strips brace comments, and the braces survive
+
+**The defect.** `frontend/test/_codeOnly.mjs` exports two functions. `codeOnly`
+removed a column-0 block comment and a whole-line `//`; `codeOnlyJsx` removed
+those **and** `{/* … */}`. 159 test files import `codeOnly`; **six** import
+`codeOnlyJsx`. So the rule that keeps a comment naming a banned phrase from
+reading as the phrase itself was applied to four percent of the callers, and it
+cost five assertion failures against correct code — login's
+`login-google-unavailable` testid, the SQLite CHECK error text, migration 240's
+comment naming `held_unpaid`, and a comment in
+`pages/advisor/practice/EarningsZone.jsx`.
+
+**The rule is in `codeOnly` now** and `codeOnlyJsx` is its alias, so the six
+callers are unchanged. Two corrections the build forced, each recorded because
+each contradicts how the change was specified:
+
+1. **Whitespace tolerance is half the fix.** The strict `\{\/\*` pair missed
+   **109** padded `{ /*` sites in `frontend/src` — which turn out to be mostly
+   `catch { /* … */ }`, not JSX at all, and are prose by the same argument.
+2. **The braces survive: the replacement is `{}`, not nothing.** Deleting them
+   turns `catch { /* … */ }` into a bare `catch`, and
+   `spinout_lab_scoring_milestones.test.mjs`, which reads a `try`/`catch` shape
+   out of the source, failed against correct code on exactly that. **A prose
+   stripper may delete prose; it may not restructure the code around it.**
+
+**The caution the file was built on is kept, not weakened.** A bare `/*` inside
+a string or a className still opens nothing — the brace shape is safe precisely
+because BOTH delimiters must appear, and neither pair occurs in any string or
+className in this tree. The comment body is additionally written so it cannot
+CONTAIN a close marker, because a lazy `[\s\S]*?` backtracks when the next
+character is not `}` and joins two adjacent comments into one match, eating the
+live code between them. **Measured: that over-match occurs nowhere in the tree
+today**, so the explicit body is defence rather than a repair — and its test
+says so with a fixture rather than claiming a defect it did not find. An earlier
+draft of this entry did claim one, having mis-attributed the pre-existing
+line-strip rules' output to the new rule.
+
+**Three existing tests relied on a comment staying visible, and each was looked
+at rather than worked around.**
+
+- `pipeline_negotiations_board.test.mjs` bounded a slice on the section marker
+  `{/* ══ TERMS IN PLAY`. A landmark that is itself a comment has to be read
+  from the unstripped source, so that one slice does; every assertion stays on
+  the stripped copy.
+- `research_ask_session.test.mjs` carried its own copy of the strip and then
+  asserted it had removed something. The copy is gone; the vacuousness guard is
+  re-aimed at the property that still holds — the page must still carry the
+  explanation the bans exist to spare, and the stripped copy must be shorter
+  than the file.
+- `spinout_lab_scoring_milestones.test.mjs` needed no change once the braces
+  survived, which is what found correction 2.
+
+**`scripts/check-inline-project-pickers.mjs` carries the same three rules**, for
+the reason it always has: a guard `test:guards` runs must not import out of the
+test tree.
+
+---
+
+## D180 — a rate-limit guard bounded at 400 characters was reading its neighbour
+
+**The defect, and it is test robustness rather than production behaviour.**
+`rateLimit_company_invite.test.ts` and `rateLimit_esign_send.test.ts` located
+their bucket with `src.indexOf("name: '<bucket>'")` and then
+`src.slice(at, at + 400)`. Measured against `middleware/rateLimit.ts`:
+
+| bucket | its literal | overshoot at 400 | `name: '` in the window |
+| --- | --- | --- | --- |
+| `company_invite_send` | 170 | **230** | 1 |
+| `esign_send` | 192 | **208** | 1 |
+| `promo_validate` | 172 | 228 | 1 |
+| `admin_catalog_writes` | 263 | 137 | 1 |
+| `advisor_session_charge` | 174 | 226 | **2** |
+
+**400 exceeds every bucket literal in the file**, so every one of these windows
+ran past its own closing `},`. Four of the five were safe only because the
+overshoot happened to land in comment prose. The fifth was not: D-era work on
+`advisor_session_charge` mutation-checked it and found that flipping the bucket
+to `scope: 'ip'` left `assert.match(bucket, /scope: 'user'/)` satisfied by the
+generic `user` bucket declared immediately below — a guard reporting green about
+a neighbour. `rateLimit_advisor_charge.test.ts` was fixed then; its two siblings
+were left carrying the same idiom, and **reordering `BUCKETS`, shortening a
+comment or inserting a bucket would have given either of them the hole.**
+
+**The fix is the reference one, applied verbatim:** bound the slice at the
+literal's own `\n  },`, assert the close was found, and assert the slice holds
+exactly one `name: '`. **Every existing assertion and its wording is unchanged
+— this changes only how the region is located, and no production code moves.**
+
+**Mutation-checked per bucket, both directions:** flipping `scope: 'user'` to
+`'ip'` and removing `failClosed: true` each fails its own test, four for four,
+with `rateLimit.ts` restored byte-identical afterwards.
+
+Three other tests in the worker tree use a fixed-length slice
+(`fills_registry`, `advisor_client_grants`, `licence_admin_lifecycle_d134`).
+They are not against `rateLimit.ts` and are **not** touched here; whether the
+same idiom is load-bearing for them is a separate reading.
+
+---
+
+## D181 — a hang detector that fires on a slow fork is a flake
+
+`frontend/test/pptx_image_size_not_bundled.test.mjs`'s *"a zero-length ICNS
+entry returns instead of hanging"* forks a child to prove `image-size` no longer
+loops (CVE-2025-71330) and failed with *"sizeOf(buf) hung in child process"* if
+the child had not reported within a fixed 2000 ms. **The timer started at
+`fork()`**, so it was timing node boot and the `image-size` require as if they
+were the parse. On 2026-09-14 it failed once inside a full `npm run test:drift`
+at `duration_ms: 2008` against that 2000 ms bound, then passed three times when
+run alone.
+
+**A flake in a security regression test teaches people to ignore it**, which is
+the whole reason this is worth a decision rather than a bump of the number.
+
+**Two bounds now, one per phase, because they measure different things.** The
+child sends a `ready` IPC message after requiring `image-size` and building the
+buffer, and the parent arms the **2 s parse bound only then** — so a real
+infinite loop still fails within ~2 s of the parse, and **what the test proves
+and the bound it proves it under are unchanged**. A separate, generous 15 s
+startup bound fails with its own message, so a child that never started is never
+reported as a library that never returned. A third assertion refuses a result
+that arrives without a preceding `ready`, so the parse cannot silently go
+untimed.
+
+**Mutation-checked both ways.** An infinite loop inserted after `ready` fails
+with the hang message in ~2 s of the parse; deleting the `ready` send fails with
+the ordering message rather than passing or waiting out the startup bound.
+Verified alone and inside a full `test:drift`.
+
+---
+
+## D182 — the post-deploy smoke asked one question, on the one path exempt from the answer
+
+**The blindness, measured.** `scripts/check-spa-live.mjs` probed a single
+`/api/*` path, defaulting to `/api/health` — which is the **first entry** of
+`RATE_LIMIT_EXEMPT` (`middleware/rateLimit.ts`). The middleware's own line is
+`if (RATE_LIMIT_EXEMPT.some(p => path === p || path.startsWith(p + '/'))) return next();`,
+so the probe returned before `rateLimitMiddleware` did any work. D78 already
+recorded the consequence: the smoke **stayed green straight through the
+2026-09-12 sign-in outage**, where `/api/auth/me` (exempt) kept answering while
+`/api/auth/magic/start` and `/api/auth/google/start` (not exempt) hung for 30
+seconds.
+
+**A second probe, on a path nobody mounted.** `API_PROBE_LIMITED_PATH` defaults
+to `/api/__smoke/rate-limited`. `app.use('/api/*', rateLimitMiddleware())` runs
+the whole chain before Hono looks for a handler, so an unmatched `/api/...`
+traverses the limiter — its `global` and `ip` buckets both test
+`p.startsWith('/api/')` — and ends at
+`app.notFound((c) => c.json({ detail: 'Not found' }, 404))`. That is a JSON
+body, which `checkApiRouting` already accepts as proof the Worker answered. A
+synthetic path is the robust choice precisely because it needs no route to
+exist and cannot rot when one is renamed.
+
+**The combination is the diagnosis, not either line.** The two results are
+reported as separate PASS/FAIL lines, and when the exempt probe passes while the
+non-exempt one fails the epilogue names it as the 2026-09-12 signature, points
+at `rateLimitMiddleware` and the `RATE_LIMITS` KV binding, and says explicitly
+that the fix is **not** to add a path to `RATE_LIMIT_EXEMPT` — D74 pins those
+two auth paths as deliberately not exempt, and exempting them is what hid the
+outage.
+
+**`SMOKE_TIMEOUT_MS` stays 15000, deliberately, and the file now says why.**
+Matching the browser's 30 s would only make the synthetic check wait as long as
+the user did before reporting the same failure. 15 s is already far past healthy
+— the limiter's KV await is deadline-bounded in single digits — and the budget
+is per request, retried `SMOKE_RETRIES` times across two hosts and ~26 routes
+inside a 5-minute job cap.
+
+**`post-deploy-smoke.yml` exposes both probe paths** as `workflow_dispatch`
+inputs beside `hosts`. An incident is exactly when someone wants to aim the
+probe by hand; blank falls back to the script's defaults.
+
+**The guard**, `cloudflare-worker/test/smoke_limiter_probe_d182.test.ts`, reads
+`RATE_LIMIT_EXEMPT` out of the source the way `auth_path_bounded.test.mjs` does
+and asserts the limited probe is matched by **no** entry and the unlimited one
+**is** — restating the middleware's exact-or-slash-boundary rule rather than
+importing it, so the test fails if the two ever stop agreeing. Four mutations,
+four caught: pointing the limited probe at `/api/health`; adding `/api/__smoke`
+to the exempt list; removing the named diagnosis; and unmounting the limiter
+from `/api/*`.
+
+---
+
+## D183 — "prunes less, never more" was the defect, not the safe direction
+
+**The accumulation, measured.** `docs/assets` on `main` held **964** files
+against a clean build's **597**. `scripts/build-frontend.mjs` backs the
+directory up, lets the bundler empty it, then restores a window of
+`ASSET_RETAIN_BUILDS` (3) generations — but the ledger it needs,
+`docs/.asset-retention.json`, is **gitignored on purpose**. So CI and every
+fresh clone take the no-ledger path on **every** run, and that path seeded
+**every file on disk** as one synthetic prior build. `.gitignore` described
+this in its own words as *"the safe direction (it prunes less, never more)"*.
+
+**Pruning less, never more, is exactly how a set becomes a high-water mark.**
+Each deploy re-kept everything already committed and added its own output, so
+`docs/assets` could only grow.
+
+**The fix: seed the PREVIOUS GENERATION, not the whole tree.** A generation is
+derivable from `docs/` alone with no ledger — it is the transitive closure of
+the committed shells over the chunk graph, the same walk
+`check-docs-assets-closure.mjs` already does (`scripts/lib/assetGeneration.mjs`).
+That keeps precisely what a client still holding the previous shell can ask for
+and drops generations older than it, which no committed shell references. The
+no-ledger window becomes **two builds rather than unbounded**. An unreadable or
+absent shell falls back to the old, over-broad seed rather than to nothing —
+seeding nothing would blank the page for every client mid-deploy.
+
+**Measured end to end on the no-ledger path, against `main`'s own tree:**
+
+```
+start: 964 assets
+[build] previous generation: 601 of 964 asset(s) reachable from a committed shell
+after:  601 assets
+```
+
+…and `check-docs-assets-closure` still reports **4704 references across 558
+chunks all resolve**, so nothing that any remaining shell asks for was pruned.
+
+**Two things the build corrected, each recorded rather than quietly done.**
+
+1. **The shell names its entry in a form the graph extractor cannot read.**
+   `index.html` writes `src="/assets/index-<hash>.js"` with a **leading
+   slash**, while `referencesOf`'s bare pattern requires the quote to sit
+   directly before `assets/`. The first walk returned **0 reachable of 601** —
+   the same silent-empty-walk shape the closure guard's own self-check exists
+   for. The shell gets its own extractor; the chunk-to-chunk forms still come
+   from `referencesOf`.
+2. **BACKTICKS WERE INVISIBLE, and that was a hole in D176's guard too.**
+   Rollup emits a lazy chunk as ``import(`./purify.es-<hash>.js`)`` — a
+   template literal — and a quote class of `["']` reads straight past it.
+   `purify.es-JEAr64Sr.js` was the one file of 601 that **no walk could reach**.
+   Both `BARE_REF` and `DOT_REF` now admit a backtick, so
+   `check-docs-assets-closure` can see a class of edge it never could: a chunk
+   it cannot see is a chunk it cannot report as dangling.
+
+**The ceiling.** `check-docs-assets-closure` fails when `docs/assets` exceeds
+1800 files (`DOCS_ASSET_CEILING`) — high enough that three full generations
+pass, low enough that unbounded growth is caught long before anyone reads it in
+a diff. It lives there rather than in `check-docs-fresh` because that script
+already reads the directory and counts it, and exits through several branches
+that a ceiling would have to be threaded past.
+
+**Mutations, five applied and five caught** after one escape was closed: the
+planner ignoring `seedFiles`; an empty seed meaning keep-nothing rather than
+fall-back; and both extractors losing their backtick. The shell extractor's
+backtick tolerance **escaped its first mutation** — the fixture reached it only
+through a quoted attribute — and a fixture for the inline-script form was added
+rather than the escape reported.

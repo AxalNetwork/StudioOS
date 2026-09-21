@@ -61,12 +61,13 @@ const PICKER_GUARD = /\bprojects\s*\.\s*length\s*>\s*1\s*(?:&&|\?)/g;
 /**
  * Prose removed, so an explanation of why a picker is gone cannot read as one.
  * Three comment shapes: a block comment starting a line, a whole-line `//`, and
- * the JSX `{/* … *\/}` these files use inside markup — the last is why this is
- * not `frontend/test/_codeOnly.mjs`, which deliberately leaves it alone.
+ * a comment wrapped in braces — `{/* … *\/}` inside markup, and the
+ * `catch { /* … *\/ }` shape — with whitespace permitted on either side. Kept
+ * in step with `frontend/test/_codeOnly.mjs`, which now carries the same three.
  */
 function codeOnly(src) {
   return String(src)
-    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    .replace(/\{\s*\/\*(?:[^*]|\*(?!\/))*\*\/\s*\}/g, '{}')
     .replace(/^\/\*[\s\S]*?\*\//gm, '')
     .replace(/^\s*\/\/[^\n]*$/gm, '')
     .replace(/^\s*\*[^\n]*$/gm, '');

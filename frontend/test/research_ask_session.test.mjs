@@ -31,7 +31,8 @@ const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const WORKER = read('cloudflare-worker/src/routes/research.ts');
 const MIGRATION = read('cloudflare-worker/sql/migrations/221_research_ask_sessions.sql');
 const API = codeOnly(read('frontend/src/lib/api.js'));
-const ASK = codeOnly(read('frontend/src/pages/research/AskZone.jsx'));
+const ASK_PATH = 'frontend/src/pages/research/AskZone.jsx';
+const ASK = codeOnly(read(ASK_PATH));
 const DRAFT = codeOnly(read('frontend/src/workspaces/ZoneDraft.jsx'));
 
 /** The `/ask` handler, bounded at the next route declaration. */
@@ -239,13 +240,18 @@ test('the metered rate is read from the pricing endpoint, never typed', () => {
   // render it. Banning the string outright bans the explanation rather than the
   // behaviour, which is the mistake `research_canvas_strips.test.mjs` records
   // making twice.
-  const rendered = ASK.replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+  // `ASK` already has its JSX comments removed — `codeOnly` carries that rule
+  // now, so the local strip this test used to do is gone rather than repeated.
   for (const literal of ['0.440', '0.014', '1.320', '$0.005 per question']) {
-    assert.ok(!rendered.includes(literal), `the artboard's ${literal} has been transcribed as a rate`);
+    assert.ok(!ASK.includes(literal), `the artboard's ${literal} has been transcribed as a rate`);
   }
-  // And the strip really did remove something, or the four bans above are
-  // passing over an empty string.
-  assert.ok(rendered.length > 0 && rendered.length < ASK.length,
+  // And the strip really is happening, or the four bans above pass because the
+  // explanation they exist to spare was never there to begin with.
+  const unstripped = read(ASK_PATH);
+  assert.ok(unstripped.includes('$0.005 per question'),
+    'the page stopped explaining why it does not print a rate, so these bans no longer '
+    + 'prove anything about the strip');
+  assert.ok(ASK.length > 0 && ASK.length < unstripped.length,
     'the JSX-comment strip removed nothing, so these bans are not reading the page');
 });
 

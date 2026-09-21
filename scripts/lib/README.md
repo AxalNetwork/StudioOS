@@ -11,6 +11,7 @@ can be read to find out what a rule actually is.
 | `migrationPlan.mjs` | The migration ledger's shape, the baseline cutoff, and what to do with each file — apply, mark, or skip. Owned by `../migrate-d1.mjs`. |
 | `migrationTargets.mjs` | Which database a migration run touches, and which database may never be bootstrapped. One `--branch <code>` target per subsidiary, each naming the config that declares it. |
 | `branchConfig.mjs` | A branch Worker's whole `wrangler.toml`, derived from HQ's `[env.production]` table, plus what a registry entry must contain and what a rendered config must never say. Owned by `../gen-branch-wrangler.mjs` and `../check-branch-config.mjs`. |
+| `assetGeneration.mjs` | The assets ONE build's shells reach — what the no-ledger seed keeps, so `docs/assets` stops growing (D183). |
 | `assetRetention.mjs` | Which hashed assets in `docs/` a build keeps and which it may prune. |
 | `sourceTreeHash.mjs` | The content hash of `frontend/src` that `docs/.build-source` records, so "is this bundle built from this source" is answerable (D103). |
 | `buildStamp.mjs` | Whether `docs/.build-source` is absent, readable or corrupt — three states, not two. Absent falls back to the commit-timestamp proxy; present-but-unreadable (a `merge=union` result, say) must never (D113). |
