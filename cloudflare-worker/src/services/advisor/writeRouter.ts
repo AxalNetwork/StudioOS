@@ -204,76 +204,102 @@ function parseList(s: string): string[] {
 }
 
 /**
- * Task #3 (AS) — resolve (or lazy-create) the partner_profiles row
- * owned by `user`. Mirrors ensureAdvisorRow's defensive pattern:
- *   1. Look up by user_id (claimed-invitation case).
- *   2. Look up by email match against partner_invitations.recipient_email
- *      and bind the user_id (admin invited the partner directly).
- *   3. Otherwise synthesise an admin-side invitation stub +
- *      partner_profiles row so advisor answers have somewhere to land.
- * The advisor never creates real `partner_invitations.token` rows
- * that can be redeemed externally — synthesised stubs are flagged
- * `status='advisor_stub'` so admin lists can filter them out.
+ * Task #3 (AS) — resolve (or lazy-create) the partner_profiles row owned by
+ * `user`, and hand back the key every partner write below binds on.
+ *
+ * D187 — THIS FUNCTION KEYED ON A COLUMN THAT DOES NOT EXIST, AND THAT IS WHY
+ * EVERY PARTNER ANSWER WAS REFUSED. Its first statement used to be
+ * `SELECT id, invitation_id FROM partner_profiles WHERE user_id = ?`. Neither
+ * column is on the table any environment has: `partner_profiles` was declared
+ * three times in two shapes and production carries the `email TEXT PRIMARY
+ * KEY` one (migration 275's header has the whole story). So the statement
+ * threw, the catch below swallowed it, this returned null, and the caller
+ * answered every one of the six partner questions with
+ *
+ *     "Partner profile not bound yet — accept your invitation from the
+ *      Partner Portal first."
+ *
+ * to 26 of 51 accounts — while production held ZERO partner_invitations, so
+ * the instruction could not be followed even in principle.
+ *
+ * The key is now `email`, which IS the table's primary key, with `user_id` as
+ * the preferred lookup so a row already bound to this user wins:
+ *   1. by user_id — the bound case;
+ *   2. by email — bind user_id if the row is unclaimed, and REFUSE if it is
+ *      owned by somebody else (that guard is unchanged and load-bearing: the
+ *      advisor must never reassign a profile);
+ *   3. otherwise insert one keyed on email.
+ *
+ * NO INVITATION STUB. The old step 3 minted a fake `partner_invitations` row
+ * flagged 'advisor_stub' purely because shape 1 declared
+ * `invitation_id NOT NULL UNIQUE`. On an email-keyed row an invitation is not
+ * required for an answer to land, so the advisor stops writing invitation rows
+ * as a side effect of a chat message — which it never should have done.
+ *
+ * AND THAT STUB COULD NEVER HAVE SUCCEEDED ANYWHERE, which is a second and
+ * independent reason this function returned null. `partner_invitations`
+ * declares `expires_at TIMESTAMP NOT NULL` with no default (migration
+ * 028_partner_deals.sql:20, mirrored verbatim in schema_baseline.sql), and the
+ * stub bound four columns — recipient_email, token, status, invited_by_user_id
+ * — omitting it. So the INSERT raised a NOT NULL constraint failure on every
+ * environment, its own `.catch(() => null)` swallowed the error, `invId` came
+ * back 0, and `if (!invId) return null` fired. Step 1 would have had to throw
+ * AND step 2 miss for step 3 to be reached, which is exactly what happened —
+ * so repairing only the schema collision would have moved the same silent null
+ * three hundred lines down rather than fixing it. Found by aiming a mutation at
+ * this deletion: the mutation restored the stub verbatim and ESCAPED, because
+ * the restored stub wrote no row either. The guard was right and the mutation
+ * was wrong, which is why a mutation is aimed before it is trusted.
  */
-async function ensurePartnerProfile(env: Env, user: User): Promise<{ id: number; invitation_id: number } | null> {
+async function ensurePartnerProfile(
+  env: Env,
+  user: User,
+): Promise<{ email: string; invitation_id: number | null } | null> {
   try {
-    // (1) Already-claimed profile.
+    // (1) Already bound to this user.
     const claimed = await env.DB.prepare(
-      `SELECT id, invitation_id FROM partner_profiles WHERE user_id = ? LIMIT 1`,
-    ).bind(user.id).first<{ id: number; invitation_id: number }>();
-    if (claimed?.id) return { id: Number(claimed.id), invitation_id: Number(claimed.invitation_id) };
-
-    // (2) Bind by email.
-    const inv = await env.DB.prepare(
-      `SELECT id FROM partner_invitations WHERE LOWER(recipient_email) = LOWER(?) LIMIT 1`,
-    ).bind(user.email).first<{ id: number }>().catch(() => null);
-    if (inv?.id) {
-      // Bind user to existing invitation; create profile if missing.
-      const existing = await env.DB.prepare(
-        `SELECT id, user_id FROM partner_profiles WHERE invitation_id = ?`,
-      ).bind(inv.id).first<{ id: number; user_id: number | null }>().catch(() => null);
-      if (existing?.id) {
-        // Access-control guard: only bind user_id when it's NULL or
-        // already this user. Refuse to silently rebind a profile
-        // currently owned by someone else (e.g. duplicate emails or
-        // a prior partner who claimed the invitation) — the advisor
-        // should never reassign profile ownership.
-        const currentOwner = existing.user_id == null ? null : Number(existing.user_id);
-        if (currentOwner != null && currentOwner !== user.id) {
-          return null;
-        }
-        if (currentOwner == null) {
-          await env.DB.prepare(
-            `UPDATE partner_profiles SET user_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id IS NULL`,
-          ).bind(user.id, existing.id).run();
-        }
-        return { id: Number(existing.id), invitation_id: Number(inv.id) };
-      }
-      const r = await env.DB.prepare(
-        `INSERT INTO partner_profiles (invitation_id, user_id, full_name)
-           VALUES (?, ?, ?)`,
-      ).bind(inv.id, user.id, user.name || user.email).run();
-      const newId = Number((r as { meta?: { last_row_id?: number } }).meta?.last_row_id || 0);
-      if (newId) return { id: newId, invitation_id: Number(inv.id) };
+      `SELECT email, invitation_id FROM partner_profiles WHERE user_id = ? LIMIT 1`,
+    ).bind(user.id).first<{ email: string; invitation_id: number | null }>();
+    if (claimed?.email) {
+      return {
+        email: String(claimed.email),
+        invitation_id: claimed.invitation_id == null ? null : Number(claimed.invitation_id),
+      };
     }
 
-    // (3) Stub invitation + profile so advisor writes have a target.
-    const bytes = new Uint8Array(16);
-    crypto.getRandomValues(bytes);
-    const token = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-    const invIns = await env.DB.prepare(
-      `INSERT INTO partner_invitations (recipient_email, token, status, invited_by_user_id)
-         VALUES (?, ?, 'advisor_stub', ?)`,
-    ).bind(user.email, token, user.id).run().catch(() => null);
-    const invId = Number((invIns as { meta?: { last_row_id?: number } } | null)?.meta?.last_row_id || 0);
-    if (!invId) return null;
-    const profIns = await env.DB.prepare(
-      `INSERT INTO partner_profiles (invitation_id, user_id, full_name)
-         VALUES (?, ?, ?)`,
-    ).bind(invId, user.id, user.name || user.email).run();
-    const profId = Number((profIns as { meta?: { last_row_id?: number } }).meta?.last_row_id || 0);
-    if (!profId) return null;
-    return { id: profId, invitation_id: invId };
+    // (2) A row already exists under this address — bind it, or refuse.
+    const byEmail = await env.DB.prepare(
+      `SELECT email, user_id, invitation_id FROM partner_profiles WHERE LOWER(email) = LOWER(?) LIMIT 1`,
+    ).bind(user.email).first<{ email: string; user_id: number | null; invitation_id: number | null }>()
+      .catch(() => null);
+    if (byEmail?.email) {
+      // Access-control guard, unchanged from the original: only bind user_id
+      // when it is NULL or already this user. Refuse to silently rebind a
+      // profile currently owned by someone else (duplicate addresses, or a
+      // prior partner who claimed it) — the advisor never reassigns ownership.
+      const currentOwner = byEmail.user_id == null ? null : Number(byEmail.user_id);
+      if (currentOwner != null && currentOwner !== user.id) return null;
+      if (currentOwner == null) {
+        await env.DB.prepare(
+          `UPDATE partner_profiles SET user_id = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE LOWER(email) = LOWER(?) AND user_id IS NULL`,
+        ).bind(user.id, user.email).run();
+      }
+      return {
+        email: String(byEmail.email),
+        invitation_id: byEmail.invitation_id == null ? null : Number(byEmail.invitation_id),
+      };
+    }
+
+    // (3) Nothing yet — create the row the answers will land in.
+    await env.DB.prepare(
+      `INSERT INTO partner_profiles (email, user_id, full_name)
+         VALUES (?, ?, ?)
+       ON CONFLICT(email) DO UPDATE SET
+         user_id = COALESCE(partner_profiles.user_id, excluded.user_id),
+         updated_at = CURRENT_TIMESTAMP`,
+    ).bind(user.email, user.id, user.name || user.email).run();
+    return { email: user.email, invitation_id: null };
   } catch (e) {
     console.error('[advisor] ensurePartnerProfile:', (e as Error).message);
     return null;
@@ -1283,11 +1309,12 @@ export async function routeAnswer(
       if (profile) {
         try {
           await env.DB.prepare(
-            `UPDATE partner_profiles SET raw_chat_json = json_set(COALESCE(raw_chat_json,'{}'), '$.' || ?, ?) WHERE id = ?`,
-          ).bind('partner_profile_focus', value, profile.id).run();
+            `UPDATE partner_profiles SET raw_chat_json = json_set(COALESCE(raw_chat_json,'{}'), '$.' || ?, ?)
+              WHERE LOWER(email) = LOWER(?)`,
+          ).bind('partner_profile_focus', value, profile.email).run();
           return {
             status: 'saved',
-            saved_to: { table: 'partner_profiles', column: 'raw_chat_json', id: profile.id, page_url: '/partner-portal' },
+            saved_to: { table: 'partner_profiles', column: 'raw_chat_json', id: profile.email, page_url: '/partner-portal' },
             hint: 'Saved as a chat note (column not yet migrated).',
           };
         } catch { /* fall through */ }
@@ -1296,7 +1323,16 @@ export async function routeAnswer(
     }
     const profile = await ensurePartnerProfile(env, user);
     if (!profile) {
-      return { status: 'noop', hint: 'Partner profile not bound yet — accept your invitation from the Partner Portal first.' };
+      // D187 — THIS SENTENCE USED TO BE THE ANSWER TO EVERY PARTNER QUESTION,
+      // and it was false twice over: the row was never looked up on a column
+      // the table has, and production held no invitations to accept. It now
+      // fires only where it is true — the row exists and belongs to another
+      // account, which is the one case ensurePartnerProfile refuses — or the
+      // write itself failed, which is not the reader's fault to explain away.
+      return {
+        status: 'noop',
+        hint: 'This answer was not saved: a partner profile already exists under your address and belongs to another account. An admin can unbind it from the Partner Portal.',
+      };
     }
     const partnerMap: Record<string, string> = {
       'partner.firm.name':         'organization',
@@ -1310,22 +1346,24 @@ export async function routeAnswer(
     if (!pcol) return { status: 'noop' };
     try {
       await env.DB.prepare(
-        `UPDATE partner_profiles SET ${pcol} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      ).bind(value, profile.id).run();
+        `UPDATE partner_profiles SET ${pcol} = ?, updated_at = CURRENT_TIMESTAMP WHERE LOWER(email) = LOWER(?)`,
+      ).bind(value, profile.email).run();
       return {
         status: 'saved',
-        saved_to: { table: 'partner_profiles', column: pcol, id: profile.id, page_url: '/partner-portal' },
+        saved_to: { table: 'partner_profiles', column: pcol, id: profile.email, page_url: '/partner-portal' },
       };
     } catch (e) {
       // Column may not be migrated on legacy dev — fall back to
-      // raw_chat_json so the value isn't lost.
+      // raw_chat_json so the value isn't lost. After migration 275 this arm
+      // is a genuine legacy path rather than the one every write took.
       try {
         await env.DB.prepare(
-          `UPDATE partner_profiles SET raw_chat_json = json_set(COALESCE(raw_chat_json,'{}'), '$.' || ?, ?) WHERE id = ?`,
-        ).bind(questionId.replace(/[^a-zA-Z0-9_]/g, '_'), value, profile.id).run();
+          `UPDATE partner_profiles SET raw_chat_json = json_set(COALESCE(raw_chat_json,'{}'), '$.' || ?, ?)
+            WHERE LOWER(email) = LOWER(?)`,
+        ).bind(questionId.replace(/[^a-zA-Z0-9_]/g, '_'), value, profile.email).run();
         return {
           status: 'saved',
-          saved_to: { table: 'partner_profiles', column: 'raw_chat_json', id: profile.id, page_url: '/partner-portal' },
+          saved_to: { table: 'partner_profiles', column: 'raw_chat_json', id: profile.email, page_url: '/partner-portal' },
           hint: 'Saved as a chat note (column not yet migrated).',
         };
       } catch {

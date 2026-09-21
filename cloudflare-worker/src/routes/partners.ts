@@ -251,9 +251,14 @@ partners.post('/match', async (c) => {
   }
 
   // Load partner profile capacity for availability_capacity.
-  // partner_profiles is keyed by invitation_id; it has a user_id FK that
-  // links to users.id, and users.partner_id links to partners.id. Query by
-  // user_id instead since we already have the partner-linked user_ids.
+  // partner_profiles is keyed by EMAIL — not by invitation_id, which this
+  // comment claimed until D187 and which was false on every environment
+  // (migration 275's header has the three-shape story). It carries a user_id
+  // that links to users.id, and users.partner_id links to partners.id, so
+  // querying by user_id is right for the reason below rather than as a
+  // workaround: we already hold the partner-linked user_ids.
+  // capacity_per_month itself did not exist until 275, so this read returned
+  // nothing and availability_capacity silently degraded for every partner.
   const partnerWithUserIds = visiblePartners.filter((p: any) => p.user_id);
   const partnerUserIds = partnerWithUserIds.map((p: any) => Number(p.user_id));
   const userIdToPartnerId = new Map<number, number>();
