@@ -15945,3 +15945,61 @@ which it had not finished closing.
 
 The README row went with the file, because `scripts/check-folder-docs.mjs`'s
 TRUTH rule fails the build on a README citing a path that does not resolve.
+
+---
+
+## D179 — `codeOnly` now strips brace comments, and the braces survive
+
+**The defect.** `frontend/test/_codeOnly.mjs` exports two functions. `codeOnly`
+removed a column-0 block comment and a whole-line `//`; `codeOnlyJsx` removed
+those **and** `{/* … */}`. 159 test files import `codeOnly`; **six** import
+`codeOnlyJsx`. So the rule that keeps a comment naming a banned phrase from
+reading as the phrase itself was applied to four percent of the callers, and it
+cost five assertion failures against correct code — login's
+`login-google-unavailable` testid, the SQLite CHECK error text, migration 240's
+comment naming `held_unpaid`, and a comment in
+`pages/advisor/practice/EarningsZone.jsx`.
+
+**The rule is in `codeOnly` now** and `codeOnlyJsx` is its alias, so the six
+callers are unchanged. Two corrections the build forced, each recorded because
+each contradicts how the change was specified:
+
+1. **Whitespace tolerance is half the fix.** The strict `\{\/\*` pair missed
+   **109** padded `{ /*` sites in `frontend/src` — which turn out to be mostly
+   `catch { /* … */ }`, not JSX at all, and are prose by the same argument.
+2. **The braces survive: the replacement is `{}`, not nothing.** Deleting them
+   turns `catch { /* … */ }` into a bare `catch`, and
+   `spinout_lab_scoring_milestones.test.mjs`, which reads a `try`/`catch` shape
+   out of the source, failed against correct code on exactly that. **A prose
+   stripper may delete prose; it may not restructure the code around it.**
+
+**The caution the file was built on is kept, not weakened.** A bare `/*` inside
+a string or a className still opens nothing — the brace shape is safe precisely
+because BOTH delimiters must appear, and neither pair occurs in any string or
+className in this tree. The comment body is additionally written so it cannot
+CONTAIN a close marker, because a lazy `[\s\S]*?` backtracks when the next
+character is not `}` and joins two adjacent comments into one match, eating the
+live code between them. **Measured: that over-match occurs nowhere in the tree
+today**, so the explicit body is defence rather than a repair — and its test
+says so with a fixture rather than claiming a defect it did not find. An earlier
+draft of this entry did claim one, having mis-attributed the pre-existing
+line-strip rules' output to the new rule.
+
+**Three existing tests relied on a comment staying visible, and each was looked
+at rather than worked around.**
+
+- `pipeline_negotiations_board.test.mjs` bounded a slice on the section marker
+  `{/* ══ TERMS IN PLAY`. A landmark that is itself a comment has to be read
+  from the unstripped source, so that one slice does; every assertion stays on
+  the stripped copy.
+- `research_ask_session.test.mjs` carried its own copy of the strip and then
+  asserted it had removed something. The copy is gone; the vacuousness guard is
+  re-aimed at the property that still holds — the page must still carry the
+  explanation the bans exist to spare, and the stripped copy must be shorter
+  than the file.
+- `spinout_lab_scoring_milestones.test.mjs` needed no change once the braces
+  survived, which is what found correction 2.
+
+**`scripts/check-inline-project-pickers.mjs` carries the same three rules**, for
+the reason it always has: a guard `test:guards` runs must not import out of the
+test tree.
