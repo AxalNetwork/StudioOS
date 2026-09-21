@@ -289,18 +289,25 @@ test('an EXPIRED code refuses — the comparison must not be format-blind', asyn
   // which forced the SQLite format on to the row no matter what the code had
   // written — so it proved the comparison side and was blind to the write side,
   // and the exact bug it exists for walked straight through it. Reading the
-  // stored value and ageing it in kind is what makes the assertion able to
-  // fail: an ISO writer now yields an ISO past value, compared as TEXT against
-  // a space-separated one, which reads as LIVE and redeems.
+  // stored value and rewriting midnight-today in kind is what makes the
+  // assertion able to fail: an ISO writer now yields an ISO past value,
+  // compared as TEXT against a space-separated one, which reads as LIVE and
+  // redeems.
+  //
+  // MIDNIGHT TODAY, not "stored minus an hour". Relative ageing crosses a UTC
+  // day when the five-minute TTL lands after midnight (CI at 23:57 UTC wrote
+  // 2026-09-21 and aged it to 2026-09-20). The broken comparison only
+  // misbehaves while the date halves match, so a fixture that rolled to
+  // yesterday would pass against unfixed code. Same trap D124's `expiredIso`
+  // exists for: midnight today is always in the past and always the same date
+  // as `datetime('now')`.
   const stored = String((db.prepare('SELECT expires_at FROM support_handoff_codes').get() as any).expires_at);
-  const aged = /T/.test(stored)
-    ? new Date(Date.parse(stored) - 3_600_000).toISOString()
-    : (db.prepare("SELECT datetime('now', '-1 hour') AS v").get() as any).v;
+  const today = String((db.prepare("SELECT date('now') AS day").get() as any).day);
+  const aged = /T/.test(stored) ? `${today}T00:00:00.000Z` : `${today} 00:00:00`;
   db.prepare('UPDATE support_handoff_codes SET expires_at = ?').run(aged);
 
-  // SAME UTC DAY, deliberately: the broken comparison only misbehaves until the
-  // date rolls over, so a test that aged the row by a day would pass either way.
-  assert.equal(aged.slice(0, 10), stored.slice(0, 10), 'the ageing crossed a UTC day');
+  assert.equal(aged.slice(0, 10), today, 'the expired fixture is not on today\'s UTC date');
+  assert.equal(/T/.test(aged), /T/.test(stored), 'ageing changed the writer\'s format');
 
   await assert.rejects(() => redeemSupportCode(env, offer.code), /not valid/);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM user_sessions').get().n, 0);
