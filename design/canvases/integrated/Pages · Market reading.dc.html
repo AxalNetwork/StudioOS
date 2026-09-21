@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeeec;color:#18181b}
+  </style>
+</helmet>
+<!--
+  Pages · Market reading. Route /research/markets/:uid.
+  The published artifact rendered its frames in the host; this file keeps the
+  design's own DCLogic, which is the contract the page was built from
+  (age from ran_at, thin below 6, catalog price never folded into the range).
+-->
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    // ══ Age is computed from ran_at and nothing else. An edit does not refresh it, TODAY() of
+    // a save does not refresh it — only recording a new reading does, which is why the save
+    // button says "Record this reading" rather than "Save". ══
+    const STALE_AT = 90, AGE_AT = 30;
+    const TODAY = new Date('2026-09-21');
+    const days = (iso) => Math.round((TODAY - new Date(iso)) / 86400000);
+    const attachment = (r) => {
+      if (!r.ran_at) return 'nothing to attach';   // never-run rows do not open this page
+      const d = days(r.ran_at);
+      if (d > STALE_AT) return 'blocked';
+      if (r.attached) return 'attached';
+      return d > AGE_AT ? 'ageing' : 'attachable';
+    };
+
+    const usd = (cents) => '$' + Math.round(cents / 100).toLocaleString('en-US');
+    const MONTH = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+    // Cyan is the ANALYTICS badge only. The product accent stays the licence colour, so the
+    // same reading renders amber for a partner and violet for a founder.
+    const ACCENT = { partner:{ a:'#b45309', deep:'#92400e', tint:'#fffbf2', hair:'#fde68a' },
+      founder:{ a:'#7c3aed', deep:'#6d28d9', tint:'#f5f3ff', hair:'#ddd6fe' },
+      advisor:{ a:'#047857', deep:'#065f46', tint:'#f0fdf6', hair:'#a7f3d0' } };
+
+    const LIGHT = { ground:'#f4f3f7', card:'#fff', hair:'#ececf1', ink:'#18181b', body:'#3f3f46', muted:'#52525b',
+      ok:'#047857', warn:'#92400e', danger:'#b91c1c', dangerHair:'#fecaca', dangerTint:'background:#fffafa',
+      okFill:'#ecfdf5', okHair:'#a7f3d0', warnFill:'#fffbeb', warnHair:'#fde68a', dangerFill:'#fef2f2',
+      chipBg:'#fafafa', sunk:'#f4f3f7', nr:'background:#f4f4f6;color:#52525b;border:1px solid #e4e4e8' };
+    const DARK = { ground:'#140c26', card:'#111827', hair:'#374151', ink:'#f4f4f5', body:'#d1d5db', muted:'#9ca3af',
+      ok:'#4ade80', warn:'#fbbf24', danger:'#fca5a5', dangerHair:'#7f1d1d', dangerTint:'background:#1a1016',
+      // A tone is a fill, an ink and a border together. Theming the ink alone is what made the
+      // dark pills fight themselves — a lifted ink on a light fill measures worse than either.
+      okFill:'#052e1a', okHair:'#065f46', warnFill:'#422006', warnHair:'#78350f', dangerFill:'#450a0a',
+      chipBg:'#0b1220', sunk:'#0f0a1e', nr:'background:#1f2937;color:#9ca3af;border:1px solid #374151' };
+    // One helper, so no surface can take a fill from one theme and an ink from another.
+    const tone = (kind, t) => kind === 'danger' ? [t.dangerFill, t.danger, t.dangerHair]
+      : kind === 'warn' ? [t.warnFill, t.warn, t.warnHair] : [t.okFill, t.ok, t.okHair];
+    const toneStyle = (kind, t) => { const c = tone(kind, t);
+      return 'background:' + c[0] + ';color:' + c[1] + ';border:1px solid ' + c[2]; };
+
+    const NAV = ['Studio','Pipeline','Delivery','Offers','Network','Research','Trust','Firm Settings'];
+    const nav = (t, ac) => NAV.map(l => ({ label:l, style: l === 'Research'
+      ? 'background:' + (t === DARK ? '#2a1c05' : ac.tint) + ';color:' + (t === DARK ? '#fcd34d' : ac.deep) + ';font-weight:700;box-shadow:inset 2px 0 0 ' + ac.a
+      : 'color:' + t.muted }));
+    const ZONES = ['Ask','Client prep','Markets','Library'];
+    const zones = (t, ac) => ZONES.map(z => ({ t:z, style: z === 'Markets'
+      ? 'background:' + (t === DARK ? '#2a1c05' : ac.tint) + ';color:' + (t === DARK ? '#fcd34d' : ac.deep) + ';border:1px solid ' + (t === DARK ? '#78350f' : ac.hair)
+      : 'color:' + t.muted + ';border:1px solid transparent' }));
+
+    // ══ One reading, rendered at three ages. The range never changes between them — only the
+    // date does — so the frames show that age alone decides whether it may be attached. ══
+    const BASE = { uid:'rm_4k2', metric:'Design system build', offering_uid:'off_91', scope:'Design & product services',
+      range_low_cents:3800000, range_high_cents:6200000, comparable_count:11, catalogued:true, catalog_price_cents:4500000 };
+    const CURRENT = Object.assign({}, BASE, { ran_at:'2026-08-28' });
+    const AGEING = Object.assign({}, BASE, { ran_at:'2026-08-10' });
+    const STALE = Object.assign({}, BASE, { ran_at:'2026-05-14' });
+    const ATTACHED = Object.assign({}, BASE, { ran_at:'2026-09-02', attached:true });
+    const UNCAT = { uid:'rm_7b8', metric:'Fractional CTO retainer', offering_uid:null, scope:null,
+      range_low_cents:1200000, range_high_cents:1800000, comparable_count:4, catalogued:false, ran_at:'2026-08-30' };
+
+    const board = (id, badge, r, t, licence, kind, extra) => {
+      const dark = t === DARK, ac = ACCENT[licence];
+      const d = days(r.ran_at);
+      const state = attachment(r);
+      const stale = state === 'blocked', attached = state === 'attached';
+      const ageing = d > AGE_AT && !stale;
+      const ageLabel = stale ? 'Stale' : (ageing ? 'Ageing' : 'Current');
+      const ageKind = stale ? 'danger' : (ageing ? 'warn' : 'ok');
+      const attachLabel = stale ? 'Re-run before attaching' : (attached ? 'Attached' : 'Attachable');
+      const attachKind = stale ? 'danger' : 'ok';
+      const thin = r.comparable_count < 6;
+      const badErr = !!(extra && extra.rangeError);
+      return Object.assign({
+        id, badge, r, t, accent: ac.a, desktop: kind === 'desktop', mobile: kind === 'mobile',
+        capW: kind === 'desktop' ? '1280px' : '390px',
+        title: r.metric + ' · ' + ageLabel + ' · ' + (kind === 'desktop' ? '1280' : '390') + (dark ? ' · dark' : ''),
+        nav: nav(t, ac), zones: zones(t, ac),
+        noScope: !r.scope,
+        // A catalog price is what the firm lists, not what the market pays. It is muted, prefixed,
+        // and never folded into the range — an uncatalogued offering gets no invented list price.
+        catalogLine: r.catalogued ? 'Catalog lists ' + usd(r.catalog_price_cents) : null,
+        ageLabel, ageDays: d, ageStyle: toneStyle(ageKind, t),
+        attachLabel, attachStyle: toneStyle(attachKind, t),
+        okStyle: toneStyle('ok', t), dangerFill: t.dangerFill,
+        headHair: stale ? t.dangerHair : t.hair, headTint: stale ? t.dangerTint : '',
+        tiles: [
+          { k:'Comparable range', v: usd(r.range_low_cents) + ' – ' + usd(r.range_high_cents), ink:t.ink, size:'17px', msize:'14px',
+            hair:t.hair, sub: r.comparable_count + ' comparables' },
+          { k:'Run date', v: r.ran_at, ink:t.ink, size:'17px', msize:'14px', hair:t.hair, sub:'age is a gate, not a label' },
+          { k:'Age', v: d + ' d old', ink: stale ? t.danger : (ageing ? t.warn : t.ink), size:'20px', msize:'17px',
+            hair: stale ? t.dangerHair : t.hair, sub: ageLabel + ' · stale at ' + STALE_AT + ' days' },
+          { k:'Proposal', v: stale ? 'Blocked' : (attached ? 'Attached' : 'Attachable'), ink: stale ? t.danger : t.ok, size:'20px', msize:'17px',
+            hair: stale ? t.dangerHair : t.hair, sub: stale ? 're-run before attaching' : (attached ? 'travelling with a quote' : 'range + run date travel together') }
+        ],
+        lowText: usd(r.range_low_cents), highText: badErr ? usd(r.range_low_cents - 400000) : usd(r.range_high_cents),
+        lowHair: badErr ? t.dangerHair : t.hair, highHair: badErr ? t.dangerHair : t.hair, rangeError: badErr,
+        runField: r.ran_at, runInk: t.ink,
+        stale, attachable: !stale && !attached, attached,
+        ageingNote: ageing ? 'This one is ' + d + ' days old — still attachable, and the date says so on the quote.' : '',
+        attachHair: stale ? t.dangerHair : t.hair, attachTint: stale ? t.dangerTint : '',
+        staleMonth: MONTH[new Date(r.ran_at).getUTCMonth()],
+        // The draft reads age and thinness off this reading. It has no second range to compare
+        // against and does not invent one.
+        draft: 'This reading is ' + d + ' days old and reads ' + ageLabel.toLowerCase() + '. '
+          + (thin ? 'The range rests on ' + r.comparable_count + ' comparables, which is thin enough that a client may ask for the names before the number.'
+                  : r.comparable_count + ' comparables is enough to state the range without hedging, though none of them are named here.')
+          + (stale ? ' Nothing can be attached until a fresh reading is recorded.' : ''),
+        draftHair: dark ? '#78350f' : ac.hair, draftBg: dark ? '#2a1c05' : ac.tint,
+        acceptBtn: 'border:1px solid ' + (dark ? '#78350f' : ac.hair) + ';color:' + (dark ? '#fcd34d' : ac.deep) + ';background:transparent'
+      }, extra || {});
+    };
+
+    const boards = [
+      board('d1','D1',CURRENT,LIGHT,'partner','desktop',{
+        blurb:'Dense SAMPLE, current. $38,000–$62,000 from 11 comparables, run 28 Aug — 24 days old, so Current and attachable. The catalog price sits muted beside the scope and is never folded into the range: what the firm lists and what the market pays are two different facts.',
+        cap:'The comparables table is empty on the dense frame too, deliberately. Filling it with invented clients would teach the one habit this page exists to prevent — the count is stored, the names are not, and the empty state says so.' }),
+      board('d2','D2',AGEING,LIGHT,'partner','desktop',{
+        blurb:'Ageing. The same range at 42 days: past the 30-day mark, short of the 90-day block. Still attachable, and the attachment panel states the age so a reader knows the date travels onto the quote with the number.',
+        cap:'Ageing is amber and does not gate anything. The only thing that changed between D1 and D2 is the run date — which is the point: age is computed from ran_at alone.' }),
+      board('d3','D3',STALE,LIGHT,'partner','desktop',{
+        blurb:'Stale at 130 days. The header and the two affected tiles take a red hairline, the Proposal tile reads Blocked, and the attachment panel carries the sentence about a May range behind a September quote. The primary action is the form, not Attach.',
+        cap:'Recording a fresh reading prefills the metric and blanks the dollars — it does not copy the old range forward, because a re-run is a new reading and not an edit of the last one.' }),
+      board('d4','D4',UNCAT,LIGHT,'partner','desktop',{ rangeError:true,
+        blurb:'Uncatalogued offering with the high-below-low error. No catalog line appears, because there is no list price to show and none is invented. The inline error takes both range fields red and nothing saves until the range reads forward.',
+        cap:'Four comparables is thin, and the draft says so rather than stating the range with confidence the count cannot carry.' }),
+      board('d5','D5',ATTACHED,LIGHT,'founder','desktop',{
+        blurb:'Attached, rendered on the founder licence — violet accent, same cyan ANALYTICS badge. The proposal name reads Not recorded, because the product stores that a reading is attached and not which quote it went to.',
+        cap:'Only the accent changes between licences. The badge, the thresholds and the copy are the same, since the reading does not belong to a licence.' }),
+      board('d6','D6',STALE,DARK,'partner','desktop',{
+        blurb:'Dark mode of the stale frame. Night well on the ground, gray-900 cards, danger ink lifted to clear on dark, and the red tint dropped to a near-black wash rather than a light panel.',
+        cap:'The ANALYTICS badge keeps its cyan; it is an archetype colour, not a theme one, and not the product accent.' }),
+      board('m1','M1',CURRENT,LIGHT,'partner','mobile',{
+        blurb:'Mobile 390, current. Header, 2×2 tiles, the four-field form as a 2×2 grid, the comparables empty state, attachment, draft, stated limit.',
+        cap:'The three statements under "Where these numbers come from" survive in full — they are the page\u2019s contract, not chrome to trim.' }),
+      board('m2','M2',STALE,LIGHT,'partner','mobile',{
+        blurb:'Mobile 390, stale. Red header tint, Blocked on the Proposal tile, and Record a fresh reading as the only action in the attachment panel.',
+        cap:'Attach is absent rather than disabled: a greyed button on a phone still invites a tap.' })
+    ];
+
+    return { boards };
+  }
+}
+</script>
+</x-dc>
+</body></html>

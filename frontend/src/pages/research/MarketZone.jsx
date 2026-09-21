@@ -51,7 +51,7 @@ export const STALE_AT = 90;
 export const AGE_AT = 30;
 
 const usd = (cents) => `$${Math.round((cents ?? 0) / 100).toLocaleString('en-US')}`;
-const daysSince = (iso) => {
+export const daysSince = (iso) => {
   const at = Date.parse(iso || '');
   return Number.isFinite(at) ? Math.floor((Date.now() - at) / 86400000) : null;
 };
@@ -241,7 +241,21 @@ export default function MarketZone({ zoneActions, zoneFilters, role = 'partner' 
               ? 'bg-red-50/40 dark:bg-red-950/20'
               : (r.band === null ? 'bg-gray-50/60 dark:bg-gray-900/40' : ''),
             cells: [
-              { text: r.metric },
+              {
+                text: r.metric,
+                // A never-run row has no uid. Opening it would be a page about
+                // a reading that does not exist.
+                ...(r.uid ? {
+                  node: (
+                    <Link
+                      to={`/research/markets/${encodeURIComponent(r.uid)}`}
+                      className="text-[11px] font-semibold text-axal-violet underline dark:text-violet-300"
+                    >
+                      Open
+                    </Link>
+                  ),
+                } : {}),
+              },
               r.range_low_cents == null
                 ? { nr: true }
                 : { text: `${usd(r.range_low_cents)} – ${usd(r.range_high_cents)}` },
