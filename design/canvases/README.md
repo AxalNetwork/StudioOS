@@ -5,7 +5,7 @@ The corpus the first integration pass worked from. Sorted by one question:
 
 | Folder | Count | Meaning |
 | --- | --- | --- |
-| `integrated/` | 64 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
+| `integrated/` | 65 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
 | `backlog/` | 25 | Graded `NEW` or `DEFERRED`. No route yet. |
 | `out-of-scope/` | 27 | Deliberately not being built. The `ROUTE_MAP.md` row says why. |
 | `shared/` | 6 | The dc-runtime bundle every canvas loads, plus two standalone pitch-deck exports. Generated — both code scanners ignore this tree. Every canvas asks for it as `src="./support.js"`, which resolves next to the canvas and **not** to this folder, so opening one straight from `integrated/` in a browser gets a blank page: copy `shared/support.js` beside it first. Nothing runs these at runtime, so the reference is nominal — it is a convention marking "the shared runtime, not an inlined 69KB copy", and `scripts/read-canvas.mjs` reproduces it when it decodes a new export. |
@@ -27,19 +27,22 @@ canvas for a route that was already live (`/spinout-lab/brief`), which makes it
 an `UPGRADE` on arrival rather than a graduation. It went **63 → 64 on
 2026-09-21** when `Pages · Fund dossier` arrived for `/research/funds/:uid`.
 `backlog/` did not change: the list was already live, and this canvas is the
-reading room for one row.
+reading room for one row. It went **64 → 65 on 2026-09-21** when
+`Pages · Company` arrived for `/research/companies/:analysisId/:candidateId`.
+`backlog/` did not change: the companies list was already live, and this
+canvas is one competitor inside an analysis.
 
 **The `107` below is stale and this pass did not fix it**, which is worth saying
 rather than leaving to be rediscovered. It is `54 + 26 + 27` — the sum as it
 stood when `integrated/` read 54 — so it has drifted every time that count moved
-and is now `64 + 25 + 27 = 116`. Correcting the number here would assert that
-`ROUTE_MAP.md` carries 114 rows, and that was not counted; the sentence below is
+and is now `65 + 25 + 27 = 117`. Correcting the number here would assert that
+`ROUTE_MAP.md` carries 115 rows, and that was not counted; the sentence below is
 the one making the claim, so the count belongs in the same pass that reads it.
 
 Sorting is derived from the grade in
 `documentation/architecture/ROUTE_MAP.md`, which has a row for every one of the
 107 — plus the later rows in its part 5 and the canvases that arrived after
-the audit, 112 rows in all — and is the authority on *what* shipped
+the audit, 113 rows in all — and is the authority on *what* shipped
 from each canvas — which zones were
 built, which were not, and why. This folder only answers the coarse question of
 whether a route exists at all.

@@ -7,6 +7,7 @@ import {
   Save, ExternalLink, ChevronRight, Search, AlertCircle, Check,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { recordedRelevance } from '../pages/research/companyCandidateRead';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
 
 // Competitor Analysis — in-house, Cloudflare-native competitive intelligence.
@@ -127,7 +128,7 @@ const COMPANIES_STRIP_LICENCES = new Set(['founder']);
  */
 const READ_FAILED = Symbol('competitors.list failed');
 
-export default function CompetitorAnalysis({ project = null, embedded = false, chromeless = false, zoneActions, zoneFilters, role = 'founder' }) {
+export default function CompetitorAnalysis({ project = null, embedded = false, chromeless = false, zoneActions, zoneFilters, role = 'founder', linkToDossier = false }) {
   // Page furniture only. Never gate data or controls on this.
   const bare = embedded || chromeless;
   const navigate = useNavigate();
@@ -725,7 +726,7 @@ function AnalysisResults(props) {
         )}
         <div className="space-y-3">
           {candidates.map((c) => (
-            <CandidateCard key={c.id} c={c} sources={sourcesByCandidate[c.id] || []} onRemove={() => onRemoveCandidate(c.id)} onUpdate={(patch) => updateCandidate(c.id, patch)} />
+            <CandidateCard key={c.id} c={c} sources={sourcesByCandidate[c.id] || []} onRemove={() => onRemoveCandidate(c.id)} onUpdate={(patch) => updateCandidate(c.id, patch)} dossierHref={linkToDossier && analysis?.id ? `/research/companies/${encodeURIComponent(analysis.id)}/${encodeURIComponent(c.id)}` : null} />
           ))}
           {!candidates.length && <p className="text-sm text-gray-500 dark:text-gray-400">No competitors yet. Add one manually or re-run.</p>}
         </div>
@@ -812,7 +813,7 @@ function AnalysisResults(props) {
   );
 }
 
-function CandidateCard({ c, sources, onRemove, onUpdate }) {
+function CandidateCard({ c, sources, onRemove, onUpdate, dossierHref }) {
   const details = c.details || {};
   return (
     <div className="rounded-lg border border-gray-200 dark:border-gray-800 p-3">
@@ -828,7 +829,12 @@ function CandidateCard({ c, sources, onRemove, onUpdate }) {
               <option value="direct">direct</option>
               <option value="adjacent">adjacent</option>
             </select>
-            <Badge tone="violet">relevance {Math.round(c.relevance_score)}</Badge>
+            {recordedRelevance(c) == null
+              ? <Badge>relevance not recorded</Badge>
+              : <Badge tone="violet">relevance {recordedRelevance(c)}</Badge>}
+            {dossierHref && (
+              <Link to={dossierHref} className="text-[11px] font-semibold text-violet-700 underline dark:text-violet-300">Open</Link>
+            )}
             {c.origin && <Badge>{c.origin}</Badge>}
           </div>
           {c.url && (

@@ -21,7 +21,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `founder/` | The founder shell's workspace tab bars. |
 | `investor/` | Investor-only workspace framing and visual-system styles. |
 | `partner/` | Partner-side operations (BD console). |
-| `research/` | Research zone bodies. Library and Ask are on every licence. Funds is the founder shortlist, and `FundDossier.jsx` is one row of it at `/research/funds/:uid`. |
+| `research/` | Research zone bodies. Library and Ask are on every licence. Funds is the founder shortlist, and `FundDossier.jsx` is one row of it at `/research/funds/:uid`. `CompanyCandidate.jsx` is one competitor at `/research/companies/:analysisId/:candidateId`. |
 | `captable/` | Cap-table panels composed into `CapTablePage.jsx`. |
 | `raise/` | Round-manager panels. |
 | `referrals/` | The Refer & Earn canvas stylesheet for `ReferralsPage.jsx`. |

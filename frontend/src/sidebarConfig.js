@@ -748,4 +748,8 @@ export const SHARED_FULL_BLEED_PREFIXES = [
   // of WorkspaceShell's own. The trailing slash keeps the list itself on the
   // zone rule.
   '/research/funds/',
+  // One competitor inside an analysis. The list `/research/companies` is
+  // already a shell zone; the child is not, and without this prefix the page
+  // would sit inside App's padding on top of WorkspaceShell's own.
+  '/research/companies/',
 ];

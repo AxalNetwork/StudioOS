@@ -13,6 +13,8 @@ a zone: a single researched fund.
 | `ClientPrepZone.jsx` | Advisor and partner client prep. |
 | `FundsZone.jsx` | The founder shortlist at `/research/funds`. Stage, path and status stay three columns. |
 | `FundDossier.jsx` | `/research/funds/:uid`. One row. A blank cheque stays blank. The draft restates the page and does not email the fund. |
+| `CompanyCandidate.jsx` | `/research/companies/:analysisId/:candidateId`. One competitor. A blank relevance stays blank. The draft restates the summary and the source titles. |
+| `companyCandidateRead.js` | The readings that page and its tests share. |
 
 The workspace chrome — crumb, zone pills, company chip — lives in
 `frontend/src/workspaces/WorkspaceShell.jsx`, not in these files. A fit score

@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 112 canonical canvases at `design/canvases/`, listed
-132 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 113 canonical canvases at `design/canvases/`, listed
+133 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -27,7 +27,7 @@ it, where in their nav, and how do they get there.*
 | Entry point | The sidebar path, or how the surface is reached when it has no nav row |
 | Confidence | High = live route reachable from that role’s nav. Medium = live route, no nav row. Low = not routed. |
 
-## Founder — 47 canvases
+## Founder — 48 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -59,6 +59,7 @@ it, where in their nav, and how do they get there.*
 | Liquidity & Secondaries | `/liquidity` | Home | Full page | Sidebar → Home → Raise | UPGRADE | High |
 | Metrics | `/build/metrics` | Home | Full page | Sidebar → Home → Build | UPGRADE | High |
 | Office Hours | `/spinout-lab/office-hours` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Pages · Company | `/research/companies/:analysisId/:candidateId` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Pages · Founder Build | `/execution` · `/build/metrics` | Home | Full page | Sidebar → Home → Build | UPGRADE | High |
 | Pages · Founder Grow | `/founder/growth/{talent` | — (not routed) | Full page (proposed) | Not reachable yet | RESKIN | Low |
 | Pages · Founder Network | `/network` | Home | Full page | Sidebar → Home → Network | RESKIN | High |
@@ -213,7 +214,7 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 68 | Live route, reachable from that workspace’s sidebar. |
+| High | 69 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 35 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 29 | Not routed. Proposed route only. |
 

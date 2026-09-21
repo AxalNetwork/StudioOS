@@ -240,6 +240,7 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
               appears here and why one must not be invented. */}
           <CompanyScopeNote role={role} />
           <CompetitorAnalysisPage chromeless
+            linkToDossier
             role={role}
             zoneFilters={(opts) => zoneFiltersFor(role, 'research/companies', opts)}
             zoneActions={(rows) => zoneActionsFor(role, 'research/companies', { view: {
