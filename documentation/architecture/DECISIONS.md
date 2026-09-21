@@ -16559,3 +16559,164 @@ read from the baseline**, so a ledger edit alone still cannot let a new gap pass
 
 **No migration — 275 stays free.** No `frontend/src` change, so no `docs/`
 rebuild. No new `/api/*` method. **12 mutations applied, 12 caught.**
+
+---
+
+## D187 — `partner_profiles` is three tables under one name, and 26 partners were told to accept an invitation that does not exist
+
+**The collision, for the third time.** `partner_profiles` is declared three
+times, in two shapes:
+
+| # | where | shape |
+| --- | --- | --- |
+| 1 | `sql/migrations/028_partner_deals.sql:34` | `id` AUTOINCREMENT / `invitation_id` / `organization` / `role_title` / … |
+| 2 | `sql/schema_baseline.sql:3297` | **`email TEXT PRIMARY KEY`** / `user_id` / `legal_entity_name` / `extracted_data` / … |
+| 3 | `routes/profiling.ts:24-58` — a runtime `CREATE TABLE IF NOT EXISTS` **plus an `ALTER … ADD COLUMN` loop** | same as 2 |
+
+A `CREATE TABLE IF NOT EXISTS` cannot add a column to a table that already
+exists, so 028 was a no-op wherever shape 2 got there first, and migration 042's
+four ALTERs went with it. That is the `metrics_snapshots` collision (#183, #202)
+for a third time and the largest instance: the baseline is a **dump of
+production**, so shape 2 is what every environment has, and **every reader
+written against shape 1 is broken on every environment.**
+
+Measured read-only against production `studioos-db` on 2026-09-21, schema and
+aggregates only: `pragma_table_info('partner_profiles')` returns the **22
+columns of shape 2**, and all eighteen of shape 1's own columns are absent —
+`id`, `invitation_id`, `full_name`, `organization`, `role_title`, `expertise`,
+`sectors`, `geography`, `capacity_per_month`, `capital_capacity_usd`,
+`motivation`, `prior_deals`, `linkedin_url`, `raw_chat_json`,
+`services_offered`, `dealflow_channels`, `conflicts_text`, `focus_text`.
+
+### What it did to a user, which is the part the filing missed
+
+D186 filed this as *"`writeRouter.ts:1307/:1630` write and read `conflicts_text`,
+a column no environment has"* — right about the symptom and **wrong about the
+size in both directions**. It is not one column and it is not a dead write path:
+
+`ensurePartnerProfile` opened with `SELECT id, invitation_id FROM
+partner_profiles WHERE user_id = ?`. Neither column exists, so the statement
+threw; the whole function is wrapped in `try { … } catch { console.error }` and
+returned **`null`**. The caller then answered every one of the six partner
+questions in the advisor chat with
+
+> *"Partner profile not bound yet — accept your invitation from the Partner
+> Portal first."*
+
+Production holds **26 partners of 51 accounts**, **18 `partner_profiles` rows**
+and **ZERO `partner_invitations`** — so that instruction was not merely false,
+it was unfollowable. And the defect sat three hundred lines **upstream** of
+where it was filed: the `conflicts_text` map entry was never reached.
+
+The reader half is the mirror image and explains why the chat never stopped
+asking. `hydrateAlreadyAnswered` uses `SELECT *`, which does **not** throw on a
+missing column — the field is simply `undefined` — so none of the six ever
+joined the `answered` set and the chat re-asked them forever, even for a partner
+who had answered.
+
+### A SECOND, INDEPENDENT REASON, found by aiming a mutation
+
+The old step 3 minted a `partner_invitations` row flagged `'advisor_stub'` so
+shape 1's `invitation_id NOT NULL UNIQUE` had something to point at. **That
+INSERT could never have succeeded on any environment either.**
+`partner_invitations.expires_at` is `TIMESTAMP NOT NULL` with no default
+(`028_partner_deals.sql:20`, mirrored verbatim in the baseline), and the stub
+bound four columns — `recipient_email`, `token`, `status`, `invited_by_user_id`
+— omitting it. The constraint failure was swallowed by the statement's own
+`.catch(() => null)`, `invId` came back 0, and `if (!invId) return null` fired.
+
+So repairing only the schema collision would have moved the same silent null
+three hundred lines down rather than fixing it. This was found because a
+mutation restoring the stub verbatim **ESCAPED** the guard — and it escaped
+because the restored stub wrote no row either. The guard was right and the
+mutation was wrong, which is the programme's own rule: aim a mutation before
+trusting it, since one that lands somewhere other than where it was aimed is not
+evidence.
+
+### Two more surfaces, same cause
+
+- **The invitation flow.** `routes/partner_onboarding.ts` is mounted at
+  `index.ts:657` with a live SPA route (`App.jsx:1994`,
+  `/partner-onboarding/:token`). Its upsert named **13 columns** and
+  `ON CONFLICT(invitation_id)`. Every one of those columns is absent and
+  `invitation_id` was not a constraint, so the statement threw outright — the
+  flow has never once run.
+- **The partner directory.** `routes/partners.ts:265` reads
+  `capacity_per_month`, and its own comment at `:254` asserted *"partner_profiles
+  is keyed by invitation_id"* — false in production. `availability_capacity`
+  degraded silently for every partner.
+
+### What this decides
+
+**Production's shape wins, and migration 275 is purely additive.** The
+seventeen columns shape 1's readers need are `ALTER TABLE … ADD COLUMN`ed onto
+the table the 18 live rows already sit in. No row is rewritten and nothing is
+dropped; with 18 rows the ALTERs are instant.
+
+**`id` is deliberately NOT added.** Shape 2's primary key is `email`, and the
+readers repoint from `id` to `user_id` / `email` in the same commit. Adding a
+second identity column to a table that already has one is how a fourth shape
+would start.
+
+**The runtime bootstrap moves in the same commit.** `profiling.ts`'s
+`NEW_COLUMNS` loop gains the same seventeen entries and the two indexes. A
+migration alone leaves the third definition stale, and which shape a database
+ends up with then depends on which ran first — which is exactly how this
+collision was born. The guard asserts the two declare the same column set, which
+is the assertion neither #183 nor #202 had and the one that stops a fourth
+definition.
+
+**The unique index on `invitation_id` is plain, not partial, on purpose.**
+SQLite treats NULLs as distinct in a unique index, so the 18 existing rows —
+which have no invitation, production holding zero — coexist without a `WHERE`
+clause, and `partner_onboarding.ts`'s upsert needs no matching predicate on its
+conflict target. That upsert is rekeyed to `ON CONFLICT(email)` regardless,
+which is near-free precisely because the flow has never run.
+
+**The advisor no longer mints invitations.** On an email-keyed row an invitation
+is not required for an answer to land, so a chat message stops creating an
+invitation as a side effect — which it never should have done, and which it
+never actually managed to do.
+
+### The guard
+
+`cloudflare-worker/test/partner_profiles_single_shape_d187.test.ts`, five tests
+on a real `node:sqlite` build from `schema_baseline.sql` + post-cutoff
+migrations through `d1Over` (`test/_d1_sqlite.mjs`, extracted in D186):
+
+1. **the bootstrap and migration 275 declare the same column set** — the
+   two-definitions-agree assertion;
+2. **every column the three readers name exists on a fresh build**, harvested
+   from the source rather than typed so a fourth reader is covered, and `id`
+   must NOT exist;
+3. **the advisor round trip** — `routeAnswer` saves to `conflicts_text` and
+   `hydrateAlreadyAnswered` reads it back as answered, which is both halves of
+   the defect;
+4. **no invitation stub, and the ownership refusal holds** — a second account
+   must not capture a profile owned by someone else;
+5. **the invitation upsert extracted from source and executed**, asserting
+   `ON CONFLICT(email)` and one row after two runs.
+
+Preparability is not the acceptance criterion and D186 measured why: a query
+that prepares and matches nothing is the same silent zero. Every test exercises
+a satisfying row.
+
+**10 mutations applied, 10 caught** — one only after the mutation itself was
+corrected, which is the finding recorded above.
+
+### Filed, not folded in
+
+**The `check-baseline-drift` extension**, D186's other filed finding and the
+guard that would have caught this. Measured while researching: comparing
+`schema_baseline.sql` + post-cutoff against applying **every** migration in
+order reports **31 tables and 42 columns** of drift, `captable_holders` and
+`references_records` among them exactly as D184/D186 predicted. The raw list
+needs triage — several entries (`licence_events_266`, `watchlist_items_new`,
+`landing_pages_new`, `watchlist_items_alias`) look like intermediates of
+rebuild-style migrations rather than real drift, and `metrics_snapshots.*` is
+the #202 retirement — so it starts dirty and needs a reviewed per-entry
+baseline, which is the `check-sqlite-columns` shape and its own PR. Filed with
+the numbers so nobody re-derives them.
+
+**Migration 275.** No `frontend/src` change, so no `docs/` rebuild. No new
+`/api/*` method.
