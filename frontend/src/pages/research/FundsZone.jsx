@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, Pill } from '../../ui';
 import { api } from '../../lib/api';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -224,7 +225,12 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
                   {visible.map((f) => (
                     <tr key={f.uid} className="border-b border-gray-100 align-top dark:border-gray-800">
                       <td className="py-3 pr-3">
-                        <span className="text-[13px] font-extrabold">{f.name}</span>
+                        <Link
+                          to={`/research/funds/${encodeURIComponent(f.uid)}`}
+                          className="text-[13px] font-extrabold text-axal-ink underline-offset-2 hover:underline"
+                        >
+                          {f.name}
+                        </Link>
                       </td>
                       {/* A range with one end missing renders as the end it has,
                           and no range at all renders as unrecorded — never as a

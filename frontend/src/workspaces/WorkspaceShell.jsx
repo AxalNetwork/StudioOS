@@ -88,9 +88,21 @@ export default function WorkspaceShell({
   const scopeLabel = scope || companyName || null;
   // `activeSlug === null` is the overview mode: a bucket root is above its
   // zones, so no zone is current — not in the pill row, and not in the crumb
-  // or title either. `zoneForPath` defaults to the first zone, which is right
-  // on a zone route and wrong here.
-  const zone = activeSlug === null ? null : zoneForPath(bucket, location.pathname);
+  // or title either. `zoneForPath` answers the first zone on a bucket root and
+  // null for a slug the shell does not list, which is right on a zone route
+  // and wrong here.
+  //
+  // A STRING `activeSlug` is the child-page case. `/research/funds/:uid` is not
+  // a zone slug, so `zoneForPath` returns null and the crumb would otherwise
+  // drop Funds. The explicit slug names the zone the page belongs to. Undefined
+  // still means "resolve from the path", which is every zone page that does
+  // not pass the prop.
+  const resolved = activeSlug === null ? null : zoneForPath(bucket, location.pathname);
+  const namedZone = typeof activeSlug === 'string'
+    ? (bucket?.zones?.find((z) => z.slug === activeSlug) || null)
+    : null;
+  const zone = resolved || namedZone;
+  const crumbTitle = typeof title === 'string' && zone && title !== zone.label ? title : null;
   // No accent is read here on purpose. In the canvases the shell chrome —
   // crumb, title, divider — is neutral in all four roles; the accent lives on
   // the zone pills (ZoneNav) and the AI rail, which is where a reader looks to
@@ -168,7 +180,19 @@ export default function WorkspaceShell({
             {zone && (
               <>
                 <span aria-hidden="true">‹</span>
-                <b className="font-bold text-axal-ink">{zone?.label}</b>
+                {crumbTitle ? (
+                  <Link to={`${bucket.prefix}/${zone.slug}`} className="hover:underline">
+                    {zone.label}
+                  </Link>
+                ) : (
+                  <b className="font-bold text-axal-ink">{zone.label}</b>
+                )}
+              </>
+            )}
+            {crumbTitle && (
+              <>
+                <span aria-hidden="true">‹</span>
+                <b className="font-bold text-axal-ink">{crumbTitle}</b>
               </>
             )}
           </div>

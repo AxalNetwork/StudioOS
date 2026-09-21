@@ -59,9 +59,11 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // canvas for a route that was already live, so it arrived graded UPGRADE
   // rather than graduating out of `backlog/`. This number counts ROUTE_MAP
   // ROWS, which is not the same as the folder totals in
-  // `design/canvases/README.md` (63 + 25 + 27); the two have never matched and
-  // conflating them is how a count starts drifting.
-  assert.equal(recs.length, 111);
+  // `design/canvases/README.md`; the two have never matched and conflating
+  // them is how a count starts drifting.
+  //
+  // 112 as of 2026-09-21. `Pages · Fund dossier` — `/research/funds/:uid`.
+  assert.equal(recs.length, 112);
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
     assert.ok(r.status.length > 0, `row "${r.canvas}" has no status`);

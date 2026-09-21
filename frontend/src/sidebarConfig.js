@@ -742,4 +742,10 @@ export const SHARED_FULL_BLEED = [
  */
 export const SHARED_FULL_BLEED_PREFIXES = [
   '/spinout-lab/',
+  // A researched fund's own page. The list `/research/funds` is already full
+  // bleed because it is a shell zone; the child is not in that derived list,
+  // and without this prefix the dossier would sit inside App's padding on top
+  // of WorkspaceShell's own. The trailing slash keeps the list itself on the
+  // zone rule.
+  '/research/funds/',
 ];
