@@ -81,8 +81,12 @@
  *   SMOKE_RETRIES    attempts per request before failing (default 3)
  *   SMOKE_RETRY_MS   delay between attempts in ms (default 5000)
  *   SMOKE_TIMEOUT_MS per-request timeout in ms (default 15000)
- *   SMOKE_API_PROBE  `/api/*` path probed to prove the Worker is reached
+ *   SMOKE_API_PROBE  exempt `/api/*` path probed to prove the Worker is reached
  *                    (default /api/health — unauthenticated, always mounted)
+ *   SMOKE_API_PROBE_LIMITED
+ *                    NON-exempt `/api/*` path probed to prove the rate-limit
+ *                    middleware itself still answers (default a synthetic
+ *                    /api/__smoke/rate-limited — see below)
  */
 
 const DEFAULT_HOSTS = ['https://axal.vc', 'https://app.axal.vc'];
@@ -90,6 +94,15 @@ const DEFAULT_HOSTS = ['https://axal.vc', 'https://app.axal.vc'];
 const SLUG = process.env.SMOKE_SLUG || 'smoke-test-deeplink';
 const RETRIES = Number(process.env.SMOKE_RETRIES || 3);
 const RETRY_MS = Number(process.env.SMOKE_RETRY_MS || 5000);
+// 15s, DELIBERATELY SHORTER THAN THE 30s THE BROWSER WAITED IN THE OUTAGE.
+// Matching 30 would only make this probe wait as long as the user did before
+// reporting the same failure; the point of a synthetic check is to call it
+// broken sooner. 15s is already far past anything healthy — the limiter's own
+// KV await is deadline-bounded in single-digit seconds — so a path that has not
+// answered by then is failing for a real visitor whether or not their browser
+// has given up yet. It also keeps the job inside its 5-minute cap: the budget
+// is per request, and each is retried SMOKE_RETRIES times across two hosts and
+// ~26 routes. Raise it only with that arithmetic in hand.
 const TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS || 15000);
 // Always-mounted, unauthenticated `/api/*` probe used to prove the Worker is
 // actually reached on each host (see checkApiRouting). `/api/health` is
@@ -97,6 +110,33 @@ const TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS || 15000);
 // returns JSON on every deploy. An authed endpoint would also work — a JSON
 // 401 still proves the Worker answered — but health needs no credentials.
 const API_PROBE_PATH = process.env.SMOKE_API_PROBE || '/api/health';
+
+// THE SECOND PROBE, AND WHY IT IS A PATH NOBODY MOUNTED.
+//
+// `/api/health` is the FIRST entry of `RATE_LIMIT_EXEMPT`
+// (cloudflare-worker/src/middleware/rateLimit.ts), so `rateLimitMiddleware`
+// returns `next()` for it before doing any work. On 2026-09-12 that is exactly
+// why this smoke stayed green through a sign-in outage: `/api/auth/me` is
+// exempt and kept answering while `/api/auth/magic/start` and
+// `/api/auth/google/start`, which are not, hung for 30 seconds — the leading
+// explanation being the middleware awaiting an unanswering KV. One probe on an
+// exempt path cannot see that class at all (D78).
+//
+// A path nothing mounts is the robust second probe. `app.use('/api/*', …)`
+// runs the whole middleware chain before Hono looks for a handler, so an
+// unmatched `/api/...` traverses `rateLimitMiddleware` — its `global` and `ip`
+// buckets both test `p.startsWith('/api/')` — and ends at
+// `app.notFound((c) => c.json({ detail: 'Not found' }, 404))`. That is a JSON
+// body, which `checkApiRouting` already treats as proof the Worker answered.
+// So it exercises the limiter without needing a route to exist, and it cannot
+// be made exempt by accident: exemption is matched as `path === p ||
+// path.startsWith(p + '/')`, and no entry is a prefix of this one.
+//
+// NOTHING HERE WEAKENS `RATE_LIMIT_EXEMPT`. D74 pins `/api/auth/magic/start`
+// and `/api/auth/google/start` as deliberately NOT exempt; this probe exists so
+// their failure mode is visible, not so the list can shrink.
+const API_PROBE_LIMITED_PATH =
+  process.env.SMOKE_API_PROBE_LIMITED || '/api/__smoke/rate-limited';
 
 // Static security headers every SPA shell response must carry. They are set
 // by `docs/_headers` (built from frontend/public/_headers), which Workers
@@ -433,8 +473,8 @@ async function checkRoute(base, route, assetSink) {
 // or `/api/*` left `run_worker_first` and the assets binding's SPA fallback
 // answered with `index.html`. (Before 2026-09-01 it was the apex's other
 // host — GitHub Pages, then Cloudflare Pages — answering with its HTML 404.)
-async function checkApiRouting(base) {
-  const url = base.replace(/\/$/, '') + API_PROBE_PATH;
+async function checkApiRouting(base, probePath = API_PROBE_PATH) {
+  const url = base.replace(/\/$/, '') + probePath;
   // Both hosts are Workers Custom Domains (since 2026-09-01, 1d320dda9); the
   // apex/app split below only chooses which failure text is printed. Match the
   // same detection routesForHost() uses (`//axal.vc` does not match
@@ -485,6 +525,11 @@ async function main() {
   const failures = [];
   let apexApiRoutingFailed = false;
   let securityHeadersFailed = false;
+  // The exempt probe's verdict per host, and the hosts where the exempt one
+  // passed while the non-exempt one did not. THE COMBINATION IS THE DIAGNOSIS,
+  // not either line on its own.
+  const exemptProbeOk = Object.create(null);
+  const limiterSignature = [];
   for (const base of HOSTS) {
     // Apex API-routing assertion FIRST: prove `/api/*` actually reaches the
     // Worker on this host. The shell-HTML + asset checks below can all pass
@@ -500,7 +545,24 @@ async function main() {
         failures.push(`${apiUrl} — ${reason}`);
         if (/\/\/axal\.vc/i.test(base)) apexApiRoutingFailed = true;
       } else {
-        console.log(`[spa-live] PASS  ${apiUrl} (API reaches Worker)`);
+        console.log(`[spa-live] PASS  ${apiUrl} (API reaches Worker, limiter EXEMPT)`);
+      }
+      exemptProbeOk[base] = !reason;
+    }
+
+    // The same question asked of a path the limiter does NOT skip. Reported as
+    // its own line, because "the Worker is reachable" and "the middleware in
+    // front of every /api/* route still answers" are different claims and the
+    // 2026-09-12 outage separated them.
+    {
+      const apiUrl = base.replace(/\/$/, '') + API_PROBE_LIMITED_PATH;
+      const reason = await checkApiRouting(base, API_PROBE_LIMITED_PATH);
+      if (reason) {
+        console.error(`[spa-live] FAIL  ${apiUrl} — ${reason}`);
+        failures.push(`${apiUrl} — ${reason}`);
+        if (exemptProbeOk[base]) limiterSignature.push(base);
+      } else {
+        console.log(`[spa-live] PASS  ${apiUrl} (rate-limit middleware answers)`);
       }
     }
 
@@ -556,6 +618,23 @@ async function main() {
           'path-scoped `axal.vc/*` or `axal.vc/assets/*` route: it steals those\n' +
           'URLs from the assets binding and breaks the SPA fallback (the\n' +
           '2026-08-31 outage).',
+      );
+    }
+    if (limiterSignature.length > 0) {
+      console.error(
+        '\nTHE 2026-09-12 SIGNATURE: on ' + limiterSignature.join(', ') + ' the\n' +
+          'RATE-LIMIT-EXEMPT probe answered and the NON-EXEMPT one did not. The\n' +
+          'Worker is reachable and its routing is fine; what is failing is\n' +
+          '`rateLimitMiddleware` (cloudflare-worker/src/middleware/rateLimit.ts),\n' +
+          'which every `/api/*` request passes through except the six entries of\n' +
+          '`RATE_LIMIT_EXEMPT`. That is the shape of the sign-in outage: exempt\n' +
+          'paths kept answering while `/api/auth/magic/start` and\n' +
+          '`/api/auth/google/start` hung. Look at the `RATE_LIMITS` KV binding\n' +
+          'first — an unanswering namespace is what the middleware awaits — then\n' +
+          "at the deadline in `withDeadline` and the bucket's fail-open/\n" +
+          'fail-closed policy. Do NOT resolve this by adding a path to\n' +
+          '`RATE_LIMIT_EXEMPT`: D74 pins those two auth paths as deliberately not\n' +
+          'exempt, and exempting them is what hid the outage in the first place.',
       );
     }
     if (securityHeadersFailed) {

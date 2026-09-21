@@ -16075,3 +16075,55 @@ untimed.
 with the hang message in ~2 s of the parse; deleting the `ready` send fails with
 the ordering message rather than passing or waiting out the startup bound.
 Verified alone and inside a full `test:drift`.
+
+---
+
+## D182 — the post-deploy smoke asked one question, on the one path exempt from the answer
+
+**The blindness, measured.** `scripts/check-spa-live.mjs` probed a single
+`/api/*` path, defaulting to `/api/health` — which is the **first entry** of
+`RATE_LIMIT_EXEMPT` (`middleware/rateLimit.ts`). The middleware's own line is
+`if (RATE_LIMIT_EXEMPT.some(p => path === p || path.startsWith(p + '/'))) return next();`,
+so the probe returned before `rateLimitMiddleware` did any work. D78 already
+recorded the consequence: the smoke **stayed green straight through the
+2026-09-12 sign-in outage**, where `/api/auth/me` (exempt) kept answering while
+`/api/auth/magic/start` and `/api/auth/google/start` (not exempt) hung for 30
+seconds.
+
+**A second probe, on a path nobody mounted.** `API_PROBE_LIMITED_PATH` defaults
+to `/api/__smoke/rate-limited`. `app.use('/api/*', rateLimitMiddleware())` runs
+the whole chain before Hono looks for a handler, so an unmatched `/api/...`
+traverses the limiter — its `global` and `ip` buckets both test
+`p.startsWith('/api/')` — and ends at
+`app.notFound((c) => c.json({ detail: 'Not found' }, 404))`. That is a JSON
+body, which `checkApiRouting` already accepts as proof the Worker answered. A
+synthetic path is the robust choice precisely because it needs no route to
+exist and cannot rot when one is renamed.
+
+**The combination is the diagnosis, not either line.** The two results are
+reported as separate PASS/FAIL lines, and when the exempt probe passes while the
+non-exempt one fails the epilogue names it as the 2026-09-12 signature, points
+at `rateLimitMiddleware` and the `RATE_LIMITS` KV binding, and says explicitly
+that the fix is **not** to add a path to `RATE_LIMIT_EXEMPT` — D74 pins those
+two auth paths as deliberately not exempt, and exempting them is what hid the
+outage.
+
+**`SMOKE_TIMEOUT_MS` stays 15000, deliberately, and the file now says why.**
+Matching the browser's 30 s would only make the synthetic check wait as long as
+the user did before reporting the same failure. 15 s is already far past healthy
+— the limiter's KV await is deadline-bounded in single digits — and the budget
+is per request, retried `SMOKE_RETRIES` times across two hosts and ~26 routes
+inside a 5-minute job cap.
+
+**`post-deploy-smoke.yml` exposes both probe paths** as `workflow_dispatch`
+inputs beside `hosts`. An incident is exactly when someone wants to aim the
+probe by hand; blank falls back to the script's defaults.
+
+**The guard**, `cloudflare-worker/test/smoke_limiter_probe_d182.test.ts`, reads
+`RATE_LIMIT_EXEMPT` out of the source the way `auth_path_bounded.test.mjs` does
+and asserts the limited probe is matched by **no** entry and the unlimited one
+**is** — restating the middleware's exact-or-slash-boundary rule rather than
+importing it, so the test fails if the two ever stop agreeing. Four mutations,
+four caught: pointing the limited probe at `/api/health`; adding `/api/__smoke`
+to the exempt list; removing the named diagnosis; and unmounting the limiter
+from `/api/*`.
