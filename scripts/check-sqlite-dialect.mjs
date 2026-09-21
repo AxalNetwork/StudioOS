@@ -74,12 +74,14 @@ function walk(dir) {
 }
 
 /**
- * The contents of every SQL-carrying string literal in a file.
+ * THE ANCHORED PASS — a literal sitting immediately after `.prepare(`,
+ * `.exec(` or the `sql` tag. Kept exactly as it was, because it is what
+ * assigns `kind`, and `kind` is what `check-sqlite-columns.mjs` reads to
+ * decide whether a `${…}` is a guaranteed bind or spliced raw text.
  *
- * Only strings that actually contain a statement keyword are returned, so a
- * table name or an error message never reaches the dialect patterns.
+ * It is no longer the whole harvest: see `sqlStrings` below for why.
  */
-export function sqlStrings(src) {
+function anchoredStrings(src) {
   const out = [];
   for (const m of src.matchAll(/(?:\.prepare\(|\bsql|\.exec\()/g)) {
     // Skip whitespace AND comments before the opening quote. Only whitespace
@@ -113,6 +115,174 @@ export function sqlStrings(src) {
       // and can carry an identifier, which is a different thing entirely.
       out.push({ body, kind: m[0], line: src.slice(0, i).split('\n').length });
     }
+  }
+  return out;
+}
+
+/**
+ * A statement, not a sentence — the verb AND the companion clause it cannot be
+ * a statement without.
+ *
+ * The anchored pass above can be loose about this, because its anchor already
+ * proved the string was handed to D1. A pass over EVERY literal cannot, and
+ * this rule had to be tightened twice on real findings:
+ *
+ *   "contains a statement keyword"  accepted an `activity_logs` audit sentence,
+ *                                   a Salesforce SOQL escaper and two
+ *                                   `throw new Error` messages.
+ *   "OPENS with a statement keyword" accepted **'Update failed'** — the toast in
+ *                                   `routes/settings.ts:1190` and three more
+ *                                   like it, which this guard duly reported as
+ *                                   a query against a table called `failed`.
+ *
+ * So `UPDATE` must reach a `SET`, `INSERT` an `INTO`, `DELETE` a `FROM`, and so
+ * on. An English sentence starting with one of these verbs does not.
+ */
+const STATEMENT_SHAPES = [
+  /^\s*SELECT\b[\s\S]*?\bFROM\b/i,
+  // `SELECT datetime('now')`, `SELECT 1` — real statements with no FROM. Bounded
+  // to a function call or a literal so prose cannot reach it.
+  /^\s*SELECT\s+(?:DISTINCT\s+)?(?:\d|[a-z_]+\s*\()/i,
+  /^\s*INSERT\s+(?:OR\s+\w+\s+)?INTO\b/i,
+  /^\s*REPLACE\s+INTO\b/i,
+  /^\s*UPDATE\s+(?:OR\s+\w+\s+)?[`"[]?\w+[`"\]]?\s+SET\b/i,
+  /^\s*DELETE\s+FROM\b/i,
+  /^\s*CREATE\s+(?:UNIQUE\s+|TEMP\s+|TEMPORARY\s+)?(?:TABLE|INDEX|VIEW|TRIGGER)\b/i,
+  /^\s*ALTER\s+TABLE\b/i,
+  /^\s*DROP\s+(?:TABLE|INDEX|VIEW|TRIGGER)\b/i,
+  /^\s*WITH\b[\s\S]*?\bAS\s*\(/i,
+  /^\s*PRAGMA\s+\w/i,
+];
+
+const looksLikeStatement = (body) => STATEMENT_SHAPES.some((re) => re.test(body));
+
+/**
+ * SOQL is not SQLite, and it is shaped exactly like it.
+ *
+ * `integrations/providers/salesforce.ts:571` builds
+ * `SELECT Id, StageName, LastModifiedDate FROM Opportunity …` and sends it to
+ * Salesforce's REST API — it never reaches D1. Structurally nothing tells it
+ * apart from a SQLite SELECT, so the tables guard duly reported a missing table
+ * called `opportunity` the moment this pass could see it.
+ *
+ * The discriminator is the binding: the repo names these `soql`, which is what
+ * the language is called. Narrow on purpose — a baseline entry would have
+ * recorded it under "SQLite tables known to be missing", which is not what it
+ * is.
+ */
+const SOQL_BINDING = /\b[a-z_]*soql\s*[:=]\s*$/i;
+
+/** Can the character before a `/` end an expression? If not, the `/` opens a regex. */
+function endsExpression(ch) {
+  return ch !== undefined && /[\w$)\]]/.test(ch);
+}
+
+/**
+ * Every string literal in a file, found by position rather than by caller.
+ *
+ * WHY A LEXER AND NOT A REGEX. The point of this pass is the literals the
+ * anchored one cannot reach, and those are reached through a *variable*:
+ * `num(env, \`SELECT …\`, userId)`, `env.DB.prepare(sql)`, `{ sql: \`…\` }`.
+ * None of them puts a quote next to an anchor token, so only walking the file
+ * finds them.
+ *
+ * REGEX LITERALS ARE THE HAZARD, and they are silent. `escapeSoql` in
+ * `integrations/providers/salesforce.ts` is `.replace(/'/g, "\\'")`; read as a
+ * string opener, that lone quote desynchronises everything after it and
+ * **swallowed 139 statements in that one file**. So a `/` is treated as a regex
+ * unless the previous meaningful character could end an expression — erring
+ * toward regex on purpose, because the union below makes a wrong guess cost
+ * only the widening, never existing coverage.
+ */
+function literalStrings(src) {
+  const out = [];
+  const lineAt = (at) => {
+    let n = 1;
+    for (let k = 0; k < at; k += 1) if (src[k] === '\n') n += 1;
+    return n;
+  };
+  let i = 0;
+  let prev;                                     // last meaningful character
+  while (i < src.length) {
+    const c = src[i];
+    if (c === '/' && src[i + 1] === '/') {
+      const n = src.indexOf('\n', i);
+      i = n < 0 ? src.length : n + 1;
+      continue;
+    }
+    if (c === '/' && src[i + 1] === '*') {
+      const n = src.indexOf('*/', i);
+      i = n < 0 ? src.length : n + 2;
+      continue;
+    }
+    if (c === '/' && !endsExpression(prev)) {
+      let j = i + 1;
+      let inClass = false;
+      while (j < src.length) {
+        const d = src[j];
+        if (d === '\\') { j += 2; continue; }
+        if (d === '\n') break;                  // unterminated — it was division
+        if (inClass) { if (d === ']') inClass = false; }
+        else if (d === '[') inClass = true;
+        else if (d === '/') break;
+        j += 1;
+      }
+      if (src[j] === '/') { i = j + 1; prev = '/'; continue; }
+      i += 1;
+      prev = '/';
+      continue;
+    }
+    if (c === '`' || c === "'" || c === '"') {
+      let j = i + 1;
+      while (j < src.length) {
+        if (src[j] === '\\') { j += 2; continue; }
+        if (src[j] === c) break;
+        j += 1;
+      }
+      const body = src.slice(i + 1, j);
+      if (looksLikeStatement(body) && !SOQL_BINDING.test(src.slice(Math.max(0, i - 40), i))) {
+        // `literal` is deliberately not `sql`: nothing here proves a `${…}`
+        // becomes a bind, so `check-sqlite-columns.mjs` must keep treating an
+        // interpolated one as raw text, exactly as it does a `.prepare(` one.
+        out.push({ body, kind: 'literal', line: lineAt(i) });
+      }
+      i = j + 1;
+      prev = c;
+      continue;
+    }
+    if (!/\s/.test(c)) prev = c;
+    i += 1;
+  }
+  return out;
+}
+
+/**
+ * Every SQL-carrying string literal in a file — the UNION of the two passes.
+ *
+ * WHY A UNION AND NOT A REPLACEMENT. The anchored pass had a blind spot it
+ * could not see out of: it harvests the literal next to `.prepare(`, `.exec(`
+ * or `sql`, so a query handed to a helper — `num(env, \`SELECT …\`, userId)` —
+ * was invisible to every check built on this function. Measured on
+ * `services/onboardingChecklist.ts`: 9 of its 54 literals were harvested, and
+ * the 44 that were not are the whole feature. Twenty-four of them name a table
+ * or column that does not exist, each swallowed by a `catch { return 0 }`, so
+ * the checklist item read "not done" for every operator, forever. That file's
+ * own header had already described the failure — "a swallowed query is
+ * indistinguishable from an honest zero" — after `op.service` paid for it once.
+ *
+ * The union is what makes widening safe: the lexer below can desynchronise on
+ * a construct nobody anticipated, and if it does, the anchored pass still
+ * returns everything it always did. A lexing miss costs the widening, never
+ * the coverage that existed before it.
+ */
+export function sqlStrings(src) {
+  const out = [];
+  const seen = new Set();
+  for (const s of [...anchoredStrings(src), ...literalStrings(src)]) {
+    const key = `${s.line}\u0000${s.body}`;
+    if (seen.has(key)) continue;                // the anchored pass wins: it carries the real `kind`
+    seen.add(key);
+    out.push(s);
   }
   return out;
 }
