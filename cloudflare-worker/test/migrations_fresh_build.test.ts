@@ -56,17 +56,24 @@ const CASCADE_TABLES = [
 /**
  * WHY THE NEXT TEST NEEDS THE ONE AFTER IT.
  *
- * The post-cutoff set is EMPTY today: 221 migration files, highest numeric
- * prefix 219 (three prefixes repeat — 011, 068, 118), and the cutoff is 219. So
- * "builds without failures" currently iterates nothing and asserts `[] === []`.
- * It is a forward guard that starts doing work at migration 220, not a
- * statement about anything today, and a test that reads as strong while
- * checking nothing is worse than no test — this file replaced one that recorded
- * 55 real failures, so the contrast matters.
+ * WHEN THIS WAS WRITTEN the post-cutoff set was EMPTY: 221 migration files,
+ * highest numeric prefix 219 (three prefixes repeated — 011, 068, 118), and the
+ * cutoff is 219. So "builds without failures" iterated nothing and asserted
+ * `[] === []` — a forward guard that would start doing work at migration 220,
+ * not a statement about anything, and a test that reads as strong while
+ * checking nothing is worse than no test. This file replaced one that recorded
+ * 55 real failures, so the contrast mattered.
  *
- * `the cutoff explains the empty set` below is what keeps that honest: it makes
- * the emptiness a checked consequence of where the cutoff sits, rather than
- * something a broken filter could also produce.
+ * THAT DAY HAS LONG PASSED, and the paragraph above is kept because it is why
+ * the companion test exists, not because it still describes the tree. As of
+ * D188 there are 279 files, the highest prefix is 276, FOUR prefixes repeat
+ * (011, 068, 118 and now 259 — the first duplicate above the cutoff), and 58
+ * migrations sit post-cutoff. So this test does real work on every run.
+ *
+ * `the cutoff explains the empty set` below is what kept that honest while the
+ * set was empty: it made the emptiness a checked consequence of where the
+ * cutoff sits, rather than something a broken filter could also produce. It is
+ * still the thing that would catch a filter breaking the other way.
  */
 test('a baseline plus every post-cutoff migration builds without failures', () => {
   const db = fromBaseline();

@@ -16720,3 +16720,257 @@ the numbers so nobody re-derives them.
 
 **Migration 275.** No `frontend/src` change, so no `docs/` rebuild. No new
 `/api/*` method.
+
+## D188 — a migration below the cutoff is marked applied without running, so eleven of migration 042's columns were never anywhere
+
+**The mechanism, which is the whole entry.** `migrate-d1.mjs --bootstrap` loads
+`schema_baseline.sql` and then **MARKS every migration at or below
+`BASELINE_CUTOFF = 219` as applied without executing a statement of it**
+(`scripts/lib/migrationPlan.mjs`, mode `'bootstrap'`). That is correct and
+deliberate: those files are not replayable, because `CREATE TABLE users`,
+`projects`, `deals` and `documents` live only in
+`cloudflare-worker/sql/historical/schema.sql` and in no numbered migration.
+
+The consequence nobody was checking follows in one step. A sub-cutoff
+migration's effect reaches a database **only if the baseline already carries
+it** — and the baseline is a dump of production, so **what the baseline lacks,
+production lacks, while the migration's own ledger row says it was applied.**
+
+**`042_advisor_field_sources.sql` declares eighteen columns over five tables.**
+Measured read-only against production `studioos-db` on 2026-09-21, schema and
+aggregates only:
+
+| table | 042 declares | state |
+| --- | --- | --- |
+| `mentors` | 3 | **the table exists nowhere** — see the repair below |
+| `partner_profiles` | 4 | ✅ landed 2026-09-21 in D187's migration 275 |
+| `investor_profiles` | 3 | ❌ **0 of 3 in production** |
+| `projects` | 7 | ❌ **0 of 7 in production** |
+| `users` | 1 | ❌ absent (`advisor_extras_json`) |
+
+The file looks applied from every angle: its ledger row is there, and the table
+it creates — `field_sources` — **does** exist, because the baseline dump
+happened to include it. Only the ALTERs went missing.
+
+**Every one of the eleven has a live reader, and the blast radius is wider than
+the advisor.** `cloudflare-worker/src/services/advisor/writeRouter.ts` reads all
+eleven — the same file D187 repaired, one migration over. Beyond it:
+`runway_months` reaches `services/scoring.ts`, `services/decks/autofill.ts`,
+`decks/methods.ts`, `decks/axalSpinoutDemoDay.ts`, `services/saasMetrics.ts`,
+`services/exploringSchema.ts` and the routes `decks.ts`, `financials.ts`,
+`legalcap.ts` and `advisory.ts`; `mrr_usd` reaches
+`services/analyticsReports.ts`; `raise_target_usd` reaches `routes/research.ts`.
+
+Because `SELECT *` does not throw on a missing column and `writeRouter`'s saves
+sit inside a catch, none of it surfaced as an error. It surfaced as an advisor
+answer that appeared to save and a founder metric that read as unrecorded.
+
+### TWO AUTHORS ALREADY FOUND THIS CLASS BY HAND, AND NEITHER LEFT A CHECK
+
+This is the strongest argument for the guard and it was not expected.
+
+- **`182_advisor_topics_calendar.sql:6-10`** quotes 042's three `mentors`
+  ALTERs and states: *"There is no `CREATE TABLE mentors` anywhere in this
+  repository."* It repairs them onto `advisors` at `:37-39`, where all three
+  exist today.
+- **`cloudflare-worker/src/auth.ts:394`** carries a live workaround in prose:
+  *"we prefer the SESSION-scoped deadline … because the
+  `users.recovery_step_up_due_at` column is unapplied/broken in prod (060)."*
+
+Two people hit this defect class, diagnosed it correctly, fixed their own
+instance, and wrote a comment. **A comment is not a check** — which is why 042's
+other eleven columns went on missing for months, and why D187's eighteen did too.
+
+### TWO CORRECTIONS TO THE FILING, both made before anything was built
+
+**1 · The comparison this was filed as cannot be built, and the numbers banked
+with it came from a broken reference.** D186 and D187 both filed it as *"compare
+`schema_baseline.sql` + post-cutoff migrations against applying **every**
+migration in order"*, with a banked figure of 31 tables and 42 columns.
+Measured:
+
+| side | result |
+| --- | --- |
+| fresh build (baseline + the post-cutoff migrations) | 458 tables, 5206 columns, **16** statements failed |
+| every migration in order, from empty | 375 tables, 3913 columns, **385** statements failed |
+
+385 failures is not a reference. The cause is structural and is the same one
+that justifies the cutoff: the four core `CREATE TABLE`s exist only in
+`sql/historical/`, so the replay fails 83 times with `no such table`. It is not
+symmetric either — the same run reports **114 tables in the fresh build and not
+in the replay**, which are just the historical-only tables the replay failed to
+create. A guard built on it would start with 114 false findings. So the banked
+31/42 is the output of a comparison whose reference side is rubble, and the plan
+that would have built it is struck rather than inherited.
+
+**2 · The right question is STATIC.** The defect class is *"for every table and
+column a migration DECLARES, does a freshly provisioned database have it?"* —
+a parse of the DDL, not an execution of it. No replay is needed and none is
+done.
+
+### What this decides
+
+**`scripts/check-migration-declarations.mjs` is a new guard in `test:guards`,
+not an extension of `check-baseline-drift.mjs`.** That guard answers a different
+question — *does baseline + post-cutoff still match **production**, by object
+name* — needs `CLOUDFLARE_API_TOKEN`, **exits 2 without one**, runs only in the
+deploy workflow **after** the deploy, and never looks at a column. The new check
+is pure, so it belongs where it can fail a PR **before** merge.
+`scripts/README.md` already states the rule in its own words: *"a check that
+cannot run inside the suite must never sit in the suite reporting success."*
+Merging them would put a suite-runnable half and a network-only half in one
+script.
+
+**Three finding kinds, and the third is the one that matters.** A declared table
+the build lacks; a declared column on a table the build has; and — the category
+a table-and-column comparison silently drops — **an `ALTER` whose table exists
+nowhere**. My own first prototype guarded on `have.has(table)`, so 042's three
+`mentors` ALTERs produced no finding at all, and that is precisely the condition
+that makes them worth reporting. It is test 4.
+
+**`sql/historical/` is excluded**, on the precedent of
+`check-sqlite-columns.mjs`, `check-sqlite-tables.mjs` and
+`check-sqlite-table-collisions.mjs`, each of which records the false negative
+its omission caused.
+
+**Migration 276 lands the eleven**, with 042's own types rather than re-chosen
+ones, so the column a reader expects is the column it gets. `monthly_burn_usd`,
+`mrr_usd` and `raise_target_usd` stay `REAL` dollars rather than becoming
+`*_cents`: all three are already recorded in `scripts/money-cents-baseline.json`
+as legacy float money, and converting them is a data migration over live
+records, not something to slip into a column-restoration migration. That
+baseline's citations gain this file. Sizing, re-measured rather than trusted:
+`projects` 5 rows, `investor_profiles` 2, `users` 51 — eleven `ADD COLUMN`s are
+instant, nothing is rewritten and nothing is dropped.
+
+**The `mentors` trio is deliberately NOT in 276.** 182 already repaired those
+three onto `advisors`, where they exist today; `mentors` is absent from a fresh
+build **and** from production and has zero readers — no `FROM`, no `INTO`, no
+`UPDATE` anywhere in `cloudflare-worker/src`. Re-adding it would create a table
+for a concept D186 finished retiring when it repointed the advisor checklist's
+capacity detector at `advisors.weekly_hours_band`. The test asserts its absence,
+so a later "fix" cannot quietly undo that decision.
+
+**The ledger refuses a stale entry as well as a new one**, copying
+`check-sqlite-tables.mjs` in shape: *a ledger of known gaps is only worth
+reading if every line in it is still true.* `scripts/migration-declarations-baseline.json`
+opens at **58 entries — 28 tables, 27 columns and 3 ALTERs on a table that
+exists nowhere** — each with a reviewed prose reason. Eight of the tables have
+**live readers** and say so: `admin_publications`, `advisor_state`,
+`customer_chat_threads`, `customer_chat_messages`, `founder_risk_pulls`,
+`referral_attributions`, `service_engagements`, `venture_risk_overrides`.
+
+### Deliberately filed, not fixed, each with its measurement
+
+- **`users.recovery_cooling_off_until` / `recovery_step_up_due_at` (060).**
+  `routes/auth_recover.ts:292` runs an unguarded
+  `UPDATE users SET recovery_cooling_off_until = ?, recovery_step_up_due_at = ?`
+  which must throw today, and `auth.ts:399` deliberately falls back to the
+  session-scoped deadline. **Making the columns exist activates an auto-relock
+  path that has never run in production.** That is a security-behaviour change
+  and deserves its own review, not a ride in a guard PR.
+- **`partners.accepting_intros` (095).** `routes/partner_portal.ts:152` SELECTs
+  it for the intro opt-out toggle, so the toggle is broken. Small, but
+  partner-facing behaviour.
+- **`users.marketing_unsubscribed_at` (053)** is a fourth state worth naming:
+  `routes/notifications.ts:51` lazily `ALTER`s it in at runtime, so it is
+  self-healing — and production's absence means **that route has never been
+  hit**.
+
+### Two pieces of stale prose corrected while there
+
+- `cloudflare-worker/test/migrations_fresh_build.test.ts`'s header said *"221
+  migration files, highest numeric prefix 219 (three prefixes repeat), and the
+  cutoff is 219. So 'builds without failures' currently iterates nothing."*
+  Re-measured: **279 files, highest 276, four repeating prefixes, 58
+  post-cutoff** — so it iterates 58, and the sentence inverted what the test
+  does.
+- `scripts/lib/migrationPlan.mjs` named the duplicate prefixes as *"011_, 068_,
+  118_"*. **`259_` repeats too** (`259_hq_escalations.sql`,
+  `259_licence_contracts.sql`) and is the **first duplicate above the cutoff**,
+  so it is the first one whose ordering the tiebreak decides on a live deploy.
+
+### One latent bug fixed in a shared helper
+
+`expectedEffects` in `scripts/lib/migrationPlan.mjs` read the word after
+`ADD COLUMN` as the column name, so `ADD COLUMN IF NOT EXISTS palette_accent`
+(`080_brand_kit_expansion.sql:5-7` — SQLite has no such form, and seven
+migrations say so in their own comments) yielded a column called **`IF`**. The
+new parser handles it, and fixing it only there would have left `verifyMarked`
+reading a column named `IF`; the test asserts both readers agree.
+
+### THE ELEVENTH COLUMN WOULD HAVE FAILED THE DEPLOY, and an existing guard caught it
+
+Migration 276's first draft carried `ALTER TABLE users ADD COLUMN
+advisor_extras_json TEXT;`, which is exactly what 042 declares. It ran clean
+locally and `frontend/test/migration_column_shapes.test.mjs` failed it — *"no
+migration numbered above 198 adds a column to users"* — and the guard was
+right.
+
+**D1 caps a table at 100 columns and `users` is at exactly 100.** Measured
+read-only against production on 2026-09-21: `SELECT COUNT(*) FROM
+pragma_table_info('users')` returns **100**, `projects` 61,
+`investor_profiles` 22. So that one statement would have failed the deploy with
+*"too many columns on sqlite_altertab_users"* — and because the runner is
+forward-only and ordered, it would have held **every later migration** out of
+production behind it. That is not hypothetical: migration 199 did precisely
+this on 2026-09-03 (#413) and stranded 200-207.
+
+**And only the source-text guard could see it**, which is the same shape as the
+rest of this entry: `node:sqlite` has no such cap, so a local fresh build
+applies 042's ALTER happily and reports `users` at 101 columns. Local succeeds,
+production fails.
+
+So 042's eighteenth declaration is **dead as written and always was** — the
+first one in the tree that is dead by a platform limit rather than by an
+accident of the cutoff. The remedy is the one GOTCHAS names and `super_admins`
+(199, D35) set the precedent for: **a side table keyed by `user_id`**. Migration
+276 creates `user_advisor_extras (user_id PRIMARY KEY, extras_json,
+updated_at)`; `writeRouter.ts`'s `mergeUserExtras` and `hydrateAlreadyAnswered`
+read it there, and the five `saved_to` reports name the store the value
+actually reached. `users.advisor_extras_json` goes on the ledger with that
+reason, which is what the ledger is for: a declaration nobody should try to
+close with a twelfth `ADD COLUMN`.
+
+`projects.advisor_extras_json` is untouched — `projects` is at 61 columns, and
+the ten other restored columns are additive there and on `investor_profiles`.
+
+### A MUTATION ESCAPED, and the escape was a false claim in my own comment
+
+`createTableColumns` splits a `CREATE TABLE` body on top-level commas, and its
+docblock said it is depth-aware because *"a naive split would read `2)` as a
+column"*. The mutation that makes it split on every comma **escaped**: the test
+still passed.
+
+Measured rather than argued away — a comma-splitting-everything version run
+against every `CREATE TABLE` in `schema_baseline.sql` and all 279 migrations,
+**788 statements, 0 where the answer differs**. The claim is simply false: the
+`2)` fragment fails the `[A-Za-z_]`-anchored name pattern whatever the split
+does. What actually keeps a constraint out of the list is `CONSTRAINT_HEAD`,
+which drops `CHECK (price > 0)` before it can be read as a column named
+`check` — and a mutation aimed there IS caught, by the same test.
+
+So the depth walk stays, because it is the correct parse of a column list and
+because the two filters are what a later widening of the name pattern would
+quietly remove — but the docblock and the test's failure message now say which
+of the three is doing the work today, and record the measurement. **An
+assertion is not improved by relaxing it, and a comment that claims a
+protection the code does not provide is the same defect one layer up.** The
+mutation was re-aimed rather than the assertion loosened: **9 applied, 9
+caught.**
+
+### The guard's own test
+
+`cloudflare-worker/test/migration_declarations_d188.test.ts`, nine tests. Six
+run against fixtures so a finding count that moves with the repo cannot make
+them pass or fail; the three that read the tree assert **properties, not
+counts**: every finding is on the ledger with a reason and no ledger entry is
+stale; the guard and `migrationPlan.expectedEffects` agree on every migration's
+table set (re-implementing a rule is how two definitions drift apart, so they
+are asserted equal on the real tree rather than left to agree by inspection);
+and the post-cutoff set the guard builds from is the set bootstrap leaves
+pending — without which the guard would pass vacuously, because every
+declaration would then be present.
+
+**Migration 276. No `frontend/src` change, so no `docs/` rebuild. No new
+`/api/*` method.**
