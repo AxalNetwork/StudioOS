@@ -40,6 +40,7 @@ import { mintDownloadToken } from '../services/signedDownload';
 import { searchSemantic, deleteChunkedEntity, researchNamespace } from '../services/vectorize';
 import { run as runAI } from '../services/aiRouter';
 import { companyScope, esignEnvelopeScope } from '../services/tenancyScope';
+import { fundOverlapNote } from '../services/researchFundRead';
 import { scopedDecisions } from './ic';
 import { investorProjectIds } from './_investorProjectScope';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
@@ -3306,6 +3307,19 @@ const oneOf = (v: unknown, set: Set<string>): string | null => {
   return set.has(t) ? t : null;
 };
 
+// The raise this page is measured against belongs to the active company, not
+// to the fund and not to "whichever project this founder touched last".
+async function activeRaiseTargetCents(c: any, user: { id: number }): Promise<number | null> {
+  const companyId = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
+  const scope = companyScope(user, companyId, 'p');
+  const target = await c.env.DB.prepare(
+    `SELECT p.raise_target_usd FROM projects p
+      WHERE ${scope.sql} AND p.raise_target_usd IS NOT NULL
+      ORDER BY p.updated_at DESC LIMIT 1`
+  ).bind(...scope.binds).first().catch(() => null) as { raise_target_usd: number } | null;
+  return target?.raise_target_usd ? Math.round(Number(target.raise_target_usd) * 100) : null;
+}
+
 research.get('/funds', async (c) => {
   const user = await requireAuth(c);
   const rows = await c.env.DB.prepare(
@@ -3321,18 +3335,11 @@ research.get('/funds', async (c) => {
   // with two companies raising two different rounds would otherwise get
   // whichever project was touched last, and every fund on this page would be
   // measured against the wrong ask — one company's data on another company's
-  // screen, which is the rule `companyScope` exists to hold. It is also the
-  // only project read in this file, and `company_switcher.test.mjs` caught it
+  // screen, which is the rule `companyScope` exists to hold. `activeRaiseTargetCents`
+  // is that read, shared with the dossier so the list and the fund page cannot
+  // measure against different asks. `company_switcher.test.mjs` caught it
   // reading unscoped before this comment existed.
-  const companyId = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
-  const scope = companyScope(user, companyId, 'p');
-  const target = await c.env.DB.prepare(
-    `SELECT p.raise_target_usd FROM projects p
-      WHERE ${scope.sql} AND p.raise_target_usd IS NOT NULL
-      ORDER BY p.updated_at DESC LIMIT 1`
-  ).bind(...scope.binds).first<{ raise_target_usd: number }>().catch(() => null);
-
-  const askCents = target?.raise_target_usd ? Math.round(Number(target.raise_target_usd) * 100) : null;
+  const askCents = await activeRaiseTargetCents(c, user);
   const overlaps = askCents === null ? null : items.filter((f) => {
     if (f.cheque_min_cents === null && f.cheque_max_cents === null) return false;
     const lo = f.cheque_min_cents ?? 0;
@@ -3581,6 +3588,26 @@ research.delete('/funds/:uid', async (c) => {
   ).bind(c.req.param('uid'), user.id).run();
   if (!res.meta?.changes) return c.json({ detail: 'Not found' }, 404);
   return c.json({ ok: true });
+});
+
+// Registered AFTER the sheet block. `research_stores_scoping.test.ts` slices
+// every sheet handler from `/funds/sheet/status` up to `patch('/funds/:uid'`
+// and requires each of them to be Super Admin. A GET placed above that line
+// would be counted as a sheet route and either fail the test or, if someone
+// "fixed" it by switching this read to requireSuperAdmin, hide a founder's
+// own dossier from them.
+research.get('/funds/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const row = await c.env.DB.prepare(
+    `SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(c.req.param('uid'), user.id).first<FundRow>();
+  if (!row) return c.json({ detail: 'Not found' }, 404);
+  const askCents = await activeRaiseTargetCents(c, user);
+  return c.json({
+    ...fundDto(row),
+    raise_target_cents: askCents,
+    overlap_note: fundOverlapNote(row, askCents),
+  });
 });
 
 // ---------------------------------------------------------------------------

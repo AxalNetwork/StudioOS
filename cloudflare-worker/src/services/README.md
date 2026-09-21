@@ -16,6 +16,7 @@ runs these directly against an in-process SQLite, with no request at all.
 | `dealPassTaxonomy.ts` | The five pass reasons and the stage-event recorder. |
 | `backup.ts` | The nightly D1 export to R2. |
 | `fundSheets.ts` | Super Admin fund research ↔ Google Sheets. Dedicated OAuth, never calendar tokens. Founders cannot Connect. |
+| `researchFundRead.ts` | The dossier overlap sentence. A missing cheque end stays open; a missing raise is not an overlap of zero. |
 
 ## Subfolders
 

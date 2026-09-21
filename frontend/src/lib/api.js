@@ -4628,6 +4628,7 @@ export const api = {
     // Sheet sync is Super Admin only (`requireSuperAdmin` on the worker).
     funds: () => request('/research/funds'),
     fundCreate: (data) => request('/research/funds', { method: 'POST', body: JSON.stringify(data || {}) }),
+    fundGet: (uid) => request(`/research/funds/${encodeURIComponent(uid)}`),
     fundUpdate: (uid, data) => request(`/research/funds/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
     fundRemove: (uid) => request(`/research/funds/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
     fundSheetStatus: () => request('/research/funds/sheet/status'),

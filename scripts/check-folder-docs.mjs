@@ -72,6 +72,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/admin',                'the admin console'],
   ['frontend/src/pages/admin/assessment',     'the assessment game editor'],
   ['frontend/src/pages/founder',              'founder workspace landing pages and shared shell'],
+  ['frontend/src/pages/research',             'the Research zone bodies, including one fund’s dossier'],
   ['frontend/src/pages/investor',             'investor workspace landing pages, mirroring frontend/src/pages/founder'],
   ['frontend/src/pages/advisor/practice',      'one file per Practice artboard, plus the pure module each keeps its derivations in'],
   ['frontend/src/templates/components',       'landing-page section blocks'],
