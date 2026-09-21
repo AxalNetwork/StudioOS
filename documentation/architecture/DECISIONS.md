@@ -16391,3 +16391,171 @@ deleted outright; and `?\s*\(` was written for one ternary shape and walked past
 No migration — **275 stays free.** No worker change and no new `/api/*` method.
 `frontend/src` moves, so `docs/` is rebuilt. Every `/login` and `/register` load
 loses one blocking request, one KV write and one cookie set.
+
+## D186 — twenty-four checklist steps whose only possible answer was "no"
+
+**D184 made them visible; this repairs them.** `services/onboardingChecklist.ts`
+carries fifty items across five personas, every one `autoDetect: true`, and each
+runs a single query through `num()`:
+
+```ts
+async function num(env, sql, ...binds) {
+  try { … } catch { return 0; }
+}
+```
+
+**Twenty-four of those queries named a table or a column that does not exist.**
+Each threw inside that catch, returned 0, failed `0 > 0`, upserted no row, and
+rendered `pending` — forever, for every account, with the route answering 200
+and **nothing logged**: `loadChecklist`'s own `console.warn` sits outside a
+catch that can never fire, because `num` already swallowed it. The advisor was
+worst hit: **seven of its ten items** were broken while `CELEBRATION_THRESHOLD`
+is an absolute **8**, so an advisor who completed everything the platform could
+observe reached **3 of 10** and the checklist never finished for them.
+
+The file's own header had already written the lesson after `op.service` paid
+for it once — *"a swallowed query is indistinguishable from an honest zero"* —
+and what that lesson bought was one hand-written assertion watching one of the
+fifty items. The other forty-nine went unwatched, and twenty-four of them are
+the very defect the header warns about. **That is the D147/D161/D164 class for
+a sixth time: the rule was right and its scope was the instance its author was
+fixing.**
+
+### The twenty-four, by what each one needed
+
+**Twenty were repointed at the store that holds the fact.** `nf.advisor` →
+`expert_bookings.user_id`; `ef.financials` → the `projects → founders → users`
+join the item's four siblings already use; `ef.83b` → **`section_83b_trackers`**
+(a rename to a *different table*: `compliance_records` is keyed on `deal_id` /
+`subsidiary_id` and has no subject column at all, while `services/section83b.ts`
+owns the tracker and the item's own route already points at it); the three
+`*.nda` arms → `party_a_user_id` / `party_b_user_id`; `inv.kyc` →
+`legal_obligations` for **both** `kyc_v1` and `accreditation_v1`, because the
+label says "KYC + Accreditation" and one of two is not it; `inv.thesis` →
+`thesis_text`; `inv.review` → `user_id` with `score_type = 'deal_flow'`;
+`inv.target` → the ticket band and LP target, **and relabelled** (below);
+`op.accept` → `resulting_user_id` / `recipient_email` / `signed_at`;
+`op.deal_type` → `user_id` with `activated_at IS NOT NULL`, the honest "signed
+and live"; `op.kyb` → `corporate_profiles` with a non-empty `entity_name`;
+`op.referral` → `sender_user_id`; `op.intro` → **`intro_propositions`**, because
+`investor_introductions` records the two *parties* and no introducer at all;
+`mt.tags` → `categories_json` **and** `sectors_json`, both tested as non-empty
+JSON arrays; `mt.comp` → `hourly_rate_usd` / `first_session_free`;
+`mt.capacity` → **`advisors.weekly_hours_band`** via `users.advisor_id`;
+`mt.slots` → `advisor_availability_rules`; `mt.booking` → the `expert_id →
+experts.user_id` join.
+
+**One arm was deleted as dead weight.** `ef.captable`'s first arm named
+`captable_holders`, which migration 034 declares and neither the baseline nor
+production has; the `cap_table_holders` arm beside it already worked, so the
+ITEM was satisfiable and the arm could only ever throw.
+
+**Four became `autoDetect: false` with their `case` arms deleted** — `ef.ip`,
+`op.conflicts`, `op.refs` and `mt.refs`, whose fact nothing stores anywhere.
+`POST /api/onboarding/checklist/:item/complete` already exists and
+`loadChecklist` already skips a non-autodetect item, so the step stays, its
+label stays, and the user ticks it. `TOTAL_ITEMS = 10` and
+`CELEBRATION_THRESHOLD = 8` stay valid for every persona, because the threshold
+is a count of the CATALOGUE and a hand-ticked item counts toward it exactly
+like a detected one. **Deleting the arm is not optional**: a dead `case` keeps
+its literal harvestable, which keeps its baseline entry alive, and both
+`check-sqlite-*` guards refuse a STALE entry as loudly as a new one. That
+refusal is the mechanism that proved each repair landed.
+
+### Three corrections to D184's own ledger, each measured before anything was built
+
+1. **`kyc_records` and `advisor_slots` are not storeless, and three items
+   repoint where the ledger said "dead".** `sqlite-tables-baseline.json` said
+   *"No KYC/KYB record store exists anywhere in the repo"* and that
+   `advisor_slots` *"was never satisfiable"*. Live: `legal_obligations` carries
+   `kyc_v1` / `accreditation_v1` / `kyb_v1`, `corporate_profiles` carries the
+   whole KYB field set, and `advisor_availability_rules` (migration 240) carries
+   the availability. Both entries are deleted; the tables ledger goes 11 → 9.
+2. **`compliance_records` was never the 83(b) store.** The columns ledger called
+   that repoint *"a decision, not a rename"*. It is a rename — to a different
+   table.
+3. **`partner_profiles.conflicts_text` DOES NOT EXIST**, in production or in a
+   fresh build, although `migrations/042_advisor_field_sources.sql:56` declares
+   it and 042 is *below* `BASELINE_CUTOFF = 219`, so the baseline had to carry
+   it and does not. The ledger's `conflicts_disclosed_at` entry proposed it as
+   the repoint target; it is the one target that is not there. **`op.conflicts`
+   therefore joins the storeless set, not the repoint set** — and the missing
+   column is baseline drift, filed for `check-baseline-drift` rather than
+   papered over here.
+
+### `inv.target` is relabelled as well as repointed
+
+*"Set deployment target + reserve %"* names two fields that exist in no
+database. Investor onboarding collects the ticket band and the LP target, so
+the item now reads **"Set ticket band + LP target"**. Repointing without
+relabelling would have made the item satisfiable while its label went on
+promising a field nobody can fill — which is the same lie one layer up.
+
+### The trap, named because the obvious fix is the wrong one
+
+`experts.pricing_model` is the natural rename for `mt.comp` and it is
+`NOT NULL DEFAULT 'paid'`. Gating on it would have flipped that item from
+**never**-satisfiable to **always**-satisfiable — done before the advisor did
+anything — which is a worse lie than the one being fixed and would have passed
+every preparability check. `hourly_rate_usd` and `first_session_free` are the
+facts an advisor actually fills in.
+
+### Preparability is not the acceptance criterion; a satisfying row is
+
+`onboarding_checklist_detectors_d184.test.ts` asks whether each query PREPARES
+against a fresh build, and its expected-failure list is now **empty**. That is
+necessary and not sufficient: a query that prepares and matches nothing produces
+exactly the silent zero this task is about. So
+`onboarding_checklist_repairs_d186.test.ts` seeds the fact each item claims to
+observe and asserts it comes back `completed` through the real `loadChecklist`
+path, **with the negative half in every case** — an identical account with
+nothing seeded must read `pending`, because a detector that matches every row
+passes the positive half and is worse than the defect. Ten further cases are
+near misses, one per gate that does real work: one obligation of two, two
+matched founders of three, a score of the wrong kind, an empty `entity_name`, a
+proposal that was never activated, an invitation never signed, sectors without
+categories, an experts row with no rate **and** `pricing_model = 'paid'` sitting
+right there, an advisors row with no band, and a booking against somebody else's
+expert profile. **Five of the twelve mutations run against this PR pass the
+preparability test and are caught only here**, which is the measurement behind
+that split rather than an argument for it.
+
+The advisor assertion **inverts**: where D184 asserted the catalogue could not
+reach 8, D186 seeds the advisor side in full and reads **9 of 10 detected**,
+with only the hand-ticked reference step outstanding, so the celebration is
+reached without a single manual tick.
+
+### The non-vacuity floor moved, and the arithmetic is the justification
+
+The detect switch held 44 queries and now holds 39 — five arms were deleted on
+purpose (the four storeless plus `ef.captable`'s dead one), and 44 − 5 = 39. The
+floor goes 40 → 35, keeping the same margin of 4 under the true count, so it
+still catches a collapse without failing on the next deliberate deletion. The
+advisor window is now derived from the `// ----- advisor side-effects -----`
+section comment rather than typed, because line numbers move every time this
+switch is edited — which is exactly what a repair does.
+
+### Two things filed rather than folded in
+
+- **`writeRouter.ts:1307` maps `'partner.conflicts.list' → 'conflicts_text'`
+  and `:1630` reads `p.conflicts_text`.** By correction 3 that column exists in
+  no environment, so the advisor's partner-conflicts capture is a dead write
+  path everywhere. Its own concern — a live write, not a checklist read.
+- **`check-baseline-drift` cannot see this class of drift.** It compares
+  `schema_baseline.sql` against **production**. Nothing asks whether the
+  baseline matches what applying every migration in order produces, which is
+  how migration 042's column went missing unnoticed and the same gap that hid
+  `references_records` and `captable_holders`.
+
+### Ledgers
+
+`sqlite-columns-baseline.json` **24 → 3** and `sqlite-tables-baseline.json`
+**11 → 9**. The three survivors are not the checklist's:
+`corporate_profiles.kyb_status` is the reviewed gap (nothing writes a KYB
+decision, so a column would not help), and `partners.owner_user_id` and
+`partner_deals.founder_user_id` belong to `services/newsTrust.ts`.
+`schema_guards.test.mjs`'s list shrinks with them and **stays typed rather than
+read from the baseline**, so a ledger edit alone still cannot let a new gap pass.
+
+**No migration — 275 stays free.** No `frontend/src` change, so no `docs/`
+rebuild. No new `/api/*` method. **12 mutations applied, 12 caught.**
