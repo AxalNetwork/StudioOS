@@ -25,6 +25,25 @@
 export const ONBOARDING_COMPLETE_EVENT = 'axal:onboarding-complete';
 
 /**
+ * Fired on `window` the moment POST /onboarding/licence succeeds, so the
+ * app shell can retire its cached "still on the licence step" belief.
+ *
+ * THE SAME EFFECT, ONE GATE EARLIER. Progress is read once per session,
+ * keyed on `[user?.id]`. Choosing Founder, Investor, Advisor or Partner
+ * writes a new flow on the server and the page then navigates to that
+ * profile's wizard (or the holding dashboard, for an advisor). The shell
+ * still believes `flow === 'licence'`, so the licence gate sends the
+ * navigation straight back to `/onboarding`. The click looks dead. A full
+ * reload re-reads progress and the next click works, which is the whole
+ * of the report.
+ *
+ * `detail` is `{ licence }` — 'founder' | 'investor' | 'advisor' | 'partner'.
+ * Advisor is the one licence the server marks complete; the other three
+ * open a wizard.
+ */
+export const ONBOARDING_LICENCE_CHOSEN_EVENT = 'axal:onboarding-licence-chosen';
+
+/**
  * Fired on `window` the moment POST /auth/accept-terms succeeds, so the app
  * shell can retire its own cached "still owes an acceptance" belief.
  *

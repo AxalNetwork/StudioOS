@@ -10,7 +10,7 @@ import { ONBOARDING_COMPLETE_EVENT } from '../lib/onboarding';
 //
 // `steps` is: [{ key, title, description?, render: ({values, set, error}) => JSX, validate?: (values) => string|null }]
 
-export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 'Finish' }) {
+export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 'Finish', onDark = false }) {
   const [stepIdx, setStepIdx] = useState(0);
   const [values, setValues] = useState({});
   const [hydrated, setHydrated] = useState(false);
@@ -108,7 +108,7 @@ export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 
 
   if (!hydrated) {
     return (
-      <div className="min-h-[400px] flex items-center justify-center text-gray-500">
+      <div className={`min-h-[400px] flex items-center justify-center ${onDark ? 'text-white/80' : 'text-gray-500'}`}>
         <Loader2 className="animate-spin mr-2" size={18} /> Loading…
       </div>
     );
@@ -136,11 +136,11 @@ export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-6">
-        <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
+        <div className={`flex items-center justify-between text-xs mb-1.5 ${onDark ? 'text-white/80' : 'text-gray-500'}`}>
           <span>Step {stepIdx + 1} of {steps.length}</span>
           <span>{pct}%</span>
         </div>
-        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+        <div className={`h-1.5 rounded-full overflow-hidden ${onDark ? 'bg-white/25' : 'bg-gray-100'}`}>
           <div className="h-full bg-violet-600 transition-all" style={{ width: `${pct}%` }} />
         </div>
       </div>

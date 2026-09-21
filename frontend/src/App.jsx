@@ -27,7 +27,7 @@ import {
   ChevronDown, Eye, ArrowLeft, Sparkles,
   Gift
 } from 'lucide-react';
-import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES } from './sidebarConfig';
+import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES, ONBOARDING_CANVAS_PATHS } from './sidebarConfig';
 import PaywallModal from './components/PaywallModal';
 import AdminFrozenBar from './components/AdminFrozenBar';
 import BranchSuspendedBar from './components/BranchSuspendedBar';
@@ -361,7 +361,7 @@ const StepUpModal = lazy(() => import('./components/StepUpModal'));
 const InstallPrompt = lazy(() => import('./components/InstallPrompt'));
 const KeyboardShortcutsOverlay = lazy(() => import('./components/KeyboardShortcutsOverlay'));
 import useInactivityTimeout from './hooks/useInactivityTimeout';
-import { ONBOARDING_COMPLETE_EVENT, TERMS_ACCEPTED_EVENT } from './lib/onboarding';
+import { ONBOARDING_COMPLETE_EVENT, ONBOARDING_LICENCE_CHOSEN_EVENT, TERMS_ACCEPTED_EVENT } from './lib/onboarding';
 import { shellRoleFor, branchOfUser, isSuperAdminUser, readHqView, writeHqView, clearHqView } from './lib/shellRole';
 
 // Phase B · Prompt 5 — sidebar groups now live in `frontend/src/sidebarConfig.js`.
@@ -877,6 +877,10 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     // this one.
     || activeRole === 'advisor';
   const flushSurface = fullBleedSurface;
+  // The three role wizards paint their own background across this column.
+  // Padding and the footer are the gaps around it; both have to go, or the
+  // landscape stops short of the sidebar and the bottom of the body.
+  const onboardingCanvas = ONBOARDING_CANVAS_PATHS.includes(location.pathname);
   const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user, hqView);
 
   // Auto-logout after 20 minutes of inactivity, with a 60-second warning modal.
@@ -1048,7 +1052,10 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
 
           {/* A COLUMN, so the footer stays at the bottom on short pages while
               still following long page content inside the scroll container. */}
-          <main className="flex flex-1 flex-col overflow-y-auto bg-gray-50 dark:bg-gray-950">
+          <main
+            {...(onboardingCanvas ? { 'data-onboarding-canvas': '' } : {})}
+            className={`flex flex-1 flex-col overflow-y-auto ${onboardingCanvas ? '' : 'bg-gray-50 dark:bg-gray-950'}`}
+          >
             {/* Keyed on the active company so a switch REMOUNTS every page
                 below the sidebar. Pages do not read the company from context —
                 it rides in the X-Company-Id header on each request — so
@@ -1057,9 +1064,10 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 happened to refetch. `savedCompanyId` is the id restored before
                 first render, so a reload that lands on the same company does
                 not remount once the switcher confirms it. */}
-            <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main data-density-target className={`${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto w-full'}`}>
+            <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main data-density-target className={`${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto w-full'}${onboardingCanvas ? ' flex w-full min-h-full flex-1 flex-col' : ''}`}>
               {children}
             </div>
+            {!onboardingCanvas && (
             <footer className="mt-auto shrink-0 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 md:px-6 py-4">
               <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-gray-400 dark:text-gray-500">
                 <span>
@@ -1071,6 +1079,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 </div>
               </div>
             </footer>
+            )}
           </main>
         </div>
       </div>
@@ -1114,6 +1123,11 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   // such key at all. Absent must read as "do not gate" in every one of them —
   // the inverse would lock a Replit session out of its own product.
   const [termsPending, setTermsPending] = useState(false);
+  // Set when the licence picker announces a choice, so an in-flight
+  // progress read — started before the click, answering `flow: 'licence'` —
+  // cannot put the gate back after the click has already moved the account on.
+  const licenceChosen = useRef(false);
+  const progressUserId = useRef(null);
 
   // Task #1 — invite/deep-link continuity. RegisterPage persisted a validated
   // `?next=` path (localStorage `gvpn:next`) before the email/OAuth
@@ -1134,6 +1148,13 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
 
   useEffect(() => {
     if (!user) return;
+    // A different account must not inherit the previous one's choice. The
+    // same account re-running this effect (StrictMode) must not wipe a
+    // choice that already landed, or the late progress read wins again.
+    if (progressUserId.current !== user.id) {
+      progressUserId.current = user.id;
+      licenceChosen.current = false;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -1142,24 +1163,34 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
         setKycStatus(me.kyc_status || 'not_started');
         setAccessLevel(me.access_level || null);
         setServerRole(me.role || null);
-        setSuggestedRole(me.suggested_role || null);
-        // `=== true`, not truthy. The key is absent on the dev FastAPI's /me and
-        // on any older worker, and `undefined` must land on "do not gate"
-        // rather than on whatever a loose check would make of it.
-        setTermsPending(me.terms_acceptance_pending === true);
+        // A /me that left before Continue must not put the suggested role or
+        // the terms gate back. The licence request already recorded both, and
+        // the picker has told this shell. Applying the stale answer here is
+        // how the next screen becomes the terms interstitial, or the licence
+        // picker, after a click that succeeded.
+        if (!licenceChosen.current) {
+          setSuggestedRole(me.suggested_role || null);
+          // `=== true`, not truthy. The key is absent on the dev FastAPI's /me and
+          // on any older worker, and `undefined` must land on "do not gate"
+          // rather than on whatever a loose check would make of it.
+          setTermsPending(me.terms_acceptance_pending === true);
+        }
         const stored = safeReadJSON('user', {});
+        const suggestedRole = licenceChosen.current
+          ? (stored.suggested_role || null)
+          : (me.suggested_role || null);
         if (
           stored.kyc_status !== me.kyc_status ||
           stored.access_level !== me.access_level ||
           stored.role !== me.role ||
-          stored.suggested_role !== me.suggested_role
+          stored.suggested_role !== suggestedRole
         ) {
           localStorage.setItem('user', JSON.stringify({
             ...stored,
             role: me.role,
             kyc_status: me.kyc_status,
             access_level: me.access_level || null,
-            suggested_role: me.suggested_role || null,
+            suggested_role: suggestedRole,
           }));
         }
       } catch {}
@@ -1174,13 +1205,13 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
       // unfinished users back to the right /onboarding/<role> step.
       try {
         const p = await api.onboardingGetProgress();
-        if (cancelled) return;
+        if (cancelled || licenceChosen.current) return;
         setOnboardingFlow(p?.flow || null);
         setOnboardingComplete(!!p?.completed_at);
         setOnboardingLoaded(true);
       } catch {
         // Endpoint missing or transient error — don't block login.
-        if (!cancelled) {
+        if (!cancelled && !licenceChosen.current) {
           setOnboardingComplete(true);
           setOnboardingLoaded(true);
         }
@@ -1201,6 +1232,30 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     const done = () => { setOnboardingComplete(true); setOnboardingLoaded(true); };
     window.addEventListener(ONBOARDING_COMPLETE_EVENT, done);
     return () => window.removeEventListener(ONBOARDING_COMPLETE_EVENT, done);
+  }, []);
+
+  // Choosing a licence is the same shape of fact as finishing a wizard: the
+  // server has already moved on, and this shell will not ask it again until
+  // the next full load. Without this listener the licence gate still holds
+  // `flow === 'licence'` and returns the navigation to `/onboarding`, so
+  // Continue appears to do nothing until a refresh.
+  useEffect(() => {
+    const chosen = (e) => {
+      const licence = e?.detail?.licence;
+      if (licence !== 'founder' && licence !== 'investor' && licence !== 'advisor' && licence !== 'partner') return;
+      licenceChosen.current = true;
+      setOnboardingLoaded(true);
+      setOnboardingFlow(licence);
+      // The server marks only the advisor row complete. The other three open
+      // a wizard, and reporting them complete would skip it.
+      setOnboardingComplete(licence === 'advisor');
+      setSuggestedRole(licence);
+      // The same request recorded the terms. Retire the interstitial here as
+      // well as on TERMS_ACCEPTED_EVENT, so one of the two events is enough.
+      setTermsPending(false);
+    };
+    window.addEventListener(ONBOARDING_LICENCE_CHOSEN_EVENT, chosen);
+    return () => window.removeEventListener(ONBOARDING_LICENCE_CHOSEN_EVENT, chosen);
   }, []);
 
   // Task #178 — the same shape, one gate along, for the same reason. The effect

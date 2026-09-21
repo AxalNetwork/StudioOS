@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuthSync';
 import { COUNTRIES } from '../lib/countries';
 import { NFX_SECTORS } from '../lib/nfxSectors';
 import { investorLanding } from '../lib/onboarding';
+import { OnboardingCanvas } from '../components/auth/AuthShell';
 
 // Phase 0.2 / Task #23 — Investor onboarding wizard.
 // Task #4 (2026-05-10) — extended into a 6-step profiling chatbot whose
@@ -262,13 +263,14 @@ export default function OnboardingInvestorPage() {
   };
 
   return (
-    <div className="py-8">
+    <OnboardingCanvas>
       <OnboardingWizard
         flow="investor"
         steps={steps}
+        onDark
         finishLabel="See deal flow"
         onFinish={handleFinish}
       />
-    </div>
+    </OnboardingCanvas>
   );
 }

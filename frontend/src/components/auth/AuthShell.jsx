@@ -27,8 +27,26 @@ export default function AuthShell({
    * keep the column they were designed for.
    */
   wide = false,
+  /**
+   * The role wizards render inside the app shell, which already has the
+   * header logo and the sidebar. A second header here is the duplicate
+   * "Axal VC" in the body. `embedded` drops that chrome and fills the main
+   * column instead of the viewport, so the background can run edge to edge
+   * under the header. Sign-in, register, and `/onboarding` leave this off
+   * and keep their own logo.
+   */
+  embedded = false,
+  /**
+   * No paint of its own. The app shell puts the onboarding landscape on
+   * `<main>`, which is the only box that is the whole body. Painting it
+   * again here would be a second image, centred on a shorter box, with a
+   * seam where the two meet.
+   */
+  plain = false,
 }) {
-  const shellStyle = backgroundSrc
+  const shellStyle = plain
+    ? undefined
+    : backgroundSrc
     ? {
         backgroundImage:
           'linear-gradient(104deg, rgba(36,31,56,.52) 0%, rgba(36,31,56,.28) 42%, rgba(36,31,56,.62) 100%), '
@@ -44,7 +62,8 @@ export default function AuthShell({
       };
 
   return (
-    <div className="min-h-screen flex flex-col" style={shellStyle}>
+    <div className={embedded ? 'flex min-h-full w-full flex-1 flex-col' : 'min-h-screen flex flex-col'} style={shellStyle}>
+      {!embedded && (
       <header className="flex items-center justify-between gap-3 px-6 py-5 sm:px-8">
         {/* Clickable: this is a signed-out page, and `/` is where PublicNav's
             logo goes, so the destination is the same wherever you meet it.
@@ -59,8 +78,9 @@ export default function AuthShell({
           <span className="font-mono text-[10px] uppercase tracking-widest text-white/80">{platformNote}</span>
         )}
       </header>
+      )}
 
-      <div className={`flex flex-1 justify-center px-4 pb-12 ${compact ? 'pt-4' : 'pt-6 sm:pt-10'}`}>
+      <div className={`flex flex-1 justify-center px-4 ${embedded ? 'py-10 sm:py-14' : `pb-12 ${compact ? 'pt-4' : 'pt-6 sm:pt-10'}`}`}>
         <div className={`w-full ${wide ? 'max-w-[840px]' : 'max-w-[404px]'}`}>
           {children}
           {showApplyCard && (
@@ -83,6 +103,19 @@ export default function AuthShell({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The founder, investor and partner wizards, once a licence is chosen.
+ * Same landscape as `/onboarding`, with no second logo: the app header
+ * already carries one, and this surface is the body under that header.
+ */
+export function OnboardingCanvas({ children }) {
+  return (
+    <AuthShell embedded wide plain>
+      {children}
+    </AuthShell>
   );
 }
 

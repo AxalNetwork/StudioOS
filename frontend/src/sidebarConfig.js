@@ -704,6 +704,20 @@ export const PARTNER_FULL_BLEED = [
  * and `flushSurface` in App.jsx, which is exactly the shape that let
  * `/grow/focus` go missing from one array and not the other.
  */
+/**
+ * Role wizards that paint inside the app shell. Exact paths, not the
+ * `/onboarding/` prefix: `/onboarding` itself is the licence picker and
+ * renders outside this shell (it keeps its own logo), and `/onboarding/chat`
+ * is the same kind of full-screen step. These three are the body under the
+ * sidebar and the header, so the shell flushes its padding and drops the
+ * footer and the page's background runs to every edge of that column.
+ */
+export const ONBOARDING_CANVAS_PATHS = [
+  '/onboarding/founder',
+  '/onboarding/investor',
+  '/onboarding/partner',
+];
+
 export const SHARED_FULL_BLEED = [
   '/referrals',
   // `/spinout-lab` — the Lab introduction opens with a full-bleed hero that has
@@ -715,6 +729,7 @@ export const SHARED_FULL_BLEED = [
   // SpinoutLabInvestorPage.jsx had to be given some in the same commit, because
   // it had none and was relying on the shell's.
   '/spinout-lab',
+  ...ONBOARDING_CANVAS_PATHS,
 ];
 
 /**
