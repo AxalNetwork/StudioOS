@@ -37,21 +37,15 @@ export default function RegisterPage() {
   // that bounced a brand-new user here). Also persisted to localStorage so it
   // survives the email/OAuth round-trip; RequireAuth consumes it post-auth.
   const [nextPath, setNextPath] = useState(null);
-  // Task #51 — optional "Continue with Google" on step 1. Hidden when the
-  // worker has no GOOGLE_AUTH_CLIENT_ID configured (start returns 503).
-  const [googleAvailable, setGoogleAvailable] = useState(false);
+  // Task #51 — "Continue with Google" on step 1. ALWAYS OFFERED, never behind a
+  // pre-flight probe. This used to call /api/auth/google/start on mount and show
+  // the button only on success, with the catch leaving it hidden and NOTHING on
+  // screen saying why — so a rate-limited, timed-out or slow response silently
+  // removed the fastest signup path. /start is rate-limited (not in
+  // RATE_LIMIT_EXEMPT, D74), does a KV write and sets a cookie, so the probe was
+  // both fragile and a real cost on every page load. continueWithGoogle() now
+  // calls it for real and reports the server's own answer if it refuses.
   const [googleBusy, setGoogleBusy] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        await api.googleStartUrl({ action: 'signin' });
-        if (!cancelled) setGoogleAvailable(true);
-      } catch { /* leave hidden */ }
-    })();
-    return () => { cancelled = true; };
-  }, []);
   const continueWithGoogle = async () => {
     setGoogleBusy(true); setError('');
     // Task #2 — funnel: Google-path signups leave the page here; there is no
@@ -411,8 +405,7 @@ export default function RegisterPage() {
                     can still enrol TOTP from Settings → Security afterwards
                     and is gently reminded to do so when they hit a step-up
                     surface. */}
-                {googleAvailable && (
-                  <>
+                <>
                     <div className="flex items-center gap-3 my-1">
                       <div className="flex-1 h-px bg-gray-200" />
                       <span className="text-[10px] uppercase tracking-wider text-gray-500">or</span>
@@ -435,8 +428,7 @@ export default function RegisterPage() {
                     <p className="text-[10px] text-gray-500 text-center">
                       We'll create your account from your Google profile. You can enrol an authenticator later from Settings.
                     </p>
-                  </>
-                )}
+                </>
               </form>
 
               <p className="text-xs text-gray-600 text-center mt-4">
