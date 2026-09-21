@@ -50,6 +50,16 @@ function parseDollars(text) {
   return { cents: Math.round(Number(raw) * 100) };
 }
 
+function exampleHost(value) {
+  try {
+    const raw = new URL(String(value)).hostname.toLowerCase();
+    const host = raw.endsWith('.') ? raw.slice(0, -1) : raw;
+    return host === 'example.com' || host === 'www.example.com';
+  } catch {
+    return false;
+  }
+}
+
 function draftRestatement(fund) {
   if (!fund?.thesis && !fund?.note) {
     return 'Record a thesis or a note first — there is nothing to draft from.';
@@ -260,7 +270,7 @@ export default function FundDossier({ role = 'founder' }) {
                     )}
                     {httpSource && (
                       <span className="ml-2 font-mono text-[10px] text-axal-muted">
-                        {fund.source_url}{/example\.com/i.test(fund.source_url) ? ' · placeholder' : ''}
+                        {fund.source_url}{exampleHost(fund.source_url) ? ' · placeholder' : ''}
                       </span>
                     )}
                   </div>

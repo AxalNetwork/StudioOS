@@ -32,6 +32,9 @@ test('the page states what it will not do', () => {
   assert.match(page, /Record a thesis or a note first — there is nothing to draft from\./);
   assert.match(page, /It will not name a partner, cite an AUM, or assume an introduction\./);
   assert.doesNotMatch(page, /research_zone_drafts|aiWorkspace|fundSheet/);
+  assert.doesNotMatch(page, /\/example\\.com\/i/,
+    'a host check must parse the URL; a substring match treats example.com.evil as the sample host');
+  assert.match(page, /host === 'example.com'/);
 });
 
 test('a blank cheque field parses to null and never to zero', () => {
