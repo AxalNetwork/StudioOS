@@ -1,5 +1,10 @@
 /**
- * D184 — every onboarding-checklist detector, prepared against the real schema.
+ * D184/D186 — every onboarding-checklist detector, prepared against the real
+ * schema. D184 made the twenty-four broken ones visible; D186 repaired them,
+ * so the expected-failure list below is now empty and the advisor assertion is
+ * inverted. The two tests that did NOT move are the ones that keep this honest:
+ * the non-vacuity floor, and the proof that these queries are reachable only
+ * through the widened literal scan.
  *
  * `services/onboardingChecklist.ts` carries fifty items across five personas,
  * all of them `autoDetect: true`, and each runs one query through `num()`:
@@ -106,10 +111,18 @@ function unpreparable(): Map<string, string> {
 
 test('the detect switch is read in full, and only the widening can read it', () => {
   const qs = detectQueries();
-  // Non-vacuity. Fifty catalogue items share forty-four queries; a number far
-  // below that means the region bound or the extractor stopped working, and a
-  // test that silently examines three queries is worse than none.
-  assert.ok(qs.length >= 40,
+  // Non-vacuity. A number far below the real one means the region bound or the
+  // extractor stopped working, and a test that silently examines three queries
+  // is worse than none.
+  //
+  // THE FLOOR MOVED WITH D186, and the arithmetic is the justification rather
+  // than the observation: the switch held 44 queries and now holds 39, because
+  // five arms were DELETED on purpose — the four whose fact nothing stores
+  // (ef.ip, op.conflicts, op.refs, mt.refs, all now autoDetect:false) and
+  // ef.captable's dead captable_holders arm. 44 − 5 = 39. The floor keeps the
+  // margin it had before (4 under the true count), so it still catches a
+  // collapse without failing on the next deliberate deletion.
+  assert.ok(qs.length >= 35,
     `only ${qs.length} detect queries were read — the region bound or sqlStrings is broken`);
 
   // THE PROOF THE WIDENING IS LOAD-BEARING. Every one of these reaches D1
@@ -123,80 +136,72 @@ test('the detect switch is read in full, and only the widening can read it', () 
     + 'to be reachable only through the whole-file literal scan');
 });
 
-test('twenty-four checklist items can never be satisfied, and these are they', () => {
+test('every auto-detected checklist item can be satisfied — the list is empty', () => {
   const bad = unpreparable();
   const lines = [...bad.keys()].map(Number).sort((a, b) => a - b);
 
-  // Each line is one detect query SQLite refuses against the shipped schema.
-  // The consequence is identical for all of them: `num()` returns 0, the item
-  // never completes, and nobody is told. `scripts/sqlite-columns-baseline.json`
-  // and `scripts/sqlite-tables-baseline.json` carry the per-item diagnosis and
-  // the column or table each should be repointed at; D184's follow-up PRs empty
-  // both ledgers and shrink this list to nothing.
+  // D184 FOUND TWENTY-FOUR HERE; D186 REPAIRED THEM AND THIS LIST IS NOW EMPTY.
+  // Each was a detect query SQLite refuses against the shipped schema, with an
+  // identical consequence: num() returns 0, the item never completes, and
+  // nobody is told. Twenty were repointed at the store that holds the fact, one
+  // (ef.captable's captable_holders arm) was deleted as dead weight because the
+  // cap_table_holders arm beside it already worked, and four whose fact nothing
+  // stores anywhere — ef.ip, op.conflicts, op.refs, mt.refs — became
+  // autoDetect:false with their arms deleted, so the user ticks them by hand.
+  //
+  // DELETING THE ARM IS NOT OPTIONAL for those four: a dead `case` keeps its
+  // literal harvestable, which keeps its baseline entry alive, and both
+  // check-sqlite-* guards refuse a STALE entry as loudly as a new one. That
+  // refusal is what proved each repair landed.
   //
   // THIS LIST IS NOT THE GUARDS' LIST, AND THE DIFFERENCE IS THE POINT. The
-  // three `check-sqlite-*` guards ask "does the repo declare this anywhere",
-  // unioning every file under `sql/`. This test asks "does a freshly
-  // provisioned database have it" — baseline plus post-cutoff migrations,
-  // which is exactly what `migrate-d1 --bootstrap` builds. Line 288 is the
-  // whole difference: `captable_holders` is declared in
-  // `migrations/034_unmounted_routes.sql`, so the guards call it known, and it
-  // is in neither `schema_baseline.sql` nor production (read read-only against
-  // studioos-db, 2026-09-21). Only a fresh-build fixture can see it.
-  //
-  // Two entries here are therefore missing TABLES rather than renamed columns,
-  // both from that same migration: `captable_holders` (288) and
-  // `references_records` (379, 397). Their baseline entries say so; the
-  // migration declaring tables neither the baseline nor production has is
-  // baseline drift, which `check-baseline-drift` owns and D184 does not.
-  assert.deepEqual(lines, [
-    269,   // nf.advisor      expert_bookings.founder_user_id -> user_id
-    288,   // ef.captable     captable_holders — absent; the cap_table_holders
-           //                 fallback below it works, so the ITEM is fine and
-           //                 this arm is dead weight. Guard-invisible (034).
-    298,   // ef.financials   financial_models.user_id -> keyed on project_id
-    301,   // ef.83b          compliance_records.user_id / .record_type
-    305,   // ef.ip           compliance_records.user_id / .record_type
-    311,   // ef/inv/mt.nda   pairwise_ndas.user_a/user_b -> party_a/b_user_id
-    316,   // inv.kyc         kyc_records — no such table anywhere
-    320,   // inv.thesis      investor_profiles.thesis -> thesis_text
-    329,   // inv.review      match_scores.investor_user_id -> user_id/target_user_id
-    334,   // inv.target      investor_profiles.deployment_target_cents/.reserve_percent
-    354,   // op.accept       partner_invitations.accepted_user_id/.email/.redeemed_at
-    360,   // op.conflicts    partner_profiles.conflicts_disclosed_at
-    364,   // op.deal_type    partner_deals.partner_user_id/.signed_at
-    368,   // op.kyb          kyc_records — no such table anywhere
-    379,   // op.refs         references_records — absent table, not a rename
-    381,   // op.referral     referral_invites.owner_user_id -> sender_user_id
-    384,   // op.intro        investor_introductions.source_user_id/.introducer_user_id
-    390,   // mt.tags         experts.tags -> categories_json/sectors_json
-    394,   // mt.comp         experts.comp_model — pricing_model is NOT NULL DEFAULT
-    397,   // mt.refs         references_records — absent table, not a rename
-    400,   // mt.capacity     advisors.weekly_hours_band, via users.advisor_id
-    403,   // mt.slots        advisor_slots — historical/ only
-    406,   // mt.booking      expert_bookings.expert_user_id -> expert_id
-  ], `unpreparable detect queries: ${[...bad].map(([l, m]) => `${l} (${m})`).join('; ')}`);
+  // three check-sqlite-* guards ask "does the repo declare this anywhere",
+  // unioning every file under sql/. This asks "does a freshly provisioned
+  // database have it" — baseline plus post-cutoff migrations, which is what
+  // migrate-d1 --bootstrap builds. captable_holders and references_records are
+  // declared in migrations/034 and exist in neither the baseline nor
+  // production, so the guards called them known and only a fresh-build fixture
+  // could see them. That migration declaring tables the baseline lacks is
+  // baseline drift, which check-baseline-drift owns.
+  assert.deepEqual(lines, [],
+    'a detect query no longer prepares against a fresh build — a repoint is wrong, or a new '
+    + `item shipped naming something that does not exist: ${[...bad].map(([l, m]) => `${l} (${m})`).join('; ')}`);
 });
 
-test('the advisor catalogue cannot reach the celebration threshold', () => {
-  // The sharpest single consequence, and the reason wholesale removal is not
-  // an option for `mt.*`. Seven of its ten items are among the broken set, and
-  // CELEBRATION_THRESHOLD is an absolute 8 — so an advisor who completes every
-  // item the platform can actually observe reaches 3 of 10 and the checklist
-  // never finishes for them.
-  const bad = new Set([...unpreparable().keys()].map(Number));
-  const mt = detectQueries().filter((q) => q.line >= 386 && q.line <= 410);
-  assert.ok(mt.length >= 5, `only ${mt.length} mt.* queries found — the line window moved`);
-  const broken = mt.filter((q) => bad.has(q.line)).length;
-  assert.ok(broken >= 5,
-    `${broken} of the advisor catalogue's detectors are broken — if this has dropped, `
-    + 'the repairs have started and this assertion should move with them');
+test('the advisor catalogue CAN now reach the celebration threshold', () => {
+  // THE SHARPEST SINGLE CONSEQUENCE, INVERTED. Seven of the advisor's ten items
+  // were among the broken set while CELEBRATION_THRESHOLD is an absolute 8, so
+  // an advisor who completed everything the platform could observe reached 3 of
+  // 10 and the checklist never finished for them. That is why wholesale removal
+  // was never an option for mt.*: dropping the broken ones would have put the
+  // threshold out of reach by a different route.
+  //
+  // The window is derived from the section comment rather than typed, because
+  // the line numbers move every time this switch is edited — which is exactly
+  // what a repair does.
+  const from = SRC.slice(0, SRC.indexOf('// ----- advisor side-effects -----')).split('\n').length;
+  const mt = detectQueries().filter((q) => q.line >= from);
+  assert.ok(mt.length >= 5, `only ${mt.length} mt.* queries found — the section comment moved`);
 
+  const bad = new Set([...unpreparable().keys()].map(Number));
+  const broken = mt.filter((q) => bad.has(q.line));
+  assert.deepEqual(broken.map((q) => q.line), [],
+    `${broken.length} advisor detectors still cannot prepare, so the advisor checklist still `
+    + 'cannot finish — the whole point of the repair');
+
+  // The threshold is an absolute count, so reachability is a claim about the
+  // CATALOGUE, not about the detectors alone: an item the user ticks by hand
+  // counts toward it exactly like a detected one.
   const threshold = /CELEBRATION_THRESHOLD\s*=\s*(\d+)/.exec(SRC);
   assert.ok(threshold, 'CELEBRATION_THRESHOLD is gone');
   assert.equal(Number(threshold![1]), 8,
-    'the threshold is an absolute count, not a ratio — changing it changes which '
-    + 'personas can ever finish, and the advisor one already cannot');
+    'the threshold is an absolute count, not a ratio — changing it changes which personas '
+    + 'can ever finish');
+
+  const advisorItems = [...SRC.matchAll(/\{ key: 'mt\.[a-z_]+'/g)].length;
+  assert.ok(advisorItems >= Number(threshold![1]),
+    `the advisor catalogue has ${advisorItems} items against a threshold of ${threshold![1]} — `
+    + 'the celebration is unreachable by construction');
 });
 
 test('a swallowed query is why none of this was visible', () => {

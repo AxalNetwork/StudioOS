@@ -27,6 +27,20 @@
  *    A swallowed query is indistinguishable from an honest zero, so a name in
  *    this list has to be a table that genuinely might be absent — never a
  *    guess, and never a typo.
+ *
+ *    AND IT HAPPENED TWENTY-FOUR MORE TIMES (D186). op.service was not the
+ *    instance, it was the first one anyone noticed. Twenty-four of the ~40
+ *    detect queries named a column or table that exists in no built schema, so
+ *    twenty-four items read "not done" for every account forever — the whole
+ *    advisor catalogue bar three, and the whole partner catalogue bar three.
+ *    They were invisible to all three SQL guards because sqlStrings() anchored
+ *    on `.prepare(` and every query here is an ARGUMENT to num(); D184 widened
+ *    the harvest so the guards can see them, and D186 repaired them: twenty
+ *    repointed at the store that holds the fact, one dead arm deleted, and four
+ *    whose fact nothing stores at all turned off (autoDetect: false) so the user
+ *    ticks them by hand rather than facing a step that can only answer "no".
+ *    `compliance_records` below is kept as an example of the tolerance, not of
+ *    a table this file still reads — no detector touches it any more.
  *  - Item keys are NEVER renamed; new items append to the end of a role.
  */
 
@@ -76,7 +90,11 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     { key: 'ef.captable',   label: 'Connect or upload cap table',        route: '/build/captable',             autoDetect: true },
     { key: 'ef.financials', label: 'Populate financial model',           route: '/build/financials',           autoDetect: true },
     { key: 'ef.83b',        label: 'Confirm 83(b) status',               route: '/spinout-lab/83b',            autoDetect: true },
-    { key: 'ef.ip',         label: 'Confirm IP assignments signed',      route: '/compliance',                 autoDetect: true },
+    // NO STORE, so no detector: nothing in the schema records an IP assignment
+    // (measured 2026-09-21 against baseline + post-cutoff migrations). The step
+    // stays and the user ticks it via POST /checklist/:item/complete — a step
+    // whose only possible answer is 'no' is worse than one you confirm yourself.
+    { key: 'ef.ip',         label: 'Confirm IP assignments signed',      route: '/compliance',                 autoDetect: false },
     { key: 'ef.okrs',       label: 'Add 3 quarterly OKRs',               route: '/build/roadmap',              autoDetect: true },
     { key: 'ef.scoring',    label: 'Run scoring with verified evidence', route: '/projects',                   autoDetect: true },
     { key: 'ef.nda',        label: 'Send first NDA to an investor',      route: '/trust',                      autoDetect: true },
@@ -89,14 +107,21 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     { key: 'inv.crm',       label: 'Connect Affinity / HubSpot (optional)', route: '/integrations',            autoDetect: true },
     { key: 'inv.review',    label: 'Review 3 matched founders',          route: '/matches',                    autoDetect: true },
     { key: 'inv.intro',     label: 'Request your first intro',           route: '/matches',                    autoDetect: true },
-    { key: 'inv.target',    label: 'Set deployment target + reserve %',  route: '/account/profile',           autoDetect: true },
+    // RELABELLED with the repoint: 'deployment target' and 'reserve %' are fields
+    // no table has. investor_profiles stores the ticket band and the LP target,
+    // which is what the investor is actually asked for.
+    { key: 'inv.target',    label: 'Set ticket band + LP target',        route: '/account/profile',           autoDetect: true },
     { key: 'inv.dealroom',  label: 'Open your first deal-room',          route: '/deals',                      autoDetect: true },
     { key: 'inv.notifs',    label: 'Configure notifications',            route: '/account/notifications',     autoDetect: true },
   ],
   operatingPartner: [
     { key: 'op.accept',     label: 'Accept partner invitation',          route: '/partner-portal',             autoDetect: true },
     { key: 'op.profile',    label: 'Complete profiling chatbot',         route: '/onboarding/persona',         autoDetect: true },
-    { key: 'op.conflicts',  label: 'Disclose conflicts',                 route: '/partner-portal',             autoDetect: true },
+    // NO STORE, so no detector: partner_profiles has no conflicts column in a
+    // built schema. migrations/042 declares conflicts_text and 042 is below
+    // BASELINE_CUTOFF, so the baseline had to carry it and does not — that is
+    // baseline drift, filed for check-baseline-drift rather than papered over.
+    { key: 'op.conflicts',  label: 'Disclose conflicts',                 route: '/partner-portal',             autoDetect: false },
     { key: 'op.deal_type',  label: 'Pick deal-type proposal + sign',     route: '/partner-portal',             autoDetect: true },
     // Task #2 — KYC is investor-only, so the partner KYB step no longer
     // deep-links to /kyc (which now renders a "not required" state for
@@ -104,7 +129,10 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     // KYB collection via the partner portal.
     { key: 'op.kyb',        label: 'Configure KYB documents',            route: '/partner-portal',             autoDetect: true },
     { key: 'op.service',    label: 'Add at least one service / offer',   route: '/services',                   autoDetect: true },
-    { key: 'op.refs',       label: 'Provide 2 references',               route: '/account/profile',           autoDetect: true },
+    // NO STORE, so no detector: references_records exists in migration 034 and in
+    // neither the baseline nor production. reference_checks is deal-scoped
+    // diligence recording (deal_id, created_by), not a self-provided reference.
+    { key: 'op.refs',       label: 'Provide 2 references',               route: '/account/profile',           autoDetect: false },
     { key: 'op.referral',   label: 'Receive one-time referral code',     route: '/refer',                      autoDetect: true },
     { key: 'op.intro',      label: 'Make first qualified intro',         route: '/pipeline',                   autoDetect: true },
     { key: 'op.notifs',     label: 'Configure notifications',            route: '/account/notifications',     autoDetect: true },
@@ -117,11 +145,12 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     { key: 'mt.tags',       label: 'Add expertise tags + sectors + stages', route: '/account/profile',        autoDetect: true },
     { key: 'mt.comp',       label: 'Pick comp model',                    route: '/advisors',                    autoDetect: true },
     { key: 'mt.calendar',   label: 'Connect Calendly or Google Calendar',route: '/calendar',                   autoDetect: true },
-    { key: 'mt.refs',       label: 'Provide 2 references',               route: '/account/profile',           autoDetect: true },
+    // NO STORE — same absence as op.refs above.
+    { key: 'mt.refs',       label: 'Provide 2 references',               route: '/account/profile',           autoDetect: false },
     { key: 'mt.nda',        label: 'Sign Advisor NDA + disclaimer',       route: '/account/security',          autoDetect: true },
-    { key: 'mt.capacity',   label: 'Set weekly capacity',                route: '/office-hours',               autoDetect: true },
-    { key: 'mt.slots',      label: 'Surface availability slots',         route: '/office-hours',               autoDetect: true },
-    { key: 'mt.booking',    label: 'Accept first session booking',       route: '/office-hours',               autoDetect: true },
+    { key: 'mt.capacity',   label: 'Set weekly capacity',                route: '/practice/opportunities',             autoDetect: true },
+    { key: 'mt.slots',      label: 'Surface availability slots',         route: '/practice/opportunities',             autoDetect: true },
+    { key: 'mt.booking',    label: 'Accept first session booking',       route: '/practice/opportunities',             autoDetect: true },
     { key: 'mt.notifs',     label: 'Configure notifications',            route: '/account/notifications',     autoDetect: true },
   ],
 };
@@ -266,7 +295,7 @@ async function detect(env: Env, userId: number, key: string, primaryPersonaId?: 
            JOIN users u ON u.founder_id = f.id
           WHERE u.id = ?`, userId)) > 0;
     case 'nf.advisor':
-      return (await num(env, `SELECT COUNT(*) FROM expert_bookings WHERE founder_user_id = ?`, userId)) > 0;
+      return (await num(env, `SELECT COUNT(*) FROM expert_bookings WHERE user_id = ?`, userId)) > 0;
     case 'nf.team':
       return (await num(env, `SELECT COUNT(*) FROM founder_invites WHERE inviter_user_id = ?`, userId)) > 0;
 
@@ -283,41 +312,49 @@ async function detect(env: Env, userId: number, key: string, primaryPersonaId?: 
       if ((await num(env,
         `SELECT COUNT(*) FROM integrations WHERE user_id = ? AND provider_key = 'carta' AND status = 'active'`,
         userId)) > 0) return true;
-      // either captable_holders or cap_table_holders
-      if ((await num(env,
-        `SELECT COUNT(*) FROM captable_holders ch
-           JOIN projects p ON p.id = ch.project_id
-           JOIN founders f ON f.id = p.founder_id
-           JOIN users u ON u.founder_id = f.id WHERE u.id = ?`, userId)) > 0) return true;
+      // ONE cap-table store, not two. `captable_holders` exists in migration 034
+      // and in neither the baseline nor production, so this arm could only ever
+      // throw into num()'s catch. cap_table_holders below is the real table, so
+      // the ITEM was already satisfiable and the arm was pure dead weight.
       return (await num(env,
         `SELECT COUNT(*) FROM cap_table_holders ch
            JOIN projects p ON p.id = ch.project_id
            JOIN founders f ON f.id = p.founder_id
            JOIN users u ON u.founder_id = f.id WHERE u.id = ?`, userId)) > 0;
     case 'ef.financials':
-      return (await num(env, `SELECT COUNT(*) FROM financial_models WHERE user_id = ?`, userId)) > 0;
+      return (await num(env,
+        `SELECT COUNT(*) FROM financial_models fm
+           JOIN projects p ON p.id = fm.project_id
+           JOIN founders f ON f.id = p.founder_id
+           JOIN users u ON u.founder_id = f.id
+          WHERE u.id = ?`, userId)) > 0;
     case 'ef.83b':
+      // A RENAME TO A DIFFERENT TABLE. compliance_records is keyed on deal_id /
+      // subsidiary_id and has no subject column, so it could never answer this;
+      // services/section83b.ts owns section_83b_trackers, which is keyed on the
+      // user and is what the item's own route (/spinout-lab/83b) writes.
       return (await num(env,
-        `SELECT COUNT(*) FROM compliance_records WHERE user_id = ? AND (LOWER(type) LIKE '%83b%' OR LOWER(record_type) LIKE '%83b%')`,
-        userId)) > 0;
-    case 'ef.ip':
-      return (await num(env,
-        `SELECT COUNT(*) FROM compliance_records WHERE user_id = ? AND (LOWER(type) LIKE '%ip%' OR LOWER(record_type) LIKE '%ip%')`,
-        userId)) > 0;
+        `SELECT COUNT(*) FROM section_83b_trackers WHERE user_id = ?`, userId)) > 0;
     case 'ef.nda':
     case 'inv.nda':
     case 'mt.nda':
       if ((await num(env, `SELECT COUNT(*) FROM esign_envelopes WHERE created_by = ?`, userId)) > 0) return true;
-      return (await num(env, `SELECT COUNT(*) FROM pairwise_ndas WHERE user_a = ? OR user_b = ?`, userId, userId)) > 0;
+      return (await num(env,
+        `SELECT COUNT(*) FROM pairwise_ndas WHERE party_a_user_id = ? OR party_b_user_id = ?`,
+        userId, userId)) > 0;
 
     // ----- investor side-effects -----
     case 'inv.kyc':
+      // kyc_records exists nowhere. legal_obligations is the store, and the item
+      // is labelled "Complete KYC + Accreditation" — so BOTH obligations, not one.
       return (await num(env,
-        `SELECT COUNT(*) FROM kyc_records WHERE user_id = ? AND LOWER(status) IN ('approved','passed','verified')`,
-        userId)) > 0;
+        `SELECT COUNT(DISTINCT obligation_key) FROM legal_obligations
+          WHERE user_id = ? AND obligation_key IN ('kyc_v1','accreditation_v1')
+            AND LOWER(status) = 'satisfied'`,
+        userId)) >= 2;
     case 'inv.thesis':
       return (await num(env,
-        `SELECT COUNT(*) FROM investor_profiles WHERE user_id = ? AND thesis IS NOT NULL AND thesis <> ''`,
+        `SELECT COUNT(*) FROM investor_profiles WHERE user_id = ? AND thesis_text IS NOT NULL AND thesis_text <> ''`,
         userId)) > 0;
     case 'inv.crm':
       return (await num(env,
@@ -326,13 +363,16 @@ async function detect(env: Env, userId: number, key: string, primaryPersonaId?: 
             AND provider_key IN ('affinity','hubspot','salesforce')`,
         userId)) > 0;
     case 'inv.review':
-      return (await num(env, `SELECT COUNT(*) FROM match_scores WHERE investor_user_id = ?`, userId)) >= 3;
+      return (await num(env,
+        `SELECT COUNT(*) FROM match_scores WHERE user_id = ? AND score_type = 'deal_flow'`,
+        userId)) >= 3;
     case 'inv.intro':
       return (await num(env, `SELECT COUNT(*) FROM investor_introductions WHERE investor_user_id = ?`, userId)) > 0;
     case 'inv.target':
       return (await num(env,
         `SELECT COUNT(*) FROM investor_profiles
-          WHERE user_id = ? AND (deployment_target_cents IS NOT NULL OR reserve_percent IS NOT NULL)`,
+          WHERE user_id = ?
+            AND (ticket_min_usd IS NOT NULL OR ticket_max_usd IS NOT NULL OR lp_target_usd IS NOT NULL)`,
         userId)) > 0;
     case 'inv.dealroom':
       return (await num(env, `SELECT COUNT(*) FROM investor_dealroom_members WHERE investor_user_id = ?`, userId)) > 0;
@@ -352,20 +392,20 @@ async function detect(env: Env, userId: number, key: string, primaryPersonaId?: 
     case 'op.accept':
       return (await num(env,
         `SELECT COUNT(*) FROM partner_invitations
-          WHERE (accepted_user_id = ? OR LOWER(email) = (SELECT LOWER(email) FROM users WHERE id = ?))
-            AND (redeemed_at IS NOT NULL OR status = 'accepted')`,
+          WHERE (resulting_user_id = ? OR LOWER(recipient_email) = (SELECT LOWER(email) FROM users WHERE id = ?))
+            AND (signed_at IS NOT NULL OR status = 'accepted')`,
         userId, userId)) > 0;
-    case 'op.conflicts':
-      return (await num(env,
-        `SELECT COUNT(*) FROM partner_profiles WHERE user_id = ? AND conflicts_disclosed_at IS NOT NULL`,
-        userId)) > 0;
     case 'op.deal_type':
       return (await num(env,
-        `SELECT COUNT(*) FROM partner_deals WHERE partner_user_id = ? AND signed_at IS NOT NULL`,
+        `SELECT COUNT(*) FROM partner_deals WHERE user_id = ? AND activated_at IS NOT NULL`,
         userId)) > 0;
     case 'op.kyb':
+      // kyc_records exists nowhere. The item is "Configure KYB documents", and
+      // corporate_profiles IS that configuration — /trust/kyb/start upserts it.
+      // Gated on entity_name so an empty row does not read as configured.
       return (await num(env,
-        `SELECT COUNT(*) FROM kyc_records WHERE user_id = ? AND (LOWER(kind) = 'kyb' OR LOWER(record_type) = 'kyb')`,
+        `SELECT COUNT(*) FROM corporate_profiles
+          WHERE user_id = ? AND entity_name IS NOT NULL AND entity_name <> ''`,
         userId)) > 0;
     case 'op.service':
       // Both arms of this used to be wrong, and `num()` swallowing the error is
@@ -375,35 +415,62 @@ async function detect(env: Env, userId: number, key: string, primaryPersonaId?: 
       // "not done" for every operator forever. Migration 200 settles the shape;
       // this is the one query that matches it.
       return (await num(env, `SELECT COUNT(*) FROM service_offerings WHERE owner_user_id = ?`, userId)) > 0;
-    case 'op.refs':
-      return (await num(env, `SELECT COUNT(*) FROM references_records WHERE user_id = ?`, userId)) >= 2;
     case 'op.referral':
-      return (await num(env, `SELECT COUNT(*) FROM referral_invites WHERE owner_user_id = ?`, userId)) > 0;
+      return (await num(env, `SELECT COUNT(*) FROM referral_invites WHERE sender_user_id = ?`, userId)) > 0;
     case 'op.intro':
+      // investor_introductions has only the two PARTIES (investor_user_id,
+      // founder_user_id) — a partner who made the introduction is recorded on it
+      // nowhere. intro_propositions is the store that names the actor.
       return (await num(env,
-        `SELECT COUNT(*) FROM investor_introductions WHERE source_user_id = ? OR introducer_user_id = ?`,
-        userId, userId)) > 0;
+        `SELECT COUNT(*) FROM intro_propositions WHERE user_id = ?`, userId)) > 0;
 
     // ----- advisor side-effects -----
     case 'mt.tags':
+      // `tags` was never a column. The two that exist are categories_json and
+      // sectors_json, and the label names both, so BOTH must be non-empty — an
+      // OR would let sectors-only read as "expertise tags added". Tested as a
+      // non-empty JSON ARRAY, not a non-empty string: '[]' is filled-in-nothing.
+      // (The label's third element, stages, has no column on experts at all.)
       return (await num(env,
-        `SELECT COUNT(*) FROM experts WHERE user_id = ? AND tags IS NOT NULL AND tags <> '' AND tags <> '[]'`,
+        `SELECT COUNT(*) FROM experts
+          WHERE user_id = ?
+            AND categories_json IS NOT NULL AND categories_json NOT IN ('', '[]')
+            AND sectors_json    IS NOT NULL AND sectors_json    NOT IN ('', '[]')`,
         userId)) > 0;
     case 'mt.comp':
+      // NOT pricing_model, though it is the obvious rename: it is NOT NULL
+      // DEFAULT 'paid', so gating on it would flip this item from never- to
+      // ALWAYS-satisfiable and it would read "done" before the advisor did
+      // anything. hourly_rate_usd and first_session_free are the facts an
+      // advisor actually fills in.
       return (await num(env,
-        `SELECT COUNT(*) FROM experts WHERE user_id = ? AND comp_model IS NOT NULL AND comp_model <> ''`,
+        `SELECT COUNT(*) FROM experts
+          WHERE user_id = ? AND (hourly_rate_usd IS NOT NULL OR first_session_free = 1)`,
         userId)) > 0;
-    case 'mt.refs':
-      return (await num(env, `SELECT COUNT(*) FROM references_records WHERE user_id = ?`, userId)) >= 2;
     case 'mt.capacity':
+      // A DIFFERENT ENTITY, not a renamed column. experts is the wellbeing
+      // directory; the capacity an advisor declares is advisors.weekly_hours_band
+      // (migration 182), reached through users.advisor_id.
       return (await num(env,
-        `SELECT COUNT(*) FROM experts WHERE user_id = ? AND weekly_capacity > 0`,
+        `SELECT COUNT(*) FROM advisors a
+           JOIN users u ON u.advisor_id = a.id
+          WHERE u.id = ? AND a.weekly_hours_band IS NOT NULL AND a.weekly_hours_band <> ''`,
         userId)) > 0;
     case 'mt.slots':
-      return (await num(env, `SELECT COUNT(*) FROM advisor_slots WHERE user_id = ?`, userId)) > 0;
+      // advisor_slots survives only in sql/historical/, and even there its column
+      // is mentor_user_id — it was never satisfiable. advisor_availability_rules
+      // (migration 240) is the store, and it keeps this item distinct from
+      // mt.capacity: the band you declare vs the availability you configure.
+      return (await num(env,
+        `SELECT COUNT(*) FROM advisor_availability_rules r
+           JOIN advisors a ON a.id = r.advisor_id
+           JOIN users u ON u.advisor_id = a.id
+          WHERE u.id = ?`, userId)) > 0;
     case 'mt.booking':
       return (await num(env,
-        `SELECT COUNT(*) FROM expert_bookings WHERE expert_user_id = ? AND LOWER(status) IN ('confirmed','completed')`,
+        `SELECT COUNT(*) FROM expert_bookings b
+           JOIN experts e ON e.id = b.expert_id
+          WHERE e.user_id = ? AND LOWER(b.status) IN ('confirmed','completed')`,
         userId)) > 0;
   }
   return false;

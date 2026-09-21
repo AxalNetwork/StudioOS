@@ -61,16 +61,17 @@ function shape(stmt, binds) {
 }
 
 /**
- * @param {string} schema  DDL applied once at construction.
- * @param {string} [seed]  Optional INSERTs.
- * @returns {{ DB: object, db: import('node:sqlite').DatabaseSync }}
+ * Wrap a database this caller already built. `makeD1` applies one blob of DDL
+ * and is the common case; a fixture assembled statement by statement — the
+ * baseline plus every post-cutoff migration, each in its own try/catch — has
+ * no such blob, so it builds the DatabaseSync itself and binds it here rather
+ * than growing a second copy of the binding below.
+ *
+ * @param {import('node:sqlite').DatabaseSync} db
+ * @returns {object} the D1 binding surface the worker uses
  */
-export function makeD1(schema, seed = '') {
-  const db = new DatabaseSync(':memory:');
-  db.exec(schema);
-  if (seed) db.exec(seed);
-
-  const DB = {
+export function d1Over(db) {
+  return {
     prepare(sql) {
       // Prepared lazily: a statement the route builds but never binds (or one
       // referencing a table this fixture omits) must not throw at prepare
@@ -94,5 +95,16 @@ export function makeD1(schema, seed = '') {
     },
     async exec(sql) { db.exec(sql); return { count: 0, duration: 0 }; },
   };
-  return { DB, db };
+}
+
+/**
+ * @param {string} schema  DDL applied once at construction.
+ * @param {string} [seed]  Optional INSERTs.
+ * @returns {{ DB: object, db: import('node:sqlite').DatabaseSync }}
+ */
+export function makeD1(schema, seed = '') {
+  const db = new DatabaseSync(':memory:');
+  db.exec(schema);
+  if (seed) db.exec(seed);
+  return { DB: d1Over(db), db };
 }

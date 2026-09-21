@@ -376,58 +376,51 @@ test('the worker INSERTs, UPDATEs and SELECTs no column that does not exist', ()
   // table has never had, and answered `D1_ERROR: no such column` to every
   // partner while this assertion was green.
   //
-  // TWENTY-THREE ENTRIES ARRIVED AT ONCE IN D184, and they are not a
-  // regression — they are what this assertion could not see. `sqlStrings()`
-  // harvested only a literal sitting next to `.prepare(`, `.exec(` or the `sql`
-  // tag, so a query handed to a helper was invisible to it. Every detect query
-  // in `services/onboardingChecklist.ts` is `num(env, \`SELECT …\`, userId)`:
-  // 9 of that file's 54 literals were harvested and the 44 that were not are
-  // the whole feature. Widening the harvest to every literal in the file made
-  // them visible for the first time.
+  // TWENTY-THREE ENTRIES ARRIVED AT ONCE IN D184 AND D186 REPAIRED THEM, so
+  // what is left is the three that are genuinely gaps rather than misdirected
+  // reads. They were never a regression — they are what this assertion could
+  // not see. `sqlStrings()` harvested only a literal sitting next to
+  // `.prepare(`, `.exec(` or the `sql` tag, so a query handed to a helper was
+  // invisible to it. Every detect query in `services/onboardingChecklist.ts`
+  // is `num(env, \`SELECT …\`, userId)`: 9 of that file's 54 literals were
+  // harvested and the 44 that were not are the whole feature. Widening the
+  // harvest to every literal in the file made them visible for the first time.
   //
-  // Each one is a checklist item that reads "not done" for every account,
+  // Each one was a checklist item that read "not done" for every account,
   // forever — `num()` is `catch { return 0 }`, so `0 > 0` is false, no row
   // upserts, the route answers 200 and nothing is logged. The advisor
-  // catalogue can never register more than three of its ten items. That file's
-  // own header had already written the lesson after `op.service` paid for it
-  // once: "a swallowed query is indistinguishable from an honest zero."
+  // catalogue could never register more than three of its ten items. That
+  // file's own header had already written the lesson after `op.service` paid
+  // for it once: "a swallowed query is indistinguishable from an honest zero."
   //
-  // The two `newsTrust.ts` entries are a second family the same widening
-  // surfaced: `partners.owner_user_id` and `partner_deals.founder_user_id` are
-  // trust-score signals that can never fire, 25 of the 35 dead points there.
+  // D186 repointed twenty of them at the store that actually holds the fact,
+  // deleted `ef.captable`'s dead `captable_holders` arm — the `cap_table_
+  // holders` arm beside it already worked — and turned the four whose fact
+  // nothing stores anywhere (`ef.ip`, `op.conflicts`, `op.refs`, `mt.refs`)
+  // into `autoDetect: false` items the user ticks by hand, with their `case`
+  // arms deleted. DELETING THE ARM IS WHAT EMPTIES THE LEDGER: a dead `case`
+  // keeps its literal harvestable, so its baseline entry stays live, and both
+  // check-sqlite-* guards refuse a STALE entry as loudly as a new one.
+  //
+  // THE THREE THAT SURVIVE ARE NOT THE CHECKLIST'S.
+  // `corporate_profiles.kyb_status` is the reviewed gap named above — nothing
+  // writes a KYB decision at all, so a column would not help. The other two
+  // belong to `services/newsTrust.ts`: `partners.owner_user_id` and
+  // `partner_deals.founder_user_id` are trust-score signals that can never
+  // fire, 25 of the 35 dead points there. Their repair is its own concern.
   //
   // THE LIST STAYS TYPED OUT rather than read from the baseline, on purpose.
   // Reading the ledger would make this assertion agree with the gate by
   // construction; typing it keeps a second lock, so adding a baseline entry is
   // not enough on its own to make a new gap pass. `scripts/sqlite-columns-
-  // baseline.json` carries the per-entry diagnosis and the column each should
-  // be repointed to; D184's follow-up PRs delete them from both places.
+  // baseline.json` carries the per-entry diagnosis for each of the three that
+  // remain; D186 deleted the other twenty-one from both places in one commit,
+  // which is what proves each repair landed.
   const unknown = [...unknownColumns().keys()].sort();
   assert.deepEqual(unknown, [
-    'compliance_records.record_type',
-    'compliance_records.user_id',
     'corporate_profiles.kyb_status',
-    'expert_bookings.expert_user_id',
-    'expert_bookings.founder_user_id',
-    'experts.comp_model',
-    'experts.tags',
-    'experts.weekly_capacity',
-    'financial_models.user_id',
-    'investor_introductions.introducer_user_id',
-    'investor_introductions.source_user_id',
-    'investor_profiles.deployment_target_cents',
-    'investor_profiles.reserve_percent',
-    'investor_profiles.thesis',
-    'match_scores.investor_user_id',
-    'pairwise_ndas.user_a',
-    'pairwise_ndas.user_b',
     'partner_deals.founder_user_id',
-    'partner_deals.partner_user_id',
-    'partner_deals.signed_at',
-    'partner_profiles.conflicts_disclosed_at',
     'partners.owner_user_id',
-    'references_records.user_id',
-    'referral_invites.owner_user_id',
   ], `unexpected: ${unknown.join(', ')}`);
 });
 
