@@ -15831,10 +15831,46 @@ decision's own first design, and it is recorded rather than quietly swapped.
 | **the same-day assertion is deleted, not repaired** | once the fixture is midnight-anchored it cannot fail, and an assertion that cannot fail is not a guard. Nor is it replaced by one re-asserting `expiredIso`'s own contract inside a test that is not about `expiredIso`: `_timeFixture.mjs` documents that contract and neither existing caller re-states it |
 | **no `expiredSql` sibling** | the plan proposed one beside `expiredIso`. Struck: the SQLite-format expired value now appears once, inline, and the repo's rule triggers at the third occurrence. A parallel name needing **no** midnight pin, beside one that does, is a near-twin that invites the wrong one being used |
 
-No migration — **274 stays free.** No `frontend/src` change, so no `docs/`
-rebuild. No new `/api/*` method. `check-timestamp-comparisons.mjs` scans
+No migration. **274 is NOT free — `main` took it** while this was being
+written (`274_research_fund_sheets.sql`, #682); **275 is the next free
+number.** This entry's first draft said 274 was free, which was true when
+written and false forty minutes later, and it is corrected here rather than
+left to mislead. No `frontend/src` change, so no `docs/` rebuild. No new
+`/api/*` method. `check-timestamp-comparisons.mjs` scans
 `cloudflare-worker/src` only (`ROOT` is set there), so a test-file change
 cannot trip it.
+
+### #682 FIXED THE CLOCK HALF INDEPENDENTLY, AND THIS SUPERSEDES ITS DESIGN
+
+**Found by a merge conflict, not by the plan.** While this was being built,
+**#682 merged to `main` carrying a fix to the same test** — and it shipped
+exactly the design this entry reversed: keep the format branch, anchor each
+branch to midnight-today, re-aim the same-day assertion at `today`. Two
+authors reached the same first answer independently, which is worth recording
+on its own: it is the intuitive fix, and it is incomplete for a reason that
+only shows under mutation.
+
+**What #682 got right, and is kept:** both windows close, and its assertion is
+aimed at `today` rather than at `stored`. Its comment also carries a datum
+this build did not have — a real CI run **at 23:57 UTC** that wrote
+`2026-09-21` and aged it to `2026-09-20`. That is the 23:55–00:00 window
+observed in CI by another author, independent corroboration of the second
+window measured here.
+
+**What it leaves open, and why this replaces it:** it keeps
+`assert.equal(/T/.test(aged), /T/.test(stored), 'ageing changed the writer's
+format')`, which does not merely permit ageing in kind but **pins** it. With
+today's SQLite-format writer that makes the fixture SQLite-format, both
+operands one format, and a dropped `datetime()` wrapper invisible at every
+hour — in the test whose name is *"the comparison must not be format-blind"*.
+
+**Nothing of #682's is lost.** Its `/T/`-parity assertion is subsumed by a
+strictly stronger one: this entry asserts the writer's **exact** format on the
+value `RETURNING` handed back, which fails on any drift rather than only on a
+change of T-ness. Its `today` assertion is deleted because, once the fixture
+is midnight-anchored, it cannot fail. **Cheap to reverse:** restoring #682's
+two assertions and dropping the ISO probe returns the file to `main`'s
+version, at the cost of the wrapper coverage measured above.
 
 ### Verification, and the two mutation results that had to be read rather than reported
 

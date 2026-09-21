@@ -34,7 +34,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth } from '../auth';
+import { hydrateSuperAdmin, isSuperAdmin, requireAuth, requireSuperAdmin } from '../auth';
 import { Jobs } from '../models/jobs';
 import { mintDownloadToken } from '../services/signedDownload';
 import { searchSemantic, deleteChunkedEntity, researchNamespace } from '../services/vectorize';
@@ -54,6 +54,13 @@ import { perkLifecycle } from './perks';
 // calls this first; the KPI draft surface is a consumer.
 import { ensureProjectMetricsSchema } from './progress';
 import { todayIso } from './_t13t14t15_helpers';
+import {
+  googleSheetsOAuthAvailable, preflightSheetsOAuthSecrets, buildSheetsAuthUrl,
+  makeSheetsState, consumeSheetsState, exchangeSheetsCode, fetchSheetsUserinfo,
+  saveSheetsToken, loadSheetsToken, deleteSheetsToken, loadSheetLink, upsertSheetLink,
+  parseSpreadsheetRef, pullFundsToSheet, pushFundsFromSheet, fundsAppBase,
+  SUGGESTED_SHEET_URL,
+} from '../services/fundSheets';
 
 const research = new Hono<{ Bindings: Env }>();
 
@@ -3373,6 +3380,161 @@ research.post('/funds', async (c) => {
     `SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`
   ).bind(uid, user.id).first<FundRow>();
   return c.json(fundDto(row as FundRow), 201);
+});
+
+// ---------------------------------------------------------------------------
+// Funds ↔ Google Sheets
+//
+// Dedicated Sheets OAuth (not calendar's token table, not calendar's scopes).
+// SUPER ADMIN ONLY — a founder's shortlist stays on Axal; they do not get a
+// Google copy of it. Sheet routes are registered BEFORE `/funds/:uid` so
+// "sheet" is never captured as a uid. Push never deletes. Pull overwrites
+// the sheet's data rows.
+// ---------------------------------------------------------------------------
+
+research.get('/funds/sheet/status', async (c) => {
+  const user = await requireSuperAdmin(c);
+  const configured = googleSheetsOAuthAvailable(c.env);
+  const missing = preflightSheetsOAuthSecrets(c.env);
+  const tok = configured ? await loadSheetsToken(c.env, user.id) : null;
+  const link = await loadSheetLink(c.env, user.id);
+  return c.json({
+    configured,
+    missing: configured ? [] : missing,
+    connected: configured ? !!tok : false,
+    google_email: tok?.google_email || null,
+    spreadsheet_id: link?.spreadsheet_id || null,
+    sheet_gid: link ? Number(link.sheet_gid) : null,
+    sheet_title: link?.sheet_title || null,
+    last_pulled_at: link?.last_pulled_at || null,
+    last_pushed_at: link?.last_pushed_at || null,
+    last_error: link?.last_error || null,
+    suggested_url: SUGGESTED_SHEET_URL,
+  });
+});
+
+research.post('/funds/sheet/connect', async (c) => {
+  const user = await requireSuperAdmin(c);
+  const missing = preflightSheetsOAuthSecrets(c.env);
+  if (missing.length > 0) {
+    return c.json({
+      error: {
+        code: 'oauth_config_missing',
+        message: `Google Sheets is not configured on this server. Missing: ${missing.join(', ')}.`,
+        missing,
+      },
+    }, 503);
+  }
+  const loginHint = user?.email ? String(user.email).toLowerCase().trim() : undefined;
+  const state = await makeSheetsState(c.env, user.id);
+  const url = buildSheetsAuthUrl(c.env, state, loginHint);
+  return c.json({ redirect_url: url, auth_url: url });
+});
+
+research.get('/funds/sheet/callback', async (c) => {
+  const dest = `${fundsAppBase(c.env)}/research/funds`;
+  const fail = (reason: string) => new Response(null, {
+    status: 302,
+    headers: { Location: `${dest}?sheets=error&reason=${encodeURIComponent(reason.slice(0, 80))}` },
+  });
+  try {
+    const url = new URL(c.req.url);
+    const code = url.searchParams.get('code');
+    const stateRaw = url.searchParams.get('state');
+    const error = url.searchParams.get('error');
+    if (error || !code || !stateRaw) return fail(error || 'invalid_state');
+    const userId = await consumeSheetsState(c.env, stateRaw);
+    if (!userId) return fail('invalid_state');
+    // The state names who started Connect. Connect is super-admin only, so a
+    // leftover or forged nonce for anyone else must not land a refresh token.
+    const row = await c.env.DB.prepare(
+      'SELECT id, role FROM users WHERE id = ?',
+    ).bind(userId).first<{ id: number; role: string }>();
+    if (!row) return fail('forbidden');
+    const actor = await hydrateSuperAdmin(c.env, row as any);
+    if (!isSuperAdmin(actor as any)) return fail('forbidden');
+    const tokens = await exchangeSheetsCode(c.env, code);
+    const refreshToken = tokens?.refresh_token;
+    if (!refreshToken) return fail('no_refresh_token');
+    const info = await fetchSheetsUserinfo(tokens.access_token || '');
+    await saveSheetsToken(c.env, { id: userId }, {
+      refreshToken,
+      scope: tokens.scope || '',
+      googleEmail: info.email || null,
+      googleSub: String(info.id || ''),
+    });
+    return new Response(null, {
+      status: 302,
+      headers: { Location: `${dest}?sheets=connected` },
+    });
+  } catch (e: any) {
+    const msg = String(e?.message || e);
+    console.error('[SHEETS:callback]', msg);
+    if (msg.startsWith('token_exchange_failed')) return fail('token_exchange');
+    if (msg.startsWith('cryptoBox:secret_missing')) return fail('secret_missing');
+    return fail('callback_failed');
+  }
+});
+
+research.delete('/funds/sheet', async (c) => {
+  const user = await requireSuperAdmin(c);
+  await deleteSheetsToken(c.env, user);
+  return c.json({ ok: true });
+});
+
+research.post('/funds/sheet/disconnect', async (c) => {
+  const user = await requireSuperAdmin(c);
+  await deleteSheetsToken(c.env, user);
+  return c.json({ ok: true });
+});
+
+research.patch('/funds/sheet/link', async (c) => {
+  const user = await requireSuperAdmin(c);
+  const body = await c.req.json<any>().catch(() => ({}));
+  const raw = String(body.url || body.spreadsheet_url || body.spreadsheet_id || '').trim();
+  const parsed = parseSpreadsheetRef(raw);
+  if ('error' in parsed) return c.json({ detail: parsed.error }, 400);
+  const existing = await loadSheetLink(c.env, user.id);
+  const gid = parsed.sheet_gid != null
+    ? parsed.sheet_gid
+    : (body.sheet_gid != null && Number.isFinite(Number(body.sheet_gid))
+      ? Math.trunc(Number(body.sheet_gid))
+      : (existing ? Number(existing.sheet_gid) : 0));
+  const link = await upsertSheetLink(c.env, user, parsed.spreadsheet_id, gid);
+  return c.json({
+    spreadsheet_id: link.spreadsheet_id,
+    sheet_gid: Number(link.sheet_gid),
+  });
+});
+
+research.post('/funds/sheet/pull', async (c) => {
+  const user = await requireSuperAdmin(c);
+  if (!googleSheetsOAuthAvailable(c.env)) {
+    return c.json({ detail: 'Google Sheets is not configured on this server yet.' }, 503);
+  }
+  try {
+    return c.json(await pullFundsToSheet(c.env, user));
+  } catch (e: any) {
+    const msg = String(e?.message || e);
+    if (msg === 'not_connected') return c.json({ detail: 'Connect a Google account first' }, 409);
+    if (msg === 'no_spreadsheet') return c.json({ detail: 'Save a spreadsheet URL first' }, 409);
+    return c.json({ detail: `Could not write to the sheet: ${msg}` }, 502);
+  }
+});
+
+research.post('/funds/sheet/push', async (c) => {
+  const user = await requireSuperAdmin(c);
+  if (!googleSheetsOAuthAvailable(c.env)) {
+    return c.json({ detail: 'Google Sheets is not configured on this server yet.' }, 503);
+  }
+  try {
+    return c.json(await pushFundsFromSheet(c.env, user));
+  } catch (e: any) {
+    const msg = String(e?.message || e);
+    if (msg === 'not_connected') return c.json({ detail: 'Connect a Google account first' }, 409);
+    if (msg === 'no_spreadsheet') return c.json({ detail: 'Save a spreadsheet URL first' }, 409);
+    return c.json({ detail: `Could not read the sheet: ${msg}` }, 502);
+  }
 });
 
 research.patch('/funds/:uid', async (c) => {
