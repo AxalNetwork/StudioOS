@@ -16003,3 +16003,44 @@ at rather than worked around.**
 **`scripts/check-inline-project-pickers.mjs` carries the same three rules**, for
 the reason it always has: a guard `test:guards` runs must not import out of the
 test tree.
+
+---
+
+## D180 — a rate-limit guard bounded at 400 characters was reading its neighbour
+
+**The defect, and it is test robustness rather than production behaviour.**
+`rateLimit_company_invite.test.ts` and `rateLimit_esign_send.test.ts` located
+their bucket with `src.indexOf("name: '<bucket>'")` and then
+`src.slice(at, at + 400)`. Measured against `middleware/rateLimit.ts`:
+
+| bucket | its literal | overshoot at 400 | `name: '` in the window |
+| --- | --- | --- | --- |
+| `company_invite_send` | 170 | **230** | 1 |
+| `esign_send` | 192 | **208** | 1 |
+| `promo_validate` | 172 | 228 | 1 |
+| `admin_catalog_writes` | 263 | 137 | 1 |
+| `advisor_session_charge` | 174 | 226 | **2** |
+
+**400 exceeds every bucket literal in the file**, so every one of these windows
+ran past its own closing `},`. Four of the five were safe only because the
+overshoot happened to land in comment prose. The fifth was not: D-era work on
+`advisor_session_charge` mutation-checked it and found that flipping the bucket
+to `scope: 'ip'` left `assert.match(bucket, /scope: 'user'/)` satisfied by the
+generic `user` bucket declared immediately below — a guard reporting green about
+a neighbour. `rateLimit_advisor_charge.test.ts` was fixed then; its two siblings
+were left carrying the same idiom, and **reordering `BUCKETS`, shortening a
+comment or inserting a bucket would have given either of them the hole.**
+
+**The fix is the reference one, applied verbatim:** bound the slice at the
+literal's own `\n  },`, assert the close was found, and assert the slice holds
+exactly one `name: '`. **Every existing assertion and its wording is unchanged
+— this changes only how the region is located, and no production code moves.**
+
+**Mutation-checked per bucket, both directions:** flipping `scope: 'user'` to
+`'ip'` and removing `failClosed: true` each fails its own test, four for four,
+with `rateLimit.ts` restored byte-identical afterwards.
+
+Three other tests in the worker tree use a fixed-length slice
+(`fills_registry`, `advisor_client_grants`, `licence_admin_lifecycle_d134`).
+They are not against `rateLimit.ts` and are **not** touched here; whether the
+same idiom is load-bearing for them is a separate reading.
