@@ -17,6 +17,8 @@ import { ensureCompetitorSchema } from '../services/competitorSchema';
 import { insertManualCandidate } from './_competitor_writes';
 import {
   runCompetitorAnalysis,
+  collectCandidateCrawl,
+  sourceKind,
   type AnalysisInputs,
   type AnalysisResult,
   type Candidate,
@@ -307,6 +309,119 @@ competitors.delete('/:id/candidates/:cid', async (c) => {
   await sql`DELETE FROM competitor_candidates WHERE analysis_id = ${id} AND id = ${cid}`;
   await sql`DELETE FROM competitor_sources WHERE analysis_id = ${id} AND candidate_id = ${cid}`;
   await sql`DELETE FROM competitor_signals WHERE analysis_id = ${id} AND candidate_id = ${cid}`;
+  await sql`UPDATE competitor_analyses SET edited = 1, updated_at = ${nowIso()} WHERE id = ${id}`;
+  const full = await loadAnalysis(c.env, user.id, id);
+  return c.json(full);
+});
+
+// PATCH /api/competitors/:id/candidates/:cid — the company page's own edits.
+// Name, category and summary only. Relevance, origin and details are not
+// fields this route writes: a blank score is not 0, and a fetched page does
+// not become a price.
+competitors.patch('/:id/candidates/:cid', async (c) => {
+  const user = await requireAuth(c);
+  await ensureCompetitorSchema(c.env);
+  const id = c.req.param('id');
+  const cid = c.req.param('cid');
+  const sql = getSQL(c.env);
+  const owned = await sql`SELECT id FROM competitor_analyses WHERE id = ${id} AND user_id = ${user.id}`;
+  if (!owned[0]) return c.json({ error: 'This analysis is not on your list.' }, 404);
+  const rows = await sql`SELECT id FROM competitor_candidates WHERE analysis_id = ${id} AND id = ${cid}`;
+  if (!rows[0]) return c.json({ error: 'This company is not in that analysis.' }, 404);
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+
+  if (typeof body.name === 'string') {
+    const name = body.name.trim().slice(0, 200);
+    if (!name) return c.json({ error: 'A company needs a name.' }, 400);
+    await sql`UPDATE competitor_candidates SET name = ${name} WHERE analysis_id = ${id} AND id = ${cid}`;
+  }
+  if (typeof body.category === 'string') {
+    if (body.category !== 'direct' && body.category !== 'adjacent') {
+      return c.json({ error: 'Category is direct or adjacent.' }, 400);
+    }
+    await sql`UPDATE competitor_candidates SET category = ${body.category} WHERE analysis_id = ${id} AND id = ${cid}`;
+  }
+  if (typeof body.summary === 'string') {
+    await sql`UPDATE competitor_candidates SET summary = ${body.summary.slice(0, 4000)} WHERE analysis_id = ${id} AND id = ${cid}`;
+  }
+  if (typeof body.name !== 'string' && typeof body.category !== 'string' && typeof body.summary !== 'string') {
+    return c.json({ error: 'Nothing on this company was sent to save.' }, 400);
+  }
+  await sql`UPDATE competitor_analyses SET edited = 1, updated_at = ${nowIso()} WHERE id = ${id}`;
+  const full = await loadAnalysis(c.env, user.id, id);
+  return c.json(full);
+});
+
+// POST /api/competitors/:id/candidates/:cid/sources — one public GET, recorded
+// as a source. The URL does not become the company's homepage, and the page
+// body is not copied into features, pricing or the summary.
+competitors.post('/:id/candidates/:cid/sources', async (c) => {
+  const user = await requireAuth(c);
+  await ensureCompetitorSchema(c.env);
+  const id = c.req.param('id');
+  const cid = c.req.param('cid');
+  const sql = getSQL(c.env);
+  const owned = await sql`SELECT id FROM competitor_analyses WHERE id = ${id} AND user_id = ${user.id}`;
+  if (!owned[0]) return c.json({ error: 'This analysis is not on your list.' }, 404);
+  const rows = await sql`SELECT id, name FROM competitor_candidates WHERE analysis_id = ${id} AND id = ${cid}`;
+  const cand = rows[0];
+  if (!cand) return c.json({ error: 'This company is not in that analysis.' }, 404);
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!body.url || typeof body.url !== 'string') return c.json({ error: 'A URL is required.' }, 400);
+
+  const page = await fetchPage(c.env, body.url, { userId: user.id });
+  if (!page.ok || !(page.text || page.title)) {
+    return c.json({ error: page.error || 'That URL did not return a page.' }, 422);
+  }
+  const existing = await sql`SELECT id FROM competitor_sources WHERE analysis_id = ${id} AND candidate_id = ${cid} AND url = ${page.url}`;
+  if (!existing[0]) {
+    await sql`INSERT INTO competitor_sources (id, analysis_id, candidate_id, url, kind, title, status, fetched_at)
+      VALUES (${crypto.randomUUID()}, ${id}, ${cid}, ${page.url}, ${sourceKind(page.url)}, ${page.title || String(cand.name || 'Untitled')}, ${page.status}, ${page.fetched_at})`;
+    await sql`UPDATE competitor_analyses SET edited = 1, updated_at = ${nowIso()} WHERE id = ${id}`;
+  }
+  const full = await loadAnalysis(c.env, user.id, id);
+  return c.json(full);
+});
+
+// POST /api/competitors/:id/candidates/:cid/crawl — the site already on the
+// row. Absent when the row has no URL. Records sources and signals only.
+competitors.post('/:id/candidates/:cid/crawl', async (c) => {
+  const user = await requireAuth(c);
+  await ensureCompetitorSchema(c.env);
+  const id = c.req.param('id');
+  const cid = c.req.param('cid');
+  const sql = getSQL(c.env);
+  const analyses = await sql`SELECT * FROM competitor_analyses WHERE id = ${id} AND user_id = ${user.id}`;
+  const analysis = analyses[0];
+  if (!analysis) return c.json({ error: 'This analysis is not on your list.' }, 404);
+  const rows = await sql`SELECT * FROM competitor_candidates WHERE analysis_id = ${id} AND id = ${cid}`;
+  const row = rows[0];
+  if (!row) return c.json({ error: 'This company is not in that analysis.' }, 404);
+  const cand = mapCandidate(row) as unknown as Candidate;
+  if (!cand.url) return c.json({ error: 'There is no URL to crawl. Nothing here will invent one.' }, 400);
+
+  const inputs = safeParse(analysis.inputs_json, {}) as AnalysisInputs;
+  const depth = inputs.depth === 'deep' ? 'deep' : 'quick';
+  const { sources, signals } = await collectCandidateCrawl(c.env, user.id, id, cand, depth);
+  if (!sources.length) return c.json({ error: 'The site did not return a page to record.' }, 422);
+
+  const haveSources = await sql`SELECT url FROM competitor_sources WHERE analysis_id = ${id} AND candidate_id = ${cid}`;
+  const seenUrl = new Set(haveSources.map((s) => String(s.url)));
+  for (const s of sources) {
+    if (seenUrl.has(s.url)) continue;
+    seenUrl.add(s.url);
+    await sql`INSERT INTO competitor_sources (id, analysis_id, candidate_id, url, kind, title, status, fetched_at)
+      VALUES (${s.id}, ${id}, ${cid}, ${s.url}, ${s.kind}, ${s.title}, ${s.status}, ${s.fetched_at})`;
+  }
+  const haveSignals = await sql`SELECT signal_type, label, detail FROM competitor_signals WHERE analysis_id = ${id} AND candidate_id = ${cid}`;
+  const seenSignal = new Set(haveSignals.map((g) => `${g.signal_type}|${g.label}|${g.detail}`));
+  for (const g of signals) {
+    const key = `${g.signal_type}|${g.label}|${g.detail}`;
+    if (seenSignal.has(key)) continue;
+    seenSignal.add(key);
+    await sql`INSERT INTO competitor_signals (id, analysis_id, candidate_id, signal_type, label, detail)
+      VALUES (${g.id}, ${id}, ${cid}, ${g.signal_type}, ${g.label}, ${g.detail})`;
+  }
   await sql`UPDATE competitor_analyses SET edited = 1, updated_at = ${nowIso()} WHERE id = ${id}`;
   const full = await loadAnalysis(c.env, user.id, id);
   return c.json(full);
