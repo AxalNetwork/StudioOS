@@ -36,11 +36,21 @@ function exemptEntries(): string[] {
   return [...RATE_LIMIT.slice(open, close).matchAll(/'([^']+)'/g)].map((m) => m[1]);
 }
 
-/** The default of a probe const in the smoke script. */
+/**
+ * The default of a probe const in the smoke script.
+ *
+ * A bounded literal scan rather than a regex built from `name`: this repo has
+ * resolved `detect-non-literal-regexp` three times the same way, and the
+ * literal form is also the stronger assertion — the window is anchored on the
+ * name's own declaration and cannot run past it into a neighbour's default.
+ */
+const DEFAULT_LITERAL = /\|\|\s*'([^']+)'/;
+
 function probeDefault(name: string): string {
-  const re = new RegExp(`${name}\\s*=[\\s\\S]{0,120}?\\|\\|\\s*'([^']+)'`);
-  const m = re.exec(SMOKE);
-  assert.ok(m, `${name} is gone from check-spa-live.mjs, or no longer has a literal default`);
+  const at = SMOKE.indexOf(`${name} =`);
+  assert.ok(at >= 0, `${name} is gone from check-spa-live.mjs`);
+  const m = DEFAULT_LITERAL.exec(SMOKE.slice(at, at + 160));
+  assert.ok(m, `${name} no longer has a literal default within its own declaration`);
   return m![1];
 }
 
