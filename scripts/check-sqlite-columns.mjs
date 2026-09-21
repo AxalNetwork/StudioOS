@@ -551,14 +551,30 @@ export function predicateIdents(region) {
 }
 
 /** INSERT column lists, UPDATE SET clauses and single-table SELECT lists. */
-/** How much of the worker's SQL the last run could actually speak for. */
-export const coverage = { read: 0, skipped: 0 };
+/**
+ * How much of the worker's SQL the last run could actually speak for.
+ *
+ * `read` AND `attributed` are both here because `read` alone overstated it. A
+ * string is read when it survives the raw-interpolation skip; it is attributed
+ * only when one of the five passes below could tie a column to a table it
+ * knows. Everything in between — a join whose alias binds to nothing, a SELECT
+ * over two tables, a predicate this parser cannot resolve — used to be counted
+ * as read and reported as coverage.
+ *
+ * That mattered because the tail line is the only thing anyone reads to decide
+ * whether this guard is watching their code. Before D184 it said "4803 SQL
+ * strings read" while ~880 statement-carrying literals were never harvested at
+ * all and an unmeasured share of the rest were declined after being counted.
+ * Both halves are now visible.
+ */
+export const coverage = { read: 0, skipped: 0, attributed: 0 };
 
 export function unknownColumns() {
   const schema = knownColumns();
   const hits = new Map();
   coverage.read = 0;
   coverage.skipped = 0;
+  coverage.attributed = 0;
   for (const file of walk(SRC, '.ts')) {
     const rel = path.relative(ROOT, file);
     for (const { body: raw, kind, line } of sqlStrings(fs.readFileSync(file, 'utf8'))) {
@@ -572,6 +588,8 @@ export function unknownColumns() {
         if (body === null) { coverage.skipped += 1; continue; }
       }
       coverage.read += 1;
+      let attributed = false;
+      const attribute = () => { if (!attributed) { attributed = true; coverage.attributed += 1; } };
       // alias.column in a JOIN query — the alias fixes the table, so the
       // reference is as attributable as a single-table one. Only aliases
       // bound to exactly one table are used.
@@ -582,6 +600,7 @@ export function unknownColumns() {
           if (!table || incompleteTables.has(table)) continue;
           const qcols = schema.get(table);
           if (!qcols) continue;
+          attribute();
           const col = norm(x[2]);
           if (qcols.has(col) || dynamicColumns.has(col) || /^(rowid|oid|_rowid_)$/.test(col)) continue;
           const k = `${table}.${col}`;
@@ -595,6 +614,7 @@ export function unknownColumns() {
       if (sel) {
         const scols = schema.get(sel.table);
         if (scols && !incompleteTables.has(sel.table)) {
+          attribute();
           for (const raw of topLevel(sel.list)) {
             const item = raw.trim();
             let col = null;
@@ -622,6 +642,7 @@ export function unknownColumns() {
         const ut = norm(um[1]);
         const ucols = schema.get(ut);
         if (!ucols || incompleteTables.has(ut)) continue;
+        attribute();
         const clause = setClause(body, um.index + um[0].length);
         for (const part of topLevel(clause)) {
           const c = /^\s*([`"[]?\w+[`"\]]?)\s*=/.exec(part);
@@ -639,6 +660,7 @@ export function unknownColumns() {
       if (pred && !incompleteTables.has(pred.table)) {
         const pcols = schema.get(pred.table);
         if (pcols) {
+          attribute();
           for (const { qual, col } of predicateIdents(pred.region)) {
             if (qual && qual !== pred.alias && qual !== pred.table) continue;
             if (PREDICATE_KEYWORDS.has(col) || pred.aliases.has(col) || /^\d/.test(col)) continue;
@@ -655,6 +677,7 @@ export function unknownColumns() {
       const t = norm(m[1]);
       const cols = schema.get(t);
       if (!cols || incompleteTables.has(t)) continue;     // unknown, unparseable, or runtime-extended
+      attribute();
       const g = group(body, m.index + m[0].length - 1);
       if (!g) continue;
       if (!/^\s*(VALUES|SELECT)\b/i.test(body.slice(g.end + 1))) continue;   // not a column list
@@ -705,6 +728,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   console.log(
     `✓ check-sqlite-columns: every INSERT, UPDATE, SELECT list, qualified join reference and single-table predicate names columns that exist `
     + `(${coverage.read} SQL strings read, ${coverage.skipped} skipped as raw-interpolated; `
+    + `${coverage.read - coverage.attributed} read but not attributable to one table; `
     + `${n} known gap${n === 1 ? '' : 's'} on record; ${incompleteTables.size} tables skipped as runtime-extended).`,
   );
 }

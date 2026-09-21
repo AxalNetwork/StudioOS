@@ -16196,3 +16196,129 @@ fall-back; and both extractors losing their backtick. The shell extractor's
 backtick tolerance **escaped its first mutation** — the fixture reached it only
 through a quoted attribute — and a fixture for the inline-script form was added
 rather than the escape reported.
+
+## D184 — the guard that could not see the thing it guarded
+
+**`services/onboardingChecklist.ts` carries fifty items, all `autoDetect: true`,
+and twenty-four of their detectors query a table or column that does not
+exist.** Each one is swallowed by `num()`'s `catch { return 0 }`, so `0 > 0` is
+false, no row upserts, the item renders `pending` forever, the route answers
+200 — and **nothing is logged**, because `loadChecklist`'s own `console.warn`
+sits outside a catch that can never fire. The advisor catalogue can never
+register more than three of its ten items, and `CELEBRATION_THRESHOLD` is an
+absolute 8, so that persona's checklist can never finish.
+
+**The file predicted this in its own header.** Lines 20-29 describe the same
+defect in the past tense — `op.service` named `services_offerings`, a typo for
+a table that exists everywhere, and *"the item read 'not done' for every
+operator, forever, with nothing anywhere to notice"* — ending on the rule *"a
+swallowed query is indistinguishable from an honest zero."* What that lesson
+bought was **one** hand-written assertion in
+`frontend/test/migration_column_shapes.test.mjs`, watching `op.service` alone.
+The rule was right; its scope was the instance its author was fixing. That is
+the D147/D161/D164 class for a fifth time, and here the unwatched forty-nine
+contained twenty-four more of the very defect the header warns about.
+
+### Why three green guards saw none of it
+
+`sqlStrings()` (`scripts/check-sqlite-dialect.mjs`) was driven by one regex —
+`/(?:\.prepare\(|\bsql|\.exec\()/g` — and then required the **very next
+character** to be a quote. It harvested the literal next to an anchor and
+nothing else. Every detect query is `num(env, \`SELECT …\`, userId)`, so the
+`.prepare(` is inside `num`, on the `sql` **variable**. Measured: **9 of that
+file's 54 literals were harvested**, and the 44 that were not are the whole
+feature.
+
+Three more invisible shapes the same measurement turned up: `env.DB.prepare(sql)`
+(next char is `s`), `{ sql: \`…\` }` (**21 sites**, `services/tenancyScope.ts`
+and `market_intel/extractor_schema.ts`), and `safeCount(env, \`…\`, …)` — which
+hides `advisor_sessions`, a table that **exists nowhere in the repo**, queried
+from `telegramAggregator.ts` and `xAggregator.ts`.
+
+**And the tail line over-claimed twice.** Both `coverage` increments in
+`check-sqlite-columns.mjs` live inside the `for (… of sqlStrings(…))` loop, so
+a never-harvested string reached neither; and `skipped` counts exactly one
+decline reason, raw-interpolation, while every other decline is booked as
+`read`. "4803 SQL strings read" was the only number anyone had to judge whether
+this guard was watching their code.
+
+### What changed
+
+`sqlStrings()` is now the **UNION** of the anchored pass and a whole-file
+literal lexer. The union is what makes widening safe: a lexer can desynchronise
+on a construct nobody anticipated, and if it does, the anchored pass still
+returns everything it always did — a lexing miss costs the widening, never the
+coverage that existed before it. **Measured: legacy 5109, union 5957, 0 lost**,
+proved by diffing the two passes file by file rather than asserted.
+
+Three things the lexer had to learn, each on a real finding:
+
+1. **Regex literals desynchronise silently.** `escapeSoql` in
+   `integrations/providers/salesforce.ts` is `.replace(/'/g, "\\'")`; read as a
+   string opener, that lone quote swallowed **139 statements after it in that
+   one file**. A `/` is treated as a regex unless the previous meaningful
+   character could end an expression — erring toward regex deliberately.
+2. **"Opens with a statement keyword" is still too loose.** It accepted
+   **`'Update failed'`**, the toast in `routes/settings.ts:1190` and three like
+   it, which this guard duly reported as a query against a table called
+   `failed`. The rule is now the verb **and** its required companion:
+   `UPDATE`…`SET`, `INSERT`…`INTO`, `DELETE`…`FROM`.
+3. **SOQL is not SQLite and is shaped exactly like it.** One string, one file,
+   assigned to a binding named `soql` — excluded by that, rather than recorded
+   in a ledger of "SQLite tables known to be missing", which is not what it is.
+
+`check-sqlite-tables.mjs`'s `knownTables()` gained the `historical/` exclusion
+`check-sqlite-columns.mjs` has had since its own header recorded the bug that
+forced it. **The omission looked safe for a stated reason that is exactly
+backwards:** *"over-harvesting here can only shrink the reported set, never
+invent an entry in it"* — true, and it makes false NEGATIVES, which is what a
+dead table produces. Five names were known solely through the archive;
+`advisor_slots` is the live one, and `historical/schema.sql:961` is its only
+`CREATE TABLE` anywhere.
+
+`coverage` gained `attributed`, so the tail line now also prints **1124 read
+but not attributable to one table** — strings this guard reads and cannot speak
+for, previously reported as coverage.
+
+### The audit is the ledger
+
+Both baselines carry a per-entry diagnosis and the column or table each item
+should be repointed to; the follow-up PRs empty them. `schema_guards.test.mjs`'s
+typed list is re-aimed to all 24 and **stays typed rather than reading the
+baseline**, so adding a ledger entry is not on its own enough to make a new gap
+pass. New: `cloudflare-worker/test/onboarding_checklist_detectors_d184.test.ts`,
+which builds a real database from the baseline plus post-cutoff migrations and
+prepares every detect query against it — this service had **no behavioural test
+at all**.
+
+**Three corrections to this work's own first pass, each caught by measurement
+rather than review:**
+
+1. **`references_records` is a missing TABLE, not a renamed column.** The first
+   baseline entry said to repoint to `subject_user_id`.
+   `migrations/034_unmounted_routes.sql` declares the table; `schema_baseline.sql`
+   does not, and production does not have it (read read-only against
+   `studioos-db`, 2026-09-21). Repointing would have fixed nothing.
+2. **`captable_holders` is a 25th finding no guard can see**, same migration,
+   same absence. Its query is `ef.captable`'s FIRST arm; the fallback uses
+   `cap_table_holders`, which exists in production with the `project_id` the
+   join needs — so that item is satisfiable and the arm is dead weight. Only
+   the fresh-build fixture finds it.
+3. **The guards and that fixture answer different questions, and both are
+   right.** The guards ask "does the repo declare this anywhere"; the fixture
+   asks "does a freshly provisioned database have it". Adding
+   `captable_holders` to the tables baseline was refused **by the guard itself**
+   as a stale entry — correctly, because the guard does not find it.
+
+**That migration 034 declares two tables neither the baseline nor production
+has is baseline drift.** `check-baseline-drift` owns it; filed, not folded in.
+
+**One trap worth recording, because this file has warned about it before and I
+did it anyway:** a `git checkout --` in the mutation harness restored the
+columns baseline to HEAD and discarded twenty-three uncommitted entries.
+Restore from a **snapshot**, never from git, and snapshot the data files too —
+not only the code.
+
+No migration; **275 stays free.** No `frontend/src` change, so no `docs/`
+rebuild. **6 mutations applied, 6 caught**, every restore verified
+byte-identical.

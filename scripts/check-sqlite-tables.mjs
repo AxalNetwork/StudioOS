@@ -39,6 +39,29 @@ const SRC = path.join(ROOT, 'cloudflare-worker', 'src');
 const SQL_DIR = path.join(ROOT, 'cloudflare-worker', 'sql');
 const BASELINE = path.join(ROOT, 'scripts', 'sqlite-tables-baseline.json');
 
+/**
+ * `sql/historical/` IS NOT A SCHEMA AUTHORITY, and harvesting it hid a defect
+ * for as long as this guard has existed. `check-sqlite-columns.mjs` drew this
+ * exclusion first (its `ARCHIVE_DIR`, under a header recording the bug that
+ * forced it) and never told its sibling.
+ *
+ * WHY THE OMISSION LOOKED SAFE, which is the part worth keeping. `knownTables`
+ * below says "over-harvesting here can only shrink the reported set, never
+ * invent an entry in it" — true, and exactly backwards as a reason to allow it.
+ * Over-harvesting is safe against a false POSITIVE and fatal for a false
+ * NEGATIVE, and a table that exists only in the archive produces the second:
+ * the query is against a table production does not have, and this check calls
+ * it known.
+ *
+ * Measured when the exclusion landed: five names were known solely through the
+ * archive — `advisor_slots`, `capital_calls_new`, `so`, `spinout_lab_studio_ops`
+ * and `statements`. `advisor_slots` is the live one. `historical/schema.sql:961`
+ * is its ONLY `CREATE TABLE` anywhere, and `onboardingChecklist.ts` queries it
+ * for the advisor checklist's `mt.slots` item — an item that has therefore never
+ * been satisfiable, for anyone.
+ */
+const ARCHIVE_DIR = path.join(SQL_DIR, 'historical');
+
 function walk(dir, ext) {
   const out = [];
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -73,7 +96,11 @@ const NOT_A_TABLE = new Set([
 export function knownTables() {
   const known = new Set();
   const DDL = /\bCREATE\s+(?:TEMP\s+|TEMPORARY\s+)?(?:TABLE|VIEW)\s+(?:IF\s+NOT\s+EXISTS\s+)?([`"[]?[\w.]+[`"\]]?)/gi;
-  for (const f of [...walk(SQL_DIR, '.sql'), ...walk(SRC, '.ts')]) {
+  const sources = [
+    ...walk(SQL_DIR, '.sql').filter((f) => !f.startsWith(ARCHIVE_DIR + path.sep)),
+    ...walk(SRC, '.ts'),
+  ];
+  for (const f of sources) {
     for (const m of fs.readFileSync(f, 'utf8').matchAll(DDL)) known.add(norm(m[1]));
   }
   return known;
