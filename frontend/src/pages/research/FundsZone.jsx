@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Card, Pill } from '../../ui';
 import { api } from '../../lib/api';
+import { useAuth } from '../../hooks/useAuthSync';
+import { isSuperAdminUser } from '../../lib/shellRole';
 import {
   Field, NothingYet, SaveNote, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
   buttonClass, ghostButtonClass, inputClass,
@@ -34,12 +36,14 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
  * compare against, and the worker returns the count as null with its reason
  * rather than as 0 — which would say no fund writes cheques your size.
  *
- * GOOGLE SHEETS IS A COPY, NOT THE STORE. The Worker writes to a spreadsheet
- * the founder names and reads it back into POST/PATCH. Sheets never talks to
- * D1, pull overwrites the sheet's data rows, and push never deletes a fund —
- * a pass is a state, and a row that left the sheet is not a delete. The
- * Connect / Pull / Push card lives in this body rather than as a fourth canvas
- * op, because the zone-action row is three slots.
+ * GOOGLE SHEETS IS A COPY, NOT THE STORE, AND ONLY THE SUPER ADMIN MAY MAKE
+ * ONE. The Worker writes to a spreadsheet the Super Admin names and reads it
+ * back into POST/PATCH of that same owner's rows. Founders keep a shortlist
+ * on Axal; they do not get Connect / Pull / Push. Sheets never talks to D1,
+ * pull overwrites the sheet's data rows, and push never deletes a fund — a
+ * pass is a state, and a row that left the sheet is not a delete. The card
+ * lives in this body rather than as a fourth canvas op, because the
+ * zone-action row is three slots.
  */
 
 const STAGE_LABEL = { right: 'Right stage', wrong: 'Wrong stage' };
@@ -66,6 +70,8 @@ function cheque(row) {
 }
 
 export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }) {
+  const { user } = useAuth() || {};
+  const canSyncSheets = isSuperAdminUser(user);
   const [state, setState] = useState({ loading: true, error: null, data: null });
   const [filter, setFilter] = useState('all');
   const [form, setForm] = useState({ name: '', thesis: '', note: '' });
@@ -319,7 +325,7 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
         </Card>
       </ZoneBody>
 
-      <SheetsSyncCard />
+      {canSyncSheets ? <SheetsSyncCard /> : null}
 
       <Card padding="lg">
         <h3 className="text-sm font-extrabold tracking-tight">Add a fund</h3>
@@ -370,9 +376,11 @@ function Stat({ label, value, note }) {
 }
 
 /**
- * Connect / Pull / Push for Google Sheets. Lives in the zone body rather than
- * as a fourth canvas op — the toolbar is three slots and adding one here would
- * fail the profile_zone_actions canvas check.
+ * Connect / Pull / Push for Google Sheets. Super-admin only — the zone
+ * mounts this card behind `isSuperAdminUser`, and every worker route behind
+ * `requireSuperAdmin`. Lives in the zone body rather than as a fourth canvas
+ * op — the toolbar is three slots and adding one here would fail the
+ * profile_zone_actions canvas check.
  *
  * HONEST EMPTY. If the Worker has no Sheets OAuth client, this card says so
  * instead of offering Connect. Pull needs a connected Google account AND a

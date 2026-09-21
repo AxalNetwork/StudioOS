@@ -4625,6 +4625,7 @@ export const api = {
 
     // Funds — founder-facing fund research (migration 216). Every read is
     // owner-scoped in the worker; there is no cross-user listing to call.
+    // Sheet sync is Super Admin only (`requireSuperAdmin` on the worker).
     funds: () => request('/research/funds'),
     fundCreate: (data) => request('/research/funds', { method: 'POST', body: JSON.stringify(data || {}) }),
     fundUpdate: (uid, data) => request(`/research/funds/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),

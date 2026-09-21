@@ -34,7 +34,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth } from '../auth';
+import { hydrateSuperAdmin, isSuperAdmin, requireAuth, requireSuperAdmin } from '../auth';
 import { Jobs } from '../models/jobs';
 import { mintDownloadToken } from '../services/signedDownload';
 import { searchSemantic, deleteChunkedEntity, researchNamespace } from '../services/vectorize';
@@ -3386,12 +3386,14 @@ research.post('/funds', async (c) => {
 // Funds ↔ Google Sheets
 //
 // Dedicated Sheets OAuth (not calendar's token table, not calendar's scopes).
-// Sheet routes are registered BEFORE `/funds/:uid` so "sheet" is never captured
-// as a uid. Push never deletes. Pull overwrites the sheet's data rows.
+// SUPER ADMIN ONLY — a founder's shortlist stays on Axal; they do not get a
+// Google copy of it. Sheet routes are registered BEFORE `/funds/:uid` so
+// "sheet" is never captured as a uid. Push never deletes. Pull overwrites
+// the sheet's data rows.
 // ---------------------------------------------------------------------------
 
 research.get('/funds/sheet/status', async (c) => {
-  const user = await requireAuth(c);
+  const user = await requireSuperAdmin(c);
   const configured = googleSheetsOAuthAvailable(c.env);
   const missing = preflightSheetsOAuthSecrets(c.env);
   const tok = configured ? await loadSheetsToken(c.env, user.id) : null;
@@ -3412,7 +3414,7 @@ research.get('/funds/sheet/status', async (c) => {
 });
 
 research.post('/funds/sheet/connect', async (c) => {
-  const user = await requireAuth(c);
+  const user = await requireSuperAdmin(c);
   const missing = preflightSheetsOAuthSecrets(c.env);
   if (missing.length > 0) {
     return c.json({
@@ -3443,6 +3445,14 @@ research.get('/funds/sheet/callback', async (c) => {
     if (error || !code || !stateRaw) return fail(error || 'invalid_state');
     const userId = await consumeSheetsState(c.env, stateRaw);
     if (!userId) return fail('invalid_state');
+    // The state names who started Connect. Connect is super-admin only, so a
+    // leftover or forged nonce for anyone else must not land a refresh token.
+    const row = await c.env.DB.prepare(
+      'SELECT id, role FROM users WHERE id = ?',
+    ).bind(userId).first<{ id: number; role: string }>();
+    if (!row) return fail('forbidden');
+    const actor = await hydrateSuperAdmin(c.env, row as any);
+    if (!isSuperAdmin(actor as any)) return fail('forbidden');
     const tokens = await exchangeSheetsCode(c.env, code);
     const refreshToken = tokens?.refresh_token;
     if (!refreshToken) return fail('no_refresh_token');
@@ -3467,19 +3477,19 @@ research.get('/funds/sheet/callback', async (c) => {
 });
 
 research.delete('/funds/sheet', async (c) => {
-  const user = await requireAuth(c);
+  const user = await requireSuperAdmin(c);
   await deleteSheetsToken(c.env, user);
   return c.json({ ok: true });
 });
 
 research.post('/funds/sheet/disconnect', async (c) => {
-  const user = await requireAuth(c);
+  const user = await requireSuperAdmin(c);
   await deleteSheetsToken(c.env, user);
   return c.json({ ok: true });
 });
 
 research.patch('/funds/sheet/link', async (c) => {
-  const user = await requireAuth(c);
+  const user = await requireSuperAdmin(c);
   const body = await c.req.json<any>().catch(() => ({}));
   const raw = String(body.url || body.spreadsheet_url || body.spreadsheet_id || '').trim();
   const parsed = parseSpreadsheetRef(raw);
@@ -3498,7 +3508,7 @@ research.patch('/funds/sheet/link', async (c) => {
 });
 
 research.post('/funds/sheet/pull', async (c) => {
-  const user = await requireAuth(c);
+  const user = await requireSuperAdmin(c);
   if (!googleSheetsOAuthAvailable(c.env)) {
     return c.json({ detail: 'Google Sheets is not configured on this server yet.' }, 503);
   }
@@ -3513,7 +3523,7 @@ research.post('/funds/sheet/pull', async (c) => {
 });
 
 research.post('/funds/sheet/push', async (c) => {
-  const user = await requireAuth(c);
+  const user = await requireSuperAdmin(c);
   if (!googleSheetsOAuthAvailable(c.env)) {
     return c.json({ detail: 'Google Sheets is not configured on this server yet.' }, 503);
   }

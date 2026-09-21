@@ -1,5 +1,5 @@
 /**
- * Google Sheets sync for founder fund research.
+ * Google Sheets sync for Super Admin fund research.
  *
  * Sheets never talks to D1. This module is the Worker job that sits between
  * them: it reads `research_funds` for the authenticated owner, writes those
@@ -8,7 +8,8 @@
  * reused — adding the spreadsheets scope to `GOOGLE_SCOPES` in calendar.ts
  * would force every connected calendar to re-consent.
  *
- * No Hono Context, no Response. Routes in `routes/research.ts` own HTTP.
+ * Routes in `routes/research.ts` refuse anyone who is not a Super Admin.
+ * No Hono Context, no Response.
  */
 import type { Env } from '../types';
 import { encryptString, decryptString } from './cryptoBox';
@@ -45,7 +46,7 @@ export const FUND_STAGE_FIT = new Set(['right', 'wrong']);
 export const FUND_PATH = new Set(['warm', 'cold']);
 export const FUND_STATUS = new Set(['researching', 'passed']);
 
-/** Placeholder only — a founder pastes their own URL; this is not the only target. */
+/** Placeholder only — the Super Admin pastes a URL; this is not the only target. */
 export const SUGGESTED_SHEET_URL =
   'https://docs.google.com/spreadsheets/d/1aLFMMqZYXdnIcutEnggadAFOunDKEyDeB5sWuhFk1OQ/edit?gid=100';
 

@@ -15,7 +15,7 @@ runs these directly against an in-process SQLite, with no request at all.
 | `signedDownload.ts` | One-time, short-TTL, HMAC-signed R2 download tokens. Every private file download goes through it. |
 | `dealPassTaxonomy.ts` | The five pass reasons and the stage-event recorder. |
 | `backup.ts` | The nightly D1 export to R2. |
-| `fundSheets.ts` | Founder fund research ↔ Google Sheets. Dedicated OAuth, never calendar tokens. |
+| `fundSheets.ts` | Super Admin fund research ↔ Google Sheets. Dedicated OAuth, never calendar tokens. Founders cannot Connect. |
 
 ## Subfolders
 

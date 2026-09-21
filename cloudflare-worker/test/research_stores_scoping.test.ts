@@ -247,3 +247,22 @@ test('calendar consent still does not ask for spreadsheets', () => {
   assert.doesNotMatch(scopes, /spreadsheets/,
     'adding Sheets to the calendar consent screen forces every connected calendar to re-consent');
 });
+
+test('sheet sync is super-admin only', () => {
+  // Founders keep a shortlist. A Google copy of it is an HQ power, so every
+  // authenticated sheet handler goes through requireSuperAdmin rather than
+  // requireAuth. The OAuth callback cannot sit behind a session gate — Google
+  // redirects there — and instead re-hydrates the state user and refuses
+  // anyone who is not a Super Admin before a refresh token is stored.
+  const start = handlers.indexOf("research.get('/funds/sheet/status'");
+  const end = handlers.indexOf("research.patch('/funds/:uid'");
+  assert.ok(start > 0 && end > start, 'the sheet-route block could not be found');
+  const sheet = handlers.slice(start, end);
+  assert.equal((sheet.match(/requireSuperAdmin\(c\)/g) || []).length, 7,
+    'a sheet handler is still on requireAuth — founders would get a Google copy');
+  assert.equal((sheet.match(/requireAuth\(c\)/g) || []).length, 0,
+    'a sheet handler fell back to requireAuth');
+  const callback = sheet.slice(sheet.indexOf("research.get('/funds/sheet/callback'"));
+  assert.match(callback, /hydrateSuperAdmin/);
+  assert.match(callback, /isSuperAdmin\(actor/);
+});

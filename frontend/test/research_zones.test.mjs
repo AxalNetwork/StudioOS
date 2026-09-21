@@ -554,9 +554,13 @@ test('a cheque range that is not recorded is not a cheque of nothing', () => {
     'a range with one end recorded must still show that end');
 });
 
-test('funds offers Sheets sync in the body, not as a fourth canvas op', () => {
+test('funds offers Sheets sync to the Super Admin only, not as a fourth canvas op', () => {
   const code = codeOnly(funds);
   assert.match(code, /function SheetsSyncCard/, 'the Sheets card is gone from the funds zone');
+  assert.match(code, /isSuperAdminUser\(user\)/,
+    'the Sheets card must key off the /me elevation, not the browsing role');
+  assert.match(code, /canSyncSheets \? <SheetsSyncCard/,
+    'a founder would still see Connect / Pull / Push');
   assert.match(code, /Pull from Axal/, 'the pull control is gone');
   assert.match(code, /Push to Axal/, 'the push control is gone');
   assert.match(code, /it never deletes one/, 'push must still say it does not delete');
