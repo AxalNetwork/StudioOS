@@ -559,6 +559,7 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
           manual={manual}
           setManual={setManual}
           onAddManual={onAddManual}
+          linkToDossier={linkToDossier}
         />
       )}
 
@@ -654,6 +655,7 @@ function AnalysisResults(props) {
     analysis, dirty, savingEdits, analyzing, onSave, onRerun, onRefresh,
     onRemoveCandidate, updateCandidate, updateOutput, setTitle,
     showManual, setShowManual, manual, setManual, onAddManual,
+    linkToDossier,
   } = props;
   const out = analysis.output || {};
   const candidates = analysis.candidates || [];

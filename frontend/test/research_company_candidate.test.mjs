@@ -59,6 +59,8 @@ test('the company page is a route for the same licences as the list', () => {
   assert.match(app, /path="\/research\/companies\/:analysisId\/:candidateId"/);
   assert.match(app, /guard\(labRoles\(\['admin', 'founder', 'advisor'\]\), <CompanyCandidate/);
   assert.match(workspace, /linkToDossier/);
+  assert.match(list, /linkToDossier=\{linkToDossier\}/,
+    'the list accepts the flag and must hand it to the results view, or Open is a free variable');
   assert.match(list, /\/research\/companies\/\$\{encodeURIComponent\(analysis\.id\)\}/);
 });
 
