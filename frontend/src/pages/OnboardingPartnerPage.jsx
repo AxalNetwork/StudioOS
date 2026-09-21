@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import OnboardingWizard, { TextField, TextArea, MultiChoiceField, ChoiceField } from '../components/OnboardingWizard';
 import { useAuth } from '../hooks/useAuthSync';
+import { OnboardingCanvas } from '../components/auth/AuthShell';
 
 // Phase 0.2 / Task #23 — Service-provider partner onboarding.
 // Collects: firm details, service catalogue, specialties.
@@ -83,13 +84,14 @@ export default function OnboardingPartnerPage() {
   ];
 
   return (
-    <div className="py-8">
+    <OnboardingCanvas>
       <OnboardingWizard
         flow="partner"
         steps={steps}
+        onDark
         finishLabel="Open Partner Portal"
         onFinish={() => navigate(user?.role === 'exploring' ? '/exploring' : '/partner-portal')}
       />
-    </div>
+    </OnboardingCanvas>
   );
 }

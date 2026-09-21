@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { routeBlock } from './_routes.mjs';
 import { OWNERSHIP_NOTICE, LEGAL_LINKS } from '../src/lib/legalNotice.js';
+import { ONBOARDING_LICENCE_CHOSEN_EVENT, TERMS_ACCEPTED_EVENT } from '../src/lib/onboarding.js';
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const app = read('../src/App.jsx');
@@ -214,6 +215,41 @@ test('the ownership notice names the operator and the IP owner', () => {
   assert.match(OWNERSHIP_NOTICE, /Axal VC Management LLC/, 'the operating entity must be named');
   assert.match(OWNERSHIP_NOTICE, /Axal VC Holdings LLC/, 'the IP-owning entity must be named');
   assert.match(OWNERSHIP_NOTICE, /All rights reserved\./);
+});
+
+test('choosing a licence tells the shell before it navigates', () => {
+  // The shell caches flow === 'licence' for the whole session. Navigating
+  // first, and telling it later, is the click that looks dead: the licence
+  // gate sends the wizard URL straight back to /onboarding.
+  const submit = page.slice(page.indexOf('const submit'), page.indexOf('const selectedMeta'));
+  const tell = submit.indexOf('ONBOARDING_LICENCE_CHOSEN_EVENT');
+  const terms = submit.indexOf('TERMS_ACCEPTED_EVENT');
+  const go = submit.indexOf('navigate(');
+  assert.ok(tell > 0 && tell < go, 'the shell must hear the choice before navigate()');
+  assert.ok(terms > 0 && terms < go, 'terms were recorded by the same request and must be retired before navigate()');
+  assert.equal(ONBOARDING_LICENCE_CHOSEN_EVENT, 'axal:onboarding-licence-chosen');
+  assert.equal(TERMS_ACCEPTED_EVENT, 'axal:terms-accepted');
+});
+
+test('the shell applies the choice for every licence and ignores a late progress read', () => {
+  const src = codeOnly(app);
+  const at = src.indexOf('addEventListener(ONBOARDING_LICENCE_CHOSEN_EVENT');
+  assert.ok(at > 0, 'App must listen, or Continue keeps returning to /onboarding until a reload');
+  const effect = src.slice(src.lastIndexOf('useEffect(', at), src.indexOf('}, []);', at));
+  assert.match(effect, /licence !== 'founder' && licence !== 'investor' && licence !== 'advisor' && licence !== 'partner'/);
+  assert.match(effect, /setOnboardingFlow\(licence\)/);
+  assert.match(effect, /setOnboardingComplete\(licence === 'advisor'\)/,
+    'only advisor is complete on the server; marking the other three complete would skip their wizard');
+  assert.match(effect, /setSuggestedRole\(licence\)/);
+  assert.match(src, /if \(cancelled \|\| licenceChosen\.current\) return;/,
+    'a progress read that started before the click must not put flow back to licence');
+  assert.match(effect, /setTermsPending\(false\)/,
+    'the licence request recorded the terms; the interstitial must stand down with the gate');
+  assert.match(
+    src,
+    /if \(!licenceChosen\.current\) \{\s*setSuggestedRole\(me\.suggested_role \|\| null\);\s*setTermsPending\(me\.terms_acceptance_pending === true\);/,
+    'a /me that started before Continue must not restore the old role or the terms gate',
+  );
 });
 
 test('the public footer and the onboarding footer read from one constant', () => {

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import OnboardingWizard, { TextField, TextArea, ChoiceField } from '../components/OnboardingWizard';
-import AuthShell, { authV2 } from '../components/auth/AuthShell';
+import { authV2, OnboardingCanvas } from '../components/auth/AuthShell';
 import { spinoutLab } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
@@ -221,15 +221,14 @@ export default function OnboardingFounderPage() {
   };
 
   return (
-    <AuthShell email={user?.email} platformNote="Founder onboarding">
-      <div className="w-full max-w-2xl mx-auto">
-        <OnboardingWizard
-          flow="founder"
-          steps={steps}
-          finishLabel={exploring ? 'Continue while review runs' : 'Continue to Studio'}
-          onFinish={handleFinish}
-        />
-      </div>
-    </AuthShell>
+    <OnboardingCanvas>
+      <OnboardingWizard
+        flow="founder"
+        steps={steps}
+        onDark
+        finishLabel={exploring ? 'Continue while review runs' : 'Continue to Studio'}
+        onFinish={handleFinish}
+      />
+    </OnboardingCanvas>
   );
 }
