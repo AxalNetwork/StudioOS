@@ -15851,6 +15851,7 @@ reproducible without faking a clock, which is why it was taken first.
 | writer emits ISO instead of SQLite format | **caught**, by the new write-side assertion alone |
 | `>` inverted to `<` | **caught**, here and by two neighbouring tests |
 | a two-hour grace window added to the stored expiry | **caught** |
+| a 61-minute grace window, with the SQLite-format row deleted | **blind** — and that is the point: it is what proves the second row is not a control that catches nothing. See below |
 
 **One mutation was withdrawn as invalid rather than reported as an escape.**
 `datetime(expires_at) > CURRENT_TIMESTAMP` escaped — correctly: measured,
@@ -15863,6 +15864,19 @@ spelling anyway, on the right grounds: the *unwrapped* form is broken.)
 comparison with a fixture forced back to the writer's own format passes the
 suite — which is precisely the point: it is what proves the adversarial format
 is load-bearing, and it is the measured form of the argument above.
+
+**The second row earns its place, measured rather than asserted.** The two
+fixtures have different lifetimes: the ISO row is pinned to midnight, so it
+ages through the day and by the afternoon is hours stale; the SQLite-format row
+is always exactly an hour old. So a small grace window slipped into the
+predicate revives the fresher one and not the staler one. At 01:02Z, with
+`datetime(expires_at, '+61 minutes')` injected: **both rows catch it; the ISO
+row alone is blind.** The pair therefore covers two different mutations rather
+than one twice — which is why the SQLite-format half is a probe, not a control.
+It is worth noting that this demonstration is itself hour-dependent, in the
+opposite direction to the defect being fixed: before 01:00 the ISO row is the
+fresher of the two and the result inverts. Neither row is fragile; only this
+particular demonstration of their division of labour has a window.
 
 ### What this does not claim
 

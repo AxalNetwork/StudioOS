@@ -320,11 +320,19 @@ test('an EXPIRED code refuses — the comparison must not be format-blind', asyn
   db.prepare('UPDATE support_handoff_codes SET expires_at = ?').run(expiredIso(db));
   await assert.rejects(() => redeemSupportCode(env, offer.code), /not valid/);
 
-  // AND IN THE WRITER'S OWN FORMAT — the row shape production actually makes.
-  // The same row serves both: a refused redeem's UPDATE matches nothing, so
-  // `used_at` is still NULL. No midnight pin here, deliberately: with both
-  // sides in one format there is no date-prefix invariant to protect, so
-  // `-1 hour` is correct at every hour and reads as what it is.
+  // AND IN THE WRITER'S OWN FORMAT — the row shape production actually makes,
+  // and NOT a control that catches nothing. It is the shorter-lived probe: the
+  // ISO row above is pinned to midnight, so by mid-afternoon it is hours stale
+  // and a small grace window slipped into the predicate would not revive it,
+  // while this one is always exactly an hour old. Measured at 01:02Z with a
+  // `+61 minutes` grace injected at the comparison: both rows CATCH it, the ISO
+  // row alone is BLIND. So the pair covers two different mutations, not one
+  // twice. The same row serves both halves: a refused redeem's UPDATE matches
+  // nothing, so `used_at` is still NULL.
+  //
+  // No midnight pin here, deliberately: with both sides in one format there is
+  // no date-prefix invariant to protect, so `-1 hour` is correct at every hour
+  // and reads as what it is.
   db.prepare("UPDATE support_handoff_codes SET expires_at = datetime('now', '-1 hour')").run();
   await assert.rejects(() => redeemSupportCode(env, offer.code), /not valid/);
 
