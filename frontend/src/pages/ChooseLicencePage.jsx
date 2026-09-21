@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
 import { track } from '../lib/funnel';
+import { ONBOARDING_LICENCE_CHOSEN_EVENT, TERMS_ACCEPTED_EVENT } from '../lib/onboarding';
 import { OWNERSHIP_NOTICE, LEGAL_LINKS } from '../lib/legalNotice';
 
 const LICENCES = [
@@ -72,7 +73,19 @@ export default function ChooseLicencePage() {
     track('onboarding_licence_submit', { licence: selected });
     try {
       await api.onboardingChooseLicence(selected, accepted);
-      await refresh({ force: true });
+      // The shell read `flow === 'licence'` once, when this session started,
+      // and it will not read it again. Tell it the choice landed — including
+      // that this same request recorded the terms — before navigating, or the
+      // licence gate sends the next URL straight back here and the click
+      // looks dead until a full reload.
+      window.dispatchEvent(new CustomEvent(ONBOARDING_LICENCE_CHOSEN_EVENT, { detail: { licence: selected } }));
+      window.dispatchEvent(new CustomEvent(TERMS_ACCEPTED_EVENT));
+      try {
+        await refresh({ force: true });
+      } catch {
+        // The licence is already stored. A failed /me must not leave them on
+        // this screen after the shell has been told they moved on.
+      }
       const wizard = WIZARD_FOR_LICENCE[selected];
       navigate(wizard || '/exploring', { replace: true });
     } catch (e) {

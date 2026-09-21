@@ -265,6 +265,22 @@ select::-ms-expand { display: none; }
 [data-density="compact"] [data-app-main] { padding-top: 0.75rem; padding-bottom: 0.75rem; }
 [data-app-main].edge-to-edge-surface { padding: 0; }
 
+/* The role wizards (`/onboarding/founder|investor|partner`) are the body
+   under the sidebar and the header. The landscape has to live on the scroll
+   container: that box is already edge to edge, and `background-attachment:
+   scroll` (the initial value) keeps the image on the visible column while
+   the card scrolls. A background on the page itself stops at the page's
+   own height and leaves the shell's gray in the gap. */
+main[data-onboarding-canvas] {
+  background-color: #241f38;
+  background-image:
+    linear-gradient(104deg, rgba(36,31,56,.52) 0%, rgba(36,31,56,.28) 42%, rgba(36,31,56,.62) 100%),
+    url(/auth/login-background.webp);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
 /* Compact density also tightens the most common Tailwind vertical-rhythm
    helpers when used inside the page wrapper. This is intentionally
    tag-agnostic so dashboards and list pages benefit without per-component
