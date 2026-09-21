@@ -15620,3 +15620,116 @@ to every Studio, Institutional, admin, partner and advisor account every Monday
 ran weekly with nothing asserting anything about it — not who it reached, not
 that it reached anyone, not that it stopped. That is how it stayed shipped long
 enough to be noticed from an inbox rather than from a test.
+
+---
+
+## D176
+
+**Nothing checked that a built chunk's references resolve — and the scan I
+reached for first reported a confident PASS while missing 2,636 edges.**
+
+**2026-09-21.** `/network` and `/expertise` were reported crashing with
+`undefined is not an object (evaluating 'e._result.default')`, and the filed
+cause was a stale-chunk theory. Investigating it turned up something separable
+and worth fixing on its own: **the repo has no check that the built module
+graph is closed**, and the ad-hoc scans used to look for one were themselves
+unreliable. This entry is that check. **It does not fix the crash** — see the
+end.
+
+### The gap, and why the existing smoke cannot see it
+
+`scripts/check-spa-live.mjs` is the only thing that looks at built assets, and
+it cannot see a broken lazy-route graph, for two independent reasons:
+
+| | |
+| --- | --- |
+| its route list is **hardcoded** (`:137-217`) | about seven shells, and **no Zone route is among them**. Every `*Zone` chunk is reached by dynamic import at click time and is named in no shell HTML |
+| `fetchAssetMeta` **cancels the response body** (`:287-291`) | deliberately, to avoid pulling 500KB bundles — so it cannot follow a single chunk→chunk edge |
+
+So it verifies `index.html`'s own references one level deep and stops. **It
+would report all-PASS on a deploy where every advisor Zone chunk 404s** —
+a failure `frontend/src/main.jsx:117-132` already names: *"a route chunk that
+404s when the user clicks — the ordinary case after a deploy."*
+
+### THE FINDING THAT DECIDED THE GUARD'S SHAPE: a narrow scan is worse than no scan
+
+This bundler emits references in **two forms**, and both are load-bearing.
+Measured on the current tree:
+
+| form | chunks using it | in the entry chunk |
+| --- | --- | --- |
+| `"assets/Name-hash.js"` | 55 | **497** |
+| `"./Name-hash.js"` | 1239 | 17 |
+
+An extractor that handles only `./` therefore **starts at an entry it cannot
+read**, the walk never expands, and it finishes quickly with a clean answer.
+That is not hypothetical, and it happened twice in one session:
+
+1. A reachability walk from `index.html` using the `./` form alone reported
+   **18 chunks reachable, 0 dangling**, on a tree of 1276. The real figure is
+   557. It read as a pass.
+2. A second, broader pass scanned all 1276 chunks and reported **10,951 edges,
+   0 dangling**, and that number was used to conclude *"the graph is closed."*
+   **The true edge count is 13,587.** The conclusion happens to survive — the
+   full scan also finds zero dangling — but **it was not established by the
+   measurement that was cited for it.** 2,636 edges were invisible to it.
+
+So the guard carries a **self-check**: both reference forms must appear in a
+non-trivial corpus, because both are in the output. A zero on either side means
+the extractor stopped seeing a whole shape of edge, and the run fails with *"this
+check refuses to report a pass it cannot stand behind"* rather than a tick. The
+self-check is re-derived from the corpus on every run, so it cannot go stale the
+way a hardcoded floor would.
+
+**Its mutation run proves the point directly.** Narrowing the extractor *and*
+removing the self-check produces `✓ … 10,951 references across 1276 chunks all
+resolve` — **exit 0, a false pass, and the very number quoted above.** Six
+mutations were applied and six caught; that pair is the seventh, kept as a
+demonstration rather than a test, because what it shows is what the absence of
+the self-check buys.
+
+### What the guard protects, and the tidy-up it refuses
+
+`docs/assets/` is **not** append-only cruft, which is the other thing this
+investigation corrected. `frontend/vite.config.js:58` sets `emptyOutDir: true`,
+so every build **wipes** `docs/` — and `scripts/build-frontend.mjs:65-103` then
+**deliberately restores a bounded window of prior builds'** hashed files,
+because a client still holding the previous `index.html` asks for the previous
+hashes right after a deploy and *"the page goes blank until a reload"*
+(`scripts/lib/assetRetention.mjs:4-14`). Verified: the ledger's union is 1319
+files and disk holds exactly 1319 — **zero orphans**.
+
+So the three copies of `RelationshipsZone` are **three generations**, each
+linked to its own `kit-*`, `ZoneToolbar-*`, `ui-*` and `api-*`. **Pruning by
+basename and keeping the newest would sever generations and manufacture exactly
+the dangling edge this guard exists to catch.** The guard's own failure message
+says so. If the window is ever shrunk, prune by whole ledger generation — and
+note that it would not shrink production anyway, because CI has no ledger and
+re-seeds from the committed tree.
+
+### The three constraints written into it
+
+- **It never builds and never writes**, reading `docs/assets/` only.
+  `check-frontend-builds.mjs:31-35` already records why: *"a check that rewrote
+  602 tracked files as a side effect of checking would be worse than the bug it
+  catches."* Sharper here, since the build wipes and restores, so a check that
+  built would rewrite every tracked file under `docs/` in order to look at them.
+- **It is inert on import** — the scan is gated on being run directly, because
+  it calls `process.exit(1)` and a bare module body would kill any test process
+  that imported its helpers *the moment the graph went bad*, which is when those
+  tests most need to run.
+- **It runs before `check-docs-fresh` and `check-frontend-builds`** in
+  `test:guards`, so a one-line finding fails before a source-tree hash or a real
+  bundler run is attempted. Its own suite pins that ordering.
+
+### What this does NOT do
+
+**It does not fix the advisor crash.** Run against today's tree it is green —
+13,587 references across 1276 chunks, all resolving — so on the committed build
+there is no dangling edge and this is not the cause of
+`e._result.default`. The crashing bytes could not be read from this environment
+(`axal.vc:443` and the PR preview Worker are both refused at CONNECT with 403),
+and CLAUDE.md §4 notes the deploy workflow rebuilds `docs/` at deploy time, so
+the committed build is not proof about the shipped one. The cause is still open;
+what this guard changes is that **if it ever is a 404, it fails before the
+deploy instead of after it.**
