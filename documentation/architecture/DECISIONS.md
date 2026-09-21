@@ -16044,3 +16044,34 @@ Three other tests in the worker tree use a fixed-length slice
 (`fills_registry`, `advisor_client_grants`, `licence_admin_lifecycle_d134`).
 They are not against `rateLimit.ts` and are **not** touched here; whether the
 same idiom is load-bearing for them is a separate reading.
+
+---
+
+## D181 — a hang detector that fires on a slow fork is a flake
+
+`frontend/test/pptx_image_size_not_bundled.test.mjs`'s *"a zero-length ICNS
+entry returns instead of hanging"* forks a child to prove `image-size` no longer
+loops (CVE-2025-71330) and failed with *"sizeOf(buf) hung in child process"* if
+the child had not reported within a fixed 2000 ms. **The timer started at
+`fork()`**, so it was timing node boot and the `image-size` require as if they
+were the parse. On 2026-09-14 it failed once inside a full `npm run test:drift`
+at `duration_ms: 2008` against that 2000 ms bound, then passed three times when
+run alone.
+
+**A flake in a security regression test teaches people to ignore it**, which is
+the whole reason this is worth a decision rather than a bump of the number.
+
+**Two bounds now, one per phase, because they measure different things.** The
+child sends a `ready` IPC message after requiring `image-size` and building the
+buffer, and the parent arms the **2 s parse bound only then** — so a real
+infinite loop still fails within ~2 s of the parse, and **what the test proves
+and the bound it proves it under are unchanged**. A separate, generous 15 s
+startup bound fails with its own message, so a child that never started is never
+reported as a library that never returned. A third assertion refuses a result
+that arrives without a preceding `ready`, so the parse cannot silently go
+untimed.
+
+**Mutation-checked both ways.** An infinite loop inserted after `ready` fails
+with the hang message in ~2 s of the parse; deleting the `ready` send fails with
+the ordering message rather than passing or waiting out the startup bound.
+Verified alone and inside a full `test:drift`.
