@@ -704,6 +704,14 @@ test('the payload names what verified is NOT, so neither screen has to word it',
   assert.equal(payload.state, 'verified');
   assert.equal(payload.serves, false, 'a verified host claimed to serve');
   assert.equal(payload.serves_reason, SERVES_REASON);
+  // THE LINE ABOVE CANNOT FAIL ON AN EDIT TO THE CONSTANT — it compares the
+  // constant to itself. The guard that could was `includes('os.axal.vc')`, and
+  // it went when the host-shaped literals did. This is that guard back in a
+  // form with no literal to search for: the zone is DERIVED from CNAME_TARGET
+  // rather than typed, so the two cannot drift apart either.
+  const PLATFORM_ZONE = CNAME_TARGET.split('.').slice(1).join('.');
+  assert.ok(SERVES_REASON.includes(PLATFORM_ZONE),
+    `the reason stopped naming the platform zone (${PLATFORM_ZONE})`);
   assert.match(payload.serves_reason, /Members keep using the platform host/);
   // `is_primary` is 0 and nothing writes 1: a host members are sent to has to
   // serve first.
