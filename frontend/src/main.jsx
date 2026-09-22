@@ -8,6 +8,7 @@ import './index.css';
 import { registerServiceWorker } from './lib/pwa';
 import { isChunkLoadError } from './lib/chunkLoadError';
 import { readAttempts, reloadCarryingCount } from './lib/reloadGuard';
+import { reportError } from './lib/log';
 
 // Task #37 — tell the un-bundled boot watchdog (index.html) that the entry
 // module actually executed, so it won't trigger a recovery reload. Also strip
@@ -78,9 +79,12 @@ const CHUNK_KEY = 'axal:chunk-reload-attempts';
 const CHUNK_PARAM = '__chunk';
 const MAX_CHUNK_RELOADS = 2;
 
+// RETURNS WHETHER A RELOAD IS UNDER WAY, and that return value is load-bearing:
+// the `vite:preloadError` listener below may only suppress Vite's rethrow when
+// it is true. See the comment there for what a bare suppression costs.
 function reloadOnceForStaleChunk() {
   const attempts = readAttempts(CHUNK_KEY, CHUNK_PARAM);
-  if (attempts >= MAX_CHUNK_RELOADS) return;
+  if (attempts >= MAX_CHUNK_RELOADS) return false;
   const next = attempts + 1;
   try { sessionStorage.setItem(CHUNK_KEY, String(next)); } catch { /* URL marker below carries it */ }
   // Drop SW caches first so the next load isn't fed another stale chunk.
@@ -100,6 +104,7 @@ function reloadOnceForStaleChunk() {
   } else {
     reloadCarryingCount(CHUNK_PARAM, next);
   }
+  return true;
 }
 
 function recoverFromStaleChunk(reason) {
@@ -111,12 +116,31 @@ window.addEventListener('unhandledrejection', (e) => recoverFromStaleChunk(e.rea
 // Vite dispatches `vite:preloadError` when a dynamically-imported chunk fails
 // to load — the canonical stale-chunk-after-deploy signal (e.g. logging out
 // redirects into the lazy /login chunk whose hashed filename no longer exists
-// after a mid-session deploy). preventDefault() stops Vite's default rethrow;
-// we reload once to pick up the new asset manifest so the failure never reaches
-// the error boundary as a visible throw.
+// after a mid-session deploy). We reload once to pick up the new asset
+// manifest, and suppress Vite's rethrow only while that reload is under way.
 window.addEventListener('vite:preloadError', (e) => {
-  try { e.preventDefault(); } catch { /* ignore */ }
-  reloadOnceForStaleChunk();
+  // REPORT THE REAL FAILURE FIRST. `e.payload` is Vite's own error and the only
+  // thing that names the chunk that could not be fetched. Suppressing the
+  // rethrow discards it, and discarding it unconditionally is why this defect
+  // went unnamed for weeks: every report carried a TypeError about React
+  // internals and nothing about which module had actually failed to load.
+  reportError('main:vitePreloadError', e && e.payload);
+  // SUPPRESS THE RETHROW ONLY WHEN A RELOAD IS ACTUALLY STARTING.
+  //
+  // Vite's helper is `baseModule().catch(handlePreloadError)`, and that handler
+  // rethrows ONLY when the event was not default-prevented. So an unconditional
+  // preventDefault() makes a failed `import()` RESOLVE WITH `undefined`. React's
+  // lazy stores that undefined as its payload result and the next render
+  // evaluates `_result.default` on it — which is the TypeError advisors were
+  // shown on /network and /expertise, with the real cause already thrown away.
+  //
+  // Suppressing it while a reload is under way is right: the tab is going away.
+  // Once the budget above is spent no reload comes, so the rethrow has to
+  // survive and reach RouteErrorBoundary — which is what the budget's own
+  // comment above has always said should happen.
+  if (reloadOnceForStaleChunk()) {
+    try { e.preventDefault(); } catch { /* ignore */ }
+  }
 });
 // THE GUARDS ARE NOT CLEARED ON A TIMER, and that removal is the fix.
 //

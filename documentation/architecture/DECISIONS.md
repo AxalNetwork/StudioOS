@@ -17591,3 +17591,98 @@ loosened, because a balanced `DEFAULT '{}'` exercises no brace-matching at all.
 
 **No migration — 279 stays free. No `frontend/src` change, so no `docs/`
 rebuild. No new `/api/*` method.**
+
+## D193
+
+**The advisor's `/network` and `/expertise` crash was our own `preventDefault()`,
+and it had been eating the one message that named the cause.**
+
+Task #295 ran for weeks on an error nobody could place: an error card reading
+`undefined is not an object (evaluating 'e._result.default')` on the advisor's
+`/network` and `/expertise`, while `/practice` and `/cohorts` were fine. A
+private window still crashed, so it was not a stale service worker or a stale
+browser cache; D176 had measured the committed `docs/` graph as closed; and
+`axal.vc:443` is refused at CONNECT from the build environment, so the shipped
+bundle could never be fetched and read.
+
+**Three measurements taken here, and the third is the answer.**
+
+1. **The module graph is sound.** All twenty-one advisor zone chunks in the
+   committed `docs/assets` were dynamically imported in a real Chromium: 21/21
+   resolved with a callable `default`. There is no missing export and no
+   dangling chunk.
+2. **The app renders.** Served locally as a signed-in advisor, `/practice`,
+   `/cohorts`, `/expertise`, `/network`, `/expertise/profile` and
+   `/network/relationships` all render their own bodies, with no error card.
+3. **Blocking ONE chunk reproduces it exactly** — and that is the defect.
+
+**The mechanism, in the shipped bytes.** Vite's preload helper is
+`baseModule().catch(handlePreloadError)`, and that handler dispatches a
+cancelable `vite:preloadError` and rethrows **only when the event was not
+default-prevented** (`react-vendor`: `…window.dispatchEvent(t),!t.defaultPrevented)throw e`).
+`main.jsx` listened for that event and called `preventDefault()`
+**unconditionally**, then called `reloadOnceForStaleChunk()` — which is bounded
+to `MAX_CHUNK_RELOADS = 2` per tab and **silently returns once the budget is
+spent**. So on the third failure the rethrow was still suppressed and no reload
+came: the failed `import()` **RESOLVED WITH `undefined`**, React's `lazy` stored
+that undefined as its payload result, and the next render evaluated
+`_result.default` on it.
+
+That is the reported error, produced by our own recovery code, and it explains
+every part of the puzzle. A private window does not help because nothing about
+this is cached. The routes differ only in which chunk happened to fail. And the
+real error — `Failed to fetch dynamically imported module: …` — was thrown away
+by `preventDefault()` before it could reach the boundary or the error beacon,
+which is why weeks of reports carried a TypeError about React internals and
+nothing about which module had failed to load.
+
+`main.jsx`'s own comment already claimed the right behaviour: *"a genuinely
+broken chunk stops after MAX_CHUNK_RELOADS and lets the error boundary render
+something a person can act on."* That was false for this path, because
+`preventDefault()` had already run.
+
+**What lands.** `reloadOnceForStaleChunk()` returns whether a reload is under
+way; the listener suppresses the rethrow **only** when it is; and `e.payload` —
+Vite's own error, the only thing that names the chunk — is reported to the
+beacon before anything can discard it.
+
+**#712 is not superseded and is not the fix.** It taught `isChunkLoadError` to
+match the `_result.default` shape, so the boundary offers a reload rather than a
+bare crash. It treats the symptom; this removes the cause, and the two compose:
+the boundary now matches on an error that says what actually failed.
+
+### Verified
+
+**PAIRED against the built bundle, with one chunk blocked.** Both halves take
+the same three fetch attempts, the same two bounded reloads and the same final
+URL `/expertise?__chunk=2`. What the advisor is shown is the only difference:
+
+| | rendered message |
+| --- | --- |
+| before | `Cannot read properties of undefined (reading 'default')` |
+| after | `Failed to fetch dynamically imported module: …/assets/AdvisorBucketRoutes-iLnbl3xk.js` |
+
+Chromium's wording for what Safari words as `undefined is not an object
+(evaluating 'e._result.default')`. Page errors before the fix: **0** — the cause
+was gone.
+
+Three assertions land in `chunk_reload_loop.test.mjs`, which already reads
+`main.jsx` through `codeOnly()` so the explanation above cannot satisfy a scan:
+`preventDefault()` sits inside the budget conditional and nowhere before it; the
+payload reaches the beacon; and **Vite's contract itself is pinned** by a replica
+of the shipped helper, showing that a default-prevented error resolves the import
+with `undefined` and that leaving the default alone rejects. That third one is
+the subsumption proved rather than claimed — if Vite changes the contract this
+fix rests on, it says so.
+
+**One pre-existing assertion was re-aimed, not loosened.** It pinned the literal
+`if (attempts >= MAX_CHUNK_RELOADS) return;`. The return value is now
+load-bearing, so it pins `return false;` and the matching `return true;` — a bare
+`return` is accidentally falsy and would still behave, which is exactly why the
+contract is worth stating.
+
+**6 mutations applied, 6 caught**, every anchor asserted unique, every mutation
+proved to have changed bytes, and the tree restored byte-identical after each.
+
+**No migration — 279 stays free. No new `/api/*` method.** `frontend/src` moves,
+so `docs/` is rebuilt by the root build.
