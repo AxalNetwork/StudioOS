@@ -28,14 +28,25 @@ export default function AdminStudioHome({ user }) {
     const take = (setter) => (value) => {
       if (!cancelled) setter(value);
     };
-    const fail = (setter, tag) => (e) => {
-      reportError(tag, e);
+    const miss = (setter) => () => {
       if (!cancelled) setter(UNAVAILABLE);
     };
-    api.branchHome().then(take(setHome), fail(setHome, 'admin-studio:home'));
-    api.myLicence().then(take(setLicence), fail(setLicence, 'admin-studio:licence'));
-    api.branchTemplates().then(take(setTemplates), fail(setTemplates, 'admin-studio:templates'));
-    api.branchInsights().then(take(setInsights), fail(setInsights, 'admin-studio:insights'));
+    api.branchHome().then(take(setHome), (e) => {
+      reportError('admin-studio:home', e);
+      miss(setHome)();
+    });
+    api.myLicence().then(take(setLicence), (e) => {
+      reportError('admin-studio:licence', e);
+      miss(setLicence)();
+    });
+    api.branchTemplates().then(take(setTemplates), (e) => {
+      reportError('admin-studio:templates', e);
+      miss(setTemplates)();
+    });
+    api.branchInsights().then(take(setInsights), (e) => {
+      reportError('admin-studio:insights', e);
+      miss(setInsights)();
+    });
     return () => { cancelled = true; };
   }, [onBranch]);
 
