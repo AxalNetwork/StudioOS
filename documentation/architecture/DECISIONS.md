@@ -12206,6 +12206,15 @@ table and every route over it is super-admin-only, so a branch has no contracts
 read of its own. The block states that with its reason instead of rendering an
 empty ledger under a heading that implies rows are coming.
 
+*Corrected by D199 — the cause above is wrong in both halves.*
+`licence_contracts` holds the licence agreement between HQ and the licensee,
+not the Studio's contracts with its counterparties. Those are rows in the
+branch's own database — `esign_envelopes`, `documents`, `pairwise_ndas`,
+`partner_deals`, the union `loadAllContracts` builds — and
+`GET /api/admin/contracts` is plain `requireAdmin`, so the branch can already
+read them. What S5 lacks is a screen that tables them, and for envelopes a
+value and a renewal date.
+
 **Migration 268** is used; **269 is free.** One new `/api/*` method each side,
 both with their routes in the same commit. `frontend/src` moves, so `docs/` is
 rebuilt through the root build.
@@ -18404,3 +18413,130 @@ became the thing preventing the fix. What did not change is the claim the block
 exists to avoid making, so that is what it asserts now: a white-label's mark is
 theirs, HQ does not approve it, and the block is drawn only for the kind that
 has one.
+
+## D199
+
+**The Studio's expiring agreements were never HQ's to push. They are the
+branch's own rows, and what two of their four stores lack is an end date.**
+
+Task #308 was filed as *"add a branch read for agreements expiring inside 60
+days"*, on this premise: the Studio overview's Contracts card hardcoded
+*"Agreements that expire inside 60 days are not recorded on a branch. The
+contract ledger is HQ's table,"* so the fix was either to push HQ's expiring
+set to the branch (migration 256's pattern) or to give the branch its own
+agreements store. It asked for a decision and a reason, and for no invented
+count. **Measured, neither option fits, because the premise names the wrong
+cause.** This decision records the correction and ships the read the
+correction makes possible.
+
+### THREE MEASUREMENTS, AND EACH ONE MOVED THE WORK
+
+**1 · HQ's contract ledger is the wrong table, and it has nothing that can
+expire.** `licence_contracts` (migration 259) is the licence agreement between
+HQ and the licensee, one per licence — `licence_uid`, the template it was
+instantiated from, its body, and `draft | sent | signed | void`. Its only
+dates are `created_at`, `sent_at`, `signed_at`, `superseded_at` and
+`updated_at`. Pushing it to a branch would carry no end date at all.
+
+**2 · The agreements the canvas draws are the Studio's own, and they are
+already local.** S5's `conExpiring` rows are a Partner MSA, an Advisory
+agreement and a Service agreement, each with a counterparty and a renewal —
+not the licence (that is S11's Settings row, *"325 seats · renews 14 Mar
+2027"*). The platform's contract ledger for those is the four-source union
+`admin_contracts.ts`'s `loadAllContracts` builds: `documents`,
+`esign_envelopes`, `pairwise_ndas`, `partner_deals`. Every one is a table in
+the deployment's own D1, so on a branch they are the branch's by D.2. And
+`GET /api/admin/contracts` is plain `requireAdmin` — only the three
+template-store writes carry `requireHqAuthoring` — so a branch can already read
+them. `legal.ts:235` says it in passing: *"esign_envelopes is the single source
+of truth for active contracts."*
+
+**3 · What is missing is a field, not a transport.** Two of the four record
+when an agreement ends, and each has a live sweep acting on it:
+`pairwise_ndas.valid_until` (`expireDueArtifacts`) and
+`partner_deals.expires_at` (`expirePartnerDeals`). The other two record when a
+document was signed and nothing about when it stops binding.
+
+So the decision the task asked for is **neither push nor new store**: count the
+dated agreements where they already live, and say plainly which agreements
+carry no end date to count.
+
+### WHAT SHIPPED — no migration, no new route, no new `api.js` method
+
+- **`services/branchHome.ts`** gains `agreements` on the digest
+  `GET /api/branch/home` already returns: active NDAs and active partner deals
+  ending in **(now, now + 60 days]** — `renewalSweep`'s own window shape, so a
+  row still `active` after its end is the sweep's business rather than
+  "expiring". Both sides go through `datetime()`, because these columns are
+  written from JavaScript as ISO strings and a bare comparison decides at
+  position 10, where `'T'` sorts above `' '` (the D124/D125 class). The
+  handler's own `now` is bound, as the rest of the digest's clock is, rather
+  than SQLite's.
+- **An unreadable source makes the total `null`, never smaller** —
+  `backlogOf`'s rule for the queues, applied here. The per-source counts still
+  travel, and the reason names what could not be read.
+- **`undated` names what is not counted** — e-sign envelopes and signed
+  documents — on every answer, with the reason.
+- **The card** reads it through `agreementsGlance`: *"2 expire inside 60
+  days"* (the canvas band exactly), a measured zero scoped to *"None of the
+  dated agreements"*, an Unreadable for `null`, and an absence for a digest
+  that carried no field. The `undated` sentence is drawn beside a measured
+  answer only; qualifying a count that was never taken would dress an absence
+  as a partial result. The card now waits for both reads, since the library
+  and the agreements are two stores with two states.
+
+### THE WRONG CAUSE WAS STATED IN FOUR PLACES, AND ALL FOUR MOVE
+
+`AdminStudioOverview.jsx` (the `agreementAbsence` constant),
+`adminStudioOverview.js` (`contractsGlance`'s hardcoded line),
+`BranchContracts.jsx` (header and rendered reason — *"There is no branch-side
+read of this branch's own contracts yet"*, which was false), and
+`frontend/src/pages/branch/README.md`. **D147's own "Still not shipped"
+paragraph and its ROUTE_MAP row-40 block said the same**, and both carry a
+correction in place pointing here — correcting three copies and leaving the
+record that produced them is how this class survives. `BranchContracts` still
+draws no table: the rows are readable, but the screen is unbuilt and two of
+S5's columns — value and renewal date — are recorded for no e-sign envelope.
+
+### THE GUARDS, AND THE TWO TRAPS THEY WERE BUILT AROUND
+
+`cloudflare-worker/test/branch_agreements_d199.test.ts` builds both tables
+from `schema_baseline.sql` itself. Its sharpest assertion is the **same-day
+2×2**: an end six hours before `now` and six hours after, each in ISO and in
+SQLite's format, against a fixed midday `now` — so a dropped `datetime()` on
+either side fails at any hour of any day, not only near midnight (D177). The
+`undated` sentence is **checked against the baseline DDL**: the day either
+table gains an end-date column, the test fails and the count should widen
+rather than the sentence go stale.
+
+**Two pre-existing guards were re-aimed, not loosened** — the eleventh and
+twelfth instances of a guard pinning a refusal that must move the day the
+refusal stops being true. `admin_studio_overview.test.mjs` asserted that the
+library glance carried an always-`unrecorded` agreements line; it now asserts
+the library glance carries no agreements answer at all. And
+`branch_contracts_s5s10.test.mjs` matched `licence_contracts` inside the
+block's reason — which a sentence *correcting* that attribution also
+contains, so it would have passed on the opposite claim. *A lexical scan cannot
+tell a rule from its violation*; it now asserts the claim itself.
+
+### NOT BUILT, AND WHY
+
+- **S5's Active contracts table.** Readable, not built, and two of its columns
+  have no store for envelopes.
+- **An end date on e-sign envelopes and documents.** That is a model change —
+  a field on the send path, with a writer — and without a writer a new column
+  would count zero forever, which is the invented figure this card refuses.
+  It is the change that would bring MSAs and service agreements into the count.
+
+### VERIFIED
+
+`npm run test:drift` exit 0, read as the exit code from a redirected log:
+frontend **2883** passed / 0 failed, worker **3736** (3733 pass plus the same 3
+pre-existing environment-gated skips), retention **41**, zero `not ok`. All ten
+tests in the new worker file confirmed to run by name. **16 mutations applied,
+16 caught**, each restored from a snapshot and verified byte-identical — among
+them a dropped `datetime()` on either side of either comparison, the window
+widened to 61 days, `status = 'active'` removed, an unreadable source folded
+into the total as zero, and the four-state glance collapsed so an absent answer
+renders as a scoped zero. No migration — **282 is the next free number**
+— and no new `/api/*` method: the figure rides `GET /api/branch/home`.

@@ -8,7 +8,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
@@ -18,6 +18,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { AdminStudioOverview } from '../src/pages/admin/AdminStudioOverview.jsx';
 import {
   accountLines,
+  agreementsGlance,
   approvalsGlance,
   contractsGlance,
   freezeLine,
@@ -139,7 +140,15 @@ test('a programme deadline without its zone is not shown', () => {
   assert.equal(programmeGlance({ open_week: null, reason: 'No cohort week is open.' }, null).kind, 'unrecorded');
 });
 
-test('contracts name the library and never an expiring-agreement count or a currency', () => {
+test('contracts name the library, carry no agreements of their own, and never a currency', () => {
+  // RE-AIMED BY D199 — the eleventh time a guard pinning a refusal has had to
+  // move the day the refusal stopped being true. This asserted that the
+  // library glance carried an `agreements` line that was always "unrecorded",
+  // on the stated ground that HQ's contract ledger is out of a branch's reach.
+  // That ground was wrong (see the agreements tests below), and the count now
+  // comes from the branch's own stores through the digest. What the library
+  // glance must NOT do is carry an agreements answer of its own: that is how
+  // the hardcoded refusal lived here for as long as it did.
   const ready = contractsGlance({
     available: true,
     items: [{ slug: 'a' }, { slug: 'b' }, { slug: 'c' }, { slug: 'd' }],
@@ -149,11 +158,116 @@ test('contracts name the library and never an expiring-agreement count or a curr
   });
   assert.match(ready.text, /4 HQ templates ready to instantiate/);
   assert.match(ready.text, /2026-09-22 07:12/);
-  assert.equal(ready.agreements.kind, 'unrecorded');
+  assert.equal('agreements' in ready, false,
+    'the library glance answers for agreements again, from a store it does not read');
   assert.doesNotMatch(JSON.stringify(ready), /EUR|5000|\$/);
   const never = contractsGlance({ available: true, items: [], never_pushed_reason: 'HQ has not pushed.' });
   assert.equal(never.kind, 'unrecorded');
   assert.match(never.reason, /not pushed/);
+});
+
+const UNDATED = {
+  sources: ['esign_envelopes', 'documents'],
+  reason: 'Counted: mutual NDAs and partner deals. E-sign envelopes record when signed, not when it ends.',
+};
+
+test('expiring agreements: a count, a scoped zero, an unreadable, and an absence are four states', () => {
+  // THE CANVAS BAND, exactly: `'2 expire inside 60 days'`.
+  const two = agreementsGlance({ window_days: 60, expiring: 2, undated: UNDATED });
+  assert.equal(two.kind, 'ready');
+  assert.equal(two.text, '2 expire inside 60 days');
+  assert.equal(two.note, UNDATED.reason, 'the count lost the sentence saying what it could not see');
+  assert.equal(agreementsGlance({ window_days: 60, expiring: 1, undated: UNDATED }).text,
+    '1 expires inside 60 days');
+  assert.match(agreementsGlance({ window_days: 30, expiring: 3, undated: UNDATED }).text,
+    /inside 30 days/, 'the window is the server\'s, not a number typed on the page');
+
+  // A MEASURED ZERO IS SCOPED to what was measured. "None" alone would read as
+  // though an MSA sent through e-sign had been checked, and it was not.
+  const zero = agreementsGlance({ window_days: 60, expiring: 0, undated: UNDATED });
+  assert.equal(zero.kind, 'empty');
+  assert.match(zero.text, /None of the dated agreements/);
+  assert.equal(zero.note, UNDATED.reason);
+
+  // UNREADABLE IS NOT ZERO.
+  const unread = agreementsGlance({ window_days: 60, expiring: null, reason: 'The partner deals could not be read.', undated: UNDATED });
+  assert.equal(unread.kind, 'unreadable');
+  assert.match(unread.reason, /partner deals/);
+  assert.equal(unread.text, undefined, 'an unread count was given a sentence as if it were measured');
+
+  // NO ANSWER AT ALL is an absence, and says it is not a claim.
+  const none = agreementsGlance(undefined);
+  assert.equal(none.kind, 'unrecorded');
+  assert.match(none.reason, /not a claim/);
+});
+
+test('the refusal that blamed HQ\'s ledger is gone from every page, not reworded in one', () => {
+  // It lived in TWO places on this page and a third on the branch Contracts
+  // page. Fixing one and leaving two is how this class survives, so the scan
+  // walks all of frontend/src — as code, so the comments explaining the
+  // correction are allowed to quote what they correct.
+  const hits = [];
+  const walk = (dir) => {
+    for (const e of readdirSync(resolve(root, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${e.name}`;
+      if (e.isDirectory()) walk(rel);
+      else if (/\.(jsx?|tsx?)$/.test(e.name)) {
+        const code = codeOnly(read(rel));
+        if (/contract ledger is HQ/i.test(code)
+          || /expire inside 60 days are not recorded on a branch/i.test(code)
+          || /no branch-side read of this branch's own contracts/i.test(code)) hits.push(rel);
+      }
+    }
+  };
+  walk('frontend/src');
+  assert.deepEqual(hits, [], `the misattributed refusal is back at: ${hits.join(', ')}`);
+});
+
+test('the card draws agreements from the digest, and waits for both reads', () => {
+  const onBranch = {
+    role: 'admin',
+    branch: { code: 'fr', name: 'Axal VC France', territories: ['FR'], status: 'active' },
+  };
+  const base = {
+    user: onBranch,
+    licence: { licence: {} },
+    templates: { available: true, items: [{ slug: 'a' }], pushed_at: '2026-09-22T07:12:00.000Z' },
+    insights: { benchmarks: [], benchmarks_empty_reason: 'none' },
+  };
+  const card = (html) => {
+    const at = html.indexOf('data-testid="admin-studio-contracts"');
+    assert.ok(at > 0, 'the Contracts card is gone');
+    const end = html.indexOf('data-testid="admin-studio-insights"', at);
+    assert.ok(end > at, 'the Contracts card never reaches the Insights card');
+    return html.slice(at, end);
+  };
+
+  const counted = card(markup({ ...base, home: { agreements: { window_days: 60, expiring: 2, undated: UNDATED } } }));
+  assert.match(counted, /data-testid="admin-studio-agreements"/);
+  assert.match(counted, /2 expire inside 60 days/);
+  assert.match(counted, /record when signed, not when it ends/, 'the count is drawn without what it excludes');
+  assert.match(counted, /1 HQ template ready to instantiate/, 'the library line was lost beside the new one');
+
+  const unread = card(markup({
+    ...base,
+    home: { agreements: { window_days: 60, expiring: null, reason: 'The partner deals could not be read.', undated: UNDATED } },
+  }));
+  assert.match(unread, /partner deals could not be read/);
+  assert.doesNotMatch(unread, /record when signed/,
+    'a count that was never taken is qualified as if it were a partial result');
+  assert.doesNotMatch(unread, /expire inside/);
+
+  // THE LIBRARY ANSWERED AND THE DIGEST HAS NOT: the card waits rather than
+  // drawing the library beside an agreements line it has no answer for.
+  const waiting = card(markup({ ...base, home: null }));
+  assert.match(waiting, /Reading the library and agreements/);
+  assert.doesNotMatch(waiting, /admin-studio-agreements/);
+
+  // A DIGEST THAT ANSWERED WITHOUT THE FIELD — a server from before D199 —
+  // is an absence that says so, never a zero.
+  const older = card(markup({ ...base, home: {} }));
+  assert.match(older, /not a claim that none are ending/);
+  assert.doesNotMatch(older, /None of the dated agreements|expire inside/);
 });
 
 test('insights refuse a median HQ did not publish, and refuse an amount', () => {

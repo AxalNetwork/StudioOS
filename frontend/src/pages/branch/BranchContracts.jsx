@@ -13,11 +13,19 @@ import BranchZone from './BranchZone';
  * master library read-only with its as-of stamp and archived versions visible
  * but unusable, and pending signatures."* Measured, the library half is now
  * real — `publishTemplate` (D147) gives a branch its copy — and the other two
- * are not, for the same reason: `licence_contracts` (migration 259) is **HQ's**
- * table, read by `admin_licences.ts` behind `requireSuperAdmin`, which on a
- * branch answers "HQ only" (D106). A branch has no contracts read of its own.
- * So this page ships the library and NAMES the absence rather than drawing an
- * empty ledger under a heading that implies rows are coming.
+ * are not drawn here yet.
+ *
+ * THE REASON THEY ARE NOT DRAWN WAS FIRST STATED WRONG, and D199 corrects it.
+ * It said the contracts live in `licence_contracts` (migration 259), HQ's
+ * table. That table holds the LICENCE AGREEMENT between HQ and this licensee
+ * and nothing else. This branch's own contracts — e-sign envelopes, signed
+ * documents, mutual NDAs and partner deals, the four sources
+ * `admin_contracts.ts`'s `loadAllContracts` unions — are rows in THIS
+ * database (D.2), and that route is `requireAdmin`, not HQ-gated. So the rows
+ * are readable here; what is missing is a branch screen that tables them, and
+ * two of the columns S5 draws (value, renewal date) that no e-sign envelope
+ * records. The Studio overview already counts the dated ones ending inside 60
+ * days (D199). This page names the gap rather than drawing an empty ledger.
  *
  * THE LIBRARY IS A COPY AND THE PAGE NEVER LETS YOU FORGET IT. Every field on
  * screen comes from `branch_templates`, which only HQ's push writes; the
@@ -206,8 +214,8 @@ export default function BranchContracts({ user }) {
       <Card data-testid="branch-contracts-ledger">
         <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Active contracts</h2>
         <div className="mt-2">
-          <Unrecorded reason="A licence's contracts live in HQ's `licence_contracts` ledger, and every route over it is super-admin-only — which on a branch answers 'HQ only'. There is no branch-side read of this branch's own contracts yet, so a table here would be an empty ledger rather than a short one.">
-            No branch-side contract read
+          <Unrecorded reason="This branch's contracts — e-sign envelopes, signed documents, mutual NDAs and partner deals — are rows in this branch's own database, not in HQ's licence ledger, which holds only the licence agreement itself. No table of them is built on this page yet, and two of the columns it would carry, value and renewal date, are recorded for no e-sign envelope.">
+            Not tabled here yet
           </Unrecorded>
         </div>
       </Card>

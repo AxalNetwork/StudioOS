@@ -109,37 +109,68 @@ export function programmeGlance(prog, formattedClose) {
 }
 
 /**
- * HQ's pushed template library. Expiring agreements are never a number:
- * `licence_contracts` is HQ's table and a branch has no read of it.
+ * HQ's pushed template library, and nothing else. Expiring agreements are
+ * their own glance (below) because they come from a different store.
  */
 export function contractsGlance(data) {
-  const agreements = {
-    kind: 'unrecorded',
-    reason: 'Agreements that expire inside 60 days are not recorded on a branch. The contract ledger is HQ\'s table.',
-  };
-  if (!data) return { kind: 'unrecorded', reason: 'The template library did not answer.', agreements };
+  if (!data) return { kind: 'unrecorded', reason: 'The template library did not answer.' };
   if (data.available === false) {
-    return { kind: 'unreadable', reason: data.reason || 'The template library could not be read.', agreements };
+    return { kind: 'unreadable', reason: data.reason || 'The template library could not be read.' };
   }
   if (data.never_pushed_reason) {
-    return { kind: 'unrecorded', reason: data.never_pushed_reason, agreements };
+    return { kind: 'unrecorded', reason: data.never_pushed_reason };
   }
   const n = Array.isArray(data.items) ? data.items.length : null;
   if (n === null) {
-    return { kind: 'unrecorded', reason: 'The template library did not include a list.', agreements };
+    return { kind: 'unrecorded', reason: 'The template library did not include a list.' };
   }
   if (n === 0) {
     return {
       kind: 'unrecorded',
       reason: 'HQ pushed a library and it was empty, so there is nothing to instantiate.',
-      agreements,
     };
   }
   const asOf = data.pushed_at ? String(data.pushed_at).replace('T', ' ').slice(0, 16) : null;
   return {
     kind: 'ready',
     text: `${n} HQ template${n === 1 ? '' : 's'} ready to instantiate${asOf ? ` · as of ${asOf}` : ''}`,
-    agreements,
+  };
+}
+
+/**
+ * #308 / D199 — AGREEMENTS THAT END INSIDE THE WINDOW, from the branch's own
+ * contract stores via `GET /api/branch/home`.
+ *
+ * THIS REPLACES A REFUSAL THAT BLAMED THE WRONG THING. The card said these
+ * were "not recorded on a branch" because "the contract ledger is HQ's table".
+ * That ledger (`licence_contracts`) is the licence agreement itself and has no
+ * end date, so pushing it would carry nothing that can expire. The Studio's
+ * own agreements are in its own database; what two of their four stores lack
+ * is an end date, and the server names those two on `undated`.
+ *
+ * A ZERO IS SCOPED TO WHAT WAS MEASURED. "None of the dated agreements"
+ * rather than "none", with the server's note beside it, because a bare zero
+ * would read as though an MSA sent through e-sign had been checked too.
+ */
+export function agreementsGlance(a) {
+  if (!a) {
+    return {
+      kind: 'unrecorded',
+      reason: 'The digest did not include an agreements read, so this is not a claim that none are ending.',
+    };
+  }
+  if (a.expiring === null || a.expiring === undefined) {
+    return { kind: 'unreadable', reason: a.reason || 'The agreement stores could not be read.' };
+  }
+  const days = Number.isFinite(a.window_days) ? a.window_days : 60;
+  const note = a.undated?.reason || null;
+  if (a.expiring === 0) {
+    return { kind: 'empty', text: `None of the dated agreements ends inside ${days} days.`, note };
+  }
+  return {
+    kind: 'ready',
+    text: `${a.expiring} ${a.expiring === 1 ? 'expires' : 'expire'} inside ${days} days`,
+    note,
   };
 }
 
