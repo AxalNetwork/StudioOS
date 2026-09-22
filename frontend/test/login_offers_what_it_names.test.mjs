@@ -26,18 +26,6 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 
-/**
- * The words a READER sees in a JSX block — tags and their attributes removed.
- *
- * Asserting over raw JSX is a trap this file fell into: `data-testid=
- * "login-google-unavailable"` satisfies a `/unavailable/i` match, so the word
- * could be deleted from the sentence a person actually reads and the assertion
- * would still pass. A mutation proved it. An attribute is not copy.
- */
-function visibleText(jsx) {
-  return jsx.replace(/<[^>]*>/g, ' ').replace(/\{[^{}]*\}/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
 const PAGE = path.resolve(import.meta.dirname, '../src/pages/LoginPage.jsx');
 const raw = readFileSync(PAGE, 'utf8');
 const src = codeOnly(raw);
