@@ -36,7 +36,7 @@ export function catalogPriceCents(
     const cents = Number(priceCents);
     if (Number.isInteger(cents)) return cents;
   }
-  if (priceUsd == null || priceUsd === undefined) return null;
+  if (priceUsd == null) return null;
   const usd = Number(priceUsd);
   if (!Number.isFinite(usd)) return null;
   return Math.round(usd * 100);
