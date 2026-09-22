@@ -33,11 +33,11 @@ const CHUNK_LOAD_RE = /chunk|loading chunk|chunkloaderror|failed to fetch dynami
  */
 export function isChunkLoadError(error) {
   if (!error) return false;
-  if (typeof error === 'object' && error !== null && /** @type {{name?: string}} */ (error).name === 'ChunkLoadError') {
+  if (error && typeof error === 'object' && /** @type {{name?: string}} */ (error).name === 'ChunkLoadError') {
     return true;
   }
   const msg = String(
-    (typeof error === 'object' && error !== null && /** @type {{message?: unknown}} */ (error).message) || error,
+    (error && typeof error === 'object' && /** @type {{message?: unknown}} */ (error).message) || error,
   );
   return CHUNK_LOAD_RE.test(msg);
 }
