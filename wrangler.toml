@@ -107,6 +107,14 @@ custom_domain  = true
 directory = "./docs"
 binding   = "ASSETS"
 not_found_handling = "single-page-application"
+# Prerender writes `docs/login/index.html` (and the same for every other
+# public route). The default `auto-trailing-slash` turns `GET /login` into a
+# 307 to `/login/`. Safari crashes in a loop when the service worker returns
+# that redirect, and the page it gives up on is exactly `/login/`.
+# `drop-trailing-slash` serves `/login` as 200 from that file — the canonical
+# URL, and the one every `location.replace('/login')` uses — and sends
+# `/login/` to `/login` once.
+html_handling = "drop-trailing-slash"
 run_worker_first = ["/api/*", "/landing/*", "/p/*", "/assets/*"]
 
 # ---------- Module Rules ----------
@@ -532,6 +540,10 @@ binding = "BROWSER"
 directory = "./docs"
 binding   = "ASSETS"
 not_found_handling = "single-page-application"
+# Same as the top-level [assets] block. Env tables do not inherit, and a
+# production deploy that kept the default would 307 `/login` back to
+# `/login/` — the URL Safari crashes on.
+html_handling = "drop-trailing-slash"
 run_worker_first = ["/api/*", "/landing/*", "/p/*", "/assets/*"]
 
 # Task #9 (AO) — wire the studioos-tail consumer worker

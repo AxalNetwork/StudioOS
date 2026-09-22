@@ -6,7 +6,7 @@
  *   - never cached:    /api/auth/*  (who you are is not a cacheable fact)
  *   - stale-while-revalidate:  /api/academy/*  +  /api/projects/*  (own data, offline read)
  *   - network-first:   every other /api/* (always prefer fresh)
- *   - navigation:      network-first w/ offline.html fallback
+ *   - navigation:      not intercepted (a 307 returned from the worker crashes Safari)
  *
  * Push: a `push` event with JSON `{title, body, link}` shows a system
  * notification. Click focuses an existing tab on `link` (or opens a new one).
@@ -22,7 +22,7 @@
 // v17 is required for the same reason one step further out: v16 still kept
 // ONE API bucket for the whole origin, so it holds one signed-in person's
 // API bodies where the next signed-in person can be handed them.
-const VERSION = 'v17-2026-09-10';
+const VERSION = 'v18-2026-09-22';
 const PRECACHE = `studioos-precache-${VERSION}`;
 const RUNTIME_STATIC = `studioos-static-${VERSION}`;
 
@@ -217,19 +217,22 @@ self.addEventListener('fetch', (event) => {
   // Don't intercept cross-origin (CDN fonts, etc.)
   if (url.origin !== self.location.origin) return;
 
-  // Navigations: network-first, fall back to offline.html
-  if (request.mode === 'navigate') {
-    event.respondWith((async () => {
-      try {
-        const res = await fetch(request);
-        return res;
-      } catch (err) {
-        const cached = await caches.match('/index.html');
-        return cached || (await caches.match('/offline.html')) || Response.error();
-      }
-    })());
-    return;
-  }
+  // Navigations are NOT intercepted.
+  //
+  // Prerender writes `docs/login/index.html`. Under the assets default
+  // (`auto-trailing-slash`) `GET /login` is a 307 to `/login/`; under
+  // `drop-trailing-slash` the slash form is a 307 back to `/login`. Either
+  // way a navigation redirect exists. Returning it from `respondWith` crashes
+  // Safari's web process. Safari reloads, the worker is still in control, the
+  // 307 happens again, and after a few passes Safari stops and shows
+  // "A problem repeatedly occurred" on `https://axal.vc/login/` with a Reload
+  // Webpage button. Every other prerendered route has the same shape.
+  //
+  // Leaving the navigation to the browser lets it follow one redirect on its
+  // own, which it does not crash on. The offline shell is the thing this
+  // gives up: a failed navigation now uses the browser's own offline page
+  // rather than `offline.html`. That is the cheaper failure.
+  if (request.mode === 'navigate') return;
 
   // /api/* routing
   if (url.pathname.startsWith('/api/')) {
