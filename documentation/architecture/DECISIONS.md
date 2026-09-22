@@ -17143,3 +17143,168 @@ declaration in the tree that is dead by a platform limit"* — there are
 
 **Migration 277. No `frontend/src` change, so no `docs/` rebuild. No new
 `/api/*` method.**
+
+## D190 — the tables the same cutoff swallowed, and three reasons in my own ledger that were false
+
+D188's guard put 59 previously-invisible gaps on a reviewed ledger, and D189
+took the four that were dead by D1's column cap. D190 takes the rest of the
+class that is genuinely repairable: **six tables and one column that a
+sub-cutoff migration declared and no database ever got.**
+
+### The defect, and it is D188's exactly
+
+`034`, `048`, `056`, `095` and `114` all sit below `BASELINE_CUTOFF = 219`. On
+a new database `migrate-d1 --bootstrap` loads `schema_baseline.sql` and then
+MARKS every file at or below the cutoff as applied **without running a
+statement of it** (`scripts/lib/migrationPlan.mjs`, mode `bootstrap`). That is
+correct — the sub-cutoff files are not replayable, because `CREATE TABLE
+users`, `projects`, `deals` and `documents` live only in
+`sql/historical/schema.sql`. So a sub-cutoff migration's effect reaches a
+database **only if the baseline already carries it**, and the baseline is a
+dump of production taken before these seven landed.
+
+Measured read-only against production `studioos-db` on 2026-09-22, schema only:
+`sqlite_master` holds **none** of the eight objects. The query came back
+carrying only their FK parents — `advisor_answers`, `founders`, `partners`,
+`projects`, `service_offerings`, `users`.
+
+| gap | declared by | live reader |
+| --- | --- | --- |
+| `service_engagements` | 034 | `routes/services.ts:132,255`; a COUNT subquery at `routes/research.ts:1493` |
+| `founder_risk_pulls` | 034 | `routes/founder_risk.ts:44,121,139` |
+| `venture_risk_overrides` | 114 | `services/ventureRisk.ts:522,557,581` |
+| `customer_chat_threads` | 056 | `routes/customer_chat.ts:63,98,226,232,303,310,321` |
+| `customer_chat_messages` | 056 | `routes/customer_chat.ts:75,237,334` |
+| `advisor_state` | 048 | `services/advisor/stateMachine.ts:246,314,555` |
+| `partners.accepting_intros` | 095 | `routes/partner_portal.ts:152` SELECT, `:168` write |
+
+**The failures are not uniform, and that is why this survived.** Six of the
+seven throw, so their readers are 500s. `advisor_state` does not:
+`stateMachine.ts:213-215` says the helpers *"swallow D1 errors and degrade to
+an empty result … even on a stale dev DB without `advisor_state` migrated."*
+So the advisor's 5-minute anti-repeat penalty and its answer counter have
+simply never worked, silently, on every turn. `onAnswered` reports the bump as
+`counter_bumped`, and that flag has been `false` in production since 048
+shipped.
+
+### THREE REASONS IN THE LEDGER WERE FALSE, and two of them are mine from D188
+
+Sizing this changed it three times, and the net effect is that **two of the
+nine gaps D188 filed need no code at all.**
+
+1 · **`advisor_state` needed no product decision.** The ledger said *"the
+repair may be a store or may be a repoint at `advisor_turn_audit`."* Measured:
+`advisor_turn_audit` has twelve columns (043 creates eleven, 270 adds
+`guardrail_category`) and **`question_id` is not among them** — zero hits for
+"question" against that table anywhere in `sql/` or `src/`. All three readers
+key on `(user_id, question_id)`. A table with no `question_id` structurally
+cannot carry per-question state. It is a restore.
+
+2 · **`referral_attributions` SELF-HEALS.** `services/referralAttribution.ts:23`
+`ensureAttributionSchema` is a D95 `WeakMap`/`bindingKey` bootstrap around
+`CREATE TABLE IF NOT EXISTS`, and **both** public entry points await it as
+their first statement (`:61` `captureAndResolveAttribution`, `:106`
+`markAttributionConverted`); the only other export, `readRefCookie` (`:118`),
+parses a cookie and touches no database. Unlike D189's ALTERs — blocked by the
+100-column cap — a `CREATE TABLE` has no limit to hit. The ledger's *"Referral
+attribution therefore records nothing, which is money-adjacent"* is **false**.
+
+3 · **`admin_publications` SELF-HEALS too.** `routes/admin_publications.ts:36`
+`ensureSchema`, same pattern, awaited by all six handlers (`:150, :200, :216,
+:253, :307, :420`). The one path that looked like a hole is closed:
+`services/publications.ts:500`'s `uniqueSlug` has exactly one caller,
+`admin_publications.ts:436`, inside the `/publish` handler that awaits
+`ensureSchema` sixteen lines earlier. The ledger's *"giving it a store is a
+product decision about whether that surface is still wanted"* is **false**.
+
+**Corrections 2 and 3 are the class D189 corrected four of**: reading
+`check-migration-declarations`' finding — which compares declarations against a
+**fresh build** — as a behavioural claim, without checking for a runtime
+bootstrap. The guard is right that a fresh build lacks them. The reason I wrote
+for why that matters was not. A sweep over all nine confirmed the other seven
+have no bootstrap. **The ledger's `note` now carries that rule**, so the next
+reader is told to look for a `CREATE TABLE IF NOT EXISTS` before writing a
+behavioural claim into a reason.
+
+**One nuance stated rather than glossed:** neither bootstrap has yet run in
+production — `sqlite_master` returns neither table — so both are absent today
+and would be created by the first reader to arrive. *Absent* and *broken* are
+different claims, and only the first is true.
+
+### What landed
+
+**Migration 278** — six `CREATE TABLE IF NOT EXISTS` plus one `ALTER TABLE
+partners ADD COLUMN`, each copied **verbatim** from its declaring migration
+with that migration's indexes. No `BEGIN`/`COMMIT` (the #26 lesson).
+
+Three things about it are decisions rather than transcription, and the file
+says so in its own header:
+
+- **034's other ~twenty tables are not here.** Only the two it declares that
+  are measured absent are restored; `service_offerings`, the FK parent of
+  `service_engagements`, already exists and re-declaring it would be noise.
+- **048's third index rides along.** `idx_advisor_answers_user_status` on
+  `advisor_answers(user_id, saved_status)` is 048's own declaration and is
+  absent from the baseline **and** from production, while `advisor_answers`
+  exists in both with eleven columns. `check-migration-declarations` tracks
+  tables and columns, not indexes, so nothing reported it.
+- **The ALTER is last, and that order is the one thing not 095's own.** D1's
+  `ALTER TABLE … ADD COLUMN` has no `IF NOT EXISTS`, so it is the only
+  statement in the file that can fail, and a failure aborts the rest — the
+  runner is forward-only and ordered, which is how 199's failed ALTER held
+  200–207 out of production (#413). Measured absent, so it will apply; placing
+  it after the six idempotent `CREATE`s means that if it ever meets a database
+  that already has the column, the six tables have already landed.
+
+**The ledger** — the seven entries come off, and the guard's **stale-entry
+refusal is what proves the repair landed**: before 278 it named all seven and
+exited 1; after, `check-migration-declarations` passes with 52 known gaps.
+`table:referral_attributions` and `table:admin_publications` **stay** with
+corrected reasons, because a fresh build still lacks them. And the three D189
+entries — `users.recovery_cooling_off_until`, `users.recovery_step_up_due_at`,
+`users.marketing_unsubscribed_at` — were still describing a live 500 and a
+silent unsubscribe that D189 fixed two hours earlier; each now records that
+277's side tables shipped, that every reader was repointed, and that the entry
+is **permanent rather than pending**.
+
+**`cloudflare-worker/test/sub_cutoff_restores_d190.test.ts`** — sixteen tests.
+Each restored table is built a second time **from its own declaring migration,
+read off disk**, and the two `pragma_table_info` rows are `deepEqual`'d, so the
+shape assertion cannot drift from the migration it is about and a re-chosen
+type fails here rather than months later in a reader. Every reader is then
+**driven, paired**: once on a build without 278, where it must fail the way
+production does, and once with it, where a satisfying row must come back.
+
+### Two corrections the build made to the test harness, not to the code
+
+Both are the same shape, and both would have hidden the defect this file is
+about — `test/_d1_sqlite.mjs` implements "the subset the worker actually uses"
+and was missing two pieces of it.
+
+1 · **`meta.last_row_id` was absent.** `routes/customer_chat.ts:229` reads it
+to key the message it is about to write to the thread it has just created. With
+the field undefined the message bound a null `thread_id`, the write landed
+nowhere, and every call still resolved — **D187's M6 shape exactly**. A shim
+that cannot carry the id cannot see the defect it exists to catch.
+
+2 · **Two of my own assertions were wrong before the code was.**
+`loadRecentlyAsked` takes a third argument, the window floor, and calling it
+with two made `t >= undefined` false for every row — the test reported an empty
+map and blamed the restore. And the shim enforces foreign keys, so
+`venture_risk_overrides` refused a row whose `projects` parent the fixture had
+not seeded. Both were the fixture, not the migration; both are recorded because
+a green test that passes for the wrong reason is worth less than a red one.
+
+**Eight mutations, eight caught** — and two of them only after the MUTATION
+was re-aimed, which is the same rule one layer out. Dropping
+`UNIQUE (project_id, layer_key)` was aimed at the re-upsert assertion and is
+caught by the FIRST write instead, because `ON CONFLICT` with no constraint to
+bind to throws outright. Removing `meta.last_row_id` was aimed at the
+`thread_id` assertion and is caught one line earlier, because node:sqlite
+refuses to bind `undefined` where real D1 would bind NULL and land the row
+nowhere. Both were caught; neither was caught where predicted, and a mutation
+that lands somewhere other than where it was aimed is not evidence until you
+have looked.
+
+**Migration 278. No `frontend/src` change, so no `docs/` rebuild. No new
+`/api/*` method.**
