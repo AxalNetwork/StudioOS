@@ -363,7 +363,18 @@ test('S19a\'s own second failure — a CNAME at the FALLBACK ORIGIN gets its own
   // telling WHY it is wrong, or they will assume the check is broken.
   assert.match(cname.detail, /fallback origin, not the published target/,
     'a CNAME at the fallback origin fell into the generic does-not-point-at sentence');
-  assert.match(cname.detail, new RegExp(CNAME_TARGET.replace(/\./g, '\\.')));
+  // A LITERAL COMPARISON, BECAUSE THAT IS WHAT THIS ASSERTION MEANS. It used
+  // to build a regex from the target with a hand-rolled dot-escaper, which
+  // CodeQL raises as incomplete sanitization: `.replace(/\./g, '\\.')` escapes
+  // dots and NOT backslashes, so an input carrying one would break the pattern.
+  // MEASURED, THE OLD FORM WAS NOT WEAK HERE — the dots were escaped and a
+  // fixture differing at a dot position was already refused — so this is not a
+  // bug being fixed. It is the wrong tool being put down: these three
+  // assertions mean "the sentence NAMES this host", which is a literal
+  // comparison, and a regex assembled from data to express it is what the
+  // query exists to flag.
+  assert.ok(cname.detail.includes(CNAME_TARGET),
+    `the fallback-origin sentence does not name ${CNAME_TARGET}`);
 });
 
 test('a CNAME pointing somewhere else names what it found, and is not the fallback sentence', async () => {
@@ -482,8 +493,8 @@ test('check-now on a half-published host stays pending and names WHICH record is
     // S19a's whole point: not "DNS error", but which row to edit.
     assert.equal(txt.ok, false);
     assert.equal(cname.ok, true);
-    assert.match(txt.title, new RegExp(`${TXT_PREFIX}\\.${HOST.replace(/\./g, '\\.')}`),
-      'the failing record is not named');
+    assert.ok(txt.title.includes(`${TXT_PREFIX}.${HOST}`),
+      `the failing record is not named: ${txt.title}`);
   } finally { globalThis.fetch = real; }
 });
 
@@ -508,8 +519,13 @@ test('check-now on the OTHER half — TXT published, no CNAME — also stays pen
     const cname = body.check.records.find((r: any) => r.kind === 'traffic');
     assert.equal(txt.ok, true);
     assert.equal(cname.ok, false);
-    assert.match(cname.title, new RegExp(HOST.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
-      'the failing traffic record is not named');
+    // The autofix on this line (3eaa472f4) widened the escaper to cover every
+    // metacharacter, which is correct as far as it goes and leaves a regex
+    // built from data behind — on one of the three sites, not all three.
+    // Superseded rather than reverted: with no regex here there is nothing to
+    // escape, and the same treatment reaches its two siblings.
+    assert.ok(cname.title.includes(HOST),
+      `the failing traffic record is not named: ${cname.title}`);
   } finally { globalThis.fetch = real; }
 });
 
