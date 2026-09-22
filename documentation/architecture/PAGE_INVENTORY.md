@@ -143,7 +143,7 @@ canvas behind it still shows up here.
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
-| Branch | Home | `/branch` | — (no canvas; shipped ahead of the design corpus) |
+| Branch | Studio | `/studio` | — (no canvas; shipped ahead of the design corpus) |
 | Branch | Accounts | `/branch/accounts` | — (no canvas; shipped ahead of the design corpus) |
 | Branch | Approvals | `/branch/approvals` | — (no canvas; shipped ahead of the design corpus) |
 | Branch | Programs | `/branch/programs` | — (no canvas; shipped ahead of the design corpus) |
@@ -223,7 +223,7 @@ rather than merely absent.
 - super_admin · HQ · Content (`/admin/content`)
 - super_admin · HQ · Platform (`/admin/platform`)
 - super_admin · HQ · Settings (`/account`)
-- branch_admin · Branch · Home (`/branch`)
+- branch_admin · Branch · Studio (`/studio`)
 - branch_admin · Branch · Accounts (`/branch/accounts`)
 - branch_admin · Branch · Approvals (`/branch/approvals`)
 - branch_admin · Branch · Programs (`/branch/programs`)

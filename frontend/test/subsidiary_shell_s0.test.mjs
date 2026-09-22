@@ -50,14 +50,21 @@ const BRANCH_USER = {
   branch: { code: 'fr', name: 'Axal VC France', territories: ['FR', 'BE', 'LU'], status: 'active' },
 };
 
-test('the eight canvas rows, in the canvas order', () => {
-  // `deepEqual` on the whole array, NOT a membership check: the canvas's order
-  // is part of what it specifies, and a set comparison would pass a shell that
+test('the eight rows, Studio first, then the canvas order', () => {
+  // `deepEqual` on the whole array, NOT a membership check: order is part of
+  // what the shell specifies, and a set comparison would pass a shell that
   // put Settings first.
+  //
+  // THE FIRST LABEL IS THE PRODUCT OVERRIDE. The canvas still titles S0's
+  // first row Home and points it at the digest. The admin profile's front
+  // door is Studio at `/studio` — Eadwyn, then one card per other page — so
+  // a revert to Home `/branch` is the old console coming back.
   assert.deepEqual(
     rows.map((r) => r.label),
-    ['Home', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Insights', 'Settings'],
+    ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Insights', 'Settings'],
   );
+  assert.equal(rows[0].to, '/studio');
+  assert.ok(!rows.some((r) => r.to === '/branch'), 'the digest is not a sidebar row');
 });
 
 test('every row points at a route that is actually registered', () => {
@@ -148,10 +155,13 @@ test('the shell arm decides a sidebar, never access', () => {
     // Bounded to this route's own element so the assertion cannot be satisfied
     // by a NEIGHBOURING route's guard — the one failure mode a substring scan
     // has, and the reason the window is 80 rather than open-ended.
-    assert.ok(
-      APP_CODE.slice(at, at + 80).includes("guard(['admin']"),
-      `${r.to} must be guarded as an admin route`,
-    );
+    const window = APP_CODE.slice(at, at + (r.to === '/studio' ? 200 : 80));
+    // `/studio` is the shared studio route. Its guard is `labRoles(['admin', …])`,
+    // which includes admin, rather than the branch-only `guard(['admin'])`.
+    const guarded = r.to === '/studio'
+      ? window.includes("guard(labRoles(['admin'")
+      : window.includes("guard(['admin']");
+    assert.ok(guarded, `${r.to} must be guarded as an admin route`);
   }
 });
 

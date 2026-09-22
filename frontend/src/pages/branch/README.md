@@ -1,6 +1,9 @@
-# pages/branch — the subsidiary tier's eight rows
+# pages/branch — the subsidiary tier's pages
 
-What a branch administrator sees on their own deployment. A branch runs the
+What a branch administrator sees on their own deployment, besides Studio.
+The sidebar's first row is Studio at `/studio` (`AdminStudioHome.jsx`),
+not the digest. `/branch` is still this folder's Home — the operating digest —
+and it is no longer a sidebar row. A branch runs the
 same code as HQ under its own name, on its own host, over its own database
 (D.2), so nothing here narrows a global view — there is no global view
 underneath to narrow. Every route is `guard(['admin'], …)` in `App.jsx` and the
