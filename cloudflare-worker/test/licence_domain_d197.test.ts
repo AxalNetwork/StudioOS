@@ -508,7 +508,7 @@ test('check-now on the OTHER half — TXT published, no CNAME — also stays pen
     const cname = body.check.records.find((r: any) => r.kind === 'traffic');
     assert.equal(txt.ok, true);
     assert.equal(cname.ok, false);
-    assert.match(cname.title, new RegExp(HOST.replace(/\./g, '\\.')),
+    assert.match(cname.title, new RegExp(HOST.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
       'the failing traffic record is not named');
   } finally { globalThis.fetch = real; }
 });
