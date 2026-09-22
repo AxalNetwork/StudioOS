@@ -17686,3 +17686,58 @@ proved to have changed bytes, and the tree restored byte-identical after each.
 
 **No migration — 279 stays free. No new `/api/*` method.** `frontend/src` moves,
 so `docs/` is rebuilt by the root build.
+
+---
+
+## D194
+
+**`main` was red, and the guard that caught it was right about the rule and
+wrong about this call.**
+
+PR #719 merged at 18:24:24Z as `7b4c81f43` and its deploy read `success`, so
+Studio is live. It also left `npm run test:drift` failing on `main`, which
+blocks every PR cut from it — including all seven of the store tasks filed
+against that very page. Measured rather than inferred: `frontend/src` in this
+branch is byte-identical to `origin/main` (zero files differ), and
+`check-frontend-logging` rejects `AdminStudioHome.jsx:32` on that tree.
+
+The line:
+
+```js
+const fail = (setter, tag) => (e) => {
+  reportError(tag, e);          // ← `tag` is an identifier, not a literal
+  ...
+};
+api.branchHome().then(take(setHome), fail(setHome, 'admin-studio:home'));
+```
+
+**The arguments are in the right order.** All four call sites pass a string
+literal, and `tag` is that literal one closure later. What the guard cannot do
+is see through the closure, so its message — *"Reversed arguments ship no
+stack…"* — is wrong about this site specifically.
+
+**The guard is still right, and it is the call that moves.** Its own docblock
+says why the first argument must be a quoted literal: an identifier there is
+exactly what the reversed `reportError(err, { where })` defect looks like, and
+that defect shipped at **27 call sites**, each sending no stack, a message of
+`"[object Object]"`, and the error's own text into `scope` — the one field
+`redact` does not clean, which the Worker then writes verbatim into a log line.
+Widen the rule to accept identifiers and `reportError(e, ctx)` passes too,
+because `e` is an identifier as well. The narrowness *is* the check.
+
+So `fail` takes the **reporter** rather than the tag, and each of the four
+scopes is a literal at its own call site. One helper, no duplicated
+cancelled/setter logic, and the guard keeps its strictness:
+
+```js
+const fail = (setter, report) => (e) => { report(e); ... };
+api.branchHome().then(take(setHome), fail(setHome, (e) => reportError('admin-studio:home', e)));
+```
+
+**What was explicitly not done: a template-literal wrapper.** `` reportError(`${tag}`, e) ``
+satisfies the check and teaches the next reader that the rule is decorative.
+A guard that is trivially circumvented is worse than no guard, and this one has
+three real defects behind it.
+
+`frontend/src` moves, so `docs/` is rebuilt by the root build. **No migration —
+279 stays free. No new `/api/*` method.**
