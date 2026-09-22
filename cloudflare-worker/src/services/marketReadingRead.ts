@@ -32,7 +32,7 @@ export function catalogPriceCents(
   priceCents: number | null | undefined,
   priceUsd: number | null | undefined,
 ): number | null {
-  if (priceCents != null && priceCents !== undefined) {
+  if (priceCents != null) {
     const cents = Number(priceCents);
     if (Number.isInteger(cents)) return cents;
   }
