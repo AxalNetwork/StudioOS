@@ -37,7 +37,7 @@ export function isChunkLoadError(error) {
     return true;
   }
   const msg = String(
-    (error && typeof error === 'object' && /** @type {{message?: unknown}} */ (error).message) || error,
+    (typeof error === 'object' && /** @type {{message?: unknown}} */ (error).message) || error,
   );
   return CHUNK_LOAD_RE.test(msg);
 }
