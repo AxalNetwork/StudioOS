@@ -322,8 +322,17 @@ test('an uploaded SVG is SANITISED before it is stored, and the mark is keyed by
   const db = freshDb();
   const files = makeR2();
   const hostile = '<svg xmlns="http://www.w3.org/2000/svg"><script>fetch("//evil")</script><rect/></svg>';
-  const res = await upload(db, WL, new File([hostile], 'm.svg', { type: 'image/svg+xml' }),
-    SUPER, { FILES: files });
+  const mark = new File([hostile], 'm.svg', { type: 'image/svg+xml' });
+  // THE ANNOTATION IS `brand_svg_sanitize.test.ts:41,64,78`'s, for the same rule
+  // and the same reason: a deliberately hostile fixture in a SANITISATION test,
+  // never rendered anywhere, whose entire point is the assertion below that these
+  // bytes do NOT survive. GOTCHAS.md:210's rule is to read the code before calling
+  // a match a false positive — and its other half, that `detect-non-literal-regexp`
+  // gets fixed rather than suppressed, does not transfer: that fix produced better
+  // code, while obfuscating an attack fixture until a scanner stops recognising it
+  // would produce worse. The call is one line because the rule reports where the
+  // payload meets the identifiers it cannot resolve, and that was two lines.
+  const res = await upload(db, WL, mark, SUPER, { FILES: files }); // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
   assert.equal(res.status, 200, JSON.stringify(res.body));
 
   const keys = [...files.objects.keys()];
