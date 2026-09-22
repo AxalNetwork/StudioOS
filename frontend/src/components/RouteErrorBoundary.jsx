@@ -2,6 +2,7 @@ import React from 'react';
 import { useLocation } from 'react-router-dom';
 import { AlertTriangle, RefreshCcw, Home } from 'lucide-react';
 import { reportError } from '../lib/log';
+import { isChunkLoadError } from '../lib/chunkLoadError';
 import { readAttempts, reloadWithinBudget } from '../lib/reloadGuard';
 
 /**
@@ -21,29 +22,15 @@ import { readAttempts, reloadWithinBudget } from '../lib/reloadGuard';
  *     the route re-renders fresh), and a "Back to Studio" link.
  *   - Resets automatically when the URL pathname changes, so navigating
  *     away from the broken page recovers without a hard reload.
+ *   - Stale-chunk / React.lazy payload failures (incl. Safari's
+ *     `_result.default` TypeError) auto-reload once via `isChunkLoadError`
+ *     instead of stranding the user on the red card.
  *
  * Per replit.md user prefs: "explicit error handling over silent
  * fallbacks" — we deliberately surface the failure with the underlying
  * message so the user knows what's wrong and the next reload of the
  * agent has a starting clue.
  */
-
-// Chunk/dynamic-import failure phrases across all major browsers:
-//   Chrome:  "Failed to fetch dynamically imported module"
-//            "error loading dynamically imported module"
-//   WebKit/Safari: "Importing a module script failed."
-//                  "module script failed to load"
-//   Firefox: "error loading dynamically imported module"
-//   Webpack: "ChunkLoadError" / "Loading chunk NNN failed"
-//   Vite:    "Failed to load module script"
-const CHUNK_LOAD_RE = /chunk|loading chunk|chunkloaderror|failed to fetch dynamically imported module|error loading dynamically imported module|importing a module script failed|module script failed to load|failed to load module script/i;
-
-function isChunkLoadError(error) {
-  if (!error) return false;
-  if (error.name === 'ChunkLoadError') return true;
-  const msg = String(error.message || error);
-  return CHUNK_LOAD_RE.test(msg);
-}
 
 // sessionStorage key used to prevent auto-reload loops.
 const RELOAD_GUARD_KEY = 'axal:chunk-reload-boundary';

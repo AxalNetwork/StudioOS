@@ -6,6 +6,7 @@ import ScrollToTop from './components/ScrollToTop';
 import TopLevelErrorBoundary from './components/TopLevelErrorBoundary';
 import './index.css';
 import { registerServiceWorker } from './lib/pwa';
+import { isChunkLoadError } from './lib/chunkLoadError';
 import { readAttempts, reloadCarryingCount } from './lib/reloadGuard';
 
 // Task #37 — tell the un-bundled boot watchdog (index.html) that the entry
@@ -40,17 +41,10 @@ try {
 // blank production page is a dynamic import 404 — the user has an old HTML
 // (or SW-cached HTML) referencing a hashed JS chunk that no longer exists.
 // We hard-reload once on detection; sessionStorage prevents reload loops if
-// the failure is permanent (CDN broken, etc.).
-function isChunkLoadError(reason) {
-  if (!reason) return false;
-  const msg = String(reason.message || reason);
-  return (
-    reason.name === 'ChunkLoadError' ||
-    /Loading chunk [\w-]+ failed/i.test(msg) ||
-    /Failed to fetch dynamically imported module/i.test(msg) ||
-    /Importing a module script failed/i.test(msg)
-  );
-}
+// the failure is permanent (CDN broken, etc.). Detection lives in
+// `lib/chunkLoadError.js` so Safari's React.lazy `_result.default` TypeError
+// is treated the same as Chrome's "Failed to fetch dynamically imported
+// module" — otherwise the red error card appears across every lazy route.
 // SW-cache-clearing hard reload, bounded to MAX_CHUNK_RELOADS per tab.
 //
 // THIS USED TO LOOP FOREVER, in two independent ways, and both produced
