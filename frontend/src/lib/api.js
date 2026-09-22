@@ -3221,6 +3221,13 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(data || {}),
     }),
+  // D121 — move an account from one provisioned branch to another. Needs TOTP
+  // and a recent step-up; the page says so when the server refuses.
+  hqMoveAccount: (code, userId, data) =>
+    request(`/admin/branches/${encodeURIComponent(code)}/accounts/${encodeURIComponent(userId)}/move`, {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
+    }),
   // The BRANCH side, under its own prefix. Live only on a branch Worker; on HQ
   // these answer 403 because HQ has no HQ to escalate to.
   branchEscalations: () => request('/branch/escalations'),

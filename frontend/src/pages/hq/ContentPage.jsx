@@ -255,13 +255,17 @@ export default function ContentPage() {
               )}
             </Zone>
 
-            <Zone title="Localisation" sub="submissions from branches, and the brand decision">
+            <Zone title="Localisation" sub="Axal-subsidiary brand decisions only">
               {/* D112 — TWO OF THE THREE ABSENCES CLOSED, AND THE THIRD NAMED.
                   A content escalation carries the branch code (attribution) and
                   takes a decision (brand approval). What still does not exist
                   is a LINK saying which piece a submission localises — so this
                   lane counts submissions, and the refusal below says that
                   rather than being deleted. */}
+              <p className="mb-3 text-[12px] leading-relaxed text-axal-muted" data-testid="hq-brand-desk-scope">
+                Brand approval is for Axal subsidiaries. A white-label has no HQ brand desk.
+                Kind is not stored yet, so this lane cannot hide a white-label submission — there is no row that says which licence is which.
+              </p>
               {lane === UNAVAILABLE && (
                 <Unreadable
                   what="Content submissions"

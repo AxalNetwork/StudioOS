@@ -31,15 +31,14 @@ import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
  * accounts, so it silently dropped them. Filtering a complete list narrows it;
  * filtering a page hides rows.
  *
- * WHAT IS NOT DRAWN, and it is measured rather than deferred. H9 also draws
- * "Move to another branch". Its route exists — D.6 shipped
- * `POST /api/admin/branches/:code/accounts/:userId/move` — and it requires a
- * SOURCE branch code and a DESTINATION branch code, each a live binding, and
- * refuses when they are equal. With no branch provisioned there is neither end,
- * so the control could only ever refuse. D134 already named that mistake on
- * this tier: a UI that offers a button and lets the server pick teaches the
- * operator that one of its buttons is a lie. The sentence below says what a
- * move is and what it needs instead.
+ * MOVE IS DRAWN ONLY WHERE BOTH ENDS EXIST. H9's "Move to another branch"
+ * calls `POST /api/admin/branches/:code/accounts/:userId/move`, which needs a
+ * source branch code and a different destination branch code, each a live
+ * binding, plus TOTP and a recent step-up. The control sits on a branch search
+ * hit, and only when another branch code is in the fan-out. HQ-held rows have
+ * no source branch, so they carry no Move button — a control that can only
+ * refuse is the lie D134 named. With no branch provisioned there is one group
+ * and no Move anywhere, which the footnote states.
  */
 
 const RUNG = {
@@ -66,6 +65,79 @@ const LICENCE_TONE = {
   suspended: 'text-rose-700 dark:text-rose-400',
   terminated: 'text-gray-500 dark:text-gray-400',
 };
+
+/**
+ * H9 — move is real only when two branch codes exist. HQ-held rows have no
+ * source branch, so the control is on a branch hit, never on the HQ table.
+ * The route needs TOTP and a recent step-up; a refusal is shown, not swallowed.
+ */
+function MoveHit({ hit, from, destinations, onMoved }) {
+  const [open, setOpen] = useState(false);
+  const [to, setTo] = useState(destinations[0] || '');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [done, setDone] = useState(null);
+  if (done) {
+    return (
+      <li className="py-1.5 text-[12px] text-axal-muted">
+        {hit.name || hit.email} closed on {from}
+        {done.invited?.ok ? ` and invited on ${to}.` : `. The invitation did not land — retry from the destination, do not move again.`}
+      </li>
+    );
+  }
+  return (
+    <li className="py-1.5 text-[12px]">
+      <div className="flex items-center justify-between gap-3">
+        <span className="truncate text-axal-ink dark:text-white">{hit.name || hit.email}</span>
+        <span className="flex shrink-0 items-center gap-2 text-[11.5px] text-axal-faint">
+          <span>{hit.role} · {Number(hit.is_active) === 1 ? 'active' : 'deactivated'}</span>
+          {destinations.length > 0 && Number(hit.is_active) === 1 && (
+            <button type="button" className="font-bold text-axal-violet dark:text-violet-300" onClick={() => setOpen((v) => !v)}>
+              Move
+            </button>
+          )}
+        </span>
+      </div>
+      {open && (
+        <form
+          className="mt-2 grid gap-2 rounded-lg border border-axal-hairline bg-axal-ground p-2"
+          data-testid="hq-team-move"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setErr('');
+            setBusy(true);
+            try {
+              const res = await api.hqMoveAccount(from, hit.id, { destination_code: to, reason });
+              setDone(res);
+              onMoved?.();
+            } catch (ex) {
+              reportError('hq-team-move', ex);
+              setErr(ex?.message || 'The move was refused.');
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <label className="text-[11px] text-axal-muted">
+            Destination
+            <select className="mt-1 block w-full rounded-md border border-axal-hairline bg-white px-2 py-1 text-[12px] dark:bg-gray-900" value={to} onChange={(e) => setTo(e.target.value)}>
+              {destinations.map((code) => <option key={code} value={code}>{code}</option>)}
+            </select>
+          </label>
+          <label className="text-[11px] text-axal-muted">
+            Reason (at least 10 characters). This changes which subsidiary earns revenue share.
+            <textarea className="mt-1 block w-full rounded-md border border-axal-hairline bg-white px-2 py-1 text-[12px] dark:bg-gray-900" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
+          </label>
+          {err && <p className="text-[11.5px] text-rose-700 dark:text-rose-300">{err}</p>}
+          <button type="submit" disabled={busy || reason.trim().length < 10} className="justify-self-start rounded-md bg-axal-violet px-3 py-1 text-[11.5px] font-bold text-white disabled:opacity-50">
+            {busy ? 'Moving…' : `Move to ${to || '…'}`}
+          </button>
+        </form>
+      )}
+    </li>
+  );
+}
 
 function Chip({ children, tone }) {
   return (
@@ -494,10 +566,13 @@ export default function HqTeamTable({ reloadKey = 0 }) {
           {b.status === 'ok' && (b.data?.results || []).length > 0 && (
             <ul className="mt-1 divide-y divide-axal-hairline">
               {(b.data.results || []).map((hit) => (
-                <li key={hit.id} className="flex items-center justify-between gap-3 py-1.5 text-[12px]">
-                  <span className="truncate text-axal-ink">{hit.name || hit.email}</span>
-                  <span className="shrink-0 text-[11.5px] text-axal-faint">{hit.role} · {Number(hit.is_active) === 1 ? 'active' : 'deactivated'}</span>
-                </li>
+                <MoveHit
+                  key={hit.id}
+                  hit={hit}
+                  from={b.code}
+                  destinations={branches.map((x) => x.code).filter((code) => code && code !== b.code)}
+                  onMoved={load}
+                />
               ))}
             </ul>
           )}
@@ -523,8 +598,9 @@ export default function HqTeamTable({ reloadKey = 0 }) {
           : `Of ${data.branches_coverage?.total ?? branches.length} branches, ${data.branches_coverage?.answered ?? 0} answered.`}
         {' '}
         Moving an account between branches closes it where it lives and re-invites it where it is
-        going — records stay put. It needs two provisioned branches to move between, so there is no
-        control for it here yet rather than one that could only refuse.
+        going — records stay put. Move appears on a branch hit only when another branch code exists.
+        It needs a step-up and TOTP; a refusal names the reason. HQ-held rows have no source branch,
+        so they are not movable from this table.
       </p>
     </Card>
   );
