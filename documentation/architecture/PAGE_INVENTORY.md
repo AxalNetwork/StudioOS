@@ -135,7 +135,7 @@ canvas behind it still shows up here.
 | HQ | Revenue | `/admin/revenue` | — (no canvas; shipped ahead of the design corpus) |
 | HQ | Content | `/admin/content` | — (no canvas; shipped ahead of the design corpus) |
 | HQ | Platform | `/admin/platform` | — (no canvas; shipped ahead of the design corpus) |
-| HQ | Support | `/help` | Support Security · Super |
+| HQ | Support | `/admin/hq-support` | Support Security · Super |
 | HQ | Security | `/admin/security` | Support Security · Super |
 | HQ | Settings | `/account` | — (no canvas; shipped ahead of the design corpus) |
 

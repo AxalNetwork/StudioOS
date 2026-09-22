@@ -152,15 +152,24 @@ test('the deadline is read through the shared UTC normaliser', () => {
     'the page parses a stamp itself instead of using lib/notices.js');
 });
 
-test('the Move control is not drawn, and the page says what a move needs', () => {
-  // Its route needs a SOURCE and a DESTINATION branch code, each a live
-  // binding. With none provisioned the control could only refuse, and D134
-  // already named that: a button the server always rejects teaches the operator
-  // that one of its buttons is a lie.
-  assert.ok(!/accountMove|accounts\/.*\/move|>Move</.test(TEAM),
-    'a Move control is drawn against a route that has no branch to move between');
-  assert.ok(TEAM_RAW.includes('needs two provisioned branches'),
-    'the page neither offers a move nor says why there is none');
+test('Move is drawn only when another branch exists, never on an HQ-held row', () => {
+  // D134: a button the server can only refuse is a lie. The control is real
+  // once two branch codes are in the fan-out; HQ-held rows have no source
+  // branch, so they never grow one.
+  assert.match(TEAM, /destinations\.length > 0/,
+    'Move is not gated on a second branch code');
+  assert.match(TEAM, /hqMoveAccount/,
+    'the control does not call the move route');
+  assert.equal((TEAM.match(/<MoveHit/g) || []).length, 1,
+    'Move is mounted more than once — the HQ-held table must not grow a copy');
+  const mount = TEAM.indexOf('<MoveHit');
+  const hqHeld = TEAM.indexOf('HQ-held ·');
+  assert.ok(hqHeld > 0 && mount > hqHeld,
+    'Move is inside the HQ-held table rather than the branch search');
+  assert.ok(TEAM_RAW.includes('only when another branch code exists'),
+    'the page does not say when Move appears');
+  assert.ok(TEAM_RAW.includes('HQ-held rows have no source branch'),
+    'the page does not say HQ-held rows cannot move');
 });
 
 test('the page composes the three in H9\'s order and keeps the directory', () => {

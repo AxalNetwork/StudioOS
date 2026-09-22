@@ -121,7 +121,8 @@ export const SIDEBAR_GROUPS = {
       // plain-admin Content Queue that reviews one piece at a time.
       { to: '/admin/content', icon: FileStack, label: 'Content' },
       { to: '/admin/platform', icon: SlidersHorizontal, label: 'Platform' },
-      { to: '/help', icon: Inbox, label: 'Support' },
+      // Y1 — three queues, not the shared Help Center. /help stays for every role.
+      { to: '/admin/hq-support', icon: Inbox, label: 'Support' },
       // "Security", not "Governance" (ASSUMPTIONS_LOG A4): the audit log is
       // what someone finds inside, not what they come for.
       { to: '/admin/security', icon: ShieldCheck, label: 'Security' },

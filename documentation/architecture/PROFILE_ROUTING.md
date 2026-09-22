@@ -150,7 +150,7 @@ it, where in their nav, and how do they get there.*
 | Founder Journey Map | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Fund Administration | `/funds/performance` · `/funds/lp-workspace` · `/lp-reports` · `/portfolio/waterfall` | HQ | Full page | Sidebar → HQ → Funds | UPGRADE | High |
 | Funds · Fabric | `/admin/fabric` · `/funds` | HQ | Full page (proposed) | Sidebar → HQ → Funds | NEW | Low |
-| Support Security · Super | `/admin/security` · `/help` | HQ | Full page | Sidebar → HQ → Security | UPGRADE | High |
+| Support Security · Super | `/admin/security` · `/admin/hq-support` · `/help` | HQ | Full page | Sidebar → HQ → Security | UPGRADE | High |
 | Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 
 ## Shell (all workspaces) — 12 canvases
