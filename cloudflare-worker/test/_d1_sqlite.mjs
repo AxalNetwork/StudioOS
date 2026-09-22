@@ -28,7 +28,23 @@ import { DatabaseSync } from 'node:sqlite';
 /**
  * `.run()` reports `meta.changes`, which lpClaim reads to decide whether to
  * log a link. node:sqlite returns `changes` from `run()` directly.
+ *
+ * IT ALSO REPORTS `meta.last_row_id`, and that one was MISSING until D190.
+ * `routes/customer_chat.ts:229` reads it to key the message it is about to
+ * write to the thread it has just created; with the field absent the shim
+ * handed back `undefined`, the message bound a null `thread_id`, and the
+ * write landed nowhere while every call still resolved. That is D187's M6
+ * shape exactly — a restored statement that writes no row — so a shim that
+ * cannot carry the id cannot see the defect it exists to catch. node:sqlite
+ * returns it as `lastInsertRowid`, a BigInt, which Number() narrows.
  */
+function meta(info) {
+  return {
+    changes: Number(info?.changes ?? 0),
+    last_row_id: Number(info?.lastInsertRowid ?? 0),
+  };
+}
+
 function shape(stmt, binds) {
   return {
     async all() {
@@ -39,7 +55,7 @@ function shape(stmt, binds) {
         return { results: stmt.all(...binds), success: true };
       } catch {
         const info = stmt.run(...binds);
-        return { results: [], success: true, meta: { changes: Number(info?.changes ?? 0) } };
+        return { results: [], success: true, meta: meta(info) };
       }
     },
     async first(col) {
@@ -51,10 +67,10 @@ function shape(stmt, binds) {
     async run() {
       try {
         const info = stmt.run(...binds);
-        return { success: true, meta: { changes: Number(info?.changes ?? 0) } };
+        return { success: true, meta: meta(info) };
       } catch {
         // A RETURNING clause makes node:sqlite treat it as a reader.
-        return { success: true, results: stmt.all(...binds), meta: { changes: 0 } };
+        return { success: true, results: stmt.all(...binds), meta: { changes: 0, last_row_id: 0 } };
       }
     },
   };
