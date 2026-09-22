@@ -168,7 +168,7 @@ test('a crafted identity cannot name another bucket', async () => {
     assert.ok(!seen.includes('alice-secret'), `identity ${JSON.stringify(crafted)} reached Alice's bucket`);
   }
   const api = (await w.caches.keys()).filter((k) => k.startsWith('studioos-api-'));
-  assert.deepEqual(api.sort(), ['studioos-api-v17-2026-09-10-8', 'studioos-api-v17-2026-09-10-anon'],
+  assert.deepEqual(api.sort(), ['studioos-api-v18-2026-09-22-8', 'studioos-api-v18-2026-09-22-anon'],
     'a crafted identity created a bucket of its own');
 });
 
@@ -194,11 +194,25 @@ test('activate keeps this build\'s per-account buckets and drops every older one
   await w.activate();
 
   const left = (await w.caches.keys()).sort();
-  assert.ok(left.includes('studioos-api-v17-2026-09-10-8'), "activate deleted an account's live bucket");
-  assert.ok(left.includes('studioos-api-v17-2026-09-10-9'), "activate deleted an account's live bucket");
+  assert.ok(left.includes('studioos-api-v18-2026-09-22-8'), "activate deleted an account's live bucket");
+  assert.ok(left.includes('studioos-api-v18-2026-09-22-9'), "activate deleted an account's live bucket");
   assert.ok(!left.includes('studioos-api-v16-2026-09-10'),
     'the shared bucket from the previous build survived — every browser keeps reading it');
   assert.ok(!left.includes('studioos-static-v9-old'), 'a stale static cache survived');
+});
+
+test('a navigation is left to the browser', async () => {
+  // Returning the trailing-slash 307 for /login from respondWith crashes
+  // Safari's web process in a loop. The worker has to stand aside so the
+  // browser follows that redirect itself.
+  const w = loadWorker();
+  let responded = false;
+  w.handlers.fetch({
+    request: { method: 'GET', url: 'https://axal.vc/login/', mode: 'navigate' },
+    respondWith: () => { responded = true; },
+    waitUntil: () => {},
+  });
+  assert.equal(responded, false, 'the worker intercepted a navigation');
 });
 
 test('sign-out drops the buckets, and the page is what does it', async () => {
