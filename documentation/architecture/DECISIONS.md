@@ -16974,3 +16974,172 @@ declaration would then be present.
 
 **Migration 276. No `frontend/src` change, so no `docs/` rebuild. No new
 `/api/*` method.**
+
+## D189 — `users` is full, so account recovery returned a 500 on every layer that mints a session
+
+D188's guard put 59 previously-invisible gaps on a reviewed ledger. Reading
+that ledger back — which is what a ledger is for — found something worse than
+the eight missing tables it was built to surface, and it was **live in
+production**.
+
+### The defect
+
+`060_auth_recovery.sql:53,57` declares two columns on `users`:
+
+```sql
+ALTER TABLE users ADD COLUMN recovery_cooling_off_until TIMESTAMP;
+ALTER TABLE users ADD COLUMN recovery_step_up_due_at TIMESTAMP;
+```
+
+**Neither could ever succeed.** `users` is at D1's hard 100-column cap —
+measured three ways on 2026-09-22: production `pragma_table_info('users')` =
+**100**, a fresh local build = **100**, and
+`cloudflare-worker/src/util/schemaBootstrap.ts`'s header already recorded the
+same figure against production on 2026-09-04. And 060 sits below
+`BASELINE_CUTOFF = 219`, so `migrate-d1 --bootstrap` **marks it applied
+without running it**; the ledger has said "applied" since the day the file
+landed while no environment has ever had the columns.
+
+`setCoolOffAndAssurance` (`routes/auth_recover.ts:276-293`) then ran, with no
+try/catch, at **all four** of its call sites — `:425` backup-code, `:526`
+sms/verify, `:610` email/verify, `:783` claim. That is **every layer that
+mints a recovery session**. An UPDATE naming a missing column **throws**,
+unlike the `SELECT *` that made D187's and D188's defects silent, so a user
+who had lost their authenticator reached the last step of every route and got
+a **500**.
+
+**Two things make it worse than a plain 500.** On the backup-code layer the
+single-use code is consumed at `:409`, *before* the throw at `:292`, so the
+user spends a code and gets nothing. And `settings.ts:563,587` name the column
+in a **SELECT**, so `/totp/re-enrol/start` and `/confirm` — the remediation
+path that exists precisely for someone who lost their authenticator — threw
+too. You could not recover, and you could not re-enrol.
+
+**The codebase half-knew.** `auth.ts:394` preferred the session-scoped
+deadline in prose *"because the `users.recovery_step_up_due_at` column is
+unapplied/broken in prod (060)"* — so somebody defended the **read** and left
+the **write** unguarded. A comment is not a check, for the third time in three
+decisions.
+
+### The same cap, a third column
+
+`053_notifications_center.sql` declares `users.marketing_unsubscribed_at`, and
+`routes/notifications.ts:51` carried a lazy `ALTER TABLE users ADD COLUMN`
+inside `catch { /* idempotent */ }` on the theory that it would self-heal a
+database where 053 had not landed. It cannot: SQLite checks the column-count
+limit in `sqlite3AddColumn()` **before** the duplicate-name check, so on a
+full table the ALTER fails whatever the column's state. Its catch swallowed
+that, the UPDATE on the next line failed too, and `applyMarketingUnsub`'s
+outer catch swallowed that — so **an unsubscribe from marketing email recorded
+nothing** while answering the reader as though it had worked. That is
+compliance-adjacent rather than cosmetic. `services/email/send.ts:117` read
+the same column inside a try, so marketing suppression has always **failed
+open**.
+
+**It was invisible locally because `node:sqlite` has no column cap.** A fresh
+local build applies every one of these ALTERs happily. Local succeeds,
+production fails — the same asymmetry as D188's eleventh column.
+
+### What lands
+
+Migration **277** creates `user_recovery_state` and `user_marketing_prefs`,
+side tables keyed by `user_id`, on the `super_admins` precedent (199, D35) and
+`user_advisor_extras` (276, D188). Every writer and reader repoints.
+
+**The `LEFT JOIN` was ruled out by the code, not by preference.**
+`auth.ts:311-313` already records that **D1 rejects a result set wider than
+100 columns**, which is why `mi_pro_subscriptions` is hydrated by a keyed
+lookup rather than joined. `SELECT u.*, r.cooling_off_until, r.step_up_due_at`
+would be 102 columns wide. So the small keyed lookup is the only available
+shape, and it goes beside the two that are already there for the same reason.
+
+**The hydration keeps the OLD property names**, deliberately:
+`middleware/recoveryCoolOff.ts:20`, the step-up check at `auth.ts:453` and
+`routes/auth.ts:1022-1023` all read `user.recovery_cooling_off_until` /
+`user.recovery_step_up_due_at`, and hydrating under those names is what lets
+all three stay byte-for-byte unchanged. It is best-effort like its two
+siblings: a database without 277 leaves both undefined, which is exactly
+today's behaviour, where a throw would 500 **every authenticated request**.
+
+**The write stays unguarded, on purpose.** Now that the store exists, a
+failure means the cool-off was not recorded — and a recovery session that
+silently skips its own 24-hour cool-off is worse than a 500, because the
+caller is about to mint full assurance on the strength of it.
+
+**`settings.ts:626`'s atomicity is preserved rather than traded away.** D165
+argued that clearing the step-up nag and bumping `jwt_min_iat` move together
+in ONE statement because the intermediate state is exactly what that write
+exists to leave behind. The two halves now live in two tables, so the single
+statement is gone — `DB.batch` runs them as one transaction instead, which
+keeps the property. Splitting it into two awaits would reintroduce the window
+D165 closed.
+
+### The user-visible behaviour change, stated because it is the one in here
+
+**After this deploys a recovered account behaves differently.** The 24-hour
+cool-off starts being enforced by `middleware/recoveryCoolOff.ts` on sensitive
+routes, and the 7-day step-up deadline starts firing the auto-relock in
+`getCurrentUser()`, prompting a fresh TOTP re-enrolment. Neither has ever run
+in production, so the first person to recover after this ships is the first
+person it has ever happened to. That is Task #50's design working as written —
+and it is new.
+
+D188 filed this pair as *"a security-behaviour change"* and deferred it on
+that basis. **That reasoning assumed the alternative was leaving a dormant
+feature dormant. It was not:** the alternative was leaving account recovery
+returning a 500 on all four layers, and the narrow fix — a try/catch around
+the UPDATE — would have recorded the cool-off nowhere, which is a silent
+weakening rather than a neutral deferral.
+
+*To reverse after the fact: keep the stores and the writes, and make
+`auth.ts:453` prefer the session-scoped deadline alone. One condition, no
+migration; the cool-off stays recorded and enforced while only the forced
+re-enrolment goes back to sleep.*
+
+### The reproduction is paired, and the durable assertion is the sweep
+
+`cloudflare-worker/test/user_column_cap_d189.test.ts` is the **first
+behavioural test this surface has ever had** — `grep -l auth_recover` over
+both test trees returned nothing, which is why an eight-hundred-line recovery
+flow shipped a 500 on every layer.
+
+Two layers run END TO END against a real `node:sqlite` build from
+`schema_baseline.sql` plus every post-cutoff migration, each **twice**: once
+without 277, where it must 500 the way production did, and once with it, where
+it must complete and the cool-off must be readable afterwards. They are not an
+arbitrary pair — `/backup-code` and `/email/verify` are the two branches of
+`setCoolOffAndAssurance`'s only varying argument (`full` and `email_only`), so
+between them they cover the helper. `/sms/verify` needs a live GCIP
+verification and `/claim` a co-signed ticket, so neither is drivable; a
+structural assertion that **all four call sites invoke that one helper with a
+bare `await`** is what extends the two proofs to four, and the test says so
+rather than claiming four.
+
+**The durable half is the runtime-ALTER sweep.**
+`check-migration-declarations` (D188) reads `sql/migrations/` and nothing
+else, so an `ALTER TABLE users ADD COLUMN` issued at **runtime** is invisible
+to it — which is exactly how the marketing-unsubscribe ALTER went on failing
+for a year. Nothing covered that until now.
+
+**And the sweep's first run caught its author.** It flagged
+`routes/notifications.ts` for an ALTER living in the docblock **explaining why
+the ALTER was removed** — the rule matching its own documentation. That is the
+fourth time in this programme a lexical scan has been unable to tell a rule
+from the thing it forbids, and the failure mode runs the dangerous way: a
+guard that fires on its own prose gets loosened, and the loosening is what
+lets the real instance through. It strips comments with `codeOnly()` now.
+
+### Four corrections to D188's own ledger, made before this was built
+
+Reading the ledger back is what found all of this, and four of its reasons
+were wrong. `users.marketing_unsubscribed_at` said the column *"self-heals the
+first time that route is hit"* and that production's absence *"means that
+route has never once been hit"* — **both halves false**, for the cap reason
+above. The two 060 entries cited only the security-behaviour argument and
+never mentioned the cap, so a reader would have tried a twelfth `ADD COLUMN`
+and failed the deploy. And `users.advisor_extras_json` called itself *"the one
+declaration in the tree that is dead by a platform limit"* — there are
+**four**. Corrected in `91470e6d3`, on #705, before it merged.
+
+**Migration 277. No `frontend/src` change, so no `docs/` rebuild. No new
+`/api/*` method.**

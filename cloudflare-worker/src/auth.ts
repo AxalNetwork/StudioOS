@@ -335,6 +335,44 @@ export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<Use
     } catch (e) {
       console.warn('[auth] mi_pro_subscriptions hydrate failed', (e as Error).message);
     }
+    // D189 — the two post-recovery deadlines live in `user_recovery_state`
+    // for the SAME reason as MI Pro above, and it is worth stating because it
+    // rules out the obvious alternative: a `LEFT JOIN` would make the result
+    // set 102 columns wide and D1 rejects any result wider than 100, so the
+    // small keyed lookup is not a preference here, it is the only shape.
+    //
+    // `060_auth_recovery.sql:53,57` declared these as columns on `users` and
+    // they could NEVER land — `users` is at the 100-column cap, measured at
+    // 100 in production on 2026-09-22 and 100 on a fresh build. 060 is below
+    // BASELINE_CUTOFF, so a bootstrap MARKED it applied without running it,
+    // and the ledger has said "applied" ever since while no environment has
+    // ever had the columns. Migration 277 moves the fact to a side table.
+    //
+    // THE KEY NAMES ARE THE OLD COLUMN NAMES, deliberately. Three readers ask
+    // for them off this object — middleware/recoveryCoolOff.ts, the step-up
+    // check below, and routes/auth.ts's /me payload — and hydrating under the
+    // same names is what lets all three stay byte-for-byte unchanged. They
+    // hold ISO-8601 and every one of those readers compares them in
+    // JavaScript, never in SQL; see 277's header before writing a predicate.
+    //
+    // Best-effort like its two siblings: a database that has not applied 277
+    // leaves both undefined, which is exactly today's behaviour — the
+    // session-scoped deadline below carries the load, and the cool-off simply
+    // does not fire. A throw here would 500 every authenticated request.
+    try {
+      const rec = await c.env.DB.prepare(
+        'SELECT cooling_off_until, step_up_due_at FROM user_recovery_state WHERE user_id = ?'
+      ).bind(payload.user_id).first<{
+        cooling_off_until: string | null; step_up_due_at: string | null;
+      }>();
+      const ru = u as User & {
+        recovery_cooling_off_until?: string | null; recovery_step_up_due_at?: string | null;
+      };
+      ru.recovery_cooling_off_until = rec?.cooling_off_until ?? null;
+      ru.recovery_step_up_due_at = rec?.step_up_due_at ?? null;
+    } catch (e) {
+      console.warn('[auth] user_recovery_state hydrate failed', (e as Error).message);
+    }
     // The Super Admin elevation lives in the `super_admins` side table for the
     // same 100-column reason (migration 199). Hydrated for every request so
     // `isSuperAdmin` reads the table's answer and never a column: a database
@@ -390,8 +428,24 @@ export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<Use
     // strong factor. Once that deadline elapses without re-enrolment, every
     // subsequent request returns 401 EXCEPT the narrow re-enrol surface and
     // the logout endpoint. This is the "auto-relock" enforcement. We prefer
-    // the SESSION-scoped deadline (user_sessions.step_up_due_at) because the
-    // users.recovery_step_up_due_at column is unapplied/broken in prod (060).
+    // the SESSION-scoped deadline (user_sessions.step_up_due_at); the second
+    // operand is now the `user_recovery_state` row hydrated above.
+    // CORRECTED, D189 — this comment used to say the fallback existed
+    // "because the users.recovery_step_up_due_at column is unapplied/broken
+    // in prod (060)". That was true and understated: the column could never
+    // land, `users` being at D1's 100-column cap, and it is now a side table
+    // (migration 277). The preference order is KEPT rather than removed —
+    // D111's narrow-don't-delete — because the session-scoped deadline is
+    // still the belt to this store's braces: it survives a `user_recovery_state`
+    // read that fails, and it is per-session where this is per-account.
+    //
+    // THIS IS A LIVE BEHAVIOUR CHANGE AND IT IS THE POINT. Until 277 the
+    // second operand was always undefined, so the auto-relock only ever fired
+    // for sessions that carried their own deadline. It now also fires for an
+    // account whose recovery recorded one, which is what Task #50 designed
+    // and what has never run in production. To put it back to sleep without
+    // undoing anything: prefer `sessionStepUpDue` alone on the next line. The
+    // cool-off stays recorded and enforced either way.
     // NOTE: the relock allowlist below currently exposes ONLY the TOTP re-enrol
     // surface — passkey enrolment (/api/auth/passkey/*) is intentionally not a
     // relock-recovery path yet, so a relocked user recovers via TOTP, then can
@@ -968,7 +1022,8 @@ export function jwtMinIatFloor(): number {
  *   routes/admin_security.ts  POST /api/admin/security/force-reauth/:userId
  *
  * ONE SITE DELIBERATELY DOES NOT CALL IT — the post-recovery TOTP re-enrolment
- * in `settings.ts`, which clears `recovery_step_up_due_at` and writes this floor
+ * in `settings.ts`, which clears `user_recovery_state.step_up_due_at` and writes
+ * this floor
  * in ONE statement. Splitting that into two writes to reuse this helper would
  * open a window where the step-up nag is cleared and the lower-assurance session
  * is still valid. It shares `jwtMinIatFloor()` instead, and says so in place.

@@ -547,7 +547,8 @@ settings.post('/email-change/revoke', async (c) => {
 /**
  * Task #50 — Fresh TOTP re-enrolment path that does NOT require an
  * existing TOTP code. Eligibility: the caller must be on a session
- * minted via recovery (i.e. users.recovery_step_up_due_at IS NOT NULL).
+ * minted via recovery (i.e. user_recovery_state.step_up_due_at IS NOT NULL;
+ * D189 moved it off `users`, which is at D1's 100-column cap).
  * This unblocks the "I lost my authenticator → recover via email magic
  * → re-pair within 7 days" loop. /totp/repair still exists for users
  * who have a working code and want to swap secrets.
@@ -560,9 +561,9 @@ settings.post('/totp/re-enrol/start', async (c) => {
   await ensureSchema(c.env);
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
-  const row = await sql`SELECT recovery_step_up_due_at FROM users WHERE id = ${user.id}`;
+  const row = await sql`SELECT step_up_due_at FROM user_recovery_state WHERE user_id = ${user.id}`;
   await sql.end();
-  if (!row.length || !row[0].recovery_step_up_due_at) {
+  if (!row.length || !row[0].step_up_due_at) {
     return c.json({ error: 'not_eligible', message: 'Fresh re-enrol is only available after account recovery. Use /totp/repair if you still have a working authenticator.' }, 403);
   }
   const secret = new Secret();
@@ -584,8 +585,8 @@ settings.post('/totp/re-enrol/confirm', async (c) => {
   const code = clampStr(body?.totp_code, 12);
   if (!proposedSecret || !code) return c.json({ error: 'totp_secret and totp_code required' }, 400);
   const sql = getSQL(c.env);
-  const row = await sql`SELECT recovery_step_up_due_at FROM users WHERE id = ${user.id}`;
-  if (!row.length || !row[0].recovery_step_up_due_at) {
+  const row = await sql`SELECT step_up_due_at FROM user_recovery_state WHERE user_id = ${user.id}`;
+  if (!row.length || !row[0].step_up_due_at) {
     await sql.end();
     return c.json({ error: 'not_eligible' }, 403);
   }
@@ -622,10 +623,26 @@ settings.post('/totp/re-enrol/confirm', async (c) => {
   // the `+1`, so the session minted at recovery time survived if it was minted
   // in the same second as its own invalidation.
   const nowSec = jwtMinIatFloor();
-  await sql`UPDATE users
-            SET recovery_step_up_due_at = NULL,
-                jwt_min_iat = ${nowSec}
-            WHERE id = ${user.id}`;
+  // D189 — THE TWO HALVES NOW LIVE IN TWO TABLES, AND THE BATCH IS WHAT KEEPS
+  // D165'S GUARANTEE TRUE. The note above argues these move together in ONE
+  // statement because clearing the step-up nag while the lower-assurance
+  // session is still valid is exactly the state this write exists to leave
+  // behind. `recovery_step_up_due_at` is no longer a column on `users` — it
+  // could never be one, `users` being at D1's 100-column cap, and migration
+  // 277 moved it to `user_recovery_state` — so the single statement is not
+  // available any more. `DB.batch` runs its statements as one transaction,
+  // which preserves the property rather than trading it away for a tidier
+  // diff. Splitting this into two awaits would reintroduce exactly the window
+  // D165 closed.
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO user_recovery_state (user_id, step_up_due_at, updated_at)
+       VALUES (?, NULL, datetime('now'))
+       ON CONFLICT(user_id) DO UPDATE SET step_up_due_at = NULL,
+                                          updated_at     = datetime('now')`,
+    ).bind(user.id),
+    c.env.DB.prepare(`UPDATE users SET jwt_min_iat = ? WHERE id = ?`).bind(nowSec, user.id),
+  ]);
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
             VALUES ('totp_reenrolled_post_recovery',
                     'Fresh authenticator paired after recovery; old session signed out',
@@ -719,9 +736,9 @@ settings.post('/totp/enrol/confirm', async (c) => {
   }
   const sql = getSQL(c.env);
   // Defensive: also clear the user-level relock deadline (getCurrentUser reads
-  // session step_up_due_at || users.recovery_step_up_due_at; re-enrol clears
+  // session step_up_due_at || user_recovery_state.step_up_due_at; re-enrol clears
   // this too).
-  try { await sql`UPDATE users SET recovery_step_up_due_at = NULL WHERE id = ${user.id}`; } catch {}
+  try { await sql`UPDATE user_recovery_state SET step_up_due_at = NULL, updated_at = datetime('now') WHERE user_id = ${user.id}`; } catch {}
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
             VALUES ('totp_enrolled', 'Authenticator app enrolled (first-time, optional TOTP)', ${user.email}, ${user.id})`;
   await sql.end();
@@ -781,7 +798,7 @@ settings.post('/totp/repair', async (c) => {
   // (the spec ties it to time, not factor enrolment) but the auto-
   // relock guard in getCurrentUser() now stops firing.
   try {
-    await sql`UPDATE users SET recovery_step_up_due_at = NULL WHERE id = ${user.id}`;
+    await sql`UPDATE user_recovery_state SET step_up_due_at = NULL, updated_at = datetime('now') WHERE user_id = ${user.id}`;
   } catch {}
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
             VALUES ('totp_repaired', 'User re-paired TOTP from /settings; all sessions invalidated',
