@@ -264,9 +264,36 @@ export function AdminStudioOverview({ user, home, licence, templates, insights }
               </Unrecorded>
             )}
             {' · '}
-            <Unrecorded reason="No brand kit is recorded. Mark, colours and the powered-by line have no store yet, and HQ does not approve one. This card does not offer a form.">
-              Brand kit not recorded
-            </Unrecorded>
+            {/* D198 — THE FIFTH STALE REFUSAL THIS PROGRAMME HAS HAD TO
+                CORRECT, and it read "Mark, colours and the powered-by line have
+                no store yet". Migration 281 gave the mark and the colours one;
+                the powered-by line still has none, and that half stays true
+                because nothing in the shell renders a platform credit at all.
+                The three states mirror the hostname block above them for the
+                same reason they exist there: unread, unreadable and absent are
+                three different claims. The fourth — "a kit does not apply" — is
+                new here, because only a white-label licence has one. */}
+            {!lic ? (
+              <Unrecorded reason="The licence was not read, so whether a brand kit is recorded is unknown rather than none.">
+                Brand kit not read
+              </Unrecorded>
+            ) : lic.kind !== 'white_label' ? (
+              <Unrecorded reason="This is an Axal subsidiary, so it trades under Axal’s brand. That brand is fixed and is not stored per licence — only a white-label has a kit of its own.">
+                Brand kit not applicable
+              </Unrecorded>
+            ) : lic.brand_kit_available === false ? (
+              <Unrecorded reason={lic.brand_kit_reason}>Brand kit not readable</Unrecorded>
+            ) : lic.brand_kit?.primary_hex ? (
+              <span data-testid="studio-brand-kit">
+                Brand kit <b>{lic.brand_kit.primary_hex}</b>
+                {lic.brand_kit.accent_hex ? ` · ${lic.brand_kit.accent_hex}` : ''}
+                {lic.brand_kit.mark_url ? ' · mark uploaded' : ' · no mark'}
+              </span>
+            ) : (
+              <Unrecorded reason="The brand-kit store was read and this white-label licence has no colours set. Super Admin captures them on the licence’s Brand kit tab; this card does not offer a form.">
+                Brand kit not recorded
+              </Unrecorded>
+            )}
           </p>
         </Card>
       </div>

@@ -425,14 +425,69 @@ function parseContentJson(raw: unknown): Record<string, any> {
 
 const HEX_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 const FONT_PAIRING_IDS = new Set(['editorial', 'modern', 'humanist', 'classic']);
-const cleanHex = (v: unknown): string | null =>
+// EXPORTED FOR D198. `routes/admin_licences.ts` validates a white-label's
+// brand colours with this rather than declaring a second hex validator — the
+// rule `frontend/src/lib/README.md` states for the SPA and this file follows
+// here. Note what it admits: `#rgb` as well as `#rrggbb`, both lowercased.
+// Both are valid CSS, and normalising case is not coercion — an input that
+// matches neither returns null, and the caller REFUSES rather than defaulting.
+export const cleanHex = (v: unknown): string | null =>
   (typeof v === 'string' && HEX_RE.test(v.trim())) ? v.trim().toLowerCase() : null;
 const cleanFontPairing = (v: unknown): string | null =>
   (typeof v === 'string' && FONT_PAIRING_IDS.has(v.trim())) ? v.trim() : null;
 
-const ALLOWED_LOGO_MIME = new Set(['image/png', 'image/jpeg', 'image/svg+xml']);
-const LOGO_MAX_BYTES = 512 * 1024;
+export const ALLOWED_LOGO_MIME = new Set(['image/png', 'image/jpeg', 'image/svg+xml']);
+export const LOGO_MAX_BYTES = 512 * 1024;
 const LOGO_INLINE_MAX_BYTES = 200 * 1024;
+
+/**
+ * The multipart read, the MIME allowlist, the size cap and the SVG
+ * sanitisation, as ONE function — because D198 needs all four for a licence's
+ * brand mark and re-implementing them beside a second R2 write is how two
+ * upload paths come to disagree about what they accept.
+ *
+ * WHAT IT DELIBERATELY DOES NOT DO, and this is the whole reason it is a
+ * helper rather than a shared route: it does not gate and it does not choose a
+ * key. `/logo/upload` below is `requireAuth` — ANY authenticated user — and
+ * keys by the UPLOADER (`brand-logos/<user.id>/…`); D198's mark is on the
+ * super-admin write bar and keys by the LICENCE. Those are the two halves that
+ * must differ, so they stay at the call sites.
+ *
+ * Returns the bytes to store and the type to store them as, or a refusal
+ * carrying the code and status its caller should answer with.
+ */
+export async function readUploadedMark(
+  form: FormData,
+): Promise<
+  | { ok: true; bytes: Uint8Array; mime: string }
+  | { ok: false; error: string; status: 400 }
+> {
+  const file = form.get('file');
+  if (!file || typeof (file as unknown as { arrayBuffer?: unknown }).arrayBuffer !== 'function') {
+    return { ok: false, error: 'no_file', status: 400 };
+  }
+  const f = file as unknown as { name?: string; type?: string; arrayBuffer(): Promise<ArrayBuffer> };
+  const mime = String(f.type || '').trim();
+  if (!ALLOWED_LOGO_MIME.has(mime)) return { ok: false, error: 'invalid mime type', status: 400 };
+
+  const raw = new Uint8Array(await f.arrayBuffer());
+  if (raw.length === 0) return { ok: false, error: 'empty data', status: 400 };
+  if (raw.length > LOGO_MAX_BYTES) return { ok: false, error: 'file too large', status: 400 };
+
+  // Sanitise SVG BEFORE any storage path. For non-SVG uploads the raw bytes
+  // are kept as-is; for SVG the sanitised text replaces them, so stored bytes
+  // never carry a script payload.
+  if (mime === 'image/svg+xml') {
+    const svgSanitized = sanitizeSvg(new TextDecoder().decode(raw));
+    if (!svgSanitized) return { ok: false, error: 'svg failed sanitization', status: 400 };
+    return { ok: true, bytes: new TextEncoder().encode(svgSanitized), mime };
+  }
+  return { ok: true, bytes: raw, mime };
+}
+
+/** The file extension the allowlist's three types are stored under. */
+export const markExtension = (mime: string): string =>
+  mime === 'image/png' ? 'png' : mime === 'image/jpeg' ? 'jpg' : 'svg';
 
 // WCAG relative luminance for a hex color (sRGB, 8-bit).
 function luminance(hex: string): number {
@@ -884,28 +939,12 @@ brand.post('/logo/upload', async (c) => {
     return c.json({ error: 'expected_multipart' }, 400);
   }
   const form = await c.req.formData();
-  const file = form.get('file');
-  if (!file || typeof (file as unknown as { arrayBuffer?: unknown }).arrayBuffer !== 'function') {
-    return c.json({ error: 'no_file' }, 400);
-  }
-  const f = file as unknown as { name?: string; type?: string; arrayBuffer(): Promise<ArrayBuffer> };
-  const mime = String(f.type || '').trim();
-  if (!ALLOWED_LOGO_MIME.has(mime)) return c.json({ error: 'invalid mime type' }, 400);
-
-  const raw = new Uint8Array(await f.arrayBuffer());
-  if (raw.length === 0) return c.json({ error: 'empty data' }, 400);
-  if (raw.length > LOGO_MAX_BYTES) return c.json({ error: 'file too large' }, 400);
-
-  // Sanitise SVG before any storage path. For non-SVG uploads the raw bytes
-  // are kept as-is; for SVG we overwrite with the sanitised text so that
-  // stored bytes never carry a script payload.
-  let logoBytes: Uint8Array = raw;
-  if (mime === 'image/svg+xml') {
-    const text = new TextDecoder().decode(raw);
-    const svgSanitized = sanitizeSvg(text);
-    if (!svgSanitized) return c.json({ error: 'svg failed sanitization' }, 400);
-    logoBytes = new TextEncoder().encode(svgSanitized);
-  }
+  // D198 — THE FIRST CALLER OF THE SHARED HELPER. The four rules it applies
+  // (multipart read, MIME allowlist, 512 KB cap, SVG sanitisation) are
+  // unchanged from what this handler did inline; only their home moved.
+  const read = await readUploadedMark(form);
+  if (!read.ok) return c.json({ error: read.error }, read.status);
+  const { bytes: logoBytes, mime } = read;
 
   // Safe base64 without spreading potentially large Uint8Arrays (avoids
   // "Maximum call stack size exceeded" on engines with small argument limits).
@@ -920,7 +959,7 @@ brand.post('/logo/upload', async (c) => {
 
   const files = c.env.FILES;
   if (files) {
-    const key = `brand-logos/${user.id}/${crypto.randomUUID()}.${mime === 'image/png' ? 'png' : mime === 'image/jpeg' ? 'jpg' : 'svg'}`;
+    const key = `brand-logos/${user.id}/${crypto.randomUUID()}.${markExtension(mime)}`;
     try {
       await files.put(key, logoBytes, {
         httpMetadata: { contentType: mime },

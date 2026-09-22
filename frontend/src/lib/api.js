@@ -1974,6 +1974,30 @@ export const api = {
     request(`/admin/licences/${encodeURIComponent(uid)}/domain/detach`, {
       method: 'POST', body: JSON.stringify({ reason }),
     }),
+  // D198 — the white-label brand kit. All three are HQ's, on the super-admin
+  // write bar, because a licence is issued before any administrator is named
+  // on it (D134) — so at issue time there is nobody else to type the kit. HQ
+  // CAPTURES it; H26 is explicit that HQ does not approve it.
+  //
+  // THERE IS NO READ METHOD HERE EITHER, for D197's reason one table over: the
+  // kit rides the licence payload the console has already fetched. The mark's
+  // BYTES are a different thing from the kit's fields — they come back from
+  // `brand_kit.mark_url` as a plain `<img src>`, which is a gated R2 stream
+  // rather than a signed one-time token, because a one-time URL 404s the
+  // second time a page renders it.
+  licenceBrandSet: (uid, data) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/brand`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  licenceBrandMarkUpload: (uid, file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return request(`/admin/licences/${encodeURIComponent(uid)}/brand/mark`, {
+      method: 'POST', body: fd,
+    });
+  },
+  licenceBrandMarkRemove: (uid) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/brand/mark`, { method: 'DELETE' }),
   // Task #14 — forward signed PDF to legal partner(s).
   adminForwardContract: (id, data) =>
     request(`/legal/esign/${id}/forward`, { method: 'POST', body: JSON.stringify(data) }),

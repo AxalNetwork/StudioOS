@@ -168,14 +168,34 @@ test('the domain strip reads the store, and HQ\'s only control is Detach (D197)'
     'the strip stopped saying the records are the tenant\'s');
 });
 
-test('the brand kit reads as unrecorded, not as Axal’s brand', () => {
-  // #307 builds the brand-kit store. Rendering Axal's mark for a white-label
-  // would be the one claim this block exists to avoid making.
-  const kit = block('licence-brand-kit', '</div>');
-  const nulls = (kit.match(/value=\{null\}/g) || []).length;
-  assert.ok(nulls >= 3, `the brand kit fabricated a value: only ${nulls} fields read as unrecorded`);
+test('the brand kit is drawn only for a white-label, and still says whose mark it is', () => {
+  // RE-AIMED BY D198, AND THE TENTH INSTANCE OF THE CLASS. This asserted
+  // `nulls >= 3` — that at least three of the block's fields read as
+  // unrecorded — because when D196 shipped there was no store behind any of
+  // them. Migration 281 built one, so the assertion pinning their absence
+  // became the thing preventing the fix. A guard that pins a REFUSAL has to
+  // move the day the refusal stops being true.
+  //
+  // What did NOT change is the claim the block exists to avoid making, so that
+  // is what it asserts now: a white-label's mark is theirs, HQ does not approve
+  // it, and the whole block is drawn only for the kind that has one. Bounded
+  // to the heading and its own intro paragraph — the block now contains four
+  // further testids, so `</div>` would reach into a neighbour's.
+  const kit = block('licence-brand-kit', '</p>');
   assert.match(kit, /A white-label operator sets their own mark\. HQ does not approve it\./,
     'the brand kit stopped saying whose mark it is');
+
+  // THE GATE, ASSERTED AS A GATE. H26: "Unique to this kind · an Axal
+  // subsidiary never sees this step." Both halves are load-bearing — the tab
+  // is what an operator clicks, and the mount is what decides what renders.
+  assert.match(SRC, /\{d\.kind === 'white_label' && \(\s*<button[\s\S]{0,200}?data-testid="licence-brand-tab"/,
+    'the Brand kit tab is drawn for every licence, which H26 forbids in its own words');
+  assert.match(SRC, /step === BRAND_STEP && d\.kind === 'white_label'/,
+    'the brand-kit editor mounts without re-checking the kind');
+  // And the step is UNNUMBERED: a numbered step only some licences have would
+  // renumber the flow per licence, which two other files pin as six.
+  assert.doesNotMatch(SRC, /const STEPS = \[[^\]]*Brand/,
+    'the brand kit became a numbered step, which renumbers the flow per licence');
 });
 
 test('the brand-desk refusal is NARROWED, not deleted', () => {

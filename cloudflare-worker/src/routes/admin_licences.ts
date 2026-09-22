@@ -69,6 +69,10 @@ import { pushLicenceToBranch } from '../services/licencePush';
 // behind an admin gate.
 import { domainPayload, type LicenceDomainRow } from '../services/licenceDomain';
 import { logAdminAction } from '../services/adminAudit';
+// D198 — the brand kit's upload rules and its hex validator are `brand.ts`'s,
+// reused rather than declared a second time. What is NOT shared is the gate
+// and the key; see the brand-kit block below.
+import { cleanHex, markExtension, readUploadedMark } from './brand';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -93,6 +97,37 @@ export type LicenceRow = {
    *  arrives without a query change; before 279 it was undefined on every row. */
   kind: string;
 };
+
+/** D198 — migration 281's row. One per licence, white-label only. */
+export type LicenceBrandKitRow = {
+  id: number; licence_id: number;
+  mark_r2_key: string | null; mark_mime: string | null; mark_bytes: number | null;
+  primary_hex: string | null; accent_hex: string | null;
+  updated_by_user_id: number | null; created_at: string; updated_at: string;
+};
+
+/**
+ * What a brand kit looks like on the wire. THE R2 KEY NEVER CROSSES — the
+ * client gets a route to fetch the mark FROM, not the object's address in a
+ * bucket it cannot reach. `mark_url` is null when no mark has been uploaded,
+ * which is a different state from "no kit at all" (`brand_kit: null`) and from
+ * "the store could not be read" (`brand_kit_available: false`); all three
+ * render differently, which is the whole reason they are three fields.
+ */
+export function brandKitPayload(uid: string, row: LicenceBrandKitRow) {
+  return {
+    primary_hex: row.primary_hex,
+    accent_hex: row.accent_hex,
+    mark_url: row.mark_r2_key ? `/api/admin/licences/${encodeURIComponent(uid)}/brand/mark` : null,
+    mark_mime: row.mark_mime,
+    mark_bytes: row.mark_bytes,
+    updated_at: row.updated_at,
+  };
+}
+
+/** The sentence every reader of an unreadable kit store prints. Said once. */
+const KIT_UNREADABLE =
+  'The brand-kit store could not be read on this database (migration 281).';
 
 /** What each notice kind is called in the mail. The CHECK's four values are
  *  machine words; this is the sentence the addressee reads. */
@@ -222,6 +257,26 @@ export async function hydrate(env: Env, rows: LicenceRow[]) {
     domainsReadable = false;
   }
 
+  // D198 — THE KIT RIDES THE SAME PAYLOAD, and for the same reason the host
+  // does: H26's step is a tab on a licence the console has already fetched, so
+  // a second `api.js` read method would buy nothing. Its own try/catch, D197's
+  // idiom one table over, because a database without migration 281 has no kit
+  // store and "this licence has no kit" is a different claim from "we could
+  // not look" — one is a fact about the licence, the other about the database.
+  const kits = new Map<number, LicenceBrandKitRow>();
+  let kitsReadable = true;
+  try {
+    const found = await env.DB.prepare(
+      `SELECT id, licence_id, mark_r2_key, mark_mime, mark_bytes, primary_hex, accent_hex,
+              updated_by_user_id, created_at, updated_at
+         FROM licence_brand_kits WHERE licence_id IN (${placeholders})`,
+    ).bind(...ids).all<LicenceBrandKitRow>();
+    for (const k of found.results || []) kits.set(Number(k.licence_id), k);
+  } catch (e) {
+    console.warn('[licences] licence_brand_kits unreadable', (e as Error).message);
+    kitsReadable = false;
+  }
+
   const byLicence = new Map<number, { territories: string[]; seats: Record<string, number> }>();
   for (const l of rows) byLicence.set(l.id, { territories: [], seats: {} });
   for (const t of terr.results || []) byLicence.get(t.licence_id)?.territories.push(t.country_code);
@@ -243,6 +298,9 @@ export async function hydrate(env: Env, rows: LicenceRow[]) {
       domain_reason: domainsReadable
         ? null
         : 'The host register could not be read on this database (migration 280).',
+      brand_kit: kitsReadable && kits.get(l.id) ? brandKitPayload(l.uid, kits.get(l.id)!) : null,
+      brand_kit_available: kitsReadable,
+      brand_kit_reason: kitsReadable ? null : KIT_UNREADABLE,
     };
   });
 }
@@ -268,6 +326,41 @@ async function activationBlockers(env: Env, licence: LicenceRow): Promise<string
     out.push('Commercial terms are incomplete — the fee and the revenue share are both required.');
   }
   if (!licence.renews_on) out.push('No renewal date is set.');
+
+  // D198 — H26's step 6, in its own words: "Brand kit — REQUIRED TO ACTIVATE",
+  // and "Unique to this kind · an Axal subsidiary never sees this step". So
+  // this is ONE `if`, and it is gated on the kind rather than applied to every
+  // licence — which is also what makes it touch nothing that exists today:
+  // migration 279 defaulted every pre-existing row to `subsidiary` because the
+  // create path refused white-label outright, so no row can meet this
+  // condition yet.
+  //
+  // IT ASKS FOR THE COLOURS, NOT THE MARK. A white-label shell with no logo
+  // yet is survivable; one wearing Axal's palette is not, because a colour has
+  // no absent state on screen — it renders as SOMETHING, and that something
+  // would be Axal's.
+  if (licence.kind === 'white_label') {
+    let kit: { primary_hex: string | null; accent_hex: string | null } | null = null;
+    let readable = true;
+    try {
+      kit = await env.DB.prepare(
+        'SELECT primary_hex, accent_hex FROM licence_brand_kits WHERE licence_id = ?',
+      ).bind(licence.id).first<{ primary_hex: string | null; accent_hex: string | null }>();
+    } catch (e) {
+      console.warn('[licences] licence_brand_kits unreadable', (e as Error).message);
+      readable = false;
+    }
+    // FAILS CLOSED, and the reason is the same one the blocker list exists
+    // for: "we could not tell" is not "it is fine". An operator reads which
+    // thing is missing, and an unreadable store is a thing that is missing.
+    if (!readable) out.push(`${KIT_UNREADABLE} A white-label cannot be activated until it can.`);
+    else if (!kit || !kit.primary_hex || !kit.accent_hex) {
+      out.push(
+        'This is a white-label licence and its brand kit has no colours. A white-label shell with '
+        + 'no palette of its own renders Axal\'s, which is the one thing the kind exists to prevent.',
+      );
+    }
+  }
   return out;
 }
 
@@ -1317,6 +1410,281 @@ r.post('/:uid/domain/detach', async (c) => {
          FROM licence_domains WHERE id = ?`,
     ).bind(row.id).first<LicenceDomainRow>();
     return c.json({ ok: true, domain: fresh ? domainPayload(fresh) : null });
+  } catch (e) { return mapError(c, e); }
+});
+
+/* ------------------------------------------------------------------ *
+ * D198 — H26 step 6: the brand a WHITE-LABEL operator trades under     *
+ * ------------------------------------------------------------------ *
+ *
+ * ALL FOUR ROUTES REFUSE A SUBSIDIARY, and that refusal is the feature
+ * rather than a guard around it. `wlCompare` on the Super canvas is what
+ * settles who owns a kit — `{ k:'Brand kit', a:'Axal, fixed', w:'Theirs ·
+ * name, mark, colours, domain' }` — so a subsidiary licence HAS a brand and
+ * it is Axal's, fixed, and not a row in this table. Storing one would make
+ * the ledger able to say a subsidiary trades under a mark of its own, which
+ * is a claim the product does not want to be able to make.
+ *
+ * HQ WRITES; HQ DOES NOT APPROVE. H26's own prose: "HQ will never approve
+ * this. They will." What HQ is doing here is CAPTURE — a licence is issued
+ * before any administrator is named on it (D134), so at issue time there is
+ * nobody else to type it. The branch-side editor S1d and `dmSub` draw is
+ * filed, not built: it needs the kit pushed to the branch first, and the
+ * mark's bytes crossing from HQ's R2 to the branch's is a transport decision
+ * rather than a store one.
+ */
+
+/** Every write here is the same refusal for a subsidiary; said once. */
+function refuseUnlessWhiteLabel(licence: LicenceRow) {
+  if (licence.kind === 'white_label') return null;
+  return {
+    error: 'A brand kit belongs to a white-label licence. An Axal subsidiary trades under Axal’s '
+      + 'brand, which is fixed and is not stored per licence.',
+    code: 'not_white_label',
+  };
+}
+
+/** The kit row for a licence, or the unreadable state, never one as the other. */
+async function kitFor(
+  env: Env, licenceId: number,
+): Promise<{ ok: true; row: LicenceBrandKitRow | null } | { ok: false }> {
+  try {
+    const row = await env.DB.prepare(
+`SELECT id, licence_id, mark_r2_key, mark_mime, mark_bytes, primary_hex, accent_hex,
+              updated_by_user_id, created_at, updated_at
+         FROM licence_brand_kits WHERE licence_id = ?`,
+    ).bind(licenceId).first<LicenceBrandKitRow>();
+    return { ok: true, row: row || null };
+  } catch (e) {
+    console.warn('[licences] licence_brand_kits unreadable', (e as Error).message);
+    return { ok: false };
+  }
+}
+
+// PUT /:uid/brand — the colours.
+//
+// BOTH ARE REQUIRED TOGETHER, which is the same condition `activationBlockers`
+// checks. A kit holding one colour would satisfy "a kit exists" while a shell
+// built from it still has to reach for a second colour, and the only second
+// colour available is Axal's.
+r.put('/:uid/brand', async (c) => {
+  try {
+    const admin = await requireSuperAdminWriteBar(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const refusal = refuseUnlessWhiteLabel(licence);
+    if (refusal) return c.json(refusal, 409);
+
+    const body = await c.req.json().catch(() => ({} as any));
+    // REFUSED, NEVER COERCED. `cleanHex` returns null for anything that is not
+    // a hex colour, and a null here is a 400 rather than a default — a brand
+    // colour quietly replaced by a fallback is a wrong claim about somebody's
+    // brand, which is worse than a missing one.
+    const primary = cleanHex(body?.primary_hex);
+    const accent = cleanHex(body?.accent_hex);
+    if (!primary || !accent) {
+      return c.json({
+        error: 'Both a primary and an accent colour are required, each as a hex value such as '
+          + '#0f766e. A white-label shell with only one colour of its own reaches for Axal’s '
+          + 'for the other.',
+        code: 'invalid_colours',
+      }, 400);
+    }
+
+    const existing = await kitFor(c.env, licence.id);
+    if (!existing.ok) return c.json({ error: KIT_UNREADABLE, code: 'brand_kit_unreadable' }, 503);
+
+    if (existing.row) {
+      await c.env.DB.prepare(
+        `UPDATE licence_brand_kits
+            SET primary_hex = ?, accent_hex = ?, updated_by_user_id = ?,
+                updated_at = datetime('now')
+          WHERE id = ?`,
+      ).bind(primary, accent, admin.id, existing.row.id).run();
+    } else {
+      await c.env.DB.prepare(
+        `INSERT INTO licence_brand_kits (licence_id, primary_hex, accent_hex, updated_by_user_id)
+         VALUES (?,?,?,?)`,
+      ).bind(licence.id, primary, accent, admin.id).run();
+    }
+
+    // Through `logAdminAction` (D159), and NOT `licence_events`: that table's
+    // CHECK admits ten values and widening it cost migration 266 a full
+    // rebuild to add one. No `target_user_id` — the subject is a licence, and
+    // a licence may have several administrators.
+    await logAdminAction(c.env, admin.id, admin.email, 'licence_brand_kit_set', {
+      licence_uid: licence.uid,
+      licence_ref: licence.licence_ref,
+      primary_hex: primary,
+      accent_hex: accent,
+    });
+
+    const after = await kitFor(c.env, licence.id);
+    return c.json({
+      ok: true,
+      brand_kit: after.ok && after.row ? brandKitPayload(licence.uid, after.row) : null,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /:uid/brand/mark — the logo, multipart.
+//
+// THE PARSING AND SANITISING HALF IS `readUploadedMark` FROM routes/brand.ts,
+// reused rather than re-implemented: the MIME allowlist, the 512 KB cap and
+// the SVG sanitisation are one set of rules and two upload paths that decided
+// them separately would drift. What is NOT shared is the half that must
+// differ — that route is `requireAuth` and keys by the uploader; this one is
+// on the super-admin write bar and keys by the LICENCE, so a mark can never
+// land in a namespace belonging to whichever operator happened to upload it.
+r.post('/:uid/brand/mark', async (c) => {
+  try {
+    const admin = await requireSuperAdminWriteBar(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const refusal = refuseUnlessWhiteLabel(licence);
+    if (refusal) return c.json(refusal, 409);
+
+    const ctype = (c.req.header('content-type') || '').toLowerCase();
+    if (!ctype.includes('multipart/form-data')) {
+      return c.json({ error: 'expected_multipart', code: 'expected_multipart' }, 400);
+    }
+    const read = await readUploadedMark(await c.req.formData());
+    if (!read.ok) return c.json({ error: read.error }, read.status);
+
+    const files = c.env.FILES;
+    // STATED, NOT SWALLOWED. Without the binding there is nowhere to put the
+    // bytes, and storing a data URI in a TEXT column instead would put a
+    // 512 KB blob on every licence payload the console fetches.
+    if (!files) {
+      return c.json({
+        error: 'No object store is bound on this deployment, so a mark cannot be uploaded. The '
+          + 'colours can still be set.',
+        code: 'r2_unavailable',
+      }, 503);
+    }
+
+    const existing = await kitFor(c.env, licence.id);
+    if (!existing.ok) return c.json({ error: KIT_UNREADABLE, code: 'brand_kit_unreadable' }, 503);
+
+    const key = `licence-marks/${licence.uid}/${crypto.randomUUID()}.${markExtension(read.mime)}`;
+    try {
+      await files.put(key, read.bytes, {
+        httpMetadata: { contentType: read.mime },
+        customMetadata: { licenceUid: licence.uid, uploadedAt: new Date().toISOString() },
+      });
+    } catch {
+      return c.json({ error: 'upload failed', code: 'upload_failed' }, 500);
+    }
+
+    if (existing.row) {
+      await c.env.DB.prepare(
+        `UPDATE licence_brand_kits
+            SET mark_r2_key = ?, mark_mime = ?, mark_bytes = ?, updated_by_user_id = ?,
+                updated_at = datetime('now')
+          WHERE id = ?`,
+      ).bind(key, read.mime, read.bytes.length, admin.id, existing.row.id).run();
+    } else {
+      await c.env.DB.prepare(
+        `INSERT INTO licence_brand_kits
+           (licence_id, mark_r2_key, mark_mime, mark_bytes, updated_by_user_id)
+         VALUES (?,?,?,?,?)`,
+      ).bind(licence.id, key, read.mime, read.bytes.length, admin.id).run();
+    }
+
+    // The superseded object is removed AFTER the row points at the new one, so
+    // a failure here costs an orphan in the bucket rather than a kit whose
+    // mark_r2_key names an object that no longer exists.
+    if (existing.row?.mark_r2_key && existing.row.mark_r2_key !== key) {
+      try { await files.delete(existing.row.mark_r2_key); } catch { /* orphan, not a failure */ }
+    }
+
+    await logAdminAction(c.env, admin.id, admin.email, 'licence_brand_mark_set', {
+      licence_uid: licence.uid,
+      licence_ref: licence.licence_ref,
+      mime: read.mime,
+      bytes: read.bytes.length,
+    });
+
+    const after = await kitFor(c.env, licence.id);
+    return c.json({
+      ok: true,
+      brand_kit: after.ok && after.row ? brandKitPayload(licence.uid, after.row) : null,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// DELETE /:uid/brand/mark — remove the logo, keep the colours.
+r.delete('/:uid/brand/mark', async (c) => {
+  try {
+    const admin = await requireSuperAdminWriteBar(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const refusal = refuseUnlessWhiteLabel(licence);
+    if (refusal) return c.json(refusal, 409);
+
+    const existing = await kitFor(c.env, licence.id);
+    if (!existing.ok) return c.json({ error: KIT_UNREADABLE, code: 'brand_kit_unreadable' }, 503);
+    if (!existing.row?.mark_r2_key) {
+      return c.json({ error: 'This licence has no mark to remove.', code: 'no_mark' }, 404);
+    }
+
+    await c.env.DB.prepare(
+      `UPDATE licence_brand_kits
+          SET mark_r2_key = NULL, mark_mime = NULL, mark_bytes = NULL,
+              updated_by_user_id = ?, updated_at = datetime('now')
+        WHERE id = ?`,
+    ).bind(admin.id, existing.row.id).run();
+    // Row first, bytes second, for the same reason as above.
+    try { await c.env.FILES?.delete(existing.row.mark_r2_key); } catch { /* orphan */ }
+
+    await logAdminAction(c.env, admin.id, admin.email, 'licence_brand_mark_removed', {
+      licence_uid: licence.uid,
+      licence_ref: licence.licence_ref,
+      mark_bytes: existing.row.mark_bytes,
+    });
+
+    const after = await kitFor(c.env, licence.id);
+    return c.json({
+      ok: true,
+      brand_kit: after.ok && after.row ? brandKitPayload(licence.uid, after.row) : null,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// GET /:uid/brand/mark — the bytes, behind the gate.
+//
+// A PLAIN GATED STREAM, NOT A SIGNED TOKEN, and the difference is measured
+// rather than stylistic. `mintDownloadToken` is ONE-TIME — its `jti` is
+// pre-registered in KV and deleted on consume — and hard-clamped to five
+// minutes, which is right for a document and wrong for an `<img src>` on a
+// page that re-renders: the second render would 404. This is the shape
+// `articles.ts:292` already uses for exactly that reason, and three more
+// routes after it.
+//
+// `requireSuperAdmin`, NOT the write bar: drawing a preview is a read, and
+// putting a step-up in front of an `<img>` would make the preview blank for an
+// operator who is perfectly entitled to see it. A same-origin `<img>` cannot
+// send a Bearer header, so this authenticates on the cookie — which is what
+// `getCurrentUser` reads first anyway.
+r.get('/:uid/brand/mark', async (c) => {
+  try {
+    await requireSuperAdmin(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const existing = await kitFor(c.env, licence.id);
+    if (!existing.ok) return c.json({ error: KIT_UNREADABLE, code: 'brand_kit_unreadable' }, 503);
+    if (!existing.row?.mark_r2_key) return c.json({ error: 'not_found' }, 404);
+    if (!c.env.FILES) return c.json({ error: 'r2_unavailable' }, 503);
+    const obj = await c.env.FILES.get(existing.row.mark_r2_key);
+    if (!obj) return c.json({ error: 'not_found' }, 404);
+    return new Response(obj.body, {
+      headers: {
+        'content-type': existing.row.mark_mime || 'application/octet-stream',
+        // Never cached: a mark is replaceable, the URL does not change when it
+        // is replaced, and a stale logo behind a brand is worse than a refetch.
+        'cache-control': 'private, no-store',
+      },
+    });
   } catch (e) { return mapError(c, e); }
 });
 

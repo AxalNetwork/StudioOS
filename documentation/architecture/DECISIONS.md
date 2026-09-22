@@ -13081,7 +13081,7 @@ it is the screen being wrong about the only thing it exists to say.
 | Subsidiary name | Yours · Edit | **HQ's, twice over.** The name this deployment answers by is `BRANCH_NAME`, a Worker var set at provisioning — `routes/auth.ts` says so where it builds `/me.branch`: *"THE VARS ARE THE SOURCE, NOT THE DATABASE"* — so changing it is a redeploy, not a form. And the licence copy's `brand_name` is HQ's: there is not one `UPDATE branch_licence` in the worker, by design (D.9), so an edit would be overwritten by HQ's next push |
 | Territory | HQ · Request | ✅ |
 | Staff & roles | Yours · Edit | **SPLIT, and the editable half is not roles.** `PATCH /users/:userId/role` answers `admin_promotion_disabled` to everyone but the super admin, and `hydrateSuperAdmin` returns 0 on a branch without querying (D106) — so a branch admin can *never* change a role, and D134 made the licence the only door for granting one. What a branch does own is deactivating a **non-admin** account on its own database: `toggle-active` refuses only an admin target (D132) |
-| Brand kit | HQ · Ask | ✅ — and the canvas wrote the absence itself, which D.10 had already decided: no brand-kit store exists |
+| Brand kit | HQ · Ask | ✅ — and the canvas wrote the absence itself, which D.10 had already decided: no brand-kit store exists. **Corrected by D198:** one exists now (migration 281), and it belongs to a **white-label** licence — an Axal subsidiary still trades under Axal's brand, which is fixed and is not stored per branch, so the chip and the null value both stand. What changed is the reason on the page: the absence is now the transport, because nothing pushes a kit to a branch yet |
 | Licence summary | HQ · Request seats | ✅ |
 
 So the split is **four of five HQ-owned**, not the canvas's three, and the count
@@ -18221,3 +18221,186 @@ whole of its change to that file and it had to be rebuilt from its own guard.
 The rule this programme has written down four times — **restore from a
 snapshot, never from git** — exists for exactly this, and the snapshot in that
 run covered five files and not the sixth.
+
+---
+
+## D198
+
+**A white-label licence records the brand its operator trades under; an Axal
+subsidiary does not, and the licence kind is what decides which.**
+
+`AdminLicences.jsx` has shipped a `licence-brand-kit` block since the licence
+console was built, with three of its four fields `value={null}` under the
+hints *"No logo store."*, *"No colour store."* and *"Hiding the mark is not a
+stored switch."* Migration **281** gives two of those three a store. The third
+stays absent on purpose, and the reason is in the judgement calls below.
+
+### THE TWO CANVASES CONTRADICT EACH OTHER, AND THE KIND IS WHAT RESOLVES IT
+
+This is the finding that decided the whole shape, and it was found by
+measurement rather than by picking a side. Four sites disagree about who owns
+a brand kit, and all four are the design of record:
+
+| source | what it says |
+| --- | --- |
+| **S11**, the branch Settings rows | `{ field:'Brand kit', value:null, who:'HQ', act:'Ask HQ · Content' }` — HQ-owned, and its reason names **`HQ.brandKit()`**, a method with zero occurrences anywhere in this repository |
+| **S1d**, the Studio overview card | *"Domain and brand kit are configured here, and **HQ does not approve the brand**"* |
+| **`dmSub`**, the branch Settings sub-nav | `['Profile','Staff & roles','Domain','Notifications','**Brand kit**']` — a branch-side page, beside Domain |
+| **H26**, the Super artboard header, verbatim | **"Step 6 · Brand kit — required to activate"** · **"Unique to this kind · an Axal subsidiary never sees this step"** |
+
+The line that settles them is in the Super canvas's own subsidiary-vs-
+white-label table: `{ k:'Brand kit', a:'**Axal, fixed**', w:'**Theirs · name,
+mark, colours, domain**' }`. So the owner of a brand kit **depends on the
+licence kind**, which is exactly what D196 shipped two PRs ago. The
+contradiction is not an error in either canvas: one artboard is describing a
+subsidiary and the other a white-label. A subsidiary's brand is Axal's and
+fixed, so **S11's HQ chip and its Not-recorded state are correct and stay**;
+this decision builds the white-label half.
+
+### HQ WRITES A KIT IT DOES NOT OWN, AND H26'S TWO SENTENCES ARE BOTH TRUE
+
+H26 says *"HQ will never approve this. They will."* and also makes the kit a
+step of HQ's own issue flow. Those are not in tension. A licence is issued
+before any administrator is named on it — D134 made appointing one an
+**unnumbered** tab precisely because a licence can be issued with nobody on it
+— so at issue time there is no operator to type their own kit. HQ **captures**
+it; HQ does not **approve** it. The branch-side editor S1d and `dmSub` draw is
+filed rather than built, because it needs the push first.
+
+### THE TAB IS UNNUMBERED, AND THAT IS FORCED RATHER THAN PREFERRED
+
+`STEPS` is six — Entity, Territory, Seats, Terms, Contract, Deploy — and
+**Kind is not one of them either**: D196 put the Kind control in the create
+form and the pill on the row, not in the numbered flow. H26's "Step 6" belongs
+to the canvas's own seven-step strip, which begins with Kind. Making the kit
+`STEPS[6]` would draw it on **every** licence, which H26 forbids in its own
+words; making a numbered step conditional would renumber the flow per licence,
+which `licence_admins_ui_d134.test.mjs:44` and `hq_licences_h2h3.test.mjs:171`
+both pin. So it joins Administrators, Notices and History as an unnumbered tab,
+drawn only when `kind === 'white_label'` — the D134/D136 argument for the
+third time, from a new angle: the first three are unnumbered because they are
+not steps, and this one because it is not every licence's step.
+
+### THE SIGNED-DOWNLOAD PRIMITIVE IS THE WRONG TOOL, AND THIS CORRECTS THE PLAN'S OWN SIZING LINE
+
+The approved plan's sizing said `files.ts`'s `GET /api/files/dl/:token` was
+the reuse point for the mark. It is not. `mintDownloadToken`
+(`services/signedDownload.ts:86`) is **one-time** — the `jti` is pre-registered
+in KV and deleted on consume — and its TTL is **hard-clamped to five minutes**.
+That is right for a document download and wrong for an `<img src>` on a page
+that re-renders: the second render 404s. The house pattern for an image behind
+a gate is a plain gated R2 stream, and there are four working copies of it
+(`articles.ts:292`, `admin_telegram.ts:588`, `dd.ts:933`,
+`founder_validate.ts:1051`). So the mark stores `mark_r2_key` + `mark_mime` —
+`articles`' exact two-column shape — and `GET /:uid/brand/mark` streams it.
+**The correction is shown rather than argued**: the guard fetches the same URL
+twice and compares the bytes.
+
+`POST /api/brand/logo/upload` **is** reused, and the plan was right about that
+half: the MIME allowlist, the 512 KB cap and `sanitizeSvg` are now one exported
+`readUploadedMark(form)` in `routes/brand.ts`, with `/logo/upload` as its first
+caller and its behaviour unchanged. What is **not** shared is the half that
+must differ — that route is `requireAuth` (any authenticated user) and keys by
+the **uploader** (`brand-logos/<user.id>/…`); the licence's mark is on
+`requireSuperAdminWriteBar` and keys by the **licence**
+(`licence-marks/<licence uid>/…`), so a mark can never land in a namespace
+belonging to whichever operator happened to be at the keyboard.
+
+### THE FOUR JUDGEMENT CALLS, EACH STATED SO IT IS CHEAP TO STRIKE
+
+1. **`show_powered_by` is NOT stored.** H26 gives it a default (Hidden) and an
+   argument (*"a platform credit is an explicit opt-in"*) — and **nothing in
+   the shell renders a platform credit at all**, measured. A stored switch
+   would be a producer with no reader, the shape this programme has now deleted
+   a dozen times. The field keeps its place in the preview and states the
+   stronger claim: the credit is hidden because no shell draws one.
+   *Strike it and the column ships defaulting to 0, with a reader owed by the
+   PR that builds the white-label shell.*
+2. **HQ writes; the branch reads nothing yet.** D198 builds the store, HQ's
+   editor and the corrected branch sentence — not the push. Pushing a kit means
+   `branch_licence` gains `kind` plus the kit fields, `applyLicenceCopy` binds
+   them, the emitter maps them to HQ's key names (D137's rule), and the mark's
+   **bytes** cross from HQ's R2 to the branch's, which is a transport decision
+   rather than a store. *Strike it and D198 roughly doubles.*
+3. **The activation blocker asks for the COLOURS, not the mark.** A white-label
+   shell with no logo yet is survivable; one wearing Axal's palette is not,
+   because a colour has no absent state on screen — it renders as *something*,
+   and that something would be Axal's. *Strike it and the mark is required too,
+   which blocks activation on an asset that can arrive later.*
+4. **The hex validator is `brand.ts`'s `cleanHex`, exported rather than
+   re-declared** — and a correction to the plan while recording it: `cleanHex`
+   admits `#rgb` as well as `#rrggbb`, lowercasing both, where the plan's
+   shorthand said `#rrggbb`. Both are valid CSS and normalising case is not
+   coercion; what matters is that a value matching neither is **refused**, not
+   replaced with a default. A brand colour quietly swapped for a fallback is a
+   wrong claim about somebody's brand, which is worse than a missing one. The
+   SPA's own rule is asserted **equal** to the worker's rather than restated,
+   so a client stricter or looser than the server fails the build.
+
+### WHAT MIGRATION 281 DELIBERATELY DOES NOT CARRY
+
+`public_name` — it already exists as `territory_licences.brand_name`, and the
+shipped block has said so in its own words since it was built. `email_from` —
+H26 draws it **inside** the preview card, computed from the public name plus
+the bound host, so it is derived rather than stored, and a per-licence sender
+is a mail-configuration change. Exclusivity — migration 279's header already
+refused it by name. And `show_powered_by`, per judgement call 1.
+
+### NO EXISTING LICENCE IS TOUCHED, AND THE ARGUMENT IS STRUCTURAL RATHER THAN A ROW COUNT
+
+The new activation blocker fires only on `kind = 'white_label'`, and migration
+279 defaulted every pre-existing row to `subsidiary` **because the create path
+refused white-label outright, in its own rendered words**. So no row that
+exists today can meet the new condition. Production's licence ledger could not
+be read from the session that built this — `CLOUDFLARE_API_TOKEN` is unset,
+measured during #305's close-out — so the structural argument is what stands,
+and the guard proves it from the other side: a subsidiary's activation is
+asserted byte-identical, blockers and all, before and after.
+
+**Unreadable is not absent**, D197's rule one table over: `hydrate` reads the
+kit in its own try/catch and a database without 281 renders
+`brand_kit_available: false` with a reason naming the migration, never
+`brand_kit: null` — which would be a claim about the licence rather than about
+the database. The activation blocker **fails closed** on that state for a
+white-label and stays open for a subsidiary, because *"we could not tell"* is
+not *"it is fine"* and a subsidiary has no kit to read.
+
+### FIVE SENTENCES THIS MAKES FALSE, AND THE FIFTH WAS NOT IN THE PLAN
+
+Four were expected: `AdminLicences.jsx`'s three `value={null}` hints, and
+`BranchSettings.jsx`'s S11 row plus its rail entry, both of which said *"HQ has
+no brand-kit store yet"*. The fifth was found by sweeping rather than by the
+plan: **`AdminStudioOverview.jsx:267`** rendered *"No brand kit is recorded.
+Mark, colours and the powered-by line have no store yet"* — beside the hostname
+block that already reads `hydrate`'s payload, so it could be made honest the
+same way. It now draws four states mirroring that block: unread, not applicable
+(a subsidiary), unreadable, and absent. **The powered-by half of its sentence
+stays**, because that half is still true.
+
+`BranchSettings.jsx`'s row keeps `who: 'HQ'` and keeps its null value — what
+changed is the reason, and the correction is the honest one rather than the
+flattering one. Two things remain true: a kit belongs to a white-label licence,
+and nothing pushes one to a branch yet. So there is still no file to fetch
+there, for a reason that is now the transport rather than the store.
+
+### THE GUARD CORRECTED ITSELF, AND IT IS THE FOURTH INSTANCE OF THE CLASS
+
+The worker suite's first draft asserted `doesNotMatch(source, /mintDownloadToken/)`
+to prove the mark does not use the one-time primitive. **It passed trivially**:
+the only occurrence of that name in `admin_licences.ts` is the comment ABOVE
+the route explaining why it is not used. *A lexical scan cannot tell a rule from
+its violation* — the fourth time this programme has paid for that — and it is
+re-aimed at the **import**, which is a structural fact prose cannot satisfy.
+The same trap shaped the frontend suite: every scan there runs over
+`codeOnly` source, and the BranchSettings assertion is bounded to the rows
+array, because the comment recording the correction necessarily quotes the
+sentence it replaced.
+
+`licence_kind_ui_d196.test.mjs:171` is **re-aimed rather than deleted** — the
+tenth instance of a guard pinning a refusal that has to move the day the
+refusal stops being true. It asserted `nulls >= 3`, that at least three of the
+block's fields read as unrecorded, which was correct when D196 shipped and
+became the thing preventing the fix. What did not change is the claim the block
+exists to avoid making, so that is what it asserts now: a white-label's mark is
+theirs, HQ does not approve it, and the block is drawn only for the kind that
+has one.
