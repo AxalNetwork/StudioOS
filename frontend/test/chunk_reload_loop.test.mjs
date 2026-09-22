@@ -178,6 +178,27 @@ test('the boot watchdog keeps at least one loop guard', () => {
     'the strip must be gated on that probe');
 });
 
+test('a trailing slash on /login is not a second document load', () => {
+  // `/login/` is where Safari shows "A problem repeatedly occurred". The
+  // prerendered `docs/login/index.html` makes the assets binding 307 between
+  // the slash form and the route. A full navigation back is the loop. The
+  // address bar is corrected with replaceState, which does not fetch.
+  assert.match(main, /_u\.pathname\.endsWith\('\/'\)/,
+    'the boot path must notice a trailing slash');
+  assert.match(main, /history\.replaceState\(null, '', _u\.pathname \+ _u\.search \+ _u\.hash\)/,
+    'the slash must be removed with replaceState');
+  const slash = main.slice(main.indexOf("_u.pathname.endsWith('/')"));
+  assert.doesNotMatch(slash.slice(0, 400), /location\.(replace|assign|href)/,
+    'stripping the slash must not navigate');
+
+  const toml = read('wrangler.toml');
+  const handling = toml.match(/html_handling = "([^"]+)"/g) || [];
+  assert.deepEqual(handling, [
+    'html_handling = "drop-trailing-slash"',
+    'html_handling = "drop-trailing-slash"',
+  ], 'both asset blocks must serve /login as 200, not 307 it to /login/');
+});
+
 /**
  * The two behaviours the source-reading tests above can only describe.
  *

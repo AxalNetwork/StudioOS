@@ -36,6 +36,14 @@ try {
     _u.searchParams.delete('__reboot');
     window.history.replaceState(null, '', _u.pathname + _u.search + _u.hash);
   }
+  // `/login/` is the post-redirect URL of the prerendered `docs/login/index.html`.
+  // The route is `/login`. A full navigation back to the no-slash form is what
+  // re-enters the 307 and crashes Safari, so this is `replaceState` only: the
+  // document stays, the router matches, and nothing is fetched.
+  if (_u.pathname.length > 1 && _u.pathname.endsWith('/')) {
+    _u.pathname = _u.pathname.replace(/\/+$/, '') || '/';
+    window.history.replaceState(null, '', _u.pathname + _u.search + _u.hash);
+  }
 } catch { /* no window / URL — nothing to do */ }
 
 // Recover from stale chunk loads after a deploy. The most common cause of a
