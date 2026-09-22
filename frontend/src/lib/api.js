@@ -352,8 +352,9 @@ export function armDeadline(ms, callerSignal) {
  * THREE SHAPE RULES, each protecting an existing consumer:
  *   · `name` is NOT `AbortError`. `LoginPage.jsx` and `SettingsPage.jsx` both
  *     read that name to mean "the user dismissed the passkey prompt".
- *   · the message must not match `/Failed to fetch dynamically imported
- *     module/i` — `RouteErrorBoundary` reloads the page on that.
+ *   · the message must not match a chunk-load phrase from
+ *     `lib/chunkLoadError.js` (incl. Safari `_result.default`) —
+ *     `RouteErrorBoundary` / `main.jsx` reload the page on those.
  *   · `code` is the machine flag. `status` stays undefined because a timeout
  *     has no HTTP status; consumers branching on `e.status` fall through to
  *     their generic branch, which is the honest outcome.
