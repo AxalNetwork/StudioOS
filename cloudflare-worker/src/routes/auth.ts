@@ -1220,22 +1220,22 @@ auth.post('/magic/start', safe('magic-start', 'Could not send your sign-in link.
     await sql.end();
     if (rows.length && rows[0].name) name = rows[0].name;
   } catch {}
-  // THE LINK IS ALREADY VALID; THE MAIL IS A SEPARATE ERRAND. The token row was
-  // committed above, so whether Google's API answers in 30ms or not at all
-  // changes nothing about whether this sign-in can complete — and the response
-  // we are about to send says only "a link is on its way", which is true the
-  // moment the row exists. Awaiting the send made the availability of sign-in
-  // equal to the availability of Gmail: two bounded fetches (token + send) that
-  // can legitimately take 10s each, on top of the limiter and the schema
-  // bootstrap, is already past the 30s the browser waits. `waitUntil` keeps the
-  // send alive after the response goes out, which is exactly the shape of the
-  // work — and the `catch` stays, because a failed send must still be logged.
-  // D74.
-  const deliver = sendEmail(c.env, 'auth_magic_link', email, { name, magic_url: magicUrl })
-    .catch((e) => { console.error('[AUTH:magic-start] email send failed', e); });
-  const ctx = (() => { try { return c.executionCtx; } catch { return null; } })();
-  if (ctx?.waitUntil) ctx.waitUntil(deliver);
-  else await deliver;
+  // THE LINK IS ALREADY VALID; THE QUEUE ACCEPTANCE IS NOT OPTIONAL. `send()`
+  // inserts the send log and hands the message to the job queue. It does not
+  // call Gmail — the queue consumer does, so this await is a D1 write plus a
+  // queue send, not the provider round-trip D74 moved off the response.
+  //
+  // It used to be `waitUntil`. The response then said the link was on its way
+  // before anything had accepted the message. On the first request (cold
+  // isolate, schema bootstrap already spent) that errand was dropped: the
+  // token row existed, the screen said "Sign-in link sent", and no mail left.
+  // Resend ran the same handler on a warm isolate, the errand survived, and
+  // that second press was the first time a message was actually queued.
+  const queued = await sendEmail(c.env, 'auth_magic_link', email, { name, magic_url: magicUrl });
+  if (!queued.ok) {
+    console.error('[AUTH:magic-start] email enqueue failed', queued.reason || 'unknown');
+    return c.json({ error: 'Could not send your sign-in link. Please try again in a moment.' }, 502);
+  }
   return c.json({ ok: true, message: 'If that email is valid, a sign-in link is on its way. It expires in 15 minutes.' }, 202);
 }));
 
