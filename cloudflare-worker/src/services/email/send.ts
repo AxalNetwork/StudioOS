@@ -31,7 +31,7 @@
  * Failure to enqueue is logged but never throws — callers stay simple.
  */
 import type { Env } from '../../types';
-import { Jobs } from '../../models/jobs';
+import { enqueueJob } from '../queue';
 import { getTemplate } from '../../templates/email/registry';
 import type { EmailTemplate } from '../../templates/email/layout';
 import { wrap } from '../../templates/email/layout';
@@ -235,6 +235,14 @@ export async function send(
 
   // Normal path — enqueue. Falls back to immediate when JOB_QUEUE
   // binding is missing (dev/preview without queues configured).
+  //
+  // `enqueueJob`, not `Jobs.enqueue`. The latter only inserts a D1
+  // `queue_jobs` row, which the minute cron drains — and skips entirely
+  // while another drain holds the lease. Production has USE_CF_QUEUE and
+  // a queue consumer that delivers `email_send` as soon as the message is
+  // accepted. Writing the row and returning `ok` made /magic/start say the
+  // link was on its way while the message waited for a cron tick that
+  // might not run before the person gave up and pressed Resend.
   const hasQueue = !!(env as any).JOB_QUEUE;
   if (!hasQueue) {
     const delivered = await deliverNow(env, payload);
@@ -242,7 +250,7 @@ export async function send(
   }
 
   try {
-    await Jobs.enqueue(env, 'email_send' as any, payload, { max_retries: 5 });
+    await enqueueJob(env, 'email_send', payload, { max_retries: 5 });
     return { ok: true, log_id: logId, notification_id: notificationId };
   } catch (e) {
     console.error('[email/send] enqueue failed, falling back to immediate', e);
