@@ -26,6 +26,7 @@ import { requireAuth, hashToken, generateToken, selectJwt, bumpJwtMinIat, jwtMin
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { hasTotpConfigured, loadTotp, persistNewTotpEnrolment } from '../services/authTotp';
 import { loadSms, getUserFactors, setUserFactor } from '../services/authSms';
+import { ensureAuthBlockersSchema } from '../services/authBlockersSchema';
 import { putHeadshotFromDataUri, getHeadshot } from '../services/r2';
 import { sendVerificationEmail } from '../services/email';
 import { send as sendSecurityEmail } from '../services/email/send';
@@ -138,6 +139,26 @@ async function ensureSchema(env: Env) {
     await db.prepare(`CREATE INDEX IF NOT EXISTS idx_fi_inviter ON founder_invites(inviter_user_id)`).run();
     await db.prepare(`CREATE INDEX IF NOT EXISTS idx_fi_project ON founder_invites(project_id)`).run();
   } catch {}
+  // THE CREATE ABOVE IS EIGHT COLUMNS AND THIS FILE READS TWELVE (D192).
+  // `user_sessions` is declared twice — here, and by migration 083 / the
+  // baseline — and D1 holds one table per name, so whichever runs first wins
+  // and `IF NOT EXISTS` cannot add a column to the other's. On a database this
+  // bootstrap reached first, the step-up UPDATE in this same file
+  // (`SET factor = 'totp', assurance_level = 'full', last_step_up_at = ?,
+  // step_up_due_at = NULL`) names four columns the live table does not have and
+  // throws — which is auth state, on the screen where a person turns 2FA on.
+  //
+  // So the owner is awaited rather than the CREATE widened: widening it would
+  // put a second declaration of those four columns beside
+  // `authBlockersSchema.ts`'s, which is the exact defect
+  // `check-schema-pair-drift` exists to catch. This is `routes/brand.ts:99`'s
+  // idiom — after the CREATEs, before the memo lands.
+  //
+  // It is best-effort BY DESIGN and that is not an oversight: the helper
+  // carries its own deadline and cooldown, and its header says a route that
+  // needs one of these columns keeps its own try/catch. What this call removes
+  // is the case where NOTHING ever declared them on this path.
+  await ensureAuthBlockersSchema(env);
   MIGRATED.set(bindingKey(env), true);
 }
 

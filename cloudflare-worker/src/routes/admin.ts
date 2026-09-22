@@ -460,6 +460,13 @@ export async function ensureAdminAuditLogTable(env: Env): Promise<void> {
     await env.DB.exec(
       'CREATE INDEX IF NOT EXISTS idx_admin_audit_user_ts ON admin_audit_log(admin_user_id, exported_at DESC)',
     );
+    // Migrations 003 and 036 and the baseline all declare this one; it came
+    // here from `routes/monitoring_analytics.ts` in D192, when that router's
+    // own narrow CREATE for this table was deleted. It backs the `action`
+    // filter on the governance and analytics audit reads.
+    await env.DB.exec(
+      'CREATE INDEX IF NOT EXISTS idx_admin_audit_action_ts ON admin_audit_log(action, exported_at DESC)',
+    );
     // PRAGMA-guarded ADD COLUMN for the three Task #1 (DB) columns —
     // needed when the table already existed from an earlier migration
     // without these columns.

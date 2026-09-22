@@ -312,52 +312,304 @@ function findConstArrayDecl(src, name, before) {
   return (preceding.length ? preceding[preceding.length - 1] : hits[0]).open;
 }
 
+/**
+ * A copy of `src` with every comment, string literal and regex body blanked to
+ * spaces, indices and newlines preserved.
+ *
+ * Brace matching cannot be done on raw source. Nine bootstraps in this tree
+ * carry `DEFAULT '{}'` inside a CREATE and several more carry a `}` in a
+ * comment, so a naive walk closes a function body dozens of lines early and
+ * then scans the wrong region. Blanking rather than deleting is what lets the
+ * masked and the real source share one index space.
+ */
+export function maskCode(src) {
+  const out = src.split('');
+  const blank = (from, to) => { for (let k = from; k < to && k < out.length; k += 1) if (!/\s/.test(out[k])) out[k] = ' '; };
+  let i = 0;
+  let prev;
+  while (i < src.length) {
+    const c = src[i];
+    if (c === '/' && src[i + 1] === '/') { const n = src.indexOf('\n', i); const e = n < 0 ? src.length : n; blank(i, e); i = e; continue; }
+    if (c === '/' && src[i + 1] === '*') { const n = src.indexOf('*/', i); const e = n < 0 ? src.length : n + 2; blank(i, e); i = e; continue; }
+    if (c === '/' && !endsExpression(prev)) {
+      let j = i + 1;
+      let inClass = false;
+      while (j < src.length) {
+        const d = src[j];
+        if (d === '\\') { j += 2; continue; }
+        if (d === '\n') break;                       // unterminated — it was division
+        if (inClass) { if (d === ']') inClass = false; }
+        else if (d === '[') inClass = true;
+        else if (d === '/') break;
+        j += 1;
+      }
+      if (src[j] === '/') { blank(i, j + 1); i = j + 1; prev = '/'; continue; }
+    }
+    if (c === '`' || c === "'" || c === '"') {
+      const { end } = readLiteral(src, i);
+      blank(i, end);
+      i = end;
+      prev = '"';
+      continue;
+    }
+    if (!/\s/.test(c)) prev = c;
+    i += 1;
+  }
+  return out.join('');
+}
+
+/** Characters a TypeScript return annotation is made of. */
+const ANNOTATION_CH = /[\s\w$<>:|&,.[\]?]/;
+const CONTROL_KEYWORD = /^(?:if|for|while|switch|catch|with)$/;
+
+/** The `(` matching the `)` at `close`, or -1. */
+function matchOpenParen(masked, close) {
+  let depth = 0;
+  for (let i = close; i >= 0; i -= 1) {
+    if (masked[i] === ')') depth += 1;
+    else if (masked[i] === '(') { depth -= 1; if (depth === 0) return i; }
+  }
+  return -1;
+}
+
+/**
+ * The body of the FUNCTION enclosing `at`, as `{start,end}` into the masked
+ * source, or null when `at` sits at module scope.
+ *
+ * Walks outward one enclosing brace at a time and takes the first that a
+ * parameter list or an arrow opens, stepping over object literals, bare blocks
+ * and `if`/`for`/`while`/`catch` blocks rather than mistaking one for a body. A
+ * return annotation between the `)` and the `{` is skipped, so
+ * `): Promise<void> {` reads as a body exactly as `) {` does — which is not a
+ * nicety: it is the shape every bootstrap in this tree is written in.
+ *
+ * FUNCTION SCOPE, NOT FILE SCOPE, AND THAT IS THE WHOLE POINT. A helper awaited
+ * somewhere else in the file runs on a path the CREATE's own bootstrap does not
+ * take, so its columns are not owed to this definition. Only a call inside the
+ * bootstrap is one the CREATE cannot return without.
+ */
+export function enclosingFunction(masked, at) {
+  let depth = 0;
+  for (let i = at - 1; i >= 0; i -= 1) {
+    const c = masked[i];
+    if (c === '}') { depth += 1; continue; }
+    if (c !== '{') continue;
+    if (depth > 0) { depth -= 1; continue; }
+    let k = i - 1;
+    while (k >= 0 && /\s/.test(masked[k])) k -= 1;
+    if (!(masked[k] === '>' && masked[k - 1] === '=')) {          // not an arrow
+      if (masked[k] !== ')') {
+        const from = k;
+        let j = k;
+        while (j >= 0 && masked[j] !== ')' && ANNOTATION_CH.test(masked[j])) j -= 1;
+        if (masked[j] !== ')') continue;                          // object or bare block
+        if (!masked.slice(j + 1, from + 1).includes(':')) continue;
+        k = j;
+      }
+      const open = matchOpenParen(masked, k);
+      if (open < 0) continue;
+      let w = open - 1;
+      while (w >= 0 && /\s/.test(masked[w])) w -= 1;
+      let s = w;
+      while (s >= 0 && /[\w$]/.test(masked[s])) s -= 1;
+      if (CONTROL_KEYWORD.test(masked.slice(s + 1, w + 1))) continue;
+    }
+    const body = balanced(masked, i, '{', '}');
+    if (!body) return null;
+    return { start: i, end: i + body.length };
+  }
+  return null;
+}
+
+/** The local names a static import clause binds, `as` aliases resolved. */
+function importedNames(clause) {
+  const out = [];
+  const brace = /\{([\s\S]*?)\}/.exec(clause);
+  if (brace) {
+    for (const part of brace[1].split(',')) {
+      const t = part.trim();
+      if (!t || /^type\b/.test(t)) continue;
+      const as = /\bas\s+([A-Za-z_$][\w$]*)/.exec(t);
+      if (as) { out.push(as[1]); continue; }
+      const id = /^([A-Za-z_$][\w$]*)/.exec(t);
+      if (id) out.push(id[1]);
+    }
+  }
+  const dflt = /^\s*([A-Za-z_$][\w$]*)\s*(?:,|$)/.exec(clause.replace(/\{[\s\S]*?\}/, ''));
+  if (dflt && !/^type$/.test(dflt[1])) out.push(dflt[1]);
+  return out;
+}
+
+/**
+ * `<spec>` from `dir` as a file IN THE CORPUS, or null.
+ *
+ * Resolved against the passed file map rather than the disk, which is both
+ * stricter — a hop can only ever reach a module this run actually parsed — and
+ * what lets the two blind spots below be tested against fixtures instead of
+ * only against the tree.
+ */
+function resolveModule(files, dir, spec) {
+  const base = path.resolve(dir, spec);
+  for (const cand of [`${base}.ts`, path.join(base, 'index.ts')]) {
+    if (files.has(cand)) return cand;
+  }
+  return null;
+}
+
+/**
+ * Local name → the file it is imported from, for this tree's own modules.
+ *
+ * STATIC IMPORTS ONLY. A `const { x } = await import('./y')` inside a bootstrap
+ * would resolve the same way, and is deliberately not read: no CREATE-bearing
+ * bootstrap in this tree uses one today, and a resolution nothing exercises is
+ * a resolution nothing can catch when it breaks. `routes/trust.ts` reaches
+ * `ensurePairwiseNdaColumns` that way, but from a ROUTE rather than from
+ * `services/trust.ts`'s own `ensureTrustSchema`, so it is out of scope twice
+ * over.
+ */
+function importMap(src, fileAbs, files) {
+  const map = new Map();
+  const dir = path.dirname(fileAbs);
+  for (const m of src.matchAll(/\bimport\s+([\s\S]*?)\s+from\s+['"]([^'"]+)['"]/g)) {
+    const clause = m[1];
+    if (/^\s*type\b/.test(clause)) continue;                 // type-only, never a call
+    const spec = m[2];
+    if (!spec.startsWith('.')) continue;                     // a package, not ours
+    const target = resolveModule(files, dir, spec);
+    if (!target) continue;
+    for (const nm of importedNames(clause)) map.set(nm, target);
+  }
+  return map;
+}
+
 const CREATE_RE = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"[]?(\w+)[`"\]]?\s*\(/i;
 const ALTER_RE = /ALTER\s+TABLE\s+[`"[]?(\w+)[`"\]]?\s+ADD\s+(?:COLUMN\s+)?(?:IF\s+NOT\s+EXISTS\s+)?([\s\S]*)$/i;
 
-/** One definition per (worker source file, table) that carries a CREATE. */
+/**
+ * One definition per (worker source file, table) that carries a CREATE.
+ *
+ * THE RUNTIME SIDE WAS BLIND TWO WAYS AND BOTH ARE CLOSED HERE. The SQL side
+ * (`sqlDefinitions`) has always built one map across the whole tree; this side
+ * built a per-file map and dropped, with one `continue`, every ALTER whose
+ * CREATE it had not already seen. That dropped 56 columns across 11 pairs, and
+ * it dropped them for two unrelated reasons:
+ *
+ *   SOURCE ORDER. The walk was one forward pass, so a file that lists its
+ *   ALTERs ABOVE its CREATE lost all of them. `routes/legalcap.ts` is the
+ *   instance: six `ALTER TABLE subsidiaries` at :22-29 and the matching CREATE
+ *   at :55, in ONE `ensureSchema`. The ledger therefore carried
+ *   `superset:subsidiaries` recommending that the CREATE be widened to hold
+ *   six columns its own function already adds thirty lines earlier — the third
+ *   ledger reason to recommend the exact second declaration this guard exists
+ *   to catch, and the one that would have done real damage. The file's ALTERs
+ *   are now buffered and resolved against its CREATEs at the end of its pass.
+ *
+ *   ONE HOP THROUGH THE CREATE'S OWN BOOTSTRAP. `routes/brand.ts:99` awaits
+ *   `ensureLandingPageBrandKitColumns(env)` inside the same `ensureSchema` that
+ *   creates `landing_pages`, after the CREATEs and before `MIGRATED.set` — so
+ *   by the time that bootstrap returns the table is at its full shape and the
+ *   pair never diverged. The CREATE's enclosing function is found, scanned for
+ *   `await <ident>(`, and `<ident>` resolved through the file's own import map.
+ *
+ * WHY NOT A REPO-WIDE UNION, which is the tempting one-line symmetry with the
+ * SQL side: it was rejected on a measured ground. A union would clear
+ * `superset:user_sessions` — the one entry on the ledger that is genuinely a
+ * defect — because `services/authBlockersSchema.ts` ALTERs those columns
+ * SOMEWHERE, on a path `routes/settings.ts`'s own bootstrap does not take. A
+ * guard that hides its only real finding to look symmetrical is worse than the
+ * blind spot. Same-file collection stays file-scoped for the mirror-image
+ * reason: narrowing it to function scope would ADD findings, and the property
+ * worth holding is that the corrected finding set is a SUBSET of the old one.
+ */
 export function runtimeDefinitions() {
-  /** @type {Map<string, Array<{where:string, create:string, alters:Array<[string,string]>, interp:boolean}>>} */
-  const defs = new Map();
-  for (const f of walk(SRC_DIR, ['.ts'])) {
-    const src = fs.readFileSync(f, 'utf8');
+  const files = new Map();
+  for (const f of walk(SRC_DIR, ['.ts'])) files.set(f, fs.readFileSync(f, 'utf8'));
+  return runtimeDefinitionsFrom(files);
+}
+
+/**
+ * The pure core of the above: a `Map<absolutePath, source>` in, definitions out.
+ *
+ * Split off so both blind spots can be driven by FIXTURES. A test that can only
+ * read the tree cannot show that reordering the pass brings a finding back,
+ * which is the half that proves either fix is load-bearing rather than
+ * coincidental with whatever the repo happens to contain today.
+ */
+export function runtimeDefinitionsFrom(files) {
+  /** @type {Map<string, {src:string, rel:string, creates:Map, alters:Map, masked?:string, imports?:Map}>} */
+  const byFile = new Map();
+
+  for (const [f, src] of files) {
     const rel = path.relative(ROOT, f);
-    const here = new Map();
+    const creates = new Map();
+    /** table → {cols, interp} for EVERY ALTER in the file, CREATE here or not. */
+    const alters = new Map();
+    const pending = [];
     for (const e of sqlExpressions(src)) {
       const c = CREATE_RE.exec(e.text);
       if (c) {
         const body = balanced(e.text, e.text.indexOf('(', c.index));
         if (!body) continue;
         const t = c[1].toLowerCase();
-        if (here.has(t)) continue;               // first CREATE in a file wins, as at runtime
-        here.set(t, {
+        if (creates.has(t)) continue;            // first CREATE in a file wins, as at runtime
+        creates.set(t, {
           where: `${rel}:${e.line}`,
           create: `CREATE TABLE ${c[1]} ${body}`,
           alters: [],
           interp: body.includes(INTERP),
+          at: e.start,
         });
         continue;
       }
       const a = ALTER_RE.exec(e.text);
       if (!a) continue;
-      const t = a[1].toLowerCase();
-      if (!here.has(t)) continue;                // an ALTER whose CREATE is elsewhere
-      const rest = a[2].trim();
-      if (rest.startsWith(INTERP)) {
-        const cols = resolveLoopColumns(src, e.start);
-        if (cols && cols.length) here.get(t).alters.push(...cols);
-        else here.get(t).interp = true;
+      pending.push({ table: a[1].toLowerCase(), rest: a[2].trim(), start: e.start });
+    }
+    for (const p of pending) {
+      if (!alters.has(p.table)) alters.set(p.table, { cols: [], interp: false });
+      const bucket = alters.get(p.table);
+      if (p.rest.startsWith(INTERP)) {
+        const cols = resolveLoopColumns(src, p.start);
+        if (cols && cols.length) bucket.cols.push(...cols);
+        else bucket.interp = true;
       } else {
-        const lit = /^[`"[]?([A-Za-z_]\w*)[`"\]]?\s*([\s\S]*)$/.exec(rest);
-        if (lit) here.get(t).alters.push([lit[1], lit[2].split(INTERP)[0].trim()]);
+        const lit = /^[`"[]?([A-Za-z_]\w*)[`"\]]?\s*([\s\S]*)$/.exec(p.rest);
+        if (lit) bucket.cols.push([lit[1], lit[2].split(INTERP)[0].trim()]);
       }
     }
-    for (const [t, d] of here) {
+    byFile.set(f, { src, rel, creates, alters });
+  }
+
+  /** @type {Map<string, Array<{where:string, create:string, alters:Array<[string,string]>, interp:boolean}>>} */
+  const defs = new Map();
+  for (const [f, info] of byFile) {
+    for (const [t, d] of info.creates) {
+      const own = info.alters.get(t);
+      if (own) { d.alters.push(...own.cols); if (own.interp) d.interp = true; }
+      for (const target of bootstrapHops(f, info, d.at, byFile)) {
+        const other = byFile.get(target).alters.get(t);
+        if (other) { d.alters.push(...other.cols); if (other.interp) d.interp = true; }
+      }
+      delete d.at;
       if (!defs.has(t)) defs.set(t, []);
       defs.get(t).push(d);
     }
   }
   return defs;
+}
+
+/** The modules a CREATE's own bootstrap awaits, one hop, static imports only. */
+function bootstrapHops(fileAbs, info, at, byFile) {
+  if (info.masked === undefined) info.masked = maskCode(info.src);
+  const fn = enclosingFunction(info.masked, at);
+  if (!fn) return [];
+  if (info.imports === undefined) info.imports = importMap(info.src, fileAbs, byFile);
+  const out = new Set();
+  for (const m of info.masked.slice(fn.start, fn.end).matchAll(/\bawait\s+([A-Za-z_$][\w$]*)\s*\(/g)) {
+    const target = info.imports.get(m[1]);
+    if (target && target !== fileAbs && byFile.has(target)) out.add(target);
+  }
+  return out;
 }
 
 /** The SQL tree as ONE ordered source: baseline, then migrations by number. */

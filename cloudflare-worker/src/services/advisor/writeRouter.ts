@@ -981,8 +981,17 @@ export async function routeAnswer(
         // ensureSchema) so this works on dev/SQLite without a prior
         // brand-page open.
         await env.DB.exec(
-          // Lockstep with brand.ts ensureSchema / migration 144: multi-page
-          // sites — project_id is NOT unique; page_slug is unique per project.
+          // NOT lockstep with brand.ts / migration 144, and the claim that it
+          // was is corrected rather than deleted (D192): this CREATE is
+          // sixteen columns and those two are forty-eight. It stays narrow on
+          // purpose — the only columns this branch reads or writes are
+          // `tagline` and `theme_color`, both of which it declares — and a
+          // database it reached first is healed by
+          // `ensureLandingPageBrandKitColumns`, which `routes/brand.ts`'s own
+          // bootstrap awaits before any wide read. What it must never become is
+          // a hand-maintained copy of the full shape.
+          // Multi-page sites: project_id is NOT unique; page_slug is unique
+          // per project.
           "CREATE TABLE IF NOT EXISTS landing_pages (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, slug TEXT NOT NULL UNIQUE, page_slug TEXT NOT NULL DEFAULT 'home', name TEXT NOT NULL, tagline TEXT, headline TEXT, subheadline TEXT, cta_text TEXT DEFAULT 'Join the waitlist', logo_url TEXT, logo_svg TEXT, theme_color TEXT DEFAULT '#7c3aed', published INTEGER DEFAULT 0, views_count INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))",
         );
         const proj = await env.DB.prepare(`SELECT name FROM projects WHERE id = ?`).bind(ctx.project_id).first<{ name: string }>();

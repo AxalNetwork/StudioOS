@@ -186,6 +186,17 @@ async function ensureSchema(env: Env): Promise<void> {
       "CREATE TABLE IF NOT EXISTS field_sources (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, question_id TEXT NOT NULL, page_target TEXT, saved_to_table TEXT, saved_to_column TEXT, saved_to_id TEXT, source TEXT NOT NULL DEFAULT 'advisor', evidence_text TEXT, filled_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(user_id, question_id))"
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_field_sources_user_page ON field_sources(user_id, page_target)");
+    // THE `advisor_messages` CREATE ABOVE IS SEVEN COLUMNS AND THIS FILE
+    // WRITES NINE (D192). `safety_score` and `sanitisation_actions_json` are
+    // declared by `services/advisor/guardrails.ts`, and on a database where
+    // THIS bootstrap ran first they do not exist — at which point the turn
+    // INSERT below does not fail loudly, it RETRIES in a legacy five-column
+    // form and succeeds. So every turn's safety score and sanitisation record
+    // is dropped and the write still reports success: the worst of the three
+    // pairs this decision repairs, because nothing anywhere says it happened.
+    // The owner is awaited rather than the CREATE widened, for the reason the
+    // guard exists — a second declaration of those two columns is the defect.
+    await ensureGuardrailColumns(env);
     SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.error('[advisor] schema:', (e as Error).message);
