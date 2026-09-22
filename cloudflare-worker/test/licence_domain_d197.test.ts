@@ -357,7 +357,8 @@ test('S19a\'s own second failure — a CNAME at the FALLBACK ORIGIN gets its own
   const cname = out.records.find((r) => r.kind === 'traffic')!;
   assert.equal(cname.ok, false);
   assert.equal(cname.readable, true);
-  assert.match(cname.found!, /axalfrance\.os\.axal\.vc/);
+  assert.ok(String(cname.found).includes('axalfrance.os.axal.vc'),
+    'the recorded CNAME is not the fallback origin');
   // The artboard's words: "That is our fallback origin, not the published
   // target." A tenant who sees a host under our own zone and a failure needs
   // telling WHY it is wrong, or they will assume the check is broken.
@@ -384,7 +385,10 @@ test('a CNAME pointing somewhere else names what it found, and is not the fallba
   }) as any);
   const cname = out.records.find((r) => r.kind === 'traffic')!;
   assert.equal(cname.ok, false);
-  assert.match(cname.detail, /ghs\.googlehosted\.com/);
+  // A literal, same as the three verdict sentences above. An unanchored
+  // hostname regex matches that host with anything before or after it.
+  assert.ok(cname.detail.includes('ghs.googlehosted.com'),
+    `the third-party sentence does not name what was found: ${cname.detail}`);
   assert.doesNotMatch(cname.detail, /fallback origin/,
     'a third-party target was described as our own fallback');
 });
@@ -422,7 +426,8 @@ test('one host per licence in this pass, and the refusal names the one already b
   const { status, body } = await call(db, 'POST', '/licence/mine/domain', HOLDER, { hostname: 'other.yourhost.com' });
   assert.equal(status, 409);
   assert.equal(body.code, 'domain_already_bound');
-  assert.match(String(body.error), /app\.yourhost\.com/);
+  assert.ok(String(body.error).includes('app.yourhost.com'),
+    `the refusal does not name the host already bound: ${body.error}`);
 });
 
 test('H33 — a collision names the other operator\'s PUBLIC name and never its legal entity', async () => {
@@ -710,7 +715,8 @@ test('the payload names what verified is NOT, so neither screen has to word it',
   });
   assert.equal(payload.state, 'verified');
   assert.equal(payload.serves, false, 'a verified host claimed to serve');
-  assert.match(payload.serves_reason, /os\.axal\.vc/);
+  assert.ok(String(payload.serves_reason).includes('os.axal.vc'),
+    'the reason stopped naming the platform host');
   assert.match(payload.serves_reason, /Members keep using the platform host/);
   // `is_primary` is 0 and nothing writes 1: a host members are sent to has to
   // serve first.
