@@ -141,8 +141,12 @@ test('attaching a brief to a proposal is the caller’s own proposal', () => {
   assert.ok(post.length > 0, 'the attach route is gone');
   // ATTACHING TO SOMEONE ELSE'S QUOTE would put the firm's reasoning behind a
   // number they did not quote, and tell them a figure exists they cannot see.
-  assert.match(post, /FROM quotes WHERE id = \? AND provider_user_id = \?/,
+  // `partner_id` is the column a quote records its provider on. `provider_user_id`
+  // is not on the live quotes table, so a predicate on it never matched a row.
+  assert.match(post, /FROM quotes WHERE id = \? AND partner_id = \?/,
     'a brief or reading can be attached to a proposal the caller does not own');
+  assert.match(post, /readingIsStale/,
+    'a stale market reading can still be attached by calling the route');
   assert.match(post, /INSERT OR IGNORE INTO research_attachments/,
     'attaching the same thing twice now fails, which reads as the first attach having failed');
   assert.match(MIGRATION, /UNIQUE \(owner_user_id, kind, ref_key, quote_id\)/,

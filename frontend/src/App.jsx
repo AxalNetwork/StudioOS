@@ -52,6 +52,7 @@ const FounderValidateWorkspace = lazy(() => import('./workspaces/founder/Founder
 const ResearchWorkspace = lazy(() => import('./workspaces/ResearchWorkspace'));
 const FundDossier = lazy(() => import('./pages/research/FundDossier'));
 const CompanyCandidate = lazy(() => import('./pages/research/CompanyCandidate'));
+const MarketReading = lazy(() => import('./pages/research/MarketReading'));
 const InvestorDealsRoutes = lazy(() => import('./workspaces/investor/InvestorDealsRoutes'));
 const AdvisorBucketRoutes = lazy(() => import('./workspaces/advisor/AdvisorBucketRoutes'));
 const PartnerBucketRoutes = lazy(() => import('./workspaces/partner/PartnerBucketRoutes'));
@@ -2132,6 +2133,7 @@ function AppInner() {
             : <Navigate to="/research/ask" replace />} />
       <Route path="/research/ask" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/markets" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/markets/:uid" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <MarketReading role={researchRole} />)} />
       <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/companies/:analysisId/:candidateId" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyCandidate role={researchRole} />)} />
       <Route path="/research/funds" element={guard(labRoles(['admin', 'founder']), <ResearchWorkspace role={researchRole} user={user} />)} />

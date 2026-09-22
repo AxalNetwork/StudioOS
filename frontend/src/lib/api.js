@@ -4621,6 +4621,7 @@ export const api = {
     // line nobody has priced the market for comes back with nulls rather than
     // being left out — that row is what the zone is about.
     marketReadings: () => request('/research/market-readings'),
+    marketReadingGet: (uid) => request(`/research/market-readings/${encodeURIComponent(uid)}`),
     marketReadingCreate: (data) => request('/research/market-readings', {
       method: 'POST', body: JSON.stringify(data || {}),
     }),

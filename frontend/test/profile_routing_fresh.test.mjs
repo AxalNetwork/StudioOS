@@ -63,7 +63,8 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // them is how a count starts drifting.
   //
   // 113 as of 2026-09-21. `Pages · Company` — `/research/companies/:analysisId/:candidateId`.
-  assert.equal(recs.length, 113);
+  // 114 as of 2026-09-21. `Pages · Market reading` — `/research/markets/:uid`.
+  assert.equal(recs.length, 114);
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
     assert.ok(r.status.length > 0, `row "${r.canvas}" has no status`);
