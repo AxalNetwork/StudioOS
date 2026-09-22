@@ -197,8 +197,8 @@ test('the SLA bands come from the server, not from the page', () => {
 test('the artboard still draws what this page claims to be', () => {
   // So the divergence stays deliberate rather than quietly going stale.
   //
-  // RE-AIMED BY D194, NOT LOOSENED. The canvas this page was built against
-  // said "five lanes"; the export D194 landed says "five columns" and
+  // RE-AIMED BY D195, NOT LOOSENED. The canvas this page was built against
+  // said "five lanes"; the export D195 landed says "five columns" and
   // "absorbs five formerly separate queues". The wording moved, the property
   // did not, so the assertion follows the property. What it must NOT become
   // is /five/, which any of a dozen sentences on the artboard satisfies.
@@ -217,7 +217,7 @@ test('the artboard still draws what this page claims to be', () => {
   assert.match(s3, /assign to reviewer/i, 'the assignment refusal may be stale');
   assert.match(s3, /decision note/i, 'the AI-note refusal may be stale');
 
-  // TWO THINGS D194's EXPORT ADDED, AND THE PAGE IS NEITHER OF THEM YET.
+  // TWO THINGS D195's EXPORT ADDED, AND THE PAGE IS NEITHER OF THEM YET.
   // Asserted here so the divergence is on the record and fails if the canvas
   // quietly reverts — which is the only way this file can tell the difference
   // between "the design moved on" and "somebody edited the export".
