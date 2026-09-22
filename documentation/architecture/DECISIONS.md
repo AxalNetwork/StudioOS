@@ -17308,3 +17308,155 @@ have looked.
 
 **Migration 278. No `frontend/src` change, so no `docs/` rebuild. No new
 `/api/*` method.**
+
+## D191 — the 238 pairs that agree today, and the guard that keeps them agreeing
+
+**The concern: two definitions of one table must not drift apart silently.**
+
+A table in this repo is often created twice — once by a migration or
+`schema_baseline.sql`, once by a runtime `CREATE TABLE IF NOT EXISTS` in a
+route or service so a database that missed the migration heals itself. D1
+holds one table per name and `IF NOT EXISTS` cannot add a column to a table
+that already exists, so whichever runs first wins, in an order nothing in the
+repository decides, and every column only the loser declares is a column that
+will never exist. Its readers then name it and throw.
+
+**It has shipped three times.** `metrics_snapshots` twice — #183 and #202,
+leaving the `traction_review` queue job dead against the losing shape — and
+`partner_profiles` in D187, where `routes/profiling.ts`'s bootstrap beat
+migration 028 and twenty-six partner accounts were told in chat to accept an
+invitation that does not exist.
+
+**Neither sibling guard can see it, and that is structural.**
+`check-sqlite-columns` UNIONS every definition, deliberately, because it cannot
+know which is live — so a column present in one definition looks present
+everywhere. `check-sqlite-table-collisions` fires only on the mutually fatal
+subset and says in its own header that definitions which merely differ are
+"common and usually fine". All three shipped defects lived between those two.
+
+### THE FOURTH CORRECTION: the re-measure in D190's filing was wrong too
+
+D190 filed *"208 tables have two schema definitions, and 14 disagree"* and this
+decision's own plan corrected that to **216 identical / 21 supersets / 5
+divergent / 25 unparseable**. Built properly, it is **239 / 24 / 2 / 2** over
+267 pairs. The correction has the same cause **four** times over — an extractor
+that could not read what the code does:
+
+| the extractor could not | cost |
+| --- | --- |
+| resolve `ADD COLUMN ${col}` loops | 21 false divergences, `partner_profiles` — a case D187 CLOSED — among them |
+| join `'a' + 'b'` CREATE statements | 15 tables reported unbuildable, every one a quote-and-plus artifact in a nine-file idiom |
+| rename a rebuilt table's own CREATE | `landing_pages` built as `landing_pages_new`, so `pragma_table_info` came back EMPTY and every other definition read as a superset of nothing |
+| read a pair whose TYPE carries its own quotes | `['raw_chat_json', "TEXT NOT NULL DEFAULT '{}'"]` dropped, so `routes/profiling.ts` read as 23 of its 24 ADD COLUMNs and `partner_profiles` — the case D187 fully converged — reported as a one-column superset |
+
+So a sweep is not a measurement until its parser has been checked against the
+thing it is parsing. **The fourth was caught by the gate's own stale-entry
+refusal**, which is the best thing that happened in this build: the ledger said
+`superset:partner_profiles`, the parser fix made the pair agree, and the refusal
+rather than a human is what noticed the entry had stopped being true.
+
+### WHICH SIDE WINS IS DECIDED BY PROVISIONING ORDER, and that was measured
+
+`migrate-d1 --bootstrap` loads `schema_baseline.sql` and then every post-cutoff
+migration, and `branch-provision.yml` runs it **before** `wrangler deploy` — so
+on any database this repo's own tooling creates the SQL side lands before a
+request can reach a route, and every runtime `CREATE` is a no-op. Built against
+a fresh build, **27 of the 29 divergent pairs have a runtime definition whose
+columns are all present**; only `capital_calls` (already on
+`sqlite-table-collisions-baseline.json`) and `oauth_state_tokens` declare a
+runtime column the resulting database lacks, and `oauth_state_tokens`'s is
+`id`, which nothing reads.
+
+**So there is no live 500 in the ledger, and the entry says so rather than
+implying one.** And `partner_profiles` is not on it at all: D187's three-way
+collision is fully converged, which is what the fourth correction above
+established. What there is instead is sharper and was not expected:
+
+### SIX BOOTSTRAPS ARE ALREADY BEHIND THEIR OWN READERS
+
+Six definitions create a table and then, in the same file, query a column that
+bootstrap does not create. On a database where the bootstrap ran first, each
+file breaks itself:
+
+| file | creates without | and its own statements name |
+| --- | --- | --- |
+| `routes/brand.ts:42` — `landing_pages` | 29 columns | **all 29** — every `audience_*` field, `template`, `goal`, `content_json` |
+| `routes/legalcap.ts:55` — `subsidiaries` | 6 columns | **all 6** |
+| `routes/settings.ts:110` — `user_sessions` | `factor`, `last_step_up_at`, `step_up_due_at`, `assurance_level` | **all 4**, and they are auth state |
+| `routes/advisor.ts:174` — `advisor_messages` | `safety_score`, `sanitisation_actions_json` | **both** |
+| `routes/brand.ts:80` — `waitlist_signups` | 6 columns | `audience` |
+| `routes/monitoring_analytics.ts:83` — `admin_audit_log` | 4 columns | `viewed_user_id` |
+
+Every one is inert on a provisioned database and every one is a self-heal that
+has gone stale relative to the migration that widened its table. That is the
+state the guard exists to stop growing.
+
+### WHAT IT COMPARES, and both halves were measured rather than chosen
+
+**Both sides get their own `ALTER … ADD COLUMN`s first**, resolving the fifteen
+`ADD COLUMN ${col}` loops in the worker over the three shapes they use (a named
+`const` array of pairs, an inline array of pairs, an inline array of
+`'col TYPE'` strings). Without it the guard opens with twenty-one false
+findings, `partner_profiles` at the top.
+
+**Column names only, not types or constraints.** Across all 267 pairs, five
+tables differ in a declared type and every one is `TIMESTAMP` against `TEXT` on
+a date column — TIMESTAMP is NUMERIC affinity, which converts a TEXT value only
+when it is a well-formed numeral, and an ISO stamp is not, so both store the
+same bytes. Fourteen differ in NOT NULL, DEFAULT or PRIMARY KEY on a shared
+column; that is the fatality question and `check-sqlite-table-collisions` owns
+it. What is left is the one thing neither watches: a column one definition has
+and another does not.
+
+**The SQL side is ONE ordered source**, not one entry per file. Baseline then
+migrations by number is the order a database applies, so a later
+`CREATE TABLE IF NOT EXISTS` for a table the baseline already has is the no-op
+it is at runtime. Treating each SQL file as a rival would re-report pairs that
+ordering already settles.
+
+### THE ONE LIVE CONSEQUENCE, AND IT IS FIXED HERE
+
+`oauth_state_tokens` has three definitions. `integrations/oauth.ts:26` won;
+`routes/calendar.ts:105` lost and knows it — its own comment adds `expires_at`
+*"if the table existed in the integrations/oauth.ts shape"*. Production is
+exactly that: oauth.ts's seven columns plus `expires_at TEXT NOT NULL
+DEFAULT ''`.
+
+`integrations/oauth.ts:93` inserts five columns and not `expires_at`, so every
+Salesforce, Carta, DocuSign, HubSpot and LinkedIn handshake sits in that table
+with `expires_at = ''`. And `calendar.ts:130`'s *"opportunistic sweep"* was
+`DELETE FROM oauth_state_tokens WHERE expires_at < <now>` — where `'' < <any
+ISO stamp>` is TRUE in SQLite. **So starting a Google or Microsoft calendar
+connect deleted every in-flight integration OAuth state**, and the user came
+back from the provider to an invalid state.
+
+`services/fundSheets.ts:192` already carries `AND expires_at != ''` for exactly
+this reason. This change adds the copy that was missing, and the test drives
+both forms against a fixture in production's shape: without the clause the
+Salesforce row is gone, with it only the genuinely expired calendar row is.
+
+**Fixing it here rather than filing it is a judgement call, and it is cheap to
+strike.** Against: one concern per PR, and this is an auth-adjacent production
+path. For: it is one clause copied verbatim from a sibling that already has it,
+it is the guard's own first find, and baselining it instead would write the
+fourth instance of the thing this programme keeps correcting — a correct
+diagnosis left as prose. *Strike it and the clause goes to its own PR and the
+`oauth_state_tokens` entry records the consequence as open.*
+
+### Filed, not folded in
+
+**`metric_anomalies` does not exist, and its sole definition cannot create
+it.** `integrations/providers/stripe.ts:293` writes
+`DEFAULT (datetime("now"))` with double quotes — which SQLite refuses with
+*"default value of column is not constant"* whether or not double-quoted string
+literals are enabled — under a `catch` that `console.warn`s. No migration
+declares the table, so nothing else creates it, and `stripe.ts:425`'s INSERT
+therefore throws `no such table` on every anomaly. Nothing reads the table
+either, so whether it should exist at all is a store decision rather than a
+two-character fix. The same quoting appears at `stripe.ts:336` for
+`project_metrics`, which is inert only because migration 249 and
+`routes/progress.ts:1842` both create that table correctly and agree — it is on
+this ledger as `refused:project_metrics`.
+
+**No migration — 279 stays free. No `frontend/src` change, so no `docs/`
+rebuild. No new `/api/*` method.**

@@ -126,8 +126,20 @@ async function persistState(env: Env, nonce: string, userId: number, provider: '
   const sql = getSQL(env);
   const expires = new Date(Date.now() + STATE_TTL_SECONDS * 1000).toISOString();
   // Opportunistic sweep — keeps the table from growing unbounded.
+  //
+  // `AND expires_at != ''` IS LOAD-BEARING AND IT IS NOT AN OPTIMISATION.
+  // `oauth_state_tokens` has two definitions and this file's is the one that
+  // lost: `integrations/oauth.ts` created the table first, so production holds
+  // its shape plus the `expires_at TEXT NOT NULL DEFAULT ''` the bootstrap
+  // above ALTERs in. That provider's INSERT names five columns and not
+  // `expires_at`, so every Salesforce, Carta, DocuSign, HubSpot and LinkedIn
+  // handshake sits in this table with `expires_at = ''` — and `'' < <any ISO
+  // stamp>` is TRUE in SQLite, so without this clause the sweep deleted every
+  // in-flight integration OAuth state each time a calendar connect started.
+  // `services/fundSheets.ts:192` already carries the same clause for the same
+  // reason; this is the copy that was missing. See D191.
   const nowIso = new Date().toISOString();
-  await sql`DELETE FROM oauth_state_tokens WHERE expires_at < ${nowIso}`;
+  await sql`DELETE FROM oauth_state_tokens WHERE expires_at < ${nowIso} AND expires_at != ''`;
   await sql`
     INSERT INTO oauth_state_tokens (state, user_id, provider, expires_at)
     VALUES (${nonce}, ${userId}, ${provider}, ${expires})
