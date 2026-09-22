@@ -100,11 +100,23 @@ const shapeOf = (db: InstanceType<typeof DatabaseSync>, table: string) =>
  * carries. Foreign keys are off by default in node:sqlite, so a REFERENCES
  * clause needs no parent here — which is what lets one statement stand on
  * its own as the reference shape.
+ *
+ * NO REGEX IS BUILT FROM `table`, and that is a correction rather than a
+ * style choice. The first draft did — Semgrep's detect-non-literal-regexp
+ * flagged it, and the query was right about the mechanism even though these
+ * names are local literals and reach no user input. The literal match it was
+ * replaced with is also the STRONGER assertion: a statement must BEGIN with
+ * the create, where the regex only needed it to contain the text somewhere.
+ * Measured: splitStatements strips comments, and all six declarations open
+ * `CREATE TABLE IF NOT EXISTS <name> (` exactly, so the interior-whitespace
+ * normalisation below is the only latitude given.
  */
 function shapeFromDeclaringMigration(migration: string, table: string) {
   const sql = readFileSync(resolve(MIGRATIONS, migration), 'utf8');
-  const stmts = splitStatements(sql).filter((s) =>
-    new RegExp(`CREATE TABLE(?: IF NOT EXISTS)? ${table}\\s*\\(`, 'i').test(s));
+  const needle = `CREATE TABLE IF NOT EXISTS ${table} (`;
+  const stmts = splitStatements(sql).filter(
+    (s) => s.slice(0, needle.length + 8).replace(/\s+/g, ' ').startsWith(needle),
+  );
   assert.equal(stmts.length, 1,
     `expected exactly one CREATE TABLE ${table} in ${migration}, found ${stmts.length}. `
     + 'This helper is the reference shape for the restore, so an ambiguous match would '
