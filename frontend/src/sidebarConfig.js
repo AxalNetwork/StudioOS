@@ -130,16 +130,22 @@ export const SIDEBAR_GROUPS = {
     ]},
   ],
 
-  // The subsidiary tier (D107). Eight rows, in the Admin · Subsidiary
-  // canvas's own nav order, one group — the canvas draws no second group and
-  // the territory badge sits above them all, in App.jsx.
+  // The subsidiary tier (D107). Eight rows, one group — the canvas draws no
+  // second group and the territory badge sits above them all, in App.jsx.
+  //
+  // THE FIRST ROW IS STUDIO, NOT THE CANVAS'S HOME. The product owner replaced
+  // the S1 digest as the front door: `/studio` is Eadwyn plus one card per
+  // other Admin page. `/branch` stays registered — it is still the digest —
+  // and it is no longer a sidebar row, because a row labelled Home that opens
+  // the digest is the front door this shell just retired.
   //
   // WHY EVERY ROW SHIPS AT ONCE, WHICH READS AS A REVERSAL OF THE COMMENT ON
   // THE GROUP ABOVE AND IS NOT ONE. That comment forbids a row pointing at a
   // route that does not exist, because such a row "looks shipped and 404s".
-  // Every row here HAS a route, registered in App.jsx and covered by the same
-  // guard — and as of D155 every one of them resolves to a REAL PAGE. The
-  // interim arrangement this comment used to describe (rows whose artboards
+  // Every row here HAS a route, registered in App.jsx. The seven `/branch/*`
+  // rows are `guard(['admin'])`. Studio is the shared `/studio` route, whose
+  // guard includes admin — and as of D155 every branch artboard is a real
+  // page. The interim arrangement this comment used to describe (rows whose artboards
   // were not built rendering `BranchZonePending`, a notice naming the artboard
   // and the PR that would build it) is over, and the component is deleted
   // rather than left unused. What it bought was a sidebar matching the canvas
@@ -149,7 +155,7 @@ export const SIDEBAR_GROUPS = {
   // exists to answer.
   branch_admin: [
     { key: 'branch', label: 'Branch', items: [
-      { to: '/branch', icon: LayoutDashboard, label: 'Home' },
+      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/branch/accounts', icon: Users, label: 'Accounts' },
       { to: '/branch/approvals', icon: Inbox, label: 'Approvals' },
       { to: '/branch/programs', icon: Calendar, label: 'Programs' },

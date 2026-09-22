@@ -1,0 +1,247 @@
+/**
+ * The cards under Eadwyn on Admin Studio. One per other Admin page.
+ * Figures come from reads the branch pages already make. This file does not
+ * mount a second assistant.
+ */
+import React from 'react';
+import { Link } from 'react-router-dom';
+import { branchLabel, branchOfUser } from '../../lib/shellRole';
+import { inZone } from '../../lib/zoneTime';
+import { titleCase, Card, Unrecorded, Unreadable } from '../../ui';
+import { COMMUNITY_CONSOLES } from '../branch/BranchCommunity';
+import {
+  accountLines,
+  approvalsGlance,
+  contractsGlance,
+  freezeLine,
+  insightsGlance,
+  offBranchReason,
+  programmeGlance,
+} from './adminStudioOverview';
+
+const UNAVAILABLE = Symbol('unavailable');
+
+function Glance({ glance }) {
+  if (!glance) return <p className="mt-2 text-[12px] text-axal-muted">Reading…</p>;
+  if (glance.kind === 'unreadable') {
+    return (
+      <div className="mt-2">
+        <Unreadable what="This" claim={glance.reason || 'The read did not complete.'} />
+      </div>
+    );
+  }
+  if (glance.kind === 'unrecorded') {
+    return (
+      <p className="mt-2 text-[13px] text-axal-ink">
+        <Unrecorded reason={glance.reason} />
+      </p>
+    );
+  }
+  if (glance.kind === 'empty' || glance.kind === 'ready') {
+    return <p className="mt-2 text-[13px] leading-relaxed text-axal-ink">{glance.text}</p>;
+  }
+  return null;
+}
+
+function CardHead({ title, to }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <h2 className="text-[14px] font-extrabold tracking-tight text-axal-ink">{title}</h2>
+      <Link to={to} className="text-[12px] font-semibold text-axal-ink underline underline-offset-2">
+        Open
+      </Link>
+    </div>
+  );
+}
+
+export function AdminStudioOverview({ user, home, licence, templates, insights }) {
+  const onBranch = Boolean(branchOfUser(user));
+  const absent = { kind: 'unrecorded', reason: offBranchReason() };
+  const agreementAbsence = {
+    kind: 'unrecorded',
+    reason: 'Agreements that expire inside 60 days are not recorded on a branch. The contract ledger is HQ\'s table.',
+  };
+  const failed = (what) => ({
+    kind: 'unreadable',
+    reason: `${what} could not be read. This is not a claim that the territory has none.`,
+  });
+
+  const lic = licence && licence !== UNAVAILABLE ? licence.licence || null : null;
+  const seats = onBranch
+    ? (licence === null
+      ? null
+      : licence === UNAVAILABLE
+        ? failed('Seats')
+        : (() => {
+          const lines = accountLines(lic?.seats_used_by_type, lic?.seats);
+          if (!lines) {
+            return {
+              kind: 'unrecorded',
+              reason: lic?.seats_used_basis || 'Seat use is not recorded on this copy, so it is not shown as zero.',
+            };
+          }
+          return { kind: 'ready', lines };
+        })())
+    : absent;
+
+  const approvals = !onBranch
+    ? absent
+    : home === null
+      ? null
+      : home === UNAVAILABLE
+        ? failed('The queues')
+        : approvalsGlance(home.queue_pressure);
+
+  const programme = !onBranch
+    ? absent
+    : home === null
+      ? null
+      : home === UNAVAILABLE
+        ? failed('The programme clock')
+        : programmeGlance(home.programme, inZone(home.programme?.week_closes_at, home.programme?.zone));
+
+  const contracts = !onBranch
+    ? { ...absent, agreements: agreementAbsence }
+    : templates === null
+      ? null
+      : templates === UNAVAILABLE
+        ? { ...failed('The template library'), agreements: agreementAbsence }
+        : contractsGlance(templates);
+
+  const insightView = !onBranch
+    ? { share: absent, median: absent }
+    : (home === null || insights === null)
+      ? null
+      : insightsGlance(
+        home === UNAVAILABLE
+          ? { share_bps: null, reason: 'The digest could not be read, so the share rate is unknown rather than nil.' }
+          : home.revenue,
+        insights === UNAVAILABLE
+          ? { benchmarks_available: false, benchmarks_reason: 'The insights read did not complete.' }
+          : insights,
+      );
+
+  const territories = Array.isArray(user?.branch?.territories) ? user.branch.territories.filter(Boolean) : [];
+  const status = user?.branch?.status;
+  const statusWord = status === 'active' ? 'Active' : status === 'suspended' ? 'Suspended' : 'Awaiting HQ';
+  const suspendedAt = lic?.suspended_at || null;
+
+  return (
+    <div data-testid="admin-studio-overview">
+      {onBranch && status === 'suspended' ? (
+        <p
+          data-testid="admin-studio-frozen"
+          className="mt-4 rounded-lg border border-rose-200 bg-rose-50/70 px-3 py-2 text-[13px] text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200"
+        >
+          {freezeLine(branchLabel(user), suspendedAt)}
+        </p>
+      ) : null}
+
+      {onBranch ? (
+        <p className="mt-4 text-[12.5px] text-axal-muted" data-testid="admin-studio-territory">
+          <span className="font-semibold text-axal-ink">{branchLabel(user) || 'This territory'}</span>
+          {territories.length ? ` · ${territories.join(' · ')}` : ''}
+          {` · ${statusWord}`}
+        </p>
+      ) : (
+        <p className="mt-4 text-[12.5px] text-axal-muted" data-testid="admin-studio-no-branch">
+          This account is not on a branch deployment. The cards below say what is not recorded here.
+        </p>
+      )}
+
+      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+        <Card data-testid="admin-studio-accounts">
+          <CardHead title="Accounts" to="/branch/accounts" />
+          {seats === null ? <p className="mt-2 text-[12px] text-axal-muted">Reading seats…</p> : null}
+          {seats && seats.kind !== 'ready' ? <Glance glance={seats} /> : null}
+          {seats?.kind === 'ready' ? (
+            <ul className="mt-2 space-y-1 text-[13px] text-axal-ink">
+              {seats.lines.tiles.map((t) => (
+                <li key={t.type}>
+                  {t.missing ? (
+                    <Unrecorded reason="This seat type was not on the copy, so it is not shown as zero.">
+                      {titleCase(t.type)}
+                    </Unrecorded>
+                  ) : t.state === 'unlicensed' ? (
+                    <>
+                      <span className="font-semibold">{titleCase(t.type)}</span>
+                      {' · no seats of this type licensed'}
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-semibold">{titleCase(t.type)}</span>
+                      {' '}
+                      <span className="tabular-nums">{t.used} of {t.licensed}</span>
+                      {t.state === 'over' ? ' · over' : ''}
+                      {t.type === seats.lines.tightestType ? ' · tightest' : ''}
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </Card>
+
+        <Card data-testid="admin-studio-approvals">
+          <CardHead title="Approvals" to="/branch/approvals" />
+          <Glance glance={approvals} />
+        </Card>
+
+        <Card data-testid="admin-studio-programs">
+          <CardHead title="Programs" to="/branch/programs" />
+          <Glance glance={programme} />
+          <p className="mt-2 text-[11.5px] text-axal-muted">Week dates are set at HQ. This page reads them.</p>
+        </Card>
+
+        <Card data-testid="admin-studio-community">
+          <CardHead title="Community" to="/branch/community" />
+          <ul className="mt-2 space-y-1.5">
+            {COMMUNITY_CONSOLES.map((c) => (
+              <li key={c.key} className="text-[13px]">
+                <Link to={c.to} className="font-semibold text-axal-ink underline underline-offset-2">{c.label}</Link>
+                <span className="text-axal-muted"> · {c.scope}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+
+        <Card data-testid="admin-studio-contracts">
+          <CardHead title="Contracts" to="/branch/contracts" />
+          {contracts === null ? <p className="mt-2 text-[12px] text-axal-muted">Reading the library…</p> : (
+            <>
+              <Glance glance={contracts} />
+              <p className="mt-2 text-[13px] text-axal-ink">
+                <Unrecorded reason={contracts.agreements?.reason}>Expiring agreements</Unrecorded>
+              </p>
+            </>
+          )}
+        </Card>
+
+        <Card data-testid="admin-studio-insights">
+          <CardHead title="Insights" to="/branch/insights" />
+          {insightView === null ? <p className="mt-2 text-[12px] text-axal-muted">Reading insights…</p> : (
+            <>
+              <Glance glance={insightView.median} />
+              <Glance glance={insightView.share} />
+            </>
+          )}
+        </Card>
+
+        <Card data-testid="admin-studio-settings" className="lg:col-span-2">
+          <CardHead title="Settings" to="/branch/settings" />
+          <p className="mt-2 text-[13px] leading-relaxed text-axal-ink">
+            4 of 5 rows owned by HQ.
+            {' '}
+            <Unrecorded reason="No hostname is recorded. The record, when a store exists, is a CNAME to cname.os.axal.vc plus a TXT ownership challenge. This card does not offer a form.">
+              Hostname not recorded
+            </Unrecorded>
+            {' · '}
+            <Unrecorded reason="No brand kit is recorded. Mark, colours and the powered-by line have no store yet, and HQ does not approve one. This card does not offer a form.">
+              Brand kit not recorded
+            </Unrecorded>
+          </p>
+        </Card>
+      </div>
+    </div>
+  );
+}

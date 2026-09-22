@@ -16,6 +16,7 @@ import FounderStudioHome from './founder/FounderStudioHome';
 import InvestorStudioHome from './investor/InvestorStudioHome';
 import AdvisorStudioHome from './advisor/AdvisorStudioHome';
 import PartnerStudioHome from './partner/PartnerStudioHome';
+import AdminStudioHome from './admin/AdminStudioHome';
 // Task #81 — reuse the founder command-center lifecycle rail for the investor
 // deal desk (rendered read-only: canEdit={false}).
 import LifecycleModule from '../components/command-center/LifecycleModule';
@@ -129,6 +130,26 @@ export default function Dashboard({ activeRole, authUser }) {
     }
     load(true);
   };
+
+  // The admin profile does not wait on the founder dashboard, and it does not
+  // fall through to skills, values and archetype. Eadwyn and the Admin page
+  // cards render from the branch reads, which answer on their own.
+  if (activeRole === 'admin' && authUser) {
+    return (
+      <div className="space-y-6">
+        {googleNotice && (
+          <InfoStrip variant="info" inline={false} onDismiss={() => setGoogleNotice(false)}>
+            <strong>You're signed in with Google.</strong> Signing out of Axal VC will not
+            sign you out of Google globally — if you're on a shared device, also sign
+            out of your Google account in this browser. You can manage this anytime
+            under <Link to="/account/security" className="underline">Settings → Security → Connected accounts</Link>.
+          </InfoStrip>
+        )}
+        <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
+        <AdminStudioHome user={authUser} />
+      </div>
+    );
+  }
 
   if (loading) return (
     <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 py-20 justify-center">
