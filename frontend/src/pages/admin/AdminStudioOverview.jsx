@@ -11,6 +11,7 @@ import { titleCase, Card, Unrecorded, Unreadable } from '../../ui';
 import { COMMUNITY_CONSOLES } from '../branch/BranchCommunity';
 import {
   accountLines,
+  agreementsGlance,
   approvalsGlance,
   contractsGlance,
   freezeLine,
@@ -57,10 +58,6 @@ function CardHead({ title, to }) {
 export function AdminStudioOverview({ user, home, licence, templates, insights }) {
   const onBranch = Boolean(branchOfUser(user));
   const absent = { kind: 'unrecorded', reason: offBranchReason() };
-  const agreementAbsence = {
-    kind: 'unrecorded',
-    reason: 'Agreements that expire inside 60 days are not recorded on a branch. The contract ledger is HQ\'s table.',
-  };
   const failed = (what) => ({
     kind: 'unreadable',
     reason: `${what} could not be read. This is not a claim that the territory has none.`,
@@ -100,13 +97,25 @@ export function AdminStudioOverview({ user, home, licence, templates, insights }
         ? failed('The programme clock')
         : programmeGlance(home.programme, inZone(home.programme?.week_closes_at, home.programme?.zone));
 
+  // #308 / D199 — the agreements come from the DIGEST, not the template
+  // library: they are this branch's own contract rows, and the library is
+  // HQ's pushed copy. Two stores, so two independent states, and a library
+  // that failed to load says nothing about whether any agreement is ending.
+  const agreements = !onBranch
+    ? absent
+    : home === null
+      ? null
+      : home === UNAVAILABLE
+        ? failed('Agreements')
+        : agreementsGlance(home.agreements);
+
   const contracts = !onBranch
-    ? { ...absent, agreements: agreementAbsence }
-    : templates === null
+    ? { ...absent, agreements }
+    : (templates === null || home === null)
       ? null
       : templates === UNAVAILABLE
-        ? { ...failed('The template library'), agreements: agreementAbsence }
-        : contractsGlance(templates);
+        ? { ...failed('The template library'), agreements }
+        : { ...contractsGlance(templates), agreements };
 
   const insightView = !onBranch
     ? { share: absent, median: absent }
@@ -207,12 +216,18 @@ export function AdminStudioOverview({ user, home, licence, templates, insights }
 
         <Card data-testid="admin-studio-contracts">
           <CardHead title="Contracts" to="/branch/contracts" />
-          {contracts === null ? <p className="mt-2 text-[12px] text-axal-muted">Reading the library…</p> : (
+          {contracts === null ? <p className="mt-2 text-[12px] text-axal-muted">Reading the library and agreements…</p> : (
             <>
               <Glance glance={contracts} />
-              <p className="mt-2 text-[13px] text-axal-ink">
-                <Unrecorded reason={contracts.agreements?.reason}>Expiring agreements</Unrecorded>
-              </p>
+              <div data-testid="admin-studio-agreements">
+                <Glance glance={contracts.agreements} />
+                {/* Only beside a MEASURED answer. Qualifying a count that was
+                    never taken would dress an absence as a partial result. */}
+                {contracts.agreements?.note
+                  && (contracts.agreements.kind === 'ready' || contracts.agreements.kind === 'empty') ? (
+                    <p className="mt-1 text-[11px] leading-relaxed text-axal-muted">{contracts.agreements.note}</p>
+                  ) : null}
+              </div>
             </>
           )}
         </Card>

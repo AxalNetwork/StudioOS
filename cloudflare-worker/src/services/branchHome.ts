@@ -79,6 +79,23 @@ export type BranchHome = {
     reason: string;
   };
   sla_bands: { due_soon_hours: number; past_hours: number };
+  /** The Studio card's expiring agreements (#308, D199). */
+  agreements: AgreementsExpiring;
+};
+
+/**
+ * Agreements that end inside the window, from THIS database's own contract
+ * stores. `expiring` is null whenever a dated source could not be read.
+ */
+export type AgreementsExpiring = {
+  window_days: number;
+  /** null = at least one dated source is unreadable, so any total would be smaller than the truth. */
+  expiring: number | null;
+  by_source: { pairwise_ndas: number | null; partner_deals: number | null };
+  /** Present when `expiring` is null, naming what could not be read. */
+  reason?: string;
+  /** What is NOT counted and why — a zero must never be read as "checked everything". */
+  undated: { sources: string[]; reason: string };
 };
 
 /**
@@ -185,6 +202,104 @@ async function revenueShare(env: Env): Promise<BranchHome['revenue']> {
   }
 }
 
+/**
+ * AGREEMENTS THAT END INSIDE THE WINDOW (#308, D199).
+ *
+ * THE TASK NAMED THE WRONG CAUSE, and the correction decides the whole shape.
+ * The Studio card said these were "not recorded on a branch" because "the
+ * contract ledger is HQ's table". That ledger is `licence_contracts`
+ * (migration 259): the licence agreement between HQ and this licensee, one per
+ * licence, recording drafting and signature and NEVER an end date. Pushing it
+ * here would carry nothing that can expire.
+ *
+ * The agreements the canvas draws on this card (S5, `conExpiring` — a Partner
+ * MSA, an Advisory agreement, a Service agreement, each with a counterparty
+ * and a renewal) are the platform's own contract union: the four sources
+ * `admin_contracts.ts`'s `loadAllContracts` joins, `documents`,
+ * `esign_envelopes`, `pairwise_ndas` and `partner_deals`. Every one is a table
+ * in THIS database, so on a branch they are the branch's by construction
+ * (D.2). Nothing needs pushing and no new store is needed.
+ *
+ * WHAT IS MISSING IS A FIELD, NOT A TRANSPORT. Two of the four record when an
+ * agreement ends, and each has a live sweep acting on it —
+ * `pairwise_ndas.valid_until` (`expireDueArtifacts`) and
+ * `partner_deals.expires_at` (`expirePartnerDeals`). The other two record
+ * when a document was SIGNED and nothing about when it stops binding, so an
+ * MSA sent through e-sign cannot be counted here, and `undated` says so rather
+ * than letting "0 expiring" read as though they were checked.
+ *
+ * THE WINDOW IS (now, now + 60 days], `renewalSweep`'s own shape: a row still
+ * `active` after its end has ended — that is the sweep's business, not
+ * something "expiring". BOTH SIDES GO THROUGH `datetime()`. These columns are
+ * written from JavaScript as ISO strings, and comparing one bare against a
+ * SQLite stamp decides at position 10, where 'T' sorts above ' ': an agreement
+ * that ended this morning reads as still running (the D124/D125 class). The
+ * handler's own `now` is bound rather than SQLite's clock, as the rest of this
+ * digest does, so the answer cannot drift from the page it is printed on.
+ *
+ * AN UNREADABLE SOURCE MAKES THE TOTAL UNKNOWN, NEVER SMALLER — `backlogOf`'s
+ * rule for the queues. Two sources with one unreadable is a count that is
+ * wrong by an amount nobody knows.
+ */
+export const AGREEMENT_WINDOW_DAYS = 60;
+
+const UNDATED_REASON =
+  'Counted: mutual NDAs and partner deals, the two agreement stores that record an end date. '
+  + 'E-sign envelopes and signed documents record when an agreement was signed, not when it '
+  + 'ends, so an MSA or a service agreement cannot be counted here.';
+
+async function countEnding(env: Env, sql: string, nowIso: string): Promise<number | null> {
+  try {
+    const row = await env.DB.prepare(sql)
+      .bind(nowIso, nowIso, `+${AGREEMENT_WINDOW_DAYS} days`)
+      .first<{ n: number }>();
+    return Number(row?.n ?? 0);
+  } catch {
+    return null;
+  }
+}
+
+async function agreementsExpiring(env: Env, now: number): Promise<AgreementsExpiring> {
+  const nowIso = new Date(now).toISOString();
+  const [ndas, deals] = await Promise.all([
+    countEnding(env,
+      `SELECT COUNT(*) AS n FROM pairwise_ndas
+        WHERE status = 'active'
+          AND valid_until IS NOT NULL
+          AND datetime(valid_until) >  datetime(?)
+          AND datetime(valid_until) <= datetime(?, ?)`,
+      nowIso),
+    countEnding(env,
+      `SELECT COUNT(*) AS n FROM partner_deals
+        WHERE status = 'active'
+          AND expires_at IS NOT NULL
+          AND datetime(expires_at) >  datetime(?)
+          AND datetime(expires_at) <= datetime(?, ?)`,
+      nowIso),
+  ]);
+  const unreadable = [
+    ndas === null ? 'mutual NDAs' : null,
+    deals === null ? 'partner deals' : null,
+  ].filter(Boolean) as string[];
+  const undated = { sources: ['esign_envelopes', 'documents'], reason: UNDATED_REASON };
+  if (unreadable.length) {
+    return {
+      window_days: AGREEMENT_WINDOW_DAYS,
+      expiring: null,
+      by_source: { pairwise_ndas: ndas, partner_deals: deals },
+      reason: `The ${unreadable.join(' and ')} could not be read, so no total is given: one that `
+        + 'left them out would be smaller than the truth by an amount nobody knows.',
+      undated,
+    };
+  }
+  return {
+    window_days: AGREEMENT_WINDOW_DAYS,
+    expiring: (ndas as number) + (deals as number),
+    by_source: { pairwise_ndas: ndas, partner_deals: deals },
+    undated,
+  };
+}
+
 export async function branchHome(env: Env, now = Date.now()): Promise<BranchHome> {
   const lanes = await laneCounts(env);
   const queue_pressure: QueuePressureLane[] = lanes.map((l) => {
@@ -201,7 +316,9 @@ export async function branchHome(env: Env, now = Date.now()): Promise<BranchHome
   });
   queue_pressure.sort(byPressure);
 
-  const [programme, revenue] = await Promise.all([programmeClock(env, now), revenueShare(env)]);
+  const [programme, revenue, agreements] = await Promise.all([
+    programmeClock(env, now), revenueShare(env), agreementsExpiring(env, now),
+  ]);
 
   return {
     queue_pressure,
@@ -209,5 +326,6 @@ export async function branchHome(env: Env, now = Date.now()): Promise<BranchHome
     programme,
     revenue,
     sla_bands: { due_soon_hours: SLA_DUE_SOON_HOURS, past_hours: SLA_PAST_HOURS },
+    agreements,
   };
 }

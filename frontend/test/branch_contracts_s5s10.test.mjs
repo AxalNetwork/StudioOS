@@ -142,14 +142,26 @@ test('what the copy leaves at HQ is read off the payload, not typed into the pag
   assert.match(WORKER_ROUTE, /field: 'archived versions'/);
 });
 
-test('the active-contracts block states its absence rather than drawing an empty ledger', () => {
+test('the active-contracts block states its gap with the TRUE cause (D199)', () => {
+  // RE-AIMED, NOT LOOSENED. This matched `licence_contracts` inside the
+  // block's reason, because the reason named that table as where a branch's
+  // contracts live. That was the wrong table: it holds the licence agreement
+  // and nothing else, and this branch's own contracts are rows in its own
+  // database. A sentence CORRECTING the attribution still contains the table's
+  // name, so the old match would pass on the opposite claim — a lexical scan
+  // cannot tell a rule from its violation. So it asserts the claim itself.
   assert.match(PAGE, /data-testid="branch-contracts-ledger"/);
-  assert.match(PAGE, /<Unrecorded[\s\S]{0,400}licence_contracts/,
-    'the block must name the table it cannot read and why');
-  assert.ok(
-    !/<table/.test(PAGE),
-    'a table with no source is an empty ledger, which is the thing being refused',
-  );
+  const at = PAGE.indexOf('data-testid="branch-contracts-ledger"');
+  const block = PAGE.slice(at, PAGE.indexOf('</Card>', at));
+  assert.match(block, /<Unrecorded reason="[^"]*rows in this branch's own database/,
+    'the block no longer says whose database the contracts are in');
+  assert.match(block, /holds only the licence agreement itself/,
+    'the block no longer says what HQ\'s ledger actually holds');
+  assert.doesNotMatch(block, /live in HQ's `licence_contracts`|no branch-side read/i,
+    'the misattributed cause is back');
+  // Still no table: the rows are readable, but the screen that tables them is
+  // not built, and two of its columns are recorded for no e-sign envelope.
+  assert.ok(!/<table/.test(PAGE), 'a table appeared without the columns S5 draws having a source');
 });
 
 test('HQ can push, and the push is the whole library rather than one template', () => {
