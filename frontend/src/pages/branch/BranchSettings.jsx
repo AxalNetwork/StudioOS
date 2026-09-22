@@ -150,10 +150,23 @@ export default function BranchSettings({ user }) {
       actTo: '/branch/accounts',
     },
     {
+      // D198 — THE REASON CHANGED AND THE ROW DID NOT, which is the honest
+      // correction rather than the flattering one. HQ now records a brand kit
+      // (migration 281), so "HQ has no brand-kit store yet" stopped being true
+      // the day that shipped. Two things are still true and they are what this
+      // row now says. A kit belongs to a WHITE-LABEL licence — an Axal
+      // subsidiary trades under Axal's brand, which is fixed and is not stored
+      // per licence, so for a subsidiary there is nothing here by design rather
+      // than by omission. And nothing pushes a kit to a branch yet: the copy
+      // and the mark's bytes crossing from HQ's object store to this one is a
+      // transport decision that has not been made. The chip stays 'HQ' because
+      // `wlCompare` puts a subsidiary's brand at HQ either way.
       field: 'Brand kit',
       who: 'HQ',
       value: null,
-      reason: 'HQ has no brand-kit store yet, so there is nothing to download. Ask for assets through Content; do not expect a file here.',
+      reason: 'A brand kit belongs to a white-label licence; an Axal subsidiary trades under Axal\u2019s '
+        + 'brand, which is fixed and is not stored per branch. HQ records one where a licence has '
+        + 'one, and nothing pushes it to a branch yet \u2014 so there is still no file to fetch here.',
       act: 'Ask HQ · Content',
       actTo: '/branch/approvals',
     },
@@ -223,7 +236,7 @@ export default function BranchSettings({ user }) {
       coverage={coverage}
       coverageNote={licence === UNAVAILABLE ? 'The licence copy could not be read.' : undefined}
       unavailable={[
-        ['A brand kit to download', 'HQ has no brand-kit store (D.10), so there is nothing to push and nothing to fetch. Assets are asked for through Content.'],
+        ['A brand kit to download', 'A kit belongs to a white-label licence, and this shell trades under Axal\u2019s brand. HQ records one where a licence has one (D198) and nothing pushes it to a branch yet, so there is nothing to fetch. Assets are asked for through Content.'],
         ['Editing the subsidiary name here', 'The name is a Worker var set at provisioning, and the licence copy is HQ\'s. A field here would either need a redeploy or be overwritten by HQ\'s next push.'],
       ]}
     >

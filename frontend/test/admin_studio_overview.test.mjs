@@ -181,7 +181,16 @@ test('off a branch the cards render the absence and no sample figures', () => {
   // rather than "no host bound" — which would be a claim about a register it
   // never consulted.
   assert.match(html, /Hostname not read/);
-  assert.match(html, /Brand kit not recorded/);
+  // RE-AIMED BY D198, AND THE GUARD WAS RIGHT TO FAIL. This asserted "Brand kit
+  // not recorded", which was the only state the card had when it was written —
+  // the kit had no store, so unread and absent could not differ. Migration 281
+  // gave it one, and the card now draws the same four states the hostname block
+  // beside it draws. With `licence: null` the correct one is UNREAD: "not
+  // recorded" would be a claim about a store this render never consulted, which
+  // is the exact distinction the line above exists to make.
+  assert.match(html, /Brand kit not read/);
+  assert.doesNotMatch(html, /Brand kit not recorded/,
+    'an unread licence renders the kit as absent, which is a claim nothing measured');
   assert.match(html, /href="\/branch\/accounts"/);
   assert.match(html, /href="\/admin\/events"/);
   assert.match(html, /href="\/admin\/jobs"/);
