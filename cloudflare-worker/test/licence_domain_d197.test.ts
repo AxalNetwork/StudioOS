@@ -35,7 +35,7 @@ import { Hono } from 'hono';
 import licences from '../src/routes/admin_licences.ts';
 import licence from '../src/routes/licence.ts';
 import {
-  CNAME_TARGET, TXT_PREFIX, domainPayload, mintChallengeToken, normaliseHostname,
+  CNAME_TARGET, SERVES_REASON, TXT_PREFIX, domainPayload, mintChallengeToken, normaliseHostname,
   recordsFor, validateHostname, verifyRecords,
 } from '../src/services/licenceDomain.ts';
 
@@ -357,25 +357,18 @@ test('S19a\'s own second failure — a CNAME at the FALLBACK ORIGIN gets its own
   const cname = out.records.find((r) => r.kind === 'traffic')!;
   assert.equal(cname.ok, false);
   assert.equal(cname.readable, true);
-  assert.ok(String(cname.found).includes('axalfrance.os.axal.vc'),
-    'the recorded CNAME is not the fallback origin');
+  assert.equal(cname.found, 'axalfrance.os.axal.vc');
   // The artboard's words: "That is our fallback origin, not the published
   // target." A tenant who sees a host under our own zone and a failure needs
   // telling WHY it is wrong, or they will assume the check is broken.
-  assert.match(cname.detail, /fallback origin, not the published target/,
-    'a CNAME at the fallback origin fell into the generic does-not-point-at sentence');
-  // A LITERAL COMPARISON, BECAUSE THAT IS WHAT THIS ASSERTION MEANS. It used
-  // to build a regex from the target with a hand-rolled dot-escaper, which
-  // CodeQL raises as incomplete sanitization: `.replace(/\./g, '\\.')` escapes
-  // dots and NOT backslashes, so an input carrying one would break the pattern.
-  // MEASURED, THE OLD FORM WAS NOT WEAK HERE — the dots were escaped and a
-  // fixture differing at a dot position was already refused — so this is not a
-  // bug being fixed. It is the wrong tool being put down: these three
-  // assertions mean "the sentence NAMES this host", which is a literal
-  // comparison, and a regex assembled from data to express it is what the
-  // query exists to flag.
-  assert.ok(cname.detail.includes(CNAME_TARGET),
-    `the fallback-origin sentence does not name ${CNAME_TARGET}`);
+  // The whole sentence, not a search for the host inside it. Searching for a
+  // host as a substring is what CodeQL calls an incomplete URL check: the
+  // same labels can sit inside a different host.
+  assert.equal(
+    cname.detail,
+    `It currently resolves to axalfrance.os.axal.vc. That is our fallback origin, not the published `
+    + `target — point it at ${CNAME_TARGET} so the origin can move without your DNS changing.`,
+  );
 });
 
 test('a CNAME pointing somewhere else names what it found, and is not the fallback sentence', async () => {
@@ -385,10 +378,8 @@ test('a CNAME pointing somewhere else names what it found, and is not the fallba
   }) as any);
   const cname = out.records.find((r) => r.kind === 'traffic')!;
   assert.equal(cname.ok, false);
-  // A literal, same as the three verdict sentences above. An unanchored
-  // hostname regex matches that host with anything before or after it.
-  assert.ok(cname.detail.includes('ghs.googlehosted.com'),
-    `the third-party sentence does not name what was found: ${cname.detail}`);
+  assert.equal(cname.found, 'ghs.googlehosted.com');
+  assert.equal(cname.detail, `It currently resolves to ghs.googlehosted.com. Point it at ${CNAME_TARGET}.`);
   assert.doesNotMatch(cname.detail, /fallback origin/,
     'a third-party target was described as our own fallback');
 });
@@ -426,8 +417,12 @@ test('one host per licence in this pass, and the refusal names the one already b
   const { status, body } = await call(db, 'POST', '/licence/mine/domain', HOLDER, { hostname: 'other.yourhost.com' });
   assert.equal(status, 409);
   assert.equal(body.code, 'domain_already_bound');
-  assert.ok(String(body.error).includes('app.yourhost.com'),
-    `the refusal does not name the host already bound: ${body.error}`);
+  assert.equal(body.hostname, 'app.yourhost.com');
+  assert.equal(
+    body.error,
+    'This licence already has app.yourhost.com bound. Remove it before binding another — '
+    + 'one host per licence in this pass.',
+  );
 });
 
 test('H33 — a collision names the other operator\'s PUBLIC name and never its legal entity', async () => {
@@ -498,8 +493,7 @@ test('check-now on a half-published host stays pending and names WHICH record is
     // S19a's whole point: not "DNS error", but which row to edit.
     assert.equal(txt.ok, false);
     assert.equal(cname.ok, true);
-    assert.ok(txt.title.includes(`${TXT_PREFIX}.${HOST}`),
-      `the failing record is not named: ${txt.title}`);
+    assert.equal(txt.title, `No TXT yet at ${TXT_PREFIX}.${HOST}`);
   } finally { globalThis.fetch = real; }
 });
 
@@ -524,13 +518,7 @@ test('check-now on the OTHER half — TXT published, no CNAME — also stays pen
     const cname = body.check.records.find((r: any) => r.kind === 'traffic');
     assert.equal(txt.ok, true);
     assert.equal(cname.ok, false);
-    // The autofix on this line (3eaa472f4) widened the escaper to cover every
-    // metacharacter, which is correct as far as it goes and leaves a regex
-    // built from data behind — on one of the three sites, not all three.
-    // Superseded rather than reverted: with no regex here there is nothing to
-    // escape, and the same treatment reaches its two siblings.
-    assert.ok(cname.title.includes(HOST),
-      `the failing traffic record is not named: ${cname.title}`);
+    assert.equal(cname.title, `No CNAME yet at ${HOST}`);
   } finally { globalThis.fetch = real; }
 });
 
@@ -715,8 +703,7 @@ test('the payload names what verified is NOT, so neither screen has to word it',
   });
   assert.equal(payload.state, 'verified');
   assert.equal(payload.serves, false, 'a verified host claimed to serve');
-  assert.ok(String(payload.serves_reason).includes('os.axal.vc'),
-    'the reason stopped naming the platform host');
+  assert.equal(payload.serves_reason, SERVES_REASON);
   assert.match(payload.serves_reason, /Members keep using the platform host/);
   // `is_primary` is 0 and nothing writes 1: a host members are sent to has to
   // serve first.
