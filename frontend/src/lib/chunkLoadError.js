@@ -33,7 +33,7 @@ const CHUNK_LOAD_RE = /chunk|loading chunk|chunkloaderror|failed to fetch dynami
  */
 export function isChunkLoadError(error) {
   if (!error) return false;
-  if (error && typeof error === 'object' && /** @type {{name?: string}} */ (error).name === 'ChunkLoadError') {
+  if (typeof error === 'object' && /** @type {{name?: string}} */ (error).name === 'ChunkLoadError') {
     return true;
   }
   const msg = String(
