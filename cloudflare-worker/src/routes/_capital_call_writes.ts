@@ -3,9 +3,9 @@
  *
  * WHY THIS FILE EXISTS. Task #197: `capital_call_notice` — the job a GP's "New
  * call" enqueues — wrote an `activity_logs` line per LP and bumped
- * `vc_funds.deployed_capital`, and never wrote a `capital_calls` row. Two live
- * screens read that table through `api.listCapitalCalls()`
- * (`PartnerPortal.jsx`, `CapitalPage.jsx`) and both carry a working Pay button
+ * `vc_funds.deployed_capital`, and never wrote a `capital_calls` row. The live
+ * screen reads that table through `api.listCapitalCalls()`
+ * (`CapitalPage.jsx`) and carries a working Pay button
  * over it, so the call existed as a log line and a moved dashboard number while
  * the receivable — who owes what, by when, paid or not — existed nowhere.
  *

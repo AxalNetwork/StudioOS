@@ -1314,7 +1314,7 @@ export async function routeAnswer(
       if (okFocus) {
         return {
           status: 'saved',
-          saved_to: { table: 'user_advisor_extras', column: 'extras_json', id: user.id, page_url: '/partner-portal' },
+          saved_to: { table: 'user_advisor_extras', column: 'extras_json', id: user.id, page_url: '/studio' },
         };
       }
       // Fallback: stash on partner_profiles.raw_chat_json so the
@@ -1328,7 +1328,7 @@ export async function routeAnswer(
           ).bind('partner_profile_focus', value, profile.email).run();
           return {
             status: 'saved',
-            saved_to: { table: 'partner_profiles', column: 'raw_chat_json', id: profile.email, page_url: '/partner-portal' },
+            saved_to: { table: 'partner_profiles', column: 'raw_chat_json', id: profile.email, page_url: '/studio' },
             hint: 'Saved as a chat note (column not yet migrated).',
           };
         } catch { /* fall through */ }
@@ -1364,7 +1364,7 @@ export async function routeAnswer(
       ).bind(value, profile.email).run();
       return {
         status: 'saved',
-        saved_to: { table: 'partner_profiles', column: pcol, id: profile.email, page_url: '/partner-portal' },
+        saved_to: { table: 'partner_profiles', column: pcol, id: profile.email, page_url: '/studio' },
       };
     } catch (e) {
       // Column may not be migrated on legacy dev — fall back to
@@ -1377,7 +1377,7 @@ export async function routeAnswer(
         ).bind(questionId.replace(/[^a-zA-Z0-9_]/g, '_'), value, profile.email).run();
         return {
           status: 'saved',
-          saved_to: { table: 'partner_profiles', column: 'raw_chat_json', id: profile.email, page_url: '/partner-portal' },
+          saved_to: { table: 'partner_profiles', column: 'raw_chat_json', id: profile.email, page_url: '/studio' },
           hint: 'Saved as a chat note (column not yet migrated).',
         };
       } catch {

@@ -444,9 +444,9 @@ three dependency audits.
 | --- | --- |
 | `admin` | `/studio` |
 | `founder` | `/studio` |
-| `partner` | `/partner-portal` |
+| `partner` | `/studio` |
 | `investor` | `/studio` |
-| `advisor` | `/office-hours` |
+| `advisor` | `/studio` |
 | `pending` | `/onboarding/chat` |
 | `exploring` | `/exploring` |
 
@@ -464,9 +464,8 @@ One shared role-branching route (`App.jsx:1717`):
 ```
 
 `Dashboard` is lazy-loaded at App.jsx:34 from `./pages/Dashboard`.
-Note `partner` is inside the `/studio` guard even though `ROLE_DEFAULT_PATH`
-lands partners on `/partner-portal` — partners may reach `/studio`, they just
-don't default there.
+Every licence in that guard, including `partner`, defaults to `/studio`.
+`/partner-portal` is a bookmark redirect to the same place.
 
 Branching inside `Dashboard.jsx` keys on the **server-supplied**
 `data.role_view` from `GET /api/dashboard`, not the client `user.role`
