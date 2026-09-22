@@ -17,6 +17,7 @@
  *          panel over that would claim a control room the product lacks.
  */
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { SlidersHorizontal } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
@@ -408,6 +409,33 @@ export default function PlatformPage() {
                   </p>
                 </>
               )}
+            </Zone>
+
+            <Zone title="Operator consoles" sub="the controls this summary does not hold">
+              <p className="text-[12.5px] leading-relaxed text-axal-muted">
+                Key material, catalog, and broadcast stay in the consoles that audit them.
+                This page counts; those pages change.
+              </p>
+              <ul className="mt-3 grid gap-2 sm:grid-cols-2" data-testid="hq-platform-consoles">
+                {[
+                  ['/admin?tab=integration-keys', 'Integration keys', 'Save, rotate, test. Secrets never render here.'],
+                  ['/admin?tab=github', 'GitHub sync', 'Ticket mirror. A failed test says what the token is missing.'],
+                  ['/admin?tab=payments', 'Payments catalog', 'Stripe products, prices, webhook status.'],
+                  ['/admin?tab=promos', 'Promo codes', 'Coupons. Ceilings per licence stay on Revenue.'],
+                  ['/monitoring', 'Monitoring', 'Infra, cron, and the platform-wide aggregate.'],
+                  ['/admin/telegram', 'Telegram', 'Channels and drafts. X stays off until OAuth is bound.'],
+                ].map(([to, title, note]) => (
+                  <li key={to}>
+                    <Link
+                      to={to}
+                      className="block rounded-xl border border-axal-hairline bg-axal-ground px-3 py-2 hover:border-axal-violet dark:hover:border-violet-700"
+                    >
+                      <div className="text-[12.5px] font-bold text-axal-ink dark:text-white">{title}</div>
+                      <div className="mt-0.5 text-[11px] leading-relaxed text-axal-faint">{note}</div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             </Zone>
 
             <Zone title="Feature flags" sub="the third of the three">

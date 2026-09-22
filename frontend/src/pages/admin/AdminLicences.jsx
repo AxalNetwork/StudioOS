@@ -227,6 +227,11 @@ function TerritoryEditor({ licence, held, onSaved }) {
         onChange={(e) => setCodes(e.target.value)}
         placeholder="FR, BE, LU"
       />
+      <p className="mt-2 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+        This refusal is the Axal-subsidiary rule: one country, one Axal licence.
+        A white-label in the same country is a separate exclusivity flag, and that flag is not stored,
+        so this step cannot yet tell the two apart.
+      </p>
       {clashes.length > 0 && (
         <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
           <div className="flex items-start gap-1.5">
@@ -1254,6 +1259,16 @@ function Detail({ uid, held, onChanged }) {
             <Chip tone={STATUS_TONE[d.status]}>{d.status.replace('_', ' ')}</Chip>
           </div>
           <div className="mt-0.5 text-xs text-gray-500">{d.licence_ref} · {d.legal_entity_name}</div>
+          <div className="mt-1 text-[11px] font-medium text-gray-500 dark:text-gray-400" data-testid="licence-kind-pill">
+            {d.kind === 'white_label'
+              ? 'White-label · platform supervised, brand unsupervised'
+              : 'Axal subsidiary · platform supervised'}
+          </div>
+          {d.kind !== 'white_label' && (
+            <p className="mt-0.5 max-w-xl text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+              The ledger has no kind column. Every row reads as an Axal subsidiary until a white-label can be stored as its own kind.
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {d.status === 'suspended' ? (
@@ -1312,6 +1327,22 @@ function Detail({ uid, held, onChanged }) {
           value={d.renews_on || null}
           hint={days === null ? null : days < 0 ? `${Math.abs(days)} days overdue` : `in ${days} days`}
         />
+      </div>
+
+      <div
+        className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950"
+        data-testid="licence-domain-strip"
+      >
+        <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-gray-500 dark:text-gray-400">Domain</div>
+        <div className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">
+          {d.custom_domain || <span className="font-normal text-gray-400">Not recorded</span>}
+        </div>
+        <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-gray-600 dark:text-gray-400">
+          The Admin binds the hostname in Settings → Domain, including a white-label.
+          HQ does not set a CNAME, a certificate, or a fallback host.
+          Super Admin stays on axal.vc and app.axal.vc.
+          Detach is not offered until a domain store exists — a button that cannot detach would be a lie.
+        </p>
       </div>
 
       {d.blockers?.length > 0 && d.status !== 'active' && (
@@ -1375,12 +1406,34 @@ function Detail({ uid, held, onChanged }) {
       </div>
       <div className="mt-4">
         {step === 1 && (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Legal entity" value={d.legal_entity_name} />
-            <Field label="Brand name in product" value={d.brand_name} />
-            <Field label="Registered address" value={d.registered_address} />
-            <Field label="Signatory"
-              value={d.signatory_name ? `${d.signatory_name}${d.signatory_title ? ` · ${d.signatory_title}` : ''}` : null} />
+          <div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Legal entity" value={d.legal_entity_name} />
+              <Field label="Brand name in product" value={d.brand_name} />
+              <Field label="Registered address" value={d.registered_address} />
+              <Field label="Signatory"
+                value={d.signatory_name ? `${d.signatory_name}${d.signatory_title ? ` · ${d.signatory_title}` : ''}` : null} />
+            </div>
+            <div
+              className="mt-4 rounded-lg border border-gray-200 p-3 dark:border-gray-800"
+              data-testid="licence-brand-kit"
+            >
+              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Brand kit</h3>
+              <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">
+                A white-label operator sets their own mark. HQ does not approve it.
+                These fields are not a store yet, so they read as not recorded rather than as Axal&rsquo;s brand.
+              </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <Field
+                  label="Public name"
+                  value={d.brand_name || null}
+                  hint="This is the brand name already on the licence. A separate public-name column does not exist."
+                />
+                <Field label="Mark" value={null} hint="No logo store." />
+                <Field label="Colours" value={null} hint="No colour store." />
+                <Field label="Powered by Axal" value={null} hint="Hiding the mark is not a stored switch." />
+              </div>
+            </div>
           </div>
         )}
         {step === 2 && <TerritoryEditor licence={d} held={held} onSaved={refresh} />}
@@ -1571,7 +1624,7 @@ export default function AdminLicences() {
   const [held, setHeld] = useState([]);
   const [sel, setSel] = useState(null);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ licence_ref: '', legal_entity_name: '', brand_name: '' });
+  const [form, setForm] = useState({ licence_ref: '', legal_entity_name: '', brand_name: '', kind: 'subsidiary' });
   const [err, setErr] = useState('');
 
   const load = useCallback(() => {
@@ -1587,10 +1640,19 @@ export default function AdminLicences() {
   async function create(e) {
     e.preventDefault();
     setErr('');
+    if (form.kind === 'white_label') {
+      setErr('White-label licences are not stored yet. The ledger has no kind column, so this would be recorded as an Axal subsidiary.');
+      return;
+    }
     try {
-      const r = await api.licenceCreate(form);
+      const payload = {
+        licence_ref: form.licence_ref,
+        legal_entity_name: form.legal_entity_name,
+        brand_name: form.brand_name,
+      };
+      const r = await api.licenceCreate(payload);
       setCreating(false);
-      setForm({ licence_ref: '', legal_entity_name: '', brand_name: '' });
+      setForm({ licence_ref: '', legal_entity_name: '', brand_name: '', kind: 'subsidiary' });
       setSel(r.uid);
       load();
     } catch (e2) {
@@ -1634,6 +1696,33 @@ export default function AdminLicences() {
 
       {creating && (
         <form onSubmit={create} className="mt-4 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+          <div className="mb-3" data-testid="licence-kind">
+            <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-gray-500">Kind</div>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {[
+                ['subsidiary', 'Axal subsidiary'],
+                ['white_label', 'White-label operator'],
+              ].map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, kind: id }))}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                    form.kind === id
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200'
+                      : 'border-gray-300 text-gray-700 dark:border-gray-700 dark:text-gray-300'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 max-w-2xl text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">
+              {form.kind === 'white_label'
+                ? 'Same subsidiary console, their brand, no HQ brand desk. The ledger has no kind column yet, so this draft cannot be stored as white-label — creating it now would record an Axal subsidiary. Super Admin stays on axal.vc.'
+                : 'Axal-branded territory. They still bind their own host in Admin Settings → Domain. Super Admin stays on axal.vc and app.axal.vc.'}
+            </p>
+          </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <input className="rounded-md border border-gray-300 px-3 py-2 text-sm uppercase dark:border-gray-700"
               placeholder="Reference, e.g. AXL-005" required
@@ -1646,8 +1735,12 @@ export default function AdminLicences() {
               value={form.brand_name} onChange={(e) => setForm((f) => ({ ...f, brand_name: e.target.value }))} />
           </div>
           {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
-          <button type="submit" className="mt-3 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
-            Create draft
+          <button
+            type="submit"
+            disabled={form.kind === 'white_label'}
+            className="mt-3 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {form.kind === 'white_label' ? 'White-label is not stored yet' : 'Create draft'}
           </button>
           <p className="mt-2 text-[11px] text-gray-500">
             A new licence starts as a draft holding no territory. It cannot be activated until it
