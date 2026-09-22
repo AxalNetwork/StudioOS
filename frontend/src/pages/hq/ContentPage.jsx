@@ -264,7 +264,10 @@ export default function ContentPage() {
                   rather than being deleted. */}
               <p className="mb-3 text-[12px] leading-relaxed text-axal-muted" data-testid="hq-brand-desk-scope">
                 Brand approval is for Axal subsidiaries. A white-label has no HQ brand desk.
-                Kind is not stored yet, so this lane cannot hide a white-label submission — there is no row that says which licence is which.
+                The ledger records which kind a licence is (D196), so this lane no longer shows every
+                submission for want of a column — but it does not filter on that yet: an escalation
+                carries a branch code, and reaching the kind means joining it through the deployment
+                row to its licence. Until it does, a white-label submission would still appear here.
               </p>
               {lane === UNAVAILABLE && (
                 <Unreadable
