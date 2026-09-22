@@ -138,17 +138,34 @@ test('the floor has ONE definition, and every writer shares it', () => {
     'settings.ts computes a jwt_min_iat floor by hand again — call bumpJwtMinIat, or jwtMinIatFloor() '
     + 'if the write genuinely has to stay combined with another column');
 
-  // Exactly ONE inline `jwt_min_iat =` write may remain in settings.ts: the
-  // post-recovery re-enrolment, which clears `recovery_step_up_due_at` in the
-  // SAME statement. Splitting it to reuse the helper would open a window where
-  // the step-up nag is cleared and the weak session is still valid.
-  const inline = SETTINGS.match(/jwt_min_iat = \$\{/g) || [];
-  assert.equal(inline.length, 1,
-    `${inline.length} inline jwt_min_iat writes remain in settings.ts; only the combined `
-    + 'recovery_step_up_due_at write is allowed to be one');
-  const combined = SETTINGS.slice(SETTINGS.indexOf('recovery_step_up_due_at = NULL'));
-  assert.match(combined.slice(0, 200), /jwt_min_iat = \$\{nowSec\}/,
-    'the one permitted inline write is not the combined one');
+  // Exactly ONE `jwt_min_iat` write may remain outside the helper in
+  // settings.ts: the post-recovery re-enrolment, which clears the step-up nag
+  // ATOMICALLY WITH IT. Splitting it to reuse the helper would open a window
+  // where the nag is cleared and the weak session is still valid.
+  //
+  // RE-AIMED IN D189, FROM THE MECHANISM TO THE PROPERTY. This used to count
+  // occurrences of the inline template `jwt_min_iat = ${`, because the
+  // exception was one `sql` tagged template naming two columns of `users`.
+  // `recovery_step_up_due_at` could never BE a column of `users` — the table
+  // is at D1's 100-column cap — so migration 277 moved it to
+  // `user_recovery_state`, and a single statement across two tables does not
+  // exist. `DB.batch` runs its statements as ONE TRANSACTION, so the property
+  // D165 argued for is intact and only the shape it took has changed; the
+  // assertion follows the property. A count of a template literal would have
+  // read this correct change as a violation and, worse, would have read a
+  // genuine split into two bare awaits as compliance.
+  const writes = SETTINGS.match(/jwt_min_iat\s*=/g) || [];
+  assert.equal(writes.length, 1,
+    `${writes.length} jwt_min_iat writes remain in settings.ts outside bumpJwtMinIat; exactly `
+    + 'one is allowed, and only because it is transactionally combined with the step-up clear');
+
+  const batchAt = SETTINGS.indexOf('await c.env.DB.batch([');
+  assert.ok(batchAt > 0, 'the combined write is no longer a batch, so it is no longer atomic');
+  const batch = SETTINGS.slice(batchAt, SETTINGS.indexOf(']);', batchAt));
+  assert.match(batch, /step_up_due_at\s*=\s*NULL/,
+    'the batch does not clear the step-up deadline, so the two halves are not moving together');
+  assert.match(batch, /jwt_min_iat\s*=\s*\?/,
+    'the jwt_min_iat write left the batch — that is the window D165 closed, reopened');
   assert.match(SETTINGS, /const nowSec = jwtMinIatFloor\(\);/,
     'the combined write re-typed the arithmetic instead of sharing the floor');
 });
@@ -176,6 +193,11 @@ test('the helper docstring names its real callers', () => {
   for (const caller of ['routes/auth.ts', 'routes/settings.ts', 'routes/admin_security.ts']) {
     assert.ok(doc.includes(caller), `the docstring does not name ${caller} among its callers`);
   }
-  assert.ok(doc.includes('recovery_step_up_due_at'),
+  // D189 renamed the thing that site clears: `recovery_step_up_due_at` was a
+  // column on `users` that could never exist, and is now
+  // `user_recovery_state.step_up_due_at`. The assertion keeps its job — the
+  // docstring must still name the one site that deliberately does NOT call
+  // the helper — and follows the name.
+  assert.ok(doc.includes('step_up_due_at'),
     'the docstring does not name the one site that deliberately does NOT call it');
 });

@@ -525,7 +525,9 @@ app.route('/api/auth/google', authGoogle);
 app.route('/api/auth/passkey', authPasskey);
 
 // Task #50 — 24h cool-off middleware. Blocks the listed sensitive
-// surfaces while users.recovery_cooling_off_until is in the future
+// surfaces while user_recovery_state.cooling_off_until is in the future
+// (D189 — it was declared as a column on `users` by 060 and could never
+// land there, the table being at D1's 100-column cap; migration 277)
 // (set by Layer 2c / 2d / 3f / 4 resolutions). Applied as a wildcard
 // BEFORE the route table so the gate runs ahead of every handler.
 // Round-5 review fix — the frontend calls `/api/legal/esign/*` (mounted

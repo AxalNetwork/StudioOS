@@ -273,10 +273,25 @@ async function transitionTicket(
   }
 }
 
+/**
+ * D189 — THE `assurance` PARAMETER WAS REMOVED BECAUSE NOTHING READ IT.
+ *
+ * It was declared `'full' | 'email_only'` and appeared nowhere in the body:
+ * the round-4 review recorded below made the step-up deadline unconditional,
+ * which left the argument vestigial, and `noUnusedParameters` is off for the
+ * worker (deliberately — it flags positional handler parameters) so nothing
+ * flagged it. Each caller's real assurance level is the literal in its own
+ * response body, which is where it was always decided.
+ *
+ * It is removed rather than kept as documentation because it was actively
+ * misleading: it made this function look like it branched on assurance, and a
+ * mutation written against that belief changed the argument at a call site,
+ * changed no behaviour, and correctly proved nothing. An argument no reader
+ * reads is the producer-with-no-reader shape, one scope smaller.
+ */
 async function setCoolOffAndAssurance(
   env: Env,
   userId: number,
-  assurance: 'full' | 'email_only',
 ) {
   const coolOff = inHours(RECOVERY_COOL_OFF_HOURS);
   // Task #50 (round-4 review fix) — EVERY recovery layer sets a step-up
@@ -288,9 +303,29 @@ async function setCoolOffAndAssurance(
   // sessions still ride out the full 7 days before the relock fires;
   // email_only sessions get the same 7-day window before relock.
   const stepUp = inDays(STEP_UP_DEADLINE_DAYS);
+  // D189 — THIS USED TO BE AN UPDATE ON `users` AND IT THREW ON EVERY CALL.
+  // 060_auth_recovery.sql:53,57 declared `recovery_cooling_off_until` and
+  // `recovery_step_up_due_at` as columns on `users`, and neither could ever
+  // land: `users` is at D1's hard 100-column cap (100 in production and on a
+  // fresh build, measured 2026-09-22), and 060 is below BASELINE_CUTOFF so a
+  // bootstrap MARKED it applied without running it. An UPDATE naming a
+  // missing column throws — unlike the `SELECT *` in getCurrentUser, which is
+  // why every READ of these two was silently undefined while this WRITE was a
+  // 500. All four callers below are a bare `await`, so account recovery
+  // returned a 500 on every layer that mints a session. Migration 277 moves
+  // the fact to `user_recovery_state`.
+  //
+  // THE WRITE STAYS UNGUARDED, deliberately. Now that the store exists a
+  // failure here means the cool-off was not recorded, and a recovery session
+  // that silently skips its own 24-hour cool-off is worse than a 500 — the
+  // caller is about to mint full assurance on the strength of it.
   await env.DB.prepare(
-    `UPDATE users SET recovery_cooling_off_until = ?, recovery_step_up_due_at = ? WHERE id = ?`,
-  ).bind(coolOff, stepUp, userId).run();
+    `INSERT INTO user_recovery_state (user_id, cooling_off_until, step_up_due_at, updated_at)
+     VALUES (?, ?, ?, datetime('now'))
+     ON CONFLICT(user_id) DO UPDATE SET cooling_off_until = excluded.cooling_off_until,
+                                        step_up_due_at    = excluded.step_up_due_at,
+                                        updated_at        = datetime('now')`,
+  ).bind(userId, coolOff, stepUp).run();
 }
 
 async function mintRecoverySession(
@@ -422,7 +457,7 @@ recover.post('/backup-code', async (c) => {
   // that reaches sensitive surfaces). Step-up is NOT required because
   // the user still holds TOTP. We emit the all-channel alert + ticket
   // so unexpected backup-code use is loud.
-  await setCoolOffAndAssurance(c.env, user.id, 'full');
+  await setCoolOffAndAssurance(c.env, user.id);
   const { id: ticketId } = await createTicket(c.env, user.id, 'backup_code',
     { ip: clientIp(c), ua: (c.req.header('user-agent') || '').slice(0, 200) }, c);
   await transitionTicket(c.env, ticketId, user,
@@ -523,7 +558,7 @@ recover.post('/sms/verify', async (c) => {
   // SMS-based recovery is full-assurance (the factor was bound at
   // enrolment) but applies the 24h cool-off since the user clearly
   // doesn't hold the canonical TOTP secret anymore.
-  await setCoolOffAndAssurance(c.env, user.id, 'full');
+  await setCoolOffAndAssurance(c.env, user.id);
   await markSmsUsed(c.env, user.id);
   // Resolve the exact ticket bound at /sms/start (Task #50 review fix:
   // no more stale open rows in the activity feed).
@@ -607,7 +642,7 @@ recover.get('/email/verify', async (c) => {
   if (!users.length) return c.json({ error: 'Account not found' }, 401);
   const user = users[0];
 
-  await setCoolOffAndAssurance(c.env, user.id, 'email_only');
+  await setCoolOffAndAssurance(c.env, user.id);
   await transitionTicket(c.env, ticketId, user,
     { status: 'resolved', assurance: 'email_only', resolved: true },
     { template: 'auth_recovery_resolved' });
@@ -780,7 +815,7 @@ recover.post('/claim', async (c) => {
   if (!users.length) return c.json({ error: 'Account not found' }, 401);
   const user = users[0];
 
-  await setCoolOffAndAssurance(c.env, user.id, 'full');
+  await setCoolOffAndAssurance(c.env, user.id);
   await transitionTicket(c.env, ticketId, user,
     { status: 'resolved', assurance: 'full', resolved: true },
     { template: 'auth_recovery_resolved' });

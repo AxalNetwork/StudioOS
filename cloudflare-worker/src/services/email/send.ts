@@ -17,7 +17,7 @@
  *   4. Resolve `Reply-To` from the template, and for marketing class
  *      templates emit an HMAC-signed one-click `List-Unsubscribe` URL
  *      (RFC 8058) — the URL lands at /api/notifications/unsubscribe.
- *   5. Honour `users.marketing_unsubscribed_at` — marketing-class emails
+ *   5. Honour `user_marketing_prefs.unsubscribed_at` — marketing-class emails
  *      to that user are dropped (logged as `suppressed_unsubscribed`).
  *   6. Mirror into `notifications_inbox` (the bell) when `userId` is
  *      provided, stamping `category` / `severity` / `cta_url` /
@@ -113,10 +113,18 @@ async function buildUnsubscribeUrl(env: Env, userId: number | undefined, appUrl:
 async function isMarketingUnsubscribed(env: Env, userId?: number): Promise<boolean> {
   if (!userId) return false;
   try {
+    // D189 — reads `user_marketing_prefs`, not `users`. The column 053
+    // declared could never exist (`users` is at D1's 100-column cap), so this
+    // SELECT named a column no environment has ever had; its own catch turned
+    // that into `false`, and marketing suppression has therefore always failed
+    // OPEN. Migration 277 gives the fact a table. The catch stays: a store
+    // this cannot read is still not a reason to block a transactional email,
+    // and failing open is the deliberate choice — but it is now a choice about
+    // an unreadable store rather than about a column that was never there.
     const r: any = await env.DB.prepare(
-      `SELECT marketing_unsubscribed_at FROM users WHERE id = ?`,
+      `SELECT unsubscribed_at FROM user_marketing_prefs WHERE user_id = ?`,
     ).bind(userId).first();
-    return !!r?.marketing_unsubscribed_at;
+    return !!r?.unsubscribed_at;
   } catch { return false; }
 }
 
