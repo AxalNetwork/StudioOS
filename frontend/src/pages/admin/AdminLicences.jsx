@@ -1228,6 +1228,13 @@ function Detail({ uid, held, onChanged }) {
   const [d, setD] = useState(null);
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
+  // D197 — the detach's own reason and its own error. `act` below reports a
+  // failure to the beacon and renders nothing, which is right for a control
+  // whose effect is visible on the next load; it is wrong for this one,
+  // because a silently-failed detach tells HQ a host was taken away when it
+  // was not. The server's sentence is shown instead.
+  const [detachReason, setDetachReason] = useState('');
+  const [detachErr, setDetachErr] = useState('');
 
   const load = useCallback(() => {
     api.licence(uid)
@@ -1324,20 +1331,117 @@ function Detail({ uid, held, onChanged }) {
         />
       </div>
 
+      {/* H31 — THE DOMAIN STRIP, AND THE ONE THING HQ MAY DO TO IT (D197).
+          The artboard's own sentence: "There is no Approve, no Add domain, and
+          no DNS editor for HQ to complete on a tenant's behalf." So five
+          columns of status, a footer saying where the records live, and Detach
+          as the only control. Before D197 `d.custom_domain` was read off a
+          table that had no such column, so this strip said "Not recorded" on
+          every licence that has ever existed. */}
       <div
         className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950"
         data-testid="licence-domain-strip"
       >
         <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-gray-500 dark:text-gray-400">Domain</div>
-        <div className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">
-          {d.custom_domain || <span className="font-normal text-gray-400">Not recorded</span>}
+        <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <Field
+            label="Platform host"
+            // THE HOST MEMBERS ACTUALLY USE, and it is never blank while a
+            // licence is deployed — S17's "a licence never waits on DNS" is
+            // only true because this column exists.
+            value={d.deployment_available === false ? null : (d.deployment?.hostname || null)}
+            hint={d.deployment_available === false
+              ? 'The deployment registry could not be read.'
+              : d.deployment ? null : 'No branch is deployed for this licence yet.'}
+          />
+          <Field
+            label="Custom host"
+            value={d.domain_available === false ? null : (d.domain?.hostname || null)}
+            hint={d.domain_available === false
+              ? d.domain_reason
+              : d.domain ? null : 'The Admin has bound none. HQ does not add one.'}
+          />
+          <Field
+            label="State"
+            value={d.domain_available === false ? null : (d.domain?.state || null)}
+            hint={d.domain?.state === 'verified' ? 'Both records confirmed' : null}
+          />
+          <Field
+            label="Certificate"
+            // NOT A DATE, AND NOT "PENDING". Issuing one needs a Cloudflare for
+            // SaaS custom hostname that is not configured, so there is no
+            // certificate and no queue it is waiting in. The server writes the
+            // reason; printing a date here would be the invented figure this
+            // strip existed to avoid.
+            value={null}
+            hint={d.domain?.serves_reason
+              || 'No certificate is issued for a custom host, and none is pending.'}
+          />
+          <Field
+            label="Primary"
+            // `is_primary` exists and nothing writes 1: a host members are sent
+            // to has to serve first. Saying so beats a "No" that reads like a
+            // choice somebody made.
+            value={null}
+            hint="No custom host is primary. Members are on the platform host."
+          />
         </div>
-        <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-gray-600 dark:text-gray-400">
-          The Admin binds the hostname in Settings → Domain, including a white-label.
-          HQ does not set a CNAME, a certificate, or a fallback host.
-          Super Admin stays on axal.vc and app.axal.vc.
-          Detach is not offered until a domain store exists — a button that cannot detach would be a lie.
+        <p className="mt-2 max-w-3xl text-[11px] leading-relaxed text-gray-600 dark:text-gray-400">
+          Status only — the records live in the tenant&rsquo;s own zone. The Admin binds the hostname in
+          Settings → Domain, including a white-label. HQ does not set a CNAME, a certificate, or a
+          fallback host, and Super Admin stays on axal.vc and app.axal.vc.
         </p>
+        {/* DETACH IS DRAWN ONLY WHEN THERE IS A HOST TO DETACH, and never on a
+            row Super Admin has already detached — both would 409, and a button
+            that can only refuse is the `still_an_admin` mistake D134 named. */}
+        {d.domain && d.domain.state !== 'detached' && (
+          <form
+            className="mt-2 flex flex-wrap items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (busy) return;
+              setBusy(true);
+              setDetachErr('');
+              api.licenceDomainDetach(d.uid, detachReason)
+                .then(() => { setDetachReason(''); refresh(); })
+                .catch((e2) => {
+                  reportError('licence_domain_detach_failed', e2);
+                  setDetachErr(e2?.data?.error || e2?.message || 'The detach did not go through, and the host is unchanged.');
+                })
+                .finally(() => setBusy(false));
+            }}
+          >
+            <input
+              value={detachReason}
+              onChange={(e) => setDetachReason(e.target.value)}
+              placeholder="Why this host is being detached (≥10 characters)"
+              className="min-w-0 flex-1 rounded border border-gray-300 px-2 py-1 text-xs dark:border-gray-700 dark:bg-gray-900"
+            />
+            <button
+              type="submit"
+              disabled={detachReason.trim().length < 10 || busy}
+              className="rounded border border-rose-300 px-2 py-1 text-xs font-semibold text-rose-700 disabled:opacity-40 dark:border-rose-800 dark:text-rose-300"
+              data-testid="licence-domain-detach"
+            >
+              Detach
+            </button>
+            <span className="text-[11px] text-gray-500 dark:text-gray-400">
+              The operator is sent this reason, and the host stays claimed so nobody else can take it.
+            </span>
+            {detachErr && (
+              <p className="w-full text-[11px] text-rose-700 dark:text-rose-300" data-testid="licence-domain-detach-error">
+                {detachErr}
+              </p>
+            )}
+          </form>
+        )}
+        {d.domain?.state === 'detached' && (
+          <p className="mt-2 text-[11px] leading-relaxed text-rose-700 dark:text-rose-300" data-testid="licence-domain-detached">
+            Detached{d.domain.detached_at ? ` ${String(d.domain.detached_at).slice(0, 10)}` : ''}.
+            {d.domain.detach_reason ? ` ${d.domain.detach_reason}` : ''} The hostname stays claimed, so
+            re-binding it is not something the operator can do from their side.
+          </p>
+        )}
       </div>
 
       {d.blockers?.length > 0 && d.status !== 'active' && (

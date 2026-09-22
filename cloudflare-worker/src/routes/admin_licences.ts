@@ -64,6 +64,11 @@ import { mergeValues, renderContract } from '../services/licenceContract';
 // licence. `applyLicence` had no caller at all, so HQ's suspend changed four
 // columns here and nothing on the subsidiary.
 import { pushLicenceToBranch } from '../services/licencePush';
+// D197 — the host register. HQ reads it onto every licence payload and may
+// detach; the tenant's own binds live in `routes/licence.ts`, deliberately not
+// behind an admin gate.
+import { domainPayload, type LicenceDomainRow } from '../services/licenceDomain';
+import { logAdminAction } from '../services/adminAudit';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -196,6 +201,27 @@ export async function hydrate(env: Env, rows: LicenceRow[]) {
       WHERE licence_id IN (${placeholders})`,
   ).bind(...ids).all<{ licence_id: number; seat_type: string; seats_licensed: number }>();
 
+  // D197 — THE HOST RIDES THE LICENCE PAYLOAD, exactly as D196's `kind` did:
+  // H31's strip needs no second fetch and no `api.js` read method. Its own
+  // try/catch, because a database without migration 280 has no register and
+  // "no host bound" is a different claim from "we could not look" — the strip
+  // renders each as its own state rather than one as the other.
+  const domains = new Map<number, LicenceDomainRow>();
+  let domainsReadable = true;
+  try {
+    const bound = await env.DB.prepare(
+      `SELECT id, licence_id, hostname, challenge_token, state,
+              txt_verified_at, cname_verified_at, last_checked_at, last_check_json,
+              is_primary, detached_at, detached_by_user_id, detach_reason,
+              created_by_user_id, created_at, updated_at
+         FROM licence_domains WHERE licence_id IN (${placeholders})`,
+    ).bind(...ids).all<LicenceDomainRow>();
+    for (const d of bound.results || []) domains.set(Number(d.licence_id), d);
+  } catch (e) {
+    console.warn('[licences] licence_domains unreadable', (e as Error).message);
+    domainsReadable = false;
+  }
+
   const byLicence = new Map<number, { territories: string[]; seats: Record<string, number> }>();
   for (const l of rows) byLicence.set(l.id, { territories: [], seats: {} });
   for (const t of terr.results || []) byLicence.get(t.licence_id)?.territories.push(t.country_code);
@@ -212,6 +238,11 @@ export async function hydrate(env: Env, rows: LicenceRow[]) {
       seats: e.seats,
       seats_licensed: licensed,
       seats_used: seatsUsed(),
+      domain: domainsReadable ? (domains.get(l.id) ? domainPayload(domains.get(l.id)!) : null) : null,
+      domain_available: domainsReadable,
+      domain_reason: domainsReadable
+        ? null
+        : 'The host register could not be read on this database (migration 280).',
     };
   });
 }
@@ -1176,6 +1207,120 @@ r.post('/:uid/notices/:noticeUid/review', async (c) => {
 });
 
 /* ------------------------------------------------------------------ *
+ * H31 — the one thing HQ may do to a tenant's host (D197)              *
+ * ------------------------------------------------------------------ */
+
+// H31 IS EXPLICIT ABOUT WHAT IS *NOT* HERE: "There is no Approve, no Add
+// domain, and no DNS editor for HQ to complete on a tenant's behalf." The
+// records live in the tenant's own zone and only the tenant can publish them,
+// so a control HQ could not complete is a control HQ does not get. H26's own
+// changelog settles the tier question one level up — "An earlier draft made
+// Domain an HQ console. It is not: Super Admin stays on axal.vc and
+// app.axal.vc and binds nothing else."
+//
+// Detach is the exception, and it is an admin act rather than a setting: it
+// takes a host away from an operator, so it takes the super-admin write bar,
+// a typed reason, and an audit row through `logAdminAction` (D159). The
+// detached row KEEPS the hostname — see migration 280's header — so the
+// collision this resolved cannot be re-created by the next licence claiming it
+// a second later.
+const MIN_DETACH_REASON = 10;
+
+r.post('/:uid/domain/detach', async (c) => {
+  try {
+    const admin = await requireSuperAdminWriteBar(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const body = await c.req.json().catch(() => ({} as any));
+    const reason = str(body?.reason, 1000);
+    // ENFORCED SERVER-SIDE, not in the form. A UI-only rule is a convention;
+    // this is the sentence an operator reads months later asking why their
+    // host stopped being theirs, and it has to exist.
+    if (reason.length < MIN_DETACH_REASON) {
+      return c.json({
+        error: `A reason of at least ${MIN_DETACH_REASON} characters is required — it is what the `
+          + 'operator is told, and what the audit row carries.',
+        code: 'reason_too_short',
+      }, 400);
+    }
+
+    let row: LicenceDomainRow | null = null;
+    try {
+      row = await c.env.DB.prepare(
+        `SELECT id, licence_id, hostname, challenge_token, state,
+                txt_verified_at, cname_verified_at, last_checked_at, last_check_json,
+                is_primary, detached_at, detached_by_user_id, detach_reason,
+                created_by_user_id, created_at, updated_at
+           FROM licence_domains WHERE licence_id = ?`,
+      ).bind(licence.id).first<LicenceDomainRow>();
+    } catch (e) {
+      console.warn('[licences] licence_domains unreadable', (e as Error).message);
+      return c.json({
+        error: 'The host register could not be read on this database (migration 280).',
+        code: 'domain_store_unreadable',
+      }, 503);
+    }
+    if (!row) {
+      return c.json({
+        error: 'This licence has no custom host bound. HQ does not add one — the Admin binds it '
+          + 'in their own Settings.',
+        code: 'no_domain',
+      }, 404);
+    }
+    if (row.state === 'detached') {
+      return c.json({
+        error: `${row.hostname} is already detached.`,
+        code: 'already_detached',
+      }, 409);
+    }
+
+    await c.env.DB.prepare(
+      `UPDATE licence_domains
+          SET state = 'detached', detached_at = datetime('now'), detached_by_user_id = ?,
+              detach_reason = ?, is_primary = 0, updated_at = datetime('now')
+        WHERE id = ?`,
+    ).bind(admin.id, reason, row.id).run();
+
+    // THROUGH `logAdminAction`, WHICH IS D159'S WHOLE POINT, and NOT through
+    // `licence_events`: that table's CHECK admits ten values and widening it
+    // means the full rebuild migration 266 had to pay to add ONE. An HQ act
+    // against a tenant belongs in `admin_audit_log`, which has no CHECK.
+    //
+    // NO `target_user_id`, deliberately. The subject is a licence, not a
+    // person, and a licence may have several administrators — naming one of
+    // them would put the wrong face on the row. `targetUserIdOf` reads an
+    // absent key as no target, which is the honest render.
+    await logAdminAction(c.env, admin.id, admin.email, 'licence_domain_detached', {
+      licence_uid: licence.uid,
+      licence_ref: licence.licence_ref,
+      hostname: row.hostname,
+      previous_state: row.state,
+      reason,
+    });
+
+    // The operator learns it here rather than by noticing. Best-effort: a
+    // recorded detach must not be undone by a mail failure.
+    try {
+      await notifyLicenceAdmins(c.env, licence.id, {
+        type: 'licence_domain_detached',
+        title: `Super Admin detached ${row.hostname}`,
+        body: `${row.hostname} is no longer bound to your licence. ${reason}`,
+        payload: { hostname: row.hostname },
+      });
+    } catch (e) { console.warn('[licences] detach notice failed', (e as Error).message); }
+
+    const fresh = await c.env.DB.prepare(
+      `SELECT id, licence_id, hostname, challenge_token, state,
+              txt_verified_at, cname_verified_at, last_checked_at, last_check_json,
+              is_primary, detached_at, detached_by_user_id, detach_reason,
+              created_by_user_id, created_at, updated_at
+         FROM licence_domains WHERE id = ?`,
+    ).bind(row.id).first<LicenceDomainRow>();
+    return c.json({ ok: true, domain: fresh ? domainPayload(fresh) : null });
+  } catch (e) { return mapError(c, e); }
+});
+
+/* ------------------------------------------------------------------ *
  * H3 step 5 — the contract, instantiated from a master template        *
  * ------------------------------------------------------------------ */
 
@@ -1317,11 +1462,34 @@ r.get('/:uid', async (c) => {
       `SELECT event, detail_json, note, created_at FROM licence_events
         WHERE licence_id = ? ORDER BY created_at DESC, id DESC LIMIT 200`,
     ).bind(licence.id).all<any>();
+    // D197 — THE PLATFORM HOST, on the payload the strip already fetches.
+    // H31's strip puts it beside the custom host because the pair is the whole
+    // point: members are on the platform host the deploy issued, and a custom
+    // host that is merely `verified` has not taken over from it. Reading it
+    // here rather than in the strip keeps `api.deployments()` to the one call
+    // `DeployStep` already makes — two reads of one registry on one screen is
+    // how two figures on one page come to disagree.
+    //
+    // Its own try/catch: a database without migration 258 has no registry, and
+    // the strip renders that as unknown rather than as no deployment.
+    let deployment: { hostname: string; status: string } | null = null;
+    let deploymentReadable = true;
+    try {
+      deployment = await c.env.DB.prepare(
+        'SELECT hostname, status FROM licence_deployments WHERE licence_uid = ?',
+      ).bind(licence.uid).first<{ hostname: string; status: string }>();
+    } catch (e) {
+      console.warn('[licences] licence_deployments unreadable', (e as Error).message);
+      deploymentReadable = false;
+    }
+
     return c.json({
       ...full,
       events: events.results || [],
       blockers: await activationBlockers(c.env, licence),
       holds_territory: HOLDS_TERRITORY.includes(licence.status),
+      deployment,
+      deployment_available: deploymentReadable,
     });
   } catch (e) { return mapError(c, e); }
 });

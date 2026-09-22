@@ -1954,6 +1954,26 @@ export const api = {
     request(`/licence/notices/${encodeURIComponent(noticeUid)}/respond`, {
       method: 'POST', body: JSON.stringify({ response }),
     }),
+  // D197 — the custom host. THE THREE WRITES ARE THE TENANT'S OWN and sit on
+  // `/licence`, which is NOT an admin router: binding a hostname is the holder
+  // configuring their own tenancy, and putting it behind `requireAdmin` would
+  // let the compliance freeze lock them out of their own settings. The fourth
+  // is HQ's, and it is the only thing H31 lets HQ do to a tenant's host —
+  // "there is no Approve, no Add domain, and no DNS editor for HQ to complete
+  // on a tenant's behalf."
+  //
+  // THERE IS NO READ METHOD, and that is deliberate rather than an omission:
+  // the bound host rides `myLicence()` and the HQ licence payload the way
+  // D196's `kind` does, so the strip and the wizard need no second fetch and
+  // cannot render a host the page's own licence read disagrees with.
+  myDomainBind: (hostname) =>
+    request('/licence/mine/domain', { method: 'POST', body: JSON.stringify({ hostname }) }),
+  myDomainCheck: () => request('/licence/mine/domain/check', { method: 'POST' }),
+  myDomainRemove: () => request('/licence/mine/domain', { method: 'DELETE' }),
+  licenceDomainDetach: (uid, reason) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/domain/detach`, {
+      method: 'POST', body: JSON.stringify({ reason }),
+    }),
   // Task #14 — forward signed PDF to legal partner(s).
   adminForwardContract: (id, data) =>
     request(`/legal/esign/${id}/forward`, { method: 'POST', body: JSON.stringify(data) }),

@@ -113,6 +113,89 @@ export default function BranchSettings({ user }) {
       .join(' · ')
     : null;
 
+  // THE ROWS ARE DATA, NOT SEVEN JSX LITERALS, and D197 made them so for one
+  // reason: the count beside them had been a TYPED string sitting under a
+  // comment that claimed it was counted. Reading one array is what makes the
+  // sentence true, and it makes the render and the guard read the same thing —
+  // a row added here reaches both or neither.
+  const rows = [
+    {
+      field: 'Subsidiary name',
+      who: 'HQ',
+      value: lic?.brand_name ? `${lic.brand_name} · ${copyNote}` : null,
+      reason: 'The licence copy could not be read, so the name it carries is unknown rather than unset.',
+      act: 'Request a change · escalation (other)',
+      actTo: '/branch/approvals',
+    },
+    {
+      field: 'Territory',
+      who: 'HQ',
+      value: lic?.territories?.length ? `${lic.territories.join(' · ')} · ${copyNote}` : null,
+      reason: 'The licence copy could not be read, so which countries this branch holds is unknown rather than none.',
+      act: 'Request a change · escalation (other)',
+      actTo: '/branch/approvals',
+    },
+    {
+      field: 'Staff & roles',
+      who: 'Yours',
+      value: staffLine,
+      reason:
+        insights === UNAVAILABLE
+          ? 'The account breakdown could not be read, so the staff count is unknown rather than zero.'
+          : 'The branch answered without a role breakdown.',
+      // SPLIT, AND THE LINK GOES TO THE HALF THAT WORKS. A branch can
+      // deactivate a non-admin account on its own database; it cannot change a
+      // role, and granting one is HQ's through the licence (D134).
+      act: 'Manage accounts — roles are granted by HQ through the licence',
+      actTo: '/branch/accounts',
+    },
+    {
+      field: 'Brand kit',
+      who: 'HQ',
+      value: null,
+      reason: 'HQ has no brand-kit store yet, so there is nothing to download. Ask for assets through Content; do not expect a file here.',
+      act: 'Ask HQ · Content',
+      actTo: '/branch/approvals',
+    },
+    {
+      field: 'Licence summary',
+      who: 'HQ',
+      value: lic
+        ? `${Number.isFinite(Number(lic.seats_licensed)) ? lic.seats_licensed : 'an unrecorded number of'} seats${lic.renews_on ? ` · renews ${String(lic.renews_on).slice(0, 10)}` : ''} · ${copyNote}`
+        : null,
+      reason: 'The licence copy could not be read, so its terms are unknown rather than absent.',
+      act: 'Request seats · escalation (seat increase)',
+      actTo: '/branch/approvals',
+    },
+    {
+      // THE CANVAS TYPES A VALUE HERE AND THE PAGE REFUSES TO. S11 draws
+      // "D1 · DO · R2 with jurisdiction eu" on this row. `branch_licence` has
+      // no residency column and HQ pushes none, so printing that would be a
+      // claim about THIS deployment that nothing on this deployment measured.
+      field: 'Data residency',
+      who: 'HQ',
+      value: null,
+      reason: 'Nothing pushes this branch its own residency, so where its data sits is unknown here rather than unset. It is chosen at provisioning and HQ holds the record.',
+      act: 'Ask HQ · escalation (other)',
+      actTo: '/branch/approvals',
+    },
+    {
+      // D197. The canvas puts Domain in a Settings sub-nav this page does not
+      // have, so it lands as a row — where its owner chip can say the true
+      // thing. The host register is HQ's structurally: "one host, one licence"
+      // is a UNIQUE index, and a branch is its own Worker over its own D1, so
+      // it cannot see what another tenant bound and cannot enforce it.
+      field: 'Domain',
+      who: 'HQ',
+      value: null,
+      reason: 'The host register is HQ\'s, so this branch cannot read which host its licence holds. Binding one is done on the licence at HQ.',
+      act: 'Ask HQ · escalation (other)',
+      actTo: '/branch/approvals',
+    },
+  ];
+  const hqOwned = rows.filter((r) => r.who === 'HQ').length;
+  const ownerCount = `${hqOwned} of ${rows.length} rows HQ-owned`;
+
   // THE RAIL IS `BranchZone`'S, NOT THIS PAGE'S. D126 put the branch tier's
   // one mount there and `branch_rail_mount.test.mjs` pins it, so a page passes
   // its COVERAGE and its ABSENCES and never a second `<WorkerRail>` — which is
@@ -129,7 +212,7 @@ export default function BranchSettings({ user }) {
       ? `${lic.territories.length} territories held · ${copyNote}`
       : 'Territories: not read',
     staffLine ? `Staff: ${staffLine}` : 'Staff breakdown: not read',
-    'Four of five rows are HQ-owned',
+    ownerCount,
   ];
 
   return (
@@ -165,68 +248,17 @@ export default function BranchSettings({ user }) {
         <Card className="mt-4">
           <div className="mb-1 flex items-baseline justify-between gap-3">
             <h2 className="text-[14.5px] font-extrabold tracking-tight">Settings</h2>
-            {/* COUNTED, NOT TYPED. The canvas types this number and gets it
-                wrong; deriving it from the rows means it cannot drift from
-                them, and the day a row changes hands it changes here too. */}
+            {/* COUNTED, AND SINCE D197 ACTUALLY SO. This comment sat above a
+                typed string for two decisions; the value is now derived from
+                the same `rows` array the list below renders, so the day a row
+                changes hands both change together. */}
             <span className="text-[11.5px] text-axal-faint" data-testid="s11-owner-count">
-              4 of 5 rows HQ-owned
+              {ownerCount}
             </span>
           </div>
 
-          <Row
-            field="Subsidiary name"
-            who="HQ"
-            value={lic?.brand_name ? `${lic.brand_name} · ${copyNote}` : null}
-            reason="The licence copy could not be read, so the name it carries is unknown rather than unset."
-            act="Request a change · escalation (other)"
-            actTo="/branch/approvals"
-          />
-          <Row
-            field="Territory"
-            who="HQ"
-            value={lic?.territories?.length ? `${lic.territories.join(' · ')} · ${copyNote}` : null}
-            reason="The licence copy could not be read, so which countries this branch holds is unknown rather than none."
-            act="Request a change · escalation (other)"
-            actTo="/branch/approvals"
-          />
-          <Row
-            field="Staff & roles"
-            who="Yours"
-            value={staffLine}
-            reason={
-              insights === UNAVAILABLE
-                ? 'The account breakdown could not be read, so the staff count is unknown rather than zero.'
-                : 'The branch answered without a role breakdown.'
-            }
-            // SPLIT, AND THE LINK GOES TO THE HALF THAT WORKS. A branch can
-            // deactivate a non-admin account on its own database; it cannot
-            // change a role, and granting one is HQ's through the licence
-            // (D134). The Accounts console is where the half it owns happens.
-            act="Manage accounts — roles are granted by HQ through the licence"
-            actTo="/branch/accounts"
-          />
-          <Row
-            field="Brand kit"
-            who="HQ"
-            value={null}
-            // The canvas wrote this absence itself, and D.10 recorded the
-            // decision behind it: there is no brand-kit store to push from.
-            reason="HQ has no brand-kit store yet, so there is nothing to download. Ask for assets through Content; do not expect a file here."
-            act="Ask HQ · Content"
-            actTo="/branch/approvals"
-          />
-          <Row
-            field="Licence summary"
-            who="HQ"
-            value={
-              lic
-                ? `${Number.isFinite(Number(lic.seats_licensed)) ? lic.seats_licensed : 'an unrecorded number of'} seats${lic.renews_on ? ` · renews ${String(lic.renews_on).slice(0, 10)}` : ''} · ${copyNote}`
-                : null
-            }
-            reason="The licence copy could not be read, so its terms are unknown rather than absent."
-            act="Request seats · escalation (seat increase)"
-            actTo="/branch/approvals"
-          />
+          {rows.map((r) => <Row key={r.field} {...r} />)}
+
         </Card>
 
         <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="s11-ownership-note">
