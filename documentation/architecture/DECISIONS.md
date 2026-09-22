@@ -17691,30 +17691,30 @@ so `docs/` is rebuilt by the root build.
 
 ## D194
 
-**`main` was red, and the guard that caught it was right about the rule and
-wrong about this call.**
+**`main` was red, and the repair shipped through somebody else's PR while this
+branch carried its own. This entry is the reasoning; #720 is the fix.**
 
 PR #719 merged at 18:24:24Z as `7b4c81f43` and its deploy read `success`, so
-Studio is live. It also left `npm run test:drift` failing on `main`, which
-blocks every PR cut from it — including all seven of the store tasks filed
-against that very page. Measured rather than inferred: `frontend/src` in this
-branch is byte-identical to `origin/main` (zero files differ), and
-`check-frontend-logging` rejects `AdminStudioHome.jsx:32` on that tree.
+Studio went live — and left `npm run test:drift` failing on `main`, which blocks
+every PR cut from it. `check-frontend-logging` rejected
+`AdminStudioHome.jsx:32`. Measured rather than inferred at the time: this
+branch's `frontend/src` was byte-identical to `origin/main`, so the failure was
+`main`'s own and not this branch's.
 
 The line:
 
 ```js
 const fail = (setter, tag) => (e) => {
-  reportError(tag, e);          // ← `tag` is an identifier, not a literal
+  reportError(tag, e);          // <- `tag` is an identifier, not a literal
   ...
 };
 api.branchHome().then(take(setHome), fail(setHome, 'admin-studio:home'));
 ```
 
-**The arguments are in the right order.** All four call sites pass a string
-literal, and `tag` is that literal one closure later. What the guard cannot do
-is see through the closure, so its message — *"Reversed arguments ship no
-stack…"* — is wrong about this site specifically.
+**The arguments were in the right order.** All four call sites passed a string
+literal, and `tag` was that literal one closure later. What the guard cannot do
+is see through a closure, so its message — *"Reversed arguments ship no
+stack..."* — was wrong about this site specifically.
 
 **The guard is still right, and it is the call that moves.** Its own docblock
 says why the first argument must be a quoted literal: an identifier there is
@@ -17725,22 +17725,40 @@ that defect shipped at **27 call sites**, each sending no stack, a message of
 Widen the rule to accept identifiers and `reportError(e, ctx)` passes too,
 because `e` is an identifier as well. The narrowness *is* the check.
 
-So `fail` takes the **reporter** rather than the tag, and each of the four
-scopes is a literal at its own call site. One helper, no duplicated
-cancelled/setter logic, and the guard keeps its strictness:
-
-```js
-const fail = (setter, report) => (e) => { report(e); ... };
-api.branchHome().then(take(setHome), fail(setHome, (e) => reportError('admin-studio:home', e)));
-```
-
 **What was explicitly not done: a template-literal wrapper.** `` reportError(`${tag}`, e) ``
-satisfies the check and teaches the next reader that the rule is decorative.
-A guard that is trivially circumvented is worse than no guard, and this one has
+satisfies the check and teaches the next reader that the rule is decorative. A
+guard that is trivially circumvented is worse than no guard, and this one has
 three real defects behind it.
 
-`frontend/src` moves, so `docs/` is rebuilt by the root build. **No migration —
-279 stays free. No new `/api/*` method.**
+### The repair is #720's, not this branch's — and the correction is the point
+
+This branch built the repair as `fail` taking the **reporter** rather than the
+tag. While it sat in review, **PR #720 merged as `b2fdf9a10`** with the same
+diagnosis and a simpler shape: the reporter is inlined at each of the four call
+sites and `miss(setter)` stays a plain setter-guard.
+
+```js
+api.branchHome().then(take(setHome), (e) => {
+  reportError('admin-studio:home', e);
+  miss(setHome)();
+});
+```
+
+Both satisfy the guard; #720's carries less indirection and is already on `main`
+and deployed. So the merge that brought #720 in **took `origin/main`'s version
+of the file wholesale**, and this branch's `frontend/src` is once again
+byte-identical to `main` — measured, zero files differ.
+
+**Recorded rather than quietly dropped**, because a decision entry describing a
+fix the branch does not ship is the stale-claim class this programme keeps
+deleting. What D194 contributes is the reasoning above: the guard stays narrow,
+and the call site moves. #720 reached the same conclusion independently, which
+is the better evidence for it.
+
+**Consequence for this PR:** it carries no `frontend/src` change, so `docs/` is
+`main`'s build unchanged rather than a rebuild of its own — verified by running
+the root build and measuring zero churn. **No migration — 279 stays free. No new
+`/api/*` method.**
 
 ---
 

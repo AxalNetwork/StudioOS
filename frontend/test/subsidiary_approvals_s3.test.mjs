@@ -39,7 +39,7 @@ const CANVAS = raw('design/canvases/integrated/Admin · Subsidiary.dc.html');
  * THE OLD ANCHOR WAS A BARE WORD AND IT WORKED BY COINCIDENCE. It sliced
  * 12,000 characters from `indexOf('Approvals')` while calling itself bounded
  * at both ends. The first occurrence of that word is not S3: on the canvas
- * D194 landed it sits inside S1's support-ticket card ("Approvals filter loses
+ * D195 landed it sits inside S1's support-ticket card ("Approvals filter loses
  * state on reload") at offset 12,826, with S3 at 39,774 — so the window
  * covered S1 and never reached the artboard it names. On the smaller canvas
  * the same slice happened to span the gap, and the assertion below passed for
