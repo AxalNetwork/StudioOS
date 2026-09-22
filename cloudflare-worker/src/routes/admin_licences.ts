@@ -71,6 +71,10 @@ const SEAT_TYPES = ['founder', 'investor', 'advisor', 'partner'] as const;
 const ISO2 = /^[A-Z]{2}$/;
 /** Statuses that still hold territory. Terminated is the only one that does not. */
 const HOLDS_TERRITORY = ['draft', 'pending_activation', 'active', 'suspended'];
+/** The two kinds migration 279's CHECK admits. Named here so the handler and
+ *  the column cannot drift: a third value is refused by BOTH, and the refusal
+ *  the handler gives is the readable one. */
+const LICENCE_KINDS = ['subsidiary', 'white_label'];
 
 export type LicenceRow = {
   id: number; uid: string; licence_ref: string; entity_id: number | null;
@@ -80,6 +84,9 @@ export type LicenceRow = {
   revenue_share_bps: number | null; token_split_bps: number | null;
   starts_on: string | null; renews_on: string | null; suspended_at: string | null;
   terminated_at: string | null; status_note: string | null; created_at: string;
+  /** 'subsidiary' | 'white_label' — migration 279. `byUid` is SELECT *, so this
+   *  arrives without a query change; before 279 it was undefined on every row. */
+  kind: string;
 };
 
 /** What each notice kind is called in the mail. The CHECK's four values are
@@ -285,21 +292,33 @@ r.post('/', async (c) => {
       .bind(ref).first<{ x: number }>();
     if (clash) return c.json({ error: `${ref} is already in use` }, 409);
 
+    // KIND IS STEP 1 (H26), AND IT IS REFUSED HERE RATHER THAN COERCED.
+    // Migration 279's CHECK would reject a third value anyway — as a 500 with
+    // SQLite's own wording. An operator who mistypes a kind deserves to be told
+    // which two exist, which is why the handler names them.
+    const kind = str(b?.kind, 20) || 'subsidiary';
+    if (!LICENCE_KINDS.includes(kind)) {
+      return c.json({ error: `kind must be one of ${LICENCE_KINDS.join(', ')}` }, 400);
+    }
+
     const uid = newUid();
     await c.env.DB.prepare(
       `INSERT INTO territory_licences (uid, licence_ref, entity_id, legal_entity_name,
                                        brand_name, registered_address, signatory_name,
-                                       signatory_title, status, created_by_user_id,
+                                       signatory_title, kind, status, created_by_user_id,
                                        created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?, 'draft', ?,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?, 'draft', ?,?,?)`,
     ).bind(
       uid, ref, intOrNull(b?.entity_id), legalName, brand,
       str(b?.registered_address) || null, str(b?.signatory_name, 200) || null,
-      str(b?.signatory_title, 200) || null, admin.id, nowIso(), nowIso(),
+      str(b?.signatory_title, 200) || null, kind, admin.id, nowIso(), nowIso(),
     ).run();
     const created = await byUid(c.env, uid);
-    if (created) await logEvent(c.env, created.id, 'created', admin.id, { licence_ref: ref });
-    return c.json({ uid, licence_ref: ref, status: 'draft' }, 201);
+    // The kind rides the audit row: `licence_events` is the licence's own
+    // record, and which kind it was issued as is not recoverable from the
+    // other fields.
+    if (created) await logEvent(c.env, created.id, 'created', admin.id, { licence_ref: ref, kind });
+    return c.json({ uid, licence_ref: ref, status: 'draft', kind }, 201);
   } catch (e) { return mapError(c, e); }
 });
 

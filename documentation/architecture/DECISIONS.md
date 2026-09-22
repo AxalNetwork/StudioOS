@@ -17881,3 +17881,139 @@ that describe them. The `integrated/` count stays **66**: a re-export replaces
 content and moves no file, and the "if you move a file, move the number" rule
 governs moves — stated in the README rather than left to be checked, because the
 last four changes to that file were moves and a reader learns to look for one.
+
+---
+
+## D196
+
+**Four shipped controls have been reading a column that did not exist, so every
+licence rendered as an Axal subsidiary and the console said so in its own
+words.**
+
+`AdminLicences.jsx` has carried a Kind control (`licence-kind`), a Kind pill
+(`licence-kind-pill`), a brand-kit block (`licence-brand-kit`) and a domain
+strip (`licence-domain-strip`) since the licence console was built. Every one
+of them reads `d.kind`. `byUid` is `SELECT * FROM territory_licences` on a
+table that had no `kind` column, so **`d.kind` was `undefined` on every row
+ever rendered**: the pill fell through to its subsidiary branch for all of
+them, and the create path refused white-label outright — in its own rendered
+words, *"The ledger has no kind column."* `ContentPage.jsx`'s brand-desk scope
+said the same thing from the other side: it could not hide a white-label
+submission because nothing recorded which licence was which.
+
+**NO TEST ASSERTED ANY OF THE FOUR.** Measured before writing one: a
+case-insensitive sweep of both test trees for `licence-kind`, `white_label`,
+`ledger has no kind` and `brand-desk` returned nothing outside this decision's
+own new files. So four controls, a refusal and a scope note shipped with
+nothing standing behind them, which is why D196 adds two guards rather than
+re-aiming one.
+
+### Migration 279, and the two things about it that were measured rather than assumed
+
+**It is the first `ALTER` this table has ever taken.** `territory_licences`
+arrived in migration 187 and `grep -rn "ALTER TABLE territory_licences"
+cloudflare-worker/sql/` returns zero. That matters because of the second
+measurement: there is **no runtime `CREATE TABLE IF NOT EXISTS
+territory_licences` anywhere in `cloudflare-worker/src/`** either. So the table
+has exactly ONE definition, and widening it here cannot reproduce the
+two-definition collision that cost #183 and #202 two PRs to unwind. The
+precondition is asserted rather than stated: the guard walks `src/` and fails
+the day somebody adds a twin.
+
+**`ADD COLUMN ... CHECK (...)` is both accepted and enforced**, verified
+against `node:sqlite` before the file was written, because `ALTER TABLE` is the
+one place SQLite's constraint support is easy to assume wrongly. An insert of a
+third value raises `CHECK constraint failed`. So the vocabulary is closed in
+the schema as well as in the handler — the shape `status` on this same table
+already uses. The test asserts the *enforcement*, not the acceptance: a
+migration that contained the word `CHECK` and enforced nothing would pass a
+regex and fail a build.
+
+**The column is `kind`, not `brand_kind`, and that is a decision.** The H26
+artboard's prose calls it `brand_kind` (*"the same admin product with
+brand_kind = white_label"*). The shipped SPA already reads `kind` at four
+testids and holds `kind` in its form state. Renaming those to match the prose
+would be a wider change than this one and would break the controls the canvas
+is describing. The column takes the name its readers already use; the prose
+describes the concept, not the column.
+
+**`DEFAULT 'subsidiary'` backfills a fact rather than inventing one.** Every
+licence issued before 279 went through a create path that REFUSED white-label,
+so every existing row *is* a subsidiary by construction. That is the one
+condition under which a default on a live table is honest, and it is stated in
+the migration header rather than left to be inferred.
+
+### The handler refuses rather than coerces, and the kind rides the audit row
+
+`str(b?.kind, 20) || 'subsidiary'` then a refusal against `LICENCE_KINDS`,
+**before** the INSERT. The column would refuse a third value anyway — as a 500
+carrying SQLite's own wording. An operator who mistypes a kind is told which
+two exist instead. And `logEvent(..., { licence_ref: ref, kind })`: which kind
+a licence was issued as is not recoverable from the other fields, and
+`licence_events` is the licence's own record.
+
+### `ContentPage`'s refusal is NARROWED, not deleted — and the join was measured
+
+D111's pattern, and the half that survives is the half that is still true. The
+lane could not filter for two reasons; 279 closes one of them. What remains is
+measured rather than guessed: an escalation carries a **branch code**, and
+reaching the kind means joining `branch_code` → `licence_deployments.code` →
+`licence_uid` → `territory_licences.kind`. That path exists and is not built,
+so the note now says the ledger records the kind **and** that this lane does
+not filter on it yet. Deleting either half is a false claim in a different
+direction — the first makes HQ look like it approves a white-label's brand, the
+second makes the lane look like it already filters. Both are pinned.
+
+### What the mutation run earned, and it is most of the value in this entry
+
+**Twenty-three mutations applied, twenty-three caught — but four of them
+escaped the first time and the fix was the assertion, never the code.** Each is
+a shape this programme has met before and will meet again:
+
+1. **A lexical scan cannot tell a rule from its violation** — the fifth
+   instance. `assert.doesNotMatch(sql, /idx_licence_territory_exclusive/)` read
+   the raw migration, whose own header names that index in the sentence saying
+   it is *not* touched. The scan now strips `--` comments first, and the pair
+   that replaced it is stronger than the original: the raw file must still
+   carry the name (the reasoning stays on the record) while the DDL must not,
+   which proves the stripper did work rather than eating the file.
+2. **A guard that reads as live and refuses nothing.** `match(src,
+   /!LICENCE_KINDS\.includes\(kind\)/)` is satisfied by `if (false &&
+   !LICENCE_KINDS.includes(kind))`. Anchoring on the `if (` makes the whole
+   condition the thing asserted.
+3. **An unbounded match satisfied by a different form.** `kind: form.kind` also
+   appears in the *notice* form eight hundred lines up, whose `kind` is a
+   notice kind — so deleting the licence payload's line escaped. The assertion
+   is now bounded to `create()`.
+4. **An assertion that compared two pieces of indentation.** Scanning the pill's
+   slice for quoted runs of twelve characters or more returns `\n ? ` and
+   `\n : ` — because a quote both closes one run and opens the next — so the
+   test compared whitespace, found it different, and passed on a pill whose two
+   branches were identical. It matches the ternary as a ternary now.
+
+Also recorded because it is the same class one layer out: a mutation aimed at a
+phrase both ternary branches carry (`Settings → Domain`) escaped, because the
+subsidiary branch satisfied an assertion about the white-label one. The
+white-label branch is now pinned by a sentence only it carries.
+
+### What this deliberately does NOT do
+
+- **It does not touch `idx_licence_territory_exclusive`.** H26 says exclusivity
+  against other white-labels is off for such a licence. That is true of the
+  *design* and is stored nowhere, so relaxing a live constraint on the strength
+  of a column one migration old would trade a real guarantee for an unbuilt
+  one. The index stays, its guard in `territory_licences.test.mjs` stays armed,
+  and 279 records why in a comment the new test reads.
+- **It builds no hostname store.** `d.custom_domain` exists nowhere in the
+  worker or in SQL, so the domain strip renders *Not recorded* unconditionally
+  and offers no control — a Detach button that cannot detach would be the
+  `still_an_admin` mistake D134 named. That store is **#306**.
+- **It builds no brand-kit store.** Every field in `licence-brand-kit` reads
+  `value={null}` with its own reason. Rendering Axal's mark for a white-label is
+  the one claim that block exists to avoid making. That store is **#307**.
+- **It does not kind-gate the Content or Support lanes** (H30). That needs the
+  join above and is **#311**.
+
+**No new `/api/*` method** — `kind` rides the create payload and `byUid`'s
+`SELECT *`, so `check-api-drift` has nothing to say. **280 is the next free
+migration.**

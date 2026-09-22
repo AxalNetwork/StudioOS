@@ -1,0 +1,57 @@
+-- 279 — a licence says which KIND it is, so the surfaces that already branch
+-- on that answer stop guessing (D196).
+--
+-- THE FIRST ALTER THIS TABLE HAS EVER TAKEN. `territory_licences` arrived in
+-- migration 187 and has been widened by nothing since: `grep -rn "ALTER TABLE
+-- territory_licences" cloudflare-worker/sql/` returns zero. That matters for
+-- one reason worth stating rather than discovering — there is also no runtime
+-- `CREATE TABLE IF NOT EXISTS territory_licences` anywhere in
+-- cloudflare-worker/src/ (measured: zero), so this table has exactly ONE
+-- definition and adding a column here cannot reproduce the two-definition
+-- collision that cost #183 and #202 two PRs to unwind.
+--
+-- WHAT WAS BROKEN. `AdminLicences.jsx` has shipped a Kind control, a Kind
+-- pill and a white-label refusal since the licence console was built. All of
+-- them read `d.kind`, and `byUid` is `SELECT * FROM territory_licences` on a
+-- table with no such column — so `d.kind` has been `undefined` on every row
+-- ever rendered. The pill fell through to its subsidiary branch for every
+-- licence including a white-label one, and the create path refused white-label
+-- outright, in its own words, because "the ledger has no kind column".
+-- `ContentPage.jsx`'s brand-desk scope says the same thing from the other
+-- side: it cannot hide a white-label submission because nothing records which
+-- licence is which.
+--
+-- WHY A CHECK AND NOT A BARE TEXT. Verified empirically against node:sqlite
+-- before this file was written, because ALTER ... ADD COLUMN is the one place
+-- SQLite's constraint support is easy to assume wrongly: `ADD COLUMN ... CHECK
+-- (...)` is BOTH accepted and enforced — an insert of a third value raises
+-- `CHECK constraint failed`. So the vocabulary is closed in the schema rather
+-- than only in the handler, which is the shape `status` on this same table
+-- already uses (migration 187).
+--
+-- THE NAME IS `kind`, NOT `brand_kind`, AND THAT IS A DECISION. The H26
+-- artboard's prose calls the field `brand_kind` ("the same admin product with
+-- brand_kind = white_label"). The shipped SPA already reads `kind` at four
+-- testids — licence-kind, licence-kind-pill, licence-brand-kit,
+-- licence-domain-strip — and holds `kind` in its form state. Renaming those to
+-- match the prose would be a wider change than this one and would break the
+-- controls the canvas is describing. The column takes the name its readers
+-- already use; the prose is describing the concept, not dictating a column.
+--
+-- DEFAULT 'subsidiary' IS THE TRUTH, NOT A CONVENIENCE. Every licence issued
+-- before this migration was issued through a create path that REFUSED
+-- white-label, so every existing row is a subsidiary by construction. The
+-- default therefore backfills a fact rather than inventing one.
+--
+-- WHAT THIS DELIBERATELY DOES NOT DO: touch `idx_licence_territory_exclusive`.
+-- H26 says exclusivity against other white-labels is off for such a licence,
+-- and that is true of the design — but it is a SEPARATE flag that nothing
+-- stores, and widening the index here would relax a live constraint on the
+-- strength of a column that has existed for one migration. It stays exactly as
+-- it is, and its guard in territory_licences.test.mjs stays armed.
+--
+-- No BEGIN/COMMIT: D1 rejects transaction control in a migration file (#26).
+
+ALTER TABLE territory_licences
+  ADD COLUMN kind TEXT NOT NULL DEFAULT 'subsidiary'
+  CHECK (kind IN ('subsidiary', 'white_label'));

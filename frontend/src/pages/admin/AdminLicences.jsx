@@ -1264,11 +1264,6 @@ function Detail({ uid, held, onChanged }) {
               ? 'White-label · platform supervised, brand unsupervised'
               : 'Axal subsidiary · platform supervised'}
           </div>
-          {d.kind !== 'white_label' && (
-            <p className="mt-0.5 max-w-xl text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-              The ledger has no kind column. Every row reads as an Axal subsidiary until a white-label can be stored as its own kind.
-            </p>
-          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {d.status === 'suspended' ? (
@@ -1640,15 +1635,15 @@ export default function AdminLicences() {
   async function create(e) {
     e.preventDefault();
     setErr('');
-    if (form.kind === 'white_label') {
-      setErr('White-label licences are not stored yet. The ledger has no kind column, so this would be recorded as an Axal subsidiary.');
-      return;
-    }
     try {
       const payload = {
         licence_ref: form.licence_ref,
         legal_entity_name: form.legal_entity_name,
         brand_name: form.brand_name,
+        // Step 1 of H26. Migration 279 gave the ledger its kind column, so the
+        // refusal that used to sit above this is gone rather than reworded:
+        // the reason it gave stopped being true.
+        kind: form.kind,
       };
       const r = await api.licenceCreate(payload);
       setCreating(false);
@@ -1719,7 +1714,7 @@ export default function AdminLicences() {
             </div>
             <p className="mt-2 max-w-2xl text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">
               {form.kind === 'white_label'
-                ? 'Same subsidiary console, their brand, no HQ brand desk. The ledger has no kind column yet, so this draft cannot be stored as white-label — creating it now would record an Axal subsidiary. Super Admin stays on axal.vc.'
+                ? 'Same subsidiary console, their brand, no HQ brand desk. Members land on a platform host at activation; their admin binds a custom one later, in Settings → Domain. Super Admin stays on axal.vc.'
                 : 'Axal-branded territory. They still bind their own host in Admin Settings → Domain. Super Admin stays on axal.vc and app.axal.vc.'}
             </p>
           </div>
@@ -1737,10 +1732,9 @@ export default function AdminLicences() {
           {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
           <button
             type="submit"
-            disabled={form.kind === 'white_label'}
             className="mt-3 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {form.kind === 'white_label' ? 'White-label is not stored yet' : 'Create draft'}
+            Create draft
           </button>
           <p className="mt-2 text-[11px] text-gray-500">
             A new licence starts as a draft holding no territory. It cannot be activated until it

@@ -1,0 +1,163 @@
+/**
+ * D196 — the four Kind surfaces, guarded for the first time.
+ *
+ * WHAT THIS FILE IS FOR. `AdminLicences.jsx` has shipped `licence-kind`,
+ * `licence-kind-pill`, `licence-brand-kit` and `licence-domain-strip` since
+ * the licence console was built, and **no test asserted any of them**. Every
+ * one reads `d.kind` or writes `form.kind` against a table that had no such
+ * column until migration 279, so the pill fell through to its subsidiary
+ * branch for every licence and the create path refused white-label outright.
+ * This adds the guard rather than re-aiming one.
+ *
+ * THE ASSERTION THAT MATTERS MOST is not any single testid — it is that the
+ * picker's vocabulary and the ledger's are read out of their own two files and
+ * compared. A hand-typed list in the SPA and a CHECK in SQL are the classic
+ * pair that drifts; here a third kind added to either side fails.
+ *
+ * EVERY BLOCK IS BOUNDED AT BOTH ENDS. D150 was caught by an assertion a
+ * NEIGHBOURING element satisfied while the element under test had lost its
+ * own copy entirely, so each slice below stops at its element's own closing
+ * tag and is asserted to contain no other testid.
+ *
+ * Run with:
+ *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/licence_kind_ui_d196.test.mjs
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { codeOnly } from './_codeOnly.mjs';
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
+
+const PAGE = read('frontend/src/pages/admin/AdminLicences.jsx');
+const SRC = codeOnly(PAGE);
+const ROUTE = codeOnly(read('cloudflare-worker/src/routes/admin_licences.ts'));
+const CONTENT = read('frontend/src/pages/hq/ContentPage.jsx');
+
+/**
+ * One element's own markup, bounded at both ends.
+ *
+ * The testid must occur exactly ONCE — a second occurrence would make the
+ * start ambiguous — and the slice must carry no other `data-testid`, which is
+ * what stops a neighbouring element satisfying an assertion about this one.
+ */
+function block(testid, closer) {
+  const needle = `data-testid="${testid}"`;
+  const count = SRC.split(needle).length - 1;
+  assert.equal(count, 1, `${testid} occurs ${count} times, so its block cannot be bounded`);
+  const at = SRC.indexOf(needle);
+  const end = SRC.indexOf(closer, at);
+  assert.ok(end > at, `${testid} never reaches its closing ${closer}`);
+  const slice = SRC.slice(at + needle.length, end);
+  assert.doesNotMatch(slice, /data-testid=/,
+    `the ${testid} slice reaches another element, so it is not bounded to its own`);
+  return slice;
+}
+
+test('the SPA offers exactly the kinds the ledger admits', () => {
+  // The whole point of D196: one vocabulary, read from both files rather than
+  // restated here. A third kind on either side — a button the CHECK refuses,
+  // or a column value with no control — fails this.
+  const picker = block('licence-kind', '</p>');
+  const spa = [...picker.matchAll(/\['([a-z_]+)',\s*'[^']*'\]/g)].map((m) => m[1]);
+  assert.deepEqual(spa, ['subsidiary', 'white_label'],
+    'the Kind control no longer offers exactly the two kinds');
+
+  const decl = ROUTE.match(/LICENCE_KINDS\s*=\s*\[([^\]]*)\]/);
+  assert.ok(decl, 'the worker no longer names its licence kinds in one place');
+  const ledger = [...decl[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+  assert.deepEqual(spa, ledger,
+    'the picker and the ledger disagree about which kinds exist');
+});
+
+test('the create path SENDS the kind and no longer refuses white-label', () => {
+  // The refusal is DELETED, not reworded, because the reason it gave — "the
+  // ledger has no kind column" — stopped being true rather than being
+  // rephrased. D111's narrow-don't-delete applies to a refusal that is partly
+  // still true; this one is not.
+  // BOUNDED TO THE LICENCE FORM. `kind: form.kind` also appears in the NOTICE
+  // form eight hundred lines up, whose `kind` is a notice kind — so an
+  // unbounded match is satisfied by a different form entirely. Measured:
+  // deleting the licence payload's line escaped the first version of this.
+  const at = SRC.indexOf('async function create(e)');
+  assert.ok(at > 0, 'the licence create handler is gone');
+  const creator = SRC.slice(at, SRC.indexOf('api.licenceCreate', at));
+  assert.match(creator, /kind:\s*form\.kind/, 'the create payload no longer carries the chosen kind');
+  assert.doesNotMatch(SRC, /ledger has no kind column/,
+    'the page still tells an operator the ledger cannot store a kind');
+  assert.doesNotMatch(SRC, /disabled=\{form\.kind/,
+    'the submit button is still gated on the chosen kind');
+  assert.doesNotMatch(SRC, /White-label is not stored yet/,
+    'the submit button still labels white-label as unstorable');
+});
+
+test('the pill reads the stored kind, and its two branches say different things', () => {
+  const pill = block('licence-kind-pill', '</div>');
+  assert.match(pill, /d\.kind === 'white_label'/,
+    'the pill stopped reading the stored kind, so every licence reads the same');
+  // THE TERNARY IS MATCHED AS A TERNARY. A scan for quoted runs inside this
+  // slice returns the WHITESPACE between the strings — `\n ? ` and `\n : ` —
+  // because a quote both opens and closes a run, so the first version of this
+  // assertion compared two pieces of indentation, found them different, and
+  // passed on a pill whose branches were identical. Measured, not reasoned.
+  const ternary = pill.match(/\?\s*'([^']+)'\s*:\s*'([^']+)'/);
+  assert.ok(ternary, 'the pill no longer renders one sentence per kind');
+  assert.notEqual(ternary[1], ternary[2],
+    'both pill branches render the same sentence, so the kind is invisible again');
+  assert.match(ternary[1], /White-label/,
+    'the white-label branch stopped naming the kind it is for');
+});
+
+test('the white-label explainer describes the host, not a missing column', () => {
+  const picker = block('licence-kind', '</p>');
+  assert.match(picker, /no HQ brand desk/,
+    'the white-label explainer stopped saying HQ does not approve their brand');
+  // A SENTENCE ONLY THE WHITE-LABEL BRANCH CARRIES. Both branches mention
+  // Settings → Domain, so matching that phrase inside this slice is satisfied
+  // by the subsidiary copy — which is what let the first version of this pass
+  // with the white-label host sentence deleted.
+  assert.match(picker, /Members land on a platform host at activation/,
+    'the explainer stopped saying a white-label starts on a platform host');
+  assert.match(picker, /Settings → Domain/,
+    'neither branch says where a custom host is bound');
+  assert.match(picker, /Super Admin stays on axal\.vc/,
+    'the explainer stopped saying Super Admin keeps its own host');
+});
+
+test('the domain strip states its absence rather than claiming a store', () => {
+  // #306 builds the hostname store. Until it does, `d.custom_domain` is
+  // undefined on every row, and the strip must read as unrecorded rather than
+  // as a domain — and must offer no control the server could only refuse.
+  const strip = block('licence-domain-strip', '</p>');
+  assert.match(strip, /Not recorded/, 'the domain strip stopped saying the host is unrecorded');
+  assert.doesNotMatch(strip, /<button/,
+    'the domain strip grew a control, and no route behind it binds or detaches a host');
+});
+
+test('the brand kit reads as unrecorded, not as Axal’s brand', () => {
+  // #307 builds the brand-kit store. Rendering Axal's mark for a white-label
+  // would be the one claim this block exists to avoid making.
+  const kit = block('licence-brand-kit', '</div>');
+  const nulls = (kit.match(/value=\{null\}/g) || []).length;
+  assert.ok(nulls >= 3, `the brand kit fabricated a value: only ${nulls} fields read as unrecorded`);
+  assert.match(kit, /A white-label operator sets their own mark\. HQ does not approve it\./,
+    'the brand kit stopped saying whose mark it is');
+});
+
+test('the brand-desk refusal is NARROWED, not deleted', () => {
+  // D111's pattern, and both halves are load-bearing. Drop the first and HQ
+  // looks like it approves a white-label's brand; drop the second and the lane
+  // looks like it already filters, which it does not — an escalation carries a
+  // branch code, and the kind is two joins away.
+  const at = CONTENT.indexOf('data-testid="hq-brand-desk-scope"');
+  assert.ok(at > 0, 'the brand-desk scope note is gone');
+  const scope = CONTENT.slice(at, CONTENT.indexOf('</p>', at));
+  assert.match(scope, /A white-label has no HQ brand desk/,
+    'the refusal is gone, so HQ reads as approving a white-label brand');
+  assert.match(scope, /does not filter on that yet/,
+    'the lane now claims to filter by kind, which nothing in it does');
+});
