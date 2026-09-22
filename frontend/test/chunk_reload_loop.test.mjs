@@ -69,8 +69,16 @@ test('the reload budget is a count, and it survives blocked storage', () => {
   // grown its own guard that did not work. Two implementations of "bounded
   // reload" is how one of them ends up missing a lesson the other paid for.
   assert.match(main, /MAX_CHUNK_RELOADS = \d+/, 'attempts must be bounded by a number');
-  assert.match(main, /if \(attempts >= MAX_CHUNK_RELOADS\) return;/,
-    'the bound must be checked before reloading');
+  // `return false` RATHER THAN A BARE `return`, and the difference is a
+  // contract: the `vite:preloadError` listener now gates preventDefault() on
+  // this function's return value, so the budget-spent path has to say so out
+  // loud. A bare `return` is accidentally falsy and would still behave, which
+  // is precisely why it is worth pinning — the next person tidying this line
+  // would otherwise have no signal that anything reads it.
+  assert.match(main, /if \(attempts >= MAX_CHUNK_RELOADS\) return false;/,
+    'the bound must be checked before reloading, and must report that it did not');
+  assert.match(main, /\n  return true;\n\}/,
+    'and the path that does start a reload must report that it did');
   assert.match(main, /readAttempts\(CHUNK_KEY, CHUNK_PARAM\)/,
     'the chunk recovery must read its budget through the shared guard');
   // sessionStorage throws in Safari Private Browsing, so it cannot be the only
@@ -436,4 +444,94 @@ test('dev is detected once, and never from the host or the port', () => {
   // into the HTML it serves, and a built bundle never has it.
   assert.match(html, /querySelector\('script\[src="\/@vite\/client"\]'\)/,
     'dev detection must be the /@vite/client tag Vite injects');
+});
+
+// A SUPPRESSED RETHROW IS A RESOLVED IMPORT, and that is how #295 happened.
+//
+// Vite's preload helper is `baseModule().catch(handlePreloadError)`, and that
+// handler rethrows ONLY when the `vite:preloadError` event it dispatches was
+// not default-prevented. `main.jsx` called `preventDefault()` unconditionally
+// while the reload it paired with was budget-bounded, so once the budget was
+// spent the rethrow was still suppressed and no reload came: the failed
+// `import()` RESOLVED WITH `undefined`, React's lazy stored that as its payload
+// result, and the next render evaluated `_result.default` on it. Advisors on
+// /network and /expertise were shown a TypeError about React internals, and the
+// one message naming the chunk that had actually failed was discarded.
+//
+// Reproduced before the fix by blocking a single chunk: three fetch attempts,
+// two bounded reloads, then "Cannot read properties of undefined (reading
+// 'default')" — Chromium's wording for Safari's "undefined is not an object
+// (evaluating 'e._result.default')". After it, the same three attempts end on
+// "Failed to fetch dynamically imported module: .../AdvisorBucketRoutes-*.js".
+const preloadListener = () => {
+  const at = main.indexOf("addEventListener('vite:preloadError'");
+  assert.ok(at > 0, 'main.jsx must still listen for vite:preloadError');
+  const end = main.indexOf('\n});', at);
+  assert.ok(end > at, 'the vite:preloadError listener must close with a bare });');
+  return main.slice(at, end);
+};
+
+test('preventDefault on a preload error is gated on a reload actually starting', () => {
+  const body = preloadListener();
+  const guard = body.indexOf('if (reloadOnceForStaleChunk())');
+  assert.ok(
+    guard > 0,
+    'preventDefault() must be gated on reloadOnceForStaleChunk() returning true — '
+      + 'suppressing the rethrow with no reload under way leaves import() resolving undefined',
+  );
+  assert.match(
+    body.slice(guard),
+    /preventDefault/,
+    'the gated branch is where preventDefault() belongs',
+  );
+  assert.doesNotMatch(
+    body.slice(0, guard),
+    /preventDefault/,
+    'nothing may prevent the default before the budget has been consulted',
+  );
+});
+
+test('the failure that names the chunk reaches the error beacon', () => {
+  const body = preloadListener();
+  assert.match(
+    body,
+    /reportError\(\s*'main:vitePreloadError'/,
+    "Vite's own error is the only thing naming the chunk that failed; report it "
+      + 'before preventDefault() discards it',
+  );
+  assert.match(body, /\.payload/, 'report e.payload, not the event');
+  assert.match(main, /import \{ reportError \} from '\.\/lib\/log'/, 'and import it');
+});
+
+test('a default-prevented preload error resolves the import with undefined', async () => {
+  // The mechanism the two assertions above turn on, pinned rather than asserted
+  // in prose: this is the shipped helper's shape, read out of react-vendor.
+  const bus = new EventTarget();
+  const vitePreload = (baseModule) => {
+    const handlePreloadError = (err) => {
+      const ev = new Event('vite:preloadError', { cancelable: true });
+      ev.payload = err;
+      bus.dispatchEvent(ev);
+      if (!ev.defaultPrevented) throw err;
+    };
+    return Promise.resolve().then(() => baseModule().catch(handlePreloadError));
+  };
+  const failing = () => Promise.reject(new Error('Failed to fetch dynamically imported module'));
+
+  let prevent = true;
+  const listener = (e) => { if (prevent) e.preventDefault(); };
+  bus.addEventListener('vite:preloadError', listener);
+
+  const swallowed = await vitePreload(failing);
+  assert.equal(
+    swallowed, undefined,
+    'preventDefault() makes a FAILED import resolve with undefined — this is the '
+      + 'value React.lazy stores and then reads `.default` off',
+  );
+
+  prevent = false;
+  await assert.rejects(
+    vitePreload(failing), /Failed to fetch dynamically imported module/,
+    'and leaving the default alone is what lets the real error reach the boundary',
+  );
 });
