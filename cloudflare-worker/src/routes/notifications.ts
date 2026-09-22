@@ -45,12 +45,37 @@ async function verifyUnsubscribeToken(env: Env, token: string): Promise<{ userId
   } catch { return null; }
 }
 
+/**
+ * D189 — THIS RECORDED NOTHING, AND THE LAZY ALTER IS WHY.
+ *
+ * It used to run `ALTER TABLE users ADD COLUMN marketing_unsubscribed_at`
+ * inside `catch { /* idempotent *\/ }` and then UPDATE that column, on the
+ * stated theory that "migration 053 may not have landed on dev/preview yet"
+ * and the ALTER would self-heal it. Neither half held. `users` is at D1's
+ * hard 100-column cap — 100 in production and on a fresh build, measured
+ * 2026-09-22 — and SQLite checks the column-count limit in `sqlite3AddColumn()`
+ * BEFORE the duplicate-name check, so on a full table the ALTER fails whatever
+ * the column's state. Its catch swallowed that; the UPDATE on the next line
+ * then failed too, swallowed by the outer catch. So an unsubscribe from
+ * marketing email succeeded from the reader's point of view and stored
+ * nothing, which is compliance-adjacent rather than cosmetic.
+ *
+ * It was invisible locally because node:sqlite has no column cap: the ALTER
+ * succeeds on a fresh local build and the whole path works. Local succeeds,
+ * production fails.
+ *
+ * Migration 277 gives the fact a side table. No lazy ALTER replaces it — a
+ * bootstrap that cannot fail usefully is the thing that hid this for a year.
+ * The outer catch stays: an unsubscribe is best-effort by design, and the
+ * caller answers the same page either way.
+ */
 async function applyMarketingUnsub(env: Env, userId: number): Promise<void> {
   try {
-    // Lazy ALTER — migration 053 may not have landed on dev/preview yet.
-    try { await env.DB.prepare(`ALTER TABLE users ADD COLUMN marketing_unsubscribed_at TIMESTAMP`).run(); } catch { /* idempotent */ }
     await env.DB.prepare(
-      `UPDATE users SET marketing_unsubscribed_at = CURRENT_TIMESTAMP WHERE id = ? AND marketing_unsubscribed_at IS NULL`,
+      `INSERT INTO user_marketing_prefs (user_id, unsubscribed_at, updated_at)
+       VALUES (?, CURRENT_TIMESTAMP, datetime('now'))
+       ON CONFLICT(user_id) DO UPDATE SET unsubscribed_at = COALESCE(user_marketing_prefs.unsubscribed_at, CURRENT_TIMESTAMP),
+                                          updated_at      = datetime('now')`,
     ).bind(userId).run();
   } catch (e) { console.warn('[notifications] marketing unsub failed', e); }
 }
