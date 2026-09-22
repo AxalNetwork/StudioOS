@@ -3,7 +3,8 @@
  *
  * Mirrors ensureTelegramSchema / ensureCalendarOAuthSchema: workers have no
  * startup hook, so we create the magic-link / passkey / WebAuthn-challenge
- * tables (and the step-up columns on user_sessions) on first hit, idempotently.
+ * tables (and the four auth-state columns on user_sessions) on first hit,
+ * idempotently.
  * Memoized per isolate so the cold-start cost is paid at most once.
  *
  * Everything here is additive + IF NOT EXISTS, so it is safe to run against a
@@ -19,14 +20,14 @@ import type { Env } from '../types';
 import { withDeadline } from '../util/deadline';
 import { bindingKey } from '../util/schemaBootstrap';
 
-// Eleven sequential D1 statements on the most latency-sensitive route in the
+// Twelve sequential D1 statements on the most latency-sensitive route in the
 // product. On a migrated database every one is a no-op that still costs a round
-// trip, so the whole bootstrap gets one budget rather than eleven: past this,
+// trip, so the whole bootstrap gets one budget rather than twelve: past this,
 // sign-in proceeds without it.
 const BOOTSTRAP_DEADLINE_MS = 3_000;
 // ...and once it has blown the budget, stop re-paying it on every request for a
 // while. `_ready` is only set on success, so without this a slow D1 makes every
-// single request fire all eleven statements again and wait again — the failure
+// single request fire all twelve statements again and wait again — the failure
 // compounds instead of degrading.
 const BOOTSTRAP_COOLDOWN_MS = 60_000;
 
@@ -117,10 +118,21 @@ async function bootstrap(env: Env): Promise<void> {
 
   // SQLite/D1 has no ADD COLUMN IF NOT EXISTS — swallow the "duplicate column"
   // error so replays are no-ops. user_sessions is NOT at the ALTER limit.
+  //
+  // `factor` JOINED ITS THREE SIBLINGS HERE IN D192, and the move is what made
+  // `routes/settings.ts` repairable at all. It was declared by
+  // `services/authSms.ts`'s MODULE-PRIVATE `ensureSchema`, so settings.ts — a
+  // file that creates `user_sessions` with eight columns and then UPDATEs all
+  // four of these in ONE statement at its step-up handler — had nothing it
+  // could import, and the only repair available to it was declaring the
+  // columns a second time. That is the defect this guard exists to catch.
+  // Auth state belongs beside auth state; an exported bootstrap can be awaited
+  // and a private one cannot.
   for (const ddl of [
     `ALTER TABLE user_sessions ADD COLUMN last_step_up_at TIMESTAMP`,
     `ALTER TABLE user_sessions ADD COLUMN step_up_due_at TIMESTAMP`,
     `ALTER TABLE user_sessions ADD COLUMN assurance_level TEXT`,
+    `ALTER TABLE user_sessions ADD COLUMN factor TEXT`,
   ]) {
     try { await db.prepare(ddl).run(); } catch {}
   }

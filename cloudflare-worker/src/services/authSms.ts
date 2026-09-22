@@ -31,7 +31,13 @@ async function ensureSchema(env: Env): Promise<void> {
      )`,
     `CREATE INDEX IF NOT EXISTS idx_auth_sms_firebase ON auth_sms(firebase_uid)`,
     `ALTER TABLE users ADD COLUMN tfa_methods TEXT NOT NULL DEFAULT '[]'`,
-    `ALTER TABLE user_sessions ADD COLUMN factor TEXT`,
+    // `user_sessions.factor` WAS DECLARED HERE AND IS NOT ANY MORE (D192). It
+    // sits in `services/authBlockersSchema.ts` now, beside the three step-up
+    // columns it is read with. Nothing is awaited in its place, and that is
+    // measured rather than assumed: this file names `factor` nowhere else, so
+    // the column had no reader here to bootstrap for, and pulling a
+    // deadline-bounded helper into seven SMS call sites to declare a column
+    // this module never reads would be coupling bought for nothing.
   ];
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); }

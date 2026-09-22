@@ -40,6 +40,7 @@ import type { Context } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAdmin, requireSuperAdmin } from '../auth';
+import { ensureAdminAuditLogTable } from './admin';
 import {
   parseRange, BadRangeError, loadOverview, loadCohorts, loadUsers, loadUser,
   loadFinancial, loadTechnical, loadTrafficByBranch,
@@ -79,11 +80,21 @@ const SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
   if (SCHEMA_READY.get(bindingKey(env))) return;
   try {
-    await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS admin_audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER NOT NULL REFERENCES users(id), action TEXT NOT NULL, report_type TEXT, format TEXT, filters_json TEXT, storage_key TEXT, download_url TEXT, exported_at TEXT NOT NULL DEFAULT (datetime('now')))",
-    );
-    await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_admin_audit_user_ts ON admin_audit_log(admin_user_id, exported_at DESC)");
-    await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_admin_audit_action_ts ON admin_audit_log(action, exported_at DESC)");
+    // ONE DEFINITION, AND THIS FILE IS NOT IT (D192). This bootstrap used to
+    // declare `admin_audit_log` for itself, nine columns wide — without
+    // `viewed_user_id`, `conversation_id`, `viewed_at` or `actor`, four columns
+    // this very router's `/audit` read names. It was the only module in the
+    // worker with its own CREATE for that table: `routes/admin.ts`'s
+    // `ensureAdminAuditLogTable` has declared the full shape all along, adds
+    // the four PRAGMA-guarded, and NINE modules already await it. The comment
+    // on `/audit/mine` below already credits that helper with creating the
+    // index this bootstrap was creating, which is how long the two have
+    // disagreed in one file.
+    //
+    // Deleted rather than widened: a second CREATE kept in step by hand is the
+    // defect, not the fix. `idx_admin_audit_action_ts` moved into the helper in
+    // the same commit, so nothing is lost and the other nine callers gain it.
+    await ensureAdminAuditLogTable(env);
     SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[analytics] ensureSchema failed:', (e as Error).message);

@@ -17460,3 +17460,134 @@ this ledger as `refused:project_metrics`.
 
 **No migration — 279 stays free. No `frontend/src` change, so no `docs/`
 rebuild. No new `/api/*` method.**
+
+## D192 — the guard was blind two ways, and one of the ways was recommending the defect
+
+D191 shipped `check-schema-pair-drift` and a 28-entry ledger. Reading that
+ledger back against the code it describes — which is what a ledger is for —
+found that **seven of its entries existed because the guard could not see what
+the code does**, and that three of its reasons therefore recommended, in prose,
+the exact second declaration the guard exists to catch.
+
+### The two blind spots
+
+`scripts/check-schema-pair-drift.mjs`'s SQL side has always built **one map
+across the whole tree**. Its runtime side built a **per-file** map and dropped,
+with a single `continue`, every `ALTER` whose `CREATE` it had not already seen.
+That asymmetry cost **56 columns across 11 file/table pairs**, for two unrelated
+reasons:
+
+1. **Source order.** The walk was one forward pass, so a file that lists its
+   ALTERs *above* its CREATE lost all of them. `routes/legalcap.ts` is the
+   instance: six `ALTER TABLE subsidiaries` at `:22-29`, the matching CREATE at
+   `:55`, **in one `ensureSchema`**. Now each file's ALTERs are buffered and
+   resolved against its CREATEs at the end of its own pass.
+2. **One hop through the CREATE's own bootstrap.** `routes/brand.ts:99` awaits
+   `ensureLandingPageBrandKitColumns(env)` inside the same `ensureSchema` that
+   creates `landing_pages`, after the CREATEs and before `MIGRATED.set` — so by
+   the time that bootstrap returns the table is at its full shape and the pair
+   never diverged. The guard now finds the CREATE's enclosing function with
+   `balanced()` over a masked copy of the source, scans it for `await <ident>(`,
+   and resolves `<ident>` through the file's own static import map.
+
+**A repo-wide union was rejected on a measured ground**, and it is the tempting
+one-line symmetry with the SQL side. It would have cleared
+`superset:user_sessions` — the one entry on the ledger that was genuinely a
+defect — because `services/authBlockersSchema.ts` ALTERs those columns
+*somewhere*, on a path `routes/settings.ts`'s own bootstrap does not take. A
+guard that hides its only real finding to look symmetrical is worse than the
+blind spot. Same-file collection stays file-scoped for the mirror reason:
+narrowing it to function scope would **add** findings, and the property worth
+holding is that the corrected set is a **subset**.
+
+**Masking is load-bearing rather than defensive, and that was measured too.**
+Brace-matching raw source counts a `{` inside a string or a comment; **eight
+files** under `cloudflare-worker/src` carry an unbalanced one today
+(`routes/events.ts`, `routes/financials.ts`, `routes/market_intel.ts`,
+`services/captable.ts`, `services/competitorAnalysis.ts`, `services/csv.ts`,
+`services/deckExtract.ts`, `integrations/providers/docusign.ts`), so an unmasked
+walk would close a bootstrap early and the hop would silently find nothing.
+
+### The ledger recommended the defect, three times
+
+D191's own reasons said of `landing_pages` that it was *"the clearest case in
+the ledger for widening the CREATE rather than trusting the order"*, and of
+`subsidiaries` that *"widening the CREATE is what closes this"*. Following
+either would have declared those columns a **second** time beside the ALTERs
+that already own them — two definitions of one column set, which is the class
+this guard was written to catch, recommended by the guard's own ledger. The
+note's closing sentence, which generalised that advice to every entry, is
+replaced: the order of repair is now **await the owner**, then **delete the
+duplicate**, and only then widen.
+
+### What the measurement changed about the plan, four times
+
+Stated rather than quietly done, because each correction shrank or re-aimed the
+work:
+
+1. **`superset:waitlist_signups` does NOT come off.** The plan had it as a Class
+   A false entry on the strength of `brand.ts:99`. That closes `audience` only;
+   the five CRM columns are owned by `services/waitlistCrmSchema.ts`, which
+   `brand.ts` does not await — correctly, because `brand.ts` names none of the
+   five and their reader is `routes/progress.ts`, which awaits
+   `ensureWaitlistCrmColumns` at `:681`, `:720` and `:832`.
+2. **`superset:landing_pages` does NOT come off either, and for a reason the
+   plan had not seen.** `services/advisor/writeRouter.ts:986` is a **third**
+   CREATE for that table, sixteen columns wide. It is benign — the only columns
+   that branch reads or writes are `tagline` and `theme_color`, both of which it
+   declares — but its own comment claimed lockstep with `brand.ts` and migration
+   144 while being 32 columns short. The comment is corrected, not made true.
+3. **`services/authSms.ts` awaits nothing in place of the ALTER it loses.** The
+   plan said it should await `ensureAuthBlockersSchema`. Measured, that file
+   names `user_sessions.factor` nowhere but in the ALTER itself — so the column
+   had no reader there to bootstrap for, and pulling a deadline-bounded helper
+   into seven SMS call sites would have been coupling bought for nothing.
+   Deleting the ALTER is the whole repair.
+4. **`idx_admin_audit_action_ts` had to move rather than go.**
+   `routes/monitoring_analytics.ts`'s deleted bootstrap created it and
+   `routes/admin.ts`'s `ensureAdminAuditLogTable` did not, so it moved into the
+   helper — where the nine existing callers gain it.
+
+### The three bootstraps that read columns they do not create
+
+| file | table | what it read that it did not create |
+| --- | --- | --- |
+| `routes/settings.ts` | `user_sessions` | `factor`, `assurance_level`, `last_step_up_at`, `step_up_due_at` — **all four in one UPDATE**, at the step-up handler. Auth state, on the screen where a person turns 2FA on |
+| `routes/advisor.ts` | `advisor_messages` | `safety_score`, `sanitisation_actions_json` |
+| `routes/monitoring_analytics.ts` | `admin_audit_log` | `viewed_user_id`, `conversation_id`, `viewed_at`, `actor` |
+
+Each now awaits the module that owns its columns — the `brand.ts:99` idiom —
+except `monitoring_analytics.ts`, whose narrow third CREATE is **deleted** in
+favour of `routes/admin.ts`'s exported `ensureAdminAuditLogTable`, which nine
+modules already await. **Never a second declaration**: every repair either
+awaits an owner or removes a duplicate.
+
+**`advisor.ts` is the one that was already failing, and it failed silently.**
+Its turn INSERT names both guardrail columns and its own `catch` retries in a
+legacy five-column form — so on a database where its bootstrap ran first, every
+turn's safety score and sanitisation record was dropped **and the write still
+reported success**. That is why its test asserts the columns are read back
+rather than that the call resolved: a test checking only for an absence of throw
+would have passed on the defect.
+
+**`user_sessions.factor` moved.** It was declared by `services/authSms.ts`'s
+**module-private** `ensureSchema`, so `settings.ts` had nothing to import and a
+second declaration was the only repair available to it. It now sits in
+`services/authBlockersSchema.ts` beside the three step-up columns it is read
+with. No cycle: that module imports only `../types`, `../util/deadline` and
+`../util/schemaBootstrap`.
+
+### Verified
+
+`28 → 24` ledger entries, and the **stale-entry refusal is what forced each
+one off** — `subsidiaries` from the source-order fix, then `user_sessions`,
+`advisor_messages` and `admin_audit_log` from the three repairs. The subset
+property was measured rather than assumed: **28 → 27 after the guard fix and
+27 → 24 after the sweep, with nothing added at either step**. The guard's
+headline reads **267 / 243 / 24**, from `267 / 239 / 28`. Worker `tsc --noEmit`
+exit 0; the D191 test file goes 16 → 27 tests; **11 mutations applied, 11
+caught** — one only after the *fixture* was fixed rather than the assertion
+loosened, because a balanced `DEFAULT '{}'` exercises no brace-matching at all.
+
+**No migration — 279 stays free. No `frontend/src` change, so no `docs/`
+rebuild. No new `/api/*` method.**
