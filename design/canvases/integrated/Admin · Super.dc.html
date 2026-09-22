@@ -49,7 +49,7 @@
 
 <!-- ══════════ CHANGELOG ══════════ -->
 <section class="ab" id="changelog" style="padding-bottom:26px">
-  <div class="ab-hd"><a class="ab-id" href="#changelog">CHANGELOG</a><span class="ab-nm">Amendments to H1–H7 · new artboards H8–H14</span><span class="ab-sub">every in-place change listed · ids stable · new ids continue the series</span></div>
+  <div class="ab-hd"><a class="ab-id" href="#changelog">CHANGELOG</a><span class="ab-nm">Amendments to H1–H7 · new artboards H8–H34</span><span class="ab-sub">every in-place change listed · ids stable · new ids continue the series</span></div>
   <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-width:1440px">
     <sc-for list="{{ changelog }}" as="c" hint-placeholder-count="4">
       <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:10px;padding:11px 14px;display:flex;gap:11px;align-items:flex-start">
@@ -615,7 +615,7 @@
 <!-- ══════════ H8 · ISSUE FLOW · STEPS 5–6 ══════════ -->
 <section class="ab" id="h8">
   <div class="ab-hd"><a class="ab-id" href="#h8">H8</a><span class="ab-nm">Issue a licence — Step 5 Contract, Step 6 Deploy</span><span class="ab-sub">extends H3 · a pending signature does not block</span></div>
-  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">Activate used to be the last step. It is not: a branch is a contract and a deployment, and neither exists until these two run. The contract is the master template at a named version; the deployment is a worker, a database and a hostname that HQ reads over a private link — so the timeline has a failure state per step, and a failure names the credential HQ has not set.</div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">Activate used to be the last step. It is not: a branch is a contract and a deployment, and neither exists until these two run. The contract is the master template at a named version; the deployment is a worker, a database and a hostname that HQ reads over a service binding — and nothing on this screen deploys it. The Deploy step dispatches branch-provision.yml on GitHub Actions, so the timeline has a failure state per step, and a failure names the credential HQ has not set.</div>
   <div class="frame">
     <div class="side"><sc-for list="{{ navLic }}" as="n" hint-placeholder-count="12"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
     <div class="main">
@@ -663,8 +663,8 @@
 
         <div class="c" style="padding:16px 18px;margin-top:14px">
           <div class="zh"><span class="zt">Deploy status</span><span class="zs">{{ h8TimelineSub }}</span></div>
-          <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:8px">
-            <sc-for list="{{ h8Timeline }}" as="t" hint-placeholder-count="8">
+          <div style="display:grid;grid-template-columns:repeat(9,1fr);gap:7px">
+            <sc-for list="{{ h8Timeline }}" as="t" hint-placeholder-count="9">
               <div style="{{ t.style }}">
                 <div style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:50%;background:{{ t.dot }};flex:none"></span><span style="font-size:11px;font-weight:700;line-height:1.3">{{ t.step }}</span></div>
                 <div class="mono num" style="font-size:10px;color:#615c6e;margin-top:6px">{{ t.time }}</div>
@@ -686,7 +686,7 @@
 <!-- ══════════ H9 · TEAM · GROUPED SEARCH + MOVE ══════════ -->
 <section class="ab" id="h9">
   <div class="ab-hd"><a class="ab-id" href="#h9">H9</a><span class="ab-nm">Team — results grouped by branch, and "Move to another branch"</span><span class="ab-sub">extends H4 · one read per branch, one can fail</span></div>
-  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">There is no global accounts table. HQ asks each branch over its private link and groups what comes back, so a search result is really four answers and a fifth for HQ-held accounts — and when one branch does not answer, its group says so instead of showing zero. A move is not a row edit: the account closes where it lives, is re-invited where it is going, and the records stay put.</div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">There is no global accounts table. HQ calls each branch over its service binding (BRANCH_FR → studioos-fr#HqEntrypoint, and so on) and groups what comes back, so a search result is really four answers and a fifth for HQ-held accounts — and when one branch does not answer, its group says so instead of showing zero. A move is not a row edit: the account closes where it lives, is re-invited where it is going, and the records stay put.</div>
   <div class="frame">
     <div class="side"><sc-for list="{{ navAcc }}" as="n" hint-placeholder-count="12"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
     <div class="main">
@@ -893,6 +893,7 @@
             </div>
           </sc-for>
         </div>
+        <div style="font-size:11px;color:#615c6e;line-height:1.55;margin-top:9px;padding:0 2px">Deployed by <span class="mono">cloudflare-worker-deploy.yml</span> on push to main; provisioned by <span class="mono">branch-provision.yml</span>. GitHub Actions is the only thing that deploys anything — every control on this page dispatches a workflow and reports its run.</div>
         <div class="c" style="padding:14px 18px;margin-top:12px;border-color:#fecaca;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
           <div style="flex:1;min-width:280px"><div style="font-size:12.5px;font-weight:700">{{ h11RbTitle }}</div><div style="font-size:11px;color:#3f3a49;margin-top:4px;line-height:1.5">{{ h11RbBody }}</div></div>
           <div style="flex:1;min-width:240px;border:1px solid #e2e1e8;border-radius:8px;padding:8px 11px;font-size:12px;color:#9c96a8">Reason — required, recorded</div>
@@ -907,7 +908,7 @@
 <!-- ══════════ H12 · VIEWING AS A BRANCH + GUARDRAILS BY BRANCH ══════════ -->
 <section class="ab" id="h12">
   <div class="ab-hd"><a class="ab-id" href="#h12">H12</a><span class="ab-nm">"Viewing as Axal VC France" — Home and Team, read-only · Guardrail hits by branch</span><span class="ab-sub">extends H7 · three frames</span></div>
-  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">The overlay is not a filter on an HQ table — it is one private-link read, of one branch, rendered with every action removed. Each figure carries the branch and the time it was read, so nothing on the screen can be mistaken for a platform total. Guardrail hits are counted per branch and foot to the Security totals, with the stale branch labelled as stale.</div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">The overlay is not a filter on an HQ table — it is one RPC read, of one branch, over its service binding, rendered with every action removed. Each figure carries the branch and the time it was read, so nothing on the screen can be mistaken for a platform total. Guardrail hits come from the AI Gateway, which is account-level and indexed by branch — so they are current even for the branch whose records are unreadable, and they foot to the Security totals.</div>
 
   <div class="frame" style="margin-bottom:16px">
     <div class="side"><sc-for list="{{ navHome }}" as="n" hint-placeholder-count="12"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
@@ -967,7 +968,7 @@
 <!-- ══════════ H13 · THE HQ AI RAIL ══════════ -->
 <section class="ab" id="h13">
   <div class="ab-hd"><a class="ab-id" href="#h13">H13</a><span class="ab-nm">HQ AI rail — scope chip and cost line</span><span class="ab-sub">AdminRail amended · two states</span></div>
-  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">The scope chip moved to the top of the rail, because it is the first thing an answer depends on. HQ picks "All branches" — one private-link read per branch, an unreadable branch named in the answer — or one branch, which is what the viewing-as overlay passes. The cost line was already there: estimated before the run, with HQ's margin shown only on this tier.</div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">The scope chip moved to the top of the rail, because it is the first thing an answer depends on. HQ picks "All branches" — one RPC read per branch for records, an unreadable branch named in the answer; aggregates from studioos_metrics, which answers regardless — or one branch, which is what the viewing-as overlay passes. The cost line was already there: estimated before the run, with HQ's margin shown only on this tier.</div>
   <div style="display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap">
     <sc-for list="{{ h13Rails }}" as="r" hint-placeholder-count="2">
       <div style="width:280px;flex:none">
@@ -982,6 +983,1012 @@
         <div style="border-left:2px solid #881337;padding-left:11px;margin-top:10px"><div style="font-size:12.5px;font-weight:700">{{ x.rule }}</div><div style="font-size:11.5px;color:#3f3a49;margin-top:3px;line-height:1.55">{{ x.why }}</div></div>
       </sc-for>
     </div>
+  </div>
+</section>
+
+<!-- ══════════ H14 · TOPOLOGY ══════════ -->
+<section class="ab" id="h14">
+  <div class="ab-hd"><a class="ab-id" href="#h14">H14</a><span class="ab-nm">Topology — what HQ can read, and through what</span><span class="ab-sub">the architecture the H-screens sit on · stated once, here</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">Stated once so the screens can honour it without repeating it. HQ reads a branch’s records over one service binding per branch, and that read can fail while the others answer. Aggregates never travel that way: every worker writes to one account-level dataset, which is why a trend, a median or a guardrail count can be current while the branch itself is unreadable. The production registry today lists fr, dach and dubai (location hint APAC); this canvas keeps its four sample tenants.</div>
+  <div style="max-width:1440px;display:grid;gap:12px">
+    <div class="c" style="padding:12px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-color:#cbd5e1;background:#f8fafc">
+      <span class="lbl">Deploys</span>
+      <sc-for list="{{ h14Actions }}" as="a" hint-placeholder-count="2"><span class="tag mono">{{ a }}</span></sc-for>
+      <span style="font-size:11px;color:#615c6e;line-height:1.5;flex:1;min-width:320px;text-align:right">{{ h14ActionsNote }}</span>
+    </div>
+    <div class="c" style="padding:14px 16px;border-color:#fbcfe0">
+      <div class="zh"><span class="zt">HQ worker · studioos</span><span class="zs">{{ h14HqAccess }}</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:14px">
+        <sc-for list="{{ h14Hq }}" as="g" hint-placeholder-count="3">
+          <div><div class="lbl" style="font-size:8.5px">{{ g.k }}</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:7px"><sc-for list="{{ g.items }}" as="i" hint-placeholder-count="5"><span class="tag mono" style="font-size:9.5px">{{ i }}</span></sc-for></div></div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+      <sc-for list="{{ h14Branches }}" as="b" hint-placeholder-count="4">
+        <div class="c" style="padding:12px 14px;{{ b.style }}">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><span class="mono" style="font-size:12px;font-weight:800">{{ b.host }}</span><span style="{{ b.pill }}">{{ b.state }}</span></div>
+          <div class="mono" style="font-size:10.5px;color:#615c6e;margin-top:3px">{{ b.worker }} · {{ b.res }}</div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:8px"><sc-for list="{{ b.items }}" as="r" hint-placeholder-count="6"><span class="tag mono" style="font-size:9px">{{ r }}</span></sc-for></div>
+          <div style="font-size:10.5px;color:#3f3a49;margin-top:8px;line-height:1.5">{{ b.bind }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div class="c" style="padding:14px 16px;background:#fbfbfc">
+      <div class="zh"><span class="zt">Shared, account-level — cross-branch by design</span><span class="zs">aggregates, never records</span></div>
+      <sc-for list="{{ h14Shared }}" as="s" hint-placeholder-count="5">
+        <div style="display:grid;grid-template-columns:.9fr 1.5fr 1.3fr;gap:12px;padding:8px 0;border-top:1px solid #f4f3f7"><span class="mono" style="font-size:11.5px;font-weight:700">{{ s.what }}</span><span style="font-size:11.5px;color:#3f3a49;line-height:1.5">{{ s.how }}</span><span style="font-size:11px;color:#615c6e;line-height:1.5">{{ s.feeds }}</span></div>
+      </sc-for>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ H15 · ANALYTICS ══════════ -->
+<section class="ab" id="h15">
+  <div class="ab-hd"><a class="ab-id" href="#h15">H15</a><span class="ab-nm">Analytics — the platform read from studioos_metrics, one series per branch</span><span class="ab-sub">Analytics Engine · SQL API · HQ-only · never a branch read</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">Every chart on this page comes from one dataset, studioos_metrics, which every worker writes to with index branch — so the page is current for all four branches even while one is unreadable over its binding, and says so on each card. No figure here is a record: a count of events is not a count of rows in a branch’s D1, and the card footers keep that distinction visible. Iberia has written nothing since its suspension, and its series stops rather than flattening to zero.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navAn }}" as="n" hint-placeholder-count="12"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq"><div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">All subsidiaries ▾</span><span class="num" style="font-size:11px;opacity:.72">{{ h15Source }}</span></div><span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">AXAL VC HQ</span></div>
+      <div class="inner">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Analytics</h1>
+          <div style="display:flex;gap:3px;background:#f0eff3;border-radius:7px;padding:2px"><sc-for list="{{ h15Range }}" as="r" hint-placeholder-count="3"><span style="{{ r.style }}">{{ r.label }}</span></sc-for></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:14px">
+          <sc-for list="{{ h15Kpis }}" as="k" hint-placeholder-count="4">
+            <div class="c" style="padding:13px 15px"><div class="lbl" style="font-size:9px">{{ k.label }}</div><div style="display:flex;align-items:baseline;gap:8px;margin-top:6px"><span class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;line-height:1">{{ k.value }}</span><span class="num" style="font-size:11px;font-weight:700;color:{{ k.deltaInk }}">{{ k.delta }}</span></div><div style="font-size:10px;color:#615c6e;margin-top:6px;line-height:1.45">{{ k.note }}</div></div>
+          </sc-for>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:14px;margin-top:14px;align-items:start">
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Active accounts · weekly, per branch</span><span class="zs">events with index branch · 8 weeks</span></div>
+            <!-- Labels are HTML, not SVG <text>: a template hole renders as a <span>, which SVG
+                 text never draws. The y column and x row share the SVG's padding so they align. -->
+            <div style="display:flex;gap:6px">
+              <div style="position:relative;width:26px;flex:none;height:150px">
+                <sc-for list="{{ h15Grid }}" as="g" hint-placeholder-count="4"><span class="mono num" style="position:absolute;right:0;top:{{ g.pct }}%;transform:translateY(-50%);font-size:9px;color:#9c96a8">{{ g.label }}</span></sc-for>
+              </div>
+              <div style="flex:1;min-width:0">
+                <svg viewBox="0 0 534 150" width="100%" height="150" style="display:block" preserveAspectRatio="none">
+                  <sc-for list="{{ h15Grid }}" as="g" hint-placeholder-count="4"><line x1="0" x2="534" y1="{{ g.y }}" y2="{{ g.y }}" stroke="#f0eff3" stroke-width="1"></line></sc-for>
+                  <sc-for list="{{ h15Series }}" as="s" hint-placeholder-count="4"><polyline points="{{ s.points }}" fill="none" stroke="{{ s.color }}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="{{ s.dash }}"></polyline><circle cx="{{ s.lastX }}" cy="{{ s.lastY }}" r="3.5" fill="{{ s.color }}"></circle></sc-for>
+                </svg>
+                <div style="display:flex;justify-content:space-between;padding:0 4px 0 0;margin-top:5px">
+                  <sc-for list="{{ h15Weeks }}" as="w" hint-placeholder-count="8"><span class="mono num" style="font-size:9px;color:#9c96a8">{{ w.label }}</span></sc-for>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px">
+              <sc-for list="{{ h15Series }}" as="s" hint-placeholder-count="4"><span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:#3f3a49"><span style="width:14px;height:2px;background:{{ s.color }};display:inline-block"></span>{{ s.name }}<span class="num" style="color:#615c6e">{{ s.last }}</span><sc-if value="{{ s.flag }}"><span style="font-size:9.5px;font-weight:700;color:#615c6e;background:#f4f4f6;border:1px solid #e4e4e8;border-radius:4px;padding:1px 6px">{{ s.flag }}</span></sc-if></span></sc-for>
+            </div>
+          </div>
+
+          <div style="display:grid;gap:12px">
+            <div class="c" style="padding:16px 18px">
+              <div class="zh"><span class="zt">Activation funnel · 30 days</span><span class="zs">all branches · events</span></div>
+              <sc-for list="{{ h15Funnel }}" as="f" hint-placeholder-count="4">
+                <div style="margin-top:8px"><div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:11.5px;font-weight:600">{{ f.k }}</span><span class="num" style="font-size:11.5px;font-weight:700">{{ f.n }} <span style="color:#615c6e;font-weight:600">· {{ f.rate }}</span></span></div><div style="height:7px;background:#f0eff3;border-radius:999px;overflow:hidden;margin-top:5px"><div style="height:100%;width:{{ f.pct }}%;background:#881337;border-radius:999px;opacity:{{ f.op }}"></div></div></div>
+              </sc-for>
+            </div>
+            <div class="c" style="padding:16px 18px;border-color:#fde68a">
+              <div class="zh"><span class="zt">Approval SLA · median age at decision</span><span class="zs">per branch</span></div>
+              <sc-for list="{{ h15Sla }}" as="s" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid #f4f3f7"><span style="font-size:11.5px;font-weight:600;width:70px;flex:none">{{ s.branch }}</span><div style="flex:1;height:7px;background:#f0eff3;border-radius:999px;overflow:hidden"><div style="height:100%;width:{{ s.pct }}%;background:{{ s.color }};border-radius:999px"></div></div><span class="num" style="font-size:11.5px;font-weight:700;width:44px;text-align:right;color:{{ s.color }}">{{ s.v }}</span></div>
+              </sc-for>
+              <div style="font-size:10px;color:#615c6e;line-height:1.5;margin-top:8px">{{ h15SlaNote }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;align-items:start">
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Revenue by stream · reported gross, Q2</span><span class="zs">what branches wrote at period close</span></div>
+            <sc-for list="{{ h15Rev }}" as="r" hint-placeholder-count="4">
+              <div style="display:grid;grid-template-columns:1fr 1.8fr .7fr;gap:10px;align-items:center;padding:6px 0;border-top:1px solid #f4f3f7"><span style="font-size:11.5px;font-weight:600">{{ r.branch }}</span><div style="display:flex;height:9px;border-radius:999px;overflow:hidden;background:#f0eff3"><sc-for list="{{ r.segs }}" as="g" hint-placeholder-count="3"><div style="width:{{ g.pct }}%;background:{{ g.color }}"></div></sc-for></div><span class="num" style="font-size:11.5px;font-weight:700;text-align:right">{{ r.total }}</span></div>
+            </sc-for>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px"><sc-for list="{{ h15RevLegend }}" as="l" hint-placeholder-count="3"><span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:#3f3a49"><span style="width:9px;height:9px;border-radius:2px;background:{{ l.color }};display:inline-block"></span>{{ l.name }}</span></sc-for></div>
+          </div>
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Token spend vs limit · this month</span><span class="zs">AI Gateway · cf-aig-metadata branch</span></div>
+            <sc-for list="{{ h15Tok }}" as="t" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid #f4f3f7"><span style="font-size:11.5px;font-weight:600;width:70px;flex:none">{{ t.branch }}</span><div style="flex:1;height:7px;background:#f0eff3;border-radius:999px;overflow:hidden"><div style="height:100%;width:{{ t.pct }}%;background:{{ t.color }};border-radius:999px"></div></div><span class="num" style="font-size:11px;width:120px;text-align:right;color:#3f3a49">{{ t.v }}</span></div>
+            </sc-for>
+            <div style="font-size:10px;color:#615c6e;line-height:1.5;margin-top:8px">{{ h15TokNote }}</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:#615c6e;line-height:1.55;margin-top:12px;padding:0 2px">{{ h15Foot }}</div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Home" hint-size="100%,1040px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ H16 · PLATFORM · KEYS, SYNC, PAYMENTS, PROMO CODES ══════════ -->
+<section class="ab" id="h16">
+  <div class="ab-hd"><a class="ab-id" href="#h16">H16</a><span class="ab-nm">Platform — Integration keys, GitHub Sync, Payments catalog, Promo codes</span><span class="ab-sub">gap-fill from the live /admin console · four consoles, not one strip</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">The Platform artboard on H6/H11 was a count of what exists — "4 keys, 12 flags, 3 jobs." These four panels are the consoles that actually hold the secrets, mirror the tickets, run the catalog, and issue the codes. They belong on Platform because HQ owns the key material and the money rail, not because a subsidiary asked for them — a subsidiary never sees this artboard.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navPlat }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq">
+        <div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">All subsidiaries ▾</span></div>
+        <span class="num" style="font-size:11px;opacity:.72">key material, sync, and money rails — one console each</span>
+      </div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Platform</h1>
+        <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Four rails the platform runs on. Each one is a console, not a count.</div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:15px">
+
+          <!-- P1 · Integration keys -->
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">P1 · Integration keys</span><span class="zs">Reveal-on-click · re-hides at 30s</span></div>
+            <div style="display:grid;gap:8px">
+              <sc-for list="{{ p1Keys }}" as="k" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px">
+                  <div style="min-width:0;flex:1">
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:12px;font-weight:700">{{ k.name }}</span><span style="{{ k.pill }}">{{ k.state }}</span></div>
+                    <div class="mono" style="font-size:10.5px;color:#615c6e;margin-top:4px">{{ k.masked }} · rotated {{ k.rotated }}</div>
+                  </div>
+                  <div style="display:flex;gap:5px;flex:none"><span class="gho" style="padding:4px 9px;font-size:10.5px">Reveal</span><span class="gho" style="padding:4px 9px;font-size:10.5px">Rotate</span><span class="gho" style="padding:4px 9px;font-size:10.5px">Test</span><span class="danger" style="padding:4px 9px;font-size:10.5px">Revoke</span></div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">A reveal is masked again after thirty seconds without a second click. Revoke is irreversible and every reveal, rotate, and revoke writes an audit line — never shown as a live secret here, only as the masked form and its state.</div>
+          </div>
+
+          <!-- P2 · GitHub Sync -->
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">P2 · GitHub Sync</span><span class="zs">Ticket → issue mirroring · HQ-only</span></div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+              <sc-for list="{{ p2Stats }}" as="s" hint-placeholder-count="3">
+                <div style="background:#fbfbfc;border:1px solid #f0eff4;border-radius:9px;padding:10px 11px">
+                  <div class="lbl" style="font-size:8.5px">{{ s.k }}</div>
+                  <div class="num" style="font-size:17px;font-weight:800;margin-top:4px;color:{{ s.ink }}">{{ s.v }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:grid;gap:7px;margin-top:10px">
+              <sc-for list="{{ p2Events }}" as="e" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border-top:1px solid #f4f3f7">
+                  <div style="min-width:0"><div style="font-size:11.5px;font-weight:600">{{ e.what }}</div><div class="mono" style="font-size:10px;color:#615c6e;margin-top:2px">{{ e.repo }}</div></div>
+                  <span style="{{ e.pill }}">{{ e.state }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ p2Note }}</div>
+          </div>
+
+          <!-- P3 · Payments catalog -->
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">P3 · Payments catalog</span><span class="zs">The money rail · not a subsidiary billing clerk</span></div>
+            <div style="display:grid;gap:0">
+              <sc-for list="{{ p3Fields }}" as="f" hint-placeholder-count="4">
+                <div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid #f4f3f7">
+                  <span class="lbl" style="font-size:8.5px;padding-top:2px">{{ f.label }}</span>
+                  <span style="font-size:12px;text-align:right;{{ f.ink }}" class="mono">{{ f.value }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">Products and prices sync from this catalog into every subsidiary's storefront read. A webhook failure here is a platform incident, which is why it sits on HQ Platform and not inside any one territory's revenue page.</div>
+          </div>
+
+          <!-- P4 · Promo codes -->
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">P4 · Promo codes</span><span class="zs">Stripe coupon CRUD · a Revenue child</span></div>
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:9px 11px;font-size:11px;color:#3f3a49;line-height:1.5;margin-bottom:10px"><strong>Not the same object as Revenue's promo ceilings.</strong> A ceiling caps how much a licence may discount in total; a code is one redeemable Stripe coupon a subsidiary hands out inside that cap.</div>
+            <div style="display:grid;gap:7px">
+              <sc-for list="{{ p4Codes }}" as="p" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px">
+                  <div style="min-width:0"><span class="mono" style="font-size:11.5px;font-weight:700">{{ p.code }}</span><div style="font-size:10.5px;color:#615c6e;margin-top:3px">{{ p.terms }}</div></div>
+                  <div style="text-align:right;flex:none"><div class="num" style="font-size:12px;font-weight:700">{{ p.redeemed }}</div><span style="{{ p.pill }}">{{ p.state }}</span></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Platform" hint-size="100%,900px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ H17 · PLATFORM · MONITORING, BROADCAST, FEATURE FLAGS ══════════ -->
+<section class="ab" id="h17">
+  <div class="ab-hd"><a class="ab-id" href="#h17">H17</a><span class="ab-nm">Platform — Monitoring, Broadcast, Feature flags</span><span class="ab-sub">reads every branch · never the reverse</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">Monitoring and broadcast are platform-wide by construction — a subsidiary never sees another branch's traffic or sends on a platform channel. Feature flags is drawn honestly empty: the canvas has named a flags panel before, but the live product has no operator-facing flag store, only per-user settings, and those are not the same thing.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navPlat }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq">
+        <div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">All subsidiaries ▾</span></div>
+        <span class="num" style="font-size:11px;opacity:.72">{{ subCount }} branches reporting</span>
+      </div>
+      <div class="inner">
+        <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:14px;margin-top:6px">
+
+          <!-- P5 · Monitoring -->
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">P5 · Monitoring</span><span class="zs">Infra, cron, DLQ, traffic by branch</span></div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+              <sc-for list="{{ p5Stats }}" as="s" hint-placeholder-count="4">
+                <div style="background:#fbfbfc;border:1px solid #f0eff4;border-radius:9px;padding:9px 10px">
+                  <div class="lbl" style="font-size:8px">{{ s.k }}</div>
+                  <div class="num" style="font-size:15px;font-weight:800;margin-top:4px;color:{{ s.ink }}">{{ s.v }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:grid;grid-template-columns:1.2fr .8fr .8fr;gap:8px;margin-top:11px">
+              <span class="th">Branch</span><span class="th">Req / min</span><span class="th">DLQ depth</span>
+            </div>
+            <sc-for list="{{ p5Traffic }}" as="t" hint-placeholder-count="4">
+              <div style="display:grid;grid-template-columns:1.2fr .8fr .8fr;gap:8px;align-items:center">
+                <span class="td" style="font-weight:600;color:#18181b">{{ t.branch }}</span>
+                <span class="td num">{{ t.rpm }}</span>
+                <span class="td num" style="{{ t.dlqInk }}">{{ t.dlq }}</span>
+              </div>
+            </sc-for>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">A subsidiary sees only its own request rate and queue depth on its own Platform strip. Cross-branch traffic is exclusively an HQ read, over the same per-branch service binding every other H-screen uses.</div>
+          </div>
+
+          <!-- P6 · Broadcast -->
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">P6 · Broadcast</span><span class="zs">Platform channels, not a branch megaphone</span></div>
+            <div style="display:grid;gap:7px">
+              <sc-for list="{{ p6Channels }}" as="c" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px;{{ c.dim }}">
+                  <div style="min-width:0"><div style="font-size:12px;font-weight:700">{{ c.name }}</div><div style="font-size:10.5px;color:#615c6e;margin-top:3px">{{ c.meta }}</div></div>
+                  <span style="{{ c.pill }}">{{ c.state }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">X stays listed rather than hidden until its OAuth exists — an absent row looks like a decision nobody made; a dashed one looks like the decision it actually is.</div>
+          </div>
+
+        </div>
+
+        <div class="c" style="padding:16px 18px;margin-top:14px">
+          <div class="zh"><span class="zt">P7 · Feature flags</span><span class="zs">Not recorded — no operator store exists yet</span></div>
+          <div style="border:1.5px dashed #d4d2dc;border-radius:10px;padding:16px 18px;text-align:center">
+            <div style="font-size:12.5px;font-weight:700;color:#18181b">No platform-level flag table.</div>
+            <div style="font-size:11.5px;color:#615c6e;margin-top:6px;line-height:1.6;max-width:560px;margin-left:auto;margin-right:auto">Prior canvases named a flags panel here on the strength of the intent, not the schema. What exists today is per-user settings, which is not an operator-facing flag any admin can stage to one territory. This panel stays visibly empty rather than repurposing a user setting to look like one.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Platform" hint-size="100%,760px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ H18 · CONTENT · ASSESSMENT STUDIO, PERSONAS TAXONOMY ══════════ -->
+<section class="ab" id="h18">
+  <div class="ab-hd"><a class="ab-id" href="#h18">H18</a><span class="ab-nm">Content — Assessment Studio, Personas taxonomy</span><span class="ab-sub">HQ authors the schema · Admin only runs and reads it</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">Both panels draw the line the subsidiary canvas already promises: a subsidiary admin runs a cohort's assessment and reads its results, and retags a person within the existing persona set — but authoring a question, a chapter, an archetype, or the persona schema itself is Content, and Content is HQ.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navCon }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq">
+        <div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">All subsidiaries ▾</span></div>
+        <span class="num" style="font-size:11px;opacity:.72">authoring surfaces · run state lives on Admin Programs</span>
+      </div>
+      <div class="inner">
+        <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:14px;margin-top:6px">
+
+          <!-- C1 · Assessment Studio -->
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">C1 · Assessment Studio</span><span class="zs">Games, chapters, archetypes · authored here</span></div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+              <sc-for list="{{ c1Stats }}" as="s" hint-placeholder-count="3">
+                <div style="background:#fbfbfc;border:1px solid #f0eff4;border-radius:9px;padding:9px 10px">
+                  <div class="lbl" style="font-size:8px">{{ s.k }}</div>
+                  <div class="num" style="font-size:16px;font-weight:800;margin-top:4px">{{ s.v }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:grid;gap:7px;margin-top:11px">
+              <sc-for list="{{ c1Games }}" as="g" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px">
+                  <div style="min-width:0"><div style="font-size:12px;font-weight:700">{{ g.name }}</div><div style="font-size:10.5px;color:#615c6e;margin-top:3px">{{ g.meta }}</div></div>
+                  <span style="{{ g.pill }}">{{ g.state }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">A subsidiary admin sees run analytics for their own cohorts — completion, drop-off, score distribution — on Admin Programs. Editing a question here republishes to every branch running that game; the branch is told, it does not approve.</div>
+          </div>
+
+          <!-- C2 · Personas taxonomy -->
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">C2 · Personas taxonomy</span><span class="zs">The schema is HQ · a retag is Admin</span></div>
+            <div style="display:grid;gap:7px">
+              <sc-for list="{{ c2Personas }}" as="p" hint-placeholder-count="5">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border-top:1px solid #f4f3f7">
+                  <div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:3px;background:{{ p.dot }};flex:none"></span><span style="font-size:12px;font-weight:600">{{ p.name }}</span></div>
+                  <span class="num" style="font-size:11.5px;color:#615c6e">{{ p.n }} tagged</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:12px;line-height:1.6">Adding, renaming, or retiring a persona changes what every branch's admin console can tag someone as. Moving one person from one existing persona to another is a routine Admin action and stays there — it never touches this schema.</div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Content" hint-size="100%,700px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ H19 · CONTENT · UNIFIED PIPELINE COMPLETED + DECK ROSTER ══════════ -->
+<section class="ab" id="h19">
+  <div class="ab-hd"><a class="ab-id" href="#h19">H19</a><span class="ab-nm">Content — the pipeline completed (C3) · Advisors &amp; Partners deck roster (C4)</span><span class="ab-sub">retires /admin/publications and /admin/network-profiles</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">H6 drew one pipeline and H11 added localisation and brand approval as a side note. Here they are lanes of equal standing, because a localised article awaiting brand approval is not a footnote to publishing — it is the most common thing waiting in the queue. Publications CRUD folds into the same lanes. The deck roster is platform content: HQ publishes who appears on every branch's decks; a branch may nominate, never publish.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navCon }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq"><div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">All subsidiaries ▾</span></div><span class="num" style="font-size:11px;opacity:.72">{{ c3Total }} items · six lanes · one meaning of published</span></div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Content</h1>
+        <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Draft → Review → Localisation → Brand approval → Scheduled → Published. Articles, publications and news are rows in the same lanes.</div>
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:9px;margin-top:15px">
+          <sc-for list="{{ c3Lanes }}" as="l" hint-placeholder-count="6">
+            <div>
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:6px;margin-bottom:8px"><span style="font-size:11px;font-weight:800">{{ l.name }}</span><span class="num" style="font-size:10.5px;font-weight:700;color:{{ l.ink }}">{{ l.n }}</span></div>
+              <div style="display:grid;gap:7px">
+                <sc-for list="{{ l.cards }}" as="c" hint-placeholder-count="2">
+                  <div style="border:1px solid {{ c.edge }};background:{{ c.bg }};border-radius:9px;padding:9px 10px">
+                    <div style="font-size:11px;font-weight:700;line-height:1.4">{{ c.title }}</div>
+                    <div style="font-size:10px;color:#615c6e;margin-top:4px;line-height:1.45">{{ c.meta }}</div>
+                    <sc-if value="{{ c.from }}"><div style="margin-top:6px"><span style="font-size:9px;font-weight:700;color:#334155;background:#f6f8fa;border:1px solid #cbd5e1;border-radius:4px;padding:2px 6px">{{ c.from }}</span></div></sc-if>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="c" style="padding:16px 18px;margin-top:15px">
+          <div class="zh"><span class="zt">C4 · Advisors &amp; Partners — deck roster</span><span class="zs">HQ publishes · a branch nominates</span></div>
+          <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr .9fr .8fr;gap:10px">
+            <span class="th">Name</span><span class="th">Role on decks</span><span class="th">Nominated by</span><span class="th">Appears on</span><span class="th">State</span>
+          </div>
+          <sc-for list="{{ c4Roster }}" as="r" hint-placeholder-count="4">
+            <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr .9fr .8fr;gap:10px;align-items:center">
+              <span class="td" style="font-weight:600;color:#18181b">{{ r.name }}</span>
+              <span class="td">{{ r.role }}</span>
+              <span class="td">{{ r.by }}</span>
+              <span class="td num">{{ r.decks }}</span>
+              <span class="td"><span style="{{ r.pill }}">{{ r.state }}</span></span>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">A nomination from a branch lands here as a row in "Nominated", not on the roster. Publishing puts the person on every branch's deck templates at once, which is why the action is HQ's.</div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Content" hint-size="100%,780px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ H20 · TEAM · THE HQ PEOPLE DESK ══════════ -->
+<section class="ab" id="h20">
+  <div class="ab-hd"><a class="ab-id" href="#h20">H20</a><span class="ab-nm">Team — cross-tenant people, and the actions only HQ may take (T1)</span><span class="ab-sub">extends H4 · retires the /admin Users table</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">The live Users table was the daily people desk for everyone; here it is HQ's. Super Admin holders stay on top as H4 drew them. Below, every account across every branch, one read per branch, with a Branch column because that is the fact the old table could not show. Two action sets, and the line between them is the whole point: HQ-only actions live here and nowhere on Admin; Admin's actions appear here read-only when viewing as a branch, so the same row never offers the same power twice.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navAcc }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq"><div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">All subsidiaries ▾</span></div><span class="num" style="font-size:11px;opacity:.72">{{ globalAccounts }} accounts · {{ subCount }} branches read</span></div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Team</h1>
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:260px;display:flex;align-items:center;gap:8px;border:1px solid #e2e1e8;background:#fff;border-radius:9px;padding:8px 12px"><span style="width:13px;height:13px;display:block;color:#615c6e" dangerouslySetInnerHTML="{{ searchIcon }}"></span><span style="font-size:12px;color:#9c96a8">Search all accounts, every branch</span></div>
+          <sc-for list="{{ t1Filters }}" as="f" hint-placeholder-count="4"><span style="{{ f.style }}">{{ f.label }}</span></sc-for>
+        </div>
+
+        <div class="c" style="padding:14px 16px;margin-top:13px">
+          <div style="display:grid;grid-template-columns:1.3fr 1.4fr .8fr .9fr .7fr .7fr .6fr .8fr 1.2fr;gap:8px">
+            <sc-for list="{{ t1Head }}" as="h" hint-placeholder-count="9"><span class="th">{{ h }}</span></sc-for>
+          </div>
+          <sc-for list="{{ t1Rows }}" as="r" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:1.3fr 1.4fr .8fr .9fr .7fr .7fr .6fr .8fr 1.2fr;gap:8px;align-items:center;{{ r.rowStyle }}">
+              <span class="td" style="font-weight:600;color:#18181b">{{ r.name }}</span>
+              <span class="td mono" style="font-size:11px">{{ r.email }}</span>
+              <span class="td"><span class="tag">{{ r.role }}</span></span>
+              <span class="td"><span style="font-size:10px;font-weight:700;color:#334155;background:#f6f8fa;border:1px solid #cbd5e1;border-radius:4px;padding:2px 6px">{{ r.branch }}</span></span>
+              <span class="td"><span style="{{ r.statusPill }}">{{ r.status }}</span></span>
+              <span class="td"><span style="{{ r.kycPill }}">{{ r.kyc }}</span></span>
+              <span class="td num">{{ r.trust }}</span>
+              <span class="td num" style="color:#615c6e">{{ r.joined }}</span>
+              <span class="td"><span class="vm">{{ r.action }}</span></span>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:13px">
+          <div class="c" style="padding:16px 18px;border-color:#fecaca">
+            <div class="zh"><span class="zt">HQ-only actions</span><span class="gov">Recorded in Security</span></div>
+            <div style="display:grid;gap:7px">
+              <sc-for list="{{ t1HqActions }}" as="a" hint-placeholder-count="5">
+                <div style="display:flex;align-items:flex-start;gap:9px;padding:8px 10px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px">
+                  <span style="width:7px;height:7px;border-radius:50%;background:#b91c1c;flex:none;margin-top:5px"></span>
+                  <div style="min-width:0"><div style="font-size:12px;font-weight:700">{{ a.name }}</div><div style="font-size:10.5px;color:#615c6e;margin-top:3px;line-height:1.5">{{ a.note }}</div></div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">None of these appears on the Admin artifact. Impersonating an admin is the one power here with no analogue anywhere else on the platform, and it carries the hardest limit: thirty minutes, a typed reason, and a banner both sides see.</div>
+          </div>
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Admin's actions</span><span class="zs">Read-only from here, live on Admin · Accounts</span></div>
+            <div style="display:grid;gap:7px">
+              <sc-for list="{{ t1AdminActions }}" as="a" hint-placeholder-count="4">
+                <div style="display:flex;align-items:flex-start;gap:9px;padding:8px 10px;border:1px dashed #e2e1e8;background:#fafafa;border-radius:9px">
+                  <span style="width:7px;height:7px;border-radius:50%;background:#94a3b8;flex:none;margin-top:5px"></span>
+                  <div style="min-width:0"><div style="font-size:12px;font-weight:700">{{ a.name }}</div><div style="font-size:10.5px;color:#615c6e;margin-top:3px;line-height:1.5">{{ a.note }}</div></div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">When the switcher reads "Viewing as Axal VC France", this table filters to that licence, the HQ-only card hides, and these four become the row actions — exactly what the branch admin sees, because it is the branch's read being rendered.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Home" hint-size="100%,940px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ H21 · REVENUE · BILLING EXCEPTIONS ══════════ -->
+<section class="ab" id="h21">
+  <div class="ab-hd"><a class="ab-id" href="#h21">H21</a><span class="ab-nm">Revenue — billing exceptions: refunds as a governed action, disputes, and an honest LTV (R1)</span><span class="ab-sub">extends H5/H10 · retires the /admin Billing tab</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">Disputes already had a home on Revenue. Refunds join them as a step-up action — a refund moves money out, so it asks for a second factor and a typed reason and writes to Security. LTV is drawn as Not recorded because no store computes it: the live tab showed a figure, and that figure was a division of two numbers the product never reconciled. Token margin per subsidiary stays Not recorded for the same reason.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navRev }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq"><div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">All subsidiaries ▾</span></div><span class="num" style="font-size:11px;opacity:.72">{{ r1Open }} exceptions open</span></div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Billing exceptions</h1>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:13px">
+          <sc-for list="{{ r1Tiles }}" as="t" hint-placeholder-count="4">
+            <div class="c" style="padding:11px 13px">
+              <div class="lbl" style="font-size:8.5px">{{ t.k }}</div>
+              <sc-if value="{{ t.nr }}"><div style="margin-top:6px"><span class="tag" style="color:#7c6f86">Not recorded</span></div></sc-if>
+              <sc-if value="{{ t.v }}"><div class="num" style="font-size:17px;font-weight:800;margin-top:4px;color:{{ t.ink }}">{{ t.v }}</div></sc-if>
+              <div style="font-size:10px;color:#615c6e;margin-top:4px;line-height:1.45">{{ t.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div class="c" style="padding:15px 17px;margin-top:13px">
+          <div class="zh"><span class="zt">Open exceptions</span><span class="zs">Refund is step-up · dispute is a Stripe state</span></div>
+          <div style="display:grid;grid-template-columns:1.1fr 1fr .8fr .8fr .9fr 1.1fr;gap:10px">
+            <span class="th">Account</span><span class="th">Branch</span><span class="th">Amount</span><span class="th">Kind</span><span class="th">State</span><span class="th">Action</span>
+          </div>
+          <sc-for list="{{ r1Rows }}" as="r" hint-placeholder-count="4">
+            <div style="display:grid;grid-template-columns:1.1fr 1fr .8fr .8fr .9fr 1.1fr;gap:10px;align-items:center">
+              <span class="td" style="font-weight:600;color:#18181b">{{ r.who }}</span>
+              <span class="td">{{ r.branch }}</span>
+              <span class="td num">{{ r.amt }}</span>
+              <span class="td"><span class="tag">{{ r.kind }}</span></span>
+              <span class="td"><span style="{{ r.pill }}">{{ r.state }}</span></span>
+              <span class="td"><span class="{{ r.actCls }}" style="padding:4px 9px;font-size:10.5px">{{ r.action }}</span></span>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">A refund asks for the second factor before the amount field unlocks, and the reason is required text, not a dropdown — because "customer request" explains nothing to the auditor reading it in a year.</div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Revenue" hint-size="100%,700px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ H22 · SUPPORT · THREE QUEUES, TENANT × QUEUE ══════════ -->
+<section class="ab" id="h22">
+  <div class="ab-hd"><a class="ab-id" href="#h22">H22</a><span class="ab-nm">Support — three queues as the row, not /help chrome</span><span class="ab-sub">draws Y1 · the missing persona is the subsidiary admin</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">The live Help page was a dump of every ticket the platform ever received. Y1 specified three queues and this artboard draws them as the Support row: escalations from subsidiaries, HQ-held users, and — the persona the old page had no column for — subsidiary admins raising tickets about the Admin product itself. GitHub sync health sits as a strip because a ticket that failed to mirror is a support fact first and a platform fact second; it links to P2 on H16.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navSup }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq"><div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">All subsidiaries ▾</span></div><span class="num" style="font-size:11px;opacity:.72">{{ y1Total }} open · oldest {{ y1Oldest }}</span></div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Support</h1>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-top:14px">
+          <sc-for list="{{ y1Queues }}" as="q" hint-placeholder-count="3">
+            <div class="c" style="padding:14px 16px">
+              <div class="zh" style="margin-bottom:8px"><span class="zt" style="font-size:13px">{{ q.name }}</span><span class="num" style="font-size:12px;font-weight:800;color:{{ q.ink }}">{{ q.n }}</span></div>
+              <div style="font-size:10.5px;color:#615c6e;line-height:1.5">{{ q.who }}</div>
+              <div style="display:grid;gap:6px;margin-top:10px">
+                <sc-for list="{{ q.items }}" as="i" hint-placeholder-count="2">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 9px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:8px">
+                    <span style="font-size:11px;font-weight:600;min-width:0">{{ i.t }}</span><span style="{{ i.pill }}">{{ i.age }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:14px;margin-top:13px">
+          <div class="c" style="padding:15px 17px">
+            <div class="zh"><span class="zt">Tenant × queue</span><span class="zs">Open items · oldest in hours</span></div>
+            <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:8px">
+              <span class="th">Branch</span><span class="th">Escalations</span><span class="th">HQ-held</span><span class="th">About Admin</span>
+            </div>
+            <sc-for list="{{ y1Matrix }}" as="m" hint-placeholder-count="4">
+              <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:8px;align-items:center">
+                <span class="td" style="font-weight:600;color:#18181b">{{ m.branch }}</span>
+                <span class="td num" style="{{ m.c1Ink }}">{{ m.c1 }}</span>
+                <span class="td num" style="{{ m.c2Ink }}">{{ m.c2 }}</span>
+                <span class="td num" style="{{ m.c3Ink }}">{{ m.c3 }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div class="c" style="padding:15px 17px">
+            <div class="zh"><span class="zt">GitHub sync</span><span class="vm">Open P2 →</span></div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+              <sc-for list="{{ p2Stats }}" as="s" hint-placeholder-count="3">
+                <div style="background:#fbfbfc;border:1px solid #f0eff4;border-radius:9px;padding:9px 10px"><div class="lbl" style="font-size:8px">{{ s.k }}</div><div class="num" style="font-size:15px;font-weight:800;margin-top:4px;color:{{ s.ink }}">{{ s.v }}</div></div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">The same three figures P2 shows — one record, read from two rows. Iberia's unreadable branch is why a failed mirror sits here and not only on Platform.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Support" hint-size="100%,760px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ H23 · SECURITY · THE LEDGER, NOT A DASHBOARD ══════════ -->
+<section class="ab" id="h23">
+  <div class="ab-hd"><a class="ab-id" href="#h23">H23</a><span class="ab-nm">Security — security_events ledger, sanctions and DR drill status, sessions, DSR clocks (S1–S4)</span><span class="ab-sub">completes Y2/H7 · deliberately not pretty</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">The canvas called security_events "the one real backend build," and this is what it looks like when it exists: dense monospace rows, immutable, no summary tiles, no chart. Sanctions review and the backup/DR drill are drawn as Not recorded with the reason — a drill that has never been run is a fact worth stating in words, not a green light. Sessions and force re-auth already exist and stay. DSR clocks are per territory because GDPR's thirty days run against the branch that holds the record.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navGov }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq"><div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">All subsidiaries ▾</span></div><span class="num" style="font-size:11px;opacity:.72">security_events · append-only · {{ s1Count }} rows today</span></div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Security</h1>
+        <div class="c" style="padding:12px 14px;margin-top:13px;background:#fbfbfc">
+          <div class="mono" style="display:grid;grid-template-columns:150px 110px 130px 1fr 110px;gap:10px;font-size:10px;color:#615c6e;padding-bottom:6px;border-bottom:1px solid #ececf1"><span>ts</span><span>actor</span><span>branch</span><span>event</span><span>outcome</span></div>
+          <sc-for list="{{ s1Rows }}" as="r" hint-placeholder-count="8">
+            <div class="mono" style="display:grid;grid-template-columns:150px 110px 130px 1fr 110px;gap:10px;font-size:10.5px;padding:6px 0;border-bottom:1px solid #f4f3f7;color:#3f3a49">
+              <span>{{ r.ts }}</span><span>{{ r.actor }}</span><span>{{ r.branch }}</span><span style="color:#18181b">{{ r.event }}</span><span style="{{ r.ink }}">{{ r.outcome }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-top:13px">
+          <div class="c" style="padding:14px 16px">
+            <div class="lbl">S2 · Sanctions review</div>
+            <div style="margin-top:8px"><span class="tag" style="color:#7c6f86">Not recorded</span></div>
+            <div style="font-size:11px;color:#615c6e;margin-top:7px;line-height:1.55">No screening run is stored. A list check happens inside KYC at the branch and does not write a platform-level event yet.</div>
+          </div>
+          <div class="c" style="padding:14px 16px">
+            <div class="lbl">S2 · Backup / DR drill</div>
+            <div style="margin-top:8px"><span class="tag" style="color:#7c6f86">Not recorded</span></div>
+            <div style="font-size:11px;color:#615c6e;margin-top:7px;line-height:1.55">Nightly D1 exports exist per branch; a restore has never been rehearsed. Stated in words rather than a green light.</div>
+          </div>
+          <div class="c" style="padding:14px 16px">
+            <div class="lbl">S3 · Sessions · MFA</div>
+            <div class="num" style="font-size:17px;font-weight:800;margin-top:6px">{{ s3Sessions }}</div>
+            <div style="font-size:11px;color:#615c6e;margin-top:5px;line-height:1.55">active sessions · MFA on {{ s3Mfa }} of admins</div>
+            <div style="display:flex;gap:6px;margin-top:9px"><span class="danger" style="padding:5px 10px;font-size:10.5px">Force re-auth platform-wide</span></div>
+          </div>
+        </div>
+        <div class="c" style="padding:15px 17px;margin-top:13px">
+          <div class="zh"><span class="zt">S4 · DSR clocks by territory</span><span class="zs">30 days from receipt · runs against the holding branch</span></div>
+          <div style="display:grid;gap:7px">
+            <sc-for list="{{ s4Dsr }}" as="d" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px">
+                <div style="min-width:0"><span style="font-size:12px;font-weight:700">{{ d.branch }}</span><span style="font-size:10.5px;color:#615c6e;margin-left:8px">{{ d.what }}</span></div>
+                <span style="{{ d.pill }}">{{ d.left }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Governance" hint-size="100%,860px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ H24 · FUNDS · OVERSIGHT, NOT THE LP WORKSPACE ══════════ -->
+<section class="ab" id="h24">
+  <div class="ab-hd"><a class="ab-id" href="#h24">H24</a><span class="ab-nm">Funds — oversight: which branches run which funds</span><span class="ab-sub">the row points at /funds today · this is what HQ sees instead</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">The Funds row currently opens the shared /funds product, which is an investor profile surface. HQ's question is different: which branches operate a fund, under which GP entity, with how much committed, and whether their last report period issued. That is a registry read across branches, not a capital account, and Fund Administration is not pasted in.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navFunds }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq"><div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">All subsidiaries ▾</span></div><span class="num" style="font-size:11px;opacity:.72">{{ f1Count }} funds across {{ f1Branches }} branches</span></div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Funds</h1>
+        <div class="c" style="padding:15px 17px;margin-top:13px">
+          <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr .8fr .9fr .9fr;gap:10px">
+            <span class="th">Fund</span><span class="th">Branch</span><span class="th">GP entity</span><span class="th">Committed</span><span class="th">Last issued</span><span class="th">Read</span>
+          </div>
+          <sc-for list="{{ f1Rows }}" as="r" hint-placeholder-count="4">
+            <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr .8fr .9fr .9fr;gap:10px;align-items:center;{{ r.rowStyle }}">
+              <span class="td" style="font-weight:600;color:#18181b">{{ r.fund }}</span>
+              <span class="td">{{ r.branch }}</span>
+              <span class="td">{{ r.gp }}</span>
+              <span class="td num">{{ r.committed }}</span>
+              <span class="td num">{{ r.issued }}</span>
+              <span class="td"><span style="{{ r.pill }}">{{ r.read }}</span></span>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">Iberia's row reads Unreadable, not zero: its worker did not answer, and a fund that cannot be read is a different fact from a fund with nothing committed. The other rows are unaffected. Clicking a fund opens that branch's Funds console viewing-as, read-only.</div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Home" hint-size="100%,560px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ H25 · IMPERSONATION BAR + LEFT ON /ADMIN ON PURPOSE ══════════ -->
+<section class="ab" id="h25">
+  <div class="ab-hd"><a class="ab-id" href="#h25">H25</a><span class="ab-nm">The impersonation bar (global chrome) · What stays on /admin on purpose</span><span class="ab-sub">matches S13 on the Admin artifact · both sides see one session</span></div>
+  <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap">
+    <div style="width:880px;flex:none">
+      <div class="lbl" style="margin-bottom:8px">Global chrome · shown whenever HQ is viewing-as or impersonating</div>
+      <div style="background:#b91c1c;color:#fff;border-radius:10px;padding:11px 18px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+          <span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ eyeIcon }}"></span>
+          <sc-for list="{{ impBar }}" as="b" hint-placeholder-count="4"><span style="font-size:11.5px"><span style="opacity:.7;font-weight:600;text-transform:uppercase;font-size:9.5px;letter-spacing:.06em">{{ b.k }}</span> <strong style="margin-left:4px">{{ b.v }}</strong></span></sc-for>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px"><span class="mono" style="font-size:13px;font-weight:800">{{ impLeft }}</span><span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;border:1px solid rgba(255,255,255,.4)">Raise a concern</span><span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:#fff;color:#b91c1c">End session</span></div>
+      </div>
+      <div style="font-size:11.5px;color:#615c6e;margin-top:9px;line-height:1.6">Who · As · Why · Limit · what you can do. The branch renders the same five fields in its own bar (S13); neither side can see a session the other cannot. Ending early and running out are recorded identically.</div>
+    </div>
+    <div style="flex:1;min-width:420px">
+      <div class="lbl" style="margin-bottom:8px">Left on /admin on purpose — not swallowed</div>
+      <div class="c" style="padding:14px 16px">
+        <div style="display:grid;gap:7px">
+          <sc-for list="{{ leftOnAdmin }}" as="l" hint-placeholder-count="6">
+            <div style="display:flex;align-items:flex-start;gap:9px;padding:7px 0;border-top:1px solid #f4f3f7">
+              <span style="font-size:10px;font-weight:700;color:#334155;background:#f6f8fa;border:1px solid #cbd5e1;border-radius:4px;padding:2px 6px;flex:none;white-space:nowrap">{{ l.where }}</span>
+              <div style="min-width:0"><div style="font-size:12px;font-weight:700">{{ l.what }}</div><div style="font-size:10.5px;color:#615c6e;margin-top:2px;line-height:1.5">{{ l.why }}</div></div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ H26 · ISSUE FLOW · KIND = WHITE-LABEL ══════════ -->
+<section class="ab" id="h26">
+  <div class="ab-hd"><a class="ab-id" href="#h26">H26</a><span class="ab-nm">Issue a white-label Admin — Kind becomes Step 1; brand kit becomes Step 6</span><span class="ab-sub">extends H3/H8 · one wizard, one new step, one new legend</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px"><strong>Same console. Their brand. No brand desk at HQ.</strong> A white-label operator is an Admin Super Admin appointed, running the identical subsidiary product with brand_kind flipped — same eight rows, same four seat types, same queues. What changes in the flow is one leading step that picks the kind, one trailing step that collects their brand kit, and a territory picker whose second legend is informational: an operator is not Axal VC France, so it may sit in France.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navLic }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq"><div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">Issue a white-label Admin</span></div><span class="num" style="font-size:11px;opacity:.72">step 6 of 7 · brand kit</span></div>
+      <div class="inner">
+        <div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ wlSteps }}" as="s" hint-placeholder-count="7"><span style="{{ s.style }}"><span class="num">{{ s.n }}</span> {{ s.label }}</span></sc-for></div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
+          <div class="c" style="padding:15px 17px">
+            <div class="lbl">Step 1 · Kind</div>
+            <div style="display:flex;gap:4px;background:#f0eff4;border-radius:9px;padding:3px;margin-top:9px">
+              <span style="flex:1;text-align:center;font-size:11.5px;font-weight:600;padding:7px 0;border-radius:7px;color:#615c6e">Axal subsidiary</span>
+              <span style="flex:1;text-align:center;font-size:11.5px;font-weight:700;padding:7px 0;border-radius:7px;background:#fff;color:#18181b;box-shadow:0 1px 3px rgba(24,24,27,.1)">White-label operator</span>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:9px;line-height:1.55">White-label gets the subsidiary console and none of the Axal brand desk.</div>
+            <div class="lbl" style="margin-top:14px">Step 2 · Entity — theirs, not "Axal VC …"</div>
+            <div style="display:grid;gap:0;margin-top:6px"><sc-for list="{{ wlEntity }}" as="f" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid #f4f3f7"><span class="lbl" style="font-size:8.5px;padding-top:2px">{{ f.label }}</span><span style="font-size:12px;text-align:right;font-weight:600">{{ f.value }}</span></div></sc-for></div>
+          </div>
+
+          <div class="c" style="padding:15px 17px">
+            <div class="lbl">Step 3 · Territory — dual legend</div>
+            <div style="display:grid;grid-template-columns:repeat(9,1fr);gap:4px;margin-top:10px">
+              <sc-for list="{{ wlCells }}" as="c" hint-placeholder-count="27"><span class="mono" style="{{ c.style }}">{{ c.code }}</span></sc-for>
+            </div>
+            <div style="display:grid;gap:5px;margin-top:10px"><sc-for list="{{ wlLegend }}" as="l" hint-placeholder-count="4"><div style="display:flex;align-items:center;gap:8px;font-size:10.5px;color:#4a4553"><span style="width:11px;height:11px;border-radius:3px;flex:none;{{ l.sw }}"></span>{{ l.label }}</div></sc-for></div>
+            <div style="border:1px solid #a7f3d0;background:#ecfdf5;border-radius:9px;padding:9px 11px;margin-top:10px;font-size:11px;color:#065f46;line-height:1.55"><strong>FR is available.</strong> Axal VC France holds FR against other Axal subsidiaries — that rule does not apply to an operator. No conflict fires. Exclusivity against other white-labels is off for this licence.</div>
+          </div>
+        </div>
+
+        <div class="c" style="padding:15px 17px;margin-top:14px;border-color:#fbcfe0">
+          <div class="zh"><span class="zt">Step 6 · Brand kit — required to activate</span><span class="zs">Unique to this kind · an Axal subsidiary never sees this step</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1.3fr;gap:14px">
+            <div style="display:grid;gap:0"><sc-for list="{{ wlKit }}" as="f" hint-placeholder-count="7"><div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid #f4f3f7"><span class="lbl" style="font-size:8.5px;padding-top:2px">{{ f.label }}</span><span style="font-size:12px;text-align:right;{{ f.ink }}" class="{{ f.cls }}">{{ f.value }}</span></div></sc-for></div>
+            <div>
+              <div class="lbl" style="font-size:8.5px;margin-bottom:7px">Preview · their colours, not ours</div>
+              <div style="border:1px solid #e2e1e8;border-radius:10px;overflow:hidden">
+                <div style="background:{{ wlPrimary }};color:#fff;padding:9px 14px;display:flex;align-items:center;justify-content:space-between"><div style="display:flex;align-items:center;gap:8px"><span style="width:16px;height:16px;border-radius:4px;background:{{ wlAccent }}"></span><span style="font-size:12px;font-weight:800">{{ wlPublic }}</span></div><span style="font-size:10px;opacity:.8">Sign in</span></div>
+                <div style="padding:10px 14px;background:#fff;border-top:1px solid #ececf1"><div style="font-size:10px;color:#615c6e">From: {{ wlPublic }} &lt;hello@{{ wlDomain }}&gt;</div><div style="font-size:12px;font-weight:700;margin-top:4px">Your workspace is ready</div></div>
+              </div>
+              <div style="font-size:11px;color:#615c6e;margin-top:8px;line-height:1.55">HQ will never approve this. They will. "Powered by Axal VC" is hidden by default; a platform credit is an explicit opt-in.</div>
+              <div style="border:1px solid #fde68a;background:#fffdf5;border-radius:9px;padding:9px 11px;margin-top:9px;font-size:11px;color:#3f3a49;line-height:1.55">No hostname is collected in this kit. Members land on <span class="mono">studiolyon.os.axal.vc</span> at activation; their admin binds a custom host later, in Settings → Domain — see H32.</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7">
+            <span style="font-size:11.5px;color:#615c6e">Step 7 contracts on the <strong>White-Label Operator Agreement</strong>, then deploys the same admin product with <span class="mono">brand_kind = white_label</span>.</span>
+            <span class="acc">Continue to Contract + Deploy →</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Licenses" hint-size="100%,900px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ H27 · WHITE-LABEL LICENCE RECORD ══════════ -->
+<section class="ab" id="h27">
+  <div class="ab-hd"><a class="ab-id" href="#h27">H27</a><span class="ab-nm">Licence record — one white-label operator</span><span class="ab-sub">Platform supervised. Brand unsupervised.</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navLic }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq"><div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">{{ wlPublic }}</span><span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">WHITE-LABEL</span></div><span class="num" style="font-size:11px;opacity:.72">WL-001 · issued 20 Sep 2026</span></div>
+      <div class="inner">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">{{ wlPublic }}</h1>
+          <span style="font-size:12px;font-weight:700;color:#881337">Platform supervised. Brand unsupervised.</span>
+        </div>
+        <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">{{ wlLegal }} · FR · non-exclusive · same console as every subsidiary, their kit on every member-facing surface.</div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:14px">
+          <div class="c" style="padding:14px 16px"><div class="lbl">Seats</div><div style="display:grid;gap:6px;margin-top:8px"><sc-for list="{{ wlSeats }}" as="s" hint-placeholder-count="4"><div style="display:flex;justify-content:space-between;font-size:11.5px"><span>{{ s.type }}</span><span class="num" style="font-weight:700">{{ s.n }}</span></div></sc-for></div></div>
+          <div class="c" style="padding:14px 16px"><div class="lbl">Terms</div><div style="display:grid;gap:6px;margin-top:8px"><sc-for list="{{ wlTerms }}" as="t" hint-placeholder-count="4"><div style="display:flex;justify-content:space-between;font-size:11.5px"><span style="color:#615c6e">{{ t.k }}</span><span class="num" style="font-weight:700">{{ t.v }}</span></div></sc-for></div></div>
+          <div class="c" style="padding:14px 16px"><div class="lbl">Brand kit</div><div style="display:flex;align-items:center;gap:9px;margin-top:9px"><span style="width:26px;height:26px;border-radius:7px;background:{{ wlPrimary }}"></span><span style="width:26px;height:26px;border-radius:7px;background:{{ wlAccent }}"></span><div class="mono" style="font-size:10.5px;color:#615c6e">{{ wlDomain }}</div></div><div style="font-size:10.5px;color:#615c6e;margin-top:8px;line-height:1.5">Theirs to change without asking. No brand-approval strip on this record, by design.</div></div>
+        </div>
+
+        <div class="c" style="padding:15px 17px;margin-top:13px">
+          <div class="zh"><span class="zt">Axal subsidiary vs White-label</span><span class="zs">what differs, and what does not</span></div>
+          <div style="display:grid;grid-template-columns:1.1fr 1.4fr 1.4fr;gap:10px"><span class="th"></span><span class="th">Axal subsidiary</span><span class="th">White-label</span></div>
+          <sc-for list="{{ wlCompare }}" as="r" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:1.1fr 1.4fr 1.4fr;gap:10px;align-items:center">
+              <span class="td" style="font-weight:700;color:#18181b">{{ r.k }}</span><span class="td">{{ r.a }}</span><span class="td" style="{{ r.wInk }}">{{ r.w }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Licenses" hint-size="100%,760px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ H28 · LEDGER + HOME CARDS, BOTH KINDS ══════════ -->
+<section class="ab" id="h28">
+  <div class="ab-hd"><a class="ab-id" href="#h28">H28</a><span class="ab-nm">Ledger and Home cards — subsidiaries and white-labels in one list</span><span class="ab-sub">extends H1/H2 · a Kind pill, a filter, their mark</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navLic }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq"><div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">All tenants ▾</span></div><span class="num" style="font-size:11px;opacity:.72">{{ wlLedgerCount }} licences · {{ wlCountSub }} Axal · {{ wlCountWl }} white-label</span></div>
+      <div class="inner">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Licences</h1>
+          <div style="display:flex;gap:6px"><sc-for list="{{ wlFilters }}" as="f" hint-placeholder-count="3"><span style="{{ f.style }}">{{ f.label }}</span></sc-for><span class="acc" style="margin-left:6px">Issue a white-label Admin</span></div>
+        </div>
+        <div class="c" style="padding:14px 16px;margin-top:13px">
+          <div style="display:grid;grid-template-columns:.9fr 1.5fr 1fr .9fr .8fr .8fr .9fr;gap:9px"><span class="th">Kind</span><span class="th">Public name</span><span class="th">Territory</span><span class="th">Seats</span><span class="th">Fee</span><span class="th">Renews</span><span class="th">State</span></div>
+          <sc-for list="{{ wlLedger }}" as="r" hint-placeholder-count="5">
+            <div style="display:grid;grid-template-columns:.9fr 1.5fr 1fr .9fr .8fr .8fr .9fr;gap:9px;align-items:center;{{ r.rowStyle }}">
+              <span class="td"><span style="{{ r.kindPill }}">{{ r.kind }}</span></span>
+              <span class="td" style="display:flex;align-items:center;gap:7px;font-weight:600;color:#18181b"><span style="width:12px;height:12px;border-radius:3px;background:{{ r.mark }};flex:none"></span>{{ r.name }}</span>
+              <span class="td mono">{{ r.terr }}</span><span class="td num">{{ r.seats }}</span><span class="td num">{{ r.fee }}</span><span class="td num">{{ r.renews }}</span>
+              <span class="td"><span style="{{ r.pill }}">{{ r.state }}</span></span>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">A white-label row shows its public name and its own mark — never "Axal VC …" and never the Axal wordmark. FR appears twice because exclusivity is a rule between Axal subsidiaries, and only between them.</div>
+        </div>
+        <div class="lbl" style="margin-top:14px">Home · tenant health cards, mixed</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:8px">
+          <sc-for list="{{ wlHomeCards }}" as="c" hint-placeholder-count="4">
+            <div class="c" style="padding:12px 13px;{{ c.style }}">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:6px"><div style="display:flex;align-items:center;gap:7px"><span style="width:11px;height:11px;border-radius:3px;background:{{ c.mark }}"></span><span style="font-size:12px;font-weight:800">{{ c.name }}</span></div><span style="{{ c.kindPill }}">{{ c.kind }}</span></div>
+              <div style="font-size:10.5px;color:#615c6e;margin-top:6px;line-height:1.5">{{ c.meta }}</div>
+              <div style="font-size:10.5px;margin-top:6px;color:{{ c.escInk }}">{{ c.esc }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:11px;color:#615c6e;margin-top:10px;line-height:1.6">The white-label card never carries an "awaiting brand approval" count — its escalations can only be seats, moderation or security. Click still opens view-as, read-only, in their chrome.</div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Licenses" hint-size="100%,780px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ H29 · VIEWING AS A WHITE-LABEL ADMIN ══════════ -->
+<section class="ab" id="h29">
+  <div class="ab-hd"><a class="ab-id" href="#h29">H29</a><span class="ab-nm">Viewing as a white-label Admin — their chrome inside, HQ's banner outside</span><span class="ab-sub">extends H7/H12 · no AXAL VC HQ badge inside their product</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">The overlay is one RPC read of the operator's own deployment, rendered with every action removed. What HQ sees inside the frame is what the operator's own admin sees: their mark, their colours, their public name. Oxblood stays only on HQ's shell around it and on the impersonation bar, which reads Who · As · Why · Limit exactly as S13 does on the branch side.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navHome }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div style="background:#b91c1c;color:#fff;padding:10px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ eyeIcon }}"></span><sc-for list="{{ wlImpBar }}" as="b" hint-placeholder-count="4"><span style="font-size:11.5px"><span style="opacity:.7;font-weight:600;text-transform:uppercase;font-size:9.5px;letter-spacing:.06em">{{ b.k }}</span> <strong style="margin-left:4px">{{ b.v }}</strong></span></sc-for></div>
+        <div style="display:flex;align-items:center;gap:8px"><span class="mono" style="font-size:13px;font-weight:800">27:10</span><span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:#fff;color:#b91c1c">Return to HQ view</span></div>
+      </div>
+      <!-- inside the frame: THEIR chrome -->
+      <div style="background:{{ wlPrimary }};color:#fff;padding:9px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="width:16px;height:16px;border-radius:4px;background:{{ wlAccent }}"></span><span style="font-size:12.5px;font-weight:800">{{ wlPublic }}</span><span class="num" style="font-size:11px;opacity:.8">FR</span></div>
+        <span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.18);border-radius:4px;padding:3px 8px">READ-ONLY · HQ SUPPORT</span>
+      </div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Home</h1>
+        <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">The operator's digest, as their admin sees it. Every figure is theirs; no action is HQ's.</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px">
+          <sc-for list="{{ wlTiles }}" as="t" hint-placeholder-count="4"><div class="c" style="padding:11px 13px"><div class="lbl" style="font-size:8.5px">{{ t.k }}</div><div class="num" style="font-size:17px;font-weight:800;margin-top:4px">{{ t.v }}</div><div style="font-size:10px;color:#615c6e;margin-top:3px">{{ t.note }}</div></div></sc-for>
+        </div>
+        <div style="font-size:11px;color:#615c6e;margin-top:14px;line-height:1.6;padding:10px 12px;border:1px dashed #d4d2dc;border-radius:9px;background:#fbfbfc">Nothing on this surface says Axal VC. The sidebar to the left is HQ's own shell, outside the frame — the only place oxblood is allowed while this session runs.</div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Home" scope="{{ wlPublic }}" hint-size="100%,560px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ H30 · CONTENT + SUPPORT, KIND-GATED ══════════ -->
+<section class="ab" id="h30">
+  <div class="ab-hd"><a class="ab-id" href="#h30">H30</a><span class="ab-nm">Content and Support with the switcher on a white-label — no brand desk, reduced escalation kinds</span><span class="ab-sub">kind-gates H11 and Y1</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">The proof that the design holds: with the tenant switcher on the operator, the brand-approval lane is empty by construction and says so, the localisation lane shows nothing awaiting HQ, and the escalation drawer offers three kinds instead of four. If a white-label row ever appears in "Approve · brand", the gate has failed.</div>
+  <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+    <div class="c" style="width:700px;flex:none;padding:16px 18px">
+      <div class="zh"><span class="zt">Content · switcher on {{ wlPublic }}</span><span class="zs">Brand approval · Axal subsidiaries only</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><div style="font-size:11px;font-weight:800;margin-bottom:8px">Localisation</div><div style="border:1.5px dashed #d4d2dc;border-radius:9px;padding:14px;text-align:center;font-size:11px;color:#615c6e;line-height:1.55">Nothing awaiting HQ. They localise their own materials.</div></div>
+        <div><div style="font-size:11px;font-weight:800;margin-bottom:8px">Brand approval <span class="tag" style="margin-left:6px">Axal subsidiaries only</span></div><div style="border:1.5px dashed #d4d2dc;border-radius:9px;padding:14px;text-align:center;font-size:11px;color:#615c6e;line-height:1.55"><strong style="color:#18181b">No brand desk.</strong> They publish under their own kit.</div></div>
+      </div>
+      <div style="font-size:11px;color:#615c6e;margin-top:12px;line-height:1.6">Contracts row note for this kind: platform clauses — data processing, acceptable use — still bind; visual identity does not. On deploy, HQ cloned the current masters into an operator-owned library they may re-skin. HQ does not approve the re-skin.</div>
+    </div>
+    <div class="c" style="width:700px;flex:none;padding:16px 18px">
+      <div class="zh"><span class="zt">Support · escalation kinds available to a white-label admin</span><span class="zs">three, not four</span></div>
+      <div style="display:grid;gap:7px">
+        <sc-for list="{{ wlEscKinds }}" as="k" hint-placeholder-count="4">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid {{ k.edge }};background:{{ k.bg }};border-radius:9px;{{ k.dim }}">
+            <div><div style="font-size:12px;font-weight:700;color:{{ k.ink }}">{{ k.name }}</div><div style="font-size:10.5px;color:#615c6e;margin-top:3px">{{ k.note }}</div></div>
+            <span style="{{ k.pill }}">{{ k.state }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:11px;color:#615c6e;margin-top:12px;line-height:1.6">Their admins still reach the third Support queue — operators stuck on the admin product — and it is the same queue Axal subsidiary admins use. What they cannot do is route content to a brand desk that, for them, does not exist.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ H31 · LICENCE RECORD · DOMAIN STRIP ══════════ -->
+<section class="ab" id="h31">
+  <div class="ab-hd"><a class="ab-id" href="#h31">H31</a><span class="ab-nm">Licence record — the domain strip, read-only (every tenant)</span><span class="ab-sub">status and one emergency action · HQ does not configure a hostname</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">A correction to the earlier draft: domain configuration is not an HQ feature. Super Admin stays on axal.vc and app.axal.vc, and binds nothing else. What HQ keeps is a read-only strip on each licence — Axal subsidiary and white-label alike, because both may bind a host of their own — plus one emergency action, Detach, for a collision, abuse, or DNS that was abandoned. There is no Approve, no Add domain, and no DNS editor for HQ to complete on a tenant's behalf.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navLic }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq"><div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">{{ wlPublic }}</span><span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">WHITE-LABEL</span></div><span class="num" style="font-size:11px;opacity:.72">WL-001 · domain</span></div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Domain</h1>
+        <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Configured by the Admin in Settings → Domain. HQ does not set this. Super Admin stays on axal.vc; this tenant's custom domain is theirs.</div>
+        <div class="c" style="padding:15px 17px;margin-top:13px">
+          <div style="display:grid;grid-template-columns:1.2fr 1.2fr .8fr .9fr .7fr;gap:10px"><span class="th">Platform host</span><span class="th">Custom host</span><span class="th">State</span><span class="th">Certificate</span><span class="th">Primary</span></div>
+          <div style="display:grid;grid-template-columns:1.2fr 1.2fr .8fr .9fr .7fr;gap:10px;align-items:center">
+            <span class="td mono">{{ dmPlatform }}</span>
+            <span class="td mono" style="font-weight:700;color:#18181b">{{ dmCustom }}</span>
+            <span class="td"><span style="{{ dmStatePill }}">{{ dmState }}</span></span>
+            <span class="td num">{{ dmCert }}</span>
+            <span class="td mono" style="font-size:11px">{{ dmPrimary }}</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7">
+            <span style="font-size:11.5px;color:#615c6e;line-height:1.55">Last DNS check {{ dmChecked }}. Status only — the records live in the tenant's own zone and are entered by their admin.</span>
+            <span class="danger">Detach hostname · typed reason</span>
+          </div>
+        </div>
+        <div class="c" style="padding:15px 17px;margin-top:13px">
+          <div class="zh"><span class="zt">Who holds which host</span><span class="zs">one line each</span></div>
+          <div style="display:grid;gap:8px">
+            <div style="display:flex;align-items:flex-start;gap:10px;padding:9px 11px;border:1px solid #fbcfe0;background:#fff5f7;border-radius:9px"><span style="{{ dmKindHq }}">Super Admin</span><span style="font-size:11.5px;color:#3f3a49;line-height:1.55"><span class="mono">axal.vc</span> and <span class="mono">app.axal.vc</span>, forever. HQ binds no other hostname and has no Domain page in its own Settings.</span></div>
+            <div style="display:flex;align-items:flex-start;gap:10px;padding:9px 11px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px"><span style="{{ dmKindSub }}">Subsidiary</span><span style="font-size:11.5px;color:#3f3a49;line-height:1.55">Still Axal-branded, but they do not sit on axal.vc — they bind their own regional host in Settings → Domain, same as anyone else.</span></div>
+            <div style="display:flex;align-items:flex-start;gap:10px;padding:9px 11px;border:1px solid #99f6e4;background:#f0fdfa;border-radius:9px"><span style="{{ dmKindWl }}">White-label</span><span style="font-size:11.5px;color:#3f3a49;line-height:1.55">{{ dmPlatform }} at deploy, then their own host. HQ provisions TLS and refuses collisions; HQ never approves the name.</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Licenses" hint-size="100%,620px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ H32 · BRAND-KIT STEP · DOMAIN SPLIT ══════════ -->
+<section class="ab" id="h32">
+  <div class="ab-hd"><a class="ab-id" href="#h32">H32</a><span class="ab-nm">Issue flow Step 6 — the brand kit collects no live domain at all</span><span class="ab-sub">amends H26 · corrected: HQ does not set a hostname</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">An earlier draft had the wizard collect a "product domain" and later softened it to an intent. Both were wrong in the same direction. The brand kit collects public name, mark and colours, and nothing about hosting — a hostname is live when DNS resolves and a certificate issues, both of which happen in the tenant's own zone after their admin can log in. The wizard names the platform fallback so nobody wonders where members land, and that is the whole of HQ's involvement.</div>
+  <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start">
+    <div class="c" style="width:640px;flex:none;padding:16px 18px;border-color:#fbcfe0">
+      <div class="lbl">Step 6 · Brand kit — domain fields</div>
+      <div style="display:grid;gap:0;margin-top:9px">
+        <sc-for list="{{ dmKitFields }}" as="f" hint-placeholder-count="3">
+          <div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid #f4f3f7">
+            <div style="min-width:0"><div class="lbl" style="font-size:8.5px">{{ f.label }}</div><div style="font-size:10.5px;color:#615c6e;margin-top:3px;line-height:1.5">{{ f.note }}</div></div>
+            <span class="mono" style="font-size:12px;text-align:right;flex:none;{{ f.ink }}">{{ f.value }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="border:1px solid #fde68a;background:#fffdf5;border-radius:9px;padding:10px 12px;margin-top:12px;font-size:11.5px;color:#3f3a49;line-height:1.55">Members land on <span class="mono">{{ dmPlatform }}</span> from the moment the licence activates. A custom host arrives later, entered by their admin — the licence never waits on DNS.</div>
+    </div>
+    <div class="c" style="flex:1;min-width:420px;padding:16px 18px">
+      <div class="lbl">What still blocks activation</div>
+      <div style="display:grid;gap:7px;margin-top:9px">
+        <sc-for list="{{ dmBlockers }}" as="b" hint-placeholder-count="3">
+          <div style="display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px solid {{ b.edge }};background:{{ b.bg }};border-radius:9px">
+            <span style="width:13px;height:13px;border-radius:3px;flex:none;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;{{ b.box }}">{{ b.mark }}</span>
+            <div><div style="font-size:12px;font-weight:700">{{ b.k }}</div><div style="font-size:10.5px;color:#615c6e;margin-top:2px;line-height:1.5">{{ b.note }}</div></div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ H33 · COLLISION AND DETACH ══════════ -->
+<section class="ab" id="h33">
+  <div class="ab-hd"><a class="ab-id" href="#h33">H33</a><span class="ab-nm">Collision and Detach — the two failure paths, as HQ sees them</span><span class="ab-sub">no Admin form on this artifact · the add-domain screen is S14c on Admin · Subsidiary</span></div>
+  <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start">
+    <div class="c" style="width:660px;flex:none;padding:16px 18px;border-color:#fecaca">
+      <div class="lbl" style="color:#b91c1c">HQ's read of a refusal it issued</div>
+      <div style="font-size:11.5px;color:#3f3a49;margin-top:8px;line-height:1.6">The form that produced this belongs to Admin · Subsidiary and is not drawn here. What HQ sees is the record: which host was attempted, by whom, and which licence already holds it — because a collision is the one refusal HQ may have to arbitrate.</div>
+      <div style="border:1px solid #fecaca;background:#fef2f2;border-radius:9px;padding:11px 13px;margin-top:10px">
+        <div style="font-size:12px;font-weight:700;color:#b91c1c">Refused · hostname already serving another licence</div>
+        <div class="mono" style="font-size:11px;color:#3f3a49;margin-top:6px;line-height:1.7;white-space:pre">attempted  studio.northstar.vc
+by         Studio Lyon · WL-001 · 21 Sep 2026
+held by    {{ dmCollision }}</div>
+        <div style="font-size:11.5px;color:#3f3a49;margin-top:8px;line-height:1.6">One host, one licence. Their admin was told to pick another subdomain or ask for a release, and was given the other operator's public name — never its legal entity.</div>
+      </div>
+      <div class="lbl" style="margin-top:14px">The other refusals, as the rule reads</div>
+      <div style="display:grid;gap:6px;margin-top:8px">
+        <sc-for list="{{ dmRefusals }}" as="r" hint-placeholder-count="4">
+          <div style="display:flex;gap:9px;align-items:flex-start;font-size:11.5px;color:#3f3a49;line-height:1.55"><span class="mono" style="font-size:10.5px;color:#b91c1c;flex:none">✕</span><span>{{ r }}</span></div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="flex:1;min-width:440px">
+      <div class="c" style="padding:16px 18px;border-color:#fecaca">
+        <div class="lbl" style="color:#b91c1c">HQ side · Detach an Active host</div>
+        <div style="font-size:11.5px;color:#3f3a49;margin-top:8px;line-height:1.6">Detach is not a brand judgement — it is for a collision, abuse, or DNS the operator abandoned. It asks for a typed reason, and that reason is what their admin reads.</div>
+        <div style="border:1px solid #e2e1e8;background:#fafafa;border-radius:9px;padding:10px 12px;margin-top:10px;font-size:11.5px;color:#615c6e;line-height:1.55">Type <span class="mono" style="color:#18181b">studio.northstar.vc</span> to confirm · reason required</div>
+        <div style="display:flex;gap:7px;margin-top:10px"><span class="danger">Detach hostname</span><span class="gho">Cancel</span></div>
+        <div style="margin-top:11px"><span class="gov">Recorded in Security</span></div>
+      </div>
+      <div class="c" style="padding:15px 17px;margin-top:12px">
+        <div class="lbl">What their admin sees afterwards</div>
+        <div style="border:1px solid #fde68a;background:#fffdf5;border-radius:9px;padding:11px 13px;margin-top:9px;font-size:11.5px;color:#3f3a49;line-height:1.6">HQ detached <span class="mono">studio.northstar.vc</span> on 22 Sep 2026 · collision with an earlier licence. Members fall back to <span class="mono">{{ dmPlatform }}</span> until a new host is Active.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ H34 · VIEWING-AS ON SETTINGS · DOMAIN ══════════ -->
+<section class="ab" id="h34">
+  <div class="ab-hd"><a class="ab-id" href="#h34">H34</a><span class="ab-nm">Viewing as their admin on Settings · Domain</span><span class="ab-sub">HQ can look · the page belongs to Admin · Subsidiary, not here</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navHome }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div style="background:#b91c1c;color:#fff;padding:10px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ eyeIcon }}"></span><sc-for list="{{ dmImpBar }}" as="b" hint-placeholder-count="4"><span style="font-size:11.5px"><span style="opacity:.7;font-weight:600;text-transform:uppercase;font-size:9.5px;letter-spacing:.06em">{{ b.k }}</span> <strong style="margin-left:4px">{{ b.v }}</strong></span></sc-for></div>
+        <div style="display:flex;align-items:center;gap:8px"><span class="mono" style="font-size:13px;font-weight:800">24:55</span><span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:#fff;color:#b91c1c">Return to HQ view</span></div>
+      </div>
+      <div style="background:{{ wlPrimary }};color:#fff;padding:9px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="width:16px;height:16px;border-radius:4px;background:{{ wlAccent }}"></span><span style="font-size:12.5px;font-weight:800">{{ wlPublic }}</span></div>
+        <span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.18);border-radius:4px;padding:3px 8px">READ-ONLY · HQ SUPPORT</span>
+      </div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Settings · Domain</h1>
+        <div class="c" style="padding:15px 17px;margin-top:13px">
+          <div class="lbl">DNS records · read-only from here</div>
+          <div style="display:grid;gap:8px;margin-top:9px">
+            <sc-for list="{{ dmRecords }}" as="r" hint-placeholder-count="2">
+              <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px;padding:10px 12px">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span style="font-size:11.5px;font-weight:700">{{ r.kind }}</span><span style="{{ r.pill }}">{{ r.state }}</span></div>
+                <!-- white-space:pre or the authored line breaks and the column padding both
+                     collapse, and the three fields run together as one string — the exact
+                     transcription error a DNS panel exists to prevent. -->
+                <div class="mono" style="font-size:10.5px;color:#3f3a49;margin-top:6px;line-height:1.7;white-space:pre">{{ r.line }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <!-- Disabled, not invisible: these two labels carry the artboard's point, so the ink
+               is the readable muted token the Not-recorded chip uses, and the dashed border
+               does the work of saying they cannot be pressed. -->
+          <div style="display:flex;gap:7px;margin-top:11px;flex-wrap:wrap"><span class="gho" style="color:#7c6f86;border-style:dashed;cursor:not-allowed">Check now · disabled</span><span class="gho" style="color:#7c6f86;border-style:dashed;cursor:not-allowed">Add domain · disabled</span></div>
+          <div style="font-size:11px;color:#615c6e;margin-top:10px;line-height:1.6">View-as does not complete their DNS. HQ can read the records and the state, which is what a support call needs; writing them is the operator's, because the records go in the operator's zone.</div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Home" scope="{{ wlPublic }}" hint-size="100%,560px"></dc-import></div>
   </div>
 </section></x-dc>
 <script type="text/x-dc" data-dc-script="">
@@ -1031,6 +2038,15 @@ class Component extends DCLogic {
       const c = M[t] || M.Expired;
       return 'font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap;flex:none';
     };
+    // ══ The one white-label operator drawn on this canvas. Sample kit, captioned as such.
+    // Their colours are theirs — deliberately not oxblood and not founder violet. ══
+    const WL = { publicName:'Studio Lyon', legal:'Studio Lyon Ventures SAS', primary:'#0f766e', accent:'#f59e0b', domain:'app.studiolyon.fr' };
+    const kindPill = (k) => k === 'wl'
+      ? 'font-size:10px;font-weight:800;letter-spacing:.04em;padding:2px 7px;border-radius:4px;background:#f0fdfa;color:#0f766e;border:1px solid #99f6e4;white-space:nowrap;flex:none'
+      : 'font-size:10px;font-weight:800;letter-spacing:.04em;padding:2px 7px;border-radius:4px;background:' + OXT + ';color:' + OX + ';border:1px solid ' + OXE + ';white-space:nowrap;flex:none';
+    // SLA pill by hours: green under 24, amber under 72, red beyond.
+    const slaP = (h) => { const c = h < 24 ? ['#ecfdf5','#047857','#a7f3d0'] : (h < 72 ? ['#fffbeb','#92400e','#fde68a'] : ['#fef2f2','#b91c1c','#fecaca']);
+      return 'font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap;flex:none'; };
     const seg = (on) => 'font-size:11.5px;font-weight:' + (on ? '700' : '600')
       + ';padding:6px 12px;border-radius:8px;cursor:pointer;'
       + (on ? 'background:' + OXT + ';color:' + OX + ';border:1px solid ' + OXE : 'background:#fff;color:#4a4553;border:1px solid #ececf1');
@@ -1083,7 +2099,7 @@ class Component extends DCLogic {
       if (mode === 'pick') {
         // On the picker, a country held by ANOTHER subsidiary is not a peer of a selection —
         // it is unavailable, and reads as such rather than as the same pink.
-        if (held && !susp) { bg = '#f4f4f6'; ink = '#615c6e'; edge = '#e2e1e8'; extra = ';cursor:not-allowed;opacity:.8'; }
+        if (held && !susp) { bg = '#f4f4f6'; ink = '#615c6e'; edge = '#e2e1e8'; extra = ';cursor:not-allowed'; }
         if (code === 'ES') { bg = OX; ink = '#fff'; edge = OX; extra = ';box-shadow:0 0 0 2px rgba(136,19,55,.22)'; }
         if (code === 'PT') { bg = '#fef2f2'; ink = '#b91c1c'; edge = '#b91c1c'; extra = ';border-width:1.5px;cursor:not-allowed'; }
       }
@@ -1119,9 +2135,112 @@ class Component extends DCLogic {
         { where:'H1–H7 · nav', what:'Sidebar is the eleven-row HQ group', why:'Home · Licences · Funds · Contracts · Team · Revenue · Content · Platform · Support · Security · Settings. Accounts is now Team; Governance lives under Security. The seven-row nav is not drawn anywhere.' },
         { where:'H2', what:'Coverage grid: sort control and open-licence affordance', why:'Held-active, held-suspended and white space were already the three states; the sort and the click are the additions. Renewal pipeline already carried days and fee. Title spelt Licences.' },
         { where:'H4 · H7', what:'Titles follow the nav rows', why:'H4 reads Team, H7 reads Security. Content unchanged.' },
-        { where:'H8–H14', what:'Appended, one per brief item', why:'H8 Contract + Deploy steps · H9 Team moves · H10 Statements ledger · H11 Localisation + Deployments · H12 Viewing-as overlay · H13 HQ rail. Every figure is a field; unreadable branches never poison the others.' }
+        { where:'H8–H14', what:'Appended, one per brief item', why:'H8 Contract + Deploy steps · H9 Team moves · H10 Statements ledger · H11 Localisation + Deployments · H12 Viewing-as overlay · H13 HQ rail · H14 Topology. Every figure is a field; unreadable branches never poison the others.' },
+        { where:'H8 · H11', what:'GitHub Actions is the only deployer', why:'Deploy dispatches branch-provision.yml with GITHUB_ACCESS_TOKEN — the missing credential the failure names. Deployments carry the registry names studioos-<code> · <code>.axal.vc, the run number, and jurisdiction eu; rollback dispatches cloudflare-worker-deploy.yml at a prior commit.' },
+        { where:'H9 · H12 · H13 · rail', what:'"Private link" is a service binding', why:'HQ reads a branch\u2019s records over BRANCH_<CODE> → studioos-<code>#HqEntrypoint. Aggregates never travel that way: studioos_metrics (Analytics Engine) and the AI Gateway are account-level, so a median or a guardrail count is current while the branch is unreadable. H12\u2019s stale guardrail row was wrong and is corrected.' },
+        { where:'H10', what:'Sources named', why:'Gross is what studioos-fr wrote to studioos_metrics; token P&L reads the AI Gateway by cf-aig-metadata and shows the per-branch spend limit HQ sets.' },
+        { where:'H15', what:'Analytics', why:'Appended. Reads studioos_metrics through the SQL API only: active accounts per branch, activation funnel, approval SLA, revenue by stream, token spend vs limit. Every aggregate summed from a series; Iberia\u2019s series ends at suspension instead of reading zero.' },
+        { where:'H16 · H17', what:'Platform consoles', why:'Retires /admin tabs Integration Keys, GitHub Sync, Payments, Promo Codes, Monitoring, Telegram Channels. Feature flags drawn Not recorded — no operator store exists.' },
+        { where:'H18 · H19', what:'Content authoring', why:'Retires /admin/assessment (authoring), Personas taxonomy, /admin/publications, /admin/network-profiles. Localisation and brand approval become lanes of equal standing; brand-approval lane is labelled "Axal subsidiaries only".' },
+        { where:'H20', what:'Team people desk', why:'Retires the /admin Users table for HQ. HQ-only actions (impersonate incl. admins, view-as, demote admin, transfer elevation, binding-agreement override) drawn here and nowhere on Admin; Admin\u2019s four actions read-only when viewing as a branch.' },
+        { where:'H21', what:'Billing exceptions', why:'Retires /admin Billing. Refunds are step-up; LTV and per-branch token margin are Not recorded because no store computes them.' },
+        { where:'H22 · H23 · H24', what:'Support, Security, Funds oversight', why:'Y1\u2019s three queues drawn as the Support row with a tenant × queue matrix; security_events as a monospace ledger with sanctions and DR drill Not recorded; Funds as a cross-branch registry read, not the LP workspace.' },
+        { where:'H25', what:'Impersonation bar · left on /admin', why:'Global chrome Who · As · Why · Limit matching S13; the list of what stays on /admin on purpose so nothing is swallowed silently.' },
+        { where:'H3 · H8 → H26', what:'Issue flow gains Kind as Step 1', why:'Entity shifts to 2, Territory to 3, Seats 4, Terms 5; Brand kit is Step 6 for white-label only; Contract + Deploy is 7 on the White-Label Operator Agreement. Territory picker gains a second, informational legend — Axal exclusivity never fires against an operator.' },
+        { where:'H1 · H2 → H27 · H28', what:'Kind pill on ledger and health cards', why:'Filter All / Axal / White-label. A white-label row shows its public name and mark; its card never carries a brand-approval count. Licence record states "Platform supervised. Brand unsupervised."' },
+        { where:'H26 · H32', what:'CORRECTION · domain configuration removed from HQ', why:'An earlier draft made Domain an HQ console. It is not: Super Admin stays on axal.vc and app.axal.vc and binds nothing else. The brand kit now collects no hostname of any kind — only the platform fallback is named, and that is issued by the deploy. A licence never waits on DNS.' },
+        { where:'H31', what:'Licence strip is status + Detach only', why:'Read-only on every tenant, subsidiary and white-label alike, because both bind their own host. No Approve, no Add domain, no DNS editor for HQ to complete on their behalf. One emergency action, Detach, with a typed reason — platform safety, not domain setup.' },
+        { where:'H33 · H34', what:'Collision and view-as, kept as read surfaces', why:'A collision refusal names the other operator\u2019s public name; Detach names HQ and the reason their admin reads. View-as shows the records and cannot write them — the records live in the tenant\u2019s own zone.' },
+        { where:'H11 · Y1 → H29 · H30', what:'Kind-gated behaviours', why:'Brand-approval lane empty by construction for white-label; escalation kinds reduced to Moderation · Seat increase · Other; viewing-as renders their chrome inside the frame with oxblood only on HQ\u2019s shell.' }
       ],
       mapSort: ['By state','A–Z'].map((l, i) => ({ label:l, style:seg(i === 0) })),
+
+      // ── H15 · Analytics. One dataset, index branch. Every series is an array here and every
+      // aggregate is summed from it; Iberia's series ends at its suspension rather than reading 0.
+      ...(() => {
+        // Plot box is the SVG alone (the y column is HTML beside it); RP keeps the last dot
+        // inside the box instead of half-clipped on the viewBox edge.
+        const W = 534, H = 150, PAD = 4, RP = 8, N = 8;
+        const COL = { 'AXL-001':'#881337', 'AXL-002':'#334155', 'AXL-003':'#0e7490', 'AXL-004':'#9c96a8' };
+        const SER = [
+          { id:'AXL-001', v:[288,296,301,309,318,326,331,338] },
+          { id:'AXL-002', v:[196,201,204,209,214,219,222,226] },
+          { id:'AXL-003', v:[141,144,147,149,152,153,155,156] },
+          { id:'AXL-004', v:[118,119,119,120,null,null,null,null] }
+        ];
+        const all = SER.flatMap(s => s.v).filter(v => v !== null);
+        const lo = 100, hi = 360;
+        const x = (i) => PAD + i * ((W - PAD - RP) / (N - 1));
+        const y = (v) => H - 4 - ((v - lo) / (hi - lo)) * (H - 12);
+        const range = ['8 weeks','Quarter','Year'];
+        const weeks = Array.from({ length:N }, (_, i) => 'w' + (30 + i));
+        const cur = SER.map(s => { const vs = s.v.filter(v => v !== null); return vs[vs.length - 1]; });
+        const prev = SER.map(s => { const vs = s.v.filter(v => v !== null); return vs[Math.max(0, vs.length - 5)]; });
+        const active = cur.reduce((a, b) => a + b, 0), activePrev = prev.reduce((a, b) => a + b, 0);
+        const FUN = [['Invited', 412], ['Signed in', 351], ['Agreement signed', 288], ['Active in week 2', 236]];
+        const SLA = [['France', 34], ['DACH', 19], ['Nordics', 27], ['Iberia', null]];
+        const STREAMS = [['Subscriptions','#881337'],['Programme fees','#334155'],['Perks','#0e7490']];
+        const REV = [['France',[64200,22800,5100]],['DACH',[41800,15200,3900]],['Nordics',[27400,9800,2100]],['Iberia',null]];
+        const TOK = [['France',412,600],['DACH',288,450],['Nordics',171,300],['Iberia',0,0]];
+        const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+        return {
+          navAn: nav('Home'),
+          h15Source: 'studioos_metrics · SQL API · queried 14 Sep 10:44:02',
+          h15Range: range.map((l, i) => ({ label:l, style:seg(i === 0) })),
+          h15Kpis: [
+            { label:'Active accounts', value:String(active), delta:'+' + (active - activePrev) + ' · 4 wk', deltaInk:'#047857', note:'sum of the four series\u2019 latest points · Iberia\u2019s last is from w33' },
+            { label:'Activation · invite → active', value:pct(FUN[3][1], FUN[0][1]) + '%', delta:FUN[3][1] + ' of ' + FUN[0][1], deltaInk:'#615c6e', note:'30 days · all branches · event counts, not rows' },
+            { label:'Median approval age', value:'26h', delta:'3 branches reporting', deltaInk:'#615c6e', note:'weighted by decisions · Iberia has none' },
+            { label:'Token spend · month', value:eur(TOK.reduce((a, t) => a + t[1], 0)), delta:'of ' + eur(TOK.reduce((a, t) => a + t[2], 0)) + ' limit', deltaInk:'#615c6e', note:'AI Gateway · account-level · current for every branch' }
+          ],
+          h15Grid: [100, 180, 260, 340].map(v => ({ y:y(v).toFixed(1), pct:(y(v) / H * 100).toFixed(2), label:String(v) })),
+          h15Weeks: weeks.map((label) => ({ label })),
+          h15Series: SER.map(s => { const L = LICENSES.find(l => l.id === s.id); const pts = s.v.map((v, i) => v === null ? null : x(i).toFixed(1) + ',' + y(v).toFixed(1)).filter(Boolean);
+            const lastI = s.v.reduce((a, v, i) => v === null ? a : i, 0);
+            return { name:L.name.replace('Axal VC ', ''), color:COL[s.id], points:pts.join(' '), lastX:x(lastI).toFixed(1), lastY:y(s.v[lastI]).toFixed(1),
+              last:String(s.v[lastI]), dash: s.id === 'AXL-004' ? '3 3' : '0', flag: s.id === 'AXL-004' ? 'series ends w33 · suspended' : (s.id === 'AXL-003' ? 'current · gateway, not binding' : null) }; }),
+          h15Funnel: FUN.map((f, i) => ({ k:f[0], n:String(f[1]), rate: i === 0 ? '100%' : pct(f[1], FUN[i - 1][1]) + ' of prior', pct:String(pct(f[1], FUN[0][1])), op:String(1 - i * .18) })),
+          h15Sla: SLA.map(s => ({ branch:s[0], v: s[1] === null ? 'none' : s[1] + 'h', pct: s[1] === null ? '0' : String(pct(s[1], 48)), color: s[1] === null ? '#7c6f86' : (s[1] > 24 ? '#b45309' : '#047857') })),
+          h15SlaNote: 'Amber past 24 hours. Iberia reads "none" — no decisions since suspension — rather than 0h, which would read as instant.',
+          h15Rev: REV.map(r => { const t = r[1] ? r[1].reduce((a, b) => a + b, 0) : 0; return { branch:r[0], total: r[1] ? eur(t) : 'Not recorded',
+            segs: r[1] ? r[1].map((v, i) => ({ pct:String(pct(v, t)), color:STREAMS[i][1] })) : [{ pct:'0', color:'transparent' }] }; }),
+          h15RevLegend: STREAMS.map(s => ({ name:s[0], color:s[1] })),
+          h15Tok: TOK.map(t => ({ branch:t[0], v: t[2] ? eur(t[1]) + ' of ' + eur(t[2]) : 'limit 0 · suspended', pct:String(pct(t[1], t[2])), color: pct(t[1], t[2]) >= 80 ? '#b45309' : '#881337' })),
+          h15TokNote: 'A branch at 80% of its limit reads amber; the limit itself is set on H10. Iberia\u2019s limit was set to 0 with the suspension, so its spend is structurally zero, not quiet.',
+          h15Foot: 'Aggregates, never records. Nordics is unreadable over its binding today (H9) and is nonetheless current on every card here, because it kept writing to studioos_metrics and the AI Gateway — the two account-level services no branch outage can interrupt. What this page cannot tell you is anything about a named account; that is a binding read, and it lives on Team.'
+        };
+      })(),
+
+      // ── H14 · Topology, from the registry scheme. Branch boxes are built from LICENSES so a
+      // fifth tenant would appear here the moment it is issued.
+      ...(() => {
+        const CODE = { 'AXL-001':'fr', 'AXL-002':'dach', 'AXL-003':'nordics', 'AXL-004':'iberia' };
+        const STATE = { fr:['Active','#ecfdf5','#047857','#a7f3d0'], dach:['Active','#ecfdf5','#047857','#a7f3d0'],
+          nordics:['Unreadable 10:41','#fef2f2','#b91c1c','#fecaca'], iberia:['Suspended','#f4f4f6','#615c6e','#e4e4e8'] };
+        return {
+          h14Actions: ['cloudflare-worker-deploy.yml · push to main', 'branch-provision.yml · workflow_dispatch'],
+          h14ActionsNote: 'GitHub Actions is the only thing that deploys anything. HQ\u2019s Deploy step dispatches branch-provision.yml with GITHUB_ACCESS_TOKEN; no screen writes to Cloudflare directly.',
+          h14HqAccess: 'Access policy on /hq and /admin/*',
+          h14Hq: [
+            { k:'Storage', items:['D1 studioos-db · jurisdiction eu', 'KV TOKENS · RATE_LIMITS', 'R2 files · publications · backups', 'Queue studioos-job-queue (+dlq)', 'DO PipelineRoom · OnboardingChat', 'Vectorize axal-search'] },
+            { k:'HQ-only tables', items:['territory_licences…', 'licence_deployments', 'hq_escalations', 'subsidiary_statements', 'licence_promo_ceilings', 'branch_benchmarks'] },
+            { k:'RPC', items:['exports BranchEntrypoint · escalate · licence · templates · brandKit · partners', 'binds BRANCH_FR → studioos-fr#HqEntrypoint', 'binds BRANCH_DACH → studioos-dach#HqEntrypoint', '… one binding per registry row, generated'] }
+          ],
+          h14Branches: LICENSES.map(l => { const c = CODE[l.id], s = STATE[c]; return {
+            host: c + '.axal.vc', worker: 'studioos-' + c, res: 'jurisdiction eu', state: s[0],
+            pill: 'font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:'+s[1]+';color:'+s[2]+';border:1px solid '+s[3]+';white-space:nowrap',
+            items: ['D1 studioos-' + c + ' (eu)', 'KV ×2', 'R2 (eu)', 'queue', 'DO (eu)', 'Vectorize studioos-' + c, 'vars BRANCH_CODE=' + c],
+            bind: 'exports HqEntrypoint · binds HQ → studioos. No binding to any other branch.',
+            style: c === 'iberia' ? 'background:#fafafa' : (c === 'nordics' ? 'border-color:#fecaca' : '') }; }),
+          h14Shared: [
+            { what:'Analytics Engine · studioos_metrics', how:'Every worker writes events with index branch. HQ reads them through the SQL API; a branch cannot.', feeds:'H10 statements · H1 backlog trends · S11 anonymised median · the audit mirror Security reads when a branch is down' },
+            { what:'AI Gateway', how:'cf-aig-metadata {branch, user} on every call; a spend limit per branch.', feeds:'H10 token P&L · H12 guardrail hits — current even when the branch\u2019s records are unreadable' },
+            { what:'Tail Worker · studioos-tail', how:'Receives logs by script name from HQ and every branch.', feeds:'Health on H11 Deployments' },
+            { what:'Workers AI · Browser Rendering', how:'Account-level compute; the rails call it carrying the branch metadata above.', feeds:'Every Worker AI rail, both tiers' },
+            { what:'Residency (D.1)', how:'EU branches: D1, DO and R2 with jurisdiction eu. Non-EU: a location hint only, stated on the licence.', feeds:'H8 residency step · S11 Settings row' }
+          ]
+        };
+      })(),
 
       // ── H13 · Rail states. scope is a prop on the shared AdminRail, so the overlay and the rail
       // cannot disagree about which branch is being read.
@@ -1132,7 +2251,7 @@ class Component extends DCLogic {
       h13Rules: [
         { rule:'Scope precedes the question', why:'The chip is chosen before typing, not inferred from the answer — so "how many overdue approvals?" has one meaning per scope.' },
         { rule:'Cost is per scope', why:'All branches is up to four reads and four drafts; the estimate multiplies before the run, and the receipt afterwards shows the reads that actually happened.' },
-        { rule:'Unreadable is a word in the answer', why:'"Three of four branches answered; Nordics did not." A total that quietly drops a branch is the failure the architecture makes likely, so the rail is required to say it.' },
+        { rule:'Unreadable applies to records, not aggregates', why:'"Three of four branches answered; Nordics did not" — for anything read over a branch binding. A trend, a median or a guardrail count comes from studioos_metrics or the AI Gateway, which are account-level and answer when the branch does not; the rail says which kind it used.' },
         { rule:'Anything about a named branch is logged', why:'Cross-branch answers write to Security, the same as an impersonation — reading a branch is a privileged act even when it is only a question.' }
       ],
 
@@ -1144,11 +2263,13 @@ class Component extends DCLogic {
         const L = { Founder:['#f5f2ff','#6d28d9','#e6dcff'], Investor:['#f5f5ff','#3730a3','#c7d2fe'] };
         const row = (who, lic, trust) => ({ who, lic, trust, trustPill:pill(trust),
           licStyle:'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:'+L[lic][0]+';color:'+L[lic][1]+';border:1px solid '+L[lic][2] });
+        // Counts come from the AI Gateway (cf-aig-metadata branch=…), not from a branch read — so
+        // Nordics is current here even though its HqEntrypoint is unreadable on H9.
         const G = [
-          { branch:'Axal VC France', b:4, f:2, p:7, src:'Advisor + Founder rails · llama-guard-3-8b · ' + READ, stale:false },
-          { branch:'Axal VC DACH', b:2, f:1, p:3, src:'Advisor rail · llama-guard-3-8b · read 10:41:03', stale:false },
-          { branch:'Axal VC Nordics', b:0, f:0, p:1, src:'unreadable today · counts as of 2 Sep 07:15', stale:true },
-          { branch:'Axal VC Iberia', b:0, f:0, p:0, src:'no traffic since suspension 18 Jul', stale:false }
+          { branch:'Axal VC France', b:4, f:2, p:7, src:'AI Gateway · branch=fr · llama-guard-3-8b · ' + READ, stale:false },
+          { branch:'Axal VC DACH', b:2, f:1, p:3, src:'AI Gateway · branch=dach · llama-guard-3-8b · 10:41:03', stale:false },
+          { branch:'Axal VC Nordics', b:0, f:0, p:1, src:'AI Gateway · branch=nordics · current — the gateway answers when the branch does not', stale:false },
+          { branch:'Axal VC Iberia', b:0, f:0, p:0, src:'AI Gateway · branch=iberia · spend limit 0 since suspension 18 Jul', stale:false }
         ];
         const sum = (k) => G.reduce((a, g) => a + g[k], 0);
         return {
@@ -1166,11 +2287,11 @@ class Component extends DCLogic {
           ],
           h12Rows: [row('Guillaume Lauzier','Founder','Verified'), row('A. Chen','Investor','Verified')],
           h12TeamNote: 'Two accounts, because that is what the branch returned — the HQ-held group and the other three branches are not on this screen at all. "Move…" is gone rather than greyed: an action that cannot run from this view is not drawn in it.',
-          h12Guard: G.concat([{ branch:'All branches', b:sum('b'), f:sum('f'), p:sum('p'), src:'foots to Security totals · includes one stale row', total:true }]).map(g => ({
+          h12Guard: G.concat([{ branch:'All branches', b:sum('b'), f:sum('f'), p:sum('p'), src:'foots to Security totals · one source, four indexes', total:true }]).map(g => ({
             branch:g.branch, blocked:String(g.b), flagged:String(g.f), passed:String(g.p), src:g.src,
             ink: g.b ? '#b91c1c' : '#615c6e',
             rowStyle: g.total ? 'border-top:2px solid #18181b;font-weight:700' : (g.stale ? 'background:#fffbeb' : '') })),
-          h12GuardNote: 'Nordics is unreadable today, so its row carries the counts from the last successful read and says so; the total includes them because omitting a branch would understate the platform, and the label is what keeps the total honest. Source names the rail and the screening model, not "AI".'
+          h12GuardNote: 'Nordics\u2019 records are unreadable today (H9), but its guardrail row is current: the AI Gateway is account-level and every call carries its branch in cf-aig-metadata, so the count never depended on the branch answering. What does go stale when a branch is down is its audit trail — and Security reads that from the audit mirror in studioos_metrics, labelled as the mirror. Source names the gateway and the screening model, not "AI".'
         };
       })(),
 
@@ -1187,12 +2308,14 @@ class Component extends DCLogic {
         const VER = [['Axal VC France','v2.1'],['Axal VC DACH','v2.1'],['Axal VC Nordics','v2.0'],['Axal VC Iberia','v2.1']];
         const NEW = 'v2.2';
         const older = VER.filter(v => v[1] !== NEW);
+        // Worker and host follow the registry scheme studioos-<code> · <code>.axal.vc. Residency
+        // is the licence's D.1 term: EU branches carry jurisdiction eu on D1, DO and R2.
         const DEP = [
-          { worker:'branch-france', host:'france.axal.vc', res:'EU-guaranteed', ver:'v41', last:'12 Sep 09:10', health:'Healthy', t:'ok', pct:100 },
-          { worker:'branch-dach', host:'dach.axal.vc', res:'EU-guaranteed', ver:'v41', last:'12 Sep 09:12', health:'Healthy', t:'ok', pct:50 },
-          { worker:'branch-nordics', host:'nordics.axal.vc', res:'Region-hinted · WEUR', ver:'v40', last:'30 Aug 08:55', health:'Unreadable', t:'bad', pct:100 },
-          { worker:'branch-iberia', host:'iberia.axal.vc', res:'EU-guaranteed', ver:'v39', last:'18 Jul 11:40', health:'Suspended', t:'chg', pct:100 },
-          { worker:'branch-iberia-sur', host:'iberia-sur.axal.vc', res:'EU-guaranteed', ver:'—', last:'14 Sep 10:02 · failed', health:'Deploying', t:'open', pct:0 }
+          { worker:'studioos-fr', host:'fr.axal.vc', res:'eu · D1 DO R2', ver:'v41', last:'12 Sep 09:10 · run #418', health:'Healthy', t:'ok', pct:100 },
+          { worker:'studioos-dach', host:'dach.axal.vc', res:'eu · D1 DO R2', ver:'v41', last:'12 Sep 09:12 · run #418', health:'Healthy', t:'ok', pct:50 },
+          { worker:'studioos-nordics', host:'nordics.axal.vc', res:'eu · D1 DO R2', ver:'v40', last:'30 Aug 08:55 · run #402', health:'Unreadable', t:'bad', pct:100 },
+          { worker:'studioos-iberia', host:'iberia.axal.vc', res:'eu · D1 DO R2', ver:'v39', last:'18 Jul 11:40 · run #377', health:'Suspended', t:'chg', pct:100 },
+          { worker:'studioos-iberia-sur', host:'iberia-sur.axal.vc', res:'eu · D1 DO R2', ver:'—', last:'14 Sep 10:02 · dispatch failed', health:'Deploying', t:'open', pct:0 }
         ];
         const H = { ok:['#ecfdf5','#047857','#a7f3d0'], bad:['#fef2f2','#b91c1c','#fecaca'], chg:['#f4f4f6','#615c6e','#e4e4e8'], open:['#fffbeb','#92400e','#fde68a'] };
         return {
@@ -1206,9 +2329,9 @@ class Component extends DCLogic {
           h11DeploySub: DEP.filter(d => d.t === 'ok').length + ' healthy · 1 unreadable · 1 suspended · 1 deploying',
           h11Deploys: DEP.map(d => ({ worker:d.worker, host:d.host, res:d.res, ver:d.ver, last:d.last, health:d.health, pct:String(d.pct),
             pill:'font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+H[d.t][0]+';color:'+H[d.t][1]+';border:1px solid '+H[d.t][2]+';white-space:nowrap',
-            rbClass: d.ver === '—' ? 'dis' : 'vm', rowStyle: d.t === 'bad' ? 'background:#fffbfb' : (d.t === 'chg' ? 'opacity:.7' : '') })),
-          h11RbTitle: 'Roll back branch-nordics · v40 → v39',
-          h11RbBody: 'Its health has been unreadable since 10:41; the last known-good version is v39, deployed 2 Aug. Rollback redeploys that worker version only — the database and its schema are untouched, so a rollback across a schema change is refused here rather than attempted.',
+            rbClass: d.ver === '—' ? 'dis' : 'vm', rowStyle: d.t === 'bad' ? 'background:#fffbfb' : (d.t === 'chg' ? 'background:#fafafa' : '') })),
+          h11RbTitle: 'Roll back studioos-nordics · v40 → v39',
+          h11RbBody: 'Its HqEntrypoint has been unreadable since 10:41; the last known-good version is v39, run #398 on 2 Aug. Rollback dispatches cloudflare-worker-deploy.yml at that commit — GitHub Actions does the deploy, HQ only asks. D1 and its schema are untouched, so a rollback across a schema migration is refused here rather than attempted.',
           h11RbTo: 'v39'
         };
       })(),
@@ -1222,6 +2345,7 @@ class Component extends DCLogic {
         const owed = Math.round(gross * FR.rev);
         const paid = 30000, disputed = owed - paid;
         const frTok = tokenSplit.find(t => t.name === FR.name);
+        const SPEND_LIMIT_FR = 600; // AI Gateway per-branch spend limit, an HQ-set control
         const promo = [
           { name:'AXL-001 · France', ceiling:12000, issued:7450, asOf:'reported 12 Sep 08:40', frozen:false },
           { name:'AXL-002 · DACH', ceiling:9000, issued:3200, asOf:'reported 13 Sep 07:15', frozen:false },
@@ -1232,7 +2356,7 @@ class Component extends DCLogic {
           h10Branches: LICENSES.map((l, i) => ({ label:l.name.replace('Axal VC ', ''), style:seg(i === 0) })),
           h10Periods: ['Q2 2026','Q3 2026','Q1 2026'].map((p, i) => ({ label:p, style:seg(i === 0) })),
           h10PeriodNote: 'Q3 closes 30 Sep — the branch reports after close, so Q3 has no gross yet.',
-          h10Title: FR.name + ' · Q2 2026', h10Reported: 'Reported by the branch at 3 Jul 2026 08:52',
+          h10Title: FR.name + ' · Q2 2026', h10Reported: 'Written by studioos-fr to studioos_metrics (branch=fr) · last event 30 Jun 23:58 · queried by HQ 3 Jul 08:52',
           h10SharePct: Math.round(FR.rev * 100) + '%',
           h10Streams: STR.map(([name, g]) => ({ name, gross:eur(g), owed:eur(Math.round(g * FR.rev)) })),
           h10Gross: eur(gross), h10Owed: eur(owed),
@@ -1245,16 +2369,18 @@ class Component extends DCLogic {
           h10Balance: eur(owed - paid - disputed) + ' outstanding · ' + eur(disputed) + ' in dispute',
           h10BalanceNote: 'Owed − paid − disputed. Disputed is not forgiven; it is parked.',
           h10Token: [
-            { label:'Gateway cost · metered by provider', value:eur(frTok.cost) },
+            { label:'Gateway cost · AI Gateway, cf-aig-metadata branch=fr', value:eur(frTok.cost) },
+            { label:'Spend limit · per branch, set at HQ', value:eur(frTok.cost) + ' of ' + eur(SPEND_LIMIT_FR) + ' · ' + Math.round(frTok.cost / SPEND_LIMIT_FR * 100) + '%' },
             { label:'Billed to accounts · estimate at ' + Math.round(FR.token * 100) + '% margin', value:'≈ ' + eur(frTok.cost + frTok.margin) },
             { label:'HQ margin · estimate', value:'≈ ' + eur(frTok.margin) }
           ],
-          h10TokenCaveat: 'Only the gateway cost is measured. What the branch actually billed its accounts arrives in its period report and is not in this figure — so this card cannot be reconciled against the statement on the left, and does not pretend to be.',
+          h10TokenCaveat: 'Only the gateway cost is measured — per branch, because every call carries cf-aig-metadata {branch, user}. What the branch actually billed its accounts arrives in its period report and is not in this figure, so this card cannot be reconciled against the statement on the left and does not pretend to be. The spend limit is the one number here HQ controls.',
           h10Promo: promo.map(p => ({ name:p.name, asOf:p.asOf, ceiling:eur(p.ceiling),
             issued: p.issued === null ? 'Not recorded' : eur(p.issued),
             remaining: p.frozen ? 'frozen' : (p.issued === null ? '—' : eur(p.ceiling - p.issued)),
             ink: p.frozen ? '#615c6e' : (p.issued === null ? '#615c6e' : (p.ceiling - p.issued < p.ceiling * 0.25 ? '#b45309' : '#18181b')),
-            rowStyle: p.frozen ? 'opacity:.6' : '' })),
+            // A frozen ceiling is a state the reader has to read, not a row to fade out.
+            rowStyle: p.frozen ? 'background:#fafafa' : '' })),
           h10PromoNote: 'The ceiling is the only editable figure, and it is HQ\u2019s. Issued is what the branch last reported, with the time; Nordics has not reported since 2 Sep, so its remaining is unknown rather than assumed to be the whole ceiling.'
         };
       })(),
@@ -1269,11 +2395,11 @@ class Component extends DCLogic {
           licStyle:'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:'+L[lic][0]+';color:'+L[lic][1]+';border:1px solid '+L[lic][2] });
         return [
           { branch:'HQ-held', count:'1', note:'accounts with no branch', noteInk:'#615c6e', rows:[row('Elena Ruiz','HQ-held','Investor','Verified')], empty:null, style:'background:#fff5f7' },
-          { branch:'Axal VC France', count:'2', note:'read 14 Sep 10:41:03', noteInk:'#615c6e', rows:[row('Guillaume Lauzier','Axal VC France','Founder','Verified'), row('A. Chen','Axal VC France','Investor','Verified')], empty:null, style:'' },
-          { branch:'Axal VC DACH', count:'1', note:'read 14 Sep 10:41:03', noteInk:'#615c6e', rows:[row('K. Nilsson','Axal VC DACH','Founder','Verified')], empty:null, style:'' },
-          { branch:'Axal VC Nordics', count:'—', note:'unreadable · private link timed out 10:41:08', noteInk:'#b91c1c', rows:null,
-            empty:'Nordics did not answer. Its accounts are absent from this list, not counted as zero — the other four groups are complete. Retry reads this branch alone.', style:'border-color:#fecaca;border-style:dashed' },
-          { branch:'Axal VC Iberia', count:'1', note:'licence suspended · read-only', noteInk:'#92400e', rows:[row('Marc Delacroix','Axal VC Iberia','Founder','Suspended')], empty:null, style:'opacity:.8' }
+          { branch:'Axal VC France', count:'2', note:'BRANCH_FR → studioos-fr · 10:41:03', noteInk:'#615c6e', rows:[row('Guillaume Lauzier','Axal VC France','Founder','Verified'), row('A. Chen','Axal VC France','Investor','Verified')], empty:null, style:'' },
+          { branch:'Axal VC DACH', count:'1', note:'BRANCH_DACH → studioos-dach · 10:41:03', noteInk:'#615c6e', rows:[row('K. Nilsson','Axal VC DACH','Founder','Verified')], empty:null, style:'' },
+          { branch:'Axal VC Nordics', count:'—', note:'unreadable · BRANCH_NORDICS RPC timed out 10:41:08', noteInk:'#b91c1c', rows:null,
+            empty:'studioos-nordics did not answer its HqEntrypoint call. Its accounts are absent from this list, not counted as zero — the other four groups are complete. Retry calls this binding alone.', style:'border-color:#fecaca;border-style:dashed' },
+          { branch:'Axal VC Iberia', count:'1', note:'licence suspended · read-only', noteInk:'#92400e', rows:[row('Marc Delacroix','Axal VC Iberia','Founder','Suspended')], empty:null, style:'background:#fafafa' }
         ];
       })(),
       h9Move: [
@@ -1282,7 +2408,7 @@ class Component extends DCLogic {
         { label:'To', value:'Axal VC DACH · re-invited', ink:'font-weight:600' },
         { label:'Reason', value:'"Relocated to Berlin · employer confirmed"', ink:'color:#615c6e' }
       ],
-      h9Confirm: 'The account is closed on Axal VC France with the reason above, and re-invited on Axal VC DACH. Both branches are notified. Records stay where they were: France keeps its history, DACH starts a new record when the invitation is accepted. Nothing is copied between databases.',
+      h9Confirm: 'The account is closed on Axal VC France with the reason above, and re-invited on Axal VC DACH. Both branches are notified over their bindings. Records stay where they were: D1 studioos-fr keeps its history, studioos-dach starts a new record when the invitation is accepted. Nothing is copied between databases.',
       h9History: [
         { when:'14 Sep 11:02', what:'Moved · A. Chen', detail:'France → DACH · by T. Okafor · "relocated to Berlin, employer confirmed" · invitation pending' },
         { when:'Yesterday 16:33', what:'Moved · K. Nilsson', detail:'Nordics → DACH · by T. Okafor · "relocated, employer confirmed" · accepted 17:10' }
@@ -1307,25 +2433,27 @@ class Component extends DCLogic {
       h8Rule: 'A pending signature does not block Deploy. The branch can exist before the paper is countersigned; the licence record shows both states side by side until they agree, and nothing routes accounts to the branch until it does.',
       h8Host: 'iberia-sur.axal.vc',
       h8Residency: [
-        { label:'EU-guaranteed', note:'Selected · data stays in EU jurisdiction', hints:null,
+        { label:'EU · jurisdiction eu', note:'Selected · D1, DO and R2 created with jurisdiction eu', hints:null,
           style:'border:1.5px solid #881337;background:#fff5f7;border-radius:9px;padding:10px 12px' },
-        { label:'Region-hinted', note:'A hint, not a guarantee', style:'border:1px solid #ececf1;background:#fbfbfc;border-radius:9px;padding:10px 12px',
+        { label:'Region-hinted', note:'A location hint only, stated on the licence — not a guarantee', style:'border:1px solid #ececf1;background:#fbfbfc;border-radius:9px;padding:10px 12px',
           hints:['WEUR','EEUR','ENAM','WNAM','APAC','OC'].map(code => ({ code, style:'font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:4px;background:#f4f4f6;color:#4a4553;border:1px solid #e8e8ec' })) },
+        // Same rule as the X row on H17: an unavailable option that is deliberately shown must
+        // stay readable, so the step-down is the background and the dashed edge, never opacity.
         { label:'In-country', note:'Not available · no ES-only region exists', hints:null,
-          style:'border:1px dashed #e2e1e8;background:#fff;border-radius:9px;padding:10px 12px;opacity:.6;cursor:not-allowed' }
+          style:'border:1px dashed #e2e1e8;background:#fafafa;border-radius:9px;padding:10px 12px;cursor:not-allowed' }
       ],
-      h8Creates: ['database · iberia-sur', 'worker · branch-iberia-sur', 'queue · iberia-sur-events', 'storage · iberia-sur-files', 'hostname · iberia-sur.axal.vc'],
-      h8TimelineSub: 'Requested 14 Sep 10:02:11 · 3 of 8 complete · 1 failed · 4 waiting',
+      h8Creates: ['D1 studioos-iberia-sur · jurisdiction eu', 'Worker studioos-iberia-sur', 'KV TOKENS · RATE_LIMITS', 'R2 · eu', 'Queue (+dlq)', 'DO · jurisdiction eu', 'Vectorize studioos-iberia-sur', 'vars BRANCH_CODE=iberia-sur', 'hostname iberia-sur.axal.vc', 'HQ binding BRANCH_IBERIA_SUR → #HqEntrypoint'],
+      h8TimelineSub: 'Requested 14 Sep 10:02:11 · branch-provision.yml (workflow_dispatch) · 1 of 9 complete · 1 failed · 7 waiting',
       h8Timeline: [
-        ['Requested','10:02:11','ok','by T. Okafor'], ['Database created','10:02:19','ok','EU-guaranteed'], ['Schema applied','10:02:23','ok','v41 · 118 tables'],
-        ['Secrets present','10:02:24','fail','BRANCH_SIGNING_KEY missing'], ['Principal seeded','—','wait','blocked by step 4'],
-        ['Worker live','—','wait',''], ['Hostname active','—','wait',''], ['Linked to HQ','—','wait','private link']
+        ['Requested','10:02:11','ok','HQ · T. Okafor'], ['Workflow dispatched','10:02:12','fail','GITHUB_ACCESS_TOKEN not set'],
+        ['D1 created','—','wait','jurisdiction eu'], ['Schema applied','—','wait',''], ['Secrets present','—','wait',''],
+        ['Principal seeded','—','wait',''], ['Worker live','—','wait','studioos-iberia-sur'], ['Hostname active','—','wait',''], ['Linked to HQ','—','wait','binding regenerated']
       ].map(([step, time, st, note]) => {
         const M = { ok:['#047857','#ecfdf5','#a7f3d0','#3f3a49'], fail:['#b91c1c','#fef2f2','#fecaca','#b91c1c'], wait:['#d4d2dc','#fbfbfc','#f0eff4','#615c6e'] };
         const c = M[st];
         return { step, time, note: note || 'waiting', dot:c[0], ink:c[3], style:'border:1px solid '+c[2]+';background:'+c[1]+';border-radius:9px;padding:10px 11px' };
       }),
-      h8Missing: 'Step 4 needs BRANCH_SIGNING_KEY, an HQ credential that has not been set — the branch signs its reports to HQ with it. Steps 5–8 hold until it exists; nothing is retried automatically, and the four waiting steps will run in order once it is present.',
+      h8Missing: 'Step 2 dispatches branch-provision.yml on GitHub Actions — the only thing that deploys anything — and needs GITHUB_ACCESS_TOKEN, an HQ credential that has not been set. Nothing is created until the run starts; the seven waiting steps are the workflow\u2019s own, reported back as it goes, and none is retried automatically.',
       subCount:String(subCount), countryCount:String(countryCount),
 
       // ── H1 ──
@@ -1344,7 +2472,7 @@ class Component extends DCLogic {
         accounts:l.accounts.toLocaleString('en-US'), mtd: l.mtd ? eur(l.mtd) : '—',
         backlog: l.status === 'Suspended' ? 'Queues frozen' : l.backlog + ' queued · oldest ' + l.oldest + 'h',
         backlogInk: l.status === 'Suspended' ? '#615c6e' : (l.oldest >= 72 ? '#b91c1c' : (l.oldest >= 24 ? '#b45309' : '#047857')),
-        cardStyle:'border:1px solid ' + (l.status === 'Suspended' ? '#e2e1e8;background:#fbfbfc;opacity:.72'
+        cardStyle:'border:1px solid ' + (l.status === 'Suspended' ? '#e2e1e8;background:#fafafa'
           : (l.oldest >= 72 ? '#fecaca;background:#fffbfb' : '#f0eff4;background:#fbfbfc')) + ';border-radius:11px;padding:13px 14px'
       })),
       subsNote: worst.name + ' has the oldest item at ' + worst.oldest + ' hours and the largest backlog at '
@@ -1371,7 +2499,7 @@ class Component extends DCLogic {
         rev:Math.round(l.rev * 100) + '%', token:Math.round(l.token * 100) + '%',
         status:l.status, pill:pill(l.status),
         rowStyle:'display:grid;grid-template-columns:.9fr 1.1fr .85fr .6fr .7fr .65fr .8fr;gap:10px;align-items:center;border-bottom:1px solid #f6f5f9;'
-          + (l.status === 'Suspended' ? 'background:#fbfbfc;opacity:.7;' : '')
+          + (l.status === 'Suspended' ? 'background:#fafafa;' : '')
       })),
       licNote: countryCount + ' of 27 EU countries are held. Nordics carries a ' + Math.round(LICENSES[2].rev * 100)
         + '% revenue share against ' + Math.round(LICENSES[0].rev * 100)
@@ -1552,7 +2680,311 @@ class Component extends DCLogic {
         { what:'Export · DACH member table', meta:'M. Weber · 377 rows · yesterday 18:04', dur:'complete', edge:'#f0eff4', bg:'#fbfbfc' },
         { what:'Impersonation · N. Okonkwo', meta:'HQ · T. Okafor · Aug 24 · expired at 30m', dur:'30m', edge:'#f0eff4', bg:'#fbfbfc' }
       ],
-      accessNote: 'An impersonation that expired at its limit is recorded the same way as one ended early — the log does not distinguish diligence from the clock running out, and it should not.'
+      accessNote: 'An impersonation that expired at its limit is recorded the same way as one ended early — the log does not distinguish diligence from the clock running out, and it should not.',
+
+      // ── H16 · P1 Integration keys ──
+      p1Keys: [
+        { name:'Stripe', masked:'sk_live_••••7f2a', rotated:'12 Aug 2026', state:'Active', pill:pill('Active') },
+        { name:'GitHub App', masked:'ghs_••••9c11', rotated:'03 Jun 2026', state:'Active', pill:pill('Active') },
+        { name:'Google OAuth', masked:'GOCSPX-••••a44', rotated:'19 Mar 2026', state:'Expired', pill:pill('Expired') },
+        { name:'Telegram Bot', masked:'••••:AAH-3k9', rotated:'28 Aug 2026', state:'Active', pill:pill('Active') }
+      ],
+
+      // ── H16 · P2 GitHub Sync ──
+      p2Stats: [
+        { k:'Synced (24h)', v:'214', ink:'#047857' }, { k:'Failed (24h)', v:'3', ink:'#b91c1c' },
+        { k:'Avg lag', v:'41s', ink:'#18181b' }
+      ],
+      p2Events: [
+        { what:'AXL-002 · billing dispute #4471', repo:'axal/support-tickets', state:'Synced', pill:pill('Active') },
+        { what:'AXL-001 · KYC escalation #4468', repo:'axal/support-tickets', state:'Synced', pill:pill('Active') },
+        { what:'AXL-003 · deploy failure #4470', repo:'axal/support-tickets', state:'Failed', pill:pill('Suspended') }
+      ],
+      p2Note: 'ticket_sync_events\u2019 health belongs here because the mirror itself is one platform-wide job, not because any one branch\u2019s ticket volume matters more. A subsidiary reads its own tickets on Support; it does not see this sync log.',
+
+      // ── H16 · P3 Payments catalog ──
+      p3Fields: [
+        { label:'Publishable key', value:'pk_live_••••4e91', ink:'font-weight:600' },
+        { label:'Catalog sync', value:'Last run 21 Sep, 06:00 · OK', ink:'color:#047857;font-weight:600' },
+        { label:'Products / prices', value:'11 / 26', ink:'color:#18181b' },
+        { label:'Webhook endpoint', value:'Healthy · 200 in 0.4s', ink:'color:#047857' }
+      ],
+
+      // ── H16 · P4 Promo codes ──
+      p4Codes: [
+        { code:'LAUNCH-FR-26', terms:'30% off · first 3 months · France cohort', redeemed:'41 / 100', state:'Active', pill:pill('Active') },
+        { code:'PARTNER-Q3', terms:'15% off · platform-wide · no expiry set', redeemed:'9 / —', state:'Active', pill:pill('Active') },
+        { code:'DACH-PILOT', terms:'50% off · DACH pilot cohort only', redeemed:'20 / 20', state:'Expired', pill:pill('Expired') }
+      ],
+
+      // ── H17 · P5 Monitoring ──
+      p5Stats: [
+        { k:'Workers healthy', v:'4 / 5', ink:'#92400e' }, { k:'Cron jobs OK', v:'18 / 19', ink:'#92400e' },
+        { k:'DLQ depth', v:'3', ink:'#18181b' }, { k:'Incidents (7d)', v:'1', ink:'#b91c1c' }
+      ],
+      p5Traffic: [
+        { branch:'Axal VC France', rpm:'214', dlq:'0', dlqInk:'color:#18181b' },
+        { branch:'Axal VC DACH', rpm:'96', dlq:'0', dlqInk:'color:#18181b' },
+        { branch:'Axal VC Nordics', rpm:'52', dlq:'0', dlqInk:'color:#18181b' },
+        { branch:'Axal VC Iberia', rpm:'0', dlq:'3', dlqInk:'color:#b91c1c;font-weight:700' }
+      ],
+
+      // ── H17 · P6 Broadcast ──
+      p6Channels: [
+        { name:'Telegram · #axal-founders', meta:'1,204 members · last sent 2h ago', state:'Live', pill:pill('Active'), dim:'' },
+        { name:'Telegram · #axal-lp-updates', meta:'86 members · last sent 6d ago', state:'Live', pill:pill('Active'), dim:'' },
+        // Kept visible on purpose, so it must actually be legible: dashed edge and a paler
+        // background carry the "not provisioned" step-down, and the ink stays readable.
+        { name:'X (Twitter)', meta:'OAuth not connected', state:'Not provisioned', pill:'font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:#f6f5f8;color:#7c6f86;border:1px dashed #d4d2dc;white-space:nowrap;flex:none', dim:'border-style:dashed;background:#fafafa' }
+      ],
+
+      // ── H18 · C1 Assessment Studio ──
+      c1Stats: [
+        { k:'Games authored', v:'6' }, { k:'Chapters', v:'34' }, { k:'Archetypes', v:'16' }
+      ],
+      c1Games: [
+        { name:'Founder Fit v3', meta:'Live on 4 branches · 812 completions', state:'Published', pill:pill('Active') },
+        { name:'Advisor Archetype v2', meta:'Live on 3 branches · 190 completions', state:'Published', pill:pill('Active') },
+        { name:'LP Risk Profile — draft', meta:'Authoring · not yet published to any branch', state:'Draft', pill:pill('Pending') }
+      ],
+
+      // ── H18 · C2 Personas taxonomy ──
+      c2Personas: [
+        { name:'The Architect', n:'1,140', dot:'#7c3aed' }, { name:'The Operator', n:'890', dot:'#4f46e5' },
+        { name:'The Connector', n:'640', dot:'#059669' }, { name:'The Analyst', n:'512', dot:'#d97706' },
+        { name:'Unclassified', n:'88', dot:'#a1a1aa' }
+      ],
+
+      // ── H19 · C3 pipeline completed · C4 deck roster ──
+      c3Total: '23',
+      c3Lanes: (function(){
+        const L = [
+          ['Draft', 6, '#615c6e', [ ['Q3 platform letter', 'HQ · article · edited 2h ago', null], ['Cohort 5 announcement', 'HQ · news · draft', null] ]],
+          ['Review', 4, '#615c6e', [ ['Formation in France, 2026', 'AXL-001 · publication · reviewer T. Roussel', 'Axal VC France'] ]],
+          ['Localisation', 3, '#92400e', [ ['"Lever une pré-seed"', 'AXL-001 · FR translation of HQ article', 'Axal VC France'], ['Gründung in DACH', 'AXL-002 · DE variant', 'Axal VC DACH'] ]],
+          ['Brand approval', 4, '#92400e', [ ['"Lever une pré-seed"', 'Awaiting HQ · 52h · Axal subsidiaries only', 'Axal VC France'] ]],
+          ['Scheduled', 2, '#615c6e', [ ['Demo Day recap', 'HQ · publishes 24 Sep 09:00', null] ]],
+          ['Published', 4, '#047857', [ ['The 83(b) window', 'HQ · 6 branches · 4,120 reads', null] ]]
+        ];
+        return L.map(([name, n, ink, cards]) => ({ name, n:String(n), ink,
+          cards: cards.map(([title, meta, from]) => ({ title, meta, from,
+            edge: name === 'Brand approval' ? '#fde68a' : '#f0eff4', bg: name === 'Brand approval' ? '#fffdf5' : '#fbfbfc' })) }));
+      })(),
+      c4Roster: [
+        { name:'Priya Nair', role:'Pricing advisor', by:'HQ', decks:'6 branches', state:'Published', pill:pill('Active') },
+        { name:'Marcus Chen', role:'GTM advisor', by:'HQ', decks:'6 branches', state:'Published', pill:pill('Active') },
+        { name:'Cabinet Ravel', role:'Legal partner', by:'Axal VC France', decks:'—', state:'Nominated', pill:pill('Pending') },
+        { name:'Studio Vireo', role:'Design partner', by:'Axal VC France', decks:'—', state:'Nominated', pill:pill('Pending') }
+      ],
+
+      // ── H20 · T1 people desk ──
+      t1Filters: ['All branches','Founders','Investors','Advisors','Exploring'].map((l, i) => ({ label:l,
+        style:'font-size:11px;font-weight:' + (i === 0 ? '700' : '600') + ';padding:7px 11px;border-radius:8px;white-space:nowrap;'
+          + (i === 0 ? 'background:' + OXT + ';color:' + OX + ';border:1px solid ' + OXE : 'background:#fff;color:#4a4553;border:1px solid #ececf1') })),
+      t1Head: ['Name','Email','Role','Branch','Status','KYC','Trust','Joined','Action'],
+      t1Rows: [
+        { name:'Ines Marchetti', email:'ines@meridian.tech', role:'Founder', branch:'Nordics', status:'Active', kyc:'Verified', trust:'92', joined:'12 Mar 26', action:'View as founder' },
+        { name:'Aurélie Chen', email:'a.chen@fo-chen.fr', role:'Investor', branch:'France', status:'Pending', kyc:'Pending', trust:'—', joined:'23 Aug 26', action:'Open KYC (read-only)' },
+        { name:'T. Roussel', email:'t.roussel@axal.vc', role:'Admin', branch:'France', status:'Active', kyc:'Verified', trust:'—', joined:'02 Jan 26', action:'Impersonate admin' },
+        { name:'Dev Raghunathan', email:'dev@novacraft.io', role:'Founder', branch:'HQ-held', status:'Active', kyc:'Verified', trust:'88', joined:'04 Feb 26', action:'View as founder' },
+        { name:'K. Weber', email:'k.weber@axal.vc', role:'Admin', branch:'DACH', status:'Active', kyc:'Verified', trust:'—', joined:'15 Apr 26', action:'Deactivate admin' },
+        { name:'Marta López', email:'m.lopez@…', role:'Exploring', branch:'Iberia', status:'Suspended', kyc:'—', trust:'—', joined:'—', action:'Unreadable · branch down' }
+      ].map(r => Object.assign(r, {
+        statusPill: pill(r.status), kycPill: r.kyc === '—' ? pill('Expired') : pill(r.kyc),
+        rowStyle: r.branch === 'Iberia' ? 'background:#fafafa' : '' })),
+      t1HqActions: [
+        { name:'Impersonate — including other admins', note:'Typed reason, 30-minute hard limit, banner both sides see. The only power with no analogue elsewhere.' },
+        { name:'View as a role shell', note:'Founder, investor, advisor or operating partner — overlay, read-mostly, their chrome.' },
+        { name:'Demote or deactivate an Admin', note:'A branch cannot remove its own admin; only the tier that appointed them can.' },
+        { name:'Transfer the Super Admin elevation', note:'One holder at a time. Step-up, typed reason, both parties notified.' },
+        { name:'Role override on a binding agreement', note:'Legal, not operational — an exploring user whose signed terms fix their role.' }
+      ],
+      t1AdminActions: [
+        { name:'Admit to Lab', note:'Lands on Programs as well. Territory-scoped.' },
+        { name:'Grant Access / Grant Limited', note:'Within the licence\u2019s seats only.' },
+        { name:'KYC decide', note:'The decision happens on Approvals; HQ sees the outcome, not the button.' },
+        { name:'Disable a non-admin in territory', note:'Reversible by the same branch.' }
+      ],
+
+      // ── H21 · R1 billing exceptions ──
+      r1Open: '5',
+      r1Tiles: [
+        { k:'Refunds (30d)', v:eur(2400), ink:'#18181b', note:'3 issued · all step-up' },
+        { k:'Disputes open', v:'2', ink:'#b91c1c', note:'Stripe state · one past evidence deadline' },
+        { k:'LTV', nr:true, note:'no store reconciles revenue to account lifetime' },
+        { k:'Token margin / branch', nr:true, note:'gateway cost is an estimate, not a ledger' }
+      ],
+      r1Rows: [
+        { who:'Verdance SAS', branch:'Axal VC France', amt:eur(1200), kind:'Refund', state:'Pending', pill:pill('Pending'), action:'Refund · step-up', actCls:'danger' },
+        { who:'Kelp Bio', branch:'Axal VC Nordics', amt:eur(480), kind:'Dispute', state:'Disputed', pill:pill('Disputed'), action:'Submit evidence', actCls:'acc' },
+        { who:'Maison Dulac', branch:'Axal VC France', amt:eur(3200), kind:'Dispute', state:'Disputed', pill:pill('Disputed'), action:'Evidence overdue', actCls:'danger' },
+        { who:'Studio Vireo', branch:'Axal VC France', amt:eur(720), kind:'Refund', state:'Paid', pill:pill('Paid'), action:'View audit line', actCls:'gho' }
+      ],
+
+      // ── H22 · Y1 support ──
+      y1Total: '14', y1Oldest: '96h · escalation from Iberia',
+      y1Queues: [
+        { name:'Escalations from subsidiaries', n:'6', ink:'#b45309', who:'Seats, moderation, security — never brand for white-label.',
+          items:[ { t:'AXL-004 · appeal on suspension', age:'96h', pill:slaP(96) }, { t:'AXL-001 · seat increase, Founder +20', age:'31h', pill:slaP(31) } ] },
+        { name:'HQ-held users', n:'3', ink:'#615c6e', who:'Accounts HQ holds directly, no branch.',
+          items:[ { t:'D. Raghunathan · data export request', age:'18h', pill:slaP(18) } ] },
+        { name:'Admins about the Admin product', n:'5', ink:'#b45309', who:'The persona the old Help page had no column for.',
+          items:[ { t:'K. Weber · Approvals filter loses state', age:'44h', pill:slaP(44) }, { t:'T. Roussel · template picker as-of time wrong', age:'9h', pill:slaP(9) } ] }
+      ],
+      y1Matrix: [
+        { branch:'Axal VC France', c1:'2', c2:'—', c3:'2' }, { branch:'Axal VC DACH', c1:'1', c2:'—', c3:'2' },
+        { branch:'Axal VC Nordics', c1:'1', c2:'—', c3:'1' }, { branch:'Axal VC Iberia', c1:'2', c2:'—', c3:'—' }
+      ].map(m => Object.assign(m, { c1Ink: m.c1 !== '—' && +m.c1 >= 2 ? 'color:#b45309;font-weight:700' : '', c2Ink:'', c3Ink:'' })),
+
+      // ── H23 · Security ──
+      s1Count: '212',
+      s1Rows: [
+        { ts:'2026-09-22 09:14:02Z', actor:'okafor@hq', branch:'—', event:'impersonation.start target=t.roussel reason="approvals filter bug"', outcome:'ok', ink:'color:#047857' },
+        { ts:'2026-09-22 09:11:40Z', actor:'okafor@hq', branch:'—', event:'step_up.mfa', outcome:'ok', ink:'color:#047857' },
+        { ts:'2026-09-22 08:58:17Z', actor:'system', branch:'studioos-iberia', event:'branch.read timeout=5000ms', outcome:'unreadable', ink:'color:#b91c1c' },
+        { ts:'2026-09-22 08:40:03Z', actor:'k.weber@dach', branch:'studioos-dach', event:'escalation.create kind=seat_increase', outcome:'ok', ink:'color:#047857' },
+        { ts:'2026-09-22 07:22:55Z', actor:'okafor@hq', branch:'—', event:'key.reveal provider=stripe', outcome:'masked_after_30s', ink:'color:#92400e' },
+        { ts:'2026-09-21 23:05:10Z', actor:'system', branch:'all', event:'backup.export nightly', outcome:'5/5', ink:'color:#047857' },
+        { ts:'2026-09-21 18:31:44Z', actor:'t.roussel@fr', branch:'studioos-fr', event:'kyc.decide subject=g.anseeuw', outcome:'rejected', ink:'color:#3f3a49' },
+        { ts:'2026-09-21 16:02:09Z', actor:'okafor@hq', branch:'—', event:'licence.suspend id=AXL-004 reason="payment default"', outcome:'ok', ink:'color:#047857' }
+      ],
+      s3Sessions: '1,418', s3Mfa: '11 of 11',
+      s4Dsr: [
+        { branch:'Axal VC France', what:'erasure · received 4 Sep', left:'12 days left', pill:pill('Pending') },
+        { branch:'Axal VC DACH', what:'access · received 19 Sep', left:'27 days left', pill:pill('Active') },
+        { branch:'Axal VC Nordics', what:'none open', left:'—', pill:pill('Expired') },
+        { branch:'Axal VC Iberia', what:'unreadable · clock may be running', left:'Not recorded', pill:pill('Suspended') }
+      ],
+
+      // ── H24 · Funds oversight ──
+      f1Count: '3', f1Branches: '3',
+      f1Rows: [
+        { fund:'Spin-Out Fund I', branch:'HQ', gp:'Axal VC GP LLC', committed:'$10.0M', issued:'Q2 2026', read:'Readable', pill:pill('Healthy'), rowStyle:'' },
+        { fund:'Axal France Fund I FPCI', branch:'Axal VC France', gp:'Axal France GP SAS', committed:'€4.2M', issued:'Q2 2026', read:'Readable', pill:pill('Healthy'), rowStyle:'' },
+        { fund:'DACH Seed I', branch:'Axal VC DACH', gp:'Axal DACH GP GmbH', committed:'€2.0M', issued:'Not yet', read:'Readable', pill:pill('Pending'), rowStyle:'' },
+        { fund:'— ', branch:'Axal VC Iberia', gp:'—', committed:'Unreadable', issued:'—', read:'Unreadable', pill:pill('Failing'), rowStyle:'background:#fafafa' }
+      ],
+
+      // ── H25 · impersonation bar · left on /admin ──
+      impBar: [ { k:'Who', v:'T. Okafor · HQ' }, { k:'As', v:'T. Roussel · Admin, Axal VC France' }, { k:'Why', v:'Approvals filter loses state (#4471)' }, { k:'Limit', v:'30 min' } ],
+      impLeft: '22:41',
+      leftOnAdmin: [
+        { where:'Approvals', what:'KYC decision on a person', why:'A branch decides who it admits; HQ reads the outcome.' },
+        { where:'Programs', what:'Admit a founder to the Lab', why:'Cohort roster is the territory\u2019s.' },
+        { where:'Community', what:'Events, jobs, circles', why:'Local, no HQ approval unless escalated.' },
+        { where:'Approvals', what:'Partner-profile approval', why:'Persona, entity, agreement — reviewed where the partner operates.' },
+        { where:'Accounts', what:'Persona retag of one person', why:'The schema is HQ (C2); assigning it is not.' },
+        { where:'Programs', what:'Advisor cohort access grant', why:'Which advisor sees which cohort is a territory call.' }
+      ],
+      navFunds: nav('Funds'),
+
+      // ══ H26–H30 · WHITE-LABEL. One kit object feeds the preview, the record, the ledger row,
+      // the home card and the viewing-as chrome — so their brand cannot render two ways. ══
+      wlPublic: WL.publicName, wlLegal: WL.legal, wlPrimary: WL.primary, wlAccent: WL.accent, wlDomain: WL.domain,
+      wlSteps: ['Kind','Entity','Territory','Seats','Terms','Brand kit','Contract + Deploy'].map((l, i) => ({
+        n:String(i + 1), label:l,
+        style:'display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:6px 11px;border-radius:999px;white-space:nowrap;'
+          + (i === 5 ? 'background:' + OX + ';color:#fff;border:1px solid ' + OX
+              : (i < 5 ? 'background:' + OXT + ';color:' + OX + ';border:1px solid ' + OXE : 'background:#fff;color:#615c6e;border:1px solid #ececf1')) })),
+      wlEntity: [ { label:'Legal entity', value:WL.legal }, { label:'Signatory', value:'Léa Moreau · CEO' }, { label:'Registered', value:'Lyon, France' } ],
+      wlCells: EU.map(code => {
+        const axal = LICENSES.some(l => l.terr.indexOf(code) > -1);
+        const wl = code === 'FR';
+        const base = 'display:block;text-align:center;font-size:9.5px;font-weight:700;padding:5px 0;border-radius:4px;';
+        return { code, style: base + (wl ? 'background:' + OX + ';color:#fff;border:1px solid ' + OX
+          : (axal ? 'background:#fde8ee;color:' + OX + ';border:1px dashed ' + OXE : 'background:#fafafa;color:#615c6e;border:1px solid #ececf1')) };
+      }),
+      wlLegend: [
+        { sw:'background:' + OX, label:'Selected · FR' },
+        { sw:'background:#fde8ee;border:1px dashed ' + OXE, label:'Axal held · blocks other Axal subsidiaries only' },
+        { sw:'background:#fff;border:1.5px solid #0e7490', label:'White-label present · informational unless that operator\u2019s exclusivity flag is on' },
+        { sw:'background:#fafafa;border:1px solid #ececf1', label:'Free' }
+      ],
+      wlKit: [
+        { label:'Public name', value:WL.publicName, ink:'font-weight:600', cls:'' },
+        { label:'Mark', value:'studio-lyon-mark.svg · uploaded', ink:'color:#047857', cls:'' },
+        { label:'Primary / accent', value:WL.primary + ' / ' + WL.accent, ink:'', cls:'mono' },
+        // Corrected in place: the kit collects no hostname. The fallback is shown because it
+        // is what members actually get, and it is issued by the deploy rather than chosen here.
+        { label:'Issued at deploy', value:'studiolyon.os.axal.vc', ink:'color:#047857;font-weight:600', cls:'mono' },
+        { label:'Email from', value:WL.publicName + ' <hello@' + WL.domain + '>', ink:'', cls:'mono' },
+        { label:'"Powered by Axal VC"', value:'Hidden (default)', ink:'color:#615c6e', cls:'' },
+        { label:'Exclusive vs other white-labels', value:'Off (default)', ink:'color:#615c6e', cls:'' }
+      ],
+      wlSeats: [ { type:'Founder', n:'60' }, { type:'Investor / LP', n:'20' }, { type:'Advisor', n:'15' }, { type:'Service Partner', n:'10' } ],
+      wlTerms: [ { k:'Term', v:'3 years' }, { k:'Annual fee', v:eur(24000) }, { k:'Revenue share', v:'30%' }, { k:'Token margin split', v:'31% to HQ' } ],
+      wlCompare: [
+        { k:'Console', a:'Subsidiary product, 8 rows', w:'Identical — brand_kind flipped', wInk:'' },
+        { k:'Brand kit', a:'Axal, fixed', w:'Theirs · name, mark, colours, domain', wInk:'font-weight:700;color:#18181b' },
+        { k:'Brand approval', a:'HQ lane on Content', w:'None. They publish locally.', wInk:'font-weight:700;color:#18181b' },
+        { k:'Territory exclusivity', a:'Against other Axal subsidiaries', w:'Off by default · optional, vs other white-labels only', wInk:'' },
+        { k:'Contract', a:'Axal subsidiary licence', w:'White-Label Operator Agreement', wInk:'' },
+        { k:'Member-facing name', a:'Axal VC [territory]', w:WL.publicName, wInk:'font-weight:700;color:#18181b' }
+      ],
+      wlLedgerCount: String(LICENSES.length + 1), wlCountSub: String(LICENSES.length), wlCountWl: '1',
+      wlFilters: ['All','Axal subsidiaries','White-label'].map((l, i) => ({ label:l,
+        style:'font-size:11px;font-weight:' + (i === 0 ? '700' : '600') + ';padding:6px 11px;border-radius:8px;'
+          + (i === 0 ? 'background:' + OXT + ';color:' + OX + ';border:1px solid ' + OXE : 'background:#fff;color:#4a4553;border:1px solid #ececf1') })),
+      wlLedger: LICENSES.map(l => ({ kind:'Subsidiary', kindPill: kindPill('sub'), name:l.name,
+          mark: OX, terr:l.terr.join(' · '), seats:String(l.seats), fee:eur(l.fee), renews:l.renews || '—', state:l.status, pill:pill(l.status),
+          rowStyle: l.status === 'Suspended' ? 'opacity:.7' : '' }))
+        .concat([{ kind:'White-label', kindPill: kindPill('wl'), name:WL.publicName, mark:WL.primary, terr:'FR', seats:'105', fee:eur(24000), renews:'20 Sep 2029', state:'Active', pill:pill('Active'), rowStyle:'' }]),
+      wlHomeCards: [
+        { name:'Axal VC France', kind:'Subsidiary', kindPill:kindPill('sub'), mark:OX, meta:'284 accounts · 19 open in queues', esc:'1 awaiting brand approval', escInk:'#92400e', style:'' },
+        { name:'Axal VC DACH', kind:'Subsidiary', kindPill:kindPill('sub'), mark:OX, meta:'161 accounts · 7 open', esc:'No escalations', escInk:'#615c6e', style:'' },
+        { name:WL.publicName, kind:'White-label', kindPill:kindPill('wl'), mark:WL.primary, meta:'42 accounts · 3 open', esc:'1 seat increase pending', escInk:'#92400e', style:'' },
+        { name:'Axal VC Iberia', kind:'Subsidiary', kindPill:kindPill('sub'), mark:OX, meta:'Unreadable · branch did not answer', esc:'Suspended · appeal open', escInk:'#b91c1c', style:'opacity:.7' }
+      ],
+      wlImpBar: [ { k:'Who', v:'T. Okafor · HQ' }, { k:'As', v:'L. Moreau · Admin, ' + WL.publicName }, { k:'Why', v:'Seat increase review (#4482)' }, { k:'Limit', v:'30 min' } ],
+      wlTiles: [ { k:'Accounts', v:'42', note:'3 licence types' }, { k:'Open in queues', v:'3', note:'oldest 22h' }, { k:'Seats used', v:'38 / 105', note:'founder 92%' }, { k:'Revenue share MTD', v:eur(1800), note:'their cut' } ],
+      wlEscKinds: [
+        { name:'Moderation', note:'A call the operator will not make alone.', state:'Available', pill:pill('Active'), edge:'#f0eff4', bg:'#fbfbfc', ink:'#18181b', dim:'' },
+        { name:'Seat increase', note:'Seats are a licence term; only HQ changes them.', state:'Available', pill:pill('Active'), edge:'#f0eff4', bg:'#fbfbfc', ink:'#18181b', dim:'' },
+        { name:'Other', note:'Security, DSR, anything without a lane.', state:'Available', pill:pill('Active'), edge:'#f0eff4', bg:'#fbfbfc', ink:'#18181b', dim:'' },
+        // Step down with the background and a dashed edge, never with opacity: opacity
+        // multiplies against white and would take this note to 2.4:1, and the note is the
+        // proof of the kind-gate — the one sentence on the artboard that must be readable.
+        { name:'Content for brand approval', note:'Hidden for this kind — there is no brand desk to send it to.', state:'Hidden', pill:pill('Expired'), edge:'#e2e1e8', bg:'#fafafa', ink:'#615c6e', dim:'border-style:dashed' }
+      ],
+
+      // ══ H31–H34 · CUSTOM DOMAIN. Two hostnames, never mixed: the platform host exists at
+      // deploy so their admin can sign in before DNS does, and the custom host becomes primary
+      // only when DNS and certificate are both Active. HQ provisions TLS and refuses
+      // collisions; there is no Approve, because a hostname is not a brand judgement. ══
+      dmPlatform: 'studiolyon.os.axal.vc',
+      dmCustom: 'app.studiolyon.fr',
+      dmState: 'Active', dmStatePill: pill('Active'),
+      dmCert: 'Expires 14 Dec 2026',
+      dmPrimary: 'app.studiolyon.fr',
+      dmChecked: '22 Sep 2026, 08:14 UTC',
+      dmKindSub: kindPill('sub'), dmKindWl: kindPill('wl'),
+      dmKindHq: 'font-size:10px;font-weight:800;letter-spacing:.04em;padding:2px 7px;border-radius:4px;background:' + OX + ';color:#fff;border:1px solid ' + OX + ';white-space:nowrap;flex:none',
+      dmKitFields: [
+        // No domain field of any kind. The fallback is stated so the wizard is honest about
+        // where members land; it is issued by the deploy, not chosen here.
+        { label:'Issued at deploy', value:'studiolyon.os.axal.vc', note:'The platform fallback. Exists immediately so their admin can sign in before any DNS.', ink:'color:#047857;font-weight:600' },
+        { label:'Custom host', value:'Not collected here', note:'Their admin adds one in Settings → Domain, in their own zone, after they can log in.', ink:'color:#615c6e' },
+        { label:'HQ\u2019s own host', value:'app.axal.vc', note:'Unchanged and unbindable. Super Admin never moves off it.', ink:'color:#615c6e' }
+      ],
+      dmBlockers: [
+        { k:'Public name', note:'Required. Members have to be told whose product this is.', mark:'✓', edge:'#a7f3d0', bg:'#ecfdf5', box:'background:#ecfdf5;border:1px solid #a7f3d0;color:#047857' },
+        { k:'Mark', note:'Required. Uploaded with the kit.', mark:'✓', edge:'#a7f3d0', bg:'#ecfdf5', box:'background:#ecfdf5;border:1px solid #a7f3d0;color:#047857' },
+        { k:'Custom domain', note:'Does not block. A licence activates on the platform host and moves when DNS is ready.', mark:'—', edge:'#e2e1e8', bg:'#fafafa', box:'background:#fff;border:1px dashed #d4d2dc;color:#615c6e' }
+      ],
+      dmCollision: 'Northstar Studio',
+      dmRefusals: [
+        'axal.vc, app.axal.vc and anything under *.os.axal.vc are ours — a licence cannot bind them.',
+        'A path is not a host: theirstudio.com/app is refused with that sentence, not a generic error.',
+        'One host per field. Wildcards are not accepted in this pass; add a second row later.',
+        'The hostname must be a valid DNS label — lowercase, no scheme, no port.'
+      ],
+      dmImpBar: [ { k:'Who', v:'T. Okafor · HQ' }, { k:'As', v:'L. Moreau · Admin, ' + WL.publicName }, { k:'Why', v:'DNS check failing (#4488)' }, { k:'Limit', v:'30 min' } ],
+      dmRecords: [
+        { kind:'Record 1 · Ownership (TXT)', state:'Verified', pill:pill('Verified'),
+          line:'Host  _axal-challenge.app.studiolyon.fr\nValue axal-verify=9f2c41ab7e\nTTL   300' },
+        { kind:'Record 2 · Traffic (CNAME)', state:'Verified', pill:pill('Verified'),
+          line:'Host   app.studiolyon.fr\nTarget studiolyon.os.axal.vc\nProxy  DNS only until Active' }
+      ]
     };
   }
 }

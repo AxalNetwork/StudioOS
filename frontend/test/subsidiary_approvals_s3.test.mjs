@@ -33,11 +33,29 @@ const HQ_ROUTE = raw('cloudflare-worker/src/routes/admin_escalations.ts');
 const INDEX = raw('cloudflare-worker/src/index.ts');
 const CANVAS = raw('design/canvases/integrated/Admin · Subsidiary.dc.html');
 
-/** S3 alone, bounded at both ends. */
+/**
+ * S3 alone, bounded at both ends — and it was not, which is why this changed.
+ *
+ * THE OLD ANCHOR WAS A BARE WORD AND IT WORKED BY COINCIDENCE. It sliced
+ * 12,000 characters from `indexOf('Approvals')` while calling itself bounded
+ * at both ends. The first occurrence of that word is not S3: on the canvas
+ * D194 landed it sits inside S1's support-ticket card ("Approvals filter loses
+ * state on reload") at offset 12,826, with S3 at 39,774 — so the window
+ * covered S1 and never reached the artboard it names. On the smaller canvas
+ * the same slice happened to span the gap, and the assertion below passed for
+ * a reason that had nothing to do with S3.
+ *
+ * Now it anchors on the artboard's own id and stops at the next one, so the
+ * window IS S3 and cannot silently become some other screen. This is a
+ * narrowing: a phrase that appears anywhere else in the canvas no longer
+ * satisfies an assertion about this artboard.
+ */
 function s3() {
-  const a = CANVAS.indexOf('Approvals');
+  const a = CANVAS.indexOf('id="s3"');
+  const b = CANVAS.indexOf('id="s4"');
   assert.ok(a >= 0, 'the S3 artboard could not be found in the canvas');
-  return CANVAS.slice(a, a + 12000).replaceAll('&amp;', '&');
+  assert.ok(b > a, 'S4 no longer follows S3, so S3 has no end bound');
+  return CANVAS.slice(a, b).replaceAll('&amp;', '&');
 }
 
 test('the artboard draws a To-HQ lane, and the page is it', () => {
