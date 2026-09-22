@@ -268,10 +268,48 @@ export function resolveLoopColumns(src, atIndex) {
   }
   const ident = /^([A-Za-z_]\w*)/.exec(iterable);
   if (!ident) return null;
-  const decl = new RegExp(`\\bconst\\s+${ident[1]}\\b[^=]*=\\s*\\[`).exec(src);
-  if (!decl) return null;
-  const body = balanced(src, decl.index + decl[0].length - 1, '[', ']');
+  const open = findConstArrayDecl(src, ident[1], forIdx);
+  if (open < 0) return null;
+  const body = balanced(src, open, '[', ']');
   return body ? parseArrayEntries(body) : null;
+}
+
+/**
+ * Where `const <name> = [` opens, found by literal scan rather than by a regex
+ * built from the name.
+ *
+ * Semgrep's detect-non-literal-regexp flagged the assembled form, and it is the
+ * FIFTH time in this programme that rule has fired on my own code. ReDoS was
+ * never reachable — the name is already narrowed to `[A-Za-z_]\w*`, so it
+ * carries no metacharacter — but a regex built from data is the shape the rule
+ * exists to refuse, and the literal walk is also the STRONGER read, twice over:
+ * it takes the declaration NEAREST BEFORE the loop instead of the first one in
+ * the file, so a second `const` of the same name can no longer stand in for the
+ * one in scope; and it refuses a `;` between the name and its `=`, so a bare
+ * `const x: T;` followed later by an unrelated `= [` no longer matches.
+ *
+ * @returns the index of the opening `[`, or -1.
+ */
+function findConstArrayDecl(src, name, before) {
+  const hits = [];
+  for (let i = src.indexOf('const'); i >= 0; i = src.indexOf('const', i + 1)) {
+    if (i > 0 && /\w/.test(src[i - 1])) continue;          // part of a longer word
+    let j = i + 5;
+    if (!/\s/.test(src[j] || '')) continue;                // `const` must be its own token
+    while (j < src.length && /\s/.test(src[j])) j += 1;
+    if (!src.startsWith(name, j)) continue;
+    const after = j + name.length;
+    if (/\w/.test(src[after] || '')) continue;             // a longer identifier
+    const eq = src.indexOf('=', after);
+    if (eq < 0 || src.slice(after, eq).includes(';')) continue;
+    let k = eq + 1;
+    while (k < src.length && /\s/.test(src[k])) k += 1;
+    if (src[k] !== '[') continue;
+    hits.push({ at: i, open: k });
+  }
+  if (!hits.length) return -1;
+  const preceding = hits.filter((h) => h.at <= before);
+  return (preceding.length ? preceding[preceding.length - 1] : hits[0]).open;
 }
 
 const CREATE_RE = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"[]?(\w+)[`"\]]?\s*\(/i;
@@ -353,10 +391,15 @@ export function sqlDefinitions() {
           // landing_pages_new` builds that name, so `pragma_table_info` for
           // `landing_pages` comes back EMPTY — a zero-column shape that reads as
           // "every other definition is a superset" rather than as a parse bug.
-          def.create = def.create.replace(
-            new RegExp(`(CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?[\`"\\[]?)${from}([\`"\\]]?\\s*\\()`, 'i'),
-            `$1${to}$2`,
-          );
+          // Spliced by index off a LITERAL header match rather than a regex
+          // assembled from `from` (Semgrep's detect-non-literal-regexp, same
+          // rule as `findConstArrayDecl` above). Stronger too: it VERIFIES the
+          // header names `from` before rewriting, where the assembled form
+          // would rewrite whatever its pattern happened to reach.
+          const hdr = /^(\s*CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"[]?)(\w+)([`"\]]?\s*\()/i.exec(def.create);
+          if (hdr && hdr[2].toLowerCase() === from) {
+            def.create = hdr[1] + to + hdr[3] + def.create.slice(hdr[0].length);
+          }
           defs.set(to, def);
           defs.delete(from);
         }

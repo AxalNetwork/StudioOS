@@ -223,7 +223,7 @@ test("the calendar sweep no longer deletes integrations/oauth.ts's in-flight sta
     .map((e) => e.text)
     .find((t) => /^\s*DELETE FROM oauth_state_tokens WHERE expires_at </.test(t));
   assert.ok(sweep, 'the calendar sweep statement is gone from calendar.ts');
-  const shipped = sweep.replace(new RegExp(INTERP, 'g'), '?');
+  const shipped = sweep.replaceAll(INTERP, '?');  // a literal swap; no regex to assemble
 
   const fixture = () => {
     // Production's shape: integrations/oauth.ts's columns plus the expires_at
