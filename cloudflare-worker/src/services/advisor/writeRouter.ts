@@ -338,16 +338,27 @@ async function mergeProjectExtras(
   }
 }
 
-/** Same shape as mergeProjectExtras but for cross-project (users) extras. */
+/**
+ * Same shape as mergeProjectExtras but for cross-project extras — and it reads
+ * a SIDE TABLE rather than a column on `users`.
+ *
+ * `042_advisor_field_sources.sql` declares `users.advisor_extras_json` and that
+ * ALTER can never succeed: D1 caps a table at 100 columns and `users` is at
+ * exactly 100 (measured against production, 2026-09-21). So this read was
+ * against a column no database has ever had, its `.catch(() => null)` swallowed
+ * the error, and every cross-project answer was silently discarded.
+ * `276_advisor_field_sources_remainder.sql` creates `user_advisor_extras` and
+ * this reads it. D188.
+ */
 async function mergeUserExtras(env: Env, userId: number, key: string, value: string): Promise<boolean> {
   try {
     const row = await env.DB.prepare(
-      `SELECT advisor_extras_json FROM users WHERE id = ?`,
-    ).bind(userId).first<{ advisor_extras_json: string | null }>().catch(() => null);
+      `SELECT extras_json FROM user_advisor_extras WHERE user_id = ?`,
+    ).bind(userId).first<{ extras_json: string | null }>().catch(() => null);
     let extras: Record<string, string> = {};
-    if (row?.advisor_extras_json) {
+    if (row?.extras_json) {
       try {
-        const parsed = JSON.parse(row.advisor_extras_json);
+        const parsed = JSON.parse(row.extras_json);
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
           extras = parsed as Record<string, string>;
         }
@@ -355,8 +366,11 @@ async function mergeUserExtras(env: Env, userId: number, key: string, value: str
     }
     extras[key] = value;
     await env.DB.prepare(
-      `UPDATE users SET advisor_extras_json = ? WHERE id = ?`,
-    ).bind(JSON.stringify(extras), userId).run();
+      `INSERT INTO user_advisor_extras (user_id, extras_json, updated_at)
+       VALUES (?, ?, datetime('now'))
+       ON CONFLICT(user_id) DO UPDATE SET extras_json = excluded.extras_json,
+                                          updated_at  = datetime('now')`,
+    ).bind(userId, JSON.stringify(extras)).run();
     return true;
   } catch {
     return false;
@@ -711,7 +725,7 @@ export async function routeAnswer(
   evidence?: string | null,
 ): Promise<WriteResult> {
   // Task #12 (BLOCK-ADV-07) — dynamic reflection answers persist to the
-  // user's advisor_extras_json sidecar (no typed column). Handled BEFORE
+  // user_advisor_extras sidecar (no typed column). Handled BEFORE
   // the bank lookup so a strict-regex dyn id never trips the unknown-id
   // failure below.
   if (DYNAMIC_ID_RE.test(questionId)) {
@@ -719,7 +733,7 @@ export async function routeAnswer(
     if (!dynValue) return { status: 'skipped' };
     const ok = await mergeUserExtras(env, user.id, questionId, dynValue);
     return ok
-      ? { status: 'saved', saved_to: { table: 'users', column: 'advisor_extras_json', id: user.id } }
+      ? { status: 'saved', saved_to: { table: 'user_advisor_extras', column: 'extras_json', id: user.id } }
       : { status: 'noop' };
   }
 
@@ -1223,12 +1237,12 @@ export async function routeAnswer(
       };
     } catch (e) {
       // Column may not be migrated yet on legacy dev DBs — fall back
-      // to users.advisor_extras_json so the value isn't lost.
+      // to the user_advisor_extras sidecar so the value isn't lost.
       const ok = await mergeUserExtras(env, user.id, questionId, value);
       if (ok) {
         return {
           status: 'saved',
-          saved_to: { table: 'users', column: 'advisor_extras_json', id: user.id, page_url: '/investor-profile' },
+          saved_to: { table: 'user_advisor_extras', column: 'extras_json', id: user.id, page_url: '/investor-profile' },
           hint: 'Saved as a chat note (column not yet migrated).',
         };
       }
@@ -1274,12 +1288,12 @@ export async function routeAnswer(
       };
     } catch (e) {
       // Column may not be migrated yet on legacy dev DBs — fall back
-      // to users.advisor_extras_json sidecar.
+      // to the user_advisor_extras sidecar.
       const ok = await mergeUserExtras(env, user.id, questionId, value);
       if (ok) {
         return {
           status: 'saved',
-          saved_to: { table: 'users', column: 'advisor_extras_json', id: user.id, page_url: '/advisors/me' },
+          saved_to: { table: 'user_advisor_extras', column: 'extras_json', id: user.id, page_url: '/advisors/me' },
           hint: 'Saved as a chat note (column not yet migrated).',
         };
       }
@@ -1294,17 +1308,17 @@ export async function routeAnswer(
       return { status: 'failed', error: 'partner questions require partner role' };
     }
     // Special case: partner.profile.focus is cross-deal so it lives
-    // on users.advisor_extras_json instead of a single partner_profile.
+    // on the user_advisor_extras sidecar instead of a single partner_profile.
     if (questionId === 'partner.profile.focus') {
       const okFocus = await mergeUserExtras(env, user.id, questionId, value);
       if (okFocus) {
         return {
           status: 'saved',
-          saved_to: { table: 'users', column: 'advisor_extras_json', id: user.id, page_url: '/studio' },
+          saved_to: { table: 'user_advisor_extras', column: 'extras_json', id: user.id, page_url: '/studio' },
         };
       }
       // Fallback: stash on partner_profiles.raw_chat_json so the
-      // answer isn't lost on a dev DB without users.advisor_extras_json.
+      // answer isn't lost on a dev DB without user_advisor_extras.
       const profile = await ensurePartnerProfile(env, user);
       if (profile) {
         try {
@@ -1484,7 +1498,7 @@ export async function routeAnswer(
     // (Acknowledged by the `^admin\.` pattern in no_write_allowlist.json.)
     const ok = await mergeUserExtras(env, user.id, questionId, value);
     return ok
-      ? { status: 'saved', saved_to: { table: 'users', column: 'advisor_extras_json', id: user.id } }
+      ? { status: 'saved', saved_to: { table: 'user_advisor_extras', column: 'extras_json', id: user.id } }
       : { status: 'noop' };
   }
 
@@ -1670,11 +1684,11 @@ export async function hydrateAlreadyAnswered(env: Env, user: User): Promise<Set<
     } catch { /* partner_profiles missing on dev */ }
     try {
       const u = await env.DB.prepare(
-        `SELECT advisor_extras_json FROM users WHERE id = ?`,
-      ).bind(user.id).first<{ advisor_extras_json: string | null }>().catch(() => null);
-      if (u?.advisor_extras_json) {
+        `SELECT extras_json FROM user_advisor_extras WHERE user_id = ?`,
+      ).bind(user.id).first<{ extras_json: string | null }>().catch(() => null);
+      if (u?.extras_json) {
         try {
-          const parsed = JSON.parse(u.advisor_extras_json) as Record<string, unknown>;
+          const parsed = JSON.parse(u.extras_json) as Record<string, unknown>;
           if (parsed && typeof parsed === 'object') {
             for (const k of Object.keys(parsed)) {
               if (k.startsWith('partner.') && parsed[k]) answered.add(k);
@@ -1682,7 +1696,7 @@ export async function hydrateAlreadyAnswered(env: Env, user: User): Promise<Set<
           }
         } catch { /* malformed — ignore */ }
       }
-    } catch { /* users.advisor_extras_json not migrated */ }
+    } catch { /* user_advisor_extras not migrated */ }
   }
 
   return answered;

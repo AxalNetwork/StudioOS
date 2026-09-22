@@ -41,6 +41,7 @@ import { searchSemantic, deleteChunkedEntity, researchNamespace } from '../servi
 import { run as runAI } from '../services/aiRouter';
 import { companyScope, esignEnvelopeScope } from '../services/tenancyScope';
 import { fundOverlapNote } from '../services/researchFundRead';
+import { catalogPriceCents, proposalName, readingIsStale } from '../services/marketReadingRead';
 import { scopedDecisions } from './ic';
 import { investorProjectIds } from './_investorProjectScope';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
@@ -789,9 +790,9 @@ const readingDto = (r: ReadingRow) => ({
 research.get('/market-readings', async (c) => {
   const user = await requireAuth(c);
   const offerings = await c.env.DB.prepare(
-    `SELECT id, uid, title, price_usd FROM service_offerings
+    `SELECT id, uid, title, price_usd, price_cents FROM service_offerings
       WHERE owner_user_id = ? AND is_active = 1 ORDER BY created_at DESC LIMIT 200`
-  ).bind(user.id).all<{ id: number; uid: string; title: string; price_usd: number | null }>();
+  ).bind(user.id).all<{ id: number; uid: string; title: string; price_usd: number | null; price_cents: number | null }>();
   const readings = await c.env.DB.prepare(
     `SELECT * FROM research_market_readings WHERE owner_user_id = ? ORDER BY ran_at DESC LIMIT 500`
   ).bind(user.id).all<ReadingRow>();
@@ -819,8 +820,10 @@ research.get('/market-readings', async (c) => {
           comparable_count: null, ran_at: null, scope: null,
         }),
         // The catalog's own price, so the page can say when a service line is
-        // unpriced AND unread — the two halves of the same gap.
-        catalogued: o.price_usd != null,
+        // unpriced AND unread — the two halves of the same gap. Cents are
+        // canonical; a pre-227 row still has only dollars. Neither is folded
+        // into the comparable range.
+        catalogued: catalogPriceCents(o.price_cents, o.price_usd) != null,
       };
     }),
     ...loose.map((r) => ({ ...readingDto(r), catalogued: false })),
@@ -872,6 +875,69 @@ research.post('/market-readings', async (c) => {
     `SELECT * FROM research_market_readings WHERE uid = ? AND owner_user_id = ?`
   ).bind(uid, user.id).first<ReadingRow>();
   return c.json({ item: row ? readingDto(row) : null }, 201);
+});
+
+/**
+ * One reading, for `/research/markets/:uid`.
+ *
+ * THE LIST KEEPS THE NEWEST PER OFFERING. This read is the row itself, including
+ * an older run the list no longer shows. Catalog price comes back beside the
+ * range and is not added into it. Attachments carry the need's title when the
+ * quote has one, and null when it does not — a quote stores no title of its own.
+ */
+research.get('/market-readings/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const uid = c.req.param('uid');
+  const row = await c.env.DB.prepare(
+    `SELECT r.*, o.uid AS offering_uid, o.price_usd AS price_usd, o.price_cents AS price_cents
+       FROM research_market_readings r
+       LEFT JOIN service_offerings o ON o.id = r.offering_id AND o.owner_user_id = r.owner_user_id
+      WHERE r.uid = ? AND r.owner_user_id = ?`
+  ).bind(uid, user.id).first<ReadingRow & {
+    offering_uid: string | null; price_usd: number | null; price_cents: number | null;
+  }>();
+  if (!row) return c.json({ detail: 'not_found' }, 404);
+
+  const attached = await c.env.DB.prepare(
+    `SELECT a.uid AS uid, a.quote_id AS quote_id, a.created_at AS created_at, n.title AS need_title
+       FROM research_attachments a
+       JOIN quotes q ON q.id = a.quote_id
+       LEFT JOIN founder_needs n ON n.id = q.need_id
+      WHERE a.owner_user_id = ? AND a.kind = 'reading' AND a.ref_key = ?
+      ORDER BY a.id DESC LIMIT 50`
+  ).bind(user.id, uid).all<{ uid: string; quote_id: number; created_at: string; need_title: string | null }>();
+
+  // Proposals the caller can attach to: quotes their partner record owns.
+  // A licence with no partner profile has none, and an admin does not see
+  // every firm's quotes from this page.
+  const proposals = user.partner_id
+    ? await c.env.DB.prepare(
+      `SELECT q.id AS id, q.status AS status, n.title AS need_title
+         FROM quotes q
+         LEFT JOIN founder_needs n ON n.id = q.need_id
+        WHERE q.partner_id = ?
+        ORDER BY q.created_at DESC LIMIT 100`
+    ).bind(user.partner_id).all<{ id: number; status: string; need_title: string | null }>()
+    : { results: [] as { id: number; status: string; need_title: string | null }[] };
+
+  return c.json({
+    item: {
+      ...readingDto(row),
+      offering_uid: row.offering_uid ?? null,
+      catalog_price_cents: catalogPriceCents(row.price_cents, row.price_usd),
+    },
+    attachments: (attached.results || []).map((a) => ({
+      uid: a.uid,
+      quote_id: a.quote_id,
+      created_at: a.created_at,
+      proposal_name: proposalName(a.need_title),
+    })),
+    proposals: (proposals.results || []).map((q) => ({
+      id: q.id,
+      status: q.status,
+      proposal_name: proposalName(q.need_title),
+    })),
+  });
 });
 
 research.delete('/market-readings/:uid', async (c) => {
@@ -1033,10 +1099,26 @@ research.post('/attachments', async (c) => {
   // THE QUOTE MUST BE THE CALLER'S OWN. Attaching a market reading to somebody
   // else's proposal would put the firm's reasoning behind a number they did not
   // quote — and would tell them a figure exists that they cannot see.
+  //
+  // Ownership is `partner_id`. That is the column `POST /needs/:id/quotes`
+  // writes. `provider_user_id` is not a column on the live `quotes` table
+  // (schema_baseline plus the later ALTERs), so a predicate on it matches
+  // nothing and the insert never runs.
+  if (!user.partner_id) return c.json({ detail: 'not_found' }, 404);
   const quote = await c.env.DB.prepare(
-    `SELECT id FROM quotes WHERE id = ? AND provider_user_id = ?`
-  ).bind(quoteId, user.id).first<{ id: number }>();
+    `SELECT id FROM quotes WHERE id = ? AND partner_id = ?`
+  ).bind(quoteId, user.partner_id).first<{ id: number }>();
   if (!quote) return c.json({ detail: 'not_found' }, 404);
+
+  if (kind === 'reading') {
+    const reading = await c.env.DB.prepare(
+      `SELECT ran_at FROM research_market_readings WHERE uid = ? AND owner_user_id = ?`
+    ).bind(refKey, user.id).first<{ ran_at: string }>();
+    if (!reading) return c.json({ detail: 'not_found' }, 404);
+    // AGE IS A GATE. A stale reading is blocked from a proposal, not merely
+    // labelled. The page hides Attach; this is the same refusal if it is called.
+    if (readingIsStale(reading.ran_at)) return c.json({ detail: 'reading_stale' }, 409);
+  }
 
   const uid = newUid();
   await c.env.DB.prepare(

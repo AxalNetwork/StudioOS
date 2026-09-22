@@ -140,21 +140,31 @@ test('the two endpoints that broke are not exempt from the limiter — by design
   assert.ok(!list.includes('/api/auth/google/start'), 'google/start must stay behind the limiter');
 });
 
-test('magic/start does not make sign-in wait on the mail provider', () => {
+test('magic/start queues the link before it says the mail is on its way', () => {
   const code = codeOnly(readFileSync(path.join(SRC, 'routes/auth.ts'), 'utf8'));
   const start = code.indexOf("auth.post('/magic/start'");
   const end = code.indexOf("auth.get('/magic/verify'");
   assert.ok(start > 0 && end > start, 'could not slice the /magic/start handler');
   const handler = code.slice(start, end);
+  // `send()` enqueues. It does not call Gmail unless the queue binding is
+  // missing, which production is not. Awaiting it is what makes the 202
+  // true: the previous `waitUntil` returned first and dropped the errand,
+  // so the screen said "sent" and the first message left only on Resend.
+  assert.match(handler, /await sendEmail\(c\.env, 'auth_magic_link'/);
   assert.ok(
-    /waitUntil\s*\(\s*deliver\s*\)/.test(handler),
-    'the magic-link send must be handed to waitUntil: the token row is already '
-    + 'committed, so the link is valid whether or not the provider answers',
+    !/immediate:\s*true/.test(handler),
+    'immediate: true would wait on Gmail inside the sign-in request',
   );
   assert.ok(
-    !/await\s+sendEmail\s*\(/.test(handler),
-    'awaiting sendEmail here couples the availability of sign-in to the '
-    + 'availability of Gmail',
+    !/waitUntil\s*\(/.test(handler),
+    'waitUntil let the response leave before the message was accepted',
+  );
+  const send = codeOnly(readFileSync(path.join(SRC, 'services/email/send.ts'), 'utf8'));
+  assert.match(send, /enqueueJob\(env, 'email_send'/);
+  assert.ok(
+    !/Jobs\.enqueue\(/.test(send),
+    'Jobs.enqueue only writes the D1 cron queue, which is what left the first '
+    + 'sign-in link sitting until a later drain',
   );
 });
 

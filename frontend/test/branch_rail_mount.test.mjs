@@ -249,12 +249,15 @@ test('a mount outside the founder tree names its role, and every literal role is
   assert.deepEqual(wrong, [], 'these mounts name a role ACCENT does not define, so they render the founder accent');
 
   // WHAT THIS RULE CANNOT SEE, said plainly so a green run is not over-read.
-  // Two shared workspaces pass `role={role}` because they serve several tiers,
-  // and a computed value is beyond a lexical check. Banning it would break two
-  // correct mounts and naming them would be an allowlist, so it is stated
-  // instead — the shape `check-timestamp-comparisons.mjs` already uses.
+  // A computed `role={role}` is beyond a lexical check. Banning it would break
+  // the mounts that serve several licences, and naming the files would be an
+  // allowlist, so the guard is a ceiling — the shape
+  // `check-timestamp-comparisons.mjs` already uses. The ceiling is the two
+  // shared shells (Research, Network) plus the three research detail pages
+  // that take the route's role (company, fund, market reading). A sixth mount
+  // should pass a literal role instead.
   const computed = MOUNTS.filter((m) => /\srole=\{/.test(m.tag)).map(at);
-  assert.ok(computed.length <= 4,
+  assert.ok(computed.length <= 5,
     `${computed.length} mounts compute their role; a lexical guard cannot check those, so keep them few: ${computed.join(', ')}`);
 });
 
