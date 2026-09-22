@@ -299,9 +299,9 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       //
       // TASK #197 ADDED THE LEDGER ROWS, WHICH WERE THE MISSING HALF. Before
       // this, a call produced an activity_log line and a moved dashboard number
-      // and nothing else — while `PartnerPortal.jsx` and `CapitalPage.jsx` both
-      // read `capital_calls` through `api.listCapitalCalls()` and both carry a
-      // working Pay button over it. The receivable a GP had just issued existed
+      // and nothing else — while `CapitalPage.jsx` reads `capital_calls` through
+      // `api.listCapitalCalls()` and carries a working Pay button over it. The
+      // receivable a GP had just issued existed
       // nowhere, so there was nothing to pay.
       //
       // AND THE REASON THIS HANDLER IS WRITTEN THE WAY IT IS: **it gets re-run.**

@@ -167,7 +167,7 @@ function parseHelperCalls(src, defaultPersona) {
     if (subtype) {
       bodySrc = args[0];
       section = unquote(args[1]);
-      page = unquote(args[2]) ?? '/partner-portal';
+      page = unquote(args[2]) ?? '/studio';
       anchor = unquote(args[3]) ?? 'network/partners';
     } else {
       bodySrc = args[args.length - 1];

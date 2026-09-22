@@ -115,19 +115,19 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     { key: 'inv.notifs',    label: 'Configure notifications',            route: '/account/notifications',     autoDetect: true },
   ],
   operatingPartner: [
-    { key: 'op.accept',     label: 'Accept partner invitation',          route: '/partner-portal',             autoDetect: true },
+    { key: 'op.accept',     label: 'Accept partner invitation',          route: '/studio',                     autoDetect: true },
     { key: 'op.profile',    label: 'Complete profiling chatbot',         route: '/onboarding/persona',         autoDetect: true },
     // NO STORE, so no detector: partner_profiles has no conflicts column in a
     // built schema. migrations/042 declares conflicts_text and 042 is below
     // BASELINE_CUTOFF, so the baseline had to carry it and does not — that is
     // baseline drift, filed for check-baseline-drift rather than papered over.
-    { key: 'op.conflicts',  label: 'Disclose conflicts',                 route: '/partner-portal',             autoDetect: false },
-    { key: 'op.deal_type',  label: 'Pick deal-type proposal + sign',     route: '/partner-portal',             autoDetect: true },
+    { key: 'op.conflicts',  label: 'Disclose conflicts',                 route: '/partner/operations/overview', autoDetect: false },
+    { key: 'op.deal_type',  label: 'Pick deal-type proposal + sign',     route: '/partners/portal',            autoDetect: true },
     // Task #2 — KYC is investor-only, so the partner KYB step no longer
     // deep-links to /kyc (which now renders a "not required" state for
     // non-investors). The item still tracks KYB completion; admins handle
-    // KYB collection via the partner portal.
-    { key: 'op.kyb',        label: 'Configure KYB documents',            route: '/partner-portal',             autoDetect: true },
+    // KYB collection via Trust.
+    { key: 'op.kyb',        label: 'Configure KYB documents',            route: '/trust',                      autoDetect: true },
     { key: 'op.service',    label: 'Add at least one service / offer',   route: '/services',                   autoDetect: true },
     // NO STORE, so no detector: references_records exists in migration 034 and in
     // neither the baseline nor production. reference_checks is deal-scoped

@@ -10,7 +10,7 @@ so the filename is usually the fastest way from a URL to its code: `/deals` →
 2. The component name is the filename.
 
 Naming follows the surface, not the persona: `PortfolioHealthPage`,
-`SpinoutLabCapitalPage`, `PartnerPortal`.
+`SpinoutLabCapitalPage`, `PartnerDealPortal`.
 
 ## Subfolders
 

@@ -257,7 +257,6 @@ export const SIDEBAR_GROUPS = {
     { key: 'more', label: 'More', items: [
       { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement' },
       { to: '/spinout-lab/83b', icon: Calendar, label: '83(b) Tracker' },
-      { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
       { to: '/perks', icon: Gift, label: 'Perks' },
     ]},
     // No 'account' group here on purpose. It once held Articles / Activity Log
@@ -390,8 +389,8 @@ export const SIDEBAR_GROUPS = {
   // Intentional removals from the partner nav (documented so a nav-integrity
   // guard treats them as deliberate, not silent drops — every route below
   // stays registered and reachable for other roles or via deep link):
-  //   • /partner-portal "Partner Portal" — Studio is the home now, so the
-  //     duplicate portal tile is dropped (route stays for admin / deep links).
+  //   • /partner-portal "Partner Portal" — the page is retired. The route
+  //     redirects to Studio, which is the home.
   //   • /projects "Projects" and /pipeline "Pipeline Board" — studio/investor
   //     execution + deal-pipeline surfaces, not partner-facing.
   //   • /deals "Deal Flow" — only relevant to investor-type partners
