@@ -40,13 +40,15 @@
     .acc{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #334155;background:#334155;color:#fff;cursor:pointer}
     .gho{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49;cursor:pointer}
     .dis{font-size:11.5px;font-weight:600;padding:6px 10px;color:#615c6e;cursor:pointer}
+    /* Absence is a state, not a value: the chip has to look unlike a recorded answer. */
+    .nr{display:inline-flex;align-items:center;font-size:9.5px;font-weight:700;letter-spacing:.03em;color:#615c6e;background:#f4f4f6;border:1px solid #e2e1e8;border-radius:4px;padding:2px 7px;white-space:nowrap}
     .lock{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#615c6e;background:#f4f4f6;border:1px solid #e2e1e8;border-radius:4px;padding:2px 7px}
   </style>
 </helmet>
 
 <!-- ══════════ CHANGELOG ══════════ -->
 <section class="ab" id="changelog" style="padding-bottom:26px">
-  <div class="ab-hd"><a class="ab-id" href="#changelog">CHANGELOG</a><span class="ab-nm">Amendments to S0–S6 · new artboards S7–S13</span><span class="ab-sub">every in-place change listed · ids stable</span></div>
+  <div class="ab-hd"><a class="ab-id" href="#changelog">CHANGELOG</a><span class="ab-nm">Amendments to S0–S6 · new artboards S7–S19</span><span class="ab-sub">every in-place change listed · ids stable</span></div>
   <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-width:1440px">
     <sc-for list="{{ changelog }}" as="c" hint-placeholder-count="4">
       <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:10px;padding:11px 14px;display:flex;gap:11px;align-items:flex-start">
@@ -102,93 +104,249 @@
   </div>
 </section>
 
-<!-- ══════════ S1 · HOME ══════════ -->
+<!-- ══════════ S1 · STUDIO ══════════ -->
 <section class="ab" id="s1">
-  <div class="ab-hd"><a class="ab-id" href="#s1">S1</a><span class="ab-nm">Home — the territory's operating digest</span></div>
+  <div class="ab-hd"><a class="ab-id" href="#s1">S1</a><span class="ab-nm">Studio — Eadwyn and the task rail are one card, and that card goes full screen</span><span class="ab-sub">/studio · page header · maximize · Proposed empty · Pending in progress</span></div>
+  <div class="ab-sub" style="max-width:1020px;margin:-6px 0 16px">The rail is not a sibling column beside the card — it lives inside it, right of a divider, which is why maximize takes the chat, Focus a section and the task list full screen together. The page keeps a header above the card: the operating headline, whose view this is, and Refresh context. The digest that used to be this page is a strip beneath, not the page.</div>
+  <sc-for list="{{ studioFrames }}" as="f" hint-placeholder-count="4">
+  <div class="lbl" style="margin:14px 0 8px">{{ f.label }}</div>
+  <div class="frame" style="width:{{ f.w }};min-width:{{ f.w }}">
+    <sc-if value="{{ f.side }}"><div class="side"><sc-for list="{{ navHome }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div></sc-if>
+    <div class="main">
+      <sc-if value="{{ f.terr }}"><div class="terr"><div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">Axal VC France</span><span class="num" style="font-size:11px;opacity:.7">FR · BE · LU</span></div><span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">BRANCH</span></div></sc-if>
+      <div class="inner" style="padding:{{ f.pad }}">
+
+        <!-- page header: above the card, not inside it -->
+        <sc-if value="{{ f.pageHd }}">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:14px">
+            <div><h1 style="margin:0;font-size:{{ f.h1 }};font-weight:800;letter-spacing:-.03em;line-height:1.1">One territory. One clear move.</h1><div style="font-size:12.5px;color:#615c6e;margin-top:6px">Axal VC France · Admin</div></div>
+            <div style="display:flex;align-items:center;gap:12px"><span class="mono" style="font-size:11.5px;color:#615c6e">Camille's operating view</span><span class="gho" style="display:inline-flex;align-items:center;gap:6px">↻ Refresh context</span></div>
+          </div>
+        </sc-if>
+
+        <!-- ONE card: chat left, task rail right of a divider, inside the same border -->
+        <div class="c" style="overflow:hidden">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;background:#f5f3ff;border-bottom:1px solid #ececf1;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:11px"><!-- The mark, not a generic sparkle tile: no violet plate behind it — the artwork carries
+                 its own colour and a fill would fight the pixel edges. -->
+            <img src="4835ee6e-8882-4123-a5fb-fec77f0048df" alt="Eadwyn" width="34" height="34" style="display:block;width:34px;height:34px;flex:none;object-fit:contain;image-rendering:pixelated"><div><div style="font-size:15px;font-weight:800;letter-spacing:-.015em">Eadwyn AI</div><div style="font-size:11.5px;color:#615c6e;margin-top:2px">admin · {{ stAnswered }}/{{ stTotal }} answered ({{ stPct }}%)</div></div></div>
+            <div style="display:flex;align-items:center;gap:14px"><span style="font-size:12px;font-weight:700;color:#7c3aed;cursor:pointer">⛶ Open a ticket</span><span style="font-size:13px;color:#615c6e;cursor:pointer" title="{{ f.maxTitle }}">{{ f.maxGlyph }}</span></div>
+          </div>
+          <sc-if value="{{ f.ticket }}">
+            <div style="padding:14px 18px;background:#faf9ff;border-bottom:1px solid #ececf1">
+              <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:12.5px;font-weight:700;color:#6d28d9">Open a support ticket</span><span style="color:#615c6e;cursor:pointer">✕</span></div>
+              <div style="border:1px solid #e2e1e8;background:#fff;border-radius:9px;padding:9px 12px;font-size:12px;margin-top:9px">Approvals filter loses state on reload</div>
+              <div style="border:1px solid #e2e1e8;background:#fff;border-radius:9px;padding:9px 12px;font-size:12px;color:#615c6e;margin-top:8px;min-height:40px">Optional — anything that helps</div>
+              <div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap"><span class="acc" style="background:#7c3aed;border-color:#7c3aed">File ticket</span><span style="font-size:12px;font-weight:600;color:#3f3a49">Cancel</span><span style="font-size:10.5px;color:#615c6e;margin-left:auto">Stays on /studio</span></div>
+            </div>
+          </sc-if>
+          <div style="display:flex;flex-direction:{{ f.dir }};align-items:stretch">
+            <!-- chat: its own scroll region -->
+            <div style="flex:1.75;min-width:0;display:flex;flex-direction:column;border-right:{{ f.divider }}">
+              <!-- align-content:end — a transcript overflows off the TOP. Packed to the start,
+                   the grid hid the newest turn, which on the ticket frame is the filed
+                   confirmation the frame exists to show. -->
+              <div style="padding:16px 18px;display:grid;gap:12px;align-content:end;min-height:{{ f.chatH }};max-height:{{ f.chatH }};overflow:hidden;position:relative">
+                <sc-for list="{{ stMsgs }}" as="m" hint-placeholder-count="6">
+                  <div style="{{ m.row }}">
+                    <span style="{{ m.bub }}">{{ m.t }}<sc-if value="{{ m.cta }}"><br><span class="acc" style="display:inline-block;margin-top:9px;background:#7c3aed;border-color:#7c3aed">{{ m.cta }} →</span></sc-if></span>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ f.ticket }}"><div><span style="display:inline-block;background:#f3f4f6;border-radius:13px;padding:10px 14px;font-size:13px;line-height:1.5;max-width:460px">"Approvals filter loses state on reload" has been filed. <span style="font-weight:700;color:#7c3aed">View in the Help Center →</span></span></div></sc-if>
+                <!-- Thumb at the foot of its track, because the region is scrolled to the end. -->
+                <div style="position:absolute;bottom:14px;right:3px;width:4px;height:{{ f.scrollH }};border-radius:99px;background:#cbd5e1"></div>
+              </div>
+              <div style="padding:11px 18px;border-top:1px solid #ececf1;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><span style="font-size:12.5px;color:#3f3a49;min-width:0"><strong style="color:#6d28d9">Currently:</strong> {{ stCurrent }}</span><span style="font-size:12px;font-weight:600;color:#7c3aed;white-space:nowrap">ⓘ Explain</span></div>
+              <div style="padding:10px 18px 16px;display:flex;align-items:center;gap:10px"><div style="flex:1;min-width:0;border:1px solid #e2e1e8;border-radius:11px;padding:11px 14px;font-size:13px;color:#615c6e">Type your answer, or "explain …"</div><span style="width:17px;height:17px;display:block;flex:none;color:#615c6e" title="Dictate" dangerouslySetInnerHTML="{{ micIcon }}"></span><span style="width:17px;height:17px;display:block;flex:none;color:#615c6e" title="Skip this question" dangerouslySetInnerHTML="{{ skipIcon }}"></span><span style="width:38px;height:38px;border-radius:11px;background:#a78bfa;color:#fff;display:flex;align-items:center;justify-content:center;flex:none;padding:10px;box-sizing:border-box" dangerouslySetInnerHTML="{{ sendIcon }}"></span></div>
+            </div>
+            <!-- task rail: inside the card -->
+            <div style="flex:1;min-width:0;padding:16px 18px;border-top:{{ f.railTop }}">
+              <div class="lbl">Focus a section</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><sc-for list="{{ stSections }}" as="x" hint-placeholder-count="4"><span style="font-size:10.5px;font-weight:700;letter-spacing:.04em;color:#4a4553;border:1px solid #e2e1e8;border-radius:999px;padding:5px 11px;background:#fff;white-space:nowrap">{{ x }}</span></sc-for></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px"><span class="lbl" style="color:#3f3a49">⌄ Proposed</span><span class="num" style="font-size:11px;font-weight:700;color:#615c6e">{{ stPropN }}</span></div>
+              <sc-if value="{{ stPropEmpty }}">
+                <div style="text-align:center;padding:26px 10px 20px">
+                  <span style="width:40px;height:40px;display:inline-block;color:#7c3aed" dangerouslySetInnerHTML="{{ caughtUpIcon }}"></span>
+                  <div style="font-size:13.5px;font-weight:800;letter-spacing:-.015em;margin-top:9px">You're all caught up!</div>
+                  <div style="font-size:11.5px;color:#615c6e;margin-top:5px;line-height:1.5">New questions appear here as your work unlocks them.</div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ stProps }}">
+                <div style="display:grid;gap:8px;margin-top:9px">
+                  <sc-for list="{{ stProps }}" as="p" hint-placeholder-count="2">
+                    <div class="c" style="padding:11px 13px">
+                      <div style="display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;flex:none;color:#7c3aed" dangerouslySetInnerHTML="{{ sparkIcon }}"></span><span style="font-size:12.5px;font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.t }}</span><span style="font-size:9px;font-weight:800;letter-spacing:.06em;color:#6d28d9;background:#f3e8ff;border-radius:5px;padding:3px 7px;flex:none">{{ p.pri }}</span></div>
+                      <div style="height:4px;border-radius:99px;background:#ece9f5;margin-top:9px;overflow:hidden"><div style="height:100%;width:{{ p.pct }};background:#7c3aed;border-radius:99px"></div></div>
+                      <div style="display:flex;align-items:center;gap:14px;margin-top:8px;font-size:11.5px;font-weight:600"><span style="color:#615c6e">▯ Learn</span><span style="color:#7c3aed;margin-left:auto">{{ p.link }} →</span></div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px"><span class="lbl" style="color:#3f3a49">⌄ Pending</span><span class="num" style="font-size:11px;font-weight:700;color:#615c6e">{{ stPendN }}</span></div>
+              <div style="display:grid;gap:8px;margin-top:9px">
+                <sc-for list="{{ stPending }}" as="p" hint-placeholder-count="1">
+                  <div class="c" style="padding:11px 13px">
+                    <div style="display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;flex:none;color:#7c3aed" dangerouslySetInnerHTML="{{ sparkIcon }}"></span><span style="font-size:12.5px;font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.t }}</span><span style="font-size:9px;font-weight:800;letter-spacing:.06em;color:#6d28d9;background:#f3e8ff;border-radius:5px;padding:3px 7px;flex:none">{{ p.pri }}</span></div>
+                    <div style="height:4px;border-radius:99px;background:#ece9f5;margin-top:9px;overflow:hidden"><div style="height:100%;width:{{ p.pct }};background:#7c3aed;border-radius:99px"></div></div>
+                    <div style="display:flex;align-items:center;gap:14px;margin-top:8px;font-size:11.5px;font-weight:600"><span style="color:#615c6e">▯ Learn</span><span style="color:#7c3aed;margin-left:auto">{{ p.link }} →</span></div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px"><span class="lbl" style="color:#3f3a49">› Completed</span><span class="num" style="font-size:11px;font-weight:700;color:#615c6e">{{ stAnswered }}</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- digest strip: after the card, never instead of it -->
+        <sc-if value="{{ f.digest }}">
+          <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+            <sc-for list="{{ stDigest }}" as="d" hint-placeholder-count="3"><div class="c" style="flex:1;min-width:160px;padding:10px 13px"><div class="lbl" style="font-size:8.5px">{{ d.k }}</div><div class="num" style="font-size:14px;font-weight:800;margin-top:4px;color:{{ d.ink }}">{{ d.v }}</div><div style="font-size:10.5px;color:#615c6e;margin-top:2px">{{ d.note }}</div></div></sc-for>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+  <div class="cap" style="max-width:1440px">{{ f.cap }}</div>
+  </sc-for>
+</section>
+
+<!-- ══════════ S1b · STUDIO · OPERATING POSTURE ══════════ -->
+<section class="ab" id="s1b">
+  <div class="ab-hd"><a class="ab-id" href="#s1b">S1b</a><span class="ab-nm">Studio — operating posture: what the admin bank has on record, full-width beneath the chat</span><span class="ab-sub">/studio · four cards · no score, no graph, no sprite</span></div>
+  <div class="ab-sub" style="max-width:1020px;margin:-6px 0 16px">The band reads the same four sections the rail is working through, but as a record rather than a queue: what has been answered, stated plainly. Every empty field says so and points back at the one place it can be answered. Oversight carries the most, so it is the wide card; Preferences carries the least and is quieter for it.</div>
   <div class="frame">
     <div class="side"><sc-for list="{{ navHome }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
     <div class="main">
-      <div class="terr">
-        <div style="display:flex;align-items:center;gap:10px">
-          <span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span>
-          <span style="font-size:12.5px;font-weight:700">Axal VC France</span>
-          <span class="num" style="font-size:11px;opacity:.7">FR · BE · LU</span>
-        </div>
-        <span class="num" style="font-size:11px;opacity:.7">Tue 26 Aug · 09:12 CET</span>
-      </div>
+      <div class="terr"><div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">Axal VC France</span><span class="num" style="font-size:11px;opacity:.7">FR · BE · LU</span></div><span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">BRANCH</span></div>
       <div class="inner">
-        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Good morning, Camille</h1>
-        <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">{{ homeSub }}</div>
-
-        <div class="prop" style="margin-top:15px">
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><span class="propb">Proposal · digest</span><span class="num" style="font-size:10.5px;color:#334155;margin-left:auto">{{ homeCost }}</span></div>
-          <div style="font-size:12.5px;color:#1e293b;line-height:1.7">{{ homeDigest }}</div>
-          <div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap"><span class="acc">Accept as today's brief</span><span class="gho">Edit</span><span class="dis">Discard</span></div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:11px">
+          <span class="lbl" style="color:#3f3a49">Operating posture</span>
+          <span class="num" style="font-size:11.5px;font-weight:700;color:#615c6e">{{ postureCount }}</span>
         </div>
-
-        <div class="c" style="padding:16px 18px;margin-top:14px">
-          <div class="zh"><span class="zt">Queue pressure</span><span class="zs">Worst first · oldest item age, not count</span></div>
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px">
-            <sc-for list="{{ queues }}" as="q" hint-placeholder-count="4">
-              <div style="{{ q.cardStyle }}">
-                <div class="lbl" style="font-size:9px">{{ q.name }}</div>
-                <div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:5px;line-height:1;color:{{ q.ink }}">{{ q.n }}</div>
-                <div class="num" style="font-size:10.5px;color:{{ q.ink }};margin-top:5px;font-weight:600">{{ q.oldest }}</div>
+        <div style="display:grid;grid-template-columns:1.45fr 1fr 1fr .85fr;gap:12px;align-items:start">
+          <sc-for list="{{ posture }}" as="p" hint-placeholder-count="4">
+            <div class="c" style="padding:15px 17px;{{ p.cardStyle }}">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                <span style="font-size:12.5px;font-weight:800;letter-spacing:-.01em;color:{{ p.titleInk }}">{{ p.title }}</span>
+                <sc-if value="{{ p.chip }}"><span style="{{ p.chipStyle }}">{{ p.chip }}</span></sc-if>
               </div>
-            </sc-for>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7">
-            <span style="font-size:11.5px;color:#615c6e;line-height:1.55">{{ queueNote }}</span>
-            <span class="vm">View more · Approvals →</span>
-          </div>
-        </div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
-          <div class="c" style="padding:16px 18px">
-            <div class="zh"><span class="zt">Today's deadlines</span><span class="zs">Programme clock</span></div>
-            <div style="display:grid;gap:8px">
-              <sc-for list="{{ deadlines }}" as="d" hint-placeholder-count="3">
-                <div style="{{ d.rowStyle }}">
-                  <div style="min-width:0"><div style="font-size:12.5px;font-weight:700">{{ d.what }}</div><div style="font-size:11px;color:#615c6e;margin-top:3px">{{ d.who }}</div></div>
-                  <span style="{{ d.pill }}">{{ d.when }}</span>
-                </div>
-              </sc-for>
-            </div>
-            <div style="margin-top:11px"><span class="vm">View more · Programs →</span></div>
-          </div>
-
-          <div class="c" style="padding:16px 18px">
-            <div class="zh"><span class="zt">Revenue share MTD</span><span class="zs">Your cut, this territory</span></div>
-            <div style="display:flex;align-items:baseline;gap:11px">
-              <span class="num" style="font-size:27px;font-weight:800;letter-spacing:-.025em">{{ mtd }}</span>
-              <span class="num" style="font-size:12px;font-weight:700;color:#047857">{{ mtdDelta }}</span>
-            </div>
-            <div style="display:flex;align-items:flex-end;gap:3px;height:44px;margin-top:13px">
-              <sc-for list="{{ spark }}" as="s" hint-placeholder-count="12"><div style="{{ s.style }}"></div></sc-for>
-            </div>
-            <div style="font-size:11px;color:#615c6e;margin-top:10px;line-height:1.55">{{ mtdNote }}</div>
-            <div style="margin-top:9px"><span class="vm">View more · Insights →</span></div>
-          </div>
-        </div>
-
-        <div class="c" style="padding:16px 18px;margin-top:14px;border-color:#fde68a;background:#fffdf5">
-          <div class="zh"><span class="zt">Flagged by the rail</span><span class="zs">Anomalies, within your territory</span></div>
-          <div style="display:grid;gap:9px">
-            <sc-for list="{{ anomalies }}" as="a" hint-placeholder-count="2">
-              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;background:#fff;border:1px solid #fde68a;border-radius:10px;padding:12px 13px">
-                <div style="min-width:0">
-                  <div style="font-size:12.5px;font-weight:700;color:#92400e">{{ a.what }}</div>
-                  <div style="font-size:11.5px;color:#3f3a49;margin-top:5px;line-height:1.55">{{ a.body }}</div>
-                </div>
-                <span class="vm" style="flex:none;color:#92400e">{{ a.action }}</span>
+              <div style="display:grid;gap:9px;margin-top:12px">
+                <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="3">
+                  <div>
+                    <div class="lbl" style="font-size:8px">{{ r.k }}</div>
+                    <sc-if value="{{ r.v }}"><div style="font-size:12px;font-weight:600;color:#18181b;margin-top:3px;line-height:1.45">{{ r.v }}</div></sc-if>
+                    <sc-if value="{{ r.nr }}">
+                      <div style="display:flex;align-items:center;gap:9px;margin-top:4px;flex-wrap:wrap"><span class="nr">Not recorded</span><span style="font-size:11px;font-weight:600;color:#7c3aed;white-space:nowrap">Continue in the chat ↑</span></div>
+                    </sc-if>
+                  </div>
+                </sc-for>
               </div>
-            </sc-for>
-          </div>
+              <sc-if value="{{ p.link }}"><div style="margin-top:13px;padding-top:11px;border-top:1px solid #f4f3f7"><span style="font-size:11.5px;font-weight:700;color:#7c3aed">{{ p.link }} →</span></div></sc-if>
+            </div>
+          </sc-for>
         </div>
+        <div class="cap" style="margin-top:12px">Oversight has two fields on record and the rest of the band does not, so the empty state is what most of this sample shows — the honest shape of a territory seven answers into eleven. The header counts bank questions rather than the values on screen, because several answers set behaviour without becoming a field here; read as a count of cards it would contradict the three values visible. Nothing is scored: a posture is a choice the admin stated, not a rating of it.</div>
       </div>
     </div>
-    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Home" hint-size="100%,700px"></dc-import></div>
   </div>
+</section>
+
+<!-- ══════════ S1c · STUDIO · NEEDS A DECISION ══════════ -->
+<section class="ab" id="s1c">
+  <div class="ab-hd"><a class="ab-id" href="#s1c">S1c</a><span class="ab-nm">Studio — needs a decision: four links, worst first, and the licence line under them</span><span class="ab-sub">/studio · tiles are links · no forms, no second home</span></div>
+  <div class="ab-sub" style="max-width:1020px;margin:-6px 0 16px">Each tile names one fact and the page that resolves it. Ordered worst first, so the eye meets the six-day KYC item before the four templates waiting quietly. Nothing is editable here — a tile that could be actioned in place would be a second home page.</div>
+  <sc-for list="{{ decisionFrames }}" as="fr" hint-placeholder-count="2">
+  <div class="lbl" style="margin:14px 0 8px">{{ fr.label }}</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navHome }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="terr" style="{{ fr.terrStyle }}"><div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">{{ fr.brand }}</span><span class="num" style="font-size:11px;opacity:.7">{{ fr.codes }}</span></div><span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">BRANCH</span></div>
+      <div class="inner">
+        <span class="lbl" style="color:#3f3a49">Needs a decision</span>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:11px;align-items:start">
+          <sc-for list="{{ fr.tiles }}" as="t" hint-placeholder-count="4">
+            <div class="c" style="padding:15px 17px;{{ t.cardStyle }}">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="lbl" style="font-size:8.5px">{{ t.k }}</span><sc-if value="{{ t.band }}"><span style="{{ t.bandStyle }}">{{ t.band }}</span></sc-if></div>
+              <div style="font-size:{{ t.size }};font-weight:800;letter-spacing:-.02em;margin-top:8px;line-height:1.25;color:{{ t.ink }}">{{ t.v }}</div>
+              <div style="font-size:11.5px;color:#3f3a49;margin-top:6px;line-height:1.5">{{ t.d }}</div>
+              <sc-if value="{{ t.alt }}">
+                <div style="border-top:1px dashed #e2e1e8;margin-top:11px;padding-top:9px">
+                  <div class="lbl" style="font-size:7.5px">Same tile, another licence</div>
+                  <div style="display:flex;align-items:center;gap:8px;margin-top:5px;flex-wrap:wrap"><span class="nr">Not recorded</span><span style="font-size:10.5px;color:#615c6e;line-height:1.45">seats are not counted for this licence yet</span></div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ t.blocked }}"><div style="font-size:10.5px;font-weight:700;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:7px;padding:7px 9px;margin-top:11px">Suspended — writes are blocked</div></sc-if>
+              <div style="margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7"><span style="font-size:11.5px;font-weight:700;color:#7c3aed">{{ t.link }} →</span></div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:13px;padding-top:12px;border-top:1px solid #f4f3f7">
+          <span style="font-size:12px;font-weight:700">{{ fr.licence }}</span>
+          <span style="{{ fr.licStyle }}">{{ fr.licState }}</span>
+          <sc-if value="{{ fr.share }}"><span style="font-size:11px;font-weight:700;color:#7c3aed;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:999px;padding:4px 11px">{{ fr.share }} · Insights →</span></sc-if>
+        </div>
+        <div class="cap" style="margin-top:11px">{{ fr.cap }}</div>
+      </div>
+    </div>
+  </div>
+  </sc-for>
+</section>
+
+<!-- ══════════ S1d · STUDIO · PAGE OVERVIEW ══════════ -->
+<section class="ab" id="s1d">
+  <div class="ab-hd"><a class="ab-id" href="#s1d">S1d</a><span class="ab-nm">Studio — page overview: one card per sidebar row, in sidebar order</span><span class="ab-sub">/studio · seven cards · where another Studio would draw skills, values and archetype</span></div>
+  <div class="ab-sub" style="max-width:1020px;margin:-6px 0 16px">An admin does not have a founder profile, so the space a founder Studio gives to skills, values and an archetype goes to the seven pages this admin actually runs. Each card carries the page name, one status line, one sentence on what the page is for, and the way in. No card counts what its own console already counts, and none of them is a form.</div>
+  <sc-for list="{{ overviewFrames }}" as="fr" hint-placeholder-count="2">
+  <div class="lbl" style="margin:14px 0 8px">{{ fr.label }}</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navHome }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="terr" style="{{ fr.terrStyle }}"><div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">{{ fr.brand }}</span><span class="num" style="font-size:11px;opacity:.7">{{ fr.codes }}</span></div><span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">BRANCH</span></div>
+      <div class="inner">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:11px">
+          <span class="lbl" style="color:#3f3a49">Page overview</span>
+          <span style="font-size:11px;color:#615c6e">Sidebar order · the seven rows below Studio</span>
+        </div>
+        <sc-if value="{{ fr.frozen }}">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px 13px;margin-bottom:12px">
+            <span style="font-size:12px;font-weight:700;color:#b91c1c">{{ fr.frozen }}</span>
+            <span style="font-size:11px;color:#3f3a49">Every card below stays readable — a frozen territory still needs to see what it was holding.</span>
+          </div>
+        </sc-if>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:start">
+          <sc-for list="{{ overview }}" as="o" hint-placeholder-count="7">
+            <div class="c" style="padding:15px 17px;{{ o.cardStyle }}">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                <span style="font-size:13px;font-weight:800;letter-spacing:-.012em">{{ o.page }}</span>
+                <sc-if value="{{ o.band }}"><span style="{{ o.bandStyle }}">{{ o.band }}</span></sc-if>
+              </div>
+              <sc-if value="{{ o.status }}"><div style="font-size:12px;font-weight:600;color:#18181b;margin-top:9px;line-height:1.5">{{ o.status }}</div></sc-if>
+              <sc-if value="{{ o.doors }}">
+                <div style="display:grid;gap:5px;margin-top:9px">
+                  <sc-for list="{{ o.doors }}" as="d" hint-placeholder-count="4">
+                    <div style="font-size:11.5px;line-height:1.45"><strong style="font-weight:700">{{ d.k }}</strong> <span style="color:#3f3a49">{{ d.v }}</span></div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ o.nr }}">
+                <div style="display:flex;align-items:flex-start;gap:9px;margin-top:9px;flex-wrap:wrap"><span class="nr">Not recorded</span><span style="font-size:11px;color:#615c6e;line-height:1.45;flex:1;min-width:120px">{{ o.nr }}</span></div>
+              </sc-if>
+              <div style="font-size:11.5px;color:#615c6e;margin-top:9px;line-height:1.55">{{ o.what }}</div>
+              <sc-if value="{{ o.alt }}">
+                <div style="border-top:1px dashed #e2e1e8;margin-top:11px;padding-top:9px">
+                  <div class="lbl" style="font-size:7.5px">Empty state</div>
+                  <div style="font-size:11.5px;font-weight:600;color:#3f3a49;margin-top:4px">{{ o.alt }}</div>
+                </div>
+              </sc-if>
+              <div style="margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7"><span style="font-size:11.5px;font-weight:700;color:#7c3aed">Open {{ o.page }} →</span></div>
+            </div>
+          </sc-for>
+        </div>
+        <div class="cap" style="margin-top:12px">{{ fr.cap }}</div>
+      </div>
+    </div>
+  </div>
+  </sc-for>
 </section>
 
 <!-- ══════════ S2 · ACCOUNTS ══════════ -->
@@ -259,7 +417,7 @@
 <!-- ══════════ S3 · APPROVALS ══════════ -->
 <section class="ab" id="s3">
   <div class="ab-hd"><a class="ab-id" href="#s3">S3</a><span class="ab-nm">Approvals — the daily job, one board</span><span class="ab-sub">WORK BOARD · absorbs five formerly separate queues</span></div>
-  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">Five queues that were five pages become five lanes, because an admin's actual question is never "what is in the LP queue" — it is "what is oldest and who is waiting." Sorting by SLA age across all of them is only possible once they share a surface.</div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">The kanban is the second view, kept to five columns because five is what fits — and which five is decided by age rather than a fixed order, so the board always shows the lanes that are hurting. The primary view, with every lane reachable, is S16. An admin's actual question is never "what is in the LP queue" — it is "what is oldest and who is waiting." Sorting by SLA age across all of them is only possible once they share a surface.</div>
   <div class="frame">
     <div class="side"><sc-for list="{{ navApp }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
     <div class="main">
@@ -391,7 +549,7 @@
           <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">Community is the one hub that is entirely local: an event in Lyon, a job posted by a Paris founder, a circle that exists nowhere else. Nothing here needs HQ approval — which is exactly why the content zone next to it does.</div>
         </div>
       </div>
-      <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Home" hint-size="100%,700px"></dc-import></div>
+      <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Programs" hint-size="100%,700px"></dc-import></div>
     </div>
   </div>
 </section>
@@ -461,7 +619,7 @@
         </div>
       </div>
     </div>
-    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Home" hint-size="100%,700px"></dc-import></div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Contracts" hint-size="100%,700px"></dc-import></div>
   </div>
 </section>
 
@@ -549,7 +707,7 @@
         <span class="num" style="font-size:10.5px;color:#b91c1c;flex:none">{{ s7Since }}</span>
       </div>
       <div class="inner">
-        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Home · {{ s7Brand }}</h1>
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Studio · {{ s7Brand }}</h1>
         <div style="display:grid;grid-template-columns:1fr 1fr 1.1fr;gap:14px;margin-top:14px;align-items:start">
           <div class="c" style="padding:16px 18px">
             <div class="zh"><span class="zt">Still readable</span><span class="zs">your database, untouched</span></div>
@@ -572,7 +730,7 @@
         </div>
       </div>
     </div>
-    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Home" hint-size="100%,600px"></dc-import></div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Settings" hint-size="100%,600px"></dc-import></div>
   </div>
 </section>
 
@@ -687,7 +845,7 @@
         </div>
       </div>
     </div>
-    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Home" hint-size="100%,620px"></dc-import></div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Contracts" hint-size="100%,620px"></dc-import></div>
   </div>
 </section>
 
@@ -733,7 +891,7 @@
         </div>
       </div>
     </div>
-    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Home" hint-size="100%,420px"></dc-import></div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Insights" hint-size="100%,420px"></dc-import></div>
   </div>
 </section>
 
@@ -789,7 +947,494 @@
     </div>
     <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Accounts" hint-size="100%,560px"></dc-import></div>
   </div>
-</section></x-dc>
+</section>
+
+<!-- ══════════ S14 · THIS DEPLOYMENT ══════════ -->
+<section class="ab" id="s14">
+  <div class="ab-hd"><a class="ab-id" href="#s14">S14</a><span class="ab-nm">This deployment — what studioos-fr is, and what it is not</span><span class="ab-sub">the architecture every S-screen honours · stated once</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">A branch is its own worker with its own database. It has exactly one service binding — to HQ — and exports one entrypoint HQ may call. It writes events to two account-level services that aggregate across branches by design, and it can read neither: there is no global view underneath any S-screen, because there is no binding that could produce one.</div>
+  <div style="max-width:1440px;display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:12px;align-items:start">
+    <div class="c" style="padding:14px 16px;border-color:#cbd5e1">
+      <div class="zh"><span class="zt mono">fr.axal.vc · studioos-fr</span><span class="lock">jurisdiction eu</span></div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap"><sc-for list="{{ s14Own }}" as="i" hint-placeholder-count="8"><span class="tag mono" style="font-size:9.5px">{{ i }}</span></sc-for></div>
+      <div style="font-size:11px;color:#615c6e;line-height:1.55;margin-top:10px">{{ s14OwnNote }}</div>
+    </div>
+    <div class="c" style="padding:14px 16px">
+      <div class="zh"><span class="zt">The one binding · HQ → studioos</span></div>
+      <sc-for list="{{ s14Rpc }}" as="r" hint-placeholder-count="2">
+        <div style="padding:8px 0;border-top:1px solid #f4f3f7"><div class="lbl" style="font-size:8.5px">{{ r.k }}</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px"><sc-for list="{{ r.items }}" as="i" hint-placeholder-count="5"><span class="tag mono" style="font-size:9.5px">{{ i }}</span></sc-for></div><div style="font-size:10.5px;color:#615c6e;margin-top:6px;line-height:1.5">{{ r.note }}</div></div>
+      </sc-for>
+    </div>
+    <div class="c" style="padding:14px 16px;background:#fbfbfc">
+      <div class="zh"><span class="zt">Writes to, cannot read</span><span class="zs">account-level, cross-branch by design</span></div>
+      <sc-for list="{{ s14Shared }}" as="s" hint-placeholder-count="3">
+        <div style="padding:8px 0;border-top:1px solid #f4f3f7"><div class="mono" style="font-size:11.5px;font-weight:700">{{ s.what }}</div><div style="font-size:11px;color:#3f3a49;line-height:1.5;margin-top:3px">{{ s.how }}</div></div>
+      </sc-for>
+      <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:9px;padding:9px 11px;margin-top:10px;font-size:11px;color:#b91c1c;line-height:1.5">{{ s14Cannot }}</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ S15 · ANALYTICS ══════════ -->
+<section class="ab" id="s15">
+  <div class="ab-hd"><a class="ab-id" href="#s15">S15</a><span class="ab-nm">Insights · Analytics — this branch’s own numbers, and one median from HQ</span><span class="ab-sub">D1 studioos-fr for records · branch_benchmarks for the only cross-branch figure</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">Everything on this page is a query against this branch’s own D1, except one number: the anonymised median HQ pushed as branch_benchmarks, stamped with when HQ computed it. The branch writes events to studioos_metrics but cannot read them back — so there is no cross-branch chart here, and no place one could be added. Where a chart on HQ’s Analytics shows four lines, the same chart here shows one.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navIns }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="terr"><div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">Axal VC France</span><span class="num" style="font-size:11px;opacity:.7">FR · BE · LU</span></div><span class="num" style="font-size:11px;opacity:.7">{{ s15Source }}</span></div>
+      <div class="inner">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Insights · Analytics</h1>
+          <div style="display:flex;gap:3px;background:#f0eff3;border-radius:7px;padding:2px"><sc-for list="{{ s15Range }}" as="r" hint-placeholder-count="3"><span style="{{ r.style }}">{{ r.label }}</span></sc-for></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:14px">
+          <sc-for list="{{ s15Kpis }}" as="k" hint-placeholder-count="4">
+            <div class="c" style="padding:13px 15px"><div class="lbl" style="font-size:9px">{{ k.label }}</div><div style="display:flex;align-items:baseline;gap:8px;margin-top:6px"><span class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;line-height:1">{{ k.value }}</span><span class="num" style="font-size:11px;font-weight:700;color:{{ k.deltaInk }}">{{ k.delta }}</span></div><div style="font-size:10px;color:#615c6e;margin-top:6px;line-height:1.45">{{ k.note }}</div></div>
+          </sc-for>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:14px;margin-top:14px;align-items:start">
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Active accounts · weekly</span><span class="zs">one line · this D1 · 8 weeks</span></div>
+            <!-- Labels are HTML, not SVG <text>: a template hole renders as a <span>, which SVG
+                 text never draws. The median rule is drawn in the SVG; its label is the HTML
+                 chip below the plot, where it can be read. -->
+            <div style="display:flex;gap:6px">
+              <div style="position:relative;width:26px;flex:none;height:150px">
+                <sc-for list="{{ s15Grid }}" as="g" hint-placeholder-count="4"><span class="mono num" style="position:absolute;right:0;top:{{ g.pct }}%;transform:translateY(-50%);font-size:9px;color:#9c96a8">{{ g.label }}</span></sc-for>
+              </div>
+              <div style="flex:1;min-width:0">
+                <svg viewBox="0 0 534 150" width="100%" height="150" style="display:block" preserveAspectRatio="none">
+                  <sc-for list="{{ s15Grid }}" as="g" hint-placeholder-count="4"><line x1="0" x2="534" y1="{{ g.y }}" y2="{{ g.y }}" stroke="#f0eff3" stroke-width="1"></line></sc-for>
+                  <line x1="0" x2="534" y1="{{ s15MedY }}" y2="{{ s15MedY }}" stroke="#9ca3af" stroke-width="1.2" stroke-dasharray="4 4"></line>
+                  <polyline points="{{ s15Points }}" fill="none" stroke="#334155" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"></polyline>
+                  <circle cx="{{ s15LastX }}" cy="{{ s15LastY }}" r="3.5" fill="#334155"></circle>
+                </svg>
+                <div style="display:flex;justify-content:space-between;padding:0 4px 0 0;margin-top:5px">
+                  <sc-for list="{{ s15Weeks }}" as="w" hint-placeholder-count="8"><span class="mono num" style="font-size:9px;color:#9c96a8">{{ w.label }}</span></sc-for>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:9px"><span style="width:16px;height:0;border-top:1.5px dashed #9ca3af;display:inline-block"></span><span class="mono num" style="font-size:10px;color:#615c6e">{{ s15MedLabel }}</span></div>
+            <div style="font-size:10.5px;color:#615c6e;line-height:1.5;margin-top:8px">{{ s15ChartNote }}</div>
+          </div>
+
+          <div style="display:grid;gap:12px">
+            <div class="c" style="padding:16px 18px">
+              <div class="zh"><span class="zt">Activation funnel · 30 days</span><span class="zs">this branch</span></div>
+              <sc-for list="{{ s15Funnel }}" as="f" hint-placeholder-count="4">
+                <div style="margin-top:8px"><div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:11.5px;font-weight:600">{{ f.k }}</span><span class="num" style="font-size:11.5px;font-weight:700">{{ f.n }} <span style="color:#615c6e;font-weight:600">· {{ f.rate }}</span></span></div><div style="height:7px;background:#f0eff3;border-radius:999px;overflow:hidden;margin-top:5px"><div style="height:100%;width:{{ f.pct }}%;background:#334155;border-radius:999px;opacity:{{ f.op }}"></div></div></div>
+              </sc-for>
+            </div>
+            <div class="c" style="padding:16px 18px;border-color:#fde68a">
+              <div class="zh"><span class="zt">Approval age · by queue</span><span class="zs">median at decision · 30 days</span></div>
+              <sc-for list="{{ s15Sla }}" as="s" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid #f4f3f7"><span style="font-size:11.5px;font-weight:600;width:110px;flex:none">{{ s.q }}</span><div style="flex:1;height:7px;background:#f0eff3;border-radius:999px;overflow:hidden"><div style="height:100%;width:{{ s.pct }}%;background:{{ s.color }};border-radius:999px"></div></div><span class="num" style="font-size:11.5px;font-weight:700;width:40px;text-align:right;color:{{ s.color }}">{{ s.v }}</span></div>
+              </sc-for>
+              <div style="font-size:10px;color:#615c6e;line-height:1.5;margin-top:8px">{{ s15SlaNote }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;align-items:start">
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Programme throughput · Cohort 4</span><span class="zs">week gates passed</span></div>
+            <div style="display:flex;gap:6px;margin-top:6px">
+              <sc-for list="{{ s15Gates }}" as="g" hint-placeholder-count="4"><div style="flex:1;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px;padding:10px 11px;text-align:center"><div class="num" style="font-size:18px;font-weight:800;letter-spacing:-.02em">{{ g.n }}</div><div class="lbl" style="font-size:8.5px;margin-top:4px">{{ g.k }}</div><div class="num" style="font-size:10px;color:#615c6e;margin-top:3px">{{ g.rate }}</div></div></sc-for>
+            </div>
+            <div style="font-size:10.5px;color:#615c6e;line-height:1.5;margin-top:10px">{{ s15GatesNote }}</div>
+          </div>
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Revenue share earned · by stream</span><span class="zs">your cut · Q2 reported gross</span></div>
+            <sc-for list="{{ s15Rev }}" as="r" hint-placeholder-count="3">
+              <div style="display:grid;grid-template-columns:1.2fr .8fr .8fr;gap:10px;align-items:center;padding:6px 0;border-top:1px solid #f4f3f7"><span style="font-size:11.5px;font-weight:600">{{ r.stream }}</span><span class="num" style="font-size:11.5px;text-align:right;color:#615c6e">{{ r.gross }}</span><span class="num" style="font-size:11.5px;font-weight:700;text-align:right">{{ r.yours }}</span></div>
+            </sc-for>
+            <div style="display:grid;grid-template-columns:1.2fr .8fr .8fr;gap:10px;align-items:center;border-top:2px solid #18181b;padding-top:6px;margin-top:2px"><span style="font-size:11.5px;font-weight:800">Q2 total</span><span class="num" style="font-size:11.5px;text-align:right;color:#615c6e">{{ s15RevGross }}</span><span class="num" style="font-size:11.5px;font-weight:800;text-align:right;color:#334155">{{ s15RevYours }}</span></div>
+            <div style="font-size:10px;color:#615c6e;line-height:1.5;margin-top:8px">{{ s15RevNote }}</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:#615c6e;line-height:1.55;margin-top:12px;padding:0 2px">{{ s15Foot }}</div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Insights" hint-size="100%,1040px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ S16 · APPROVALS · THE FULL BOARD, SORTED BY AGE ══════════ -->
+<section class="ab" id="s16">
+  <div class="ab-hd"><a class="ab-id" href="#s16">S16</a><span class="ab-nm">Approvals — every queue the live console kept on its own page, as one list</span><span class="ab-sub">extends S3 · the primary view · kanban is secondary</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">Eleven more queues arrive here from the live Admin Console, where each had a page of its own: KYC, partner profiles, directory listings, exploring users, jobs, events, circles, partner invitations, best-fit consultations, territory diligence cases, and advisor cohort access. Sixteen lanes will not fit five columns, and they should not have to — an admin opening this page is asking what has waited longest, not which page it waited on. So the list is the view, age is the sort, and the lane is a chip.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navApp }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="terr"><div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">Axal VC France</span><span class="num" style="font-size:11px;opacity:.72">FR · BE · LU</span></div><span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">BRANCH</span></div>
+      <div class="inner">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Approvals</h1>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="num" style="font-size:11.5px;color:#615c6e">{{ s16Total }} open · oldest {{ s16Oldest }}</span>
+            <span style="font-size:11.5px;font-weight:700;color:#334155;cursor:pointer">Lane board ↗</span>
+          </div>
+        </div>
+        <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">{{ s16Sub }}</div>
+
+        <!-- chip row: the four views, then every lane -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:13px;padding-bottom:12px;border-bottom:1px solid #ececf1">
+          <sc-for list="{{ s16Chips }}" as="c" hint-placeholder-count="10"><span style="{{ c.style }}">{{ c.label }}</span></sc-for>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.55fr 1fr;gap:14px;margin-top:14px">
+
+          <!-- the list -->
+          <div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px">
+              <span class="lbl">All queues · oldest first</span>
+              <div style="display:flex;gap:6px"><span class="gho" style="padding:4px 9px;font-size:10.5px">Assign to reviewer</span><span class="gho" style="padding:4px 9px;font-size:10.5px">Select all past SLA</span></div>
+            </div>
+            <div style="display:grid;gap:7px">
+              <sc-for list="{{ s16Rows }}" as="r" hint-placeholder-count="10">
+                <div style="{{ r.rowStyle }}">
+                  <span style="width:13px;height:13px;border:1.5px solid #cbd5e1;border-radius:3px;flex:none"></span>
+                  <div style="min-width:0;flex:1">
+                    <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+                      <span style="font-size:12.5px;font-weight:700">{{ r.who }}</span>
+                      <span style="{{ r.laneStyle }}">{{ r.lane }}</span>
+                      <sc-if value="{{ r.outbound }}"><span style="font-size:9.5px;font-weight:700;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:2px 6px">To HQ</span></sc-if>
+                    </div>
+                    <div style="font-size:11px;color:#615c6e;margin-top:4px;line-height:1.45">{{ r.what }}</div>
+                  </div>
+                  <span style="{{ r.slaPill }}">{{ r.age }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ s16Note }}</div>
+          </div>
+
+          <!-- detail drawer -->
+          <div class="c" style="padding:16px 18px;align-self:start">
+            <div class="zh"><span class="zt">Naïma Fournier</span><span style="{{ s16DrawerPill }}">118h</span></div>
+            <div style="font-size:11.5px;color:#615c6e;line-height:1.55">KYC · Investor · documents uploaded 16 Sep, not yet reviewed. The oldest item on the board, and the one a reviewer has not been assigned to.</div>
+            <div class="lbl" style="font-size:8.5px;margin-top:14px">History</div>
+            <div style="display:grid;gap:8px;margin-top:8px">
+              <sc-for list="{{ s16History }}" as="h" hint-placeholder-count="4">
+                <div style="display:flex;gap:9px;align-items:flex-start"><span style="width:7px;height:7px;border-radius:50%;flex:none;margin-top:5px;background:{{ h.dot }}"></span><div><div style="font-size:11.5px;font-weight:600">{{ h.what }}</div><div class="num" style="font-size:10.5px;color:#615c6e;margin-top:2px">{{ h.when }}</div></div></div>
+              </sc-for>
+            </div>
+            <div class="lbl" style="font-size:8.5px;margin-top:14px">Approve with this note</div>
+            <div style="border:1px solid #e2e1e8;background:#fbfbfc;border-radius:9px;padding:10px 12px;margin-top:7px;font-size:11.5px;color:#3f3a49;line-height:1.55">{{ s16Draft }}</div>
+            <div style="display:flex;gap:7px;margin-top:10px;flex-wrap:wrap"><span class="acc">Approve</span><span class="gho">Request more</span><span class="danger" style="padding:6px 11px">Reject</span></div>
+            <div style="font-size:10.5px;color:#615c6e;margin-top:9px;line-height:1.55">The rail drafted the note. The click is the admin's, and the audit line records it as theirs — not as an assisted or automated approval.</div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Approvals" hint-size="100%,900px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ S17 · SETTINGS · DOMAIN ══════════ -->
+<section class="ab" id="s17">
+  <div class="ab-hd"><a class="ab-id" href="#s17">S17</a><span class="ab-nm">Settings · Domain — every licence binds its own host</span><span class="ab-sub">a section under Settings, not a ninth row · Super Admin stays on axal.vc</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">Both kinds of licence bind a hostname here, and neither of them is axal.vc — an Axal subsidiary still looks like Axal but does not sit on the Super Admin's product host, and a white-label operator carries their own brand on their own name. Until a custom host is Active, members use the fallback the deploy issued, which is infrastructure rather than branding: on a white-label that host still serves their kit. HQ provisions the certificate and refuses collisions. HQ does not approve the name.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navSet }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for>
+      <div style="padding:10px 15px 4px"><div class="lbl" style="font-size:8.5px">Settings</div></div>
+      <sc-for list="{{ dmSub }}" as="s" hint-placeholder-count="4"><div style="{{ s.style }}">{{ s.label }}</div></sc-for>
+    </div>
+    <div class="main">
+      <div class="terr"><div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">Axal VC France</span><span class="num" style="font-size:11px;opacity:.7">FR · BE · LU</span></div><span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">BRANCH</span></div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Settings · Domain</h1>
+        <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">This host is yours. The Super Admin product remains axal.vc.</div>
+
+        <!-- A · primary host -->
+        <div class="c" style="padding:15px 17px;margin-top:13px;border-color:#fde68a;background:#fffdf5">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+            <div><div class="lbl" style="font-size:8.5px">Primary host · what members type</div><div class="mono" style="font-size:19px;font-weight:700;letter-spacing:-.02em;margin-top:6px">{{ s17Fallback }}</div></div>
+            <span style="{{ s17StatePill }}">{{ s17State }}</span>
+          </div>
+          <!-- Pending DNS, so the line names what is outstanding rather than repeating the
+               Empty-state copy — a host has been added and one of its two records resolves. -->
+          <div style="font-size:11.5px;color:#92400e;margin-top:9px;line-height:1.55">Ownership verified. Waiting on the CNAME at <span class="mono">france.axalnetwork.com</span> — members stay on the platform host until it resolves and the certificate issues.</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.25fr 1fr;gap:13px;margin-top:13px">
+          <div>
+            <!-- B · add hostname -->
+            <div class="c" style="padding:15px 17px">
+              <div class="lbl">Add a hostname</div>
+              <!-- An entered value, not a placeholder: the DNS cards below report this host as
+                   half-verified, so rendering it in placeholder grey would say the field is
+                   still empty — and at 2.8:1 it would barely be readable either way. -->
+              <div style="display:flex;gap:8px;margin-top:9px"><div style="flex:1;border:1px solid #e2e1e8;background:#fff;border-radius:9px;padding:9px 12px;font-size:12.5px;color:#18181b" class="mono">france.axalnetwork.com</div><span class="gho" style="flex:none">Replace</span></div>
+              <div style="font-size:11px;color:#615c6e;margin-top:7px;line-height:1.55">Added 21 Sep. Host only — no scheme, no path, no port. <span class="mono">app.yourhost.com</span>, not <span class="mono">https://yourhost.com/app</span>.</div>
+            </div>
+
+            <!-- C · DNS -->
+            <div class="c" style="padding:15px 17px;margin-top:13px">
+              <div class="zh"><span class="zt">At your domain host</span><span class="zs">You change DNS where you bought the domain</span></div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:11px"><sc-for list="{{ s17Steps }}" as="s" hint-placeholder-count="4"><span style="{{ s.style }}"><span class="num">{{ s.n }}</span> {{ s.t }}</span></sc-for></div>
+              <div class="mono" style="font-size:15px;font-weight:700;letter-spacing:-.02em">france.axalnetwork.com</div>
+              <div class="lbl" style="font-size:8px;margin-top:11px">Your registrar · the records are the same everywhere</div>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px"><sc-for list="{{ s17Registrars }}" as="r" hint-placeholder-count="6"><span style="{{ r.style }}">{{ r.t }}</span></sc-for></div>
+              <div style="display:grid;gap:9px;margin-top:11px">
+                <sc-for list="{{ s17Dns }}" as="d" hint-placeholder-count="2">
+                  <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px;padding:10px 12px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span style="font-size:11.5px;font-weight:700">{{ d.kind }}</span><div style="display:flex;align-items:center;gap:7px"><span style="{{ d.pill }}">{{ d.state }}</span><span class="vm">Copy all</span></div></div>
+                    <div class="mono" style="font-size:10.5px;color:#3f3a49;margin-top:7px;line-height:1.7;white-space:pre">{{ d.line }}</div>
+                    <sc-if value="{{ d.note }}"><div style="font-size:10.5px;color:#92400e;margin-top:6px;line-height:1.5">{{ d.note }}</div></sc-if>
+                  </div>
+                </sc-for>
+              </div>
+              <div class="lbl" style="font-size:8px;margin-top:12px">Then, in order</div>
+              <div style="display:grid;gap:5px;margin-top:6px">
+                <sc-for list="{{ s17Checklist }}" as="c" hint-placeholder-count="5"><div style="display:flex;gap:8px;align-items:flex-start;font-size:11.5px;color:#3f3a49;line-height:1.5"><span style="width:12px;height:12px;border:1.5px solid #cbd5e1;border-radius:3px;flex:none;margin-top:2px"></span>{{ c }}</div></sc-for>
+              </div>
+              <div style="border:1px dashed #d4d2dc;background:#fafafa;border-radius:9px;padding:10px 12px;margin-top:11px">
+                <div style="font-size:11.5px;font-weight:700">▸ Using an apex (axalnetwork.com, no subdomain)?</div>
+                <div style="font-size:11px;color:#92400e;margin-top:5px;line-height:1.6">Use a subdomain. An apex CNAME is not supported at every registrar. If you must: ALIAS (DNSimple, NS1), ANAME (Route 53 alias), or CNAME flattening (Cloudflare) — all pointing at <span class="mono">cname.os.axal.vc</span>. Never an A record; the address behind that name moves.</div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:11px;flex-wrap:wrap">
+                <span style="font-size:11px;color:#615c6e">Last checked {{ s17Checked }}</span>
+                <div style="display:flex;gap:7px"><span class="gho">I've added the records</span><span class="acc">Check now</span></div>
+              </div>
+              <div style="border-top:1px solid #f4f3f7;margin-top:12px;padding-top:11px;display:grid;gap:5px">
+                <sc-for list="{{ s17Help }}" as="h" hint-placeholder-count="3"><div style="font-size:11px;color:#615c6e;line-height:1.55">{{ h }}</div></sc-for>
+              </div>
+              <div style="display:flex;gap:9px;margin-top:11px;flex-wrap:wrap">
+                <div style="flex:1;min-width:200px;border:1px solid #a7f3d0;background:#f0fdf6;border-radius:8px;padding:8px 11px;font-size:11px;color:#065f46;line-height:1.5"><strong>Recommended</strong> · CNAME to <span class="mono">cname.os.axal.vc</span></div>
+                <div style="flex:1;min-width:200px;border:1px dashed #d4d2dc;background:#fafafa;border-radius:8px;padding:8px 11px;font-size:11px;color:#615c6e;line-height:1.5"><strong>Not recommended</strong> · changing your nameservers</div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <!-- D · certificate -->
+            <div class="c" style="padding:15px 17px">
+              <div class="zh"><span class="zt">Certificate</span><span style="{{ s17CertPill }}">{{ s17Cert }}</span></div>
+              <div style="font-size:11.5px;color:#3f3a49;line-height:1.6">{{ s17CertNote }}</div>
+            </div>
+
+            <!-- E · make primary -->
+            <div class="c" style="padding:15px 17px;margin-top:13px">
+              <div class="lbl">Make primary</div>
+              <div style="font-size:11.5px;color:#615c6e;margin-top:7px;line-height:1.6">Available once the host is Active. Before you confirm, what moves:</div>
+              <div style="display:grid;gap:6px;margin-top:9px">
+                <sc-for list="{{ s17Moves }}" as="m" hint-placeholder-count="4"><div style="display:flex;gap:8px;align-items:flex-start;font-size:11.5px;color:#3f3a49;line-height:1.5"><span style="color:#334155;font-weight:800;flex:none">·</span>{{ m }}</div></sc-for>
+              </div>
+              <div style="font-size:11px;color:#615c6e;margin-top:9px;line-height:1.6">The platform host then redirects to the primary. Two live brands at once is the state this avoids.</div>
+            </div>
+
+            <!-- F · remove -->
+            <div class="c" style="padding:15px 17px;margin-top:13px;border-color:#fecaca">
+              <div class="lbl" style="color:#b91c1c">Remove domain</div>
+              <div style="font-size:11.5px;color:#3f3a49;margin-top:7px;line-height:1.6">If the host is primary you must first choose a fallback — <span class="mono">{{ s17Fallback }}</span> — or cancel. Type the hostname to confirm.</div>
+              <span class="danger" style="display:inline-block;margin-top:10px">Remove</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- G · email domain, a sibling card -->
+        <div class="c" style="padding:15px 17px;margin-top:13px">
+          <div class="zh"><span class="zt">Email domain</span><span class="zs">Separate from the app host · separate state</span></div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:9px">
+            <sc-for list="{{ s17Email }}" as="e" hint-placeholder-count="3">
+              <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px;padding:10px 11px">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-size:11.5px;font-weight:700">{{ e.k }}</span><span style="{{ e.pill }}">{{ e.state }}</span></div>
+                <div class="mono" style="font-size:10px;color:#615c6e;margin-top:5px;line-height:1.6;white-space:pre">{{ e.line }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:11px;color:#615c6e;margin-top:10px;line-height:1.6">Links inside an email use the app host; the From: line uses this card. An Active app host with a Failed email domain still serves the app — mail just keeps going out from the platform address until this clears. No MX record belongs on the CNAME card above.</div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Settings" hint-size="100%,1080px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ S18 · DOMAIN · ACTIVE, COLLISION, DETACHED, WHITE-LABEL, MOBILE ══════════ -->
+<section class="ab" id="s18">
+  <div class="ab-hd"><a class="ab-id" href="#s18">S18</a><span class="ab-nm">Domain — Active with the callback to copy · collision · HQ-detached · the same page in a white-label's chrome</span><span class="ab-sub">S17 states b–d, and the mobile DNS pass</span></div>
+  <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+
+    <div class="c" style="width:620px;flex:none;padding:16px 18px;border-color:#a7f3d0">
+      <div class="lbl" style="color:#047857">S17b · Active and primary</div>
+      <div class="mono" style="font-size:18px;font-weight:700;letter-spacing:-.02em;margin-top:8px">france.axalnetwork.com</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:7px"><span style="{{ s18ActivePill }}">Active</span><span style="font-size:11px;color:#615c6e">Certificate issued · expires 14 Dec 2026</span></div>
+      <div style="font-size:11.5px;color:#3f3a49;margin-top:10px;line-height:1.6">Members should use this host. <span class="mono">{{ s17Fallback }}</span> redirects here.</div>
+      <div class="lbl" style="margin-top:14px;font-size:8.5px">Add this callback to each login provider</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #e2e1e8;background:#fbfbfc;border-radius:9px;padding:9px 12px;margin-top:7px"><span class="mono" style="font-size:11.5px;color:#18181b">https://france.axalnetwork.com/api/auth/callback</span><span class="vm">Copy</span></div>
+      <div style="font-size:11px;color:#615c6e;margin-top:8px;line-height:1.6">Google, LinkedIn and anything else you have connected. Until each provider carries it, sign-in on the new host fails at the provider, not here — which is why the exact string is printed rather than described.</div>
+    </div>
+
+    <div style="flex:1;min-width:440px;display:grid;gap:13px">
+      <div class="c" style="padding:15px 17px;border-color:#fecaca">
+        <div class="lbl" style="color:#b91c1c">S17c · Collision</div>
+        <div style="display:flex;gap:8px;margin-top:9px"><div style="flex:1;border:1.5px solid #fecaca;background:#fff;border-radius:9px;padding:9px 12px;font-size:12.5px" class="mono">studio.northstar.vc</div><span class="gho" style="flex:none">Add domain</span></div>
+        <div style="border:1px solid #fecaca;background:#fef2f2;border-radius:9px;padding:10px 12px;margin-top:9px">
+          <div style="font-size:12px;font-weight:700;color:#b91c1c">Northstar Studio already holds this hostname.</div>
+          <div style="font-size:11.5px;color:#3f3a49;margin-top:5px;line-height:1.6">One host, one licence. Pick another subdomain, or ask them to release it.</div>
+        </div>
+        <div class="lbl" style="margin-top:12px;font-size:8.5px">The other refusals, each named in place</div>
+        <div style="display:grid;gap:5px;margin-top:7px">
+          <sc-for list="{{ s18Refusals }}" as="r" hint-placeholder-count="3"><div style="display:flex;gap:8px;align-items:flex-start;font-size:11px;color:#3f3a49;line-height:1.55"><span class="mono" style="color:#b91c1c;flex:none;font-size:10px">✕</span>{{ r }}</div></sc-for>
+        </div>
+      </div>
+
+      <div class="c" style="padding:15px 17px;border-color:#fde68a">
+        <div class="lbl" style="color:#92400e">S17d · HQ detached the host</div>
+        <div style="border:1px solid #fde68a;background:#fffdf5;border-radius:9px;padding:11px 13px;margin-top:9px;font-size:11.5px;color:#3f3a49;line-height:1.6">HQ detached <span class="mono">studio.northstar.vc</span> on 22 Sep 2026 · collision with an earlier licence. Members are on <span class="mono">{{ s17Fallback }}</span> until a new host is Active.</div>
+        <div style="font-size:11px;color:#615c6e;margin-top:9px;line-height:1.6">You can add a different hostname from here. This page is not where a detach is disputed — that is an escalation, under Approvals · To HQ.</div>
+      </div>
+    </div>
+
+    <div style="width:100%;display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;margin-top:4px">
+      <!-- white-label, same form, their chrome -->
+      <div style="width:620px;flex:none">
+        <div class="lbl" style="margin-bottom:8px">The same page on a white-label licence — their chrome, identical form</div>
+        <div style="border:1px solid rgba(24,24,27,.12);border-radius:12px;overflow:hidden;background:#fff">
+          <div style="background:{{ s18WlPrimary }};color:#fff;padding:9px 16px;display:flex;align-items:center;justify-content:space-between"><div style="display:flex;align-items:center;gap:9px"><span style="width:14px;height:14px;border-radius:4px;background:{{ s18WlAccent }}"></span><span style="font-size:12.5px;font-weight:800">{{ s18WlName }}</span></div><span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.18);border-radius:4px;padding:3px 8px">BRANCH</span></div>
+          <div style="padding:14px 16px">
+            <div style="font-size:15px;font-weight:800;letter-spacing:-.02em">Settings · Domain</div>
+            <div style="font-size:11.5px;color:#4a4553;margin-top:4px;line-height:1.5">This host is yours. HQ will not approve the name or the brand kit.</div>
+
+            <div style="border:1px solid #a7f3d0;background:#f0fdf6;border-radius:10px;padding:11px 13px;margin-top:11px">
+              <div class="lbl" style="font-size:8px">Primary host · what members type</div>
+              <div class="mono" style="font-size:16px;font-weight:700;letter-spacing:-.02em;margin-top:5px">app.studiolyon.fr</div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:6px"><span style="{{ s18ActivePill }}">Active</span><span style="font-size:10.5px;color:#615c6e">platform host redirects here</span></div>
+            </div>
+
+            <div class="lbl" style="font-size:8px;margin-top:12px">Add a hostname</div>
+            <div style="display:flex;gap:7px;margin-top:6px"><div class="mono" style="flex:1;border:1px solid #e2e1e8;background:#fff;border-radius:8px;padding:8px 11px;font-size:11.5px;color:#18181b">app.studiolyon.fr</div><span class="gho" style="flex:none;padding:6px 11px;font-size:10.5px">Replace</span></div>
+
+            <div class="lbl" style="font-size:8px;margin-top:12px">DNS records</div>
+            <div style="display:grid;gap:7px;margin-top:6px">
+              <sc-for list="{{ s18WlDns }}" as="d" hint-placeholder-count="2">
+                <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:8px;padding:9px 11px">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-size:11px;font-weight:700">{{ d.kind }}</span><div style="display:flex;align-items:center;gap:6px"><span style="{{ d.pill }}">{{ d.state }}</span><span style="font-size:10.5px;font-weight:700;color:{{ s18WlPrimary }}">Copy</span></div></div>
+                  <div class="mono" style="font-size:9.5px;color:#3f3a49;margin-top:6px;line-height:1.7;white-space:pre">{{ d.line }}</div>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px">
+              <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:8px;padding:9px 11px">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-size:11px;font-weight:700">Certificate</span><span style="{{ s18ActivePill }}">Issued</span></div>
+                <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.5">Expires 14 Dec 2026 · renews automatically</div>
+              </div>
+              <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:8px;padding:9px 11px">
+                <div style="font-size:11px;font-weight:700">Make primary</div>
+                <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.5">Already primary. Callback: <span class="mono">…/api/auth/callback</span></div>
+              </div>
+            </div>
+
+            <div class="lbl" style="font-size:8px;margin-top:12px">Email domain · separate state</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px">
+              <sc-for list="{{ s17Email }}" as="e" hint-placeholder-count="3">
+                <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:8px;padding:8px 9px">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:6px"><span style="font-size:10.5px;font-weight:700">{{ e.k }}</span><span style="{{ e.pill }}">{{ e.state }}</span></div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:10.5px;color:#615c6e;margin-top:9px;line-height:1.6">Same form, same states, same refusals as Axal VC France — drawn from the same records rather than claimed. One sentence of copy differs, and the chrome, which is theirs on <span class="mono">studiolyon.os.axal.vc</span> too.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- mobile DNS pass -->
+      <div>
+        <div class="lbl" style="margin-bottom:8px">Mobile · the DNS cards stay copyable</div>
+        <div style="width:390px;border-radius:26px;box-shadow:0 4px 18px rgba(24,24,27,.16),0 0 0 8px #1a1a1c;overflow:hidden;background:#f7f7f8">
+          <div style="height:34px;background:#fff;display:flex;align-items:flex-end;justify-content:space-between;padding:0 18px 5px"><span class="mono" style="font-size:10.5px;font-weight:700">9:41</span><span style="font-size:9px">▮▮▮ ◗</span></div>
+          <div style="background:#fff;padding:8px 15px 12px;border-bottom:1px solid #ececf1"><div style="font-size:11px;font-weight:700;color:#334155">‹ Settings</div><div style="font-size:17px;font-weight:800;letter-spacing:-.022em;margin-top:6px">Domain</div><div class="mono" style="font-size:12px;color:#615c6e;margin-top:4px">{{ s17Fallback }}</div></div>
+          <div style="padding:12px 14px 20px;display:grid;gap:10px">
+            <sc-for list="{{ s17Dns }}" as="d" hint-placeholder-count="2">
+              <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:11px 12px">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-size:11.5px;font-weight:700">{{ d.kind }}</span><span style="{{ d.pill }}">{{ d.state }}</span></div>
+                <div class="mono" style="font-size:9.5px;color:#3f3a49;margin-top:7px;line-height:1.75;white-space:pre;overflow-x:auto">{{ d.line }}</div>
+                <div style="font-size:11.5px;font-weight:700;color:#334155;text-align:center;border:1px solid #e2e1e8;border-radius:9px;padding:9px 0;margin-top:9px">Copy record</div>
+              </div>
+            </sc-for>
+            <div style="font-size:11px;font-weight:700;color:#fff;background:#334155;text-align:center;border-radius:9px;padding:11px 0">Check now</div>
+            <div style="font-size:10.5px;color:#615c6e;line-height:1.55">Copy stays a full-width 44pt target on a phone — the one action a founder will actually perform here, standing in a DNS panel on another screen.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ S19 · DOMAIN · CHECK FAILED, ACTIVE RECEIPT, ADVANCED NAMESERVERS ══════════ -->
+<section class="ab" id="s19">
+  <div class="ab-hd"><a class="ab-id" href="#s19">S19</a><span class="ab-nm">Domain — what Check now says when it fails, the receipt when it passes, and the nameserver path kept out of the way</span><span class="ab-sub">Settings › Domain · three resolutions of the same wizard</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">A failed check names the record that is wrong, because the admin is standing in a registrar panel and "DNS error" does not tell them which row to edit. Nameserver delegation is real and occasionally necessary, so it is here — collapsed, last, behind an acknowledgement, never the first instruction.</div>
+  <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+
+    <div style="width:460px;flex:none">
+      <div class="lbl" style="margin-bottom:8px">S19a · Check failed</div>
+      <div class="c" style="padding:15px 17px">
+        <div class="zh"><span class="zt">Check now</span><span class="zs">Ran 14:02 · 3 problems</span></div>
+        <div style="display:grid;gap:8px">
+          <sc-for list="{{ s19Fails }}" as="f" hint-placeholder-count="3">
+            <div style="border:1px solid #fecaca;background:#fef2f2;border-radius:9px;padding:10px 12px">
+              <div class="mono" style="font-size:11px;font-weight:700;color:#b91c1c;line-height:1.5">{{ f.t }}</div>
+              <div style="font-size:11px;color:#3f3a49;margin-top:5px;line-height:1.55">{{ f.d }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;gap:7px;margin-top:11px;justify-content:flex-end"><span class="gho">Back to records</span><span class="acc">Check again</span></div>
+        <div style="font-size:11px;color:#615c6e;margin-top:9px;line-height:1.55">Nothing is bound while a check fails. The hostname stays saved and the old address keeps working.</div>
+      </div>
+    </div>
+
+    <div style="width:460px;flex:none">
+      <div class="lbl" style="margin-bottom:8px">S19b · Active · the receipt and the callback</div>
+      <div class="c" style="padding:15px 17px">
+        <div class="zh"><span class="zt">At your domain host</span><span class="zs">Collapsed · nothing left to do here</span></div>
+        <div style="display:grid;gap:6px">
+          <sc-for list="{{ s19Active }}" as="a" hint-placeholder-count="5">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #f4f3f7"><span style="font-size:11px;color:#615c6e">{{ a.k }}</span><span class="mono" style="font-size:11px;font-weight:700;text-align:right">{{ a.v }}</span></div>
+          </sc-for>
+        </div>
+        <div style="border:1px solid #a7f3d0;background:#f0fdf6;border-radius:9px;padding:10px 12px;margin-top:11px">
+          <div style="font-size:11.5px;font-weight:700;color:#065f46">Make primary</div>
+          <div style="font-size:11px;color:#3f3a49;margin-top:5px;line-height:1.55">Login, magic links and OAuth move to this host. Add the callback at your identity provider before you switch, or sign-in breaks for everyone at once:</div>
+          <div class="mono" style="font-size:10.5px;color:#065f46;margin-top:7px;background:#fff;border:1px solid #a7f3d0;border-radius:7px;padding:8px 10px;white-space:pre;overflow:auto">{{ s19Oauth }}</div>
+          <div style="display:flex;gap:7px;margin-top:9px"><span class="gho">Copy callback</span><span class="acc">Make primary</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="width:460px;flex:none">
+      <div class="lbl" style="margin-bottom:8px">S19c · Advanced · nameservers (collapsed, then acknowledged)</div>
+      <div class="c" style="padding:13px 15px;border-style:dashed">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span style="font-size:11.5px;font-weight:700;color:#615c6e">▸ Advanced · use Axal nameservers</span><span style="font-size:10px;font-weight:700;color:#615c6e;background:#f4f3f7;border:1px solid #ececf1;border-radius:5px;padding:2px 7px">Rarely needed</span></div>
+        <div style="font-size:11px;color:#615c6e;margin-top:6px;line-height:1.55">Only if your registrar supports neither ALIAS nor CNAME flattening and you must serve the app at the apex.</div>
+      </div>
+      <div class="c" style="padding:15px 17px;margin-top:10px;border-color:#fecaca;background:#fffafa">
+        <div class="zh"><span class="zt" style="color:#b91c1c">Advanced · use Axal nameservers</span><span class="zs">Expanded</span></div>
+        <div style="border:1px solid #fecaca;background:#fef2f2;border-radius:9px;padding:11px 13px">
+          <div style="font-size:11.5px;font-weight:700;color:#b91c1c">This moves your entire domain onto Axal DNS.</div>
+          <div style="font-size:11px;color:#3f3a49;margin-top:5px;line-height:1.6">MX, www, and every other record must be recreated here or mail and your website stop. A studio with a marketing site and staff email has more to lose here than a hostname.</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-start;margin-top:10px"><span style="width:13px;height:13px;border:1.5px solid #b91c1c;border-radius:3px;flex:none;margin-top:2px;background:#b91c1c"></span><span style="font-size:11.5px;color:#3f3a49;line-height:1.5">I understand email will break until MX is copied.</span></div>
+        <div style="display:grid;gap:6px;margin-top:11px">
+          <sc-for list="{{ s19Ns }}" as="n" hint-placeholder-count="2">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #f0eff4;background:#fff;border-radius:8px;padding:9px 11px"><span style="font-size:11px;color:#615c6e">{{ n.k }}</span><div style="display:flex;align-items:center;gap:8px"><span class="mono" style="font-size:11px;font-weight:700">{{ n.v }}</span><span class="vm">Copy</span></div></div>
+          </sc-for>
+        </div>
+        <div style="font-size:11px;color:#92400e;margin-top:10px;line-height:1.55"><strong>Copy your existing MX records before you switch.</strong> Once the nameservers change, we answer for the whole zone — anything not recreated here no longer resolves.</div>
+      </div>
+    </div>
+
+  </div>
+  <div class="cap">Recommended and not-recommended are stated side by side on S17 rather than left to inference: a CNAME at one host, or a nameserver change that takes the whole zone. The wizard never opens on the second one.</div>
+</section>
+</x-dc>
 <script type="text/x-dc" data-dc-script="">
 class Component extends DCLogic {
   ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
@@ -808,7 +1453,8 @@ class Component extends DCLogic {
       srch:  this.ic('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>')
     };
     const ST = '#334155', STF = '#475569', STT = '#f6f8fa', STE = '#cbd5e1';
-    const ROWS = [['Home',I.home],['Accounts',I.acc],['Approvals',I.app],['Programs',I.prog],
+    // First row is Studio — the same front door every role lands on. There is no row named Home.
+    const ROWS = [['Studio',I.home],['Accounts',I.acc],['Approvals',I.app],['Programs',I.prog],
                   ['Community',I.comm],['Contracts',I.con],['Insights',I.ins],['Settings',I.cog]];
     const nav = (active) => ROWS.map(([label, icon]) => ({ label, icon,
       style:'display:flex;align-items:center;gap:9px;padding:8px 15px;font-size:12.5px;'
@@ -845,9 +1491,32 @@ class Component extends DCLogic {
       { lane:'Cohort applications', who:'Lucie Bertrand', what:'Cohort 5 · deep tech, Toulouse', hrs:91 },
       { lane:'Cohort applications', who:'Hugo Peeters', what:'Cohort 5 · fintech, Brussels', hrs:19 },
       { lane:'Spinout moderation', who:'Kelso Freight FR', what:'Profile claims an exit that is not on record', hrs:7 },
-      { lane:'Content to HQ', who:'"Lever une pré-seed en France"', what:'Localised article awaiting brand approval', hrs:52, outbound:true }
+      { lane:'Content to HQ', who:'"Lever une pré-seed en France"', what:'Localised article awaiting brand approval', hrs:52, outbound:true },
+      // ── The live console's remaining queues, absorbed. Each was its own page; none was worth
+      // a page, because the admin's question is "what is oldest", not "which URL".
+      { lane:'KYC', who:'Naïma Fournier', what:'Investor · documents uploaded, not reviewed', hrs:118 },
+      { lane:'KYC', who:'Gilles Anseeuw', what:'Founder · rejected once, resubmitted', hrs:26 },
+      { lane:'Partner profiles', who:'Cabinet Ravel', what:'Legal · persona and entity set, agreement unsigned', hrs:44 },
+      { lane:'Directory', who:'Studio Vireo', what:'Approved partner requesting a public listing', hrs:9 },
+      { lane:'Exploring', who:'11 invited, not accepted', what:'Binding agreement sent · seats reserved', hrs:73 },
+      { lane:'Jobs', who:'Kelso Freight FR · Ops lead', what:'Job post awaiting review', hrs:5 },
+      { lane:'Events', who:'Lyon · Founder dinner, 14 Oct', what:'Local event, no HQ approval needed', hrs:12 },
+      { lane:'Circles', who:'Deep tech Toulouse', what:'Publish and feature request', hrs:31 },
+      { lane:'Partner invitations', who:'Maison Dulac', what:'Invitation sent 6 Sep · no response', hrs:96 },
+      { lane:'Best-Fit', who:'Hugo Peeters', what:'Consultation queued · no reviewer assigned', hrs:22 },
+      { lane:'Due diligence', who:'Verdance SAS', what:'Territory case open · investor workbook is elsewhere', hrs:67 },
+      { lane:'Advisor cohort access', who:'P. Nair → Cohort 5', what:'Advisor requesting visibility of one cohort', hrs:16 }
     ];
-    const LANES = ['LP applications','Referrals','Cohort applications','Spinout moderation','Content to HQ'];
+    // The five the canvas already had, named so the count of what was absorbed is derived
+    // rather than typed — the same rule every other figure on this page follows.
+    const nWord = (n) => ['no','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve'][n] || String(n);
+    const Cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+    const CORE_LANES = ['LP applications','Referrals','Cohort applications','Spinout moderation','Content to HQ'];
+    const ABSORBED_LANES = ['KYC','Partner profiles','Directory','Exploring','Jobs','Events','Circles',
+      'Partner invitations','Best-Fit','Due diligence','Advisor cohort access'];
+    // Too many lanes for a five-column board, which is why the kanban becomes a second view
+    // and the SLA-sorted list becomes the first.
+    const LANES = CORE_LANES.concat(ABSORBED_LANES);
     const apOpen = QUEUES.length;
     const breached = QUEUES.filter(q => q.hrs >= 72);
     const oldest = QUEUES.slice().sort((a, b) => b.hrs - a.hrs)[0];
@@ -880,13 +1549,242 @@ class Component extends DCLogic {
 
     return {
       globeIcon:I.globe, searchIcon:I.srch,
-      navHome:nav('Home'), navAcc:nav('Accounts'), navApp:nav('Approvals'),
+      navHome:nav('Studio'), navAcc:nav('Accounts'), navApp:nav('Approvals'),
+      // ══ S1d · page overview. One card per sidebar row, in sidebar order, filling the space a
+      // founder Studio gives to skills, values and archetype — an admin has no such profile.
+      // Community carries no counts on purpose: each console counts its own rows. ══
+      overview: [
+        { page:'Accounts', band:'Service partner tightest', status:'Founder 184 of 200 · Investor 47 of 60 · Advisor 31 of 40 · Service partner 22 of 25.',
+          bandStyle:'font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:5px;padding:3px 7px',
+          what:'Every seat type in this territory, and the path to ask HQ for more.', cardStyle:'', doors:null, nr:null, alt:null },
+        { page:'Approvals', band:'Past the window', status:'Oldest is a cohort application, 6 days · 5 open.',
+          bandStyle:'font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:5px;padding:3px 7px',
+          what:'The daily board, including what has been sent to HQ. Age is the urgency; the count is secondary.',
+          cardStyle:'border-color:#fecaca', doors:null, nr:null, alt:'Nothing is waiting.' },
+        { page:'Programs', band:null, status:'Week 2 gate closes 23 Sep 00:00 America/New_York.',
+          what:'This territory\u2019s cohort clock. Programme authoring stays at HQ.', cardStyle:'', doors:null, nr:null, alt:null },
+        { page:'Community', band:null, status:null,
+          doors:[ { k:'Events', v:'moderation and analytics' }, { k:'Job board', v:'moderation only' },
+            { k:'Circles', v:'this territory authors them' }, { k:'Network profiles', v:'this territory authors them, and they are not a member directory' } ],
+          what:'Each console counts its own rows, so this card does not.', cardStyle:'', nr:null, alt:null },
+        { page:'Contracts', band:'2 expire inside 60 days', status:'4 HQ templates ready to instantiate · as of 22 Sep 09:12 CET.',
+          bandStyle:'font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:5px;padding:3px 7px',
+          what:'Instantiate a template HQ already published. This card does not author, upload, or edit one.', cardStyle:'', doors:null, nr:null, alt:null },
+        { page:'Insights', band:null, status:'Activation sits above the anonymised median · share rate 35%.',
+          what:'This territory against the anonymised median, and the share rate from the licence term.', cardStyle:'', doors:null, nr:null,
+          alt:null },
+        { page:'Settings', band:null, status:'4 of 5 rows owned by HQ.',
+          nr:'hostname and brand kit are unset — the domain wizard has not been run and HQ has no brand-kit store.',
+          what:'Each row names who decides it. Domain and brand kit are configured here, and HQ does not approve the brand.', cardStyle:'', doors:null, alt:null }
+      ],
+      overviewFrames: [
+        { label:'S1d · active licence', brand:'Axal VC France', codes:'FR · BE · LU', terrStyle:'', frozen:null,
+          cap:'Seven cards for seven rows, in the order the sidebar lists them, so the band is a map of the page rather than a ranking of it. Insights shows one tick and a rate with no euro figure and no sparkline; if HQ has not published a median that half reads Not recorded rather than drawing a line through nothing.' },
+        { label:'S1d-frozen · one line above, cards unchanged', brand:'Axal VC Iberia', codes:'ES · PT', terrStyle:'background:#9f1239',
+          frozen:'Axal VC Iberia · frozen since 18 Jul · writes are blocked',
+          cap:'Suspension is a line, not a card. Nothing is removed and no figure is blanked — the state belongs to the licence, so it is stated once at the top and the seven pages keep describing themselves.' }
+      ],
+
+      // ══ S1b · operating posture. The same four sections the rail works through, read back as
+      // a record. Count is answered over askable, both from the bank — never a score. ══
+      // Named against the bank, not against the cards: 11 of the 14 questions belong to these
+      // four sections, 7 of those are answered, and not every answer surfaces as a field here.
+      // Left as a bare "7 of 11" it would read as a count of the values on screen, which is 3.
+      postureCount: '7 of 11 admin-bank questions recorded',
+      posture: [
+        { title:'Oversight', titleInk:'#18181b', chip:'Conservative', link:'Continue in the chat', cardStyle:'',
+          chipStyle:'font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#065f46;background:#f0fdf6;border:1px solid #a7f3d0;border-radius:5px;padding:3px 8px',
+          rows:[ { k:'Review cadence', v:'Weekly' },
+            { k:'Metrics named', v:'Runway · gate completion · advisor cadence' },
+            { k:'Escalation condition', nr:true } ] },
+        { title:'Operations', titleInk:'#18181b', chip:null, link:'Continue in the chat', cardStyle:'',
+          rows:[ { k:'Intake priority', nr:true }, { k:'Onboarding turnaround', nr:true } ] },
+        { title:'Governance', titleInk:'#18181b', chip:null, link:'Continue in the chat', cardStyle:'',
+          rows:[ { k:'Inactive record retention', nr:true }, { k:'Access-review cadence', nr:true } ] },
+        { title:'Preferences', titleInk:'#4a4553', chip:null, link:'Settings', cardStyle:'background:#fbfbfc',
+          rows:[ { k:'Digest', nr:true }, { k:'Alert channel', nr:true }, { k:'Timezone', v:'Europe/Paris' } ] }
+      ],
+
+      // ══ S1c · needs a decision. Links only. Ordered worst first, which is why the six-day
+      // KYC item leads and the templates sit last. ══
+      decisionFrames: [
+        { label:'S1c · active licence', brand:'Axal VC France', codes:'FR · BE · LU', terrStyle:'',
+          licence:'Axal VC France · FR · BE · LU', licState:'Active',
+          licStyle:'font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#065f46;background:#f0fdf6;border:1px solid #a7f3d0;border-radius:5px;padding:3px 8px',
+          share:'Share rate 35%',
+          cap:'The share rate is a chip and a link, not a figure — an amount here would be a number this page does not hold, and Insights is where it reconciles.',
+          tiles:[
+            { k:'Approvals', band:'Past the window', v:'6 days', size:'20px', ink:'#b91c1c', link:'Approvals', alt:false, blocked:false,
+              bandStyle:'font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:5px;padding:3px 7px',
+              cardStyle:'border-color:#fecaca', d:'KYC lane · oldest item, one venture waiting.' },
+            { k:'Seats', band:null, v:'12 of 20', size:'20px', ink:'#18181b', link:'Accounts', alt:true, blocked:false,
+              cardStyle:'', d:'Founder seats on this licence.' },
+            { k:'Programme', band:'Within 24 hours', v:'Week 2 gate', size:'17px', ink:'#18181b', link:'Programs', alt:false, blocked:false,
+              bandStyle:'font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:5px;padding:3px 7px',
+              cardStyle:'border-color:#fde68a', d:'Closes 23 Sep 00:00 America/New_York.' },
+            { k:'Contracts', band:null, v:'4 templates', size:'17px', ink:'#18181b', link:'Contracts', alt:false, blocked:false,
+              cardStyle:'', d:'HQ master library, ready to instantiate · as of 22 Sep 09:12 CET.' }
+          ] },
+        { label:'S1c-suspended · the tiles stay, the writes do not', brand:'Axal VC Iberia', codes:'ES · PT', terrStyle:'background:#9f1239',
+          licence:'Axal VC Iberia', licState:'Frozen since 18 Jul',
+          licStyle:'font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:5px;padding:3px 8px',
+          share:null,
+          cap:'Suspension does not blank the page. Every figure stays readable, because a frozen territory still needs to see what it was holding — only the write affordances say they are blocked.',
+          tiles:[
+            { k:'Approvals', band:'Past the window', v:'19 days', size:'20px', ink:'#b91c1c', link:'Approvals', alt:false, blocked:true,
+              bandStyle:'font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:5px;padding:3px 7px',
+              cardStyle:'border-color:#fecaca', d:'KYC lane · frozen mid-queue.' },
+            { k:'Seats', band:null, v:'0 of 15', size:'20px', ink:'#18181b', link:'Accounts', alt:false, blocked:true, cardStyle:'', d:'Founder seats on this licence.' },
+            { k:'Programme', band:null, v:'No open gate', size:'17px', ink:'#18181b', link:'Programs', alt:false, blocked:true, cardStyle:'', d:'Cohort paused with the licence.' },
+            { k:'Contracts', band:null, v:'4 templates', size:'17px', ink:'#18181b', link:'Contracts', alt:false, blocked:true,
+              cardStyle:'', d:'HQ master library, readable · as of 22 Sep 09:12 CET.' }
+          ] }
+      ],
+
+      // ══ S1 · Studio. The rail lives inside the Eadwyn card, so maximize takes the chat,
+      // Focus a section and the task list full screen as one thing. Counters derive from the
+      // admin bank; the percentage is the numerator over the total, not a weighted figure.
+      sparkIcon: this.ic('<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.8 2.8M14.9 14.9l2.8 2.8M17.7 6.3l-2.8 2.8M9.1 14.9l-2.8 2.8"/>'),
+      // Line icons, not emoji: an emoji renders in the platform's own font on every OS and
+      // cannot take the muted ink the other controls use.
+      micIcon: this.ic('<rect x="9.4" y="3" width="5.2" height="10" rx="2.6"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4M9.5 21h5"/>'),
+      skipIcon: this.ic('<path d="M7 5.5l8.5 6.5L7 18.5z"/><path d="M18.5 5.5v13"/>'),
+      // Paper plane on a light-violet rounded square, matching the shipped composer.
+      sendIcon: this.ic('<path d="M21 3 3 10.5l7 2.5 2.5 7z"/><path d="M21 3 10 14"/>'),
+      caughtUpIcon: this.ic('<circle cx="12" cy="13" r="6.4"/><path d="m9.6 13 1.9 1.9 3.2-3.4"/><path d="M4.4 5.6l1.3 1M19.6 5.6l-1.3 1M12 2.6v1.6M6.2 20.4l-.6 1.4M17.8 20.4l.6 1.4"/>'),
+      stTotal:'14', stAnswered:'8', stPct:'57',
+      stCurrent:'What timezone should we schedule digests and reports against? (e.g. "Europe/Paris")',
+      stSections:['GOVERNANCE · 100%','OPERATIONS · 100%','OVERSIGHT · 75%','PREFS'],
+      stMsgs:[
+        ['u','roadmap', null], ['a','Opening Dashboard.','Open Dashboard'],
+        ['u','(skipped)', null],
+        ['a','How often do you review portfolio health across the territory?', null],
+        ['u','Probably every week.', null],
+        ['a','How often should admin/partner access be reviewed?', null],
+        ['u','Quarterly, and on every role change.', null]
+      ].map(([k, t, cta]) => ({ t, cta, row: k === 'u' ? 'text-align:right' : '',
+        bub: k === 'u' ? 'display:inline-block;background:#7c3aed;color:#fff;border-radius:12px;padding:10px 16px;font-size:13px;font-weight:600'
+                       : 'display:inline-block;background:#f3f4f6;color:#18181b;border-radius:13px;padding:10px 14px;font-size:13px;line-height:1.5;max-width:440px' })),
+      // Proposed is empty on purpose: the two sections at 100% have nothing left to ask, so the
+      // rail shows its caught-up state rather than a zero with no explanation.
+      stPropN:'0', stPropEmpty:true, stProps:null,
+      stPendN:'1',
+      stPending:[{ t:'What timezone should we schedule digests and reports against?', pri:'NORMAL', pct:'34%', link:'Open Account' }],
+      stDigest:[
+        { k:'Oldest in queues', v:'118h', ink:'#b91c1c', note:'KYC · Naïma Fournier' },
+        { k:'Next deadline', v:'Fri 26 Sep', ink:'#18181b', note:'Cohort 5 admissions close' },
+        { k:'Revenue share MTD', v:'€4,120', ink:'#18181b', note:'this territory’s cut' }
+      ],
+      studioFrames:[
+        { label:'S1 · Studio · 1440', w:'1440px', side:true, terr:true, pageHd:true, digest:true, ticket:false,
+          dir:'row', pad:'22px 26px 26px', h1:'26px', chatH:'330px', scrollH:'150px', divider:'1px solid #ececf1', railTop:'0',
+          maxGlyph:'⤢', maxTitle:'Maximize — chat, Focus a section and the task list together',
+          cap:'One card, one border: the chat scrolls on the left, the task rail sits right of the divider. The page header above it carries the operating headline, whose view this is, and Refresh context — that row is the page, not the card.' },
+        { label:'S1-max · maximized · the whole card full screen', w:'1440px', side:false, terr:false, pageHd:false, digest:false, ticket:false,
+          dir:'row', pad:'0', h1:'26px', chatH:'470px', scrollH:'240px', divider:'1px solid #ececf1', railTop:'0',
+          maxGlyph:'⤡', maxTitle:'Restore',
+          cap:'Maximize is why the rail is inside the card. Sidebar, territory bar, page header and digest all step aside; Focus a section and the task list come with the conversation, because they are the same surface. The glyph flips to restore.' },
+        { label:'S1-ticket · panel open, filed bubble', w:'1440px', side:true, terr:true, pageHd:false, digest:false, ticket:true,
+          dir:'row', pad:'22px 26px 26px', h1:'26px', chatH:'250px', scrollH:'120px', divider:'1px solid #ececf1', railTop:'0',
+          maxGlyph:'⤢', maxTitle:'Maximize',
+          cap:'The ticket panel opens under the card header and above both columns, because it belongs to the card rather than to the conversation. Filing closes it and leaves a grey Eadwyn bubble with the way back to the Help Center.' },
+        { label:'S1-m · 390 · chat above, rail below', w:'390px', side:false, terr:true, pageHd:true, digest:true, ticket:false,
+          dir:'column', pad:'14px 14px 20px', h1:'21px', chatH:'250px', scrollH:'110px', divider:'0', railTop:'1px solid #ececf1',
+          maxGlyph:'⤢', maxTitle:'Maximize',
+          cap:'On a phone the divider becomes a rule and the columns stack — the rail is still inside the card, so maximize still takes both.' }
+      ],
       navProg:nav('Programs'), navCon:nav('Contracts'), navIns:nav('Insights'),
       navComm:nav('Community'), navSet:nav('Settings'),
+
+      // ══ S17–S18 · Settings → Domain. Every licence binds its own host; axal.vc and
+      // app.axal.vc belong to Super Admin and are refused here. The fallback is issued by the
+      // deploy, so a licence never waits on DNS to activate. ══
+      dmSub: ['Profile','Staff & roles','Domain','Notifications','Brand kit'].map(label => ({ label,
+        style:'display:flex;align-items:center;gap:9px;padding:6px 15px 6px 30px;font-size:12px;'
+          + (label === 'Domain' ? 'font-weight:700;color:' + ST + ';background:' + STT : 'font-weight:500;color:#615c6e') })),
+      s17Fallback: 'axalfrance.os.axal.vc',
+      s17State: 'Pending DNS', s17StatePill: pill('Awaiting HQ'),
+      s17Checked: '22 Sep 2026, 09:41 UTC',
+      // One STABLE target for every tenant. The registrar never sees the per-tenant fallback
+      // origin — we attach {slug}.os.axal.vc behind cname.os.axal.vc ourselves, so a tenant's
+      // published DNS never has to change when their origin does.
+      s17Steps: ['Add hostname','Create records at your registrar','Check','Make primary'].map((t, i) => ({
+        n:String(i + 1), t,
+        style:'display:flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;padding:5px 10px;border-radius:999px;white-space:nowrap;'
+          + (i === 1 ? 'background:' + ST + ';color:#fff;border:1px solid ' + ST
+              : (i < 1 ? 'background:' + STT + ';color:' + ST + ';border:1px solid ' + STE : 'background:#fff;color:#615c6e;border:1px solid #ececf1')) })),
+      s17Registrars: ['Cloudflare','Google / Squarespace','Route 53','Namecheap','GoDaddy','Other'].map((t, i) => ({ t,
+        style:'font-size:10.5px;font-weight:' + (i === 0 ? '700' : '600') + ';padding:4px 10px;border-radius:999px;white-space:nowrap;'
+          + (i === 0 ? 'background:' + STT + ';color:' + ST + ';border:1px solid ' + STE : 'background:#fff;color:#4a4553;border:1px solid #ececf1') })),
+      s17Dns: [
+        { kind:'Ownership', state:'Found', pill:pill('Complete'), note:null,
+          line:'Type   TXT\nName   _axal-challenge.france.axalnetwork.com\nValue  axal-verify=41ce8b20df\nTTL    300' },
+        { kind:'Traffic', state:'Not found', pill:pill('Overdue'),
+          note:'DNS only — disable proxy or the orange cloud until we say Active. You can turn it back on afterwards.',
+          line:'Type    CNAME\nName    france.axalnetwork.com\nTarget  cname.os.axal.vc\nTTL     300' }
+      ],
+      s17Checklist: [
+        'Open the DNS page at your registrar — not here.',
+        'Add the TXT record and wait until it saves.',
+        'Add the CNAME pointing at cname.os.axal.vc.',
+        'Turn proxy or the orange cloud off until we say Active.',
+        'Click Check now.'
+      ],
+      s17Help: [
+        'You change DNS where you bought the domain — GoDaddy, Namecheap, Cloudflare. Axal cannot click Save there.',
+        'Do not replace your domain\u2019s nameservers unless you open Advanced below.',
+        'Super Admin remains axal.vc. This host is yours.'
+      ],
+      s17Cert: 'Pending', s17CertPill: pill('Scheduled'),
+      s17CertNote: 'Not recorded — waiting on DNS. The certificate is requested the moment the CNAME resolves; nothing to retry until then. A failure here would read as one sentence — timeout, CAA record, or rate limit — with Retry and Remove beside it.',
+      s17Moves: [
+        'Login and every app URL',
+        'Magic links and invitations already in flight',
+        'The OAuth callback base — each provider needs the new one added by hand',
+        'Public directory and Lab links'
+      ],
+      s17Email: [
+        { k:'SPF', state:'Found', pill:pill('Complete'), line:'TXT  @\nv=spf1 include:_spf.axal.vc ~all' },
+        { k:'DKIM', state:'Not found', pill:pill('Overdue'), line:'CNAME  ax1._domainkey\n→ ax1.dkim.axal.vc' },
+        { k:'DMARC', state:'Found', pill:pill('Complete'), line:'TXT  _dmarc\nv=DMARC1; p=none; rua=…' }
+      ],
+      s18ActivePill: pill('Active'),
+      s18Refusals: [
+        'axal.vc and app.axal.vc belong to Super Admin — a licence cannot bind either.',
+        'Another licence\u2019s fallback, *.os.axal.vc, is infrastructure and not available.',
+        'A path is not a host: yourhost.com/app is refused with that sentence.',
+        'One host per field in this pass. Wildcards come later; add a second row then.'
+      ],
+      s18WlName: 'Studio Lyon', s18WlPrimary: '#0f766e', s18WlAccent: '#f59e0b',
+      // The white-label rendition reads the same record shape as France, rewritten for a host
+      // that has finished verifying — so the two pages cannot drift into different forms.
+      s18WlDns: [
+        { kind:'Record 1 · Ownership (TXT)', state:'Verified', pill:pill('Complete'),
+          line:'Host   _axal-challenge.app.studiolyon.fr\nValue  axal-verify=9f2c41ab7e\nTTL    300' },
+        { kind:'Record 2 · Traffic (CNAME)', state:'Verified', pill:pill('Complete'),
+          line:'Host    app.studiolyon.fr\nTarget  cname.os.axal.vc\nProxy   Proxied \u00b7 safe now that it is Active' }
+      ],
+      // ══ S19 · the three states the wizard resolves into. Failures name the record that is
+      // wrong, not "DNS error" — the admin is standing in a registrar panel and needs to know
+      // which row to fix. ══
+      s19Fails: [
+        { t:'No TXT yet at _axal-challenge.france.axalnetwork.com', d:'The ownership record has not propagated. It saves instantly at most registrars; give it five minutes and check again.' },
+        { t:'CNAME at france.axalnetwork.com does not point at cname.os.axal.vc', d:'It currently resolves to axalfrance.os.axal.vc. That is our fallback origin, not the published target — point it at cname.os.axal.vc so the origin can move without your DNS changing.' },
+        { t:'Proxy is on; set DNS only and check again', d:'The orange cloud hides the record from us until the certificate is issued. Turn it off, reach Active, then turn it back on.' }
+      ],
+      s19Active: [
+        { k:'Hostname', v:'france.axalnetwork.com' }, { k:'Certificate', v:'Issued \u00b7 renews 12 Dec 2026' },
+        { k:'Ownership TXT', v:'Verified' }, { k:'Traffic CNAME', v:'cname.os.axal.vc \u00b7 verified' },
+        { k:'Fallback', v:'axalfrance.os.axal.vc redirects here' }
+      ],
+      s19Oauth:'https://france.axalnetwork.com/api/auth/callback',
+      s19Ns: [
+        { k:'Nameserver 1', v:'ns1.os.axal.vc' }, { k:'Nameserver 2', v:'ns2.os.axal.vc' }
+      ],
       // ── S11 · Benchmark as one tick; Settings rows with owners. The brand kit is the honest
       // row: HQ has no store for it, so the value is Not recorded with the reason.
       ...(() => {
-        const AS_OF = 'computed by HQ 12 Sep 09:10';
+        const AS_OF = 'computed by HQ 12 Sep 09:10 · from studioos_metrics · pushed as branch_benchmarks';
         const N = 4;
         const B = [
           { metric:'Activation rate', you:'62%', med:'54%', youPct:62, medPct:54, better:true },
@@ -900,8 +1798,9 @@ class Component extends DCLogic {
           { field:'Subsidiary name', value:'Axal VC France SAS', who:'Yours', act:'Edit' },
           { field:'Territory', value:'FR · BE · LU · licence copy as of 8 Sep 09:12', who:'HQ', act:'Request · escalation (other)' },
           { field:'Staff & roles', value:'6 admins, 2 reviewers', who:'Yours', act:'Edit' },
-          { field:'Brand kit', value:null, nr:'HQ has no brand-kit store yet, so there is nothing to download. Ask for assets through Content; do not expect a file here.', who:'HQ', act:'Ask HQ · Content' },
-          { field:'Licence summary', value:'325 seats · renews 14 Mar 2027 · copy as of 8 Sep 09:12', who:'HQ', act:'Request seats · escalation' }
+          { field:'Brand kit', value:null, nr:'HQ.brandKit() answers with no assets — HQ has no brand-kit store behind the export yet, so there is nothing to download. Ask for assets through Content; do not expect a file here.', who:'HQ', act:'Ask HQ · Content' },
+          { field:'Licence summary', value:'325 seats · renews 14 Mar 2027 · copy as of 8 Sep 09:12', who:'HQ', act:'Request seats · escalation' },
+          { field:'Data residency', value:'D1 · DO · R2 with jurisdiction eu · licence term D.1', who:'HQ', act:'Stated on the licence · not changeable' }
         ];
         return {
           s11AsOf: AS_OF, s11Head: 'n ' + N + ' branches · anonymised median · you',
@@ -914,10 +1813,71 @@ class Component extends DCLogic {
         };
       })(),
 
+      // ── S15 · Analytics, one branch. One line, and one dashed median that HQ pushed. The
+      // revenue-share card reads the branch's own cut from the same streams H10 shows HQ's.
+      ...(() => {
+        // Plot box is the SVG alone (the y column is HTML beside it); RP keeps the last dot
+        // inside the box. The range starts below the median so the dashed rule is a real
+        // position on the axis rather than a line parked at the floor.
+        const W = 534, H = 150, PAD = 4, RP = 8, N = 8, lo = 200, hi = 350;
+        const V = [288,296,301,309,318,326,331,338];
+        const x = (i) => PAD + i * ((W - PAD - RP) / (N - 1));
+        const y = (v) => H - 4 - ((v - lo) / (hi - lo)) * (H - 12);
+        const MED = 226, MED_AT = '12 Sep 09:10'; // the anonymised median, from branch_benchmarks
+        const FUN = [['Invited', 164], ['Signed in', 141], ['Agreement signed', 118], ['Active in week 2', 102]];
+        const SLA = [['LP applications', 41], ['Cohort applications', 29], ['Referrals', 17], ['Content to HQ', 96]];
+        const GATES = [['Week 1', 12, 12], ['Week 2', 11, 12], ['Week 3', 9, 12], ['Week 4', 0, 12]];
+        const STR = [['Subscriptions', 64200], ['Programme fees', 22800], ['Perks & marketplace', 5100]];
+        const SHARE = 0.82; // the branch keeps 1 − HQ's 18% revenue share
+        const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+        const gross = STR.reduce((a, s) => a + s[1], 0);
+        return {
+          s15Source: 'D1 studioos-fr · queried 14 Sep 10:46 · median from branch_benchmarks ' + MED_AT,
+          s15Range: ['8 weeks','Quarter','Year'].map((l, i) => ({ label:l, style:seg(i === 0) })),
+          s15Kpis: [
+            { label:'Active accounts', value:String(V[N - 1]), delta:'+' + (V[N - 1] - V[N - 5]) + ' · 4 wk', deltaInk:'#047857', note:'this D1 · accounts with an event in the week' },
+            { label:'Activation · invite → active', value:pct(FUN[3][1], FUN[0][1]) + '%', delta:FUN[3][1] + ' of ' + FUN[0][1], deltaInk:'#615c6e', note:'30 days · this branch only' },
+            { label:'Median approval age', value:'34h', delta:'HQ median 19h', deltaInk:'#b45309', note:'the one cross-branch figure · as of ' + MED_AT },
+            { label:'Seat utilisation', value:pct(accTotal, SEATS.reduce((a, s) => a + s.lic, 0)) + '%', delta:accTotal + ' of ' + SEATS.reduce((a, s) => a + s.lic, 0), deltaInk:'#615c6e', note:'seats are the licence\u2019s; the count is yours' }
+          ],
+          s15Grid: [200, 250, 300, 350].map(v => ({ y:y(v).toFixed(1), pct:(y(v) / H * 100).toFixed(2), label:String(v) })),
+          s15Weeks: Array.from({ length:N }, (_, i) => ({ label:'w' + (30 + i) })),
+          s15Points: V.map((v, i) => x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' '),
+          s15LastX: x(N - 1).toFixed(1), s15LastY: y(V[N - 1]).toFixed(1),
+          // The median is plotted at its true value on the same axis, so the gap between the
+          // dashed rule and this branch's line is the actual distance, not a decoration.
+          s15MedY: y(MED).toFixed(1), s15MedLabel: 'anonymised median ' + MED + ' · n 4 branches · computed by HQ ' + MED_AT,
+          s15ChartNote: 'One line, because this deployment has one database. The dashed rule is the anonymised median of four branches at its true value on this axis, pushed by HQ as branch_benchmarks — the only figure on this page not read from this D1, and stamped accordingly.',
+          s15Funnel: FUN.map((f, i) => ({ k:f[0], n:String(f[1]), rate: i === 0 ? '100%' : pct(f[1], FUN[i - 1][1]) + ' of prior', pct:String(pct(f[1], FUN[0][1])), op:String(1 - i * .18) })),
+          s15Sla: SLA.map(s => ({ q:s[0], v:s[1] + 'h', pct:String(Math.min(100, pct(s[1], 120))), color: s[1] > 48 ? '#b91c1c' : (s[1] > 24 ? '#b45309' : '#047857') })),
+          s15SlaNote: 'Content to HQ is measured from submission to HQ\u2019s decision — that clock is HQ\u2019s, and this bar reads it from the escalation thread, not from anything this branch controls.',
+          s15Gates: GATES.map(g => ({ k:g[0], n:String(g[1]), rate: g[1] ? pct(g[1], g[2]) + '% of ' + g[2] : 'not yet due' })),
+          s15GatesNote: 'Twelve admitted. Week 4 reads "not yet due" rather than 0 — the cohort is in its third week, and a zero would read as twelve failures.',
+          s15Rev: STR.map(s => ({ stream:s[0], gross:eur(s[1]), yours:eur(Math.round(s[1] * SHARE)) })),
+          s15RevGross: eur(gross), s15RevYours: eur(Math.round(gross * SHARE)),
+          s15RevNote: 'Your cut is gross × ' + Math.round(SHARE * 100) + '%, the complement of HQ\u2019s 18% revenue share on the licence copy. The same three streams appear on HQ\u2019s statement for this branch; the two pages differ only in whose share is in the right-hand column.',
+          s15Foot: 'This branch writes to studioos_metrics and cannot read it back, so there is no cross-branch chart here and no place one could go. Ask the rail how another branch is doing and it declines with that reason (S12). What HQ chooses to share comes back as one median with a timestamp — and that is the whole of what this page knows about anyone else.'
+        };
+      })(),
+
+      // ── S14 · This deployment, from the registry scheme.
+      s14Own: ['D1 studioos-fr · eu', 'KV TOKENS · RATE_LIMITS', 'R2 · eu', 'queue (+dlq)', 'DO · jurisdiction eu', 'Vectorize studioos-fr', 'vars BRANCH_CODE=fr', 'deployed by cloudflare-worker-deploy.yml · run #418'],
+      s14OwnNote: 'Everything an S-screen shows is read from this D1 or written by this worker. Residency is the licence\u2019s D.1 term and appears in Settings (S11) as an HQ-owned row.',
+      s14Rpc: [
+        { k:'Exports HqEntrypoint · what HQ may call', items:['accounts', 'queues', 'statement', 'audit'], note:'H9, H12 and the viewing-as overlay are these calls. A call HQ makes here is logged in this D1 and mirrored (S13).' },
+        { k:'Calls BranchEntrypoint · what this branch may ask HQ', items:['escalate', 'licence', 'templates', 'brandKit', 'partners'], note:'S9 is escalate; S7\u2019s badge is licence; S10 is templates; S11\u2019s Not-recorded row is brandKit answering with nothing.' }
+      ],
+      s14Shared: [
+        { what:'Analytics Engine · studioos_metrics', how:'This worker writes events with index branch=fr — statements, backlog, audit mirror. Only HQ\u2019s SQL API reads them; the median in S11 comes back as branch_benchmarks.' },
+        { what:'AI Gateway', how:'Every rail call carries cf-aig-metadata {branch: fr, user}. HQ sets a spend limit for fr; guardrail hits are counted there, not here.' },
+        { what:'Tail Worker · studioos-tail', how:'Logs by script name. Health on HQ\u2019s Deployments page comes from this, not from a read of this worker.' }
+      ],
+      s14Cannot: 'No binding to studioos-dach, studioos-nordics or studioos-iberia. No Analytics Engine SQL API. No GITHUB_ACCESS_TOKEN — this worker cannot deploy anything, including itself.',
+
       // ── S12 · rail rules; the rail itself is the shared component with decline="true".
       s12SearchNote: 'The box names its scope before any result arrives. Results that come back are the branch database\u2019s; there is no result set from anywhere else that a filter could have hidden.',
       s12Rules: [
-        { rule:'Scope is fixed', why:'The chip reads Axal VC France and has no caret. Nothing on this deployment can be pointed at another one.' },
+        { rule:'Scope is fixed', why:'The chip reads Axal VC France and has no caret. The only binding on studioos-fr is HQ → studioos; there is none to another branch, and the Analytics Engine SQL API is HQ-only.' },
         { rule:'It declines with the reason', why:'"There is no cross-branch read behind this rail" is a statement about the architecture, not a policy — which is why it can be said plainly.' },
         { rule:'It points at the copy it does have', why:'HQ pushes one anonymised median with a timestamp. The rail may cite that, and says when HQ computed it.' },
         { rule:'Cost is stated before the run', why:'Same rail, same receipt: the estimate first, the spend afterwards, the branch\u2019s plan as the ceiling.' }
@@ -939,7 +1899,7 @@ class Component extends DCLogic {
         { t:'09:14:10', actor:'HQ · T. Okafor', action:'read', ink:'#615c6e', target:'Cap table export · Novacraft Labs · 3 rows', rowStyle:'' },
         { t:'—', actor:'HQ · T. Okafor', action:'support session end', ink:'#615c6e', target:'written when it ends or expires — whichever comes first, recorded the same way', rowStyle:'opacity:.6' }
       ],
-      s13AuditNote: 'Two copies of every line: HQ\u2019s Security log and this branch\u2019s own. The branch copy exists because the branch database is what was read, and a tenant should not have to ask HQ what was done to it.',
+      s13AuditNote: 'Two copies of every line: this branch\u2019s own audit table in D1 studioos-fr, and the cross-branch audit mirror in studioos_metrics that HQ\u2019s Security reads — including when this branch is unreadable. The branch copy exists because the branch database is what was read, and a tenant should not have to ask HQ what was done to it.',
 
       // ── S9 · Escalations. One drawer, four kinds; the SLA is HQ's and the decision names its
       // author. The seat increase is the S8 request, so the two artboards describe one object.
@@ -964,7 +1924,8 @@ class Component extends DCLogic {
             { label:'Kind', value:'Moderation', ink:'font-weight:600' },
             { label:'Concerns', value:'Job post #2291 · Studio Vireo', ink:'font-weight:600' },
             { label:'Raised by', value:'C. Moreau · 12 Sep 09:05', ink:'color:#615c6e' },
-            { label:'SLA', value:'2 business days · HQ\u2019s · met', ink:'color:#615c6e' }
+            { label:'SLA', value:'2 business days · HQ\u2019s · met', ink:'color:#615c6e' },
+            { label:'Path', value:'HQ.escalate() → hq_escalations · HQ-only table', ink:'color:#615c6e;font-family:ui-monospace,Menlo,monospace;font-size:11px' }
           ],
           s9Thread: [
             { who:'C. Moreau · Axal VC France', when:'12 Sep 09:05', ink:'#334155', text:'Post claims a guaranteed multiple on advisor equity. We would remove it, but the partner is on a retainer with two cohort companies — flagging rather than deciding alone.', style:'border:1px solid #cbd5e1;background:#f6f8fa;border-radius:9px;padding:9px 11px' },
@@ -977,7 +1938,7 @@ class Component extends DCLogic {
 
       // ── S10 · Template library as HQ's copy. as-of is the push time; archived stays visible.
       ...(() => {
-        const AS_OF = 'as of 8 Sep 2026 09:12 · pushed by HQ';
+        const AS_OF = 'as of 8 Sep 2026 09:12 · pulled over HQ.templates()';
         const ST = { Current:['#ecfdf5','#047857','#a7f3d0'], Archived:['#f4f4f6','#615c6e','#e4e4e8'] };
         const pl = (c) => 'font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
         const ROWS = [
@@ -1001,9 +1962,19 @@ class Component extends DCLogic {
 
       // ── S7 · Iberia's shell while suspended. Everything below is a copy of what HQ pushed,
       // stamped; nothing on the branch is deleted by a suspension.
-      s7Brand: 'Axal VC Iberia', s7Codes: 'ES · PT', s7BadgeSrc: 'deployment branch-iberia · licence copy as of 18 Jul 11:40',
-      s7Banner: 'Queues frozen by HQ since 18 Jul 2026. Reason as stated by HQ: payment default, 41 days. Your database is intact; nothing here is deleted.',
-      s7Since: '58 days',
+      s7Brand: 'Axal VC Iberia', s7Codes: 'ES · PT', s7BadgeSrc: 'vars BRANCH_CODE=iberia · HQ.licence() copy as of 18 Jul 11:40',
+      // Two different facts, each derived once: how long the queues have been frozen (freeze date
+      // to the canvas's today) and how overdue the payment was when HQ froze them (due date to the
+      // freeze date). The old copy typed both, and they read as the same fact disagreeing.
+      ...(() => {
+        const days = (a, b) => Math.round((b - a) / 86400000);
+        const FROZEN_AT = new Date('2026-07-18T11:40:00Z'), TODAY = new Date('2026-09-14T00:00:00Z'), DUE = new Date('2026-06-07T00:00:00Z');
+        const frozenDays = days(FROZEN_AT, TODAY), overdueAtFreeze = days(DUE, FROZEN_AT);
+        return {
+          s7Banner: 'Queues frozen by HQ since 18 Jul 2026. Reason as stated by HQ: licence fee ' + overdueAtFreeze + ' days overdue at suspension (due 7 Jun). Your database is intact; nothing here is deleted.',
+          s7Since: frozenDays + ' days frozen'
+        };
+      })(),
       s7Read: [
         { row:'Accounts', note:'Every account and its seat, read-only. Nothing can be assigned or released.' },
         { row:'Contracts', note:'Signed agreements and their envelopes. New instantiations refused with the reason.' },
@@ -1023,7 +1994,7 @@ class Component extends DCLogic {
         { label:'SLA', value:'5 business days · HQ\u2019s, not ours', ink:'color:#615c6e' }
       ],
       s7AppealNote: 'The answer comes back as a thread with HQ\u2019s decision and who made it — the same drawer as every other escalation (S9). There is no field on this branch that can change the licence state.',
-      s7Sources: ['brand · licence copy · 18 Jul 11:40', 'codes ES · PT · licence copy', 'BRANCH · deployment record', 'worker branch-iberia · v39'],
+      s7Sources: ['brand · HQ.licence() over the HQ binding · 18 Jul 11:40', 'codes ES · PT · same licence copy', 'BRANCH · vars BRANCH_CODE=iberia', 'worker studioos-iberia · D1 studioos-iberia (eu) · v39'],
 
       // ── S8 · Seats. Free is licensed minus used; the request path is an escalation with the
       // number in it, and the licensed count is not a field anywhere on the branch.
@@ -1064,7 +2035,14 @@ class Component extends DCLogic {
         { where:'S0', what:'Badge reads BRANCH', why:'A branch is a deployment, not a division; the badge is fed by the deployment record (S7). Rows and wall unchanged.' },
         { where:'S1–S6', what:'No other in-place change', why:'Every existing screen already read as its own database. The additions are appended so the ids stay stable.' },
         { where:'S7–S13', what:'Appended, one per brief item', why:'S7 badge + suspended shell · S8 seat assignment · S9 To-HQ escalation drawer · S10 template picker as HQ copy · S11 benchmark tick + Settings owners · S12 branch rail · S13 HQ support session.' },
-        { where:'AdminRail', what:'Scope chip at top; decline card by prop', why:'The branch chip is its own name with no caret. Passing decline="true" renders the cross-branch refusal (S12).' }
+        { where:'AdminRail', what:'Scope chip at top; decline card by prop', why:'The branch chip is its own name with no caret. Passing decline="true" renders the cross-branch refusal (S12), which now names the one binding this worker has.' },
+        { where:'S7 · S9 · S10 · S11 · S13', what:'Sources named from the topology', why:'Badge from vars BRANCH_CODE and HQ.licence(); escalations via HQ.escalate() → hq_escalations; templates via HQ.templates(); the median from studioos_metrics via branch_benchmarks; the audit line mirrored to studioos_metrics. S11 gains a Data residency row [HQ].' },
+        { where:'S14', what:'This deployment', why:'What studioos-fr is, its one binding, what it exports, what it writes to account-level services, and what it cannot do.' },
+        { where:'S15', what:'Insights · Analytics', why:'Appended. Every figure a query on D1 studioos-fr except one: the anonymised median from branch_benchmarks, drawn as a dashed rule with HQ\u2019s timestamp. One line where HQ\u2019s chart has four; revenue share shows the branch\u2019s cut of the same streams H10 shows HQ\u2019s.' },
+        { where:'S17 · S19', what:'Custom domain is configured by the Admin at their own registrar', why:'The wizard is CNAME + TXT to one stable target, cname.os.axal.vc \u2014 the registrar never sees the per-tenant origin, so {slug}.os.axal.vc can move without the tenant republishing DNS. Nameserver delegation is advanced-only, collapsed, behind an acknowledgement that mail breaks until MX is recreated. Super Admin stays on axal.vc; HQ does not fill records for a subsidiary.' },
+        { where:'S1 · every sidebar', what:'"Home" removed \u00b7 landing is Studio at /studio', why:'The territory digest was the wrong front door. S1 is now the Studio shell every role lands on, with the admin question bank: Eadwyn asks, the Admin answers, the right rail is the priority list. Worker AI rail removed from this page; AdminRail stays on Accounts, Approvals and the rest. The digest survives as a strip after the card.' },
+        { where:'S17 · S18', what:'Domain is an Admin setting for every subsidiary licence, including white-label', why:'Super Admin stays on axal.vc and app.axal.vc and binds nothing else; this page is where a licence binds its own host. A section under Settings, not a ninth row. Until a custom host is Active members use the fallback the deploy issued — so a licence never waits on DNS. Email DNS is a sibling card with its own state, never mixed into the CNAME.' },
+        { where:'S3 · S16', what:'Approvals absorbs the console\u2019s remaining queues', why:'Eleven queues that were pages in the live console join the same record: KYC, partner profiles, directory, exploring, jobs, events, circles, partner invitations, best-fit, territory diligence, advisor cohort access. S16 is the primary view — chip row, one list sorted by age; S3 stays a five-column board whose columns are chosen by age rather than fixed. Wellbeing is deliberately not laned until it is known whether the roster is local or an HQ catalog.' }
       ],
 
       // ── S0 ──
@@ -1085,10 +2063,9 @@ class Component extends DCLogic {
         tSw:'width:11px;height:11px;border-radius:3px;flex:none;background:' + a.text + ';border:1px solid rgba(24,24,27,.14)',
         fSw:'width:11px;height:11px;border-radius:3px;flex:none;background:' + a.fill + ';border:1px solid rgba(24,24,27,.14)' })),
 
-      // ── S1 ──
-      homeSub: apOpen + ' items waiting, ' + breached.length + ' past SLA. The oldest has been open ' + oldest.hrs + ' hours.',
-      homeCost: '≈ ' + c4(run(16800, 1240, 0.293, 2.253)),
-      homeDigest: 'The queue that needs you is cohort applications — Lucie Bertrand has waited ' + oldest.hrs
+      // ── retired with the Home digest: the strip on S1 now carries oldest-queue age, the next
+      // deadline and revenue share, and Approvals owns the triage narrative. ──
+      _retiredHomeDigest: 'The queue that needs you is cohort applications — Lucie Bertrand has waited ' + oldest.hrs
         + ' hours against a 72-hour SLA, and Cohort 5 closes Friday. ' + breached.length + ' of ' + apOpen
         + ' items are past SLA and two of those three are in the same lane, which is a staffing signal rather than a backlog. '
         + 'Revenue share is tracking ahead of last month. One anomaly: token consumption from your Founder accounts is up sharply, concentrated in four of them.',
@@ -1152,7 +2129,14 @@ class Component extends DCLogic {
       apOpen:String(apOpen), apBreached:String(breached.length),
       apSub: apOpen + ' items across ' + LANES.length + ' queues. Sorted by age, because that is the question — not by which queue they came from.',
       apViews: ['All queues','Past SLA','Assigned to me','Outbound to HQ'].map((l, i) => ({ label:l, style:seg(i === 0) })),
-      lanes: LANES.map(l => {
+      // The kanban keeps five columns because five is what fits; which five is decided by age,
+      // not by a fixed order, so the board always shows the lanes that are actually hurting.
+      // Every lane is reachable from the chip row on S16, which is the primary view.
+      lanes: LANES.slice().sort((a, b) => {
+        const age = (l) => { const it = QUEUES.filter(q => q.lane === l);
+          return it.length ? Math.max.apply(null, it.map(i => i.hrs)) : -1; };
+        return age(b) - age(a);
+      }).slice(0, 5).map(l => {
         const cards = QUEUES.filter(q => q.lane === l).sort((a, b) => b.hrs - a.hrs);
         const worst = cards.length ? Math.max.apply(null, cards.map(c => c.hrs)) : 0;
         return { name:l, n:String(cards.length), empty:cards.length === 0,
@@ -1161,6 +2145,42 @@ class Component extends DCLogic {
             slaPill:slaPill(c.hrs),
             cardStyle:'border:1px solid ' + (c.hrs >= 72 ? '#fecaca;background:#fffbfb' : '#f0eff4;background:#fbfbfc') + ';border-radius:10px;padding:11px 12px' })) };
       }),
+      // ── S16 · the full board. Every figure derives from QUEUES, so the chip counts, the
+      // header total and the list can never disagree about what is open.
+      s16Total: String(apOpen),
+      s16Oldest: oldest.hrs + 'h · ' + oldest.lane,
+      s16Sub: apOpen + ' items across ' + LANES.length + ' queues, ' + breached.length
+        + ' past the 72-hour mark. ' + Cap(nWord(ABSORBED_LANES.length)) + ' of these lanes were separate pages in the console this replaces.',
+      s16Chips: (function(){
+        const views = ['All queues','Past SLA (' + breached.length + ')','Assigned to me','Outbound to HQ (' + QUEUES.filter(q => q.outbound).length + ')'];
+        const laneChips = LANES.map(l => {
+          const n = QUEUES.filter(q => q.lane === l).length;
+          return l + ' ' + n;
+        });
+        return views.map((label, i) => ({ label,
+          style:'font-size:11px;font-weight:' + (i === 0 ? '700' : '600') + ';padding:5px 11px;border-radius:999px;white-space:nowrap;'
+            + (i === 0 ? 'background:' + STT + ';color:' + ST + ';border:1px solid ' + STE
+                       : 'background:#fff;color:#4a4553;border:1px solid #ececf1') }))
+          .concat([{ label:'·', style:'font-size:11px;color:#cbd5e1;padding:5px 2px' }])
+          .concat(laneChips.map(label => ({ label,
+            style:'font-size:11px;font-weight:600;padding:5px 11px;border-radius:999px;white-space:nowrap;background:#fbfbfc;color:#615c6e;border:1px solid #ececf1' })));
+      })(),
+      s16Rows: QUEUES.slice().sort((a, b) => b.hrs - a.hrs).map(q => ({
+        who:q.who, what:q.what, lane:q.lane, age:q.hrs + 'h', outbound:!!q.outbound,
+        slaPill:slaPill(q.hrs),
+        laneStyle:'font-size:9.5px;font-weight:700;color:#334155;background:#f6f8fa;border:1px solid #cbd5e1;border-radius:4px;padding:2px 6px;white-space:nowrap',
+        rowStyle:'display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:9px;border:1px solid '
+          + (q.hrs >= 72 ? '#fecaca;background:#fffbfb' : '#f0eff4;background:#fff')
+      })),
+      s16Note: 'The list is sorted by age and nothing else, which is why a jobs post five hours old sits below a KYC case that has waited five days. Lane is a chip on the row rather than a column, so adding the seventeenth queue costs a chip and not a redesign.',
+      s16DrawerPill: slaPill(118),
+      s16History: [
+        { what:'Documents uploaded', when:'Tue 16 Sep · 11:20', dot:'#cbd5e1' },
+        { what:'Automated checks passed', when:'Tue 16 Sep · 11:24', dot:'#10b981' },
+        { what:'No reviewer assigned', when:'118h and counting', dot:'#ef4444' }
+      ],
+      s16Draft: 'Identity documents verified against the register; source-of-funds statement consistent with the declared family office. No adverse media. Approving for investor access at the standard limit.',
+
       drawerHistory: [
         { what:'Application submitted', when:'Sat 23 Aug · 22:40', dot:'#cbd5e1' },
         { what:'KYC returned clear', when:'Sun 24 Aug · 08:15', dot:'#10b981' },
@@ -1205,7 +2225,9 @@ class Component extends DCLogic {
       ].map(t => ({ name:t.name, ver:t.ver, note:t.note,
         actionLabel: t.dead ? 'Archived' : 'Use template',
         action: t.dead
-          ? 'font-size:11px;font-weight:600;color:#a8a4b4;flex:none;cursor:not-allowed'
+          // Archived is status, not decoration: it says which version is visible and unusable,
+          // so it reads at the file's muted token rather than at a greyed-out weight.
+          ? 'font-size:11px;font-weight:600;color:#615c6e;flex:none;cursor:not-allowed'
           : 'font-size:11px;font-weight:700;color:' + ST + ';flex:none;cursor:pointer',
         rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid '
           + (t.dead ? '#f0eff4;background:#fbfbfc;opacity:.62' : '#f0eff4;background:#fbfbfc') + ';border-radius:9px' })),
@@ -1236,7 +2258,7 @@ class Component extends DCLogic {
         { metric:'Median approval age', you:'34h', med:'19h', youPct:'71', medPct:'40', ink:'#b45309' },
         { metric:'Token spend per account', you:'€1.90', med:'€2.60', youPct:'46', medPct:'63', ink:'#047857' }
       ],
-      benchNote: 'The median is computed across every subsidiary and rendered as a tick, never as a ranked list — there is no view here that would let you work out who is above you. Approval age is the one line where you are behind it, and Home already told you why.',
+      benchNote: 'The median is computed across every subsidiary and rendered as a tick, never as a ranked list — there is no view here that would let you work out who is above you. Approval age is the one line where you are behind it, and Approvals already told you why.',
       settings: [
         { field:'Subsidiary name', value:'Axal VC France SAS', who:'Yours', edit:true },
         { field:'Territory', value:'FR · BE · LU', who:'HQ', edit:false },

@@ -61,3 +61,35 @@ here has nothing left in it.
 They are exports. Editing one makes it disagree with the design source without
 changing anything that runs. If a design needs to change, it changes in Claude
 Design and a new export lands in `design/incoming/`.
+
+## Amendments in place — a re-export replaces content, and moves no number
+
+**2026-09-22 (D195).** `Admin · Subsidiary.dc.html` and `Admin · Super.dc.html`
+were both replaced with fresh decodes of the artifacts they came from. Neither
+file moved folder, so **`integrated/` stays 66** — the "if you move a file, move
+the number" rule above governs *moves*, and a re-export is a content change. The
+count is stated here rather than left to be checked, because the last four times
+this file changed it was a move and the reader learns to look for one.
+
+| canvas | was | is |
+| --- | --- | --- |
+| `Admin · Subsidiary` | 110 KB · S0–S13 | **219 KB · S0–S19 plus S1b, S1c, S1d** |
+| `Admin · Super` | 135 KB · H1–H13 | **283 KB · H1–H34** |
+
+Both new exports are strict supersets — every artboard id the repo already
+carried is still present, which is checked rather than assumed — so nothing was
+lost by replacing them. Each carries its own CHANGELOG artboard listing the
+in-place amendments to the ids that already existed; that block, not this table,
+is the authority on what changed inside an artboard.
+
+**One asset could not be placed, and it stays an unresolved uuid on purpose.**
+`Admin · Subsidiary` references `4835ee6e-8882-4123-a5fb-fec77f0048df` as the
+34px Eadwyn mark on S1. `scripts/read-canvas.mjs` refuses to substitute an asset
+it does not recognise, and its header says why: *"a canvas that silently drops an
+asset is worse than one that says which asset it could not place."* The asset
+store was unreachable from here — the published artifact does not declare the
+`assets` capability, so a read of it answers `capability_disabled` — and pointing
+the tag at a different mark in `assets/` would make the canvas assert something
+the design does not show. So it renders as a broken 34px image, which is the
+decoder's contract working, and is the honest state until the artifact is
+republished with assets declared.

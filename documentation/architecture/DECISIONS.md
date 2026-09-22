@@ -17741,3 +17741,125 @@ three real defects behind it.
 
 `frontend/src` moves, so `docs/` is rebuilt by the root build. **No migration —
 279 stays free. No new `/api/*` method.**
+
+---
+
+## D195
+
+**The design of record moved under four open tasks, so it lands before any of
+them is built: thirty artboards this repository had never seen.**
+
+`design/canvases/integrated/Admin · Subsidiary.dc.html` and `Admin ·
+Super.dc.html` were the reference for #232–#235, #241–#246 and, most recently,
+for the four Studio-card store tasks filed against PR #719. Both were re-exported
+upstream and both grew substantially. Measured with the repo's own
+`scripts/read-canvas.mjs` rather than described:
+
+| canvas | was | is |
+| --- | --- | --- |
+| Admin · Subsidiary | 110 KB · S0–S13 | **219 KB · S0–S19 plus S1b, S1c, S1d** |
+| Admin · Super | 135 KB · H1–H13 | **283 KB · H1–H34** |
+
+**Thirty artboards, and they are not decoration.** Three of the four store tasks
+already filed are drawn in far more detail than those tasks capture, and one
+thing the new canvas settles was an open question in two of them. So the
+canvases land first and the task list is re-derived against them, rather than
+finished against a stale reference.
+
+**Both exports are strict supersets.** Every artboard id the repo already carried
+is present in the new file — checked by extracting the id list from both sides,
+not assumed from the byte count — so replacing the files loses nothing. Each new
+export also carries its own CHANGELOG artboard naming the in-place amendments to
+ids that already existed, which is the authority on what moved *inside* an
+artboard; this entry records what the repo now holds and which of it conflicts
+with something live.
+
+### What the new artboards are
+
+**Branch.** S14 states what this deployment is and is not. S15 is Insights ·
+Analytics, every figure a query on the branch's own D1 except the anonymised
+median, drawn as a dashed rule carrying HQ's timestamp. S16 is Approvals as one
+age-sorted list absorbing **eleven** further queues the live console keeps on
+their own pages, with wellbeing deliberately not laned until it is known whether
+the roster is local or an HQ catalog. S17–S19 are the custom-domain wizard, on
+the branch's **own** Settings as a section rather than a ninth row: CNAME plus a
+TXT ownership challenge to one stable target, `cname.os.axal.vc`, so the
+registrar never sees the per-tenant origin and `{slug}.os.axal.vc` can move
+without the tenant republishing DNS — with Check-now's failure text, the receipt
+when it passes, collision, Detach, the mobile pass, and nameserver delegation
+collapsed behind an acknowledgement that mail breaks until MX is recreated.
+Until a custom host is Active, members use the fallback the deploy issued, so a
+licence never waits on DNS. S1b and S1c are the Studio card's operating posture
+and needs-a-decision strips; S1d is a page overview, one card per sidebar row.
+
+**HQ.** H14 topology, H15 the platform read from `studioos_metrics` through the
+SQL API only — where a suspended branch's series **ends** rather than reading
+zero. H16–H19 Platform and Content consoles, H20 the people desk, H21 billing
+exceptions, H22 Support as a tenant × queue matrix, H23 a `security_events`
+ledger with sanctions and DR drill drawn Not recorded, H24 Funds oversight as a
+cross-branch registry read rather than the LP workspace, H25 the impersonation
+bar as global chrome. H26–H30 are the white-label tier: **Kind becomes Step 1**
+of the issue flow, the territory picker gains an informational legend because
+Axal exclusivity never fires against an operator, the ledger and health cards
+gain a Kind pill with an All / Axal / White-label filter, and Content and Support
+are kind-gated — the brand-approval lane empty by construction for a white-label
+and its escalation kinds reduced to Moderation · Seat increase · Other.
+H31–H34 make the licence domain strip **read-only on every tenant**, subsidiary
+and white-label alike, with one emergency action — Detach, with a typed reason.
+
+### Three things the measurement corrected, each recorded rather than absorbed
+
+**1 · The HQ canvas corrects itself on domains, and its correction is the
+instruction this work was commissioned under.** H26 · H32 read, verbatim: *"An
+earlier draft made Domain an HQ console. It is not: Super Admin stays on axal.vc
+and app.axal.vc and binds nothing else. The brand kit now collects no hostname of
+any kind."* The brief these tasks came from says the same thing in its own words
+— no domain editor, no CNAME form, no brand-approval desk on Super Admin. Design
+and instruction agree, which is worth saying because the earlier draft is still
+what a reader of the old export would have built.
+
+**2 · The retirement list is six artboards wide, not three.** H16/H17 retire the
+`/admin` Integration Keys, GitHub Sync, Payments, Promo Codes, Monitoring and
+Telegram Channels tabs; H18/H19 retire `/admin/assessment` authoring, the Personas
+taxonomy, `/admin/publications` and `/admin/network-profiles`; H20 retires the
+`/admin` Users table; H21 retires `/admin` Billing. A first reading of the canvas
+found only the last three, and that smaller number was carried into a plan before
+it was counted. **Nothing retires**: the instruction is explicit that `/admin`
+routes stay, `frontend/test/admin_route_reachability.test.mjs` requires every
+`/admin/*` route to stay reachable from the sidebar, so the new HQ screens are
+**additive** and that guard is not re-aimed. Any retirement is its own decision,
+later.
+
+**3 · One branch amendment contradicts live chrome, and is recorded rather than
+acted on.** The subsidiary canvas removes **Home** from every branch sidebar and
+makes S1 the Studio shell at `/studio`, with the territory digest surviving as a
+strip after the card and the Worker AI rail removed from that page. The shipped
+branch shell is eight rows beginning with Home (D107), pinned by
+`frontend/test/subsidiary_shell_s0.test.mjs`. That is a proposal against
+something live, not a gap to close quietly, so it is written down here and left
+for its own decision.
+
+### One asset could not be placed, and stays an unresolved uuid
+
+`Admin · Subsidiary` references `4835ee6e-8882-4123-a5fb-fec77f0048df` as the
+34px Eadwyn mark on S1. `read-canvas.mjs` refuses to substitute an asset it does
+not recognise, and its own header says why: *"a canvas that silently drops an
+asset is worse than one that says which asset it could not place."* The plan for
+this PR said the asset would be resolved into `design/canvases/assets/`; it could
+not be, and the reason is a capability rather than an oversight — the published
+artifact does not declare the `assets` capability, so a read of the asset store
+answers `capability_disabled`. Pointing the tag at a different mark already in
+`assets/` would make the canvas assert something the design does not show. So it
+renders as a broken 34px image, which is the decoder's contract working, and is
+the honest state until the artifact is republished with assets declared. Recorded
+in `design/canvases/README.md` beside the amendment table.
+
+### What this decision does NOT do
+
+It ships **no route, no worker change, no migration and no `frontend/src`
+change** — so **279 stays free**, no `docs/` rebuild is owed, and
+`check-api-drift` has nothing to say. It lands two exports and the three ledgers
+that describe them. The `integrated/` count stays **66**: a re-export replaces
+content and moves no file, and the "if you move a file, move the number" rule
+governs moves — stated in the README rather than left to be checked, because the
+last four changes to that file were moves and a reader learns to look for one.

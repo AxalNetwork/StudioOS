@@ -196,13 +196,43 @@ test('the SLA bands come from the server, not from the page', () => {
 
 test('the artboard still draws what this page claims to be', () => {
   // So the divergence stays deliberate rather than quietly going stale.
+  //
+  // RE-AIMED BY D194, NOT LOOSENED. The canvas this page was built against
+  // said "five lanes"; the export D194 landed says "five columns" and
+  // "absorbs five formerly separate queues". The wording moved, the property
+  // did not, so the assertion follows the property. What it must NOT become
+  // is /five/, which any of a dozen sentences on the artboard satisfies.
   const at = CANVAS.indexOf('S3 · APPROVALS');
+  const end = CANVAS.indexOf('id="s4"');
   assert.ok(at > 0, 'the S3 artboard is gone from the canvas');
-  const s3 = CANVAS.slice(at, at + 7000).replaceAll('&amp;', '&');
-  assert.match(s3, /five lanes/i, 'S3 no longer describes five lanes');
+  assert.ok(end > at, 'S4 no longer follows S3, so S3 has no end bound');
+  // Bounded at BOTH ends now. The old `at + 7000` overshot the artboard by
+  // about a thousand characters into S4, so a phrase belonging to the next
+  // screen could satisfy an assertion about this one.
+  const s3 = CANVAS.slice(at, end).replaceAll('&amp;', '&');
+  assert.match(s3, /five columns/i, 'S3 no longer describes a five-column board');
   assert.match(s3, /oldest/i, 'S3 no longer orders by age, which is the board\'s whole claim');
   // The canvas draws assignment and the AI note; the page refuses both with a
   // reason. If the canvas ever stops drawing them, the refusals are stale.
   assert.match(s3, /assign to reviewer/i, 'the assignment refusal may be stale');
   assert.match(s3, /decision note/i, 'the AI-note refusal may be stale');
+
+  // TWO THINGS D194's EXPORT ADDED, AND THE PAGE IS NEITHER OF THEM YET.
+  // Asserted here so the divergence is on the record and fails if the canvas
+  // quietly reverts — which is the only way this file can tell the difference
+  // between "the design moved on" and "somebody edited the export".
+  //
+  //   1 · Which five columns is now decided by AGE rather than being a fixed
+  //       order, so the board always shows the lanes that are hurting. The
+  //       shipped board's columns are fixed.
+  //   2 · The board is the SECOND view. The primary view — every lane
+  //       reachable, one age-sorted list — is S16, which does not exist as a
+  //       page. That is why this test is named for what the page CLAIMS to be
+  //       rather than for what the artboard is.
+  assert.match(s3, /decided by age/i,
+    'S3 stopped saying its five columns are chosen by age — the board is a fixed order again');
+  assert.match(s3, /primary view/i,
+    'S3 stopped naming a primary view, so the "this board is the second view" divergence is stale');
+  assert.match(s3, /S16/,
+    'S3 stopped pointing at S16, so the unbuilt primary view is no longer on the record here');
 });
