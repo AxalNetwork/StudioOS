@@ -23,6 +23,17 @@
  * These assertions pin the corrected ownership, and they are written against
  * the WORKER as well as the page, because a page that merely says "HQ" while
  * the worker grew a branch-side write would be wrong in the other direction.
+ *
+ * AMENDED BY D197, which moved this file from five rows to seven and from a
+ * typed count to a derived one. The canvas's five gained **Data residency**
+ * (S11 draws it) and **Domain** (the canvas puts it in a Settings sub-nav this
+ * page does not have), and both are HQ's with no branch-side read — so each
+ * renders its absence with a reason rather than a value. That makes the split
+ * 6-of-7 rather than the canvas's 4-of-6, and the number beside the rows is now
+ * counted from them: it had been a typed string under a comment reading
+ * "COUNTED, NOT TYPED" since D155, in two spellings that a grep for either
+ * would miss. The `rows` array is what both the render and these assertions
+ * read, so a row cannot reach one without reaching the other.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -43,26 +54,97 @@ test('the route is built, admin-gated, and renders no placeholder', () => {
   assert.doesNotMatch(line, /Pending/, 'the route went back to a placeholder');
 });
 
-test('every row names an owner, and four of the five are HQ', () => {
-  const rows = [...PAGE.matchAll(/<Row\b[\s\S]*?\/>/g)].map((m) => m[0]);
-  assert.equal(rows.length, 5, `expected S11's five rows, found ${rows.length}`);
-  const owners = rows.map((r) => (/who="HQ"/.test(r) ? 'HQ' : 'Yours'));
-  // COUNTED FROM THE ROWS, so the figure on screen cannot drift from them.
-  assert.equal(owners.filter((o) => o === 'HQ').length, 4,
-    'the ownership split moved — if a row genuinely changed hands, the count and the note move with it');
-  assert.match(PAGE, /4 of 5 rows HQ-owned/, 'the stated count disagrees with the rows');
+/**
+ * The `rows` array, sliced out of the page and split per row.
+ *
+ * D197 TURNED THE ROWS FROM JSX LITERALS INTO DATA, because that is the only
+ * thing that could make the count beside them true — it had been a typed
+ * string under a comment reading "COUNTED, NOT TYPED" since D155. Reading the
+ * same array the page derives from is also a stronger scan than matching
+ * `<Row …/>` ever was: a row added to the array reaches both the render and
+ * this assertion, and one cannot be updated without the other.
+ */
+function rowBlocks() {
+  const at = PAGE.indexOf('const rows = [');
+  assert.ok(at > 0, 'the rows stopped being one array, so the count below cannot be derived from them');
+  const end = PAGE.indexOf('\n  ];', at);
+  assert.ok(end > at, 'the rows array never closes');
+  const body = PAGE.slice(at, end);
+  const parts = body.split(/\n      field: /).slice(1);
+  return parts.map((s) => `field: ${s}`);
+}
+
+test('every row names an owner and a path, and S11 has the six the canvas draws plus Domain', () => {
+  const rows = rowBlocks();
+  assert.equal(rows.length, 7, `expected S11's rows, found ${rows.length}`);
+  const fields = rows.map((r) => (r.match(/field: '([^']+)'/) || [])[1]);
+  // ORDER MATTERS AND IS ASSERTED AS ORDER. The canvas's five, then its sixth
+  // (Data residency), then Domain — which the canvas puts in a Settings
+  // sub-nav this page does not have, so it lands here where its owner chip can
+  // say the true thing.
+  assert.deepEqual(fields, [
+    'Subsidiary name', 'Territory', 'Staff & roles', 'Brand kit',
+    'Licence summary', 'Data residency', 'Domain',
+  ], 'the row set moved');
   for (const r of rows) {
-    assert.match(r, /who="(HQ|Yours)"/, `a row names no owner: ${r.slice(0, 60)}`);
-    assert.match(r, /act=/, `a row offers no path: ${r.slice(0, 60)}`);
+    assert.match(r, /who: '(HQ|Yours)'/, `a row names no owner: ${r.slice(0, 60)}`);
+    assert.match(r, /act: /, `a row offers no path: ${r.slice(0, 60)}`);
   }
 });
 
+test('the stated count is DERIVED from the rows, not typed beside them', () => {
+  // THE DEFECT THIS REPLACES. `s11-owner-count` carried the literal
+  // "4 of 5 rows HQ-owned" directly under a comment claiming it was counted,
+  // and the rail carried "Four of five rows are HQ-owned" in a second spelling
+  // — so a grep for either missed the other, and both were wrong the moment a
+  // sixth row landed. Two spellings of one number is the shape this repo has
+  // corrected a dozen times.
+  const rows = rowBlocks();
+  const hq = rows.filter((r) => /who: 'HQ'/.test(r)).length;
+  assert.equal(hq, 6, 'the ownership split moved — say so in the note if a row genuinely changed hands');
+
+  // The page must COMPUTE it: a typed figure is refused in either spelling.
+  assert.doesNotMatch(PAGE, /\b\d+ of \d+ rows HQ-owned/,
+    'the count went back to being typed beside the rows it is meant to be counted from');
+  assert.doesNotMatch(PAGE, /of (five|six|seven) rows are HQ-owned/i,
+    'the rail went back to a second, typed spelling of the same number');
+  assert.match(PAGE, /rows\.filter\(\(r\) => r\.who === 'HQ'\)\.length/,
+    'the count is no longer derived from the rows');
+  assert.match(PAGE, /\$\{hqOwned\} of \$\{rows\.length\} rows HQ-owned/,
+    'the derived sentence changed shape');
+  // ONE source reaches BOTH the span and the rail, so they cannot disagree.
+  assert.match(PAGE, /data-testid="s11-owner-count">\s*\{ownerCount\}/,
+    'the rendered count stopped reading the derived value');
+  assert.match(PAGE, /^\s*ownerCount,$/m, 'the rail stopped reading the same derived value');
+});
+
+test('the two rows with no branch-side read state their absence rather than the canvas sentence', () => {
+  // D197 — the canvas types "D1 · DO · R2 with jurisdiction eu" on the Data
+  // residency row. `branch_licence` has no residency column and HQ never
+  // pushes one, so printing that would be a claim about this deployment that
+  // nothing on this deployment measured. Same for Domain: the host register is
+  // HQ's, and a branch cannot read it.
+  const rows = rowBlocks();
+  for (const field of ['Data residency', 'Domain']) {
+    const row = rows.find((r) => r.includes(`field: '${field}'`));
+    assert.ok(row, `${field} is not a row`);
+    assert.match(row, /who: 'HQ'/, `${field} stopped being HQ's`);
+    assert.match(row, /value: null/, `${field} started printing a value no branch read produces`);
+    assert.match(row, /reason: /, `${field} renders an absence with no reason`);
+  }
+  assert.doesNotMatch(PAGE, /jurisdiction eu/,
+    'the residency row printed the canvas\'s sample string as though it were this deployment\'s');
+});
+
 test('the two rows the canvas gets wrong are corrected, and the page says so', () => {
-  const name = PAGE.slice(PAGE.indexOf('field="Subsidiary name"'));
-  assert.match(name.slice(0, 200), /who="HQ"/,
+  const rows = rowBlocks();
+  const name = rows.find((r) => r.includes("field: 'Subsidiary name'"));
+  assert.ok(name, 'the subsidiary name row is gone');
+  assert.match(name, /who: 'HQ'/,
     'the subsidiary name went back to being the branch\'s, which the worker refuses');
-  const staff = PAGE.slice(PAGE.indexOf('field="Staff & roles"'));
-  assert.match(staff.slice(0, 400), /roles are granted by HQ/,
+  const staff = rows.find((r) => r.includes("field: 'Staff & roles'"));
+  assert.ok(staff, 'the staff row is gone');
+  assert.match(staff, /roles are granted by HQ/,
     'the staff row stopped saying roles are HQ\'s');
   // The correction is explained on the page, not only in a comment: a reader
   // who notices the artboard says otherwise gets the reason rather than a
@@ -78,8 +160,8 @@ test('no row draws a control the server would refuse', () => {
   assert.ok(!/<input\b/.test(PAGE) && !/<select\b/.test(PAGE) && !/<textarea\b/.test(PAGE),
     'a settings field appeared on a page whose rows are all decided elsewhere');
   // Every act is a LINK to somewhere that works.
-  const acts = [...PAGE.matchAll(/actTo="([^"]+)"/g)].map((m) => m[1]);
-  assert.equal(acts.length, 5, 'a row lost its destination');
+  const acts = [...PAGE.matchAll(/actTo: '([^']+)'/g)].map((m) => m[1]);
+  assert.equal(acts.length, rowBlocks().length, 'a row lost its destination');
   for (const to of acts) {
     assert.ok(APP.includes(`path="${to}"`), `${to} is a request path with no route behind it`);
   }
@@ -93,7 +175,7 @@ test('the role breakdown is read rather than recomputed, and absent is not zero'
   assert.match(PAGE, /ins\?\.stats\?\.by_role/, 'the page recomputes the breakdown instead of reading it');
   // An unreadable breakdown is unknown, never "no staff".
   assert.doesNotMatch(PAGE, /\|\|\s*0\b/, 'a figure defaults to zero instead of saying it is absent');
-  assert.match(PAGE, /staffLine\s*$|value=\{staffLine\}/m, 'the staff row stopped reading the derived line');
+  assert.match(PAGE, /value: staffLine,/, 'the staff row stopped reading the derived line');
 });
 
 test('the page owns no second rail — BranchZone mounts the branch tier\'s only one', () => {

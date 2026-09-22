@@ -229,12 +229,40 @@ export function AdminStudioOverview({ user, home, licence, templates, insights }
 
         <Card data-testid="admin-studio-settings" className="lg:col-span-2">
           <CardHead title="Settings" to="/branch/settings" />
+          {/* D197 — THE TYPED COUNT IS GONE, and that is the whole correction
+              here. This card said "4 of 5 rows owned by HQ." in a second
+              spelling of a number `BranchSettings` states in a third; the
+              branch page now DERIVES it from its own rows, and this card
+              cannot derive anything — it has no read of them. A number it
+              cannot compute is a number that goes stale the next time a row
+              lands, which is exactly what happened. The link is what it has,
+              and the link goes to the page that counts. */}
           <p className="mt-2 text-[13px] leading-relaxed text-axal-ink">
-            4 of 5 rows owned by HQ.
+            Every row on Settings names who decides it, and the count of HQ-owned rows is derived
+            there rather than stated here.
             {' '}
-            <Unrecorded reason="No hostname is recorded. The record, when a store exists, is a CNAME to cname.os.axal.vc plus a TXT ownership challenge. This card does not offer a form.">
-              Hostname not recorded
-            </Unrecorded>
+            {!lic ? (
+              // THE LICENCE WAS NOT READ, which is a different claim from "no
+              // host is bound" — the register was never consulted. The card
+              // already draws that distinction for seats a dozen lines up, and
+              // a host is no less worth it.
+              <Unrecorded reason="The licence was not read, so whether a custom host is bound is unknown rather than none.">
+                Hostname not read
+              </Unrecorded>
+            ) : lic.domain_available === false ? (
+              <Unrecorded reason={lic.domain_reason}>Hostname not readable</Unrecorded>
+            ) : lic.domain ? (
+              // A BOUND HOST IS NAMED WITH ITS STATE AND NEVER WITHOUT IT:
+              // `verified` is not serving, and a hostname printed bare would
+              // read as the host members are on.
+              <span data-testid="studio-hostname">
+                Hostname <b>{lic.domain.hostname}</b> · {lic.domain.state}
+              </span>
+            ) : (
+              <Unrecorded reason="The host register was read and this licence has bound no custom host. The Admin binds one in Settings → Domain; Super Admin does not add one, and this card does not offer a form.">
+                No hostname bound
+              </Unrecorded>
+            )}
             {' · '}
             <Unrecorded reason="No brand kit is recorded. Mark, colours and the powered-by line have no store yet, and HQ does not approve one. This card does not offer a form.">
               Brand kit not recorded

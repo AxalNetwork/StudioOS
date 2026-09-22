@@ -18017,3 +18017,207 @@ white-label branch is now pinned by a sentence only it carries.
 **No new `/api/*` method** — `kind` rides the create payload and `byUid`'s
 `SELECT *`, so `check-api-drift` has nothing to say. **280 is the next free
 migration.**
+
+## D197
+
+**A licence records the host its admin bound, and Super Admin's only power
+over it is to take it away.**
+
+`AdminLicences.jsx:1333` rendered `d.custom_domain`. **`custom_domain` exists
+nowhere** — measured across `cloudflare-worker/src` and every file under
+`sql/`, zero hits — so the domain strip has read *"Not recorded"*
+unconditionally for every licence that has ever existed. It is the same shape
+D196 fixed one block over, where `d.kind` was `undefined` on every row: a
+control shipped against a column nobody wrote. Migration **280** gives it a
+store, and S17–S19 plus H31–H34 say exactly who may touch it.
+
+**THE HOST IS HQ'S ROW EVEN THOUGH THE TENANT WRITES IT, and the reason is
+structural rather than a permission somebody chose.** H33's rule is *"One
+host, one licence"*, and a branch is its own Worker over its own D1 (D.2) — it
+cannot see what another tenant bound, so it cannot enforce uniqueness and
+cannot produce the collision refusal that names the other operator. HQ can. So
+`licence_domains` lives in HQ's database with `hostname` UNIQUE, and on a
+branch all three tenant writes answer **501 `domain_hq_only`** with a sentence
+saying why. The branch's licence payload carries the same three keys with
+`domain_available: false`, so the wizard states that rather than offering a
+form whose every write would refuse.
+
+**WHERE THE TWO SIDES SIT, AND WHY NEITHER IS WHERE YOU WOULD FIRST PUT IT.**
+The three tenant writes — bind, check-now, remove — are on `routes/licence.ts`
+behind `requireAuth` plus `licence_admins` membership, **deliberately not an
+admin gate**: binding a hostname is the holder configuring their own tenancy,
+and behind `requireAdmin` the compliance freeze (D135) would lock them out of
+their own settings — the exception-list problem that file's header already
+refuses to reintroduce. HQ's one write, `POST /:uid/domain/detach`, is on
+`admin_licences.ts` behind `requireSuperAdminWriteBar` with a typed reason of
+at least ten characters, because taking a host away from an operator is an
+admin act and has to be audited as one.
+
+**THE AUDIT GOES THROUGH `logAdminAction` AND NOT `licence_events`, and that
+avoids a migration rather than paying for one.** SQLite cannot ALTER a CHECK,
+so admitting one new event value there means the full table rebuild migration
+266 had to perform. `admin_audit_log` has no CHECK. The detach is recorded
+with the licence uid, the hostname, the previous state and the reason, and
+**no `target_user_id`**: the subject is a licence, and a licence may have
+several administrators, so naming one of them would put the wrong face on the
+row.
+
+### What this deliberately cannot do, and says so on both screens
+
+**`verified` is the terminal state.** Making a host actually serve needs a
+Cloudflare for SaaS custom hostname on the `os.axal.vc` zone, and there is
+**zero groundwork for it in this repository** — no `custom_hostname`, no SaaS
+call anywhere — plus a Cloudflare token nobody has set. So migration 280's
+`state` CHECK has **no `'active'` value at all**: a column that could hold a
+state nothing can reach is a claim waiting to be made falsely, and a test
+asserts the CHECK refuses it. `is_primary` exists and nothing writes 1, for
+the same reason — a host members are sent to has to serve first.
+
+What makes the gap harmless is S17's own rule, and it is the first sentence on
+the wizard: **a licence never waits on DNS.** Members are on the platform host
+the deploy issued before the form is touched and during every minute of
+propagation. The strip's **Platform host** column reads the real
+`licence_deployments.hostname` so that is visible rather than implied, and the
+**Certificate** column says there is none and none pending rather than
+printing a date. `SERVES_REASON` is one exported string both tiers render, so
+the wizard and HQ's strip cannot word the same absence differently.
+
+**The live DNS call has never run.** `cloudflare-dns.com` is refused at CONNECT
+from the environment this was built in, so `verifyRecords` takes an injected
+fetch (D135's `deps.notify` idiom) and the suite drives it with recorded DoH
+response shapes. The PR says this plainly rather than implying the path is
+exercised.
+
+### Six places the design of record contradicts itself, recorded rather than quietly picked
+
+1. **The CNAME target.** S18 publishes `cname.os.axal.vc`; H34 draws
+   `studiolyon.os.axal.vc`. **S19a settles it by making H34's version an
+   explicit failure** — *"It currently resolves to axalfrance.os.axal.vc. That
+   is our fallback origin, not the published target."* So the target is the
+   shared one, and a CNAME at a `*.os.axal.vc` fallback gets its own failure
+   sentence rather than falling into the generic one.
+2. **Proxy state** for one Active host — S18 says `Proxied`, H34 says
+   `DNS only`. Moot here: nothing reaches Active.
+3. **One certificate, two dates** — 14 Dec against 12 Dec. Moot for the same
+   reason.
+4. **S11's brand-kit row** against S6's stale one.
+5. **H33 cross-references "S14c"**, an artboard that does not exist.
+6. **The Super changelog still names `<code>.axal.vc`** after the H32
+   correction, while S17 uses `{slug}.os.axal.vc`.
+
+**And `os.axal.vc` is a deployment precondition, not an assumption this code
+makes.** The shipped platform host is `<code>.axal.vc`, derived independently
+in four places (`admin_deployments.ts:113`, `util/branch.ts:131`,
+`branchConfig.mjs:63`, and in reverse in `branchHost.js:20`). Adopting
+`{slug}.os.axal.vc` would move provisioning, the generated wrangler config,
+cookie names (D104), OAuth callbacks and `assertBranchAppUrl` — far beyond a
+store, and its own decision. `CNAME_TARGET` is a named constant carrying that
+fact in its header.
+
+### Three corrections this made to its own approved plan
+
+1. **`make-primary` is NOT built, and the plan named it.** `is_primary` decides
+   which host members are sent to, and members can only be sent to a host that
+   serves. A control that marked a host primary while nothing could route to it
+   would be the `still_an_admin` mistake D134 named, on the one field where
+   being wrong sends people to a dead host. It ships when a certificate can.
+2. **S11 reaches "4 of 6" by also flipping Subsidiary name to `Yours`, which
+   this platform cannot honour** — D155 already measured why (the name is
+   `BRANCH_NAME`, a Worker var, and `brand_name` is HQ's, with not one
+   `UPDATE branch_licence` in the worker). So the shipped page is **6 of 7**,
+   and the number is right *because it is derived*: `BranchSettings.jsx`'s
+   rows became data, and the count beside them is computed from that array.
+   The comment above it has read **"COUNTED, NOT TYPED"** since D155 over a
+   hardcoded string, in a second spelling the rail carried as *"Four of five
+   rows are HQ-owned"* — two typed spellings of one number, which is how a
+   grep for either missed the other. D197 makes the comment true.
+   `AdminStudioOverview.jsx` carried a **third** spelling, *"4 of 5 rows owned
+   by HQ."*, and it has no read to derive anything from — so it states no
+   number at all and links to the page that counts.
+3. **Domain is a ROW on the branch Settings page, not a sub-nav entry.** The
+   canvas puts it in `dmSub`; the shipped page has no sub-nav, and adding one
+   is its own concern. As a row it also gets an owner chip, which is where the
+   true thing can be said: the register is HQ's, so the act is the ask path.
+   The **Data residency** row lands the same way and renders its **absence**
+   rather than the canvas's `D1 · DO · R2 with jurisdiction eu` — `branch_licence`
+   has no residency column and HQ never pushes one, so printing the EU default
+   would be a claim about this deployment that nothing on this deployment
+   measured.
+
+### Two defects the guards and the suite caught in this PR's own code
+
+- **A refusal nothing could reach.** `validateHostname` declared
+  `host_not_ascii` with the one actionable sentence for a unicode host — *enter
+  the punycode form* — and `LABEL` refuses anything outside `[a-z0-9-]`, so
+  `münchen.de` failed the label rule first and the punycode sentence could
+  never be produced by any input. **A refusal with a carefully written sentence
+  that nothing can trigger is the same class of defect as an assertion that
+  cannot fail.** The fix was the order, not the wording, and the test now
+  asserts that every declared refusal code is reachable.
+- **A spread hid a key from the check that exists to see it.**
+  `check-api-drift` reads the response literal to prove the SPA can render a
+  reason rather than *"Request failed"*, and `c.json({ ...DOMAIN_HQ_ONLY }, 501)`
+  is invisible to it. The keys are written out at the call site now, with a
+  comment saying why — the same shape D151 recorded when a spread into the
+  rail's `unavailable` array hid the row shape from a line-oriented guard.
+
+### And a sixth instance of a class this programme keeps recording
+
+**A lexical scan cannot tell a rule from its violation.** The re-aimed
+assertion in `admin_studio_overview.test.mjs` refuses a typed row count, and
+the comment above the removal quotes the sentence it removed — so a raw scan
+matched the explanation and reported it as the offence. It strips comments
+now, with the pair that proves the stripper is load-bearing: the raw text must
+still carry the reasoning while the rendered code must not. D196's test 8 is
+the fifth instance and made the same repair.
+
+### Four existing guards re-aimed, never loosened
+
+`licence_kind_ui_d196.test.mjs` pinned the strip as reading *"Not recorded"*
+and carrying no `<button`, which was exactly right while `custom_domain` was a
+field no table had; it now pins H31's actual property — five columns, the host
+read off the store, and **exactly one** control, which must be the detach.
+`admin_studio_overview.test.mjs` moves from *"Hostname not recorded"* to all
+four states the card now distinguishes, including the one it gained: an
+**unread** licence is not the same claim as a register that was read and holds
+no host. `branch_settings_s11.test.mjs` reads the rows array rather than
+matching `<Row …/>` literals, which is the stronger scan — a row added to the
+array reaches both the render and the assertion. **The ninth time in this
+programme a guard has had to be re-aimed the day the refusal it pinned
+expired**, and leaving any of them would have made the test the thing
+preventing the fix.
+
+**No new store beyond migration 280 — 281 is the next free number.** Four new
+`/api/*` methods, each with its worker route in the same commit.
+
+### Two mutations escaped, and both were the assertion rather than the code
+
+The verification run applied fifteen mutations and caught thirteen on the
+first pass. The two that walked through are worth recording, because each was
+a test that could not fail on the defect it was written for.
+
+**The write bar was indistinguishable from the elevation.** Swapping
+`requireSuperAdminWriteBar` for a bare `requireSuperAdmin` on
+`POST /:uid/domain/detach` passed all 26 tests. The bar is TOTP plus a recent
+step-up **before** the super-admin check, and the fixture minted every session
+with `factor = 'totp'` — so the only account the test could distinguish was a
+plain admin, whom both forms refuse. The fixture now carries a fourth user who
+holds the same `super_admins` row and whose session was minted without a
+second factor; under the bar he does not get as far as the elevation, and
+under `requireSuperAdmin` he detaches a tenant's host.
+
+**The half-published check tested one half of two.** Dropping the CNAME
+conjunct from the promotion — `txtAt && cnameAt` becoming `txtAt` — passed,
+because the only half-published case under test was the one with no TXT to
+promote on. The mirror is now its own test: ownership published, traffic
+absent, state still `pending`. **A two-record rule needs both halves
+exercised, or it is a one-record rule that happens to agree.**
+
+### One mechanical loss, recorded because the rule that prevents it is stated everywhere else
+
+`BranchSettings.jsx` was restored mid-mutation-run with `git checkout --`
+rather than from the snapshot. D197 is uncommitted work, so that discarded the
+whole of its change to that file and it had to be rebuilt from its own guard.
+The rule this programme has written down four times — **restore from a
+snapshot, never from git** — exists for exactly this, and the snapshot in that
+run covered five files and not the sixth.

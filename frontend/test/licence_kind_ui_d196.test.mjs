@@ -128,14 +128,44 @@ test('the white-label explainer describes the host, not a missing column', () =>
     'the explainer stopped saying Super Admin keeps its own host');
 });
 
-test('the domain strip states its absence rather than claiming a store', () => {
-  // #306 builds the hostname store. Until it does, `d.custom_domain` is
-  // undefined on every row, and the strip must read as unrecorded rather than
-  // as a domain — and must offer no control the server could only refuse.
-  const strip = block('licence-domain-strip', '</p>');
-  assert.match(strip, /Not recorded/, 'the domain strip stopped saying the host is unrecorded');
-  assert.doesNotMatch(strip, /<button/,
-    'the domain strip grew a control, and no route behind it binds or detaches a host');
+test('the domain strip reads the store, and HQ\'s only control is Detach (D197)', () => {
+  // RE-AIMED, NOT LOOSENED. This assertion said the strip must read
+  // "Not recorded" and carry no `<button`, because `d.custom_domain` was a
+  // field no table had. D197 built the store, so the refusal it pinned stopped
+  // being true — the ninth time in this programme a guard has had to be
+  // re-aimed the day the refusal it pinned expired, and leaving it would have
+  // made the test the thing preventing the fix.
+  //
+  // What replaces it is the property H31 actually states: "There is no
+  // Approve, no Add domain, and no DNS editor for HQ to complete on a tenant's
+  // behalf." So the strip may carry EXACTLY ONE control, and it must be the
+  // detach.
+  const at = SRC.indexOf('data-testid="licence-domain-strip"');
+  assert.ok(at > 0, 'the domain strip is gone');
+  const end = SRC.indexOf('{d.blockers?.length', at);
+  assert.ok(end > at, 'the strip never reaches the block that follows it');
+  const strip = SRC.slice(at, end);
+
+  // H31's five columns, each present and each named.
+  for (const label of ['Platform host', 'Custom host', 'State', 'Certificate', 'Primary']) {
+    assert.ok(strip.includes(`label="${label}"`), `the strip lost its ${label} column`);
+  }
+  // THE HOST IS READ OFF THE STORE, not off the phantom field D196 measured.
+  assert.match(strip, /d\.domain\?\.hostname/, 'the strip stopped reading the bound host');
+  assert.doesNotMatch(strip, /custom_domain/,
+    'the strip went back to a field no table has ever had');
+  // AN UNREADABLE REGISTER IS ITS OWN STATE — never "no host bound".
+  assert.match(strip, /d\.domain_available === false/,
+    'an unreadable host register renders as no host bound');
+  // EXACTLY ONE CONTROL, and it is the detach.
+  const buttons = (strip.match(/<button/g) || []).length;
+  assert.equal(buttons, 1, `the strip carries ${buttons} controls; H31 allows one, and it is Detach`);
+  assert.match(strip, /data-testid="licence-domain-detach"/, 'the one control is not the detach');
+  assert.doesNotMatch(strip, /Approve|Add domain|Edit DNS/,
+    'HQ grew a control H31 says it does not get');
+  // The footer that says why there is nothing else here.
+  assert.match(strip, /Status only — the records live in the tenant/,
+    'the strip stopped saying the records are the tenant\'s');
 });
 
 test('the brand kit reads as unrecorded, not as Axal’s brand', () => {

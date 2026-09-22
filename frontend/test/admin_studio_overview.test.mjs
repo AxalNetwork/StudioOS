@@ -29,6 +29,8 @@ import { seatState } from '../src/pages/branch/BranchAccounts.jsx';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 const HOME = read('frontend/src/pages/admin/AdminStudioHome.jsx');
+import { codeOnly } from './_codeOnly.mjs';
+
 const OVERVIEW = read('frontend/src/pages/admin/AdminStudioOverview.jsx');
 const DASH = read('frontend/src/pages/Dashboard.jsx');
 
@@ -56,7 +58,31 @@ test('the seven cards are the other Admin pages, in sidebar order, with no inven
   assert.match(OVERVIEW, /COMMUNITY_CONSOLES/);
   assert.ok(!OVERVIEW.includes('184'), 'a sample seat count was left in the card');
   assert.ok(!/€|\$[0-9]/.test(OVERVIEW), 'a currency figure was drawn');
-  assert.match(OVERVIEW, /Hostname not recorded/);
+  // D197 — THE HOSTNAME IS NO LONGER "not recorded", because a store exists.
+  // What this card must still never do is print a host without its state, or
+  // claim a register it did not read. All four arms are pinned, so a later
+  // edit that collapses two of them into one sentence fails here.
+  assert.match(OVERVIEW, /Hostname not read/, 'an unread licence stopped being its own state');
+  assert.match(OVERVIEW, /Hostname not readable/, 'an unreadable register stopped being its own state');
+  assert.match(OVERVIEW, /No hostname bound/, 'a read register with no host stopped being its own state');
+  assert.match(OVERVIEW, /\{lic\.domain\.hostname\}<\/b> · \{lic\.domain\.state\}/,
+    'a bound host is printed without the state that says whether it serves');
+  // The typed count is the defect this replaced: the branch page derives it,
+  // and this card cannot, so it states no number at all.
+  //
+  // THE SCAN READS CODE, NOT THE FILE — "a lexical scan cannot tell a rule
+  // from its violation", for the sixth time in this programme. The comment
+  // above the removal quotes the sentence it removed, so a raw scan matches
+  // the explanation and reports it as the offence. The pair below proves the
+  // stripper did work rather than ate the file: the raw text must still carry
+  // the reasoning while the rendered code must not.
+  const code = codeOnly(OVERVIEW);
+  assert.match(code, /admin-studio-settings/,
+    'the comment stripper ate the card, so the assertion below could not fail');
+  assert.match(OVERVIEW, /4 of 5 rows owned by HQ/,
+    'the card stopped recording WHY it no longer states a row count');
+  assert.doesNotMatch(code, /\d+ of \d+ rows owned by HQ/,
+    'the card went back to typing a row count it has no read to derive');
   assert.match(OVERVIEW, /Brand kit not recorded/);
   assert.ok(!/<input\b/.test(OVERVIEW) && !/<form\b/.test(OVERVIEW), 'a form appeared for a store that does not exist');
   assert.doesNotMatch(OVERVIEW, /Good morning/);
@@ -151,7 +177,10 @@ function markup(props) {
 test('off a branch the cards render the absence and no sample figures', () => {
   const html = markup({ user: { role: 'admin' }, home: null, licence: null, templates: null, insights: null });
   assert.match(html, /not on a branch deployment/);
-  assert.match(html, /Hostname not recorded/);
+  // Off a branch with `licence: null` nothing was read, so the card says that
+  // rather than "no host bound" — which would be a claim about a register it
+  // never consulted.
+  assert.match(html, /Hostname not read/);
   assert.match(html, /Brand kit not recorded/);
   assert.match(html, /href="\/branch\/accounts"/);
   assert.match(html, /href="\/admin\/events"/);

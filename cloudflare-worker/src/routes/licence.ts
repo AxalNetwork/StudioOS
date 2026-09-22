@@ -34,11 +34,18 @@
  * addressable: `licence_admins`, which says who administers what. Before it,
  * "which licence is this admin's?" had no answer at all.
  */
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { branchOf } from '../util/branch';
 import { hydrate, type LicenceRow } from './admin_licences';
+import { nowIso } from './_t13t14t15_helpers';
+// D197 — the host the licence's own admin binds. The validator, the two
+// records and the resolver check all live in the service so this router and
+// HQ's strip cannot derive them differently.
+import {
+  domainPayload, loadDomainRow, mintChallengeToken, validateHostname, verifyRecords,
+} from '../services/licenceDomain';
 // The roles a licence sells a seat for. Imported rather than re-listed, so the
 // branch overview and this page cannot disagree about what a seat is (D127).
 import { SEAT_ROLES } from '../rpc/branchOps';
@@ -235,6 +242,14 @@ async function branchLicencePayload(env: Env, code: string) {
       terminated_at: row.terminated_at,
       template_version: row.template_version,
       admin_role: 'principal',
+      // D197 — THE HOST REGISTER IS HQ'S AND A BRANCH HAS NO READ OF IT, so
+      // this is "unknown", never "no host bound". HQ's `hydrate` sends the same
+      // three keys with the real answer; a branch sending nothing at all would
+      // leave the wizard rendering its bind form on a tier where every write
+      // answers 501, which is the `still_an_admin` mistake D134 named.
+      domain: null,
+      domain_available: false,
+      domain_reason: DOMAIN_HQ_ONLY_MESSAGE,
     },
     // NOT an empty history. `licence_events` is HQ's append-only trail and is
     // not pushed, so an empty array here would say "nothing has happened to
@@ -463,6 +478,245 @@ r.post('/notices/:uid/respond', async (c) => {
   } catch (e) { console.warn('[compliance] HQ notification failed', (e as Error).message); }
 
   return c.json({ ok: true, status: 'responded' });
+});
+
+/* ------------------------------------------------------------------ *
+ * The custom host the licence's own admin binds (D197, S17–S19)        *
+ * ------------------------------------------------------------------ */
+
+// THESE WRITES ARE NOT ADMIN WRITES, and that is why they are here rather
+// than in HQ's ledger. Binding a hostname is the licence holder configuring
+// their own tenancy — the same act as answering a compliance notice two
+// blocks up, and gated the same way: `requireAuth` plus "you administer this
+// licence". Putting them behind `requireAdmin` would mean the compliance
+// freeze (D135) locks a holder out of their own settings, which is the
+// exception-list problem that file's header already refuses to reintroduce.
+//
+// H31 IS THE OTHER HALF OF THE SAME RULE. HQ's strip is read-only: "There is
+// no Approve, no Add domain, and no DNS editor for HQ to complete on a
+// tenant's behalf." The only HQ write is Detach, and it lives in
+// `admin_licences.ts` behind the super-admin write bar, because taking a host
+// away from an operator is an admin act and has to be audited as one.
+
+const DOMAIN_HQ_ONLY_MESSAGE =
+  'The host register is held at HQ, because "one host, one licence" is a rule no single branch '
+  + 'can check — a branch is its own deployment over its own database and cannot see what '
+  + 'another tenant bound. Binding a host from a branch needs the branch-to-HQ leg, which is '
+  + 'not built. Ask HQ.';
+
+/** The licence this caller administers, refusing a branch before it looks. */
+async function ownLicenceForDomain(c: Context<{ Bindings: Env }>) {
+  const user = await requireAuth(c);
+  const code = branchOf(c.env);
+  // THE KEYS ARE WRITTEN OUT AND NOT SPREAD FROM A CONST, because
+  // `check-api-drift` reads the literal to prove the SPA can render a reason
+  // rather than "Request failed" — and a spread hides it from exactly the
+  // check that exists to see it.
+  if (code) {
+    return {
+      refusal: c.json({
+        error: 'domain_hq_only',
+        message: DOMAIN_HQ_ONLY_MESSAGE,
+        branch: code,
+      }, 501),
+    } as const;
+  }
+  const row = await licenceForUser(c.env, user.id);
+  if (!row) {
+    return {
+      refusal: c.json({
+        error: 'no_licence',
+        message: 'You do not administer a territory licence.',
+      }, 404),
+    } as const;
+  }
+  return { user, licence: row } as const;
+}
+
+/** The sentence a licence with no host, or an unreadable register, reads. */
+const NO_DOMAIN_BOUND = {
+  error: 'no_domain',
+  message: 'This licence has no custom host bound.',
+} as const;
+
+// POST /mine/domain — bind one, and mint the token it will publish.
+r.post('/mine/domain', async (c) => {
+  const own = await ownLicenceForDomain(c);
+  if ('refusal' in own) return own.refusal;
+  const { user, licence } = own;
+
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const checked = validateHostname((body as Record<string, unknown>)?.hostname);
+  if (!checked.ok) return c.json({ error: checked.error, code: checked.code }, 400);
+  const hostname = checked.hostname;
+
+  // ONE HOST PER LICENCE IN THIS PASS, checked before the collision so the
+  // operator who is simply re-typing their own host reads that rather than a
+  // sentence about somebody else. `licence_id UNIQUE` is what enforces it; this
+  // is the readable refusal.
+  let existing: Awaited<ReturnType<typeof loadDomainRow>> = null;
+  try {
+    existing = await loadDomainRow(c.env, licence.id);
+  } catch (e) {
+    console.warn('[licence] licence_domains unreadable', (e as Error).message);
+    return c.json({
+      error: 'domain_store_unreadable',
+      message: 'The host register could not be read on this database (migration 280).',
+    }, 503);
+  }
+  if (existing) {
+    return c.json({
+      error: existing.hostname === hostname
+        ? `${hostname} is already bound to this licence.`
+        : `This licence already has ${existing.hostname} bound. Remove it before binding another — `
+          + 'one host per licence in this pass.',
+      code: 'domain_already_bound',
+      hostname: existing.hostname,
+    }, 409);
+  }
+
+  // H33 — THE COLLISION NAMES THE OTHER OPERATOR'S PUBLIC NAME AND NEVER ITS
+  // LEGAL ENTITY. Who trades under a brand is public; which company holds the
+  // licence behind it is the other tenant's commercial business, and a refusal
+  // is not the place to disclose it.
+  const clash = await c.env.DB.prepare(
+    `SELECT d.licence_id AS licence_id, d.state AS state, l.brand_name AS brand_name
+       FROM licence_domains d
+       JOIN territory_licences l ON l.id = d.licence_id
+      WHERE d.hostname = ?`,
+  ).bind(hostname).first<{ licence_id: number; state: string; brand_name: string | null }>();
+  if (clash) {
+    // A DETACHED ROW STILL HOLDS THE HOST, on purpose: Super Admin took it
+    // away, and letting the next licence claim it immediately would re-create
+    // whatever the detach resolved. Nobody is named, because nobody holds it.
+    if (clash.state === 'detached') {
+      return c.json({
+        error: `${hostname} was detached by Super Admin and is not available. Ask Super Admin to release it.`,
+        code: 'host_detached_elsewhere',
+      }, 409);
+    }
+    return c.json({
+      error: `${hostname} is already bound to ${clash.brand_name || 'another operator'}. `
+        + 'One host, one licence — bind a name you control.',
+      code: 'host_taken',
+      held_by: clash.brand_name || null,
+    }, 409);
+  }
+
+  const token = mintChallengeToken();
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO licence_domains (licence_id, hostname, challenge_token, created_by_user_id)
+       VALUES (?,?,?,?)`,
+    ).bind(licence.id, hostname, token, user.id).run();
+  } catch (e) {
+    // The UNIQUE index is the final word, not the SELECT above — two admins
+    // binding the same host in the same second race past a check and cannot
+    // race past a constraint. Same argument migration 187 makes for territory.
+    console.warn('[licence] domain insert refused', (e as Error).message);
+    return c.json({
+      error: `${hostname} is already bound to another licence. One host, one licence.`,
+      code: 'host_taken',
+    }, 409);
+  }
+  const row = await loadDomainRow(c.env, licence.id);
+  return c.json({ ok: true, domain: row ? domainPayload(row) : null }, 201);
+});
+
+// POST /mine/domain/check — S19's Check now.
+r.post('/mine/domain/check', async (c) => {
+  const own = await ownLicenceForDomain(c);
+  if ('refusal' in own) return own.refusal;
+  const { licence } = own;
+
+  let row: Awaited<ReturnType<typeof loadDomainRow>> = null;
+  try {
+    row = await loadDomainRow(c.env, licence.id);
+  } catch (e) {
+    console.warn('[licence] licence_domains unreadable', (e as Error).message);
+    return c.json({
+      error: 'domain_store_unreadable',
+      message: 'The host register could not be read on this database (migration 280).',
+    }, 503);
+  }
+  if (!row) return c.json(NO_DOMAIN_BOUND, 404);
+  if (row.state === 'detached') {
+    return c.json({
+      error: 'This host was detached by Super Admin. There is nothing to check until it is restored.',
+      code: 'domain_detached',
+    }, 409);
+  }
+
+  const now = nowIso();
+  const result = await verifyRecords(row.hostname, row.challenge_token, now);
+  const txt = result.records.find((x) => x.kind === 'ownership');
+  const cname = result.records.find((x) => x.kind === 'traffic');
+
+  // A STAMP IS WRITTEN ONCE AND KEPT. `txt_verified_at` says when the record
+  // was seen, not that it is still published — and the two are different
+  // claims. Most registrars expect an ownership TXT to be removed once it has
+  // done its job, so re-writing the stamp on every pass would make a tenant who
+  // tidied up look unverified.
+  const txtAt = row.txt_verified_at ?? (txt?.ok ? now : null);
+  const cnameAt = row.cname_verified_at ?? (cname?.ok ? now : null);
+
+  // STATE DOES NOT DEMOTE IN THIS PASS, and that is a decision rather than an
+  // omission. `verified` here records that both records were confirmed; nothing
+  // downstream acts on it — no certificate is issued and no member is routed —
+  // so demoting on a later miss would be a state change with no consequence
+  // that punishes the tidy-up above. The per-record verdict below is the live
+  // view, and the screen shows it beside the stamp, so nothing on the page
+  // claims more than was measured. When Cloudflare for SaaS lands it owns the
+  // live view of whether a host still reaches us, and that is what should
+  // demote.
+  const next = row.state === 'pending' && txtAt && cnameAt ? 'verified' : row.state;
+
+  await c.env.DB.prepare(
+    `UPDATE licence_domains
+        SET state = ?, txt_verified_at = ?, cname_verified_at = ?,
+            last_checked_at = ?, last_check_json = ?, updated_at = datetime('now')
+      WHERE id = ?`,
+  ).bind(next, txtAt, cnameAt, now, JSON.stringify(result), row.id).run();
+
+  const fresh = await loadDomainRow(c.env, licence.id);
+  return c.json({
+    ok: true,
+    verified: next === 'verified',
+    check: result,
+    domain: fresh ? domainPayload(fresh) : null,
+  });
+});
+
+// DELETE /mine/domain — S18's Remove.
+r.delete('/mine/domain', async (c) => {
+  const own = await ownLicenceForDomain(c);
+  if ('refusal' in own) return own.refusal;
+  const { licence } = own;
+
+  let row: Awaited<ReturnType<typeof loadDomainRow>> = null;
+  try {
+    row = await loadDomainRow(c.env, licence.id);
+  } catch (e) {
+    console.warn('[licence] licence_domains unreadable', (e as Error).message);
+    return c.json({
+      error: 'domain_store_unreadable',
+      message: 'The host register could not be read on this database (migration 280).',
+    }, 503);
+  }
+  if (!row) return c.json(NO_DOMAIN_BOUND, 404);
+  // AN OPERATOR MAY REMOVE A HOST THEY BOUND AND NOT ONE HQ TOOK AWAY. A
+  // detached row is what keeps the host out of circulation; deleting it here
+  // would let the same licence re-bind it in the next request and undo the
+  // detach without anyone deciding to.
+  if (row.state === 'detached') {
+    return c.json({
+      error: 'Super Admin detached this host. Removing the record is Super Admin\'s to do — '
+        + 'ask them to release it.',
+      code: 'domain_detached',
+    }, 409);
+  }
+  await c.env.DB.prepare('DELETE FROM licence_domains WHERE id = ?').bind(row.id).run();
+  return c.json({ ok: true, removed: row.hostname });
 });
 
 export default r;

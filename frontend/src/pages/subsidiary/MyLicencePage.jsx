@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Map, Users, Calendar, Percent, Building2, AlertTriangle, Bell, Loader2, History, Lock,
+  Map, Users, Calendar, Percent, Building2, AlertTriangle, Bell, Loader2, History, Lock, Globe,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
@@ -8,6 +8,7 @@ import { bpsPercent } from '../../lib/bps';
 import { FROZEN, STILL_READABLE, FREEZE_RULE } from '../../lib/branchFreeze';
 import { reportError } from '../../lib/log';
 import { FREEZING_STATUSES, noticeKindLabel } from '../../lib/notices';
+import DomainWizard from '../../components/licence/DomainWizard';
 
 /**
  * My Licence — /admin/my-licence. The subsidiary administrator's own view.
@@ -315,7 +316,11 @@ export default function MyLicencePage() {
   }, []);
   useEffect(loadNotices, [loadNotices]);
 
-  useEffect(() => {
+  // D197 — EXTRACTED SO THE DOMAIN WIZARD CAN RE-READ IT. The wizard's three
+  // writes change a field on this very payload (`licence.domain`), so it hands
+  // back the loader rather than holding a second copy of the row — the tile-vs-
+  // table disagreement D128 ended, one component down.
+  const loadLicence = useCallback(() => {
     api.myLicence()
       .then(setData)
       .catch((e) => {
@@ -336,6 +341,7 @@ export default function MyLicencePage() {
         else { reportError('MyLicencePage:load', e); setErr(e?.message || 'Could not load your licence'); }
       });
   }, []);
+  useEffect(loadLicence, [loadLicence]);
 
   if (err) {
     return (
@@ -556,6 +562,24 @@ export default function MyLicencePage() {
             {data.derived_metrics_reason}
           </p>
         )}
+      </Panel>
+
+      {/* S17–S19 — D197. THE WIZARD IS MOUNTED HERE BECAUSE THIS IS ALREADY
+          THE HOLDER'S OWN VIEW: `/admin/my-licence` resolves through
+          `licence_admins`, which is the same membership the three domain
+          writes are gated on, so the screen and the route agree about who is
+          asking without a second identity check.
+          The panel renders on every tier; what changes is the payload. On a
+          branch the server answers `domain_available: false` with its reason,
+          because the host register is HQ's — so the wizard states that instead
+          of offering a form whose every write would answer 501. */}
+      <Panel icon={Globe} title="Custom host">
+        <DomainWizard
+          domain={l.domain || null}
+          available={l.domain_available}
+          reason={l.domain_reason}
+          onChanged={loadLicence}
+        />
       </Panel>
 
       <Panel icon={Bell} title="Notices from HQ">
