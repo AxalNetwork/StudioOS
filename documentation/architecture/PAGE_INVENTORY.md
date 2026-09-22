@@ -59,7 +59,7 @@ canvas behind it still shows up here.
 | Headerless | Network | `/network` | Partner Operator Canvas |
 | Headerless | Research | `/research` | — (no canvas; shipped ahead of the design corpus) |
 
-## `admin` — 51 destinations in 6 groups
+## `admin` — 50 destinations in 6 groups
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
@@ -112,7 +112,6 @@ canvas behind it still shows up here.
 | Network & Growth | Co-Marketing Review | `/comarketing` | — (no canvas; shipped ahead of the design corpus) |
 | More | Co-Founder Agreement | `/incorporate/cofounder-agreement` | — (no canvas; shipped ahead of the design corpus) |
 | More | 83(b) Tracker | `/spinout-lab/83b` | — (no canvas; shipped ahead of the design corpus) |
-| More | Partner / Investor Portal | `/partner-portal` | — (no canvas; shipped ahead of the design corpus) |
 | More | Perks | `/perks` | — (no canvas; shipped ahead of the design corpus) |
 
 ## `exploring` — 4 destinations in 2 groups
@@ -155,7 +154,7 @@ canvas behind it still shows up here.
 
 ## Destinations with no canvas
 
-72 of the 105 sidebar rows above are not claimed
+71 of the 104 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
@@ -215,7 +214,6 @@ rather than merely absent.
 - admin · Network & Growth · Co-Marketing Review (`/comarketing`)
 - admin · More · Co-Founder Agreement (`/incorporate/cofounder-agreement`)
 - admin · More · 83(b) Tracker (`/spinout-lab/83b`)
-- admin · More · Partner / Investor Portal (`/partner-portal`)
 - admin · More · Perks (`/perks`)
 - exploring · Home · Studio (`/exploring`)
 - exploring · Home · Spin-Out Lab (`/spinout-lab`)

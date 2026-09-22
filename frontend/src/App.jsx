@@ -78,7 +78,6 @@ const CapitalPage = lazy(() => import('./pages/CapitalPage'));
 const TicketsPage = lazy(() => import('./pages/TicketsPage'));
 const DealsPage = lazy(() => import('./pages/DealsPage'));
 const DealRoomPage = lazy(() => import('./pages/DealRoomPage'));
-const PartnerPortal = lazy(() => import('./pages/PartnerPortal'));
 const PartnerDealPortal = lazy(() => import('./pages/PartnerDealPortal'));
 const PartnerOnboardPage = lazy(() => import('./pages/PartnerOnboardPage'));
 const AdminPartnerInvitations = lazy(() => import('./pages/admin/PartnerInvitations'));
@@ -410,6 +409,16 @@ const ROLE_DEFAULT_PATH = {
 // and server-driven OAuth callbacks (?google=ok, ?advisor=1, ?profile_pending=1)
 // keep working after the rename.
 function DashboardRedirect() {
+  const loc = useLocation();
+  return <Navigate to={{ pathname: '/studio', search: loc.search, hash: loc.hash }} replace />;
+}
+
+// /partner-portal was the LP/capital-call cockpit. Investors were already sent
+// to Studio; the page stayed mounted for admin and partner bookmarks and for
+// the admin More item. Studio is the home for every licence, and deals,
+// capital, and the firm profile each have their own route. Old bookmarks keep
+// their query string and hash.
+function PartnerPortalRedirect() {
   const loc = useLocation();
   return <Navigate to={{ pathname: '/studio', search: loc.search, hash: loc.hash }} replace />;
 }
@@ -2823,13 +2832,11 @@ function AppInner() {
       <Route path="/network/organizations" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <NetworkWorkspace role={networkRole} />)} />
       <Route path="/relationships" element={<Navigate to="/network?tab=relationships" replace />} />
       <Route path="/legal-capital" element={guard(['admin', 'founder', 'partner', 'investor'], <LegalCapitalPage />)} />
-      {/* Task #17 — the investor sidebar no longer surfaces "Investor Portal"
-          (redundant with Studio). Investors hitting the old bookmark are
-          redirected to /studio; admin/partner keep the LP/capital-call surface. */}
-      <Route path="/partner-portal" element={guard(['admin', 'partner', 'investor'], partnerPrivateWorkspace(user?.role === 'investor' ? <Navigate to="/studio" replace /> : <PartnerPortal />))} />
-      {/* Task #9 (X-2) — Deal-specific Partner Portal (referral code,
-          granted tiers, redemption count). Distinct from the legacy
-          /partner-portal which keeps the LP/capital-call surface. */}
+      {/* Retired LP/capital-call cockpit. Bookmarks for admin, partner, and
+          investor land on Studio. /partners/portal below is a different page. */}
+      <Route path="/partner-portal" element={guard(['admin', 'partner', 'investor'], <PartnerPortalRedirect />)} />
+      {/* Task #9 (X-2) — Deal-specific partner page (referral code,
+          granted tiers, redemption count). */}
       <Route path="/partners/portal" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerDealPortal />))} />
       {/* Task #2 (DD) — Direct-URL guard for admin docs. Non-admins
           (or anonymous visitors) hitting /docs/admin/* see a Not Found

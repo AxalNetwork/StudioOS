@@ -89,8 +89,8 @@ export default function OnboardingPartnerPage() {
         flow="partner"
         steps={steps}
         onDark
-        finishLabel="Open Partner Portal"
-        onFinish={() => navigate(user?.role === 'exploring' ? '/exploring' : '/partner-portal')}
+        finishLabel="Open Studio"
+        onFinish={() => navigate(user?.role === 'exploring' ? '/exploring' : '/studio')}
       />
     </OnboardingCanvas>
   );

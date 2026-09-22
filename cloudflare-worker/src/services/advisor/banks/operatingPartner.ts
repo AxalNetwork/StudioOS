@@ -51,7 +51,7 @@ const block = (subtype: PartnerSubtype | undefined, section: string,
 // SHARED — preserved Task #2 IDs (no partner_subtype tag; visible to
 // all sub-types as the common onboarding spine).
 // =====================================================================
-const SHARED: Question[] = block(undefined, 'FIRM', '/partner-portal', 'network/partners', [
+const SHARED: Question[] = block(undefined, 'FIRM', '/studio', 'network/partners', [
   { id: 'partner.firm.name', prompt: 'Which firm or organization are you with?', kind: 'short', imp: 'critical', followups: ['partner.role.kind'] },
   { id: 'partner.role.kind', prompt: 'Which role best describes your partnership with the studio?', kind: 'select', opts: ROLES, imp: 'critical', followups: ['partner.services.offered'] },
   { id: 'partner.services.offered', prompt: 'What do you bring to portfolio companies? (comma-separated services)', kind: 'short', imp: 'high', followups: ['partner.deals.interest'] },
@@ -69,7 +69,7 @@ const SHARED: Question[] = block(undefined, 'FIRM', '/partner-portal', 'network/
 // =====================================================================
 // SUB-TYPE: service_provider (~50 questions)
 // =====================================================================
-const SP = (rows: RowSpec[], section: string, page = '/partner-portal',
+const SP = (rows: RowSpec[], section: string, page = '/studio',
             anchor = 'network/partners') =>
   block('service_provider', section, page, anchor, rows);
 
@@ -143,7 +143,7 @@ const SERVICE_PROVIDER: Question[] = [
 // =====================================================================
 // SUB-TYPE: mentor_advisor (~50)
 // =====================================================================
-const MA = (rows: RowSpec[], section: string, page = '/partner-portal',
+const MA = (rows: RowSpec[], section: string, page = '/studio',
             anchor = 'network/partners') =>
   block('mentor_advisor', section, page, anchor, rows);
 
@@ -217,7 +217,7 @@ const ADVISOR_ADVISOR: Question[] = [
 // =====================================================================
 // SUB-TYPE: strategic (~50) — channel / distribution / corporate partner
 // =====================================================================
-const ST = (rows: RowSpec[], section: string, page = '/partner-portal',
+const ST = (rows: RowSpec[], section: string, page = '/studio',
             anchor = 'network/partners') =>
   block('strategic', section, page, anchor, rows);
 
@@ -291,7 +291,7 @@ const STRATEGIC: Question[] = [
 // =====================================================================
 // SUB-TYPE: corporate_venture (~50) — CVC + commercial bundle
 // =====================================================================
-const CV = (rows: RowSpec[], section: string, page = '/partner-portal',
+const CV = (rows: RowSpec[], section: string, page = '/studio',
             anchor = 'network/partners') =>
   block('corporate_venture', section, page, anchor, rows);
 
