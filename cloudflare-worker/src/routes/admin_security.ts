@@ -7,8 +7,9 @@
  * and one page. A subsidiary admin has no security console by design (A5).
  *
  *   GET  /overview        one payload for the Security page
- *   GET  /governance      canvas H7's privileged-action feed, unioned across
- *                         the four stores that actually record one
+ *   GET  /governance      canvas H23's ledger (which completes H7's
+ *                         privileged-action feed), unioned across the five
+ *                         stores that actually record one
  *   POST /force-reauth    sign every active account out, everywhere, with a
  *                         typed reason; recorded in admin_audit_log
  *   POST /dsr/:userId/close   close a data-subject erasure request as
@@ -21,14 +22,21 @@
  * the statutory clock; and — since D152 — the AI guardrail counters, which
  * this page denied for months while `AiUsageTab` rendered them one click away.
  *
- * WHAT IS NOT, AND IS NAMED RATHER THAN SAMPLED. A `security_events` ledger
- * (failed sign-ins, step-ups, permission grants, exports as one feed) — the
- * canvas calls it "the one real backend build" and it is not built; a
- * sanctions screen; backup and restore-drill status. Each comes back
- * `{ available: false, reason }` so the page says so in the zone the canvas
- * draws for it, instead of rendering the canvas's sample rows. The AI-safety
- * zone is now the mixed case the D111 pattern produces: real figures beside a
- * named list of what those figures still cannot say.
+ * WHAT WAS NOT, AND WHAT D200 CHANGED. This header used to name three stated
+ * absences: a `security_events` ledger, a sanctions screen, and backup /
+ * restore-drill status. Measured, two of the three were refusals that denied
+ * stores the platform has. The ledger is built now (migration 282,
+ * services/securityEvents.ts) and is the fifth store /governance unions; the
+ * sanctions card reads `sanctions_screenings`, which `screenUser` has written
+ * since migration 035 — on request, never on a schedule, and the card says
+ * so; the backup half of "Backup / DR" reads the heartbeat the nightly export
+ * writes to R2. What is still genuinely absent — a restore-drill outcome the
+ * platform can read, and the events the ledger deliberately does not count —
+ * comes back as `{ available: false, reason }` or a `not_counted` list, so
+ * the page says so in the zone the canvas draws for it instead of rendering
+ * the canvas's sample rows. The AI-safety zone is the same mixed case the
+ * D111 pattern produces: real figures beside a named list of what they
+ * cannot say.
  *
  * FORCE RE-AUTH. `users.jwt_min_iat` is how sign-out-everywhere already works
  * per account (routes/settings.ts POST /sessions/revoke-all). Platform-wide
@@ -45,6 +53,12 @@ import type { Env } from '../types';
 import { IMPERSONATION_EXPIRY_MINUTES, requireSuperAdmin, requireSuperAdminWriteBar, bumpJwtMinIat } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
 import { loadGuardrailCounters } from '../services/aiRouter';
+import {
+  loadSecurityEventCounts, SECURITY_EVENT_KINDS, SECURITY_EVENT_RETENTION_DAYS, SECURITY_EVENTS_NOT_COUNTED,
+} from '../services/securityEvents';
+import { screeningSummary } from '../services/sanctions';
+import { readBackupHeartbeat, RESTORE_DRILL_REASON } from '../services/backup';
+import { branchBindings } from '../services/branches';
 import {
   HQ_DSR_OUTCOMES, isHqDsrOutcome, loadDsrHistory, closeDsrRequest, dsrDaysLeft, DSR_CLOCK_DAYS,
 } from '../services/dsrRequests';
@@ -138,6 +152,40 @@ function parseSqlTs(s: string | null | undefined): number {
   if (!s) return NaN;
   const iso = s.includes('T') ? s : `${s.replace(' ', 'T')}Z`;
   return Date.parse(iso);
+}
+
+/**
+ * D200 — the `security_events` block on /overview. The counts come from the
+ * service so the SQL has one home (the same argument `aiSafetyBlock` makes for
+ * `loadGuardrailCounters`), and an unreadable ledger keeps the retention, the
+ * kinds and the not-counted list — those are facts about the design, not about
+ * the database — while carrying NO `today` figure.
+ */
+async function securityEventsBlock(env: Env) {
+  const counts = await loadSecurityEventCounts(env);
+  const shape = {
+    retention_days: SECURITY_EVENT_RETENTION_DAYS,
+    kinds: SECURITY_EVENT_KINDS,
+    not_counted: SECURITY_EVENTS_NOT_COUNTED,
+    feed: '/api/admin/security/governance?filter=auth',
+  };
+  if (!counts.available) return { available: false as const, reason: counts.reason, ...shape };
+  return {
+    available: true as const,
+    today: counts.today,
+    failed_signins_24h: counts.failed_signins_24h,
+    ...shape,
+  };
+}
+
+const DSR_BRANCH_REASON =
+  'No branch RPC returns a branch\'s erasure requests, and HQ does not fan out for them; a request raised on '
+  + 'a branch is that branch\'s to answer and is visible there. Every request listed here is held on this '
+  + 'database.';
+
+/** How many branch Workers are bound here, or null when the env cannot be scanned. */
+function boundBranchCount(env: Env): number | null {
+  try { return branchBindings(env).length; } catch { return null; }
 }
 
 r.get('/overview', async (c) => {
@@ -238,16 +286,35 @@ r.get('/overview', async (c) => {
     dsr: {
       clock_days: DSR_CLOCK_DAYS,
       rows: dsr,
+      // D200 — H23 draws the DSR clocks "by territory · runs against the
+      // holding branch". Every request this database holds is HQ-held by
+      // construction, so the grouping has one group, and the second field says
+      // why there is not a second: no branch RPC returns a branch's erasure
+      // requests, and the brief forbids fanning out for one.
+      by_branch: [{ branch: 'HQ-held', open: dsr.length }],
+      branches: { bound: boundBranchCount(env), reason: DSR_BRANCH_REASON },
       ledger_available: ledgerAvailable,
       ...(ledgerReason ? { ledger_reason: ledgerReason } : {}),
     },
-    security_events: absent(
-      'No security_events ledger exists. Failed sign-ins, step-ups, permission grants and exports are not '
-      + 'collected into one feed; the admin action audit below is the only trail, and it records admin actions only.',
-    ),
+    // D200 — the ledger H23 draws: rows today and refused sign-ins in 24h,
+    // with the retention, the kinds, and what it deliberately does not count.
+    // Unreadable comes back with its reason and NO `today`, never a zero.
+    security_events: await securityEventsBlock(env),
     ai_safety: await aiSafetyBlock(env),
-    sanctions: absent('No sanctions screening runs on the platform; KYC status is the only trust fact recorded.'),
-    backup_dr: absent('No backup, restore-drill or failover record is kept where the platform can read it.'),
+    // D200 — the store's own figures. `sanctions_screenings` has existed since
+    // migration 035 and `screenUser` writes one row per on-request run; the
+    // old refusal here denied both. Zero runs is a measured zero and the
+    // block's `how` says why; a missing table is `available: false`.
+    sanctions: await screeningSummary(env),
+    // D200 — two halves with their own states. The backup half reads the
+    // heartbeat the nightly export writes to R2 (absent when the binding is
+    // unbound, absent when nothing was ever written, present with its stamp);
+    // the drill half stays a stated absence for the runtime reason in
+    // RESTORE_DRILL_REASON. Never one green light inferred from the other.
+    backup_dr: {
+      backup: await readBackupHeartbeat(env, 'd1'),
+      drill: absent(RESTORE_DRILL_REASON),
+    },
   });
 });
 
@@ -311,6 +378,9 @@ const FEED_FILTERS = [
   { key: 'licence_changes', label: 'Licence changes', reads: 'licence_events' },
   { key: 'suspensions', label: 'Suspensions', reads: 'licence_events · activity_logs' },
   { key: 'exports', label: 'Exports', reads: 'admin_audit_log' },
+  // D200 — the sixth, which H23 (completing H7) added: the ledger of refusals
+  // and step-ups at the auth boundary.
+  { key: 'auth', label: 'Sign-ins and step-ups', reads: 'security_events' },
 ];
 
 type FeedRow = {
@@ -322,6 +392,14 @@ type FeedRow = {
   target: string | null;
   source: string;
   tone: 'alert' | 'warn' | 'note';
+  /**
+   * D200 — H23's fifth column. Stored for a security event; DERIVED for the
+   * other four stores, because each of them writes AFTER the act it records
+   * (`logAdminAction`, `logActivity`, `logEvent` — hq_security.test.mjs pins
+   * that order), so a row's existence is the act having happened: `ok`. An
+   * impersonation is the one whose outcome is a state, not a verdict.
+   */
+  outcome: string;
 };
 
 /** A person, by the best name the join gave — never a bare id passed off as one. */
@@ -350,6 +428,19 @@ const clip = (s: string, n = 220) => (s.length > n ? `${s.slice(0, n - 1)}…` :
 const stamp = (v: unknown) => (v ? String(v).slice(0, 16).replace('T', ' ') : null);
 /** Whole minutes between two epochs, floored at zero. */
 const minutesBetween = (a: number, b: number) => Math.max(0, Math.round((b - a) / 60000));
+
+/**
+ * D200 — an impersonation's outcome for the ledger column, on the same rule
+ * the Data access zone below applies to its own rows: an open row past the
+ * token's expiry means the record was never closed, not that somebody is
+ * still inside.
+ */
+function impersonationOutcome(i: ImpersonationRow, now: number): 'live' | 'ended' | 'not closed' {
+  if (i.ended_at) return 'ended';
+  const started = parseSqlTs(i.started_at as string);
+  const elapsed = Number.isNaN(started) ? null : minutesBetween(started, now);
+  return elapsed !== null && elapsed >= IMPERSONATION_EXPIRY_MINUTES ? 'not closed' : 'live';
+}
 
 /**
  * THE SIX READS, EACH A COMPLETE LITERAL.
@@ -418,6 +509,18 @@ const FEED_LICENCE_SUSPENSIONS_SQL = `SELECT e.id, e.event, e.note, e.created_at
     WHERE e.event IN (?, ?)
     ORDER BY e.created_at DESC, e.id DESC LIMIT ?`;
 
+/**
+ * D200 — the fifth store. The subject joins to an account where the event
+ * named one; the address a refused attempt presented is never stored, so a
+ * row that resolves to nobody is its network bucket and nothing more.
+ */
+const FEED_SECURITY_EVENTS_SQL = `SELECT s.id, s.kind, s.factor, s.outcome, s.detail, s.user_id, s.ip_prefix,
+          s.branch_code, s.occurred_at,
+          u.name AS subject_name, u.email AS subject_email
+     FROM security_events s
+     LEFT JOIN users u ON u.id = s.user_id
+    ORDER BY s.occurred_at DESC, s.id DESC LIMIT ?`;
+
 type ImpersonationRow = Record<string, unknown>;
 
 r.get('/governance', async (c) => {
@@ -433,6 +536,7 @@ r.get('/governance', async (c) => {
   const readActivity = filter === 'all' || filter === 'suspensions';
   const readImpersonations = filter === 'all' || filter === 'impersonations';
   const readLicences = filter === 'all' || filter === 'licence_changes' || filter === 'suspensions';
+  const readSecurity = filter === 'all' || filter === 'auth';
 
   const rows: Array<FeedRow & { ts: number }> = [];
   const sources: Array<{ table: string; available: boolean; rows?: number; reason?: string }> = [];
@@ -492,6 +596,7 @@ r.get('/governance', async (c) => {
           ].filter(Boolean).join(' · ') || null,
           source: 'admin_audit_log',
           tone: action.includes('export') ? 'warn' : 'note',
+          outcome: 'ok',
         });
       }
       sources.push({ table: 'admin_audit_log', available: true, rows: took(got.length) });
@@ -522,6 +627,7 @@ r.get('/governance', async (c) => {
           target: l.details ? clip(String(l.details)) : null,
           source: 'activity_logs',
           tone: SUSPENSION_ACTIVITY_ACTIONS.includes(action) ? 'alert' : 'note',
+          outcome: 'ok',
         });
       }
       sources.push({ table: 'activity_logs', available: true, rows: took(got.length) });
@@ -551,6 +657,7 @@ r.get('/governance', async (c) => {
           ].filter(Boolean).join(' · ') || null,
           source: 'impersonation_sessions',
           tone: 'alert',
+          outcome: impersonationOutcome(i, now),
         });
       }
       sources.push({ table: 'impersonation_sessions', available: true, rows: took(impersonations.length) });
@@ -582,11 +689,47 @@ r.get('/governance', async (c) => {
           ].filter(Boolean).join(' · ') || null,
           source: 'licence_events',
           tone: SUSPENSION_LICENCE_EVENTS.includes(event) ? 'alert' : 'note',
+          outcome: 'ok',
         });
       }
       sources.push({ table: 'licence_events', available: true, rows: took(got.length) });
     } catch {
       sources.push({ table: 'licence_events', available: false, reason: 'The licence event log could not be read.' });
+    }
+  }
+
+  // ── security_events — D200, the fifth store ───────────────────────────
+  if (readSecurity) {
+    try {
+      const res = await env.DB.prepare(FEED_SECURITY_EVENTS_SQL).bind(FEED_LIMIT).all<Record<string, unknown>>();
+      const got = res.results || [];
+      for (const s of got) {
+        const outcome = String(s.outcome || '');
+        const branch = String(s.branch_code || 'hq');
+        rows.push({
+          key: `security:${s.id}`,
+          at: (s.occurred_at as string) || null,
+          ts: parseSqlTs(s.occurred_at as string),
+          // A subject that resolved to an account is named; one that did not
+          // is its network, because the address a refused attempt presented
+          // was hashed before it reached the row and is not recoverable.
+          actor: who(s.subject_name, s.subject_email, s.user_id) || `network ${String(s.ip_prefix || 'unknown')}`,
+          action: `${String(s.kind || '')}.${String(s.factor || '')}`,
+          // The deployment that recorded it — a fact about where, not whose.
+          tenant: branch === 'hq' ? 'HQ' : branch,
+          target: s.detail ? `detail=${String(s.detail)}` : null,
+          source: 'security_events',
+          tone: outcome === 'refused' ? 'alert' : 'note',
+          outcome,
+        });
+      }
+      sources.push({ table: 'security_events', available: true, rows: took(got.length) });
+    } catch {
+      sources.push({
+        table: 'security_events',
+        available: false,
+        reason: 'The security_events ledger could not be read on this database.',
+      });
     }
   }
 
@@ -686,7 +829,8 @@ r.get('/governance', async (c) => {
     // What no store can say, said once rather than once per row.
     tenant_available: false,
     tenant_reason:
-      'Only a licence event can name a subsidiary, because it is about a licence. No account carries a '
+      'Two stores can fill this column: a licence event names its subsidiary, because it is about a licence, '
+      + 'and a security event names the deployment that recorded it (HQ, or a branch code). No account carries a '
       + 'licence_id (U1), so an export, a role change or an impersonation cannot be attributed to one — those '
       + 'rows leave the column unrecorded rather than filling it with a guess.',
     data_access: {

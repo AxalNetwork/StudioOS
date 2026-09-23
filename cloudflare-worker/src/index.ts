@@ -1627,6 +1627,27 @@ export default {
             }
           } catch (e) { console.error('[cron] hq SLA sweep failed', e); }
         }
+        // D200 — the security_events ledger keeps 90 days. Migration 282's own
+        // seal refuses any delete INSIDE that window, so this sweep can only
+        // ever remove rows the trigger admits; the two comparisons are
+        // complementary by construction (`<` here, `>=` in the trigger).
+        //
+        // NOT GATED ON `hqCadences`, on the D122 precedent: the table is
+        // per-deployment and every tier prunes its own, so the rows' own age
+        // is the discriminator and a branch pruning its ledger is exactly
+        // right. DAILY, and the cadence bounds nothing a row says — a row is
+        // readable until it ages out whether the sweep runs at 04:50 or a day
+        // late. `branch_licence_copy.test.ts` pins this block in its ungated
+        // list, so a later edit that tidies it under the HQ gate fails the
+        // build.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 50) {
+          try {
+            const { pruneSecurityEvents } = await import('./services/securityEvents');
+            const p = await pruneSecurityEvents(env);
+            if (!p.readable) console.warn('[cron] security_events prune could not read the ledger');
+            else if (p.deleted) console.info(`[cron] security_events pruned=${p.deleted}`);
+          } catch (e) { console.error('[cron] security_events prune failed', e); }
+        }
         // D148 — the anonymised platform median, computed at HQ and pushed to
         // every branch. `branch_benchmarks` was created by migration 256 and
         // had no writer at all (#252); this is it.

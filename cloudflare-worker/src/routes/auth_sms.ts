@@ -29,6 +29,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
+import { recordSecurityEvent } from '../services/securityEvents';
 import {
   createJWT, requireAuth, setAuthCookies, generateCsrfToken,
 } from '../auth';
@@ -261,22 +262,31 @@ sms.post('/sms/verify-challenge', async (c) => {
   const code = String(body?.code || '').trim();
   if (!email || !sessionInfo || !code) return c.json({ error: 'Missing parameters' }, 400);
   if (!(await rate(c.env, `sms-verify-email:${email}`, 5, 300))) return c.json({ error: 'Too many attempts. Try again later.' }, 429);
+  // D200 — a refused SMS challenge is recorded in security_events, subject
+  // hashed and network bucketed; the answer it already gave is unchanged. A
+  // 502 from the provider is not a refusal and is not written.
+  const smsRefuse = (detail: string, userId?: number) =>
+    recordSecurityEvent(c.env, { kind: 'signin', factor: 'sms', outcome: 'refused', detail, userId, email, ip: clientIp(c) });
 
   const stashed = await withDeadline(c.env.RATE_LIMITS.get(`sms-login:${sessionInfo}`), RATE_KV_DEADLINE_MS, 'stash-get');
-  if (!stashed) return c.json({ error: 'session_expired' }, 410);
+  if (!stashed) { await smsRefuse('session_expired'); return c.json({ error: 'session_expired' }, 410); }
   let bound: { user_id: number; email: string };
   try { bound = JSON.parse(stashed); }
   catch { return c.json({ error: 'session_corrupted' }, 500); }
-  if (bound.email !== email) return c.json({ error: 'session_email_mismatch' }, 401);
+  if (bound.email !== email) { await smsRefuse('session_email_mismatch'); return c.json({ error: 'session_email_mismatch' }, 401); }
 
   const v = await signInWithPhoneNumber(c.env, sessionInfo, code);
-  if (!v.ok) return c.json({ error: v.code, message: v.message }, v.code === 'invalid_code' ? 401 : 502);
+  if (!v.ok) {
+    if (v.code === 'invalid_code') await smsRefuse('invalid_code', bound.user_id);
+    return c.json({ error: v.code, message: v.message }, v.code === 'invalid_code' ? 401 : 502);
+  }
 
   // Cross-check the verified phone against the stored row. Defense-in-depth
   // in case GCIP ever returns a phoneNumber that's been re-bound to another
   // localId since enrollment.
   const stored = await loadSms(c.env, bound.user_id);
   if (!stored || stored.phone !== v.phoneNumber) {
+    await smsRefuse('phone_mismatch', bound.user_id);
     return c.json({ error: 'phone_mismatch' }, 401);
   }
   await withDeadline(c.env.RATE_LIMITS.delete(`sms-login:${sessionInfo}`), RATE_KV_DEADLINE_MS, 'stash-delete');
@@ -285,7 +295,7 @@ sms.post('/sms/verify-challenge', async (c) => {
   // factor='sms' so requireFactor('totp') will refuse high-risk routes.
   const sql = getSQL(c.env);
   const users = await sql`SELECT * FROM users WHERE id = ${bound.user_id}`;
-  if (!users.length) { await sql.end(); return c.json({ error: 'Account not found' }, 401); }
+  if (!users.length) { await sql.end(); await smsRefuse('account_not_found', bound.user_id); return c.json({ error: 'Account not found' }, 401); }
   const user = users[0];
   const jti = crypto.randomUUID();
   const jwtToken = await createJWT(c.env, user.id, user.email, user.role, undefined, jti);

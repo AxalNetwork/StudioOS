@@ -391,4 +391,24 @@ test('the three platform-content cadences are gated on HQ in the scheduled handl
     !/hqCadences\s*&&[^\n]*\n[\s\S]{0,200}$/.test(block),
     'the support-session sweep was gated on hqCadences — it would then never run on a branch',
   );
+
+  // D200 — the security_events prune joins the ungated list, for D122's
+  // reason: the ledger is per-deployment, so every tier prunes its own rows
+  // and the rows' own age is the discriminator. Anchored on the IMPORT for
+  // the same reason as the sweep above: a local stub can keep a function's
+  // name, never the module specifier.
+  const prune = src.indexOf("await import('./services/securityEvents')");
+  assert.ok(prune > 0, 'the security_events prune is no longer wired into the cron');
+  assert.match(
+    src.slice(prune, prune + 200),
+    /pruneSecurityEvents\(env\)/,
+    'the prune is imported but never called with env',
+  );
+  const pruneBlock = src.slice(Math.max(0, prune - 400), prune);
+  assert.match(pruneBlock, /if \(now\.getUTCHours\(\) === 4 && now\.getUTCMinutes\(\) === 50\) \{/,
+    'the prune lost its daily 04:50 cadence');
+  assert.ok(
+    !/hqCadences\s*&&[^\n]*\n[\s\S]{0,200}$/.test(pruneBlock),
+    'the security_events prune was gated on hqCadences — a branch would then keep its ledger forever',
+  );
 });

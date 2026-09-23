@@ -434,6 +434,9 @@ export interface Env {
   // main worker ever needs to read from the same bucket directly. The
   // tail consumer worker (cloudflare-worker-tail/) writes the events.
   LOGS?: R2Bucket;
+  // D200 — `studioos-backups`, declared in both wrangler.toml tables; optional
+  // at runtime, which is why services/backup.ts treats its absence as a state.
+  BACKUPS?: R2Bucket;
 
   // Wide allowlist for preview/dev CORS, see middleware/cors guard.
   EXTRA_DEV_ORIGINS?: string;

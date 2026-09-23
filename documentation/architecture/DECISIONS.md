@@ -18540,3 +18540,212 @@ widened to 61 days, `status = 'active'` removed, an unreadable source folded
 into the total as zero, and the four-state glance collapsed so an absent answer
 renders as a scoped zero. No migration — **282 is the next free number**
 — and no new `/api/*` method: the figure rides `GET /api/branch/home`.
+
+## D200
+
+**HQ Security stated four absences. One was genuine and is now a ledger; two
+denied stores the platform already has; the fourth — the restore drill — stays
+absent, for a truer reason than the one it gave.**
+
+Task #309 asked for H23's `security_events` ledger and said sanctions and the
+DR drill were *"drawn Not recorded on the canvas itself, so they ship as stated
+absences with their reasons rather than as invented status."* Measured, two of
+those absences were false, and the thing that decided the ledger's shape was
+not in the task at all: it was H23's subtitle.
+
+### THE FINDING THAT DECIDED THE SHAPE: H23 "completes Y2/H7"
+
+`Admin · Super.dc.html` subtitles H23 **`completes Y2/H7 · deliberately not
+pretty`** and draws one ledger with five columns — `ts · actor · branch · event
+· outcome` — in monospace, with no tile above it. So the Security page's feed
+did not gain a second table beside H7's privileged-action log: H7's feed
+**became** H23's ledger, and `security_events` is its fifth store.
+`/api/admin/security/governance` widened its union rather than growing a
+sibling route, so there is **no new `/api/*` method**, and the page's own
+guard — two reads, two writes, and nothing else — stays true.
+
+**The canvas disagrees with itself twice, and both are recorded rather than
+picked silently.** H7 still draws `Time · Actor · Tenant · Action · Target and
+reason` under five filters; H23 draws its own five columns and no filter. H23
+wins on this page because it names itself H7's completion — and
+`hq_governance_h7.test.mjs` asserts H7 still draws its old columns, so the day
+H7 is redrawn to match, that assertion fails and this note can retire. And
+H23's Sanctions card reads *"No screening run is stored. A list check happens
+inside KYC at the branch"*: **both clauses are false for this repo**, below.
+
+### THREE MEASUREMENTS THAT CHANGED THE TASK
+
+**1 · The sanctions refusal denied a store the platform has — the thirteenth
+instance of a guard pinning a refusal that must move the day it stops being
+true.** `/overview` answered `sanctions: absent('No sanctions screening runs on
+the platform…')`. `sanctions_screenings` has existed since migration 035, with
+a runtime bootstrap (`ensureSanctionsSchema`). `screenUser` is a real screen —
+it loads the OFAC, EU and UK HMT lists, fuzzy-matches, writes one row per run
+with `provider = 'aggregate'`, and notifies the admin on a hit — behind
+`POST /api/trust/sanctions/screen/:user_id`, read by the Trust Center's Sanctions
+tab. **Nothing schedules it**, so production's 0 rows is a measured zero:
+nobody has asked for a screen yet. `routes/kyc.ts` carries only a
+`sanctions_acknowledged` consent flag, which is why the canvas's "inside KYC"
+clause is false too. The card now shows runs, last run, hits and unreviewed
+hits with the sentence that screening is on request and unscheduled; an
+unreadable table answers absent with its reason, never `runs_total: 0`.
+
+**2 · The backup half of "Backup / DR" was readable; the drill half is honestly
+absent — the fourteenth instance.** The `BACKUPS` R2 binding sits in both
+`wrangler.toml` tables, and `backup-d1.yml` writes `heartbeat-d1.json` (`at`,
+`source`, `kind`, `key`, `size_bytes`) to the bucket root after a successful
+put — yet `Env` had no `BACKUPS` field and `services/backup.ts` reached it
+through a cast. It is typed now, and the card reads the heartbeat in three
+states: unbound, never written, present. **The restore drill has never
+completed:** `dr-drill.yml` ran four times — 2026-06-01, 07-01, 08-01 and
+09-01 — and every run concluded `failure` within forty seconds (35, 39, 19
+and 3 seconds, measured from the run list); the job logs have expired, so the cause is not readable from here, and
+`scripts/dr-drill.sh` writes no marker on success or failure. So the drill
+half's reason is that **its outcome is written nowhere the platform can read**,
+not that no backup exists. The four-of-four count lives here and in the PR
+body and **never in the runtime string**, where it would go stale; a test
+refuses a count in `RESTORE_DRILL_REASON`.
+
+**3 · The auth boundary recorded successes and no refusals — the store that was
+genuinely absent.** `activity_logs` holds every `user_login_*` success, factor
+enrolment and recovery success. Nothing recorded a refused sign-in, a refused
+recovery, a gate turning an authenticated caller away, or a step-up at all
+(`/auth/step-up` stamped `last_step_up_at` and left no trail).
+
+### WHAT SHIPPED
+
+- **Migration 282 — `security_events`**: `kind` (`signin`, `step_up`, `gate`,
+  `recovery`, CHECKed and asserted equal to `SECURITY_EVENT_KINDS`), `factor`,
+  `outcome` (`ok`, `refused`), `detail`, `user_id`, `subject_key`, `ip_prefix`,
+  `branch_code`, `minute`, `occurred_at`; two indexes; an UPDATE trigger that
+  always aborts; and a DELETE trigger **WHEN-guarded** so a row inside the
+  retention window cannot be deleted by anything, the sweep included.
+- **`services/securityEvents.ts`**: `recordSecurityEvent` (never throws),
+  `pruneSecurityEvents` (deletes exactly what the trigger admits, `readable`
+  reported separately from `deleted`), `loadSecurityEventCounts` (rows today
+  from midnight UTC, refused sign-ins in 24 hours; unreadable answers
+  `available: false` with a reason, never `0`), `ipPrefix`, and
+  `SECURITY_EVENTS_NOT_COUNTED`.
+- **Writers at every refusal**: `/login` and `/verify-totp` (unknown account,
+  unverified, inactive, TOTP not configured, invalid code); `/magic/verify`
+  (expired, inactive); `/sms/verify-challenge` (five refusals); passkey
+  `/auth-verify` (seven); recovery across backup code, SMS, email, trusted
+  contact and claim; `requireFactor` and `requireStepUp`, which record an
+  authenticated caller they turn away and **nothing** for a caller with no
+  session. `/auth/step-up` records its refusals **and** its grant, the one
+  `ok` a writer may pass — a structural test refuses any other.
+- **`routes/auth.ts`'s two inline `/24` and `::/48` buckets** now read
+  `ipPrefix`, the consolidation this PR forces instead of a third copy.
+- **The retention sweep** at 04:50 UTC (04:45 was taken), in its own
+  `try/catch`, **not gated on `hqCadences`** — each tier prunes its own ledger
+  — and pinned in `branch_licence_copy.test.ts`'s ungated list.
+- **`occurred_at` joined `check-timestamp-comparisons`' `TTL_COLUMN`** in the
+  commit that creates it; the sweep, the seal and both counts compare it
+  against the clock through `datetime()`.
+- **`/overview`** carries the ledger block, the sanctions summary, and
+  `backup_dr` as `{backup, drill}`; the DSR block gains `by_branch`
+  (`HQ-held`) and the reason no branch RPC returns a branch's requests.
+- **`/governance`** gains the fifth store, a sixth filter (`auth`, *"Sign-ins
+  and step-ups"*), and an `outcome` on every row: stored for a security event,
+  `live` / `ended` / `not closed` for an impersonation, and `ok` for the three
+  stores that write after the act they record.
+- **The page**: the ledger zone first, monospace throughout, the bar's
+  `security_events · append-only · N rows today`, the three cards, DSR grouped
+  `HQ-held`, and *Failed sign-ins* as a real 24-hour count.
+
+### THE JUDGEMENT CALLS, EACH STATED SO IT IS CHEAP TO STRIKE
+
+1. **The AE audit mirror is pointed at, not unioned.** D163's rows carry
+   `branch` and `outcome` and deliberately no identity and no correlation key,
+   and every act they mirror is already a row in one of the four HQ stores —
+   a union would show each pushed act twice with nothing to fold them by.
+2. **No foreign key on `user_id`.** `ON DELETE SET NULL` would run an UPDATE
+   on an append-only table and the seal would abort the user delete.
+3. **Retention is 90 days and structural**: the number lives in the trigger
+   and in `SECURITY_EVENT_RETENTION_DAYS`, and a test asserts they agree.
+4. **One row per minute per (kind, factor, outcome, subject, network).** The
+   plan's tuple omitted `outcome`; it is in, because an `ok` step-up after a
+   `refused` one in the same minute is a different fact. **`detail` is not in
+   the tuple**, and the build found that this was a rule nobody had written
+   down: two passkey refusals with different reasons from one network in one
+   minute are one row, carrying the **first** reason. It is now stated in the
+   migration header, the service header and the page's footnote, and asserted.
+5. **Sign-in successes are not recorded here** — `activity_logs` has them. A
+   test drives a real enrolled `/login` and asserts the ledger stays empty.
+6. **The DSR zone groups every request `HQ-held`** and says why there is no
+   second group, rather than fanning out for something no branch RPC returns.
+7. **H23's columns replace H7's on this page**, as above.
+
+### WHERE THE BUILD CORRECTED ITSELF
+
+- **Sanctions and Backup / DR rendered "Loading…" under a failed overview
+  read** — the claim that an answer is coming, when none is. A guard caught it
+  and both cards now check an `unreadable` prop first. The bar's right span had
+  the same defect in its ellipsis, caught while writing its test, and now
+  reads *unreadable* under a failed read.
+- **Two of my own test fixtures were wrong before they ran**: a clean
+  screening row with `severity` NULL, against a column that is `NOT NULL
+  DEFAULT 'none'` and a writer that stores `'none'`; and an `/overview` token
+  naming a `jti` with no `user_sessions` row, which `getCurrentUser` rightly
+  treats as no session.
+
+### GUARDS RE-AIMED, NOT LOOSENED
+
+`hq_security.test.mjs` (the zones with no store: the ledger and sanctions stop
+being `absent(`, the drill keeps its absent half), `hq_governance_h7.test.mjs`
+(columns read from H23, the sixth filter, a five-store union, the zone's new
+title), `admin_governance.test.ts` (the fifth store built from migration 282)
+and `branch_licence_copy.test.ts` (the ungated list). The four-call `deepEqual`,
+the `|| 0` ban and the rail-pairs check are untouched. New:
+`cloudflare-worker/test/security_events_d200.test.ts` and
+`frontend/test/hq_security_h23.test.mjs`, which renders the two cards and the
+two sentence builders rather than reading their source.
+
+### NOT BUILT, AND WHY
+
+- **`key.reveal` rows** — no reveal exists; integration keys are promoted to
+  Worker secrets and never read back.
+- **`branch.read timeout` rows** — a fan-out's unreadable state is reported on
+  the page that asked; making it an event is its own producer.
+- **The per-branch guardrail split** — no branch column on either store, no
+  RPC returns one (D152); it stays Not recorded.
+- **A drill-outcome marker from `dr-drill.sh`**, and the cause of its four
+  failures — a CI change needing a fresh run's logs. Filed.
+- **`rate_limit_logs` in the union** — throttling is not a credential refusal,
+  and it is already recorded.
+- **The three local `clientIp` copies** (`auth_recover.ts`, `cofounder.ts`,
+  `esign.ts`) — filed; `ipPrefix` takes a string and needs none of them.
+
+### VERIFIED
+
+`npm run test:drift` exit 0, read as the exit code from a redirected log:
+frontend 2883 → **2888** (the five new render tests), worker 3736 → **3764**
+(3761 pass plus the same 3 pre-existing environment-gated skips; the 28 new
+tests), retention **41**, zero `not ok`, and all **33** new tests confirmed to
+run **by name** in the log. Worker `tsc --noEmit`,
+`check-timestamp-comparisons` (with `occurred_at` newly listed),
+`check-decision-ids` (D1 → **D200**) and `check-folder-docs` exit 0, and
+`check-docs-fresh --strict` exits 0 after the root build, which the last
+`frontend/src` edit preceded.
+
+**21 mutations applied, 21 caught**, each anchor asserted unique before it was
+applied and each restore verified by sha256 — the first run stopped on a wrong
+anchor, and the uniqueness check fired before anything was written. Among
+them: the sweep's `datetime()` dropped (the timestamp guard fails); the
+trigger's window moved to 30 days while the constant stays 90; the WHEN guard
+removed; the raw address stored as the subject; the writer rethrowing; a
+successful `/login` recorded; an unreadable ledger, and separately a missing
+sanctions table, read as zero; the drill half claiming a record;
+`security_events` dropped from the union; the prune gated on `hqCadences`; a
+second `::/48` bucket in `routes/auth.ts`; `detail` added to the dedupe key;
+two H23 columns swapped; monospace left on the time cell only; a cell opting
+into a proportional face; the bar keeping its ellipsis under a failed read,
+and reading `0 rows today` when unreadable; a measured zero drawn as an
+absence; a green backup turning the drill green; and an unscannable env read
+as no branch bound.
+
+Production, read-only and aggregates only: `schema_migrations` holds **284**
+rows topping at `281_licence_brand_kits.sql`, `security_events` does not
+exist, and `sanctions_screenings` holds **0** rows. So 282 creates one table,
+two indexes and two triggers and moves no rows. **283 is the next free
+number.**

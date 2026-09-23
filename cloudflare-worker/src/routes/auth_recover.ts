@@ -61,6 +61,7 @@ import {
   hashToken, generateToken,
 } from '../auth';
 import { hashEmail } from '../util/hashEmail';
+import { recordSecurityEvent } from '../services/securityEvents';
 import { hasTotpConfigured } from '../services/authTotp';
 import { hasSmsConfigured, loadSms, markSmsUsed } from '../services/authSms';
 import { isGcipConfigured, sendVerificationCode, signInWithPhoneNumber } from '../services/gcip';
@@ -95,6 +96,17 @@ function inDays(d: number): string { return new Date(Date.now() + d * 86400 * 10
 function clientIp(c: any): string {
   return (c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '')
     .split(',')[0].trim().slice(0, 64) || 'unknown';
+}
+
+/**
+ * D200 — a refused recovery step is recorded in security_events (kind
+ * `recovery`, one factor per layer), subject hashed and network bucketed. It
+ * never throws, so the refusal it sits beside answers exactly what it did
+ * before; a successful recovery is NOT recorded here — the ticket
+ * transition and activity_logs already hold it.
+ */
+function recoveryRefusal(c: any, factor: string, detail: string, subject?: { email?: string; userId?: number }) {
+  return recordSecurityEvent(c.env, { kind: 'recovery', factor, outcome: 'refused', detail, ip: clientIp(c), ...subject });
 }
 
 async function rate(env: Env, key: string, max: number, windowSec: number): Promise<boolean> {
@@ -423,13 +435,14 @@ recover.post('/backup-code', async (c) => {
 
   const user = await findUserByEmail(c.env, email);
   if (!user || !user.email_verified || !user.is_active) {
+    await recoveryRefusal(c, 'backup_code', 'invalid_code', { email });
     return c.json({ error: 'invalid_code' }, 401);
   }
 
   // Reuse the existing tryConsumeRecoveryCode helper. We inline a copy
   // here to avoid a circular import with routes/auth.ts.
   const normalized = code.replace(/[\s-]/g, '').toUpperCase();
-  if (normalized.length !== 12) return c.json({ error: 'invalid_code' }, 401);
+  if (normalized.length !== 12) { await recoveryRefusal(c, 'backup_code', 'invalid_code', { email, userId: Number(user.id) }); return c.json({ error: 'invalid_code' }, 401); }
   const formatted = `${normalized.slice(0, 4)}-${normalized.slice(4, 8)}-${normalized.slice(8, 12)}`;
   const candidateHash = await hashToken(formatted);
   const sql = getSQL(c.env);
@@ -450,7 +463,7 @@ recover.post('/backup-code', async (c) => {
     }
   } finally { try { await sql.end(); } catch {} }
 
-  if (!consumed) return c.json({ error: 'invalid_code' }, 401);
+  if (!consumed) { await recoveryRefusal(c, 'backup_code', 'invalid_code', { email, userId: Number(user.id) }); return c.json({ error: 'invalid_code' }, 401); }
 
   // Layer 1a is FULL ASSURANCE and ALSO applies the 24h cool-off
   // (per Task #50 acceptance criteria: cool-off after ANY recovery
@@ -537,22 +550,25 @@ recover.post('/sms/verify', async (c) => {
     return c.json({ error: 'Too many attempts' }, 429);
   }
   const stashed = await withDeadline(c.env.RATE_LIMITS.get(`recover-sms-session:${sessionInfo}`), RATE_KV_DEADLINE_MS, 'stash-get');
-  if (!stashed) return c.json({ error: 'session_expired' }, 410);
+  if (!stashed) { await recoveryRefusal(c, 'sms', 'session_expired', { email }); return c.json({ error: 'session_expired' }, 410); }
   let bound: { user_id: number; email: string; ticket_id?: number };
   try { bound = JSON.parse(stashed); } catch { return c.json({ error: 'session_corrupted' }, 500); }
-  if (bound.email !== email) return c.json({ error: 'session_email_mismatch' }, 401);
+  if (bound.email !== email) { await recoveryRefusal(c, 'sms', 'session_email_mismatch', { email }); return c.json({ error: 'session_email_mismatch' }, 401); }
 
   const v = await signInWithPhoneNumber(c.env, sessionInfo, code);
-  if (!v.ok) return c.json({ error: v.code, message: v.message }, v.code === 'invalid_code' ? 401 : 502);
+  if (!v.ok) {
+    if (v.code === 'invalid_code') await recoveryRefusal(c, 'sms', 'invalid_code', { email, userId: bound.user_id });
+    return c.json({ error: v.code, message: v.message }, v.code === 'invalid_code' ? 401 : 502);
+  }
 
   const sql = getSQL(c.env);
   const users = await sql`SELECT * FROM users WHERE id = ${bound.user_id}`;
   await sql.end();
-  if (!users.length) return c.json({ error: 'Account not found' }, 401);
+  if (!users.length) { await recoveryRefusal(c, 'sms', 'account_not_found', { email, userId: bound.user_id }); return c.json({ error: 'Account not found' }, 401); }
   const user = users[0];
 
   const stored = await loadSms(c.env, user.id);
-  if (!stored || stored.phone !== v.phoneNumber) return c.json({ error: 'phone_mismatch' }, 401);
+  if (!stored || stored.phone !== v.phoneNumber) { await recoveryRefusal(c, 'sms', 'phone_mismatch', { email, userId: Number(user.id) }); return c.json({ error: 'phone_mismatch' }, 401); }
   await withDeadline(c.env.RATE_LIMITS.delete(`recover-sms-session:${sessionInfo}`), RATE_KV_DEADLINE_MS, 'stash-delete');
 
   // SMS-based recovery is full-assurance (the factor was bound at
@@ -627,19 +643,20 @@ recover.get('/email/verify', async (c) => {
   const row: any = await c.env.DB.prepare(
     `SELECT * FROM auth_recovery_tickets WHERE id = ? AND layer = 'email_magic' AND status = 'open'`,
   ).bind(ticketId).first();
-  if (!row) return c.json({ error: 'invalid_or_used' }, 400);
+  if (!row) { await recoveryRefusal(c, 'email', 'invalid_or_used'); return c.json({ error: 'invalid_or_used' }, 400); }
   let state: any = {};
   try { state = JSON.parse(row.state_json || '{}'); } catch {}
-  if (state.token_hash !== tokenHash) return c.json({ error: 'invalid_or_used' }, 400);
+  if (state.token_hash !== tokenHash) { await recoveryRefusal(c, 'email', 'invalid_or_used', { userId: Number(row.user_id) }); return c.json({ error: 'invalid_or_used' }, 400); }
   if (state.expires_at && new Date(state.expires_at) < new Date()) {
     await c.env.DB.prepare(`UPDATE auth_recovery_tickets SET status='expired' WHERE id = ?`).bind(ticketId).run();
+    await recoveryRefusal(c, 'email', 'expired', { userId: Number(row.user_id) });
     return c.json({ error: 'expired' }, 400);
   }
 
   const sql = getSQL(c.env);
   const users = await sql`SELECT * FROM users WHERE id = ${row.user_id}`;
   await sql.end();
-  if (!users.length) return c.json({ error: 'Account not found' }, 401);
+  if (!users.length) { await recoveryRefusal(c, 'email', 'account_not_found', { userId: Number(row.user_id) }); return c.json({ error: 'Account not found' }, 401); }
   const user = users[0];
 
   await setCoolOffAndAssurance(c.env, user.id);
@@ -718,11 +735,14 @@ recover.post('/trusted-contact/attest', async (c) => {
         .find(s => s.startsWith('studioos_auth='))?.slice('studioos_auth='.length);
     if (token) jti = (await decodeJWT(c.env, token))?.jti as string | undefined;
   } catch {}
-  if (!jti) return c.json({ error: 'must_be_totp_session' }, 403);
+  const attestRefusal = (detail: string) =>
+    recoveryRefusal(c, 'trusted_contact', detail, { email: String(contact.email), userId: Number(contact.id) });
+  if (!jti) { await attestRefusal('must_be_totp_session'); return c.json({ error: 'must_be_totp_session' }, 403); }
   const sess: any = await c.env.DB.prepare(
     `SELECT factor FROM user_sessions WHERE jti = ? AND user_id = ?`,
   ).bind(jti, contact.id).first();
   if (!sess || sess.factor !== 'totp') {
+    await attestRefusal('must_be_totp_session');
     return c.json({ error: 'must_be_totp_session', message: 'Sign in with your authenticator to attest a recovery.' }, 403);
   }
 
@@ -730,7 +750,7 @@ recover.post('/trusted-contact/attest', async (c) => {
     `SELECT * FROM auth_recovery_tickets WHERE id = ? AND layer = 'trusted_contact' AND status IN ('open','awaiting_contacts')`,
   ).bind(ticketId).first();
   if (!ticket) return c.json({ error: 'ticket_not_open' }, 400);
-  if (Number(ticket.user_id) === Number(contact.id)) return c.json({ error: 'cannot_attest_self' }, 403);
+  if (Number(ticket.user_id) === Number(contact.id)) { await attestRefusal('cannot_attest_self'); return c.json({ error: 'cannot_attest_self' }, 403); }
 
   let state: any = {};
   try { state = JSON.parse(ticket.state_json || '{}'); } catch {}
@@ -738,7 +758,7 @@ recover.post('/trusted-contact/attest', async (c) => {
     Number(r.user_id) === Number(contact.id) ||
     String(r.email || '').toLowerCase() === String(contact.email).toLowerCase(),
   );
-  if (!eligible) return c.json({ error: 'not_a_trusted_contact' }, 403);
+  if (!eligible) { await attestRefusal('not_a_trusted_contact'); return c.json({ error: 'not_a_trusted_contact' }, 403); }
 
   const atts: number[] = Array.isArray(state.attestations) ? state.attestations : [];
   if (atts.includes(contact.id)) {
@@ -798,21 +818,23 @@ recover.post('/claim', async (c) => {
   const row: any = await c.env.DB.prepare(
     `SELECT * FROM auth_recovery_tickets WHERE id = ?`,
   ).bind(ticketId).first();
-  if (!row) return c.json({ error: 'invalid_or_used' }, 400);
+  if (!row) { await recoveryRefusal(c, 'claim', 'invalid_or_used'); return c.json({ error: 'invalid_or_used' }, 400); }
   let state: any = {};
   try { state = JSON.parse(row.state_json || '{}'); } catch {}
-  if (state.claim_token_hash !== tokenHash) return c.json({ error: 'invalid_or_used' }, 400);
+  if (state.claim_token_hash !== tokenHash) { await recoveryRefusal(c, 'claim', 'invalid_or_used', { userId: Number(row.user_id) }); return c.json({ error: 'invalid_or_used' }, 400); }
   if (state.claim_expires_at && new Date(state.claim_expires_at) < new Date()) {
+    await recoveryRefusal(c, 'claim', 'expired', { userId: Number(row.user_id) });
     return c.json({ error: 'expired' }, 400);
   }
   if (row.status === 'resolved' && row.resolved_at) {
+    await recoveryRefusal(c, 'claim', 'already_used', { userId: Number(row.user_id) });
     return c.json({ error: 'already_used' }, 400);
   }
 
   const sql = getSQL(c.env);
   const users = await sql`SELECT * FROM users WHERE id = ${row.user_id}`;
   await sql.end();
-  if (!users.length) return c.json({ error: 'Account not found' }, 401);
+  if (!users.length) { await recoveryRefusal(c, 'claim', 'account_not_found', { userId: Number(row.user_id) }); return c.json({ error: 'Account not found' }, 401); }
   const user = users[0];
 
   await setCoolOffAndAssurance(c.env, user.id);

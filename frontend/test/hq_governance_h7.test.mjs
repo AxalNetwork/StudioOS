@@ -12,7 +12,9 @@
  *   `admin_audit_log` alone. Three of H7's five filters — impersonations,
  *   licence changes, suspensions — have no rows in that table at all, so a
  *   filter bar over it would have looked like a working control returning
- *   nothing. The feed now unions four stores.
+ *   nothing. The feed unioned four stores, and since D200 five: canvas H23
+ *   "completes Y2/H7" and draws this feed as the `security_events` ledger,
+ *   so the columns are H23's and the fifth store is migration 282's.
  *
  *   TENANT. H7 draws the column. Only a licence event can fill it, because
  *   it is about a licence; no account carries a licence_id (U1). The trap is
@@ -63,17 +65,44 @@ function h7() {
   return (CANVAS.slice(a, b) + CANVAS.slice(fa, fb)).replaceAll('&amp;', '&');
 }
 
-test('the feed carries the five columns the artboard draws, in its order', () => {
-  const board = h7();
-  const columns = ['Time', 'Actor', 'Tenant', 'Action', 'Target and reason'];
+/**
+ * D200 — H23 alone, on the same both-halves shape as `h7()`: its markup
+ * section and its fixture block, each bounded at both ends, because a slice
+ * that runs into H24 could be satisfied by the next artboard's words.
+ */
+function h23() {
+  const a = CANVAS.indexOf('H23 · SECURITY · THE LEDGER, NOT A DASHBOARD');
+  assert.ok(a >= 0, 'the H23 artboard could not be found in the canvas');
+  const b = CANVAS.indexOf('</section>', a);
+  assert.ok(b > a, 'the H23 section is unterminated — this slice would run past the artboard');
+  const fa = CANVAS.indexOf('// ── H23 · Security ──', b);
+  assert.ok(fa > b, 'the H23 fixture block is gone');
+  const fb = CANVAS.indexOf('// ── H24', fa);
+  assert.ok(fb > fa, 'the H23 fixture block is unterminated');
+  return (CANVAS.slice(a, b) + CANVAS.slice(fa, fb)).replaceAll('&amp;', '&');
+}
+
+test('the ledger carries the five columns H23 draws, in its order — H23 completes H7', () => {
+  // D200 — RE-AIMED, NOT LOOSENED. This test read its five columns off H7
+  // (`Time · Actor · Tenant · Action · Target and reason`). H23 draws the same
+  // feed as the security_events ledger with five different columns, and says
+  // in its own subtitle that it completes Y2/H7 — so the page follows H23 and
+  // the columns are read off H23. The order is still asserted as a sequence.
+  const board = h23();
+  assert.ok(board.includes('completes Y2/H7'), 'H23 no longer says it completes H7 — the reason it wins here');
+  const columns = ['ts', 'actor', 'branch', 'event', 'outcome'];
   for (const c of columns) {
-    assert.ok(board.includes(`>${c}</span>`), `the artboard no longer draws the ${c} column`);
+    assert.ok(board.includes(`<span>${c}</span>`), `H23 no longer draws the ${c} column`);
   }
-  // The page's own header row, read as a sequence rather than as five
-  // independent substrings: the order is part of the artboard.
   const head = PAGE.slice(PAGE.indexOf('data-testid="hq-gov-feed"'));
   const ths = [...head.slice(0, head.indexOf('</thead>')).matchAll(/<th[^>]*>([^<]+)<\/th>/g)].map((m) => m[1]);
-  assert.deepEqual(ths, columns, 'the feed head no longer matches the artboard');
+  assert.deepEqual(ths, columns, 'the ledger head no longer matches H23');
+  // AND THE DISAGREEMENT STAYS DELIBERATE. H7 still draws its older five; D200
+  // records the two canvases disagreeing. If H7 is redrawn to match, this
+  // fails and the note in D200 can be retired — the D129 shape, where the page
+  // said Role while the artboard still said Seat.
+  assert.ok(h7().includes('>Target and reason</span>'),
+    'H7 stopped drawing its old columns — retire the canvas-disagreement note in D200');
 });
 
 test('the five filters are the artboard\'s five, and the server applies them', () => {
@@ -92,9 +121,17 @@ test('the five filters are the artboard\'s five, and the server applies them', (
     'the filter is no longer sent to the server');
   assert.match(P, /api\.hqGovernance\(filter\)/, 'the page no longer asks the server for the filtered feed');
   assert.doesNotMatch(P, /feed\.rows\.filter\(/, 'the page filters the merged page in the browser');
+  // D200 — THE SIXTH, which no artboard labels: H7 draws five filters and H23
+  // draws the ledger without a bar. It is asserted on the route and the page
+  // only, and it must name the store it reads — a filter whose `reads` is
+  // wrong is a working-looking control over the wrong table.
+  assert.ok(ROUTE.includes(`{ key: 'auth', label: 'Sign-ins and step-ups', reads: 'security_events' }`),
+    'the route no longer offers the ledger filter, or it reads the wrong store');
+  assert.ok(P.includes(`{ key: 'auth', label: 'Sign-ins and step-ups' }`),
+    'the page\'s pre-flight bar no longer offers the ledger filter');
 });
 
-test('the feed is a union of four stores, not the one Y2 read', () => {
+test('the feed is a union of five stores, not the one Y2 read', () => {
   // Asserted as the WHOLE SET of tables the file reads, not as four
   // substring checks. Two earlier shapes of this were too weak: plain
   // `includes('FROM activity_logs')` passed a rename to
@@ -115,9 +152,12 @@ test('the feed is a union of four stores, not the one Y2 read', () => {
     [...codeOnly(ROUTE).matchAll(/\b(?:FROM|JOIN)\s+([a-z_]+)/g)].map((m) => m[1]),
   );
   assert.deepEqual([...tables].sort(), [
-    // The feed's four stores…
-    'activity_logs', 'admin_audit_log', 'impersonation_sessions', 'licence_events',
+    // The feed's five stores — the fifth is D200's security_events ledger…
+    'activity_logs', 'admin_audit_log', 'impersonation_sessions', 'licence_events', 'security_events',
     // …the two it joins for names, and the one /overview reads for sessions.
+    // `sanctions_screenings` is deliberately NOT here: its summary SQL lives
+    // in services/sanctions.ts beside the writer, so this route has one
+    // definition of what a screening run is rather than a second.
     'territory_licences', 'user_sessions', 'users',
   ], 'the set of tables this route reads changed');
   // And the page shows WHICH stores answered, so a silently-dropped store is
@@ -131,7 +171,10 @@ test('no summary tile sits above the feed — H7 forbids exactly that', () => {
   // The artboard's own words, and the structural check that enforces them:
   // between the zone opening and the table there must be no <Stat>.
   assert.ok(h7().includes('No cards, no summary tiles, no chart'), 'the artboard changed its mind');
-  const zone = PAGE.slice(PAGE.indexOf('title="Privileged action log"'));
+  // D200 — the zone is the ledger now, titled for it; H23 restates the rule
+  // ("no summary tiles, no chart"), so the property is unchanged.
+  assert.ok(h23().includes('no summary tiles, no chart'), 'H23 stopped restating the no-tiles rule');
+  const zone = PAGE.slice(PAGE.indexOf('title="Security events"'));
   const head = zone.slice(0, zone.indexOf('</Zone>'));
   assert.ok(head.includes('data-testid="hq-gov-feed"'), 'the feed left its zone');
   assert.doesNotMatch(head, /<Stat\b/, 'a summary tile appeared over the audit log');
