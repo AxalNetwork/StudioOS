@@ -384,8 +384,25 @@ const WIRING = [
 ];
 
 const calls = (src, name) => count(src, `${name}(`) - count(src, `function ${name}(`);
-const importsFrom = (src, name, from) =>
-  new RegExp(`import \\{[^}]*\\b${name}\\b[^}]*\\} from '${from.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}';`).test(src);
+// The names each `import { … } from '<from>';` statement binds, read as
+// literal text. No pattern is built from the name or the path: what the check
+// means is "this module imports exactly this name, unaliased, from exactly this
+// path", which is a string comparison. A regex assembled from data compared it
+// as a pattern instead, and `\bname\b` also accepted `name as other` — an
+// import whose local binding is not the name `calls()` then counts.
+const importedNames = (src, from) => {
+  const names = [];
+  const tail = `} from '${from}';`;
+  for (let at = src.indexOf(tail); at >= 0; at = src.indexOf(tail, at + tail.length)) {
+    const open = src.lastIndexOf('import {', at);
+    if (open < 0) continue;
+    const list = src.slice(open + 'import {'.length, at);
+    if (list.includes(';')) continue; // that brace opened a different statement
+    for (const spec of list.split(',')) if (spec.trim()) names.push(spec.trim());
+  }
+  return names;
+};
+const importsFrom = (src, name, from) => importedNames(src, from).includes(name);
 
 test("each switch is read through the predicate the code that obeys it calls", () => {
   for (const [name, from, obeyer] of WIRING) {
