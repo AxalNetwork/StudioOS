@@ -16,7 +16,8 @@
  *                           users.advisor_shadow_flag on heuristic triggers.
  *   L6 audit              — writeTurnAudit() inserts one
  *                           advisor_turn_audit row per turn.
- *   L7 kill switch        — checkKillSwitch() honours ADVISOR_DISABLED env
+ *   L7 kill switch        — checkKillSwitch() honours the whole Eadwyn kill
+ *                           (the deploy variables and HQ's operator switch, D203)
  *                           + users.advisor_locked column.
  *
  * The route layer wires these in: /start + /answer + /explain call
@@ -27,7 +28,7 @@
 import type { Env, User } from '../../types';
 import * as aiRouter from '../aiRouter';
 import { bindingKey } from '../../util/schemaBootstrap';
-import { isAdvisorDisabled } from './rollout';
+import { advisorKillState, ADVISOR_DISABLED_MESSAGE } from './rollout';
 
 // ---------------------------------------------------------------------------
 // L4 — canonical refusal bank. Embedded in the system prompt so the model
@@ -45,8 +46,6 @@ export const REFUSAL = {
     "I can't repeat raw database rows, secrets, or other users' data. The relevant page has CSV/PDF exports if you need to download something.",
   locked:
     "Your advisor session has been temporarily disabled while we review unusual activity. Please reach out via Settings → Support if this is unexpected.",
-  disabled:
-    "The advisor is temporarily offline for maintenance. The rest of StudioOS is unaffected — use the side nav to navigate as normal.",
   shadow:
     "I'm running in a limited mode right now and can't take new requests. Try again in a few minutes, or contact support if this persists.",
 } as const;
@@ -569,7 +568,8 @@ export async function writeTurnAudit(env: Env, a: TurnAudit): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// L7 — kill switch. ADVISOR_DISABLED env + users.advisor_locked column.
+// L7 — kill switch. The Eadwyn kill (rollout.ts advisorKillState: the deploy
+// variables OR HQ's operator switch) + users.advisor_locked column.
 // Also surfaces users.advisor_shadow_flag (does not hard-block; route layer
 // renders the templated REFUSAL.shadow reply instead).
 // ---------------------------------------------------------------------------
@@ -606,7 +606,7 @@ export async function ensureGuardrailColumns(env: Env): Promise<void> {
 export interface KillSwitchResult {
   blocked: boolean;
   shadow: boolean;
-  reason?: 'env_disabled' | 'user_locked' | 'user_shadow';
+  reason?: 'disabled' | 'user_locked' | 'user_shadow';
   message?: string;
 }
 
@@ -621,8 +621,14 @@ export async function checkKillSwitch(env: Env, user: User): Promise<KillSwitchR
   // readings of one switch that happened to agree. HQ Platform now reports the
   // switch through the same function, and a third copy would be the one that
   // drifts.
-  if (isAdvisorDisabled(env)) {
-    return { blocked: true, shadow: false, reason: 'env_disabled', message: REFUSAL.disabled };
+  //
+  // D203 — and it is the WHOLE switch now, both halves. Asking only the deploy
+  // half here would let a caller that reaches this gate without the route's
+  // own check serve Eadwyn while an operator had switched it off. The message
+  // is the route's own, in Eadwyn's voice: the old one said "the advisor" was
+  // "offline for maintenance", which an operator's kill is not.
+  if ((await advisorKillState(env)).off) {
+    return { blocked: true, shadow: false, reason: 'disabled', message: ADVISOR_DISABLED_MESSAGE };
   }
   await ensureGuardrailColumns(env);
   try {

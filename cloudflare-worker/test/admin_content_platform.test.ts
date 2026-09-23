@@ -14,11 +14,13 @@
  *   - The master template library the artboard draws in this zone already
  *     exists at `/admin/contracts`. Two pages over one store drift apart, so
  *     this one points rather than rebuilds.
- *   - Feature flags have no store at all. This header used to add that what
- *     is called flags is per-user settings; D202 found that false — the
- *     codebase also calls MI_FLAG_* and DD_FLAG_* flags, and those are
- *     platform switches set at deploy. The switches and the H17 consoles are
- *     held by platform_consoles_d202.test.ts.
+ *   - Feature flags. This header first said there was no store at all and
+ *     that what is called flags is per-user settings; D202 found the second
+ *     half false (MI_FLAG_* and DD_FLAG_* are platform switches set at
+ *     deploy), and D203 the first — `platform_switches` (migration 283) is an
+ *     operator store for the one switch HQ can throw. The switches and the
+ *     H17 consoles are held by platform_consoles_d202.test.ts, the store by
+ *     operator_switches_d203.test.ts.
  *
  * So most of what follows asserts a figure is ABSENT with its reason, or
  * that a count is computed from the store rather than assumed — the two
@@ -331,13 +333,24 @@ test('each DECLARED trigger is read against its own schedule, from rows the writ
   assert.equal(jobs.stale_after_hours, undefined, 'the one-window-for-every-cadence figure came back');
 });
 
-test('flags are refused: per-user settings are not a platform switch', async () => {
+test('flags are no longer refused: the switches carry the operator store (D203)', async () => {
+  // This test pinned `flags_available: false` and a reason saying no store
+  // existed. D203 built one and retired the pair; per-user settings still are
+  // not a platform switch, and nothing here turns one into a flag.
   const db = freshDb();
   const r = await call(platform, db, SUPER);
-  assert.equal(r.body.flags_available, false);
-  assert.match(String(r.body.flags_reason), /no feature-flag store/);
-  assert.match(String(r.body.flags_reason), /per-user settings/);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.flags_available, undefined, 'the retired flags pair came back');
+  assert.equal(r.body.flags_reason, undefined, 'the retired flags pair came back');
   assert.equal(r.body.flags, undefined, 'a flags list appeared');
+  // THIS FIXTURE HAS NO `platform_switches`, which is what a database that has
+  // not applied 283 looks like — so the switch the store backs reads
+  // unreadable with the store's own reason, never "off".
+  const eadwyn = r.body.switches.items.find((sw: any) => sw.key === 'eadwyn_off');
+  assert.ok(eadwyn, 'the Eadwyn switch is not listed');
+  assert.equal(eadwyn.state, 'unreadable', 'an uncreated store read as a switch nobody threw');
+  assert.equal(eadwyn.operator.available, false);
+  assert.match(String(eadwyn.operator.reason), /has not been created on this database yet/);
 });
 
 test('an unreadable platform store says so and leaves the other alone', async () => {

@@ -3173,6 +3173,16 @@ export const api = {
   hqTakeRate: () => request('/admin/platform/take-rate'),
   setHqTakeRate: (bps) =>
     request('/admin/platform/take-rate', { method: 'PUT', body: JSON.stringify({ bps }) }),
+  // D203 — the operator switches: the kills HQ can throw without a deploy.
+  // The read carries both halves of each switch; the write takes
+  // { action: 'throw' | 'release', reason } and needs a TOTP session with a
+  // recent step-up, which this file prompts for on the 403.
+  hqPlatformSwitches: () => request('/admin/platform/switches'),
+  hqSetPlatformSwitch: (key, action, reason) =>
+    request(`/admin/platform/switches/${encodeURIComponent(key)}`, {
+      method: 'POST',
+      body: JSON.stringify({ action, reason }),
+    }),
   // HQ · Security. The overview is read-only; force re-auth signs every
   // active account out everywhere (the caller included) and needs a TOTP
   // session with a recent step-up, which lib/api.js prompts for on the 403.

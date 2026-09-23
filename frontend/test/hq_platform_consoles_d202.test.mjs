@@ -17,8 +17,9 @@
  * they disagree on; this file holds the imports and the call sites in place.
  *
  * Pinned elsewhere and not repeated: the page has no handler and no form
- * (hq_content_platform_h6), the Flags and Overrides stats stay empty (the
- * same file), and the zone slices bounded by these titles
+ * (hq_content_platform_h6), the Flags and Overrides stats read the operator
+ * store through one builder each (the same file; their states are rendered
+ * in hq_platform_switches_d203), and the zone slices bounded by these titles
  * (hq_licences_h2h3).
  */
 import test from 'node:test';
@@ -374,7 +375,12 @@ test('each switch says what sets it, what "on" does, and why — and nothing on 
  * thing the list exists to rule out.
  */
 const WIRING = [
-  ['isAdvisorDisabled', './advisor/rollout', 'cloudflare-worker/src/routes/advisor.ts'],
+  // D203 — the Eadwyn kill has two halves now, the deploy variables and HQ's
+  // `eadwyn_off` row, and the property this row exists for is unchanged: the
+  // console and the routes that refuse ask ONE predicate. It moved from the
+  // deploy half alone to the combined one, because asking only the deploy half
+  // would show Eadwyn on while every request was refused by the store's kill.
+  ['advisorKillState', './advisor/rollout', 'cloudflare-worker/src/routes/advisor.ts'],
   ['rerankDisabled', './advisor/rerank', 'cloudflare-worker/src/services/advisor/rerank.ts'],
   ['settlementMode', './advisorMoney', 'cloudflare-worker/src/services/advisorConnect.ts'],
   ['stripeTaxEnabled', '../util/stripeTax', 'cloudflare-worker/src/routes/billing.ts'],
@@ -459,7 +465,11 @@ test('the rail reads back only what answered, and names what has no store', () =
     assert.ok(P.includes(line), `the rail reads the ${block} back without asking whether it answered`);
   }
   for (const row of [
-    "['Feature flags', 'No operator flag store exists; the switches listed are set at deploy and read-only here.']",
+    // D203 retired "No operator flag store exists" — migration 283 is one. What
+    // stays absent is staging a switch below a whole deployment, and reaching
+    // a branch with one HQ throws.
+    "['Staged switches', 'A switch is on or off for a whole deployment; none can be staged to one territory or a share of accounts.']",
+    "['Branch reach', 'A switch HQ throws stops Eadwyn on HQ\\'s own deployment; pushing one to the branches is not built.']",
     "['Channel member counts', 'Never asked of Telegram, so not recorded.']",
     "['Dead letters per branch', 'No branch reports its backlog to HQ; the figure here is HQ\\'s own.']",
   ]) {

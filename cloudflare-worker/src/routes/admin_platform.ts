@@ -4,9 +4,11 @@
  *
  * SUPER ADMIN ONLY.
  *
- *   GET /summary      connected integrations, scheduled-job health, the
- *                     monitoring and broadcast consoles, and the platform's
- *                     switches, read-only
+ *   GET  /summary        connected integrations, scheduled-job health, the
+ *                        monitoring and broadcast consoles, and the platform's
+ *                        switches, read-only
+ *   GET  /switches       the switches an operator can throw, both halves (D203)
+ *   POST /switches/:key  throw or release one, with a reason, audited (D203)
  *
  * EVERY BLOCK CARRIES ITS OWN STATE. One store failing to answer makes that
  * block unreadable, with the reason, and leaves the others standing: an
@@ -39,16 +41,18 @@
  *          SELECT reduces it to a boolean, by the same test `/send` applies.
  *          X: whether its OAuth client is configured and how many accounts
  *          exist — no token state, which admin_x already refuses to echo.
- *   Flags  STILL NO STORE. D202 corrects the reason this endpoint gave for
- *          it and D203 builds one. What the platform has is switches set at
- *          deploy, listed read-only by services/platformSwitches, each asked
- *          through the predicate the code that obeys it uses.
+ *   Flags  services/platformSwitches lists every switch, each asked
+ *          through the predicate the code that obeys it uses. Since D203 one
+ *          of them an operator can throw: Eadwyn's kill has a stored half in
+ *          `platform_switches` beside its deploy variables, and the two
+ *          /switches routes below read and write it. Everything else is
+ *          still set at deploy or by the platform itself.
  *
  * Mounted at /api/admin/platform BEFORE the catch-all /api/admin in index.ts.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireSuperAdmin } from '../auth';
+import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { DERIVED_UNAVAILABLE } from './licence';
 import { ensureAdminAuditLogTable } from './admin';
 import {
@@ -58,7 +62,13 @@ import {
   CRON_TRIGGERS, STALE_GRACE_MINUTES, latestRunPerTrigger, triggerState,
 } from '../util/cronHistory';
 import { dlqDepth } from '../services/deadLetters';
-import { readPlatformSwitches } from '../services/platformSwitches';
+import {
+  PLATFORM_SWITCH_KEYS, readOperatorSwitchEntries, readPlatformSwitches,
+} from '../services/platformSwitches';
+import {
+  OPERATOR_SWITCH_REACH, OPERATOR_SWITCH_TTL_MS, SWITCH_REASON_MIN, isOperatorSwitchKey, setOperatorSwitch,
+} from '../services/operatorSwitches';
+import { logAdminAction } from '../services/adminAudit';
 import { telegramTokenConfigured } from '../services/telegramClient';
 import { xClientConfigured } from '../services/xClient';
 
@@ -280,20 +290,122 @@ r.get('/summary', async (c) => {
     jobs,
     monitoring: { dlq, incidents },
     broadcast: { telegram, x },
+    // D203 — the switches block is the whole answer now. It used to travel
+    // with `flags_available: false` and a sentence saying no operator store
+    // existed; the store exists, and the writable entry in `switches` says
+    // what it holds. A refusal nothing reads would be a producer with no
+    // reader, so the pair is gone rather than flipped.
     switches,
 
-    // Still no store, and now the reason is true. The old one said that
-    // what the codebase calls flags is per-user settings, and the codebase
-    // also calls MI_FLAG_* and DD_FLAG_* flags — platform switches, set at
-    // deploy. D202.
-    flags_available: false,
-    flags_reason:
-      'There is no feature-flag store: nothing an operator can throw from the product or stage to '
-      + 'one territory, and per-user settings (services/userSettings.ts) are a person\'s own '
-      + 'preferences, not platform switches. What the platform does have is switches set at deploy, '
-      + 'and one the AI router throws by itself, listed below read-only.',
-
     ...DERIVED_UNAVAILABLE,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D203 — the operator switches. SUPER ADMIN ONLY.
+//
+//   GET  /switches       every switch an operator can throw, with both halves
+//   POST /switches/:key  throw or release one: { action: 'throw'|'release', reason }
+//
+// THE WRITE TAKES force-reauth's SHAPE, step for step, because it is the same
+// kind of act — one operator, changing what every user gets:
+//
+//   1. requireSuperAdminWriteBar — a TOTP-minted session, a recent step-up,
+//      the elevation. On a branch the elevation does not exist (D106), so a
+//      branch answers "HQ only" before anything else is read.
+//   2. The key. One nobody knows is 404; one the registry knows but an
+//      operator cannot throw is 409, and says what does change it.
+//   3. The action, then a reason of SWITCH_REASON_MIN characters — stored on
+//      the row and in the audit entry.
+//   4. No change is 409, decided INSIDE the write, so two operators pressing
+//      at once cannot both record one.
+//   5. A store that cannot be written is 503 and nothing changed.
+//   6. One audit row through logAdminAction, after the act and never before
+//      it. No `user_id` key — the switch is nobody's account.
+// ---------------------------------------------------------------------------
+r.get('/switches', async (c) => {
+  await requireSuperAdmin(c);
+  let items: unknown;
+  try {
+    items = await readOperatorSwitchEntries(c.env);
+  } catch {
+    return c.json({ available: false, reason: 'The operator switches could not be read.' });
+  }
+  return c.json({
+    available: true,
+    items,
+    reason_min: SWITCH_REASON_MIN,
+    // Stated, not implied: the writing isolate sees a change at once, every
+    // other isolate within this many seconds.
+    propagation_seconds: OPERATOR_SWITCH_TTL_MS / 1000,
+    reach: OPERATOR_SWITCH_REACH,
+  });
+});
+
+r.post('/switches/:key', async (c) => {
+  const actor = await requireSuperAdminWriteBar(c);
+
+  const key = String(c.req.param('key') || '');
+  if (!isOperatorSwitchKey(key)) {
+    if ((PLATFORM_SWITCH_KEYS as readonly string[]).includes(key)) {
+      return c.json({
+        error: 'That switch is not one an operator throws. It is set by the deployment, or by the '
+          + 'platform itself, and only that changes it.',
+        code: 'not_operator_switch',
+      }, 409);
+    }
+    return c.json({ error: 'No switch has that name.', code: 'unknown_switch' }, 404);
+  }
+
+  let body: { action?: unknown; reason?: unknown } = {};
+  try { body = (await c.req.json()) ?? {}; } catch { body = {}; }
+  const action = String(body.action ?? '');
+  if (action !== 'throw' && action !== 'release') {
+    return c.json({ error: 'The action must be "throw" or "release".', code: 'invalid_action' }, 400);
+  }
+  const reason = String(body.reason ?? '').trim();
+  if (reason.length < SWITCH_REASON_MIN) {
+    return c.json({
+      error: `A reason of at least ${SWITCH_REASON_MIN} characters is required. It is stored with the switch and in the audit log.`,
+      code: 'reason_required',
+    }, 400);
+  }
+
+  const thrown = action === 'throw';
+  let changed: boolean;
+  try {
+    ({ changed } = await setOperatorSwitch(c.env, key, thrown, reason, actor.id));
+  } catch {
+    return c.json({
+      error: 'The operator switch store could not be written, so nothing was changed.',
+      code: 'store_unavailable',
+    }, 503);
+  }
+  if (!changed) {
+    return c.json({
+      error: thrown ? 'That switch is already thrown.' : 'That switch is not thrown, so there is nothing to release.',
+      code: 'no_change',
+    }, 409);
+  }
+
+  await logAdminAction(c.env, actor.id, actor.email, thrown ? 'platform_switch_thrown' : 'platform_switch_released', {
+    reason,
+    switch_key: key,
+  });
+
+  // The switch as it now stands, read back from the store — including whether
+  // the deploy half still holds it on after a release, which a release cannot
+  // change and the operator needs told.
+  let entry: unknown = null;
+  try {
+    entry = (await readOperatorSwitchEntries(c.env)).find((sw) => sw.key === key) ?? null;
+  } catch { entry = null; }
+  return c.json({
+    ok: true,
+    switch: entry,
+    message: thrown
+      ? `Thrown. This deployment refuses at once; every instance follows within ${OPERATOR_SWITCH_TTL_MS / 1000} seconds.`
+      : `Released. Every instance follows within ${OPERATOR_SWITCH_TTL_MS / 1000} seconds, unless the deployment still holds it on.`,
   });
 });
 
@@ -304,12 +416,11 @@ r.get('/summary', async (c) => {
 //                      whether that is a stored decision or the default
 //   PUT  /take-rate    change it, audited
 //
-// THIS IS NOT THE FLAGS PANEL the summary above says does not exist, and the
-// distinction is worth keeping. `flags_available: false` is still true: there
-// is no feature-flag registry, and nothing here creates one. What migration
-// 241 adds is ONE typed platform number, in `platform_settings`, with an
-// `updated_by` because a rate that decides what the platform charges is a
-// thing somebody has to be answerable for having changed.
+// THIS IS NOT A SWITCH, and the distinction is worth keeping now that D203
+// gives the platform an operator switch store. A switch can only switch
+// something off; this is ONE typed platform number, in `platform_settings`,
+// with an `updated_by` because a rate that decides what the platform charges
+// is a thing somebody has to be answerable for having changed (migration 241).
 //
 // NOTHING HERE MOVES MONEY. Advisory charging is off — `settlementMode()`
 // answers 'none' until PR5b's flag flips — so this sets the rate that a
