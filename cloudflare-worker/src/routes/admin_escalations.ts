@@ -93,10 +93,17 @@ r.patch('/escalations/:uid', async (c) => {
     }
 
     // THE PUSH IS REPORTED, NEVER THROWN. See the header.
+    //
+    // D205 — THE REASON SAYS WHAT HAPPENED, NOT WHAT MIGHT. It used to end "and
+    // will reach the branch when a binding exists", which nothing makes true:
+    // no route or sweep re-sends a stored decision once a binding appears
+    // (#341). It was harmless while no screen showed it; HQ Support now does,
+    // and it adds "nothing sends it again" itself, once, for every reason a
+    // push can fail — so it is not said here as well.
     let pushed: { ok: boolean; reason?: string } = {
       ok: false,
       reason: `No branch Worker is bound for ${decided.row.branch_code}, so the decision is recorded `
-        + 'at HQ and will reach the branch when a binding exists.',
+        + 'at HQ and was not sent.',
     };
     const binding = branchByCode(c.env, decided.row.branch_code);
     if (binding) {

@@ -132,7 +132,11 @@ test('an escalation past its SLA is reported, stamped, and HQ is told', async ()
   assert.equal(out.notified, 2);
   assert.deepEqual(rec.sent.map((n) => n.userId).sort(), [HQ_A, HQ_B]);
   assert.equal(rec.sent[0].category, 'compliance');
-  assert.equal(rec.sent[0].link, '/hq');
+  // D205 — the page that can ANSWER it, not /hq's list with no control on it.
+  // And a registered route: a mailed link that 404s is worse than none.
+  assert.equal(rec.sent[0].link, '/admin/hq-support');
+  const app = readFileSync(resolve(process.cwd(), 'frontend/src/App.jsx'), 'utf8');
+  assert.ok(app.includes(`path="${rec.sent[0].link}"`), `${rec.sent[0].link} is not a registered route`);
   assert.equal(rec.sent[0].type, 'hq_escalation_sla_breached');
   assert.match(rec.sent[0].body, /fr/, 'the branch that raised it must be named');
   assert.equal(rec.sent[0].payload.escalation_uid, 'esc_late');

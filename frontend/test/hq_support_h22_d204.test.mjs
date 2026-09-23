@@ -266,8 +266,10 @@ test('every rail row is a [title, detail] pair, and the retired refusal is gone'
 
 // ──────────────────────────────────────────────────────────── the page ──
 
-test('the page makes one read, the Support route, and never falls back to a zero', () => {
-  assert.equal((CODE.match(/api\.\w+\(/g) || []).join(','), 'api.hqSupport(');
+test('the page makes one read and one write — the Support route, and HQ’s answer (D205) — and never falls back to a zero', () => {
+  // D205 added the write: answering an escalation. Still exactly these two, so
+  // a third call — a second read of the board, say — fails here.
+  assert.deepEqual([...(CODE.match(/api\.\w+\(/g) || [])].sort(), ['api.escalationAnswer(', 'api.hqSupport(']);
   assert.doesNotMatch(CODE, /\|\|\s*0\b/, 'a count falls back to zero');
   assert.doesNotMatch(CODE, /from '\.\.\/\.\.\/pages\//, 'the page imports a routed page');
   const api = read('frontend/src/lib/api.js');

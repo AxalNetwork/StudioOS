@@ -19634,3 +19634,177 @@ Production was not read for this entry — the Cloudflare connector is not
 authorized in this session — and nothing here needs it: the page reads
 tables that exist and writes nothing. **Migration 284 is still the next free
 number.**
+
+## D205
+
+**HQ answers an escalation on Support. The route D112 built had no caller, so
+no screen could answer one; each open escalation now opens a decision panel,
+and what comes back is two facts, never one — the decision is recorded at HQ,
+and the branch did or did not receive it.**
+
+PR 2 of #311 (canvas H22). **No new route, no migration, no new `api.js`
+method**: `PATCH /api/admin/escalations/:uid` (D112) and
+`api.escalationAnswer` already existed. **Nothing retires.**
+
+### WHAT WAS WRONG
+
+`api.escalationAnswer` had **zero callers**. An escalation a branch raised sat
+on HQ's board until its SLA passed, and then D143's sweep emailed HQ a link
+to `/hq`, whose list has no control on it: HQ was sent to watch a clock it
+could not stop, D168's shape exactly.
+
+It was worse than an unbuilt control, because shipped copy said the loop
+closed. HQ Home's escalation zone read *"Answering one records HQ's decision
+and pushes it to the branch"* and linked to `/admin/content` — which has no
+answer control either. That sentence had been false since D112, and
+`hq_home.test.mjs` passed anyway: it checks that the link lands on a
+registered route, and a route that exists is not a route that can answer.
+
+And the route's own no-binding reason promised what nothing performs:
+*"…recorded at HQ and will reach the branch when a binding exists."* No route
+or sweep re-sends a stored decision once a binding appears (#341). It was
+harmless while no screen showed it; this page shows it.
+
+### WHAT SHIPPED
+
+- **The panel** (`HqSupportPage.jsx`) — a pure `EscalationDecisionView` and a
+  stateful `EscalationDecision`, on `DsrClose`'s shape (`SecurityPage.jsx`).
+  It shows what the branch sent (kind, who raised it, age, SLA band, what it
+  is about, the detail — or *No detail*, with its reason, when the branch
+  raised it with a subject alone), then two choices:
+  - **Record as answered**, and **Record as declined**. Never `withdrawn`,
+    which is the branch taking its own request back (the PATCH still accepts
+    it — #344), and never `open`, which the server refuses.
+  - **The reason is required**: submit stays disabled while `!reason.trim()`,
+    mirroring the server's *"a decision needs its reason"*, and the textarea's
+    4,000 characters match the route's own clip. The trimmed reason is what
+    is sent.
+  - **Each outcome says what the branch will see before it is sent.** The
+    declined copy says the branch has no separate declined state and shows
+    the refusal as HQ's decision with the reason as its words — D112's
+    deliberate collapse, stated to the person typing those words.
+- **Refusals in words, and "not known" where that is the truth.**
+  `decisionError(err)` returns the sentence and whether reloading is the next
+  step:
+  - no status, or a 5xx → *"Whether HQ recorded this is not known: no answer
+    came back. Reload the queue before recording it again — a second answer
+    replaces the first."* A timeout or a dropped connection can each leave the
+    decision recorded, so the page never shows `request()`'s timeout sentence
+    *"Nothing was changed."*, which for a write can be false (#350);
+  - a 404 → the escalation is no longer on HQ's board, with the same reload;
+  - anything else → `err.data.message` first, because `request()` puts a
+    string error CODE into `err.message` (#343).
+- **Two facts, never one.** After a decision the panel closes, the queue
+  re-reads quietly — no skeleton flash, so the answered row simply leaves the
+  open queue — and a *Recorded this session* list keeps each outcome:
+  *"Recorded at HQ at HH:MM UTC as answered"*, then one of *"fr received it."*,
+  *"Not on fr: {reason} Nothing sends it again on its own; recording it again
+  replaces the decision and sends the new one."*, or *"Whether it reached fr
+  was not reported."* for a response with no readable `pushed`. **No retry
+  button**: recording again replaces the decision rather than resending it,
+  and a button that looked like a resend would promise a mechanism that does
+  not exist. The list says it is for this session only, and why: the board
+  keeps the decision and not whether it arrived.
+- **Rows** in the escalation card become buttons with `aria-expanded`; the
+  panel renders **under** the row and **outside** its button — a form inside
+  a button is invalid, and every click in it would toggle the row.
+- **The rail** reads *"Read-only, except answering an escalation"*, and the
+  refusal *"Answering an escalation"* is replaced by what is still absent:
+  whether an answer arrived, later.
+- **Both doors now lead here.** HQ Home's link is *"Answer on Support"* to
+  `/admin/hq-support`; D143's breach email links to `/admin/hq-support`
+  instead of `/hq`.
+- **The route's reason says what happened**: *"No branch Worker is bound for
+  fr, so the decision is recorded at HQ and was not sent."* The page adds
+  "nothing sends it again" itself, once, for every reason a push can fail, so
+  the server does not say it too.
+
+### THE JUDGEMENT CALLS, EACH CHEAP TO STRIKE
+
+1. **Whether an answer arrived is shown for this session only.** It is not
+   stored. *Strike it and `hq_escalations` gains a delivery column with a
+   re-push route — a migration and a store (#341).*
+2. **No retry on a decision that did not reach the branch.** The sentence
+   says recording it again replaces it and sends the new one. *Strike it and
+   the panel gains "Record again", pre-filling the stored reason.*
+3. **The PATCH's gate is unchanged**: `requireSuperAdmin`, as D112 set it,
+   with no step-up. D205 draws a control over an existing route and changes
+   nothing about who may call it.
+
+### CORRECTIONS MADE WHILE BUILDING, RECORDED RATHER THAN QUIETLY DONE
+
+- The plan's not-sent sentence read *"not on fr **yet**"*. "Yet" promises a
+  later delivery that nothing performs (#341), so it was dropped, and a test
+  refuses it.
+- The plan put "nothing sends it later" in the server's reason; it moved into
+  the page, which says it once for every failure a push can have.
+- The plan's error helper returned a string; it returns `{text, reload}`,
+  because whether to offer a reload is part of the answer.
+- `hq_support_h22_d204.test.mjs` pinned the page to exactly one `api.*` call.
+  D205 adds the write, so the pin names both — still an exact list, so a
+  third call fails it.
+- Two assertions of my own could not fail as first written. One matched the
+  call with `/api\.escalationAnswer\([^)]*\)/`, which stops at the first `)` —
+  inside `reason.trim()` — so it never saw the arguments; it is a literal scan
+  now. The other fed the time formatter `'sometime'`, whose characters 11–16
+  are empty, so a formatter that sliced anything passed it; it uses a string
+  long enough to print garbage if the guard goes.
+- CodeQL alert 6146 on #733 moved the rendered-text helper into
+  `frontend/test/_renderedText.mjs`, a character scan that cannot leave a tag
+  open (`ea741aaee`); this PR's test reads sentences through it too.
+
+### DELIBERATELY NOT BUILT
+
+- **Storing delivery, and a re-push** (#341).
+- **Refusing `withdrawn` at the PATCH** (#344).
+- **The timeout sentence for writes** (#350) and **the code-for-sentence
+  sweep** across other forms (#343).
+- **`licencePush.ts`'s two reasons**, which make the same promise the
+  escalation reason made (*"will reach the branch when a binding exists"*) —
+  added to #342, where the pull that could make them true is filed.
+
+### VERIFIED
+
+`npm run test:drift` exit 0, read as the exit code from a redirected log:
+frontend 2941 → **2959** (the 18 tests of `hq_support_answer_d205.test.mjs`),
+worker **3850** unchanged (3847 pass plus the same 3 pre-existing
+environment-gated skips — two worker tests were re-aimed and one extended,
+none added), retention **41**, zero `not ok`. Every test in the four files
+this PR adds or changes — 18, 16, 21 and 15 — was confirmed to run **by
+name**, parsed out of the files and matched against the log rather than
+inferred from the counts. Both typechecks, `lint:undef`, `check-api-drift`
+(no new method), `check-decision-ids` (D1 → **D205**), `check-folder-docs`,
+`check-unused-imports`, `check-react-hook-imports`, `check-frontend-logging`
+and `check-dark-mode` exit 0.
+
+**22 mutations applied, 22 caught**, each anchor asserted unique before
+anything was written and every restore verified by sha256 against a snapshot
+taken first; the suite above ran on those bytes. `withdrawn` offered as an
+outcome; the submit enabled with a blank reason; a failure with no status
+read as a refusal; the error code preferred to its sentence; the 404's
+sentence dropped; *received* shown for a push that failed; a retry button on
+a not-sent outcome; the declined copy's collapse sentence removed; HQ Home's
+link back to Content; the old *Answering an escalation* refusal back in the
+rail; every row expanded at once; the reason sent untrimmed; the server's
+reason promising delivery again; the breach email back to `/hq`; the panel
+moved inside its row's button; a loud reload after a decision; a failed write
+reported as recorded; "yet" in the not-sent sentence; the time formatter
+slicing any string; a `pushed` with no `ok` read as a failure; the page
+dropping the panels; the session list not drawn.
+
+**The root build ran on CI's no-ledger path** — the local retention ledger
+moved aside first (#333): 606 fresh assets, 359 retained. Every file the 31
+committed shells of this branch's base (D204, `ea741aaee`) reach is still
+present, **606 of 606**, walked through that tree's own chunk graph; then
+`check-docs-fresh --strict`, `prerender-og.mjs --check` (31 routes) and
+`check-docs-assets-closure` (9,211 references across 921 chunks) exit 0. The
+same walk against `main` as deployed today (`b14757f1a`) finds 367 of its
+files gone: the designed two-build window, since this build's previous
+generation is D204's. Reading why led to a real defect in how a DEPLOY
+treats that window — the deploy's own rebuild drops the generation
+production is serving — filed as #351 rather than folded in.
+
+**No migration — 284 is still the next free number.** Production was not
+read for this entry: the Cloudflare connector is not authorized in this
+session, and nothing here needs it — the page calls a route that has existed
+since D112.
