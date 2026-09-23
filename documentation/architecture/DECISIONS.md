@@ -20097,3 +20097,183 @@ depends on a row count:
 
 So the ALTER adds a nullable column to a table with no rows. **285 is the next
 free migration, and D207 the next decision.**
+
+## D207
+
+**A branch now binds HQ through the class that has the methods it calls, and
+binds nothing else. The generated branch config named `HqEntrypoint` — the
+class a branch exports for HQ to call, which has no `escalate` — so every
+escalation a real branch raised would have been stored `undelivered`. And the
+generator copied HQ's own `[[services]]` table into every branch config, so
+the first branch's link PR would have handed each branch a line to that branch,
+and the guard would have gone red on the PR that linked it. Both were latent:
+no branch has been provisioned.**
+
+The first PR of #312: the label that task wants to push has to be able to
+arrive. **No migration, no route, no `api.js` method, and no `frontend/src`
+change**, so `docs/` does not move. **Nothing retires.**
+
+### WHAT WAS WRONG
+
+1. **The branch's `HQ` binding named the wrong class.** `rpc/index.ts`
+   documents the pair in its own words: `HqEntrypoint` is *"Exported by a
+   branch Worker; called by HQ over `BRANCH_<CODE>`"*, and `BranchEntrypoint`
+   is *"Exported by HQ; called by a branch over its `HQ` binding"*. The
+   generator (`scripts/lib/branchConfig.mjs`) wrote `entrypoint =
+   "HqEntrypoint"` on the branch's `HQ` binding, `branchConfig.test.mjs`
+   pinned that line, and `checkRendered` checked the service name and never the
+   entrypoint.
+   - **Nothing would have failed.** An RPC stub answers every property with a
+     function, so `branch_escalations.ts`'s `typeof hq.escalate !==
+     'function'` check passes on either class. The call is dispatched to HQ's
+     `HqEntrypoint`, which has no `escalate`, and throws. The route then files
+     the escalation as `undelivered`, with *"HQ did not accept the escalation:
+     …"*.
+   - **That is every kind**, including `other` — the kind a suspended branch
+     appeals with, which D107 kept outside the freeze so that a frozen branch
+     still has a way out.
+   - **Where it came from.** Plan F.2 wrote the wrong value, and the generator
+     followed it literally. F.1's diagram and both canvases say the opposite:
+     Admin · Subsidiary draws *"Calls BranchEntrypoint · what this branch may
+     ask HQ"*, and Admin · Super's topology draws a branch as *"exports
+     HqEntrypoint · binds HQ → studioos"*. `rpc/index.ts` warns that the two
+     names *"read backwards until you see it"*. No document in the repository
+     states the wrong value; it lived only in the generator and the test that
+     pinned it.
+   - **HQ's half was right** and does not change: `open-branch-link-pr.mjs`
+     writes `BRANCH_<CODE>` → `HqEntrypoint`, and
+     `branch_provision_workflow.test.mjs` pins that correct value.
+2. **A branch config would inherit HQ's lines to its branches.**
+   `renderBranchConfig` copies every `[env.production]` table it does not have
+   a rule for, and it had no rule for `services`. The first branch's link PR
+   adds `[[env.production.services]] binding = "BRANCH_<CODE>"` to
+   `wrangler.toml`. From then on every rendered branch config would carry that
+   binding beside its own `HQ` one — the linked branch a binding to itself,
+   every other branch a binding to it.
+   - **The guard would have gone red, loudly.** `checkRendered` counts each
+     table's blocks against HQ's, so it would report *"table services: HQ
+     declares 1, the branch config has 2"*. It runs in `test:guards` and in
+     `branch-provision.yml`, so the first branch's link PR could never go
+     green, and `main` would go red with it.
+   - **The obvious fix was the dangerous one.** Teaching the guard's
+     `IDENTITY` map a rename rule for `services` would ship a binding from each
+     branch to every other. The topology artboard's rule is *"binds HQ →
+     studioos. No binding to any other branch."* — and a binding to another
+     branch's `HqEntrypoint` reaches `searchAccounts`, `applyLicence` and
+     `applyEscalationAnswer`, none of which takes a secret.
+
+### WHAT SHIPPED
+
+- **The pair is named once**, in `branchConfig.mjs`: `BRANCH_CALLS_HQ =
+  'BranchEntrypoint'` and `HQ_CALLS_BRANCH = 'HqEntrypoint'`. The renderer's
+  `HQ` binding reads the first; `open-branch-link-pr.mjs` reads the second, so
+  the value it writes does not change.
+- **`renderBranchConfig` skips `services`** (`case 'services': continue;`),
+  quoting the canvas. The one binding a branch gets is the `HQ` one pushed at
+  the end.
+- **`checkRendered` checks the table on its own.** `services` leaves the
+  identity loop, like `routes`, `vars` and `triggers`. The dedicated check:
+  - finds the HQ block **by its binding name, never by position**, so a stray
+    block ahead of it is refused as itself and HQ's own is still read;
+  - requires exactly one, naming `studioos` and `BRANCH_CALLS_HQ`;
+  - refuses every other binding, and says so specifically when it names
+    another branch;
+  - keeps *"the HQ service binding is missing"* word for word.
+- **`branchConfig.test.mjs`**: the pin re-aimed to `BranchEntrypoint`, five new
+  refusal cases, and a test that a stray block ahead of HQ's draws exactly one
+  complaint, about itself.
+- **`scripts/lib/rpcEntrypoints.test.mjs`, new — the guard, and it is
+  structural rather than a pinned literal**, because a pinned literal is how
+  the wrong value survived. It reads `rpc/index.ts` as text and takes each
+  class's doc line and methods, then:
+  1. **the branch side**: the rendered `HQ` binding names the class documented
+     as called over `HQ`, and that class declares every method branch code
+     calls through `HQ`. Those calls go through a local alias (`const hq =
+     (c.env as {…}).HQ;` … `hq.escalate(`), so a pattern like `env.HQ.<m>(`
+     finds nothing and passes vacuously. The harvest takes the alias from the
+     assignment, then every `<alias>.<m>(` in that file, plus any direct
+     `.HQ.<m>(`;
+  2. **the HQ side**: `addServiceBinding`'s entrypoint names the class
+     documented as called over `BRANCH_<CODE>`, and that class declares every
+     method HQ calls on a branch. Three call shapes reach a branch: `fanOut`
+     (six sites, all generic, two with the method on the next line, one
+     passing `c.env`), `branchRead` (two sites) and `.stub.<m>(` (six sites).
+     A call whose method is computed fails the test until it names one;
+  3. **it cannot pass empty**: each shape must still find the fifteen sites
+     measured today, named in the file;
+  4. **after two link PRs** (`fr`, then `dach`), the example, `fr` and `dach`
+     configs each carry exactly one service binding — `HQ` →
+     `BranchEntrypoint` — none carries a `BRANCH_*` binding, and
+     `checkRendered` returns nothing for all three. That is the half that
+     keeps CI green on the first real provisioning.
+
+  It asserts that each class *declares* everything called through it, never
+  that everything declared is *called*.
+- **`check-branch-config.mjs`'s header** names the new refusals, and
+  `scripts/lib/README.md`'s test paragraph names the new file and corrects its
+  own count: it said four of five modules were covered here, and it is six of
+  seven.
+
+### THE JUDGEMENT CALLS, EACH CHEAP TO STRIKE
+
+1. **A branch binds HQ and nothing else.** *Strike it and the renderer copies
+   an allowlist of peer bindings. That would first need every `HqEntrypoint`
+   method to authenticate its caller, the way `openSupportSession` does.*
+2. **The guard derives the names; it does not pin them.** *Strike it and the
+   test pins `entrypoint = "BranchEntrypoint"`, which is exactly as strong as
+   the pin that held the wrong value.*
+3. **Declared ⊇ called, not declared = called.** *Strike it and the four
+   uncalled methods below fail the test today.*
+
+### FOUND WHILE BUILDING, AND FILED
+
+**Four declared RPC methods have no caller anywhere in `src`:** `revenueSummary`
+on `HqEntrypoint`, and `licence`, `reportUsage` and `promoCeiling` on
+`BranchEntrypoint`. So H5's per-branch statement figures are fed by nothing on
+either side, and D150's *"no branch has reported one yet"* reads as though a
+report were possible. `licence()` belongs to #342. The other three are one new
+task, measured against the harvest above.
+
+### VERIFIED
+
+`npm run test:drift` exits **0**, read as the exit code from a redirected log.
+Counts:
+
+- frontend **2976**, unchanged;
+- worker **3872** — 3869 pass plus the same 3 pre-existing environment-gated
+  skips — unchanged;
+- retention 41 → **47**: the five tests in `rpcEntrypoints.test.mjs` and the
+  position test in `branchConfig.test.mjs`;
+- zero `not ok`.
+
+Every new or changed test was confirmed **by name** in the log.
+`check-decision-ids` (D1 → **D207**), `check-folder-docs`,
+`check-branch-config`, both typechecks and `lint:undef` all exit 0. The
+harvest was printed and read before it was trusted. It found:
+
+- 14 HQ-to-branch calls: six `fanOut`, two `branchRead` and six `.stub`;
+- one branch-to-HQ call, `escalate` through the alias;
+- no computed method names;
+- 12 methods on `HqEntrypoint` and 4 on `BranchEntrypoint`.
+
+**17 mutations applied, 17 caught.** The harness pre-flighted every anchor as
+unique before writing anything, ran a clean baseline first, and restored every
+file by sha256:
+
+- **the renderer and the guard**: `HqEntrypoint` back in the renderer; back
+  in `checkRendered` only; the `services` case deleted, which only the
+  link-PR composition test catches; the HQ block selected by position; the
+  other-branch refusal skipped; `services` back in the identity loop; the
+  `studioos` check dropped; the duplicate-HQ check dropped; the missing-HQ
+  sentence reworded;
+- **the classes and their callers**: `escalate` renamed on
+  `BranchEntrypoint`; a `fanOut` to a method `HqEntrypoint` lacks; the two
+  class doc lines swapped; the link PR writing the branch-side class;
+- **the harvest itself**: missing the generic `fanOut<{…}>(` form; missing
+  a method on the next line; missing the `branchRead` shape; dropping the
+  alias step.
+
+**No production read is owed**: nothing here reaches D1 or a deployed Worker,
+and no branch has been provisioned (`infra/branches/` holds only
+`_example.json`). **285 is still the next free migration, and D208 the next
+decision.**

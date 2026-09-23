@@ -28,7 +28,7 @@ import { execFileSync } from 'node:child_process';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { BRANCH_CODE_RE } from './lib/branchConfig.mjs';
+import { BRANCH_CODE_RE, HQ_CALLS_BRANCH } from './lib/branchConfig.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -58,7 +58,9 @@ export function addServiceBinding(tomlSrc, code) {
     `[[${prefix}services]]`,
     `binding = "${binding}"`,
     `service = "studioos-${code}"`,
-    'entrypoint = "HqEntrypoint"',
+    // The class the BRANCH exports for HQ to call (D207). Named once, in
+    // branchConfig.mjs, beside the one the branch's own HQ binding names.
+    `entrypoint = "${HQ_CALLS_BRANCH}"`,
     '',
   ].join('\n');
 

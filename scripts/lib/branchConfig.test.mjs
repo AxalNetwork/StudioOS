@@ -61,7 +61,11 @@ test('every name is derived from the code, and the shared dataset is not', () =>
     'BRANCH_TERRITORY = "FR,BE,LU"',
     'CF_WORKER_SCRIPT_NAME = "studioos-fr"',
     'APP_URL = "https://fr.axal.vc"',
-    'entrypoint = "HqEntrypoint"',
+    // The class HQ exports for a BRANCH to call. This line pinned
+    // "HqEntrypoint" until D207 — the generator had followed a plan line that
+    // named the wrong class, and this test had pinned the generator.
+    // rpcEntrypoints.test.mjs now derives the right name from the classes.
+    'entrypoint = "BranchEntrypoint"',
   ]) assert.ok(src.includes(want), `the rendered config is missing: ${want}`);
 
   // Shared by design — the HQ statements and the anonymised median are
@@ -168,9 +172,31 @@ test('checkRendered catches every way a rendered config can be undeployable', ()
   breaks((s) => s.replace('directory = "./docs"', 'directory = "../docs"'), 'assets directory');
   breaks((s) => s.replace(/crons = \[[^\]]*\]/, 'crons = ["* * * * *", "0 */6 * * *"]'), 'branch crons');
   breaks((s) => s.replace(/\n\[\[services\]\][^[]*/, '\n'), 'HQ service binding');
+  // D207 — the line to HQ names the class with the methods, and it is the
+  // only line a branch has.
+  breaks((s) => s.replace('entrypoint = "BranchEntrypoint"', 'entrypoint = "HqEntrypoint"'), 'must name BranchEntrypoint');
+  breaks((s) => s.replace('service = "studioos"', 'service = "studioos-fr"'), 'must name the studioos Worker');
+  breaks((s) => `${s}\n[[services]]\nbinding = "BRANCH_DACH"\nservice = "studioos-dach"\nentrypoint = "HqEntrypoint"\n`, 'another branch');
+  breaks((s) => `${s}\n[[services]]\nbinding = "PAYMENTS"\nservice = "payments"\n`, 'no other Worker');
+  breaks((s) => `${s}\n[[services]]\nbinding = "HQ"\nservice = "studioos"\nentrypoint = "BranchEntrypoint"\n`, 'declared 2 times');
   breaks((s) => s.replace(/\n\[observability\]\n/, '\n[observability_off]\n'), 'observability');
   breaks((s) => s.replace('name = "studioos-fr"', 'name = "studioos"'), 'name must be');
   breaks((s) => `[env.production]\nname = "x"\n${s}`, 'flat');
+});
+
+test('the HQ block is found by its binding, never by its position', () => {
+  // A stray block AHEAD of HQ's must be refused as itself, and must not be the
+  // block the HQ checks read. Checked by position, HQ's correct block would
+  // pass unread while the stray one drew three complaints meant for HQ.
+  const e = entry();
+  const good = render(e);
+  const at = good.indexOf('\n[[services]]');
+  assert.ok(at > 0, 'the rendered config has a services block');
+  const stray = '\n[[services]]\nbinding = "BRANCH_DACH"\nservice = "studioos-dach"\nentrypoint = "HqEntrypoint"\n';
+  const problems = checkRendered(TOML, e, `${good.slice(0, at)}${stray}${good.slice(at)}`);
+  assert.deepEqual(problems, [
+    'service binding "BRANCH_DACH" is a line to another branch — a branch binds HQ and no other branch',
+  ]);
 });
 
 test('the cron table\'s multi-line array is read, not dropped', () => {
