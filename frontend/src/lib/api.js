@@ -3187,6 +3187,11 @@ export const api = {
   // active account out everywhere (the caller included) and needs a TOTP
   // session with a recent step-up, which lib/api.js prompts for on the 403.
   hqSecurityOverview: () => request('/admin/security/overview'),
+  // HQ · Support (D204, canvas H22) — the escalation queue, the two ticket
+  // queues HQ can attribute from its own records, the tenant × queue matrix and
+  // the GitHub mirror strip, in one read. Each part answers for itself: an
+  // unreadable escalation board costs its own queue, never the tickets beside it.
+  hqSupport: () => request('/admin/hq-support'),
   // Canvas H7's privileged-action feed, unioned across the four stores that
   // record one. Filtered SERVER-side: the feed is a merged page of 60, so a
   // client-side filter would quietly show a handful of rows and read as

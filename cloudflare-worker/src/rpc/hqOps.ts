@@ -143,26 +143,59 @@ export function slaBand(dueAt: string | null, now = Date.now()): 'ok' | 'due_soo
   return due - now <= 24 * 3600_000 ? 'due_soon' : 'ok';
 }
 
+export type OpenEscalation = EscalationRow & { sla: 'ok' | 'due_soon' | 'past' };
+
 /**
- * What HQ's Home lists under "Escalations awaiting HQ" (H1).
+ * How many open escalations one read will count before it stops calling its
+ * count a total (D204).
+ *
+ * Past it the read is still useful — it is ordered oldest first, so the oldest
+ * items and their ages are exact — but the count is not, and a count that was
+ * cut is never shown as the total (D131). `complete: false` is how a caller
+ * learns that, rather than reading the length of a truncated list.
+ */
+export const OPEN_ESCALATION_CEILING = 2000;
+
+/**
+ * Every open escalation, oldest first — THE one statement that says what "open"
+ * means for an escalation (D204).
+ *
+ * TWO CALLERS, ONE READ. HQ Home lists the oldest few; HQ Support counts them,
+ * bands them by SLA and attributes them to a branch. Both used to be possible
+ * only by writing a second `WHERE status = 'open'`, and two statements for one
+ * question is how a digest and a desk come to disagree about what is waiting.
+ * So the list and the count are one measurement: whoever needs the count reads
+ * `items.length` of a COMPLETE summary, and a summary cut at the ceiling says so.
  *
  * Oldest first: the canvas orders queue pressure by age, not by count, on both
- * tiers.
+ * tiers. `id` breaks ties because `created_at` is `datetime('now')`, one-second
+ * resolution, and two escalations raised in one second must not swap places
+ * between reads.
  */
-export async function openEscalations(
-  env: Env, limit = 50,
-): Promise<Array<EscalationRow & { sla: 'ok' | 'due_soon' | 'past' }>> {
-  const cap = Math.max(1, Math.min(200, Number(limit) || 50));
+export async function openEscalationSummary(
+  env: Env, now = Date.now(),
+): Promise<{ items: OpenEscalation[]; complete: boolean }> {
   const rows = await env.DB.prepare(
     `SELECT uid, branch_code, kind, subject, subject_ref, detail, raised_by_name,
             status, due_at, created_at, answer, answered_at
        FROM hq_escalations
       WHERE status = 'open'
-      ORDER BY created_at ASC
+      ORDER BY created_at ASC, id ASC
       LIMIT ?`,
-  ).bind(cap).all<EscalationRow>();
-  const now = Date.now();
-  return (rows.results || []).map((r) => ({ ...r, sla: slaBand(r.due_at, now) }));
+  ).bind(OPEN_ESCALATION_CEILING + 1).all<EscalationRow>();
+  const all = rows.results || [];
+  const complete = all.length <= OPEN_ESCALATION_CEILING;
+  const kept = complete ? all : all.slice(0, OPEN_ESCALATION_CEILING);
+  return { items: kept.map((r) => ({ ...r, sla: slaBand(r.due_at, now) })), complete };
+}
+
+/**
+ * What HQ's Home lists under "Escalations awaiting HQ" (H1) — the oldest few of
+ * `openEscalationSummary`, never a second statement.
+ */
+export async function openEscalations(env: Env, limit = 50): Promise<OpenEscalation[]> {
+  const cap = Math.max(1, Math.min(200, Number(limit) || 50));
+  return (await openEscalationSummary(env)).items.slice(0, cap);
 }
 
 /**
