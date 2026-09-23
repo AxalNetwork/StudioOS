@@ -196,7 +196,10 @@ export async function reportBreachedEscalations(
           type: 'hq_escalation_sla_breached',
           title: 'An escalation is past its SLA',
           body: breachBody(row, nowMs),
-          link: '/hq',
+          // D205 — the page that can ANSWER it. `/hq` lists open escalations
+          // and offers no control, so the email sent HQ to watch a clock it
+          // could not stop.
+          link: '/admin/hq-support',
           category: 'compliance',
           payload: { escalation_uid: row.uid, branch_code: row.branch_code, kind: row.kind, due_at: row.due_at },
         });

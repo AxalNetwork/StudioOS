@@ -24,11 +24,19 @@
  * tickets carry none, so their ages render without a band rather than borrowing
  * one nobody set.
  *
+ * D205 — HQ ANSWERS HERE. `PATCH /api/admin/escalations/:uid` (D112) had no
+ * caller, so an escalation sat on HQ's board until its SLA passed and D143's
+ * sweep emailed HQ a link to a list with no control on it. Each open
+ * escalation now opens a decision panel on `DsrClose`'s shape. What comes back
+ * is two facts, never one: the decision is recorded at HQ, and the branch did
+ * or did not receive it. The second is shown only for this session, because the
+ * board keeps the decision and not whether it arrived.
+ *
  * Super Admin stays on axal.vc. This page configures nothing.
  */
 import React, { useCallback, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Inbox } from 'lucide-react';
+import { Inbox, Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
@@ -154,11 +162,30 @@ export function QueueCard({
                 </>
               );
               const row = 'flex items-center justify-between gap-2 rounded-lg border border-axal-hairline bg-axal-ground px-2.5 py-1.5';
+              // Three kinds of row: a link to the item's own page, a row that
+              // opens a panel under itself (an escalation HQ can answer), or
+              // plain text. The panel sits beside the button, never inside it.
+              let head;
+              if (it.to) {
+                head = <Link to={it.to} className={`${row} hover:border-[#881337]/40`}>{body}</Link>;
+              } else if (it.onToggle) {
+                head = (
+                  <button
+                    type="button"
+                    onClick={it.onToggle}
+                    aria-expanded={Boolean(it.expanded)}
+                    className={`${row} w-full text-left hover:border-[#881337]/40`}
+                  >
+                    {body}
+                  </button>
+                );
+              } else {
+                head = <div className={row}>{body}</div>;
+              }
               return (
                 <li key={it.key}>
-                  {it.to
-                    ? <Link to={it.to} className={`${row} hover:border-[#881337]/40`}>{body}</Link>
-                    : <div className={row}>{body}</div>}
+                  {head}
+                  {it.expanded && it.panel}
                 </li>
               );
             })}
@@ -177,8 +204,13 @@ export function QueueCard({
   );
 }
 
-/** The escalation queue's props, from the payload. */
-export function escalationCardProps(data, failed) {
+/**
+ * The escalation queue's props, from the payload. `decide`, when the page
+ * passes it, makes each row open its decision panel —
+ * `{ openUid, onToggle(uid), panelFor(item) }`. Without it the rows are plain
+ * text, which is how the queue renders on its own.
+ */
+export function escalationCardProps(data, failed, decide) {
   const base = {
     queue: 'escalations',
     who: 'What a branch pushes up to HQ: moderation, content for brand approval, a seat increase, or other.',
@@ -193,14 +225,271 @@ export function escalationCardProps(data, failed) {
     state: 'ready',
     count: e.count,
     bands: e.bands,
-    items: (e.items || []).map((x) => ({
-      key: x.uid,
-      title: `${x.branch_code} · ${x.subject || String(x.kind || '').replace(/_/g, ' ')}`,
-      meta: `${String(x.kind || '').replace(/_/g, ' ')}${x.raised_by_name ? ` · raised by ${x.raised_by_name}` : ''}`,
-      age_hours: x.age_hours,
-      band: x.sla,
-    })),
+    items: (e.items || []).map((x) => {
+      const open = Boolean(decide) && decide.openUid === x.uid;
+      return {
+        key: x.uid,
+        title: `${x.branch_code} · ${x.subject || String(x.kind || '').replace(/_/g, ' ')}`,
+        meta: `${String(x.kind || '').replace(/_/g, ' ')}${x.raised_by_name ? ` · raised by ${x.raised_by_name}` : ''}`,
+        age_hours: x.age_hours,
+        band: x.sla,
+        ...(decide ? {
+          onToggle: () => decide.onToggle(x.uid),
+          expanded: open,
+          panel: open ? decide.panelFor(x) : null,
+        } : {}),
+      };
+    }),
   };
+}
+
+/**
+ * The two decisions HQ records here. Never `withdrawn` — taking a request back
+ * is the branch's act, not HQ's — and never `open`, which the server refuses:
+ * an answer that left the row open would read as decided at HQ and undecided
+ * on the branch.
+ */
+export const DECISION_OUTCOMES = [
+  ['answered', 'Record as answered'],
+  ['declined', 'Record as declined'],
+];
+
+/**
+ * What each outcome tells the branch, said before it is sent. A declined
+ * escalation reaches the branch as HQ's decision with its reason: the branch's
+ * copy has no declined state (D112's collapse, `branchOps.ts`), so the words
+ * the operator types ARE the refusal the branch reads.
+ */
+const OUTCOME_COPY = {
+  answered: (code) => `This records HQ’s answer with your reason and sends it to ${code}. Recording it again later replaces it.`,
+  declined: (code) => `This records a refusal with your reason and sends it to ${code}. The branch has no separate declined state: it shows this as HQ’s decision, with your reason as its words.`,
+};
+const OUTCOME_SUBMIT = { answered: 'Record the answer', declined: 'Record the refusal' };
+const OUTCOME_PLACEHOLDER = {
+  answered: 'What HQ decided, in the words the branch will read.',
+  declined: 'Why HQ is declining, in the words the branch will read.',
+};
+
+/**
+ * A refusal in words, and whether reloading is the next step.
+ *
+ * `request()` puts a string `error` code into `err.message` and keeps the body
+ * on `err.data`, so the sentence is read from `err.data.message` first — the
+ * code is not a sentence (#343).
+ *
+ * A FAILURE WITH NO STATUS, OR A 5xx, IS NOT A REFUSAL. A timeout, a dropped
+ * connection, or a server failure after the write can each leave the decision
+ * recorded with no answer coming back, so the page says it does not know and
+ * says to reload before recording again: a second answer replaces the first,
+ * which is harmless only when it is meant. That is also why the timeout's own
+ * "Nothing was changed." is never shown for this write — for a write it may be
+ * false. A 400 or 403 is refused before the UPDATE, so its sentence stands.
+ */
+export function decisionError(err) {
+  const status = err?.status;
+  if (!status || status >= 500) {
+    return {
+      text: 'Whether HQ recorded this is not known: no answer came back. Reload the queue before recording it again — a second answer replaces the first.',
+      reload: true,
+    };
+  }
+  if (status === 404) {
+    return { text: 'This escalation is no longer on HQ’s board, so there is nothing to answer.', reload: true };
+  }
+  return { text: String(err?.data?.message || err?.message || 'The decision was refused.'), reload: false };
+}
+
+/**
+ * The decision panel, pure over its props so both phases render in a test.
+ * `DsrClose`'s shape (`SecurityPage.jsx`): two outcomes, then a form whose
+ * reason is required — mirroring the server's "a decision needs its reason" —
+ * with a Cancel that goes back to the choice.
+ */
+export function EscalationDecisionView({
+  item, outcome, reason, busy, error, onChoose, onReason, onSubmit, onCancel, onReload,
+}) {
+  const code = item.branch_code;
+  const age = fmtAge(item.age_hours);
+  const facts = [
+    item.kind ? String(item.kind).replace(/_/g, ' ') : null,
+    item.raised_by_name ? `raised by ${item.raised_by_name}` : null,
+    age ? `${age} old` : null,
+    item.sla ? SLA_WORD[item.sla] : null,
+  ].filter(Boolean).join(' · ');
+  const btn = 'rounded-md border border-axal-hairline bg-white px-2 py-1 text-[11px] font-semibold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
+  return (
+    <div
+      className="mt-1.5 rounded-lg border border-axal-hairline bg-white px-2.5 py-2 dark:border-gray-700 dark:bg-gray-900"
+      data-testid="hq-support-decision"
+    >
+      {facts && <p className="text-[10.5px] text-axal-faint">{facts}</p>}
+      {item.subject_ref && (
+        <p className="mt-1 text-[10.5px] text-axal-muted">About <span className="font-mono">{item.subject_ref}</span></p>
+      )}
+      {item.detail
+        ? <p className="mt-1 whitespace-pre-wrap text-[11.5px] leading-relaxed text-axal-ink dark:text-gray-100">{item.detail}</p>
+        : (
+          <p className="mt-1 text-[11px] text-axal-muted">
+            <Unrecorded reason="The branch raised it with a subject and no detail.">No detail</Unrecorded>
+          </p>
+        )}
+
+      {!outcome ? (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5" data-testid="hq-support-decision-actions">
+          {DECISION_OUTCOMES.map(([o, label]) => (
+            <button key={o} type="button" onClick={() => onChoose(o)} className={btn}>{label}</button>
+          ))}
+        </div>
+      ) : (
+        <form onSubmit={onSubmit} className="mt-2 space-y-1.5" data-testid="hq-support-decision-form" data-outcome={outcome}>
+          <p className="text-[11px] leading-relaxed text-axal-muted">{OUTCOME_COPY[outcome](code)}</p>
+          <label className="block text-[11px] font-semibold text-axal-muted">
+            Reason · required, stored with the decision and sent to {code}
+            <textarea
+              value={reason}
+              onChange={(e) => onReason(e.target.value)}
+              maxLength={4000}
+              rows={3}
+              disabled={busy}
+              placeholder={OUTCOME_PLACEHOLDER[outcome]}
+              className="mt-1 w-full rounded-md border border-axal-hairline bg-white px-2.5 py-1.5 text-[12px] font-normal text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+            />
+          </label>
+          {error && (
+            <div role="alert" className="text-[11.5px] text-red-700 dark:text-red-300" data-testid="hq-support-decision-error">
+              <p>{error.text}</p>
+              {error.reload && (
+                <button type="button" onClick={onReload} className="mt-1 font-semibold underline">Reload the queue</button>
+              )}
+            </div>
+          )}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="submit"
+              disabled={busy || !reason.trim()}
+              className="inline-flex items-center gap-1.5 rounded-md border-[1.5px] border-[#881337] bg-white px-2.5 py-1 text-[11px] font-bold text-[#881337] hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-400 dark:bg-gray-900 dark:text-rose-300 dark:hover:bg-rose-950/30"
+            >
+              {busy ? <Loader2 size={12} className="animate-spin" /> : null}
+              {busy ? 'Recording…' : OUTCOME_SUBMIT[outcome]}
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={busy}
+              className="rounded-md px-2 py-1 text-[11px] font-semibold text-axal-faint hover:text-axal-ink dark:hover:text-gray-100"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
+/** The panel's state and its one write. */
+export function EscalationDecision({ item, onRecorded, onReload }) {
+  const [outcome, setOutcome] = useState('');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const submit = async (e) => {
+    e.preventDefault();
+    if (busy || !reason.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api.escalationAnswer(item.uid, { answer: reason.trim(), status: outcome });
+      onRecorded?.(item, outcome, res);
+    } catch (err) {
+      reportError('hq-support:answer', err);
+      setError(decisionError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <EscalationDecisionView
+      item={item}
+      outcome={outcome}
+      reason={reason}
+      busy={busy}
+      error={error}
+      onChoose={(o) => { setOutcome(o); setError(null); }}
+      onReason={setReason}
+      onSubmit={submit}
+      onCancel={() => { setOutcome(''); setError(null); }}
+      onReload={onReload}
+    />
+  );
+}
+
+/** One session record, from the PATCH's answer and the item it answered. */
+export function recordOf(item, outcome, res) {
+  return {
+    uid: item.uid,
+    branch_code: res?.branch_code || item.branch_code,
+    subject: res?.subject || item.subject,
+    status: res?.status || outcome,
+    answered_at: res?.answered_at || null,
+    pushed: res?.pushed,
+  };
+}
+
+const hhmm = (iso) => (typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(iso) ? iso.slice(11, 16) : null);
+
+/**
+ * What happened, as two facts that stay two (D112's header): HQ recorded the
+ * decision, and the branch did or did not receive it. A push that failed is
+ * stated with its reason and no "try again" — recording again replaces the
+ * decision rather than resending it, and nothing re-sends a stored one on its
+ * own (#341), so a retry button would promise a mechanism that does not exist.
+ */
+export function RecordedOutcome({ rec }) {
+  const code = rec.branch_code;
+  const at = hhmm(rec.answered_at);
+  const p = rec.pushed;
+  let delivery;
+  if (!p || typeof p !== 'object' || typeof p.ok !== 'boolean') {
+    delivery = <span data-delivery="unreported">Whether it reached {code} was not reported.</span>;
+  } else if (p.ok) {
+    delivery = <span data-delivery="received">{code} received it.</span>;
+  } else {
+    delivery = (
+      <span data-delivery="not_sent" className="text-amber-800 dark:text-amber-300">
+        Not on {code}: {p.reason || 'no reason was given.'} Nothing sends it again on its own; recording it again
+        replaces the decision and sends the new one.
+      </span>
+    );
+  }
+  return (
+    <li className="rounded-lg border border-axal-hairline bg-axal-ground px-2.5 py-1.5 text-[11px] leading-relaxed" data-testid="hq-support-recorded-item">
+      <span className="font-semibold text-axal-ink dark:text-gray-100">{code} · {rec.subject}</span>
+      <span className="block text-axal-muted">
+        Recorded at HQ{at ? ` at ${at} UTC` : ''} as {rec.status === 'declined' ? 'declined' : 'answered'}.
+      </span>
+      <span className="block text-axal-muted">{delivery}</span>
+    </li>
+  );
+}
+
+/** This session's decisions. Nothing here is read back from a store. */
+export function RecordedList({ recorded }) {
+  if (!recorded?.length) return null;
+  return (
+    <div className="mt-3" data-testid="hq-support-recorded">
+      <Card>
+        <h2 className="text-[13.5px] font-extrabold tracking-tight">Recorded this session</h2>
+        <p className="mt-1 text-[10.5px] leading-relaxed text-axal-faint">
+          Shown until you leave this page: the board keeps each decision, and whether it reached the branch is not
+          stored against it.
+        </p>
+        <ul className="mt-2 grid gap-1.5">
+          {recorded.map((r) => <RecordedOutcome key={`${r.uid}-${r.answered_at || 'unstamped'}`} rec={r} />)}
+        </ul>
+      </Card>
+    </div>
+  );
 }
 
 /** One ticket queue's props, from the payload. */
@@ -452,20 +741,44 @@ export const SUPPORT_UNAVAILABLE = [
   ['Tickets filed on a branch host', 'Once a licence has a branch, its administrators file on that branch’s host, into its own database, and no branch call returns tickets. The matrix marks those cells “On the branch”.'],
   ['A ticket’s queue as filed', 'A ticket is sorted by its requester’s standing now. Nothing stamps it when it is filed, so an administrator demoted since has moved queue.'],
   ['A ticket SLA', 'Tickets carry no due date, so their ages show without a band. Only escalations have one.'],
-  ['Answering an escalation', 'No screen records HQ’s answer yet: the route exists and nothing calls it.'],
+  ['Whether an answer arrived, later', 'The board keeps each decision. Whether it reached the branch is shown once, when you record it, and nothing sends a stored decision again on its own.'],
   ['Support under the overlay', 'Out of scope. Viewing as a branch scopes Home and Team; this page reads HQ’s escalation board and HQ’s own tickets, not one branch’s database.'],
 ];
 
 export default function HqSupportPage() {
   const [data, setData] = useState(null); // null = loading, UNAVAILABLE = failed
-  const load = useCallback(() => {
-    setData(null);
+  const [openUid, setOpenUid] = useState(null);
+  const [recorded, setRecorded] = useState([]);
+  // `clear` shows the loading state first: a retry after a failed read. After a
+  // decision the reload is quiet — the queue stays on screen and the answered
+  // item leaves when the new read lands, rather than the page blanking.
+  const fetchSupport = useCallback((clear) => {
+    if (clear) setData(null);
     api.hqSupport().then(setData, (e) => {
       reportError('hq-support', e);
       setData(UNAVAILABLE);
     });
   }, []);
+  const load = useCallback(() => fetchSupport(true), [fetchSupport]);
   useEffect(() => { load(); }, [load]);
+
+  const onRecorded = useCallback((item, outcome, res) => {
+    setRecorded((prev) => [recordOf(item, outcome, res), ...prev]);
+    setOpenUid(null);
+    fetchSupport(false);
+  }, [fetchSupport]);
+  const decide = {
+    openUid,
+    onToggle: (uid) => setOpenUid((cur) => (cur === uid ? null : uid)),
+    panelFor: (x) => (
+      <EscalationDecision
+        key={x.uid}
+        item={x}
+        onRecorded={onRecorded}
+        onReload={() => { setOpenUid(null); load(); }}
+      />
+    ),
+  };
 
   const failed = data === UNAVAILABLE;
   const ready = data && !failed ? data : null;
@@ -504,15 +817,17 @@ export default function HqSupportPage() {
             Three queues: what branches push up, the accounts HQ holds directly, and subsidiary administrators
             filing about the Admin product. A ticket&apos;s queue is read from its requester&apos;s account as it
             stands now, so the two ticket queues and the tickets outside them add up to HQ Home&apos;s Queue backlog.
+            Open an escalation to answer it.
           </p>
         </header>
 
         <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <QueueCard {...escalationCardProps(ready, failed)} onRetry={load} />
+          <QueueCard {...escalationCardProps(ready, failed, decide)} onRetry={load} />
           <QueueCard {...ticketCardProps(ready, failed, 'hq_held')} onRetry={load} />
           <QueueCard {...ticketCardProps(ready, failed, 'admin_product')} onRetry={load} />
         </div>
         <FootingLine tickets={ready?.tickets} />
+        <RecordedList recorded={recorded} />
 
         <div className="mt-4 grid gap-3 lg:grid-cols-[1.3fr_1fr]">
           <TenantMatrix matrix={ready?.matrix} failed={failed} onRetry={load} />
@@ -522,8 +837,8 @@ export default function HqSupportPage() {
       <WorkerRail
         workspace="Support"
         role="super_admin"
-        stance="Read-only summary"
-        note="Escalations, both ticket queues, the tenant × queue matrix and the mirror strip are read from HQ's own stores in one request. It takes no action."
+        stance="Read-only, except answering an escalation"
+        note="Escalations, both ticket queues, the tenant × queue matrix and the mirror strip are read from HQ's own stores in one request. The one action here records HQ's answer to an escalation, with its reason, and sends it to the branch."
         coverage={coverage}
         coverageNote={coverage.length ? undefined : (failed ? 'The Support read could not be completed.' : 'Loading…')}
         unavailable={SUPPORT_UNAVAILABLE}

@@ -339,6 +339,11 @@ test('HQ records the decision even when the branch cannot be reached, and says s
   // THE HALF THAT MATTERS: the decision stands, the delivery is its own field.
   assert.equal(r.body.pushed.ok, false);
   assert.match(String(r.body.pushed.reason), /No branch Worker is bound/);
+  // D205 — and it says what HAPPENED. It used to promise the decision "will
+  // reach the branch when a binding exists"; nothing re-sends a stored one
+  // (#341), and HQ Support now shows this sentence to the operator.
+  assert.match(String(r.body.pushed.reason), /was not sent/);
+  assert.doesNotMatch(String(r.body.pushed.reason), /will reach|when a binding exists/);
 
   const [row] = db.prepare('SELECT * FROM hq_escalations').all() as any[];
   assert.equal(row.answer, 'Granted for Q4.', 'an unreachable branch lost HQ\'s decision');
