@@ -75,3 +75,44 @@ export function deployProgress(status) {
       : `${done} of ${total} complete · ${total - done} waiting`,
   };
 }
+
+/**
+ * The live read of one branch, as one chip. A branch that ANSWERS while its
+ * own health read reports its database failing is not "answering" in any
+ * sense an operator cares about: it replied to say it cannot serve. Before
+ * D202 that case drew green.
+ *
+ * MOVED HERE FROM PlatformPage IN D209, unchanged, when Platform → Topology
+ * became its second reader: a helper in two pages is the one this folder's
+ * README says goes here once rather than being copied.
+ *
+ * @param {{live_state?: string, live?: {db_ok?: boolean}}} d a deployment row
+ * @returns {[string, string]} the chip's words and its classes
+ */
+export function liveChip(d) {
+  if (d.live_state === 'ok' && d.live?.db_ok === false) {
+    return ['database failing', 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'];
+  }
+  if (d.live_state === 'ok') return ['answering', 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300'];
+  if (d.live_state === 'not_deployed') return ['no binding yet', 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'];
+  return ['unreadable', 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'];
+}
+
+/**
+ * Where a deployment's database lives, in the words the registry supports —
+ * or null when the row records neither a jurisdiction nor a hint.
+ *
+ * A JURISDICTION IS A GUARANTEE AND A HINT IS NOT, and the two never read
+ * alike: D1 enforces a jurisdiction, while a location hint only says where the
+ * primary was asked to start. A hint rendered as "resident" would promise
+ * residency nothing enforces. Platform → Deployments wrote this inline until
+ * D209 gave it a second reader.
+ *
+ * @param {{d1_jurisdiction?: string|null, location_hint?: string|null}} d
+ * @returns {string|null}
+ */
+export function residencyLine(d) {
+  if (d?.d1_jurisdiction) return `${String(d.d1_jurisdiction).toUpperCase()} resident`;
+  if (d?.location_hint) return `hinted ${String(d.location_hint).toUpperCase()} (not guaranteed)`;
+  return null;
+}

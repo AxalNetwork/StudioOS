@@ -738,8 +738,23 @@ export interface TechnicalReport {
  * It is a NAME, never a tier discriminator — every branch points at the same
  * shared dataset, which is D105's design, with the branch carried per row.
  */
-function aeDataset(env: Env): string {
+export function aeDataset(env: Env): string {
   return env.AE_DATASET || 'studioos_metrics';
+}
+
+/**
+ * D209 — whether THIS Worker holds what the SQL API needs to read the dataset:
+ * an account id and a token scoped to Account Analytics · Read.
+ *
+ * `aeSql` refuses on exactly this test, and HQ's topology page and the
+ * branch's "This deployment" zone report it, so the two cannot disagree about
+ * what "can read Analytics Engine here" means. It is a fact about secrets, not
+ * about the binding: every Worker can WRITE the dataset through `ANALYTICS`
+ * with no credential at all, which is why a branch writes to it and — while
+ * these two are unset on it — cannot read it back.
+ */
+export function aeReadable(env: Env): boolean {
+  return Boolean(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_AE_API_TOKEN);
 }
 
 /**
@@ -775,9 +790,9 @@ async function aeSql(
   env: Env,
   sqlText: string,
 ): Promise<Array<Record<string, unknown>> | null> {
+  if (!aeReadable(env)) return null;
   const accountId = env.CLOUDFLARE_ACCOUNT_ID;
   const token = env.CLOUDFLARE_AE_API_TOKEN;
-  if (!accountId || !token) return null;
   try {
     const res = await fetch(
       `https://api.cloudflare.com/client/v4/accounts/${accountId}/analytics_engine/sql`,

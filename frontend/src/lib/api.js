@@ -3178,6 +3178,9 @@ export const api = {
   // { action: 'throw' | 'release', reason } and needs a TOTP session with a
   // recent step-up, which this file prompts for on the 403.
   hqPlatformSwitches: () => request('/admin/platform/switches'),
+  // D209 — H14, the topology stated once. Super admin; a branch reads its own
+  // half through branchDeployment() below.
+  hqPlatformTopology: () => request('/admin/platform/topology'),
   hqSetPlatformSwitch: (key, action, reason) =>
     request(`/admin/platform/switches/${encodeURIComponent(key)}`, {
       method: 'POST',
@@ -3310,6 +3313,9 @@ export const api = {
   // `pushed_at` and its own `n_branches`. `unavailable` names the three stats
   // S6 draws that have no branch-side source.
   branchInsights: () => request('/branch/insights'),
+  // D209 — S14: what this branch Worker binds, exports and calls, and the three
+  // things it cannot do, each checked on this deployment rather than recited.
+  branchDeployment: () => request('/branch/deployment'),
   branchEscalate: (data) =>
     request('/branch/escalations', { method: 'POST', body: JSON.stringify(data || {}) }),
   licenceCreate: (data) => request('/admin/licences', { method: 'POST', body: JSON.stringify(data || {}) }),

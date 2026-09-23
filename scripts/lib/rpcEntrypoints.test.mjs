@@ -34,13 +34,17 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
-import { resolve, join, relative, sep } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { resolve, join } from 'node:path';
 
 import {
   BRANCH_CALLS_HQ, HQ_CALLS_BRANCH, renderBranchConfig, checkRendered, parseToml, validateBranch, hqIds,
 } from './branchConfig.mjs';
 import { addServiceBinding } from '../open-branch-link-pr.mjs';
+import {
+  ENTRYPOINT_ROLE, entrypointClasses, classesForRole, workerSources,
+  hqToBranchCalls as harvestHqToBranch, branchToHqCalls as harvestBranchToHq,
+} from './rpcSurface.mjs';
 
 const ROOT = process.cwd();
 const SRC = resolve(ROOT, 'cloudflare-worker/src');
@@ -52,168 +56,25 @@ const entryFor = (code, name) => ({
   ...structuredClone(EXAMPLE), code, hostname: `${code}.axal.vc`, name, status: 'provisioning',
 });
 
-// ── the classes, read off their own file ───────────────────────────────────
+// ── the classes and the calls, read off the source by rpcSurface.mjs ───────
+//
+// The harvest lives in `rpcSurface.mjs` since D209, which reads the same facts
+// for HQ's topology page. The assertions below are unchanged; only where the
+// harvest is defined moved, so the two readers cannot come to disagree about
+// what was harvested.
 
 /** Who calls each class, in the words its own doc line uses. */
-const ROLE = {
-  branchCallsHq: 'called by a branch over its `HQ` binding',
-  hqCallsBranch: 'called by HQ over `BRANCH_<CODE>`',
-};
-
-/**
- * Each `export class X extends WorkerEntrypoint<Env>` with the single-line doc
- * above it and the methods declared at class-body indent. The region of a
- * class runs to the next class head, so a method is attributed to the class
- * it sits in without having to balance braces through comments that quote
- * code.
- */
-function entrypointClasses(src) {
-  const heads = [...src.matchAll(/\/\*\* ([^\n]*?) \*\/\nexport class ([A-Za-z_$][\w$]*) extends WorkerEntrypoint<Env> \{/g)];
-  return heads.map((h, i) => {
-    const body = src.slice(h.index + h[0].length, i + 1 < heads.length ? heads[i + 1].index : src.length);
-    return {
-      name: h[2],
-      doc: h[1],
-      methods: new Set([...body.matchAll(/^ {2}([A-Za-z_$][\w$]*)\(/gm)].map((m) => m[1])),
-    };
-  });
-}
+const ROLE = ENTRYPOINT_ROLE;
 
 function classFor(role) {
-  const found = entrypointClasses(RPC).filter((c) => c.doc.includes(ROLE[role]));
+  const found = classesForRole(RPC, role);
   assert.equal(found.length, 1, `exactly one entrypoint class must be documented as "${ROLE[role]}"`);
   return found[0];
 }
 
-// ── the worker source, and every call that crosses the tier boundary ───────
-
-function tsFiles(dir) {
-  const out = [];
-  for (const d of readdirSync(dir, { withFileTypes: true })) {
-    const p = join(dir, d.name);
-    if (d.isDirectory()) out.push(...tsFiles(p));
-    else if (d.name.endsWith('.ts')) out.push(p);
-  }
-  return out;
-}
-
-const FILES = tsFiles(SRC).sort().map((p) => ({
-  file: relative(SRC, p).split(sep).join('/'),
-  src: readFileSync(p, 'utf8'),
-}));
-
-const lineOf = (src, i) => src.slice(0, i).split('\n').length;
-const skipSpace = (src, j) => { let k = j; while (k < src.length && /\s/.test(src[k])) k += 1; return k; };
-
-/** Past a `<…>` type argument list; -1 when what follows `<` is not one. */
-function skipGeneric(src, j) {
-  let depth = 0;
-  for (let k = j; k < src.length && k < j + 400; k += 1) {
-    const c = src[k];
-    if (c === '(' || c === ')') return -1;
-    if (c === '<') depth += 1;
-    else if (c === '>') { depth -= 1; if (depth === 0) return k + 1; }
-  }
-  return -1;
-}
-
-/** The top-level argument texts of the call whose `(` is at `open`. */
-function splitArgs(src, open) {
-  const args = [];
-  let depth = 0; let quote = null; let cur = '';
-  for (let k = open + 1; k < src.length && k < open + 4000; k += 1) {
-    const c = src[k];
-    if (quote) {
-      cur += c;
-      if (c === '\\') { cur += src[k + 1] ?? ''; k += 1; } else if (c === quote) quote = null;
-      continue;
-    }
-    if (c === "'" || c === '"' || c === '`') { quote = c; cur += c; continue; }
-    if (c === ')' && depth === 0) { if (cur.trim()) args.push(cur.trim()); return args; }
-    if ('([{'.includes(c)) depth += 1;
-    else if (')]}'.includes(c)) depth -= 1;
-    if (c === ',' && depth === 0) { args.push(cur.trim()); cur = ''; continue; }
-    cur += c;
-  }
-  return null;
-}
-
-/**
- * Every call to the plain function `name` — `name(…)` or `name<T>(…)`, its
- * arguments on one line or several — with its arguments. The definition is
- * not a call, and neither is a mention in an import list or a comment, since
- * neither is followed by `(`.
- */
-function callsTo(src, name) {
-  const out = [];
-  for (let from = 0; ;) {
-    const i = src.indexOf(name, from);
-    if (i < 0) return out;
-    from = i + name.length;
-    if (/[\w$.]/.test(src[i - 1] || '') || /[\w$]/.test(src[from] || '')) continue;
-    if (/\bfunction\s+$/.test(src.slice(Math.max(0, i - 20), i))) continue;
-    let j = skipSpace(src, from);
-    if (src[j] === '<') {
-      j = skipGeneric(src, j);
-      if (j < 0) continue;
-      j = skipSpace(src, j);
-    }
-    if (src[j] !== '(') continue;
-    const args = splitArgs(src, j);
-    if (args) out.push({ line: lineOf(src, i), args });
-  }
-}
-
-/** A method named by a string literal, or null when the name is computed. */
-const literalMethod = (arg) => (/^'([A-Za-z_$][\w$]*)'$/.exec(arg || '') || [])[1] || null;
-
-/**
- * Every method HQ calls on a branch. Three call shapes reach a branch:
- *   · `fanOut<T>(env, '<method>', args?)` — every branch at once;
- *   · `branchRead<T>(env, code, '<method>', args?)` — one branch, by code;
- *   · `<binding>.stub.<method>(…)` and `(<binding>.stub as any).<method>(…)`
- *     — one branch, after `branchBindings(env).find(…)`.
- * A call whose method is computed cannot be checked, so it is reported and
- * this file fails until the call names its method.
- */
-function hqToBranchCalls() {
-  const calls = []; const computed = [];
-  for (const { file, src } of FILES) {
-    for (const [shape, at] of [['fanOut', 1], ['branchRead', 2]]) {
-      for (const c of callsTo(src, shape)) {
-        const method = literalMethod(c.args[at]);
-        if (method) calls.push({ shape, file, line: c.line, method });
-        else computed.push(`${file}:${c.line} ${shape}(… ${c.args[at]} …)`);
-      }
-    }
-    for (const m of src.matchAll(/\.stub\b(?:\s+as\s+[A-Za-z_$][\w$]*\s*\))?\s*\??\.\s*([A-Za-z_$][\w$]*)\s*\(/g)) {
-      calls.push({ shape: 'stub', file, line: lineOf(src, m.index), method: m[1] });
-    }
-  }
-  return { calls, computed };
-}
-
-/**
- * Every method a branch calls on HQ. The binding is read once into a local
- * (`const hq = (c.env as {…}).HQ;`) and called through it, so a pattern that
- * looks for `env.HQ.<method>(` finds nothing and passes vacuously. The alias
- * is taken from the assignment, then every `<alias>.<method>(` in that file
- * is a call; a direct `.HQ.<method>(` counts too.
- */
-function branchToHqCalls() {
-  const calls = [];
-  for (const { file, src } of FILES) {
-    for (const m of src.matchAll(/\.HQ\??\.([A-Za-z_$][\w$]*)\s*\(/g)) {
-      calls.push({ shape: 'direct', file, line: lineOf(src, m.index), method: m[1] });
-    }
-    const aliases = new Set([...src.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*[^;]*?\.HQ\s*;/g)].map((a) => a[1]));
-    if (!aliases.size) continue;
-    for (const m of src.matchAll(/\b([A-Za-z_$][\w$]*)\??\.([A-Za-z_$][\w$]*)\s*\(/g)) {
-      if (aliases.has(m[1])) calls.push({ shape: 'alias', file, line: lineOf(src, m.index), method: m[2] });
-    }
-  }
-  return calls;
-}
+const FILES = workerSources(SRC);
+const hqToBranchCalls = () => harvestHqToBranch(FILES);
+const branchToHqCalls = () => harvestBranchToHq(FILES);
 
 // ── the sites that exist today — the floor under every harvest ────────────
 //

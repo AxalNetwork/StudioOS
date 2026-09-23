@@ -42,6 +42,7 @@ import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import { SWITCH_TONE, setByLabel, operatorLine } from '../../lib/platformSwitches';
+import { liveChip, residencyLine } from '../../lib/deployTimeline';
 
 // Re-exported, not redeclared: Platform → Switches draws the same tones, and
 // the list lives once in lib/platformSwitches.js (D203).
@@ -257,21 +258,6 @@ export function perMinute(hits, minutes) {
   return v >= 10
     ? v.toLocaleString(undefined, { maximumFractionDigits: 0 })
     : v.toLocaleString(undefined, { maximumSignificantDigits: 2 });
-}
-
-/**
- * The live read of one branch, as one chip. A branch that ANSWERS while its
- * own health read reports its database failing is not "answering" in any
- * sense an operator cares about: it replied to say it cannot serve. Before
- * D202 that case drew green.
- */
-export function liveChip(d) {
-  if (d.live_state === 'ok' && d.live?.db_ok === false) {
-    return ['database failing', 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'];
-  }
-  if (d.live_state === 'ok') return ['answering', 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300'];
-  if (d.live_state === 'not_deployed') return ['no binding yet', 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'];
-  return ['unreadable', 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'];
 }
 
 /**
@@ -694,8 +680,7 @@ export default function PlatformPage() {
                       )}
                       <div className="mt-0.5 text-[11px] text-axal-faint">
                         {d.d1_name}
-                        {d.d1_jurisdiction ? ` · ${d.d1_jurisdiction.toUpperCase()} resident` : ''}
-                        {!d.d1_jurisdiction && d.location_hint ? ` · hinted ${d.location_hint.toUpperCase()} (not guaranteed)` : ''}
+                        {residencyLine(d) ? ` · ${residencyLine(d)}` : ''}
                         {d.status_note ? ` · ${d.status_note}` : ''}
                       </div>
                       {/* D163 — WHAT HQ TRIED, beside what the branch says
@@ -739,6 +724,22 @@ export default function PlatformPage() {
                   {deps.coverage.answered} of {deps.coverage.total} branches answered.
                 </p>
               )}
+              {/* D209 — H14, the zone's detail: what HQ can read and through
+                  what, stated from HQ's own config rather than drawn. A link
+                  and not a sidebar row (the HQ group is eleven rows by
+                  design), with a literal `to` so the reachability walk counts
+                  it. */}
+              <Link
+                to="/admin/platform/topology"
+                className="mt-3 block rounded-xl border border-axal-hairline bg-axal-ground px-3 py-2 hover:border-axal-violet dark:hover:border-violet-700"
+                data-testid="hq-deployments-topology-link"
+              >
+                <div className="text-[12.5px] font-bold text-axal-ink dark:text-white">Topology</div>
+                <div className="mt-0.5 text-[11px] leading-relaxed text-axal-faint">
+                  What HQ can read, and through what: its bindings, the calls in both directions, and what every
+                  Worker shares.
+                </div>
+              </Link>
             </Zone>
 
             {/* D202 — H17 P5: four stats, then D161's traffic table under them.

@@ -31,15 +31,18 @@
 // its buttons is a lie — and it is worse here than usual, because the whole
 // point of this artboard is to answer "who owns this?" on the page.
 //
-// NO NEW `/api/*` METHOD. Two reads the branch already has: `myLicence()` for
-// the pushed copy and its stamp, `branchInsights()` for the role breakdown
-// (which that route computed and dropped until D155).
+// THREE READS, EACH WITH ITS OWN STATE. `myLicence()` for the pushed copy and
+// its stamp, `branchInsights()` for the role breakdown (which that route
+// computed and dropped until D155), and — since D209 — `branchDeployment()`
+// for S14, the one `/api/*` method this page added: what this Worker is and
+// what it is not, answered from the same service HQ's Topology page reads.
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Settings, Lock } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, Unrecorded, Unreadable } from '../../ui';
+import { TopologyTag, RpcSide } from '../../components/TopologyParts';
 import BranchZone from './BranchZone';
 
 const UNAVAILABLE = Symbol('unavailable');
@@ -84,23 +87,159 @@ function Row({ field, value, reason, who, act, actTo }) {
   );
 }
 
+/**
+ * S14 · THIS DEPLOYMENT (D209) — what this branch Worker is, and what it is not.
+ *
+ * WHY IT IS ON SETTINGS. The canvas draws S14 as the architecture every
+ * S-screen honours, stated once; Settings is the one branch page whose subject
+ * is what this branch IS rather than what it holds. It renders
+ * `GET /api/branch/deployment`, which answers from `services/topology.ts` —
+ * the service HQ's Topology page reads too — so the two tiers cannot describe
+ * one architecture two ways.
+ *
+ * WHAT THE CANVAS GOT WRONG, AND THIS DOES NOT REPEAT. S14 drew the branch as
+ * deployed by the push-to-main workflow (it is provisioned once, and nothing
+ * deploys it again), its entrypoint as "accounts, queues, statement, audit"
+ * (HQ may call twelve methods, listed from the class), and its search index
+ * under the wrong name. Every one of those now comes off the payload.
+ *
+ * THE "CANNOT" LIST IS READ, NOT RECITED. Two of S14's three refusals depend
+ * on what this Worker was given — a hand-added binding, a pair of SQL API
+ * credentials — so the service checks each one here and says which way it came
+ * out. One that stopped holding is drawn as such, with its reason, and never
+ * as a tick.
+ */
+export function DeploymentZone({ dep }) {
+  const own = (dep?.bindings || []).filter((b) => !b.shared);
+  const missing = own.filter((b) => !b.present);
+  const a = dep?.analytics || {};
+  const g = dep?.ai_gateway || {};
+  const hq = dep?.links?.hq;
+  const others = dep?.links?.branches || [];
+  const cannot = dep?.cannot || [];
+  return (
+    <section className="mt-6" data-testid="s14-deployment">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-[16px] font-extrabold tracking-tight">This deployment</h2>
+        <span className="font-mono text-[11px] text-axal-faint" data-testid="s14-identity">
+          {dep?.hostname} · {dep?.worker}
+        </span>
+      </div>
+      {/* THE BINDING COUNT IS READ, NOT RECITED: a hand-added BRANCH_ line, or
+          a missing HQ one, makes "one service binding, to HQ" untrue here. */}
+      <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-axal-muted" data-testid="s14-summary">
+        This branch is its own Worker over its own database.{' '}
+        {!hq?.bound
+          ? 'It holds no binding to HQ'
+          : others.length === 0
+            ? 'It holds one service binding, to HQ'
+            : `It holds a binding to HQ and ${others.length === 1 ? 'one to another branch' : `${others.length} to other branches`}, which a generated config never writes`}
+        , and exports one entrypoint HQ may call. Every page here reads this branch&rsquo;s own database.
+      </p>
+
+      <div className="mt-3 grid gap-3 lg:grid-cols-3">
+        <Card>
+          <h3 className="text-[13px] font-extrabold tracking-tight">Its own resources</h3>
+          <div className="mt-2 flex flex-wrap gap-1.5" data-testid="s14-own">
+            {own.map((b) => (
+              <TopologyTag key={b.name} muted={!b.present}>
+                {b.name}{b.resource ? ` · ${b.resource}` : ''}
+              </TopologyTag>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-axal-faint" data-testid="s14-own-note">
+            {missing.length === 0
+              ? `All ${own.length} are present on this Worker, and every one is this branch's alone.`
+              : `Declared and not present on this Worker: ${missing.map((b) => b.name).join(', ')}.`}
+            {' '}Where the database sits was chosen at provisioning and is recorded at HQ, not here.
+          </p>
+        </Card>
+
+        <Card>
+          <h3 className="text-[13px] font-extrabold tracking-tight">The one binding · HQ</h3>
+          <p className="mt-1 text-[11.5px] leading-relaxed text-axal-muted" data-testid="s14-hq-link">
+            {hq?.bound
+              ? `Bound to HQ's ${hq.service} Worker, through ${hq.entrypoint}.`
+              : 'No HQ binding is present on this Worker, so nothing this branch raises can reach HQ.'}
+          </p>
+          <div className="mt-1 divide-y divide-axal-hairline">
+            <RpcSide side={dep?.rpc?.exports} heading="HQ calls this branch" exportedBy="this branch" />
+            <RpcSide side={dep?.rpc?.calls} heading="This branch calls HQ" exportedBy="HQ" />
+          </div>
+        </Card>
+
+        <Card>
+          <h3 className="text-[13px] font-extrabold tracking-tight" data-testid="s14-analytics-head">
+            {a.readable_here ? 'Writes to, and can read' : 'Writes to, cannot read'}
+          </h3>
+          <div className="mt-2 font-mono text-[11px] font-bold">Analytics Engine · {a.dataset}</div>
+          <ul className="mt-1 space-y-0.5 text-[11px] leading-snug text-axal-muted">
+            {(a.written_here || []).map((w) => (
+              <li key={w}>This branch writes {w.charAt(0).toLowerCase() + w.slice(1)}</li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-[11px] leading-snug text-axal-faint" data-testid="s14-gateway">
+            {g.carries_metadata
+              ? 'Each model call carries metadata naming this branch.'
+              : 'No model call carries metadata naming this branch, so gateway spend cannot be split by branch.'}
+          </p>
+          <div className="mt-3 text-[11px] font-extrabold uppercase tracking-[.06em] text-axal-faint">
+            What this Worker cannot do
+          </div>
+          <ul className="mt-1 space-y-2">
+            {cannot.map((c) => (
+              <li key={c.what} data-testid="s14-cannot" data-holds={c.holds ? 'yes' : 'no'} className="text-[11px] leading-snug">
+                <div className="flex flex-wrap items-baseline gap-1.5">
+                  <b>{c.what}</b>
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-[9.5px] font-bold uppercase ${
+                      c.holds
+                        ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                    }`}
+                  >
+                    {c.holds ? 'holds here' : 'does not hold here'}
+                  </span>
+                </div>
+                <div className="mt-0.5 text-axal-muted">{c.why}</div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      </div>
+
+      {dep?.deploys?.branch_redeployed === false && dep.deploys.branch_deployed_by && (
+        <p className="mt-3 max-w-2xl text-[11.5px] leading-relaxed text-axal-faint" data-testid="s14-deployed-once">
+          Deployed once, by <span className="font-mono">{dep.deploys.branch_deployed_by}</span>. Nothing deploys a
+          branch a second time, so this Worker runs the code it was provisioned with.
+        </p>
+      )}
+    </section>
+  );
+}
+
 export default function BranchSettings({ user }) {
   const [licence, setLicence] = useState(null);
   const [insights, setInsights] = useState(null);
+  const [deployment, setDeployment] = useState(null);
 
   const load = useCallback(() => {
     setLicence(null);
     setInsights(null);
-    // TWO READS, TWO STATES. A failed licence read must not empty the staff
-    // row and vice versa: they answer different questions and one being
-    // unreadable is not evidence about the other.
+    setDeployment(null);
+    // THREE READS, THREE STATES. A failed licence read must not empty the
+    // staff row and vice versa: they answer different questions and one being
+    // unreadable is not evidence about the other. The deployment read is the
+    // same rule a third time — it describes this Worker, not its records.
     api.myLicence().then(setLicence, (e) => { reportError('branch-settings:licence', e); setLicence(UNAVAILABLE); });
     api.branchInsights().then(setInsights, (e) => { reportError('branch-settings:insights', e); setInsights(UNAVAILABLE); });
+    api.branchDeployment().then(setDeployment, (e) => { reportError('branch-settings:deployment', e); setDeployment(UNAVAILABLE); });
   }, []);
   useEffect(() => { load(); }, [load]);
 
   const lic = licence && licence !== UNAVAILABLE ? licence.licence || null : null;
   const ins = insights && insights !== UNAVAILABLE ? insights : null;
+  const dep = deployment && deployment !== UNAVAILABLE ? deployment : null;
   const asOf = stamp(licence && licence !== UNAVAILABLE ? licence.as_of || lic?.pushed_at : null);
   const copyNote = asOf ? `copy as of ${asOf}` : 'copy with no push stamp';
 
@@ -226,6 +365,9 @@ export default function BranchSettings({ user }) {
       : 'Territories: not read',
     staffLine ? `Staff: ${staffLine}` : 'Staff breakdown: not read',
     ownerCount,
+    dep
+      ? `This deployment: ${dep.worker}, ${(dep.cannot || []).filter((c) => c.holds).length} of ${(dep.cannot || []).length} refusals hold`
+      : 'This deployment: not read',
   ];
 
   return (
@@ -282,6 +424,16 @@ export default function BranchSettings({ user }) {
           which is the link above. Drawing an Edit beside a field the server refuses is what this page exists
           not to do.
         </p>
+
+        {deployment === null && (
+          <p className="mt-6 text-[12.5px] text-axal-muted">Reading this deployment…</p>
+        )}
+        {deployment === UNAVAILABLE && (
+          <div className="mt-6">
+            <Unreadable what="This deployment's description" claim="This is not a claim that anything is unbound." onRetry={load} />
+          </div>
+        )}
+        {dep && <DeploymentZone dep={dep} />}
       </div>
     </BranchZone>
   );

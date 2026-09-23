@@ -20477,3 +20477,255 @@ both suites for every mutation, and restored every file by sha256:
 rides `subject_ref`, which migrations 259 and 261 already declare on both
 escalation tables. **285 is still the next free migration, and D209 the next
 decision.**
+
+## D209
+
+**HQ's Platform gains a Topology page (H14), and a branch's Settings gains
+"This deployment" (S14). Both state the architecture the other screens sit on,
+once per tier, and both answer from one service, so the two tiers cannot
+describe it two ways. Every structural fact on either screen is a literal that
+a test holds to the file that decides it — `wrangler.toml`, the RPC classes,
+the generator, the workflows, `index.ts` — and every fact that depends on what a
+Worker was given is read from its `env` on the request. The canvases, measured
+against the code, got most of this wrong; the table below is the correction.**
+
+#313. **No migration.** There are **two new routes and two new `api.js`
+methods**, each with its route in this commit. `frontend/src` changes, so
+`docs/` is rebuilt. **Nothing retires**: the page is reached from Platform →
+Deployments by one literal link, and the HQ sidebar stays eleven rows (D146).
+
+### WHAT THE CANVASES SAID, AGAINST THE CODE
+
+H14 and S14 draw an architecture rather than read a store, so their whole risk
+is saying something untrue. Each claim below was measured before anything was
+drawn:
+
+| the canvas said | the code says |
+| --- | --- |
+| *"Access policy on /hq and /admin/\*"* | Cloudflare Access guards **two routes**, both KYC documents (`/api/kyc/admin/:userId/document` and its `/*`). `index.ts` records why it was taken off `/api/admin/*` |
+| *"GitHub Actions is the only thing that deploys anything"* | **three workflows** run `wrangler deploy` — the push-to-main job, `branch-provision.yml`, and `pr-preview.yml` — and the root `npm run deploy` deploys HQ from a checkout, migrations first |
+| *"no screen writes to Cloudflare directly"* | **three screens write Worker secrets** through the Cloudflare API — Integration keys, GitHub Sync and Stripe. None deploys code |
+| HQ exports `BranchEntrypoint` with *escalate · licence · templates · brandKit · partners* | it declares **escalate, licence, reportUsage, promoCeiling**. `templates`, `brandKit` and `partners` exist nowhere |
+| S14: HQ may call *"accounts, queues, statement, audit"* | `HqEntrypoint` declares **twelve** methods, and none has any of those names |
+| S14: the branch was *"deployed by cloudflare-worker-deploy.yml"* | that job ships HQ alone. A branch is deployed **once**, by `branch-provision.yml`, and **nothing deploys it again** (#356) |
+| S14: *"Vectorize studioos-fr"* | the index is **`axal-search-<code>`** (`derivedNames`, D105) |
+| *"Every worker writes events with index branch"* | the branch code rides in the **sixth blob** of the request point, not an index (D161); the first index stays the sampling key |
+| the dataset feeds *"statements · backlog trends · the anonymised median · the audit mirror"*, and a branch *"writes statements, backlog, audit mirror"* | the **median** is computed from each branch's `overview()` over its binding (D148); **guardrail counts** come from HQ's own database and are platform-wide (D152, D158); **statements** come from `reportUsage`, which nothing calls (#354). The **audit mirror** is in the dataset (D163), but HQ writes it about its own acts; a branch writes one point per metered request and nothing else |
+| AI Gateway: *"cf-aig-metadata {branch, user} on every call; a spend limit per branch"* | the gateway option carries **only the gateway id**, and only for **two task classes** (Eadwyn's turns and explanations). No call names a branch or a user, so no per-branch limit exists (#358) |
+| *"Tail Worker … Health on Deployments comes from this"* | Deployments reads health over **each branch's binding** (`health()`); the tail is a log sink |
+| *"DO · jurisdiction eu"* | the Durable Object jurisdiction is chosen at provisioning, recorded, and **applied nowhere** (#357) |
+| S14: *"No Analytics Engine SQL API"* and *"no binding to studioos-dach…"* as fixed facts | both **depend on what the Worker was given**: two secrets make the dataset readable from a branch (#360), and a hand-added `BRANCH_*` line would bind one. So both are checked on the deployment, not recited |
+| S14: *"No GITHUB_ACCESS_TOKEN — this worker cannot deploy anything"* | the refusal is **structural**: the one route that dispatches a deploy is HQ-only (D106), whatever secrets the Worker holds |
+| H14's *"HQ-only tables"* list | every migration ships to **every** database, so a table is HQ's by who writes it, not by where it exists. The list also named `branch_benchmarks`, which is the **branch's** copy (migration 256). It is not drawn |
+
+### WHAT SHIPPED
+
+- **`services/topology.ts`, new.** It holds two kinds of fact, kept apart:
+  - **Structural literals**, each held by the worker test to its source:
+    - `BINDINGS` — fourteen, with what `[env.production]` names each and what
+      a branch's generated config names it;
+    - `RPC_SURFACE` — both classes, method for method, each with whether
+      anything calls it across the tier boundary and whether it takes a
+      secret;
+    - `AE_READERS` and `NOT_FROM_ANALYTICS`;
+    - `DEPLOY_WORKFLOWS`, `DEPLOY_BY_HAND` and `BRANCH_DEPLOYED_BY`;
+    - `SECRET_WRITERS` and `CF_ACCESS_PATHS`;
+    - `branchResourceNames(code)`, held equal to the generator's
+      `derivedNames` for several codes, because a Worker cannot import a
+      script.
+  - **Runtime facts** read from `env` on every request: which bindings are
+    present, which `BRANCH_*` bindings exist, whether the Analytics Engine
+    SQL credentials are set, where a secret write would land, whether a
+    deploy can be dispatched.
+  - `describeTopology(env)` is pure over `env`: no D1 read and no network, so
+    it cannot fail on a store. It never returns a secret value; every
+    credential is reduced to a boolean or to a script name.
+- **Two routes**:
+  - **`GET /api/admin/platform/topology`**, gated on `requireSuperAdmin`, so on
+    a branch it answers "HQ only".
+  - **`GET /api/branch/deployment`**, gated on `requireAdmin` and
+    `requireBranchTier` like every `/api/branch/*` read. It is not
+    suspension-gated, because reads never are (D130).
+- **Four consolidations**, each forced by a second reader:
+  - **`aeReadable`**: `aeSql` refuses on it and both screens report it, so
+    "can read Analytics Engine here" has one definition;
+  - **`GATEWAY_TASKS` and `advisorGatewaySlug`**, exported from `aiRouter.ts`,
+    so the page does not keep its own copy of which calls use the gateway;
+  - **`secretWriteTarget`**, which asks `resolveConfig` rather than re-deriving
+    the script;
+  - **the RPC harvest**, moved from D207's test into
+    **`scripts/lib/rpcSurface.mjs`**. That test's assertions are unchanged.
+- **`pages/hq/PlatformTopologyPage.jsx`, new, at `/admin/platform/topology`.**
+  It has four zones:
+  - who deploys what, and whether HQ can dispatch;
+  - HQ's Worker: its own bindings, both RPC sides, Access and the secret
+    writers;
+  - one box per branch, from the registry and the live read Deployments
+    already makes;
+  - what every Worker shares.
+
+  Both reads have their own state. Under the view-as overlay (D153) the page
+  says it is HQ's own and is not narrowed.
+- **`TopologyParts.jsx`** holds `TopologyTag` and `RpcSide`, which both tiers
+  draw. An uncalled method is a dashed chip beside a sentence saying so, and a
+  method that takes a secret says `· secret`.
+- **`BranchSettings.jsx` gains `DeploymentZone`**, S14. It draws:
+  - the Worker's identity and its own resources, and which are missing;
+  - its HQ binding and both RPC sides;
+  - what it writes to the shared dataset, and whether it can read it back;
+  - the gateway line;
+  - **the cannot-list, each item checked on this deployment**. One that has
+    stopped holding is drawn in amber, with its reason, never as a tick.
+
+  The summary line and the analytics heading are derived from the payload
+  rather than written as fixed sentences.
+- **`lib/deployTimeline.js`** gains **`liveChip`**, moved from `PlatformPage`
+  unchanged, and **`residencyLine`**, lifted from an inline expression. Both
+  now have two readers.
+
+### THE JUDGEMENT CALLS, EACH CHEAP TO STRIKE
+
+1. **A page reached from Deployments, not a zone on Platform.** Platform is
+   long already, and H14 is a whole artboard. *Strike it and the four zones
+   render under Deployments on Platform.*
+2. **S14 lives on Settings.** Settings is the one branch page whose subject is
+   what the branch is rather than what it holds, and the branch sidebar is
+   the canvas's eight rows. *Strike it and S14 becomes its own route and a
+   ninth row, which is a decision about that sidebar (#322 is already one).*
+3. **Structural facts are literals held by a test, not read at runtime.** A
+   deployed Worker carries neither `wrangler.toml` nor the workflows, so
+   there is nothing to read them from. *Strike it and a build step generates
+   the literals from the sources, which moves the check from a test to a
+   generator.*
+4. **The cannot-list is read, not recited.** Two of S14's three refusals
+   depend on the Worker's own secrets and bindings. *Strike it and all three
+   are fixed sentences, false on the first branch someone binds by hand.*
+5. **No HQ-only table list.** A table exists wherever the migrations ran;
+   "HQ's" describes who writes it. *Strike it and the list returns,
+   corrected, as a list of who writes what.*
+
+### CORRECTIONS WHILE BUILDING
+
+- **A branch box that was still loading said the topology "could not be
+  read."** The links have three states now: loaded, unreadable and still
+  reading. Each renders its own sentence.
+- **Four sentences on S14 were typed rather than read**, and each would have
+  been false on some deployment:
+  - the summary asserted "one service binding, to HQ";
+  - the analytics heading always said "cannot read";
+  - the deployed-by line named the workflow in the page;
+  - the shared card said AI was "bound as AI" even where the binding was
+    absent.
+
+  The first two are derived. The deployed-by line reads `BRANCH_DEPLOYED_BY`,
+  which the test holds to the one deploy line that reads a generated branch
+  config. The shared card draws a present binding and a declared-but-absent
+  one differently.
+- **The trigger strings read "Runs on run by hand".** They are rewritten to be
+  read after the word "Runs", and the test holds each one to its workflow's
+  `on:` keys.
+- **Two of my own guards were wrong before they ran:**
+  - A body scan of `gatewayOptionFor` took the braces of its **return type**
+    for the body, so it read the type instead of the code. A body finder that
+    skips the balanced parameter list and takes the first brace that ends a
+    line replaced it.
+  - A banned-literal scan forbade the phrase "wrangler deploy", which the
+    page's own section label uses legitimately, and which the deploy test
+    backs.
+- **Two mutations escaped, and both were my assertions rather than the
+  code:**
+  - Passing `[]` instead of `null` for an unreadable topology survived.
+    `BranchBoxes` was tested with all four states, but nothing read how the
+    page **maps** its own three states onto them. That mapping is the one
+    place where "could not be read" turns into "HQ holds no binding". The page
+    loads in an effect, so a render never gets past "still reading". The test
+    reads the expression off the one element that receives it.
+  - Deleting the view-as note survived, because nothing asserted it existed.
+    It is the sentence that stops a reader who arrived viewing as one branch
+    from taking HQ's page for that branch's. A new test holds the note to the
+    shell's view-as state.
+
+### DELIBERATELY NOT BUILT, AND FILED
+
+- **Any new health read.** The branch boxes reuse Deployments' own read.
+- **Three new absences, all filed and stated on screen rather than drawn as
+  present:**
+  - **gateway metadata** (#358);
+  - **a DO jurisdiction** (#357);
+  - **a branch redeploy** (#356).
+- **Gating the three secret-writing screens to the holder** (#359). They are
+  open to any admin today, and the page states which screens write.
+- **Stopping a branch reading the shared dataset** (#360). S14 says which way
+  it came out on the deployment.
+- **The worker package's own `deploy` script**, which omits `--env
+  production` and has no `predeploy` (#361). The page names the root script,
+  which has both.
+- **Four declared RPC methods nothing calls** (#354; the licence pull is
+  #342). The page draws them dashed rather than hiding them.
+
+### VERIFIED
+
+`npm run test:drift` exits **0**, read as the exit code from a redirected log.
+Counts:
+
+- frontend 2994 → **3011**: the seventeen tests in
+  `topology_h14_s14.test.mjs`;
+- worker 3897 → **3917** — 3914 pass plus the same 3 pre-existing
+  environment-gated skips: the twenty tests in `topology_d209.test.ts`;
+- retention **47**, unchanged: `rpcEntrypoints.test.mjs` keeps its test
+  count, now reading the harvest from `scripts/lib/rpcSurface.mjs`;
+- zero `not ok`.
+
+All thirty-seven new tests were confirmed **by name** in the log. Each file
+draws one test per RPC direction from a loop, and those four were matched by
+their expanded names. Both typechecks, `lint:undef`,
+`check-api-drift` (two new methods, each with its route), `check-decision-ids`
+(D1 → **D209**), `check-folder-docs`, `check-sql-prepare`,
+`check-unused-imports`, `check-react-hook-imports`, `check-frontend-logging`
+and `check-dark-mode` all exit 0.
+
+`docs/` was rebuilt on the no-ledger path: the local retention ledger was
+moved aside first, so a stale one could not decide the window (#333).
+`check-docs-fresh --strict`, `prerender-og --check` (31 routes) and
+`check-docs-assets-closure` (9,255 references across 932 chunks) all exit 0.
+A walk of every asset `main`'s committed shells reach found **606 of 606**
+still on disk.
+
+**30 mutations applied, 30 caught — two only after their assertion was
+fixed** (see CORRECTIONS). The harness pre-flighted all 31 anchors as unique
+and byte-changing before writing anything. It ran a clean baseline first, ran
+both suites for every mutation, and restored every file by sha256:
+
+- **the structural literals**: an uncalled method marked called; a
+  secret-taking method marked open; a `BINDINGS` entry dropped; the dataset
+  marked not shared; the canvas's search-index name; a fourth deploy
+  workflow; the canvas's branch deployer; a secret writer dropped; the
+  canvas's Access path added;
+- **the runtime facts and the payload**: "Reach another branch" always
+  holding; the gateway claiming metadata; a secret value leaking into the
+  payload; an off-voice label;
+- **the gates and the consolidations**: `/topology` weakened to
+  `requireAdmin` in two edits; `requireBranchTier` dropped; `aeSql`'s
+  credential check dropped; the gateway task guard dropped;
+- **the shared pieces and the HQ page**: uncalled chips no longer dashed;
+  "· secret" dropped; an unreadable topology passed down as `[]`; the loading
+  line reading as a failure; "bound as" drawn regardless of presence; the
+  gateway line claiming metadata; the rail's coverage counting every binding;
+  the view-as note dropped;
+- **S14**: the summary made static; the analytics heading made static; the
+  deployer typed into the zone; a refusal drawn as holding regardless; the HQ
+  link claimed regardless.
+
+**Production, read-only, schema only.** The Cloudflare connector is
+authorized in this session, so the read-back owed since D203 and D206 was
+made; the response itself reported `changed_db: false` and `rows_written: 0`:
+
+- `283_platform_switches.sql` applied **2026-09-23 12:27:45**, which is
+  D203's deploy, and the `platform_switches` table exists;
+- `284_branch_licence_kind.sql` applied **2026-09-23 17:37:45**, which is
+  D206's deploy, and `branch_licence.kind` exists;
+- the ledger holds **287 rows against 287 migration files on `main`** —
+  nothing pending, nothing orphaned.
+
+D209 adds no migration, so nothing further is owed in D1. **285 is still the
+next free migration, and D210 the next decision.**
