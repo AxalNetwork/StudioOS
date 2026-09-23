@@ -30,6 +30,7 @@ import {
   publishBenchmarks, median, MIN_BRANCHES, METRICS, currentPeriod,
 } from '../src/services/branchBenchmarks.ts';
 import { applyBenchmarks } from '../src/rpc/branchOps.ts';
+import { weekAxis } from '../src/services/activeAccounts.ts';
 import branchInsights from '../src/routes/branch_insights.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -98,8 +99,20 @@ function binding(overview: unknown, applied?: any[]) {
     async applyBenchmarks(p: any) { applied?.push(p); return { ok: true }; },
   };
 }
-const OV = (accounts: number, seats: number, backlog: number) => ({
-  accounts: { total: accounts }, seats_used: seats, backlog: [{ count: backlog }],
+/**
+ * One branch's overview, in the shape `branchOverview()` RETURNS.
+ *
+ * D210 — this fixture used to write `backlog` as an array of lanes, which is
+ * not what the producer returns (`{ count, oldest_at } | null`). The metric
+ * reader was written to the same wrong shape, so the test passed while
+ * `approvals_backlog` could never be published against a real branch.
+ * `analytics_d210.test.ts` now feeds the real producer's output to the same
+ * readers, so the two cannot drift apart again.
+ */
+const WEEK = weekAxis(new Date().toISOString(), 2).last_complete;
+const OV = (accounts: number, seats: number, backlog: number, active: number | null = null) => ({
+  accounts: { total: accounts }, seats_used: seats, backlog: { count: backlog, oldest_at: null },
+  active_accounts_week: active, active_accounts_week_of: WEEK,
 });
 
 const app = new Hono<any>();
@@ -147,9 +160,9 @@ test('THREE branches publish, and every row carries the n it was computed over',
   const pushed: any[] = [];
   const env = {
     ...HQ,
-    BRANCH_FR: binding(OV(10, 6, 2), pushed),
-    BRANCH_DE: binding(OV(20, 12, 4), pushed),
-    BRANCH_ES: binding(OV(30, 18, 9), pushed),
+    BRANCH_FR: binding(OV(10, 6, 2, 5), pushed),
+    BRANCH_DE: binding(OV(20, 12, 4, 9), pushed),
+    BRANCH_ES: binding(OV(30, 18, 9, 14), pushed),
   } as any;
   const r = await publishBenchmarks(env, '2026-Q3');
   assert.equal(r.answered, 3);
@@ -159,9 +172,12 @@ test('THREE branches publish, and every row carries the n it was computed over',
   assert.equal(byKey.accounts_total.median_value, 20);
   assert.equal(byKey.seats_used.median_value, 12);
   assert.equal(byKey.approvals_backlog.median_value, 4);
+  assert.equal(byKey.active_accounts_week.median_value, 9);
   for (const row of r.rows) {
     assert.equal(row.n_branches, 3, 'a median with no denominator implies a population it does not know');
-    assert.equal(row.period, '2026-Q3');
+    // A weekly metric is stamped with the Monday it measured; the rest with
+    // the quarter.
+    assert.equal(row.period, row.metric_key === 'active_accounts_week' ? WEEK : '2026-Q3');
   }
   // AND IT REACHED EVERY BRANCH. A computation with no push is the #252 defect
   // in a new place.
@@ -187,6 +203,25 @@ test('an UNREADABLE branch is excluded from n, never counted as a zero', async (
   assert.equal(accounts.median_value, 20);
 });
 
+test('a branch with NO weekly figure is left out of that median, never counted as a zero', async () => {
+  // `active_accounts_week` is null when a branch's log began inside the week
+  // (D210): four days are not a week's figure. `Number(null)` is 0, so a reader
+  // that coerced before checking would count that branch as having nobody
+  // active — and with [0,5,9,14] the median is 7, not 9. The branch names the
+  // right Monday, so only the reader stands between it and the median.
+  const env = {
+    ...HQ,
+    BRANCH_FR: binding(OV(10, 6, 2, 5)),
+    BRANCH_DE: binding(OV(20, 12, 4, 9)),
+    BRANCH_ES: binding(OV(30, 18, 9, 14)),
+    BRANCH_IT: binding(OV(40, 24, 1, null)),
+  } as any;
+  const r = await publishBenchmarks(env, '2026-Q3');
+  const weekly = r.rows.find((x) => x.metric_key === 'active_accounts_week')!;
+  assert.equal(weekly.n_branches, 3, 'the branch with no figure is not in the denominator');
+  assert.equal(weekly.median_value, 9);
+});
+
 test('the threshold is applied PER METRIC, not once per fan-out', async () => {
   // Three branches answer, but only two have a readable backlog. Accounts and
   // seats publish; the backlog median would be over two and does not.
@@ -206,7 +241,7 @@ test('revenue is NOT a published metric, because no branch returns one', () => {
   const keys = METRICS.map((m) => m.key);
   assert.ok(!keys.some((k) => /revenue|money|cents/i.test(k)),
     'branchOverview returns revenue_mtd_cents null by construction; a median of it would be a median of nothing');
-  assert.deepEqual(keys.sort(), ['accounts_total', 'approvals_backlog', 'seats_used']);
+  assert.deepEqual(keys.sort(), ['accounts_total', 'active_accounts_week', 'approvals_backlog', 'seats_used']);
 });
 
 test('the publisher refuses to run on a branch', async () => {

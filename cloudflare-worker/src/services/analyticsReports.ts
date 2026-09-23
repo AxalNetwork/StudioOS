@@ -13,6 +13,10 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { MIRROR_KIND } from './auditMirror';
 import {
+  aeLoggedRequestPredicate, foldDailyActives,
+  type ActiveFold, type WeekAxis,
+} from './activeAccounts';
+import {
   loadPlanPriceMap, priceFor, ensureSubscriptionPlansSchema,
   loadFxRates, convertFromUsd,
   type PlanPricing,
@@ -785,6 +789,13 @@ const HTTP_ROWS_ONLY = "blob1 LIKE '/%'";
  * non-OK response, a throw. Callers must treat `null` as "could not read" and
  * NOT as "no traffic" — those are different claims and the surfaces render
  * them differently.
+ *
+ * D210 — A 200 WITH NO `data` ARRAY IS A FAILURE TOO. It used to come back as
+ * `[]`, which every caller reads as "the store answered and holds nothing":
+ * the traffic split would have printed "no branch has traffic yet" and the
+ * weekly active-account read would have drawn a platform with nobody on it,
+ * both about a response that did not say either thing. An answer this reader
+ * cannot understand is not an empty answer.
  */
 async function aeSql(
   env: Env,
@@ -804,7 +815,7 @@ async function aeSql(
     );
     if (!res.ok) return null;
     const json = await res.json() as { data?: Array<Record<string, unknown>> };
-    return Array.isArray(json.data) ? json.data : [];
+    return Array.isArray(json.data) ? json.data : null;
   } catch {
     return null;
   }
@@ -1032,6 +1043,104 @@ export async function loadBranchActionMirror(
       count: num(r.n as number),
       last_at: r.last_at ? str(r.last_at as string) : null,
     })),
+  };
+}
+
+/**
+ * D210 — the most rows one weekly read may return. Each row is one account (or
+ * the anonymous `0`) on one branch on one day, so this is roughly a year of
+ * the platform at today's size. Past it the read is cut OLDEST-first (the query
+ * orders newest first), and the weeks it did not reach are blanked with that
+ * reason rather than drawn short.
+ */
+export const AE_ACTIVE_ROW_CAP = 10000;
+
+export type ActiveAccountsRead =
+  | { available: false; reason: string; as_of: string }
+  | { available: true; as_of: string; fold: ActiveFold; cap_day: string | null; row_cap: number };
+
+/**
+ * D210 — signed-in accounts per branch per week, as HQ reads them (H15).
+ *
+ * ONE ROW PER ACCOUNT PER BRANCH PER DAY, folded into weeks in
+ * `foldDailyActives`. The reasons are there: `toStartOfWeek()`'s first day is
+ * not documented, and neither is a distinct count. `toStartOfDay()`, `count()`
+ * and `sum(_sample_interval)` are — the last is the documented way to see
+ * sampling, and a sampled read makes every distinct count a floor, which the
+ * page must say.
+ *
+ * THE WHERE CLAUSE IS `activityLogged()`, NOT A SECOND IDEA OF ACTIVITY. It is
+ * built from the list the middleware reads, so a branch's line here and that
+ * branch's own count from `activity_logs` describe the same requests.
+ *
+ * ANONYMOUS ROWS ARE READ ON PURPOSE. They count nobody, but they date the
+ * store: the earliest day anything was recorded is how the page knows where the
+ * store's history begins inside the window, and a week before that is blank
+ * rather than zero.
+ *
+ * SUPER ADMIN ONLY BY ITS CALLER, and it has to be: grouped by blob6, this is
+ * every branch's figures side by side — exactly what `loadTrafficByBranch`'s
+ * header says a branch admin must not read (D133's rule).
+ */
+export async function loadActiveAccountsByBranchWeek(env: Env, axis: WeekAxis): Promise<ActiveAccountsRead> {
+  const as_of = new Date().toISOString();
+  if (!aeReadable(env)) {
+    return {
+      available: false,
+      as_of,
+      reason:
+        'This Worker holds no Analytics Engine read credential (CLOUDFLARE_ACCOUNT_ID and '
+        + 'CLOUDFLARE_AE_API_TOKEN), so the dataset every branch writes to cannot be read here. '
+        + 'That is not a count of zero.',
+    };
+  }
+  // The bounds are interpolated, because the SQL API has no binding. They can
+  // only be what `weekAxis` builds; the shape is checked anyway, so a future
+  // caller that passes something else is refused rather than sent.
+  const SHAPE = /^\d{4}-\d{2}-\d{2} 00:00:00$/;
+  if (!SHAPE.test(axis.from) || !SHAPE.test(axis.to)) {
+    throw new Error('loadActiveAccountsByBranchWeek takes the bounds weekAxis builds, and nothing else');
+  }
+  const sqlText = `
+    SELECT toStartOfDay(timestamp) AS day,
+           blob6 AS branch,
+           double3 AS uid,
+           count() AS n,
+           sum(_sample_interval) AS weight
+    FROM ${aeDataset(env)}
+    WHERE timestamp >= toDateTime('${axis.from}')
+      AND timestamp < toDateTime('${axis.to}')
+      AND ${aeLoggedRequestPredicate()}
+    GROUP BY day, branch, uid
+    ORDER BY day DESC
+    LIMIT ${AE_ACTIVE_ROW_CAP}
+  `.trim();
+  const data = await aeSql(env, sqlText);
+  if (data === null) {
+    return {
+      available: false,
+      as_of,
+      reason:
+        'Analytics Engine did not answer, or answered in a shape this page cannot read, so these '
+        + 'are not counts of zero.',
+    };
+  }
+  const fold = foldDailyActives(data, axis);
+  if (!fold) {
+    return {
+      available: false,
+      as_of,
+      reason:
+        'Analytics Engine answered with a day this page could not read, so the weeks cannot be '
+        + 'built from it. Nothing is drawn rather than a chart with holes nobody can see.',
+    };
+  }
+  return {
+    available: true,
+    as_of,
+    fold,
+    cap_day: data.length >= AE_ACTIVE_ROW_CAP ? fold.floorDay : null,
+    row_cap: AE_ACTIVE_ROW_CAP,
   };
 }
 

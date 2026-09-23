@@ -187,6 +187,7 @@ const BranchPrograms = lazy(() => import('./pages/branch/BranchPrograms'));
 const BranchCommunity = lazy(() => import('./pages/branch/BranchCommunity'));
 const BranchContracts = lazy(() => import('./pages/branch/BranchContracts'));
 const BranchInsights = lazy(() => import('./pages/branch/BranchInsights'));
+const BranchAnalytics = lazy(() => import('./pages/branch/BranchAnalytics'));
 // The Super Admin's HQ-only surfaces (migrations 199/207). `hqOnly` below
 // renders the notice for an admin without the elevation.
 const SuperAdminOnlyNotice = lazy(() => import('./pages/hq/SuperAdminOnlyNotice'));
@@ -198,6 +199,7 @@ const HqContentPage = lazy(() => import('./pages/hq/ContentPage'));
 const HqPlatformPage = lazy(() => import('./pages/hq/PlatformPage'));
 const HqPlatformSwitchesPage = lazy(() => import('./pages/hq/PlatformSwitchesPage'));
 const HqPlatformTopologyPage = lazy(() => import('./pages/hq/PlatformTopologyPage'));
+const HqAnalyticsPage = lazy(() => import('./pages/hq/HqAnalyticsPage'));
 const HqSecurityPage = lazy(() => import('./pages/hq/SecurityPage'));
 const HqSupportPage = lazy(() => import('./pages/hq/HqSupportPage'));
 const KYCPage = lazy(() => import('./pages/KYCPage'));
@@ -2244,6 +2246,9 @@ function AppInner() {
       <Route path="/branch/community" element={guard(['admin'], <BranchCommunity user={user} />)} />
       <Route path="/branch/contracts" element={guard(['admin'], <BranchContracts user={user} />)} />
       <Route path="/branch/insights" element={guard(['admin'], <BranchInsights user={user} />)} />
+      {/* D210 — S15, reached from Insights by a literal link and lit under its
+          row. Not suspension-gated: a frozen branch still reads where it stands. */}
+      <Route path="/branch/insights/analytics" element={guard(['admin'], <BranchAnalytics user={user} />)} />
       <Route path="/branch/settings" element={guard(['admin'], <BranchSettings user={user} />)} />
       {/* The HQ shell's Contracts and Team rows. Both frame panels the Admin
           Console already has (Legal templates; the Users table) for the
@@ -2253,6 +2258,9 @@ function AppInner() {
       {/* HQ · Home (canvas H1). The whole business on one screen; every
           per-subsidiary figure says Not recorded until accounts carry a licence. */}
       <Route path="/hq" element={guard(['admin'], hqOnly(<HqHomePage />))} />
+      {/* D210 — H15. Not a sidebar row: its artboard lights Home, and it is
+          reached from Home's Accounts tile by a literal link. */}
+      <Route path="/admin/analytics" element={guard(['admin'], hqOnly(<HqAnalyticsPage />))} />
       {/* HQ · Security (canvas Y2, decision A4). Four zones read their stores;
           four say what is not recorded. Force re-auth is the one write. */}
       <Route path="/admin/revenue" element={guard(['admin'], hqOnly(<HqRevenuePage />))} />

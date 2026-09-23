@@ -103,7 +103,7 @@ export default function BranchHome({ user }) {
     ? [
       `${measured.reduce((n, l) => n + l.count, 0)} open across ${measured.length} of ${lanes.length} local queues`,
       ...(prog && prog.open_week !== null ? [`cohort week ${prog.open_week} is open`] : []),
-      ...(rev && rev.share_bps !== null ? [`revenue share ${pctFromBps(rev.share_bps)}% on your licence`] : []),
+      ...(rev && rev.share_bps !== null ? [`revenue share owed to HQ ${pctFromBps(rev.share_bps)}% on your licence`] : []),
     ]
     : [];
 
@@ -123,8 +123,8 @@ export default function BranchHome({ user }) {
       <header className="mb-4">
         <h1 className="text-xl font-extrabold tracking-tight text-axal-ink">Home</h1>
         <p className="mt-1 text-[12.5px] text-axal-muted">
-          The territory&rsquo;s operating digest — what is waiting, what closes next, and what your
-          share of it is.
+          The territory&rsquo;s operating digest — what is waiting, what closes next, and what share
+          of its revenue goes to HQ.
         </p>
       </header>
 
@@ -281,8 +281,12 @@ export default function BranchHome({ user }) {
                 <div className="text-[20px] font-extrabold tabular-nums text-axal-ink">
                   {pctFromBps(rev.share_bps)}%
                 </div>
-                <div className="text-[11.5px] text-axal-muted">
-                  your share of this territory
+                {/* D210 — THIS IS HQ'S CUT, NOT THE BRANCH'S. The statement
+                    computes what is owed to HQ as gross times this rate, so
+                    labelling it "your share" told a branch it kept the part
+                    it pays. The complement is what the branch keeps. */}
+                <div className="text-[11.5px] text-axal-muted" data-testid="branch-home-revenue-rate">
+                  owed to HQ · you keep {pctFromBps(10000 - Number(rev.share_bps))}%
                   {rev.as_of ? ` · as HQ pushed it ${String(rev.as_of).slice(0, 10)}` : ''}
                 </div>
               </>

@@ -2,14 +2,11 @@ import type { MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
 import { getCurrentUser } from '../auth';
 import { branchOf } from '../util/branch';
-
-// Endpoints we don't want spamming activity_logs on every request.
-const SKIP_ACTIVITY_LOG_PATHS = [
-  '/api/health',
-  '/api/activity',                 // listing your own activity shouldn't write activity
-  '/api/monitoring/',              // monitoring polls would create infinite churn
-  '/api/dashboard/stats',
-];
+// D210 — which requests write an activity_logs row is decided in ONE place,
+// because both Analytics pages count "active accounts" from it: a branch reads
+// its own activity_logs, and HQ reads Analytics Engine through the same rule
+// written as a WHERE clause. The skip list moved there; it is not restated here.
+import { activityLogged } from '../services/activeAccounts';
 
 // Endpoints completely excluded from system_metrics — prevents the monitoring
 // dashboard's polling from inflating the very metrics it displays.
@@ -17,10 +14,6 @@ const SKIP_METRICS_PATHS = [
   '/api/health',
   '/api/monitoring/',
 ];
-
-function shouldLog(path: string) {
-  return path.startsWith('/api/') && !SKIP_ACTIVITY_LOG_PATHS.some(p => path === p || path.startsWith(p));
-}
 
 function shouldMeter(path: string) {
   return path.startsWith('/api/') && !SKIP_METRICS_PATHS.some(p => path === p || path.startsWith(p));
@@ -135,7 +128,7 @@ export const observabilityMiddleware = (): MiddlewareHandler<{ Bindings: Env }> 
         }
 
         // ---- write activity_logs row with latency / status ----
-        if (shouldLog(path) && status !== 429) {
+        if (activityLogged(path, status)) {
           try {
             await env.DB.prepare(
               `INSERT INTO activity_logs (action, details, actor, user_id, endpoint, method, status_code, latency_ms)

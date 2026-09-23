@@ -34,6 +34,7 @@ import { slaBand } from './hqOps';
 import { sha256Hex, verifySecret } from './secret';
 import { createJWT, loadSuperAdminFlag } from '../auth';
 import { likeNeedle } from '../util/likeSearch';
+import { activeAccountsInWeek, weekAxis } from '../services/activeAccounts';
 
 /** Every branch answer carries the code, because a binding does not (D.7). */
 export type BranchAnswer<T> = T & { branch: string; as_of: string };
@@ -63,6 +64,16 @@ export type BranchOverview = {
   revenue_mtd_cents: null;
   revenue_reason: string;
   suspended: boolean;
+  /**
+   * D210 — distinct signed-in accounts in the last COMPLETE week, counted from
+   * this branch's own `activity_logs` under `activityLogged()`'s rule, and the
+   * Monday that week began. HQ medians this across branches as
+   * `active_accounts_week`, and only across branches reporting the same Monday.
+   * `null` with its reason when the log is unreadable or began inside the week.
+   */
+  active_accounts_week: number | null;
+  active_accounts_week_of: string;
+  active_accounts_week_reason?: string;
 };
 
 /**
@@ -211,6 +222,8 @@ export async function branchOverview(env: Env): Promise<BranchAnswer<BranchOverv
 
   const { backlog, reason } = await backlogOf(env);
   const licence = await licenceCopy(env);
+  const weekOf = weekAxis(nowIso(), 2).last_complete;
+  const active = await activeAccountsInWeek(env, weekOf);
 
   // SEATS USED IS A SUM OF FOUR NUMBERS ALREADY IN HAND (D127), and the
   // definition is the product owner's rather than a measurement: a seat is a
@@ -240,6 +253,9 @@ export async function branchOverview(env: Env): Promise<BranchAnswer<BranchOverv
       'Revenue month-to-date for a territory needs the branch\'s own billing rows summed against the '
       + 'pushed revenue share. The reporting call that computes it is not built, so no figure is sent.',
     suspended: String(licence.status || '').toLowerCase() === 'suspended',
+    active_accounts_week: active.value,
+    active_accounts_week_of: weekOf,
+    ...(active.reason ? { active_accounts_week_reason: active.reason } : {}),
     branch,
     as_of: nowIso(),
   };

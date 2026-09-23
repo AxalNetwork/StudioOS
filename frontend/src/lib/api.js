@@ -3158,6 +3158,14 @@ export const api = {
       .filter(Boolean).join('&');
     return request(`/admin/hq/admins${qs ? `?${qs}` : ''}`);
   },
+  // D210 — H15 · Analytics. One weekly line per branch, and one for HQ's own
+  // deployment, of distinct signed-in accounts — read from Analytics Engine as
+  // counts, never as records. `range` is 8w, quarter or year; anything else is
+  // a 400 rather than eight weeks drawn under another label.
+  hqAnalytics: (range) => {
+    const r = String(range || '').trim();
+    return request(`/admin/hq/analytics${r ? `?range=${encodeURIComponent(r)}` : ''}`);
+  },
   // HQ · Revenue (canvas H5). D1 only — open disputes come from Stripe
   // through adminBillingListDisputes, read separately so an outage there
   // costs one zone rather than the page.
@@ -3313,6 +3321,13 @@ export const api = {
   // `pushed_at` and its own `n_branches`. `unavailable` names the three stats
   // S6 draws that have no branch-side source.
   branchInsights: () => request('/branch/insights'),
+  // D210 — S15 · Analytics. This branch over time from its own request log,
+  // the seats and decision ages it can measure, and each tile it cannot — with
+  // the reason on the payload. Same `range` vocabulary as `hqAnalytics`.
+  branchAnalytics: (range) => {
+    const r = String(range || '').trim();
+    return request(`/branch/analytics${r ? `?range=${encodeURIComponent(r)}` : ''}`);
+  },
   // D209 — S14: what this branch Worker binds, exports and calls, and the three
   // things it cannot do, each checked on this deployment rather than recited.
   branchDeployment: () => request('/branch/deployment'),

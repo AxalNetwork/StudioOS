@@ -163,6 +163,7 @@ export const AE_READERS = [
   'HQ · Analytics · Technical — the platform-wide request log, not split by branch',
   'HQ · Monitoring · traffic by branch — super admin only (D161)',
   'HQ · Platform · Deployments — HQ\'s own acts against each branch over thirty days (D163)',
+  'HQ · Analytics — signed-in accounts per branch per week, as counts; super admin only (D210)',
 ] as const;
 
 /**
