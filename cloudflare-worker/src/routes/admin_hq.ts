@@ -41,6 +41,7 @@ import { openEscalations } from '../rpc/hqOps';
 import type { BranchOverview, BranchAccountHit } from '../rpc/branchOps';
 import { FREEZING_STATUSES } from '../util/authErrors';
 import { ensureLastActiveColumn } from '../middleware/lastActive';
+import { ticketBacklog } from '../services/supportQueues';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -193,19 +194,16 @@ r.get('/overview', async (c) => {
 
   // The ticket queue is platform-wide, not per tenant (U1 again). An
   // unreadable table is reported as unreadable, not as an empty queue.
+  //
+  // D204 — THE READ LIVES IN `services/supportQueues.ts` NOW, beside the one
+  // definition of an open ticket that HQ Support also counts by. Two statements
+  // each deciding what "open" means is how this tile and the Support desk would
+  // come to disagree; there is one, and both pages call it.
   let queue: { available: true; by_status: Record<string, number>; open: number }
     | { available: false; reason: string };
   try {
-    const t = await env.DB.prepare(
-      'SELECT status, COUNT(*) AS n FROM tickets GROUP BY status',
-    ).all<{ status: string; n: number }>();
-    const byStatus: Record<string, number> = {};
-    for (const row of t.results || []) byStatus[String(row.status)] = Number(row.n) || 0;
-    queue = {
-      available: true,
-      by_status: byStatus,
-      open: (byStatus.open || 0) + (byStatus.in_progress || 0),
-    };
+    const b = await ticketBacklog(env);
+    queue = { available: true, by_status: b.by_status, open: b.open };
   } catch {
     queue = { available: false, reason: 'The tickets table could not be read on this database.' };
   }

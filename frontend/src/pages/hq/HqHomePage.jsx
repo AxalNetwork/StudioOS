@@ -313,7 +313,11 @@ export default function HqHomePage() {
           <Tile
             label="Queue backlog"
             value={ready && queue?.available ? num(queue.open) : null}
-            note={ready && queue?.available ? 'open + in progress, platform-wide' : 'tickets unreadable'}
+            // D204 — the same `open` Support splits into its queues, so the
+            // tile points at the desk that shows where each ticket landed.
+            note={ready && queue?.available
+              ? <>open + in progress, platform-wide · <Link to="/admin/hq-support" className="underline">by queue on Support</Link></>
+              : 'tickets unreadable'}
             tone={ready && queue?.available && queue.open > 20 ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink'}
           />
           <Tile

@@ -19442,3 +19442,195 @@ no-database test. It now reads the console after the release too, and the
 mutation fails the test that names it. The suite was re-run on those bytes.
 
 **Migration 284 is the next free number.**
+
+## D204
+
+**HQ Support reads what HQ records. The two ticket queues it called absent are
+derived from HQ's own database, each open ticket sorted by its requester's
+standing now; the tenant × queue matrix and the mirror strip are drawn; and
+every part answers for itself.**
+
+PR 1 of #311 (canvas H22, which draws Y1). **Nothing retires**: every `/admin/*`
+route stays reachable from the sidebar, and `admin_route_reachability.test.mjs`
+is not re-aimed.
+
+### WHAT WAS WRONG
+
+`/admin/hq-support` counted one queue — escalations, from `hq_escalations` —
+and marked the other two, *HQ-held users* and *subsidiary administrators filing
+about the Admin product*, **Not recorded**, on the ground that no ticket
+persona separated them. Every fact those queues need was already on HQ's
+database:
+
+- a ticket names its requester — the one INSERT (`routes/tickets.ts`) binds the
+  signed-in user, though the baseline leaves `tickets.user_id` nullable;
+- `users.role` and `users.is_active` say what that account is;
+- `licence_admins` (a UNIQUE index on `user_id`) says exactly which accounts
+  administer which licence.
+
+And every account — every subsidiary administrator included — lives on HQ's
+database today, because no branch has been provisioned. So the page refused
+figures its own store holds: the class D150 corrected on Home and D152 on
+Security, a third time.
+
+Two smaller defects sat on the same card. Its count was `items.length` of a
+list the escalations route caps at 100, so a long board was shown as exactly
+100; and its pill read *open* for `due_soon`, folding the band that most needs
+attention into the one that needs none.
+
+### WHAT SHIPPED
+
+- **`services/supportQueues.ts`** (new). `OPEN_TICKET_STATUSES = ['open',
+  'in_progress']` as a typed tuple, and **`ticketBacklog`, HQ Home's read moved
+  here verbatim**, so Home's Queue backlog tile and this page mean one thing by
+  an open ticket. `admin_hq.ts` calls it; its unreadable sentence stays its own.
+- **`personaOf`**, first match wins, and the order is the decision:
+  1. no account (`user_id` NULL, or the row gone) → *not on record*;
+  2. the account is closed → *closed account* — D145's terminate demotes,
+     deactivates and detaches, so without this bucket a terminated licence's
+     administrators would read as HQ-held users;
+  3. bound in `licence_admins` → *the Admin product* — **the binding beats the
+     role**, which covers D134's demote-then-detach window;
+  4. `role = 'admin'` with no licence → *HQ staff*, which is not a customer
+     queue;
+  5. anyone else → *HQ-held*.
+
+  **The licence kind is never read**: a white-label's administrators are still
+  administrators filing about the Admin product, which is where H30 puts them.
+  The five buckets foot to `ticketBacklog().open`, and the page says so under
+  the cards with the three outside buckets named.
+- **`openEscalationSummary`** (`rpc/hqOps.ts`) is now the one statement that
+  defines an open escalation; `openEscalations`, which HQ Home lists, returns
+  its oldest few. Ordered oldest first with `id` breaking ties.
+- **`GET /api/admin/hq-support`** (`routes/admin_hq_support.ts`,
+  `requireSuperAdmin`, mounted before the `/api/admin` catch-all) and one
+  `api.js` method, `hqSupport()`. Five reads, each with its own failure: an
+  unreadable escalation board costs the escalation queue and the matrix's
+  escalation cells, never the ticket queues. A read past its ceiling — 2,000
+  escalations, 5,000 tickets — answers `complete: false`, and its count **and**
+  its SLA bands are withheld rather than one of them shown as whole; the listed
+  items stay exact, because the read is ordered. The server sends ages in hours
+  (`ageHours`), so the page never parses a SQL stamp.
+- **The band's total** is the three queues or it is not shown: if any term is
+  unreadable or cut, the total is null with the reason (the `backlogOf` rule).
+- **The tenant × queue matrix.** HQ's row first — Y1's own rule, a table
+  without it totals more than its rows. A row per licence that is draft,
+  pending activation, active or suspended; a terminated one only while an open
+  item is attributed to it, and a terminated licence is omitted **only when the
+  reads prove it has nothing** — a failed or cut read keeps it listed. Every
+  cell is a count with its oldest age or no value, a `why` and a reason. **A
+  deployed licence's About-Admin cell is *On the branch*, never the smaller
+  axal.vc count**: its administrators file on its own host into its own
+  database and no branch call returns tickets, so the axal.vc count would read
+  as the branch's whole load. An *Unattributed* row appears only when an
+  escalation's code maps to no listed licence and every read it needs answered.
+- **The mirror strip** counts synced and failed attempts over 24 hours from
+  migration 273's columns on `tickets`, and states average lag as **Not
+  recorded** with the reason: the mirror runs inside the request that files a
+  ticket and a ticket keeps only its latest attempt, so there is no pair of
+  moments to average. Its comparison wraps both sides in `datetime()`, and
+  **`attempted_at` joins `check-timestamp-comparisons`' list in the same
+  commit**. **No `ensureTicketSyncSchema` on this GET**: it runs up to ten
+  ALTERs, and a read-only page must not write; a database without 273 answers
+  unreadable, which is true.
+- **The page** (`HqSupportPage.jsx`), drawn to H22: the band (*All
+  subsidiaries · N open · oldest 96h · escalation from fr* and the read time,
+  **no switcher caret**, because there is no switcher), three queue cards under
+  H22's names — escalations in three SLA bands, tickets with ages and **no
+  band**, because a ticket has no due date — the footing line, the matrix with
+  numbered reasons under it rather than hover-only ones, and the strip. Its
+  canvas link goes to H16's P2 console, which is not built, so it goes to the
+  mirror's settings on the Admin Console and says so. The rail reports one
+  coverage line per read that answered (D126) and states five absences, the
+  view-as overlay's scope among them (#340). HQ Home's Queue backlog tile links
+  here.
+
+### THE JUDGEMENT CALLS, EACH CHEAP TO STRIKE
+
+1. **Persona is the requester's standing now, not as filed.** Nothing stamps a
+   ticket at filing, so an administrator demoted since has moved queue. *Strike
+   it and tickets gain a write-time persona column — a migration and a change to
+   the writer (#345).*
+2. **H22's "HQ-held users" is narrower than H9's "every account on HQ's
+   database".** H9 groups every account that lives on HQ, staff and licence
+   administrators included; this queue is the customers among them. HQ staff
+   and closed accounts are counted outside the queues rather than inside one.
+3. **The About-Admin cell of a deployed licence is null.** *Strike it and the
+   matrix shows the axal.vc count there, which understates by construction.*
+4. **The sync strip's window is a literal in the SQL**, not a bound value, so
+   the timestamp guard can see it; a test holds `SYNC_WINDOW_HOURS` equal to it.
+
+### DELIBERATELY NOT BUILT
+
+- **Answering an escalation from a screen** — D205, the next PR. The route
+  exists (D112) and nothing calls it; the rail says so.
+- **H16's P2 console** (#315).
+- **Tickets filed on a branch host.** No branch call returns tickets; the
+  matrix says *On the branch* and the rail names the absence.
+- **A ticket SLA.** Tickets carry no due date; inventing a band would be a
+  number nobody set.
+
+### VERIFIED
+
+`npm run test:drift` exit 0, read as the exit code from a redirected log:
+frontend 2922 → **2938** (the 16 tests of `hq_support_h22_d204.test.mjs`),
+worker 3830 → **3850** (3847 pass plus the same 3 pre-existing
+environment-gated skips; the 20 tests of `support_queues_d204.test.ts`),
+retention **41**, zero `not ok` — and all 36 new tests confirmed to run **by
+name**, parsed out of the two files and matched against the log rather than
+inferred from the counts. Both typechecks, `lint:undef`, `check-api-drift`
+(one method, `hqSupport`, with its mounted route), `check-sql-prepare`,
+`check-timestamp-comparisons` (with `attempted_at` newly listed),
+`check-row-generics`, `check-schema-readiness`, `check-decision-ids`
+(D1 → **D204**), `check-folder-docs`, `check-unused-imports`,
+`check-react-hook-imports`, `check-frontend-logging` and `check-dark-mode`
+exit 0.
+
+**The worker suite reads real SQLite**: the baseline's own DDL for the
+tables it touches, plus migrations 258, 259, 267, 273 and 279 applied off
+disk, because the baseline stops at 219. A fixture narrower than the schema
+is how D133's tests once reported a licence copy missing from a row sitting
+in front of them.
+
+**The root build ran on CI's no-ledger path** — the local retention ledger
+moved aside first, the #333 trap. Every file `main`'s 31 committed shells
+reach is still present, **606 of 606**, walked through `main`'s own chunk
+graph rather than trusting either guard; then `check-docs-fresh --strict`,
+`prerender-og.mjs --check` (31 routes) and `check-docs-assets-closure` (9,237
+references across 929 chunks) exit 0.
+
+**29 mutations applied, 29 caught**, each anchor asserted unique before
+anything was written, and every restore verified by sha256 against a
+snapshot taken first; the suite above ran on those bytes. Worker:
+`in_progress` dropped from the tuple; role checked before the binding; a
+closed account checked after it; a missing account filed as HQ-held; HQ Home
+counting its backlog its own way; a `?` short of the tuple; the axal.vc count
+returned for a deployed licence; a kind filter in the persona read;
+terminated licences dropped; the count taken as the list's length; *due
+soon* folded into *on time*; the *due soon* and *on time* bands swapped; a
+bare timestamp comparison; the persona read touching a migration-273 column;
+zeros instead of *unreadable*; the mount moved after the `/api/admin`
+catch-all; the GET running the sync bootstrap; the total without its
+escalation term; the window literal parted from its constant; a second
+statement defining an open escalation. Frontend: *due soon* folded on the
+page; a bare dash in a matrix cell; a ticket borrowing an SLA band; a second
+read on the page; a withheld total drawn as zero; a capped count drawn as the
+list's length; a coverage line for a failed read; HQ Home's tile losing its
+link; an unreadable queue saying *Nothing is waiting*.
+
+**Two of my own assertions could not fail, and were fixed before they were
+trusted.** One banned the licence kind from the persona read with
+`/\bkind\b/` — which cannot match `licence_kind`, because `_` is a word
+character, so a kind filter walked straight past it; it now scans the body
+for `kind` as a substring and asserts the open-ticket statement names no
+kind column, and that mutation is caught. The other called
+`assert.notMatch?.(…)`, a method that does not exist: the optional chaining
+made it a line that could never run, let alone fail. It was removed; the
+line after it already asserts the same thing.
+
+**No migration.** The strip reads migration 273's columns, applied in
+production on 2026-09-20; escalations are 259 and licences 187, 190 and 258.
+Production was not read for this entry — the Cloudflare connector is not
+authorized in this session — and nothing here needs it: the page reads
+tables that exist and writes nothing. **Migration 284 is still the next free
+number.**

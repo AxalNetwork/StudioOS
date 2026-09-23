@@ -59,7 +59,12 @@ const problems = [];
 // `security_events.occurred_at` (migration 282). The retention sweep, the
 // WHEN-guarded delete seal and both counts on the Security page compare it
 // against the clock, so it belongs on the list the day it has a comparison.
-const TTL_COLUMN = '(?:expires_at|valid_until|confirm_expires_at|starts_at|start_at|respond_by|due_at|occurred_at)';
+// `attempted_at` joined with D204, in the commit that gives
+// `tickets.github_sync_attempted_at` (migration 273) its first comparison
+// against the clock — HQ Support's mirror strip counts the last 24 hours of
+// attempts. The name is matched as a suffix, so it covers that column without
+// naming its table.
+const TTL_COLUMN = '(?:expires_at|valid_until|confirm_expires_at|starts_at|start_at|respond_by|due_at|occurred_at|attempted_at)';
 // A bare column on the left of a comparison against the clock. The negative
 // lookbehind lets `datetime(expires_at)` through and nothing else.
 const BARE_TTL = new RegExp(
