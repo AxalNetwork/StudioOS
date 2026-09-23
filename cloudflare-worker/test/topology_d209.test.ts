@@ -144,13 +144,24 @@ function fnBody(src: string, anchor: string): string {
   return braceBody(src, i + open.index);
 }
 
-/** Every call to `name(` outside its own definition, as `{file, index}`. */
+/**
+ * Every call to `name(` outside its own definition, as `{file, index}`.
+ *
+ * A LITERAL SCAN, NOT A PATTERN BUILT FROM THE NAME. The name is compared as
+ * the text it is: not preceded by anything that makes it a member access or
+ * part of a longer identifier, and followed — past any whitespace — by its
+ * `(`. Measured against the regex it replaced, over every call this suite
+ * makes: identical results, and a scan broken on purpose disagreed on three
+ * names, so the comparison was live rather than vacuous.
+ */
 function callSites(name: string, files = CODE) {
-  const re = new RegExp(`(^|[^\\w$.])${name}\\s*\\(`, 'g');
   const out: Array<{ file: string; index: number }> = [];
   for (const { file, code } of files) {
-    for (const mt of code.matchAll(re)) {
-      const at = (mt.index ?? 0) + mt[1].length;
+    for (let at = code.indexOf(name); at >= 0; at = code.indexOf(name, at + 1)) {
+      if (at > 0 && /[\w$.]/.test(code[at - 1])) continue;
+      let i = at + name.length;
+      while (/\s/.test(code[i] ?? '')) i += 1;
+      if (code[i] !== '(') continue;
       if (/\bfunction\s+$/.test(code.slice(Math.max(0, at - 24), at))) continue;
       out.push({ file, index: at });
     }

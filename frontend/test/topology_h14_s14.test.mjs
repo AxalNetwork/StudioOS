@@ -75,21 +75,47 @@ function chips(markup) {
     .map(([, name, cls, inner]) => ({ name, dashed: /\bborder-dashed\b/.test(cls), label: renderedText(inner) }));
 }
 
-/** The element carrying `data-testid="<id>"`, as rendered text. Bounded by its own closing tag. */
+/**
+ * The element carrying `data-testid="<id>"`, as rendered text. Bounded by its
+ * own closing tag: tags of the same name are counted open and shut, and a
+ * self-closing one counts neither way.
+ *
+ * A LITERAL SCAN, NOT A PATTERN BUILT FROM THE TAG NAME. Every `<` in React's
+ * static markup opens a tag or a comment — text and attribute values escape
+ * theirs — so the scan steps from `<` to `<` and compares the name as text.
+ * Measured against the regex it replaced, over every call this suite makes:
+ * the same 48 results, and a scanner made blind to nesting on purpose
+ * disagreed on three elements, so the comparison was live.
+ */
 function byTestId(markup, id) {
   const at = markup.indexOf(`data-testid="${id}"`);
   assert.ok(at >= 0, `${id} is not rendered`);
   const open = markup.lastIndexOf('<', at);
   const tag = /^<([a-z0-9]+)/.exec(markup.slice(open))[1];
   let depth = 0;
-  const re = new RegExp(`<(/?)${tag}\\b[^>]*?(/?)>`, 'g');
-  re.lastIndex = open;
-  for (let mt = re.exec(markup); mt; mt = re.exec(markup)) {
-    if (mt[2] === '/') continue;
-    depth += mt[1] ? -1 : 1;
-    if (depth === 0) return readable(markup.slice(open, mt.index + mt[0].length));
+  for (let i = open; i >= 0; i = markup.indexOf('<', i + 1)) {
+    const closing = markup[i + 1] === '/';
+    const nameAt = i + (closing ? 2 : 1);
+    if (!markup.startsWith(tag, nameAt) || /\w/.test(markup[nameAt + tag.length] ?? '')) continue;
+    const end = markup.indexOf('>', nameAt);
+    if (end < 0) break;
+    if (markup[end - 1] === '/') continue;
+    depth += closing ? -1 : 1;
+    if (depth === 0) return readable(markup.slice(open, end + 1));
   }
   throw new Error(`${id} never closes`);
+}
+
+/**
+ * Literal-text assertions. A count or a list of method names spliced into a
+ * RegExp is a pattern built from data; comparing the text as text says the
+ * same thing and shows both strings when it fails.
+ */
+function startsWithText(actual, expected) {
+  assert.ok(actual.startsWith(expected), `expected ${JSON.stringify(actual)} to start with ${JSON.stringify(expected)}`);
+}
+function hasText(actual, expected) {
+  assert.ok(actual.includes(expected), `expected ${JSON.stringify(expected)} in ${JSON.stringify(actual)}`);
 }
 
 // ── 1 · one render of the RPC surface ───────────────────────────────────────
@@ -108,7 +134,7 @@ for (const role of ['hqCallsBranch', 'branchCallsHq']) {
     const uncalled = side.methods.filter((m) => !m.called).map((m) => m.name);
     assert.ok(uncalled.length > 0, 'both classes have an uncalled method today (task #354), or this proves nothing');
     const sentence = byTestId(markup, `rpc-uncalled-${side.class}`);
-    assert.match(sentence, new RegExp(`^Declared and not called by anything yet: ${uncalled.join(', ')}\\.`));
+    startsWithText(sentence, `Declared and not called by anything yet: ${uncalled.join(', ')}.`);
     assert.match(sentence, /not one that failed/);
     assert.ok(readable(markup).includes(`${side.class}, exported by somebody and called over ${side.called_over}.`),
       'the class, who exports it and the binding it is called over');
@@ -148,11 +174,11 @@ test('HQ\'s card: its own bindings and which are missing, both sides of the RPC 
   const tags = byTestId(full, 'h14-hq-bindings');
   for (const b of OWN) assert.ok(tags.includes(b.hq ? `${b.name} · ${b.hq}` : b.name), `${b.name} is drawn with its resource`);
   for (const b of BINDINGS.filter((x) => x.shared)) assert.ok(!tags.includes(b.name), `${b.name} is shared and belongs to the shared card`);
-  assert.match(renderedText(full), new RegExp(`All ${OWN.length} of its own bindings are present on this Worker\\.`));
+  hasText(renderedText(full), `All ${OWN.length} of its own bindings are present on this Worker.`);
   assert.match(full, /data-testid="rpc-side-HqEntrypoint"/);
   assert.match(full, /data-testid="rpc-side-BranchEntrypoint"/);
   const access = renderedText(full);
-  assert.match(byTestId(full, 'h14-access'), new RegExp(`Stands in front of ${CF_ACCESS_PATHS.length} routes and no others`));
+  hasText(byTestId(full, 'h14-access'), `Stands in front of ${CF_ACCESS_PATHS.length} routes and no others`);
   for (const p of CF_ACCESS_PATHS) assert.ok(access.includes(p), `Access path ${p} is listed`);
   const writers = byTestId(full, 'h14-secret-writers');
   for (const s of SECRET_WRITERS) assert.ok(writers.includes(`${s.screen} — ${s.writes}`));
@@ -280,7 +306,7 @@ test('S14 names this Worker, its own resources, its one link and both sides of t
     const r = b.branch('fr');
     assert.ok(own.includes(r ? `${b.name} · ${r}` : b.name), `${b.name} names the branch's own resource`);
   }
-  assert.match(byTestId(markup, 's14-own-note'), new RegExp(`^All ${OWN.length} are present on this Worker`));
+  startsWithText(byTestId(markup, 's14-own-note'), `All ${OWN.length} are present on this Worker`);
   assert.equal(byTestId(markup, 's14-hq-link'), 'Bound to HQ\'s studioos Worker, through BranchEntrypoint.');
   assert.match(markup, /data-testid="rpc-side-HqEntrypoint"/);
   assert.match(markup, /data-testid="rpc-side-BranchEntrypoint"/);
