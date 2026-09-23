@@ -52,6 +52,16 @@ export class XConfigMissing extends XError {
   }
 }
 
+/**
+ * Whether this deployment can speak OAuth to X at all: both halves of the
+ * client credential are set. The accounts console, the OAuth start and HQ
+ * Platform's Broadcast console all ask this, so they cannot disagree about
+ * whether X is provisioned (D202). Neither value is ever returned.
+ */
+export function xClientConfigured(env: Env): boolean {
+  return !!(env.X_CLIENT_ID && env.X_CLIENT_SECRET);
+}
+
 function breakerOpen(): boolean {
   if (_consecutiveFailures < BREAKER_THRESHOLD) return false;
   if (Date.now() - _openedAt > RECOVERY_MS) {

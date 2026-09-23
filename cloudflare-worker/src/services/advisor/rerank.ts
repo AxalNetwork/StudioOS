@@ -169,7 +169,7 @@ function parsePickedId(raw: string | undefined | null, allowed: Set<string>): st
   }
 }
 
-function rerankDisabled(env: Env): boolean {
+export function rerankDisabled(env: Env): boolean {
   const e = env as unknown as Record<string, string | undefined>;
   const v = e.ADVISOR_RERANK_DISABLED;
   return v === '1' || v === 'true';

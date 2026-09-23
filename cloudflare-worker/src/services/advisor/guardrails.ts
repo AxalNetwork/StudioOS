@@ -27,6 +27,7 @@
 import type { Env, User } from '../../types';
 import * as aiRouter from '../aiRouter';
 import { bindingKey } from '../../util/schemaBootstrap';
+import { isAdvisorDisabled } from './rollout';
 
 // ---------------------------------------------------------------------------
 // L4 — canonical refusal bank. Embedded in the system prompt so the model
@@ -614,9 +615,13 @@ export async function checkKillSwitch(env: Env, user: User): Promise<KillSwitchR
   // advisor. Logical OR (NOT precedence by presence) so a stale
   // `ADVISOR_V2_DISABLED=0` can't silently override an operator's
   // `ADVISOR_DISABLED=1` during incident response.
-  const e = env as unknown as { ADVISOR_DISABLED?: string; ADVISOR_V2_DISABLED?: string };
-  const truthy = (v: string | undefined) => v === '1' || v === 'true';
-  if (truthy(e.ADVISOR_V2_DISABLED) || truthy(e.ADVISOR_DISABLED)) {
+  //
+  // D202 — THE RULE IS rollout.ts's, NOT A COPY OF IT. This used to restate
+  // the two-variable OR inline, so the route's 503 and this refusal were two
+  // readings of one switch that happened to agree. HQ Platform now reports the
+  // switch through the same function, and a third copy would be the one that
+  // drifts.
+  if (isAdvisorDisabled(env)) {
     return { blocked: true, shadow: false, reason: 'env_disabled', message: REFUSAL.disabled };
   }
   await ensureGuardrailColumns(env);

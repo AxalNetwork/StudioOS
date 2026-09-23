@@ -1,12 +1,16 @@
 /**
- * HQ · Platform — canvas H6, "Keys, flags, jobs".
+ * HQ · Platform — canvas H6 ("Keys, flags, jobs") and H17 ("Monitoring,
+ * Broadcast, Feature flags").
  *
  * SUPER ADMIN ONLY.
  *
- *   GET /summary      connected integrations, scheduled-job health, and the
- *                     one of the three that has no store
+ *   GET /summary      connected integrations, scheduled-job health, the
+ *                     monitoring and broadcast consoles, and the platform's
+ *                     switches, read-only
  *
- * TWO OF THE THREE ARE REAL.
+ * EVERY BLOCK CARRIES ITS OWN STATE. One store failing to answer makes that
+ * block unreadable, with the reason, and leaves the others standing: an
+ * unreadable count is never sent as a zero.
  *
  *   Keys   `integrations` carries a provider, a display name and a status
  *          (active | paused | error | disconnected), which is what the
@@ -24,11 +28,21 @@
  *          aged every cadence against one 26-hour window, and compared an
  *          ISO cutoff to rows stored as `YYYY-MM-DD HH:MM:SS`. Five of the
  *          six triggers read as silent while their work ran.
- *   Flags  NOT RECORDED. There is no feature-flag store. What exists under
- *          that name is per-user settings (`services/userSettings.ts`), which
- *          is a different thing: a user's own preference, not a platform
- *          switch an operator can throw. Drawing a flags panel over it would
- *          claim a control room that does not exist.
+ *   Monitoring (D202, H17 P5) — the dead-letter backlog summed over both of
+ *          its tables (services/deadLetters), and the incidents entered in
+ *          the last seven days. The page adds branch health and the cron
+ *          triggers from reads it already makes, so no figure is fetched
+ *          twice.
+ *   Broadcast (D202, H17 P6) — Telegram channels: bound to a chat or not,
+ *          how many posts each has sent and when the last went, and whether
+ *          the bot token is set. THE CHAT ID NEVER LEAVES THE DATABASE: the
+ *          SELECT reduces it to a boolean, by the same test `/send` applies.
+ *          X: whether its OAuth client is configured and how many accounts
+ *          exist — no token state, which admin_x already refuses to echo.
+ *   Flags  STILL NO STORE. D202 corrects the reason this endpoint gave for
+ *          it and D203 builds one. What the platform has is switches set at
+ *          deploy, listed read-only by services/platformSwitches, each asked
+ *          through the predicate the code that obeys it uses.
  *
  * Mounted at /api/admin/platform BEFORE the catch-all /api/admin in index.ts.
  */
@@ -43,8 +57,44 @@ import {
 import {
   CRON_TRIGGERS, STALE_GRACE_MINUTES, latestRunPerTrigger, triggerState,
 } from '../util/cronHistory';
+import { dlqDepth } from '../services/deadLetters';
+import { readPlatformSwitches } from '../services/platformSwitches';
+import { telegramTokenConfigured } from '../services/telegramClient';
+import { xClientConfigured } from '../services/xClient';
 
 const r = new Hono<{ Bindings: Env }>();
+
+/** H17 P5's "Incidents (7d)" — the window the count is taken over. */
+export const INCIDENT_WINDOW_DAYS = 7;
+
+/**
+ * Said with the count, because a zero here is easy to misread. The public
+ * status page publishes what `status_incidents` holds, and the only writer is
+ * `POST /api/public/status/incidents` — an admin intake that nothing in the
+ * product calls. So the number is what somebody entered, not what happened.
+ */
+const INCIDENT_BASIS =
+  'Incidents entered for the public status page in the last seven days. No screen in the '
+  + 'product enters one — the intake exists and nothing calls it — so a zero means none was '
+  + 'entered, not that nothing went wrong.';
+
+/** P6's member counts, and why the canvas's figure is not drawn. */
+const MEMBERS_REASON =
+  'Member counts are not recorded: the platform never asks Telegram how many people are in a '
+  + 'channel, so any number here would be invented.';
+
+/**
+ * A count read back from SQL, or a throw. Every console block below catches
+ * into its own unreadable state, so a value that is not a number fails that
+ * block instead of reading as a measured zero — the `|| 0` this page is
+ * built not to have. `null` is refused before `Number()` sees it, because
+ * `Number(null)` is 0.
+ */
+function countOf(value: unknown, what: string): number {
+  const n = value === null || value === undefined ? NaN : Number(value);
+  if (!Number.isFinite(n)) throw new Error(`${what} unreadable`);
+  return n;
+}
 
 r.get('/summary', async (c) => {
   await requireSuperAdmin(c);
@@ -118,16 +168,130 @@ r.get('/summary', async (c) => {
     jobs = { available: false, reason: 'The scheduled-run history could not be read.' };
   }
 
+  // ── Monitoring (D202, H17 P5) ─────────────────────────────────────────
+  // Two of P5's four stats are computed here. The other two are the page's,
+  // from reads it already makes: Workers healthy from /deployments, cron
+  // triggers from `jobs` above.
+  const dlq = await dlqDepth(env);
+  let incidents: unknown;
+  try {
+    // datetime() on both sides: `created_at` is written by datetime('now'),
+    // and a bound ISO cutoff would read a same-day row as older than it is.
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM status_incidents
+        WHERE datetime(created_at) >= datetime('now', ?)`,
+    ).bind(`-${INCIDENT_WINDOW_DAYS} days`).first<{ n: number }>();
+    const count = countOf(row?.n, 'incident count');
+    incidents = { available: true, window_days: INCIDENT_WINDOW_DAYS, count, basis: INCIDENT_BASIS };
+  } catch {
+    incidents = {
+      available: false,
+      window_days: INCIDENT_WINDOW_DAYS,
+      reason: 'The status-page incident table could not be read, so the count is unknown rather '
+        + 'than zero.',
+    };
+  }
+
+  // ── Broadcast (D202, H17 P6) ──────────────────────────────────────────
+  // The token is a deployment fact, not a row, so it is reported whichever
+  // way the channel read goes — and said once, not once per channel.
+  const tokenConfigured = telegramTokenConfigured(env);
+  let telegram: unknown;
+  try {
+    // `chat_bound` is `/send`'s own test (`if (!post.chat_id)`) done in SQL,
+    // so the id is reduced to a boolean before it leaves the database.
+    const rows = await env.DB.prepare(
+      `SELECT c.id, c.label, c.audience, c.enabled, c.last_test_at, c.last_error,
+              CASE WHEN c.chat_id IS NULL OR c.chat_id = '' THEN 0 ELSE 1 END AS chat_bound,
+              (SELECT COUNT(*) FROM telegram_posts p
+                WHERE p.channel_id = c.id AND p.status = 'sent') AS sent_count,
+              (SELECT MAX(p.sent_at) FROM telegram_posts p
+                WHERE p.channel_id = c.id AND p.status = 'sent') AS last_sent_at
+         FROM telegram_channels c
+        ORDER BY c.audience ASC, c.id ASC`,
+    ).all<{
+      id: number; label: string; audience: string; enabled: number;
+      last_test_at: string | null; last_error: string | null;
+      chat_bound: number; sent_count: number; last_sent_at: string | null;
+    }>();
+    const channels = (rows.results || []).map((ch) => {
+      const enabled = !!ch.enabled;
+      const chatBound = !!ch.chat_bound;
+      return {
+        id: ch.id,
+        label: String(ch.label),
+        audience: String(ch.audience),
+        enabled,
+        chat_bound: chatBound,
+        // A channel's own facts decide its state; the token is platform-wide
+        // and is reported beside the list rather than folded into each row.
+        state: !enabled ? 'disabled' : !chatBound ? 'unbound' : 'ready',
+        sent_count: countOf(ch.sent_count, 'sent count'),
+        last_sent_at: ch.last_sent_at || null,
+        last_test_at: ch.last_test_at || null,
+        last_error: ch.last_error ? String(ch.last_error).slice(0, 200) : null,
+      };
+    });
+    telegram = {
+      available: true,
+      token_configured: tokenConfigured,
+      channels,
+      members_available: false,
+      members_reason: MEMBERS_REASON,
+    };
+  } catch {
+    telegram = {
+      available: false,
+      token_configured: tokenConfigured,
+      reason: 'The Telegram channel table could not be read.',
+    };
+  }
+
+  // X is listed whether or not it is set up: the canvas's own rule, that an
+  // absent row looks like a decision nobody made.
+  const xConfigured = xClientConfigured(env);
+  let x: unknown;
+  try {
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) AS accounts,
+              COALESCE(SUM(CASE WHEN enabled THEN 1 ELSE 0 END), 0) AS enabled
+         FROM x_accounts`,
+    ).first<{ accounts: number; enabled: number }>();
+    x = {
+      available: true,
+      client_configured: xConfigured,
+      accounts: countOf(row?.accounts, 'X account count'),
+      enabled_accounts: countOf(row?.enabled, 'enabled X account count'),
+    };
+  } catch {
+    x = { available: false, client_configured: xConfigured, reason: 'The X account table could not be read.' };
+  }
+
+  // ── Switches (D202, H17 P7) ───────────────────────────────────────────
+  let switches: unknown;
+  try {
+    switches = { available: true, items: await readPlatformSwitches(env) };
+  } catch {
+    switches = { available: false, reason: 'The platform switches could not be read.' };
+  }
+
   return c.json({
     integrations,
     jobs,
+    monitoring: { dlq, incidents },
+    broadcast: { telegram, x },
+    switches,
 
-    // The third of the three, and why it is not drawn.
+    // Still no store, and now the reason is true. The old one said that
+    // what the codebase calls flags is per-user settings, and the codebase
+    // also calls MI_FLAG_* and DD_FLAG_* flags — platform switches, set at
+    // deploy. D202.
     flags_available: false,
     flags_reason:
-      'There is no feature-flag store. What the codebase calls flags is per-user settings '
-      + '(services/userSettings.ts) — a person\'s own preference, not a platform switch an operator '
-      + 'can throw. A flags panel over that would claim a control room the product does not have.',
+      'There is no feature-flag store: nothing an operator can throw from the product or stage to '
+      + 'one territory, and per-user settings (services/userSettings.ts) are a person\'s own '
+      + 'preferences, not platform switches. What the platform does have is switches set at deploy, '
+      + 'and one the AI router throws by itself, listed below read-only.',
 
     ...DERIVED_UNAVAILABLE,
   });

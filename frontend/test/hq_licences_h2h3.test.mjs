@@ -500,10 +500,16 @@ test('the branch traffic split is its own read, on its own method', () => {
  * neighbouring zone can satisfy is not an assertion about this one.
  */
 function trafficZone() {
+  // D202 moved this table INSIDE H17's Monitoring console, under its four
+  // stats, and put Broadcast straight after it. The old end bound was the
+  // text "Feature flags", which after the move sat two zones further on — so
+  // this slice silently grew to cover Broadcast and the consoles, and every
+  // assertion below could have been satisfied by either. The bound is the
+  // next zone's title now, and the start is the table's own heading.
   const from = PLATFORM_JSX.indexOf('Traffic by branch');
   assert.ok(from > 0, 'the zone must exist');
-  const to = PLATFORM_JSX.indexOf('Feature flags', from);
-  assert.ok(to > from, 'and must sit before Feature flags, which is what bounds this slice');
+  const to = PLATFORM_JSX.indexOf('title="Broadcast"', from);
+  assert.ok(to > from, 'and must sit before Broadcast, which is what bounds this slice');
   return PLATFORM_JSX.slice(from, to);
 }
 
@@ -540,10 +546,14 @@ test('one row does not read as one branch out of several', () => {
  * assertion a neighbour can satisfy is not an assertion about this one.
  */
 function deploymentsZone() {
+  // Bounded by the NEXT ZONE'S TITLE since D202, for the reason trafficZone
+  // states: the traffic table's heading now sits inside the Monitoring zone,
+  // below its stats, so ending at that text made this slice cover Monitoring
+  // as well.
   const from = PLATFORM_JSX.indexOf('one row per branch');
   assert.ok(from > 0, 'the zone must exist');
-  const to = PLATFORM_JSX.indexOf('Traffic by branch', from);
-  assert.ok(to > from, 'and must sit before Traffic by branch, which is what bounds this slice');
+  const to = PLATFORM_JSX.indexOf('title="Monitoring"', from);
+  assert.ok(to > from, 'and must sit before Monitoring, which is what bounds this slice');
   return PLATFORM_JSX.slice(from, to);
 }
 

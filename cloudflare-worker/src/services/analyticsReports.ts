@@ -867,6 +867,27 @@ export interface BranchTrafficRow {
 }
 
 /**
+ * D202 — the window a traffic read covered, said with the figures. `hits` is a
+ * count over a window, and a count with no window cannot be turned into a
+ * rate: HQ Platform's Monitoring console divides one by the other and labels
+ * the result an AVERAGE over this window, never a live rate. Both bounds are
+ * UTC, in the `YYYY-MM-DD HH:MM:SS` form the AE query was bound to.
+ */
+export interface TrafficWindow {
+  range: { from: string; to: string };
+  window_minutes: number;
+}
+
+export function trafficWindow(range: DateRange): TrafficWindow {
+  const at = (s: string) => Date.parse(`${s.replace(' ', 'T')}Z`);
+  const minutes = Math.round((at(range.toIso) - at(range.fromIso)) / 60_000);
+  return {
+    range: { from: range.fromIso, to: range.toIso },
+    window_minutes: Number.isFinite(minutes) && minutes > 0 ? minutes : 1,
+  };
+}
+
+/**
  * D161 — traffic split BY BRANCH, for HQ only.
  *
  * WHY THIS IS A SEPARATE FUNCTION AND NOT A FLAG ON `loadTechnical`.
@@ -889,8 +910,9 @@ export interface BranchTrafficRow {
 export async function loadTrafficByBranch(
   env: Env,
   range: DateRange,
-): Promise<{ available: boolean; reason?: string; as_of: string; rows: BranchTrafficRow[] }> {
+): Promise<{ available: boolean; reason?: string; as_of: string; rows: BranchTrafficRow[] } & TrafficWindow> {
   const as_of = new Date().toISOString();
+  const span = trafficWindow(range);
   const sqlText = `
     SELECT blob6 AS branch,
            COUNT() AS hits,
@@ -913,6 +935,7 @@ export async function loadTrafficByBranch(
         + 'Analytics Engine is unconfigured or did not answer.',
       as_of,
       rows: [],
+      ...span,
     };
   }
   const rows = data.map(r => {
@@ -927,7 +950,7 @@ export async function loadTrafficByBranch(
       error_rate_pct: hits > 0 ? Number(((errs / hits) * 100).toFixed(2)) : 0,
     };
   });
-  return { available: true, as_of, rows };
+  return { available: true, as_of, rows, ...span };
 }
 
 /** D163 — one branch, and how HQ's own acts against it went. */

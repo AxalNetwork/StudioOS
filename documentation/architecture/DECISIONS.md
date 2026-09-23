@@ -18977,3 +18977,241 @@ survived. Committed, the deploy would have 404'd every open tab's lazy chunks.
 The ledger was moved aside and `docs/` rebuilt on CI's no-ledger path: all
 604 of `main`'s committed assets are present, checked file by file. The
 build-script gap is filed as #333.
+
+## D202
+
+**HQ · Platform draws H17's three consoles — Monitoring, Broadcast and Feature
+flags — and each reading asks the question the code that obeys it asks. The
+old refusal for flags was half false: the platform has switches, it has no
+store an operator can throw them from.**
+
+PR B of #310. D201 made the scheduler's record true; this draws the consoles
+on it; D203 builds the operator switch store. **Nothing retires**: every
+`/admin/*` route and every Operator-consoles link stays, and the three new
+zones are additive beside Keys, Scheduled jobs and Deployments.
+
+### WHAT THE STORES HOLD, MEASURED FIRST
+
+Production, read-only and aggregates only, at planning time on 2026-09-23:
+
+| store | held |
+| --- | --- |
+| `dead_letter_queue` · `cf_dlq_mirror` | 0 · 0 |
+| `status_incidents` | **0** — and its only writer, `POST /api/public/status/incidents`, has no caller in the SPA |
+| `telegram_channels` | 7, all enabled, 6 bound to a chat |
+| `telegram_posts` sent | **0, ever** |
+| `x_accounts` | 1 |
+
+So on the day it ships every console reads mostly empty, and each says why
+in words rather than drawing a zero that could be mistaken for health.
+
+### WHAT SHIPPED
+
+**`GET /api/admin/platform/summary`** (still `requireSuperAdmin`, no new route
+and no new `api.js` method) gains four blocks, **each with its own state**, so
+one store failing leaves the others standing:
+
+- **`monitoring.dlq`** — `services/deadLetters.ts` (new), the backlog summed
+  over **both** tables `/infra/dlq` already sums. Read-only: it creates
+  neither table, because a summary that bootstrapped a table in order to count
+  it would report 0 for a database that was never set up. Either table failing
+  makes the whole answer unreadable and names the table; half a sum is never
+  sent as the sum.
+- **`monitoring.incidents`** — the count in the last seven days, compared with
+  `datetime()` on both sides (the column is written by `datetime('now')`),
+  with the sentence that no screen enters one, so a zero means none was
+  entered.
+- **`broadcast.telegram`** — per channel: label, audience, enabled, **chat
+  bound as a boolean reduced in the SELECT** by `/send`'s own test, sent count
+  and last send, last test and last error; `token_configured` said once for
+  the deployment; member counts stated as not recorded (nothing ever asks
+  Telegram). **The chat id never leaves the database.**
+- **`broadcast.x`** — whether its OAuth client is configured and how many
+  accounts exist, enabled and not. No token state: `admin_x` refuses to echo
+  it, and so does this.
+- **`switches`** — `services/platformSwitches.ts` (new), eight switches the
+  platform does have, read-only: Eadwyn off, question reranking off, the AI
+  budget trip, session charging, Stripe Tax, the Cloudflare Queue, live market
+  sources, live diligence connectors. Each carries `on | off | unreadable`,
+  who sets it (`deploy` or `runtime`), a sentence saying what "on" does, and —
+  for the two families — how many members are on. **Never a variable's value
+  and never a variable's name.**
+
+**The page** (`frontend/src/pages/hq/PlatformPage.jsx`):
+
+- **Monitoring (P5)** — the artboard's four stats in its order.
+  *Branch Workers healthy* counts a branch healthy only when it answers **and**
+  reports a working database, excludes HQ and says so, and says *No branch* in
+  words rather than 0 / 0. *Cron triggers firing* is D201's six declared
+  triggers reading `ok`. *DLQ depth* and *Incidents (7d)* each have an
+  unreadable state that draws as unreadable with the server's reason and the
+  note *not a count of zero*. Traffic by branch sits under them — one render
+  of one figure, the D128 rule — with **average req/min over the window the
+  read covered**, labelled as an average and not a live rate, and a DLQ column
+  only HQ's own row can fill.
+- **Broadcast (P6)** — the channel rows, the no-token banner **once for the
+  deployment, never per channel**, X dashed as *Not provisioned* when it is,
+  and a note that a disabled channel takes no new posts while a drafted one
+  can still be sent (#328, below).
+- **Feature flags (P7)** — `Flags` and `Overrides` stay `value={null}`, and
+  under them the read-only switch list. There is nothing on the page to press.
+
+**The Help Center's flags article** (`#admin/feature-flags`, id kept because
+it is linked) told admins to *"Open Admin Console → Settings → Feature flags"*
+and stage cohorts; none of that exists. It now says what does. Its events
+pitfall told admins to update *"both wrangler route blocks"* for a new events
+page — a path-scoped route CLAUDE.md fact 4 forbids — and now says a new page
+needs no routing change.
+
+### ONE PREDICATE PER SWITCH — THE RULE THE REGISTRY IS BUILT ON
+
+The eight readers already disagreed about what "on" means, and each
+disagreement is a shipped decision:
+
+| switch | "on" means | reader |
+| --- | --- | --- |
+| Eadwyn off | `'1'` or `'true'`, exactly, on either variable | `advisor/rollout` `isAdvisorDisabled` |
+| reranking off | `'1'` or `'true'`, exactly | `advisor/rerank` `rerankDisabled` |
+| AI budget trip | the KV key reads `'1'` or `'true'` | `aiRouter` `aiOrgKillSwitchState` |
+| session charging | `'1'` exactly **and** a Stripe key; live mode only in production | `advisorMoney` `settlementMode` |
+| Stripe Tax | `1 · true · yes · on`, trimmed, any case | `util/stripeTax` `stripeTaxEnabled` |
+| Cloudflare Queue | `'true'` exactly **and** the `JOB_QUEUE` binding | `queue` `cfQueueEnabled` |
+| a market source | `'live'`, any case — `'1'` means the stub | `market_intel/registry` `isLive` |
+| a diligence connector | `/^(1|true|on|yes)$/i` | `dueDiligence` `isFlagged` |
+
+A second parser written for the console would be wrong for at least one of
+them and would show a switch on while the code that obeys it reads it off —
+the disagreement a console exists to rule out. So the registry parses nothing:
+`rerankDisabled`, `cfQueueEnabled` and `isFlagged` were exported, one word
+each; `aiOrgKillSwitchState` wraps the router's own reading of its key; and
+three consumers that restated a rule inline now call the function instead —
+`guardrails.ts`'s `checkKillSwitch` (`isAdvisorDisabled`), `infra.ts`'s
+`transport_active` (`cfQueueEnabled`), and `admin_x.ts`'s two X checks
+(`xClientConfigured`, new in `xClient.ts`). `telegramClient.ts` gained
+`telegramTokenConfigured`, which `call()` and `sendMultipart()` now refuse
+through. A frontend test fails when any registry entry stops importing its
+reader's predicate, or when the registry grows a parser of its own.
+
+### THE JUDGEMENT CALLS, EACH STATED SO IT IS CHEAP TO STRIKE
+
+1. **The AI budget trip reports three states where the router gates on two.**
+   The router's `killSwitchOn` fails open on a KV error, deliberately and
+   unchanged — a KV hiccup must not refuse every AI call on the platform. A
+   reader that *reports* rather than gates keeps the unreadable case, and a
+   deployment with no spend store bound says so rather than reading *off*.
+   *Strike it and the console reads the gate's two states, and a KV outage
+   reads as "off".*
+2. **Two stats are renamed from the artboard.** *Workers healthy* →
+   *Branch Workers healthy*, because HQ is not a row in the registry and is
+   not counted; *Cron jobs OK* → *Cron triggers firing*, because what is
+   counted is the six declared triggers, not jobs. Each note says why.
+   *Strike it and the artboard's labels return over the same figures.*
+3. **Req/min is an average over the read's window, never a live rate.**
+   `loadTrafficByBranch` echoes its window (`range`, `window_minutes`) — no
+   extra Analytics Engine query, so D161's three-query pin holds.
+   *Strike it and the column goes, since a count with no window has no rate.*
+4. **The DLQ column reads HQ's own backlog on HQ's row only.** No branch RPC
+   returns a backlog, so a branch row reads *not recorded* rather than
+   borrowing HQ's figure.
+5. **The Broadcast console lists channels, not a send button.** Sending stays
+   on `/admin/telegram`, audited there. *Strike it and the console grows a
+   write path this read-only page has a test against.*
+
+### WHERE THE BUILD CORRECTED THE PLAN
+
+- **Six call sites stopped restating a rule.** The plan named only the
+  exports; the build found four inline copies of rules the registry reads
+  (`guardrails.ts` once, `infra.ts` once, `admin_x.ts` twice) and the token
+  test written twice in `telegramClient.ts`. Each now asks the function.
+- **The trip is `aiOrgKillSwitchState`, not the plan's `aiOrgKillSwitchOn`** —
+  a boolean could not say unreadable, which is the state the page most needs.
+- **A count that is not a number now fails its block** rather than reading as
+  0 (`countOf` in the route; `Number(null)` is 0, so null is refused first).
+- **Two guards were re-aimed, not loosened.** `hq_licences_h2h3.test.mjs`
+  sliced the Traffic and Deployments zones up to the text *"Feature flags"*,
+  which after the move sat two zones further on; each slice now ends at the
+  zone that follows it. `admin_content_platform.test.ts`'s header claimed the
+  flags reason's premise; it now points at D202's guard.
+- **One more defect, in the zone being rebuilt**: the Feature flags zone said
+  *"The platform summary could not be read"* for as long as the summary was
+  still loading. Loading is its own state now, asserted.
+
+### THE DESIGN OF RECORD, WHERE IT DISAGREES
+
+- **H17's P7 prose repeats the claim this PR corrects** — that what the
+  codebase calls flags is per-user settings. The codebase also calls
+  `MI_FLAG_*` and `DD_FLAG_*` flags, and those are platform switches.
+- **The Super canvas's changelog says H16/H17 "retire /admin tabs".** The
+  brief for this work says nothing retires and
+  `admin_route_reachability.test.mjs` is not re-aimed. The brief wins.
+
+### FILED, NOT FOLDED IN
+
+- **#328** — Telegram `/send` checks `chat_id` and never `enabled`.
+- **#329** — scheduled Telegram and X posts are never dispatched.
+- **#330** — the AI budget trip's 35-day TTL outlives the month it measures;
+  nothing in the product clears it sooner, and the switch's own reason says so.
+- **#335** — DLQ depth now has one definition that sums both tables and fails
+  closed; two others still count one table and read a failed count as 0.
+- **#336** — badge seeds below the baseline cutoff never reach a fresh database.
+- **#337 — platform channels are writable by every admin.** P6 calls them *platform
+  channels, not a branch megaphone*, yet `/api/admin/telegram/*` and
+  `/api/admin/x/*` are `requireAdmin`, and `GET /telegram/channels` spreads
+  the row — `chat_id` included — to any admin. The exclusivity question D133
+  answered for four other surfaces, one console over.
+- **Analytics Engine `COUNT()` under sampling** — whether the traffic count is
+  sample-weighted could not be checked from here; the rate inherits whatever
+  the count is.
+
+**Checked and struck**: a note taken while researching this said the public
+`/status` page binds its incident cutoff in the wrong format. It binds a bare
+`YYYY-MM-DD`, which is a prefix of the stored `YYYY-MM-DD HH:MM:SS` and so
+compares correctly — the case D160's table already lists as correct by prefix
+alignment.
+
+### VERIFIED
+
+`npm run test:drift` exit 0, read as the exit code from a redirected log:
+frontend 2888 → **2907** (the 19 tests of `hq_platform_consoles_d202.test.mjs`),
+worker 3787 → **3813** (3810 pass plus the same 3 pre-existing
+environment-gated skips; the 26 tests of `platform_consoles_d202.test.ts`),
+retention **41**, zero `not ok` — and all 45 new tests confirmed to run **by
+name**, not inferred from the counts. Both typechecks, `lint:undef`,
+`check-api-drift` (no method added), `check-folder-docs`, `check-decision-ids`
+(D1 → **D202**), `check-sql-prepare`, `check-timestamp-comparisons`,
+`check-unused-imports`, `check-react-hook-imports` and `check-dark-mode` exit 0.
+
+**The root build ran on CI's no-ledger path**: the local retention ledger was
+moved aside first — the #333 trap D201 hit. Afterwards every file `main`'s 34
+committed shells reach is present, **603 of 603**, checked by walking `main`'s
+own chunk graph rather than trusting either guard (both check only the new
+tree's closure). Then `check-docs-fresh --strict`, `prerender-og.mjs --check`
+and `check-docs-assets-closure` (9,184 references across 919 chunks) exit 0.
+
+**31 mutations applied, 31 caught**, each by the test named for it; every
+anchor asserted unique before anything was written and every restore verified
+by sha256: the DLQ half-sum, and the DLQ read creating the table it counts;
+the incident `datetime()` wrapper dropped, the window widened, and the catch
+reporting 0; the chat id selected and sent; `chat_bound` ignoring `''`; the
+channel state order swapped; `sent_count` counting every status; the bot token
+echoed, and dropped from the unreadable branch; X configured on either half of
+its client, and its catch reporting 0 accounts; a private Eadwyn parser in the
+registry; a market source live on `'1'`; the queue switch without its binding;
+the settlement modes swapped; the AI trip's unreadable state reading off; the
+old flags reason restored; the traffic window dropped from the answer; `countOf`
+letting `null` become 0; a branch healthy without a working database; the
+database-failing chip removed; an unknown switch state toned as on; a chat id
+rendered; the token banner repeated per channel; X always drawn configured; a
+fixed 1440-minute window; a wiring import replaced by a local copy; a rail row
+deleted; and the flags zone saying the summary failed while it loads.
+
+**One escaped the first fixture, and the fixture was at fault.** Swapping the
+channel state order so *unbound* outranks *disabled* passed 26 of 26: the only
+disabled channel had a chat bound, so both orders read `disabled`. A disabled
+channel with no chat now tells them apart — re-running the old fixture against
+the mutation confirmed the escape. And `countOf`'s refusal of `null` is
+unreachable through real SQLite, where `COUNT()` is never NULL, so it is held
+by a stubbed read — the one stub in a file that otherwise refuses them, with
+the reason written beside it.
+
+**Migration 283 is still the next free number** — this PR needs none.

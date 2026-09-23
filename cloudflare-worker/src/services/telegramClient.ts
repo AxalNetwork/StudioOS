@@ -45,6 +45,22 @@ export class TelegramTokenMissing extends TelegramError {
   }
 }
 
+/**
+ * Whether the bot token is set — THE ONE RULE for it. `call()` and
+ * `sendMultipart()` refuse through `botToken()` on exactly this test, and HQ
+ * Platform's Broadcast console reports it (D202), so the console cannot say
+ * the bot is configured while every send refuses, or the reverse. The value
+ * itself never leaves this module.
+ */
+export function telegramTokenConfigured(env: Env): boolean {
+  return !!env.TELEGRAM_BOT_TOKEN;
+}
+
+function botToken(env: Env): string {
+  if (!telegramTokenConfigured(env)) throw new TelegramTokenMissing();
+  return env.TELEGRAM_BOT_TOKEN as string;
+}
+
 function breakerOpen(): boolean {
   if (_consecutiveFailures < BREAKER_THRESHOLD) return false;
   if (Date.now() - _openedAt > RECOVERY_MS) {
@@ -73,8 +89,7 @@ async function call<T>(
   body: Record<string, unknown>,
   opts: { attempt?: number } = {},
 ): Promise<T> {
-  const token = env.TELEGRAM_BOT_TOKEN;
-  if (!token) throw new TelegramTokenMissing();
+  const token = botToken(env);
   if (breakerOpen()) {
     throw new TelegramError(
       'telegram_breaker_open',
@@ -199,8 +214,7 @@ async function sendMultipart(
   caption: string,
   attempt = 0,
 ): Promise<TgMessage> {
-  const token = env.TELEGRAM_BOT_TOKEN;
-  if (!token) throw new TelegramTokenMissing();
+  const token = botToken(env);
   if (breakerOpen()) {
     throw new TelegramError('telegram_breaker_open', 'Telegram API circuit breaker is open.');
   }
