@@ -19,6 +19,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
+import { renderedText } from './_renderedText.mjs';
 
 import {
   QUEUE_TITLES, OUTSIDE_BUCKETS, WHY_WORD, SUPPORT_UNAVAILABLE,
@@ -33,8 +34,9 @@ const CODE = codeOnly(PAGE);
 const CANVAS = read('design/canvases/integrated/Admin · Super.dc.html');
 
 const render = (C, props) => renderToStaticMarkup(createElement(MemoryRouter, null, createElement(C, props)));
-// Rendered text with the markup removed, for sentence assertions.
-const text = (html) => html.replace(/<[^>]*>/g, '').replace(/&#x27;|&#39;/g, "'").replace(/&amp;/g, '&');
+// Rendered text with the markup removed, for sentence assertions. A scan, not
+// a regex replace: see _renderedText.mjs for why (CodeQL alert 6146).
+const text = renderedText;
 
 const LAG = 'Not recorded: the mirror runs inside the request that files a ticket, and a ticket keeps only its latest attempt, so no delay between a change and its mirror is stored to average.';
 
