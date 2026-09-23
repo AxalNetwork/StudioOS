@@ -41,6 +41,15 @@
  * has failed, every kind is offered — the route and HQ both refuse a hidden
  * kind anyway, so offering it costs one refusal in words, where hiding a kind
  * this page merely failed to read would take a door away for nothing.
+ *
+ * D208 — A CONTENT ESCALATION CAN NAME WHAT IT CONCERNS. The lane read carries
+ * `concerns`: HQ's templates as pushed here and this branch's own articles,
+ * each with a label the worker built from the branch's own row. `ConcernsPicker`
+ * offers them for a content raise only, and its option text IS that label —
+ * this page never builds one, so there is no second format for a pick and its
+ * record to drift between. Naming is optional; a list that is loading, could
+ * not be read, or holds nothing draws a sentence and no control. What HQ gets
+ * is the name, not a link, and each row here shows the name it was raised with.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -122,6 +131,162 @@ export function chosenKind(offered, picked) {
   if (offered.available.includes(picked)) return picked;
   if (offered.available.includes('other')) return 'other';
   return offered.available[0] || null;
+}
+
+/**
+ * D208 — the two sources a content escalation can name an item from, in the
+ * order the worker lists them, with the words the drawer uses for each.
+ */
+const CONCERN_SOURCES = [
+  ['template', 'HQ templates', 'no HQ templates'],
+  ['article', 'Articles on this branch', 'no articles'],
+];
+const CONCERN_HEADING = Object.fromEntries(CONCERN_SOURCES.map(([type, heading]) => [type, heading]));
+const CONCERNS_UNSENT =
+  'This branch did not send the items a content escalation can name, so none can be picked here. '
+  + 'The escalation can still be raised without one.';
+
+/** A pick is held under its type and id together: a slug and a number can collide. */
+const concernKey = (it) => `${it.type}:${it.id}`;
+
+/**
+ * What the drawer can offer to name, read off the lane payload (D208).
+ *
+ * FIVE STATES, AND ONLY `ready` HAS A CONTROL. `loading`, `unreadable`,
+ * `unavailable` and `empty` each come with a sentence instead, because a list
+ * this page could not read, or one with nothing in it, is not something to
+ * choose from. Naming is optional, so no state stops the raise.
+ *
+ * THE LABEL IS THE WORKER'S. Each item carries the text built from the branch's
+ * own row by the same function that builds the value the route stores, and
+ * this file renders it as it came. An item with no label is dropped rather than
+ * drawn as a blank choice.
+ */
+export function concernsOffered(lane) {
+  const base = {
+    items: [], groups: [], gaps: [], none: [], truncated: false, cap: null, note: null, reason: null,
+  };
+  if (lane === null || lane === undefined) return { ...base, state: 'loading' };
+  if (typeof lane !== 'object') return { ...base, state: 'unreadable' };
+  const block = lane.concerns;
+  if (!block || typeof block !== 'object' || !Array.isArray(block.items) || !Array.isArray(block.sources)) {
+    return { ...base, state: 'unavailable', reason: CONCERNS_UNSENT };
+  }
+  if (block.available !== true) {
+    return { ...base, state: 'unavailable', reason: String(block.reason || '').trim() || CONCERNS_UNSENT };
+  }
+  const items = block.items.filter((it) => it
+    && CONCERN_HEADING[it.type]
+    && (typeof it.id === 'string' || typeof it.id === 'number') && String(it.id) !== ''
+    && typeof it.label === 'string' && it.label.trim() !== '');
+  const readable = (type) => block.sources.some((s) => s && s.type === type && s.available === true);
+  return {
+    ...base,
+    state: items.length > 0 ? 'ready' : 'empty',
+    items,
+    groups: CONCERN_SOURCES
+      .map(([type, heading]) => ({ type, heading, items: items.filter((it) => it.type === type) }))
+      .filter((g) => g.items.length > 0),
+    gaps: block.sources
+      .filter((s) => s && CONCERN_HEADING[s.type] && s.available === false)
+      .map((s) => ({
+        type: s.type,
+        heading: CONCERN_HEADING[s.type],
+        reason: String(s.reason || '').trim() || 'This source could not be read.',
+      })),
+    none: CONCERN_SOURCES
+      .filter(([type]) => readable(type) && !items.some((it) => it.type === type))
+      .map(([, , noun]) => noun),
+    truncated: block.truncated === true,
+    cap: Number.isInteger(block.cap) ? block.cap : null,
+    note: typeof block.note === 'string' && block.note.trim() ? block.note : null,
+  };
+}
+
+/**
+ * The `concerns` a raise sends (D208): the picked item, for a content
+ * escalation only, and only while the list still offers it.
+ *
+ * DERIVED AT SEND TIME, LIKE `chosenKind`. A pick outlives a change of kind in
+ * state — an admin can pick an item, then switch to Other, and the picker is
+ * gone while the pick is still held — and the route refuses `concerns` on any
+ * kind but content. So what is sent is worked out from what is on screen, not
+ * from what was once chosen.
+ */
+export function concernToSend(chosen, offered, key) {
+  if (chosen !== 'content' || !key || offered.state !== 'ready') return undefined;
+  const hit = offered.items.find((it) => concernKey(it) === key);
+  return hit ? { type: hit.type, id: hit.id } : undefined;
+}
+
+/**
+ * The content raise's optional "which item" choice (D208).
+ *
+ * A SELECT WHOSE OPTION TEXT IS THE WORKER'S LABEL, grouped by source, with a
+ * first option for "nothing in particular" — a content question about no one
+ * item is still a legitimate question. Every other state is a sentence with no
+ * control, and a source that could not be read says so beside the list rather
+ * than vanishing from it.
+ */
+export function ConcernsPicker({ offered, value, onChoose }) {
+  const ready = offered.state === 'ready';
+  const heading = 'Which item is this about? (optional)';
+  const sentence = {
+    loading: 'Loading the items this branch can name…',
+    unreadable: 'The items this branch can name could not be read, so none can be picked. '
+      + 'The escalation can still be raised without one.',
+    unavailable: offered.reason,
+    empty: `Nothing on this branch can be named: ${offered.none.join(' and ') || 'no readable source'}. `
+      + 'The escalation is raised without one.',
+  }[offered.state];
+  return (
+    <div data-testid="branch-escalate-concerns">
+      {ready
+        ? <label htmlFor="branch-escalate-concern" className="block text-[11.5px] font-bold">{heading}</label>
+        : <p className="text-[11.5px] font-bold">{heading}</p>}
+      {ready ? (
+        <select
+          id="branch-escalate-concern"
+          value={offered.items.some((it) => concernKey(it) === value) ? value : ''}
+          onChange={(e) => onChoose(e.target.value)}
+          className="mt-1 w-full rounded-xl border border-axal-hairline bg-axal-ground p-2.5 text-[12.5px]"
+          data-testid="branch-escalate-concern"
+        >
+          <option value="">No item — this is about something else</option>
+          {offered.groups.map((g) => (
+            <optgroup key={g.type} label={g.heading}>
+              {g.items.map((it) => (
+                <option key={concernKey(it)} value={concernKey(it)}>{it.label}</option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      ) : (
+        <p className="mt-1 text-[11px] leading-relaxed text-axal-muted" data-testid="branch-escalate-concern-state">
+          {sentence}
+        </p>
+      )}
+      {ready && offered.truncated && (
+        <p className="mt-1 text-[11px] leading-relaxed text-axal-muted" data-testid="branch-escalate-concern-truncated">
+          Only the {offered.cap} most recent articles are listed. To name an older one, say which in the subject.
+        </p>
+      )}
+      {offered.gaps.map((g) => (
+        <p
+          key={g.type}
+          className="mt-1 text-[11px] leading-relaxed text-axal-muted"
+          data-testid={`branch-escalate-concern-gap-${g.type}`}
+        >
+          {g.heading}: {g.reason}
+        </p>
+      ))}
+      {ready && offered.note && (
+        <p className="mt-1 text-[11px] leading-relaxed text-axal-muted" data-testid="branch-escalate-concern-note">
+          {offered.note}
+        </p>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -246,6 +411,7 @@ export default function BranchApprovals({ user }) {
   const [board, setBoard] = useState(null);         // D130 — the four local queues
   const [view, setView] = useState('all');
   const [kind, setKind] = useState('other');
+  const [concern, setConcern] = useState('');       // D208 — the picked item's key, or none
   const [subject, setSubject] = useState('');
   const [detail, setDetail] = useState('');
   const [sending, setSending] = useState(false);
@@ -276,6 +442,8 @@ export default function BranchApprovals({ user }) {
   // D206 — the kinds the licence offers, and the one the form will send.
   const offered = kindsOffered(lane);
   const chosen = chosenKind(offered, kind);
+  // D208 — the items a content raise can name, from the same lane read.
+  const concerns = concernsOffered(lane);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -283,9 +451,11 @@ export default function BranchApprovals({ user }) {
     setSending(true);
     setSendError('');
     try {
-      await api.branchEscalate({ kind: chosen, subject: subject.trim(), detail: detail.trim() || undefined });
+      await api.branchEscalate({ kind: chosen, subject: subject.trim(), detail: detail.trim() || undefined,
+        concerns: concernToSend(chosen, concerns, concern) });
       setSubject('');
       setDetail('');
+      setConcern('');
       load();
     } catch (err) {
       reportError('branch-escalate', err);
@@ -364,6 +534,11 @@ export default function BranchApprovals({ user }) {
         <h2 className="text-[14.5px] font-extrabold tracking-tight">Raise one</h2>
         <form className="mt-3 space-y-3" onSubmit={submit} data-testid="branch-escalate-form">
           <KindPicker offered={offered} chosen={chosen} onChoose={setKind} />
+          {/* D208 — for content only: the one kind whose subject is an item
+              this branch holds. Every other kind describes itself in words. */}
+          {chosen === 'content' && (
+            <ConcernsPicker offered={concerns} value={concern} onChoose={setConcern} />
+          )}
           <input
             className="w-full rounded-xl border border-axal-hairline bg-axal-ground p-2.5 text-[12.5px]"
             placeholder="What is this about?"
@@ -441,6 +616,14 @@ export default function BranchApprovals({ user }) {
                       {it.kind.replace('_', ' ')} · raised {it.created_at}
                       {it.sla && SLA_LABEL[it.sla] ? ` · ${SLA_LABEL[it.sla]}` : ''}
                     </div>
+                    {/* D208 — the item it was raised about, in the words HQ
+                        received. "About" is the word HQ Support already uses
+                        for this field, so one field has one word. */}
+                    {it.subject_ref && (
+                      <div className="mt-0.5 text-[10.5px] text-axal-muted" data-testid="branch-escalation-about">
+                        About <span className="font-mono">{it.subject_ref}</span>
+                      </div>
+                    )}
                   </div>
                   <span className={STATUS_PILL[it.status] || STATUS_PILL.open}>{it.status}</span>
                 </div>

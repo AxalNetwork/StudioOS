@@ -54,6 +54,35 @@ function Absent({ reason }) {
   );
 }
 
+/**
+ * D208 — what one content submission names, in the words its branch sent.
+ *
+ * A LABEL, NOT A LINK. The item lives in the branch's database, which HQ cannot
+ * open, so the branch sends the name it gives the item and this renders that
+ * name as it came — the same "About" line HQ Support draws for this field, so
+ * one field has one word.
+ *
+ * AN ABSENT LABEL IS STATED, NEVER BLANK. A submission raised without naming an
+ * item, or before a submission could carry a label at all, has none. That row
+ * says so with its reason rather than drawing an empty "About", which would read
+ * as a label that failed to load.
+ */
+export function LocalisationRow({ subjectRef }) {
+  const label = typeof subjectRef === 'string' ? subjectRef.trim() : '';
+  if (label) {
+    return (
+      <p className="mt-1 text-[10.5px] text-axal-muted" data-testid="hq-localisation-about">
+        About <span className="font-mono">{label}</span>
+      </p>
+    );
+  }
+  return (
+    <p className="mt-1 text-[10.5px] text-axal-muted" data-testid="hq-localisation-unnamed">
+      <Unrecorded /> — No item named: raised without one, or before a submission carried its label.
+    </p>
+  );
+}
+
 function Stat({ label, value, note }) {
   return (
     <div className="rounded-xl border border-axal-hairline bg-axal-ground p-3">
@@ -129,7 +158,10 @@ export default function ContentPage() {
         // this list: a content escalation carries the branch code and takes a
         // decision. "Localisation" stays and is NARROWER: what is missing is
         // the link between a piece and the one it localises, not the lane.
-        ['Localisation link', 'Nothing records that one piece is a localisation of another, so a count of localised items would be a count of submissions.'],
+        // D208 — NARROWER AGAIN. A submission can now name the item it
+        // concerns, so "which item" is answered; "what the submission is to
+        // it" is not, and that is the part a localisation count needs.
+        ['Localisation link', 'A submission can name the item it concerns, as its branch labels it. Nothing records whether it localises that item or asks for a change to it, so a count of localised items would still be a count of submissions.'],
         ['Per-article attribution', 'An escalation names the branch that submitted it; an ARTICLE still names no licence (U1).'],
       ]}
       data-testid="hq-content-rail"
@@ -306,6 +338,7 @@ export default function ContentPage() {
                             {it.branch_code} · raised {it.created_at}
                             {it.sla === 'past' ? ' · past SLA' : it.sla === 'due_soon' ? ' · due soon' : ''}
                           </div>
+                          <LocalisationRow subjectRef={it.subject_ref} />
                         </div>
                         <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9.5px] font-extrabold uppercase tracking-[.08em] ${
                           it.answer
@@ -324,6 +357,12 @@ export default function ContentPage() {
                   ))}
                 </ul>
               )}
+              {laneItems && laneItems.length > 0 && (
+                <p className="mt-2 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-localisation-label-note">
+                  An item is named in its branch&rsquo;s own words: a label, not a link. The item lives in
+                  the branch&rsquo;s database, which HQ cannot open.
+                </p>
+              )}
 
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <Stat
@@ -333,8 +372,11 @@ export default function ContentPage() {
                 />
                 {/* STILL PERMANENTLY BLANK, and for the one reason that did not
                     change: counting localisations needs a link between two
-                    pieces, and nothing records one. */}
-                <Stat label="Localised" value={null} note="no localisation link exists" />
+                    pieces, and nothing records one. D208 lets a submission
+                    NAME its item, which is not the same thing — a French
+                    version of X and a fix to X both name X — so the check the
+                    task asked for came out "stays null, narrower reason". */}
+                <Stat label="Localised" value={null} note="naming an item does not record a localisation" />
               </div>
               <p className="mt-3 text-[12px] leading-relaxed text-axal-muted" data-testid="hq-localisation-reason">
                 {ready ? data.localisation_reason : 'The content summary could not be read.'}

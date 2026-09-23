@@ -165,13 +165,23 @@ r.get('/summary', async (c) => {
     // LOCALISES ANOTHER. An escalation names what a branch submitted; it does
     // not say which original it is a version of, so "4 localised" would be
     // counting submissions and calling them translations.
+    //
+    // NARROWED AGAIN IN D208. A content escalation can now NAME the item it
+    // concerns — HQ's template or the branch's own article — as a label the
+    // branch builds from its own row (`services/escalationConcerns.ts`), since
+    // HQ cannot open that database. That closes "which item". It does not close
+    // "what the submission is TO that item": a French version of template X and
+    // a request to fix a clause in X both name X. So the count still has no
+    // source, and this sentence now says the narrower true thing.
     localisation_available: false,
     localisation_reason:
-      'Brand approval and per-subsidiary attribution exist now: a branch submits content as an '
-      + 'escalation of kind "content", which carries its branch code and takes an approve or '
-      + 'request-changes decision, and the lane is read from /api/admin/escalations?kind=content. '
-      + 'What is still not recorded is the LINK — nothing says that one piece is a localisation of '
-      + 'another, so a count of localised items would be a count of submissions wearing the wrong '
+      'Brand approval, per-subsidiary attribution and the item a submission concerns exist now: a '
+      + 'branch submits content as an escalation of kind "content", which carries its branch code, '
+      + 'takes an approve or request-changes decision, and can name the item it concerns — a label '
+      + 'the branch builds, not a link HQ can open. The lane is read from '
+      + '/api/admin/escalations?kind=content. What is still not recorded is the RELATION — naming '
+      + 'an item does not say that the submission is a localisation of another rather than a change '
+      + 'to it, so a count of localised items would be a count of submissions wearing the wrong '
       + 'name.',
     localisation_lane_endpoint: '/api/admin/escalations?kind=content',
 
