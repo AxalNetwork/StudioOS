@@ -18,12 +18,17 @@ can be read to find out what a rule actually is.
 
 ## Tests
 
-`npm run test:retention` runs every `*.test.mjs` in this folder. Four of the
-five modules are covered here; `migrationPlan.mjs` is the exception, and
+`npm run test:retention` runs every `*.test.mjs` in this folder. Six of the
+seven modules are covered here; `migrationPlan.mjs` is the exception, and
 deliberately so — its behaviour is pinned against a real SQLite database by
 `cloudflare-worker/test/migrate_d1_plan.test.ts` and
 `cloudflare-worker/test/migrations_fresh_build.test.ts`, which run the actual
 migrations rather than a model of them.
+
+`rpcEntrypoints.test.mjs` covers no module of its own. It holds
+`branchConfig.mjs`'s two entrypoint names against the RPC classes in
+`cloudflare-worker/src/rpc/index.ts` and against every call that crosses the
+tier boundary, derived from the source rather than pinned (D207).
 
 ## The rule for adding to it
 

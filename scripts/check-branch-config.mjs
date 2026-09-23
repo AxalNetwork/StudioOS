@@ -23,6 +23,10 @@
  *   · a table HQ declares and the branch config does not
  *   · a var whose URL still points at HQ — every email link, magic link and
  *     OAuth callback on the branch reads one of those four
+ *   · a service binding other than HQ, or an HQ binding naming the wrong
+ *     class (D207) — HQ's own `[[services]]` are its lines to branches, so a
+ *     copy of them would bind each branch to every other; and a branch calls
+ *     HQ through `BranchEntrypoint`, not the `HqEntrypoint` it exports itself
  *   · a committed `wrangler.branch.*.toml` — it is build output
  *
  * Exit 0 prints one line. Exit 1 lists every problem, so one run fixes them all.

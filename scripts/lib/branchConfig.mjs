@@ -30,9 +30,14 @@
  *   · `triggers` — trimmed to the two cadences a branch needs. The platform
  *     content crons (market-intel connectors, persona digests) would otherwise
  *     run N times over the same external sources.
- *   · `[[services]]` — added. A branch calls HQ through a service binding;
- *     HQ's side of the pair is committed into `wrangler.toml` when the branch
- *     is provisioned.
+ *   · `[[services]]` — REPLACED, never copied (D207). HQ's service bindings are
+ *     HQ's lines to its branches: `open-branch-link-pr.mjs` commits one
+ *     `BRANCH_<CODE>` per provisioned branch into both tables of
+ *     `wrangler.toml`. Copied, they would bind every branch to every other
+ *     branch — and to itself — through an entrypoint that answers HQ's
+ *     `searchAccounts`, `applyLicence` and `applyEscalationAnswer` with no
+ *     secret. A branch binds exactly one Worker, HQ, through the class HQ
+ *     exports for branches to call (`BRANCH_CALLS_HQ` below).
  *
  * The output is FLAT — no `[env.*]` — so `--env` is never combined with
  * `--name`, and the non-inheritance trap cannot recur inside a branch config.
@@ -75,6 +80,25 @@ export function derivedNames(code) {
 
 /** The crons a branch runs: the queue drain and the nightly cleanup, nothing else. */
 export const BRANCH_CRONS = ['* * * * *', '0 3 * * *'];
+
+/**
+ * THE TWO ENTRYPOINTS, NAMED BY WHO CALLS WHOM (D207). The class names read
+ * backwards until you see it — `cloudflare-worker/src/rpc/index.ts` says so in
+ * its own header — and this file once wrote the wrong one:
+ *   · a BRANCH calls HQ over its `HQ` binding, which must name the class HQ
+ *     exports for branches to call: `BranchEntrypoint` (`escalate`, …);
+ *   · HQ calls a branch over `BRANCH_<CODE>`, which must name the class the
+ *     branch exports for HQ to call: `HqEntrypoint` (`health`, `overview`, …).
+ * The wrong name does not fail a deploy. An RPC stub answers every property
+ * with a function, so `typeof hq.escalate === 'function'` holds on either
+ * class, the call throws on the far side, and the branch files the escalation
+ * as `undelivered` — every one, for every kind, the suspended branch's appeal
+ * included. Both halves read these constants so they cannot disagree, and
+ * `rpcEntrypoints.test.mjs` derives both from the classes' own doc lines and
+ * from the methods their callers actually call.
+ */
+export const BRANCH_CALLS_HQ = 'BranchEntrypoint';
+export const HQ_CALLS_BRANCH = 'HqEntrypoint';
 
 const KV_ID_KEY = { TOKENS: 'kv_tokens', RATE_LIMITS: 'kv_rate_limits' };
 
@@ -264,6 +288,12 @@ export function renderBranchConfig(tomlSrc, entry) {
     switch (table) {
       case 'routes':
         continue; // replaced above
+      case 'services':
+        // HQ's lines to its branches, one per provisioned branch (D207). The
+        // canvas draws a branch as "binds HQ → studioos. No binding to any
+        // other branch." (Admin · Super, the topology artboard): the one
+        // binding a branch gets is pushed below, and none of these is it.
+        continue;
       case 'vars': {
         for (const key of ['APP_URL', 'PUBLIC_BASE_URL', 'OAUTH_CALLBACK_BASE_URL', 'PUBLIC_MARKETING_URL']) {
           if (kv.has(key)) kv.set(key, q(`https://${n.hostname}`));
@@ -321,11 +351,13 @@ export function renderBranchConfig(tomlSrc, entry) {
 
   for (const s of inherited) push(s.name, s.double, new Map(s.kv));
 
-  // HQ's side of this pair is committed into wrangler.toml at provisioning.
+  // The branch's one line out: HQ, through the class HQ exports for branches
+  // to call (`rpc/index.ts`, `BranchEntrypoint`). HQ's side of the pair is
+  // committed into wrangler.toml at provisioning, and names the other class.
   push('services', true, new Map([
     ['binding', q('HQ')],
     ['service', q('studioos')],
-    ['entrypoint', q('HqEntrypoint')],
+    ['entrypoint', q(BRANCH_CALLS_HQ)],
   ]));
 
   return `${out.join('\n')}\n`;
@@ -399,7 +431,10 @@ export function checkRendered(tomlSrc, entry, rendered) {
   }
   const renamedQueue = (v) => (v.endsWith('-dlq') ? q(n.dlq) : q(n.queue));
   for (const [table, list] of prodTables) {
-    if (['routes', 'vars', 'triggers'].includes(table)) continue;
+    // `services` is checked on its own below, and must never be matched
+    // against HQ's: HQ's service bindings are its lines to branches, so a
+    // branch config carrying the same set is exactly the defect (D207).
+    if (['routes', 'vars', 'triggers', 'services'].includes(table)) continue;
     const here = byName(table);
     if (here.length !== list.length) {
       bad.push(`table ${table}: HQ declares ${list.length}, the branch config has ${here.length}`);
@@ -467,9 +502,30 @@ export function checkRendered(tomlSrc, entry, rendered) {
     bad.push(`branch crons must be ${arr(BRANCH_CRONS)} — the platform-content cadences are HQ's alone`);
   }
 
-  const svc = byName('services')[0];
-  if (!svc || JSON.parse(svc.kv.get('service') || '""') !== 'studioos') {
-    bad.push('the HQ service binding is missing');
+  // A BRANCH BINDS HQ AND NOTHING ELSE, THROUGH THE CLASS WITH THE METHODS
+  // (D207). The HQ block is found by its binding name, never by position: a
+  // stray block ahead of it would otherwise be the one checked, and HQ's own
+  // would pass unread.
+  const services = byName('services');
+  const toHq = services.filter((s) => s.kv.get('binding') === q('HQ'));
+  if (!toHq.length) bad.push('the HQ service binding is missing');
+  else if (toHq.length > 1) bad.push(`the HQ service binding is declared ${toHq.length} times; a branch has one line to HQ`);
+  else {
+    const hq = toHq[0];
+    if (hq.kv.get('service') !== q('studioos')) {
+      bad.push(`the HQ service binding must name the studioos Worker, found ${hq.kv.get('service')}`);
+    }
+    if (hq.kv.get('entrypoint') !== q(BRANCH_CALLS_HQ)) {
+      bad.push(`the HQ service binding must name ${BRANCH_CALLS_HQ}, found ${hq.kv.get('entrypoint')} — `
+        + `HQ exports ${BRANCH_CALLS_HQ} for branches to call; ${HQ_CALLS_BRANCH} is the class a branch exports for HQ, and has no escalate`);
+    }
+  }
+  for (const s of services) {
+    const binding = s.kv.get('binding');
+    if (binding === q('HQ')) continue;
+    bad.push(/^"BRANCH_/.test(binding || '')
+      ? `service binding ${binding} is a line to another branch — a branch binds HQ and no other branch`
+      : `service binding ${binding} is not HQ — a branch binds HQ and no other Worker`);
   }
 
   for (const name of ['rules', 'observability']) {
