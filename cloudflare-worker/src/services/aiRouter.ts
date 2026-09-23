@@ -686,11 +686,26 @@ interface WorkersAIBinding {
 // (call falls through to the un-gatewayed Workers AI path).
 // Task #19 (WS0): `onboarding_chat` is deliberately NOT in this list — it
 // must never depend on the advisor gateway, so it always runs un-gatewayed.
+//
+// D209 — the list and the slug are exported because HQ's topology page states
+// them, and a page holding its own copy of "which calls go through the gateway"
+// is a second place to update. What the option carries is ONLY the gateway id:
+// no `cf-aig-metadata`, so the gateway sees no branch and no user, and cannot
+// hold a per-branch spend limit (task #358). The page says that too, and
+// `topology_d209.test.ts` fails if an option here starts carrying anything else
+// without the page learning of it.
+export const GATEWAY_TASKS: readonly TaskClass[] = ['advisor_turn', 'advisor_explain'];
+
+export function advisorGatewaySlug(env: Env): string | null {
+  const slug = env.CF_AI_GATEWAY_SLUG_ADVISOR;
+  return slug && slug.trim() ? slug.trim() : null;
+}
+
 function gatewayOptionFor(env: Env, task: TaskClass): { gateway: { id: string } } | undefined {
-  if (task !== 'advisor_turn' && task !== 'advisor_explain') return undefined;
-  const slug = (env as unknown as Record<string, string | undefined>).CF_AI_GATEWAY_SLUG_ADVISOR;
-  if (!slug || !slug.trim()) return undefined;
-  return { gateway: { id: slug.trim() } };
+  if (!GATEWAY_TASKS.includes(task)) return undefined;
+  const slug = advisorGatewaySlug(env);
+  if (!slug) return undefined;
+  return { gateway: { id: slug } };
 }
 
 // True when this task would normally route through the advisor AI Gateway

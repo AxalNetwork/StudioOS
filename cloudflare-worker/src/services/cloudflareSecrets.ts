@@ -60,6 +60,19 @@ function resolveConfig(env: Env): { token: string; accountId: string; script: st
   return { token, accountId, script };
 }
 
+/**
+ * D209 — the script a secret write from this Worker would land on, or `null`
+ * when this Worker cannot write one (no token, no account id, or a branch with
+ * no script name). Read by the topology page, which states that three screens
+ * write Worker secrets through the Cloudflare API; asking `resolveConfig`
+ * rather than re-deriving the script is what keeps the page from naming a
+ * target the write would not use. Never returns a credential.
+ */
+export function secretWriteTarget(env: Env): string | null {
+  const cfg = resolveConfig(env);
+  return 'missing' in cfg ? null : cfg.script;
+}
+
 function classifyError(status: number, body: string): CfSecretResult {
   // Trim body to avoid leaking large responses into logs / audit rows.
   const detail = (body || '').slice(0, 300);

@@ -9,6 +9,8 @@
  *                        switches, read-only
  *   GET  /switches       the switches an operator can throw, both halves (D203)
  *   POST /switches/:key  throw or release one, with a reason, audited (D203)
+ *   GET  /topology       what this Worker binds, exports and calls, and what
+ *                        the shared services do and do not carry (D209, H14)
  *
  * EVERY BLOCK CARRIES ITS OWN STATE. One store failing to answer makes that
  * block unreadable, with the reason, and leaves the others standing: an
@@ -71,6 +73,7 @@ import {
 import { logAdminAction } from '../services/adminAudit';
 import { telegramTokenConfigured } from '../services/telegramClient';
 import { xClientConfigured } from '../services/xClient';
+import { describeTopology } from '../services/topology';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -340,6 +343,20 @@ r.get('/switches', async (c) => {
     propagation_seconds: OPERATOR_SWITCH_TTL_MS / 1000,
     reach: OPERATOR_SWITCH_REACH,
   });
+});
+
+// ---------------------------------------------------------------------------
+// D209 — H14, the topology stated once. Pure over `env` (services/topology.ts),
+// so there is no store to fail and no unreadable state of its own. The branch
+// rows it is drawn beside come from GET /api/admin/deployments, which carries
+// their registry rows and live health; this says what each of them IS.
+//
+// Super admin only, and on a branch it answers "HQ only": a branch reads its
+// own half at GET /api/branch/deployment.
+// ---------------------------------------------------------------------------
+r.get('/topology', async (c) => {
+  await requireSuperAdmin(c);
+  return c.json(describeTopology(c.env));
 });
 
 r.post('/switches/:key', async (c) => {

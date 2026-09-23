@@ -172,6 +172,7 @@ import branchApprovalRoutes from './routes/branch_approvals';
 import branchHomeRoutes from './routes/branch_home';
 import branchTemplateRoutes from './routes/branch_templates';
 import branchInsightsRoutes from './routes/branch_insights';
+import branchDeploymentRoutes from './routes/branch_deployment';
 import adminSuperAdmins from './routes/admin_super_admins';
 import adminHq from './routes/admin_hq';
 import adminRevenue from './routes/admin_revenue';
@@ -813,6 +814,9 @@ app.route('/api/branch', branchTemplateRoutes);
 
 // S6 (D148) — this territory's own stats, and the anonymised median HQ pushed.
 app.route('/api/branch', branchInsightsRoutes);
+// S14 (D209) — what this branch Worker is and is not. HQ's half is
+// GET /api/admin/platform/topology; both answer from services/topology.ts.
+app.route('/api/branch', branchDeploymentRoutes);
 app.route('/api/admin/licences', adminLicences);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
 // catch-all for the same reason as the licence ledger above.

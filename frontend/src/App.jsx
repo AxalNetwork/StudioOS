@@ -197,6 +197,7 @@ const HqRevenuePage = lazy(() => import('./pages/hq/RevenuePage'));
 const HqContentPage = lazy(() => import('./pages/hq/ContentPage'));
 const HqPlatformPage = lazy(() => import('./pages/hq/PlatformPage'));
 const HqPlatformSwitchesPage = lazy(() => import('./pages/hq/PlatformSwitchesPage'));
+const HqPlatformTopologyPage = lazy(() => import('./pages/hq/PlatformTopologyPage'));
 const HqSecurityPage = lazy(() => import('./pages/hq/SecurityPage'));
 const HqSupportPage = lazy(() => import('./pages/hq/HqSupportPage'));
 const KYCPage = lazy(() => import('./pages/KYCPage'));
@@ -2261,6 +2262,7 @@ function AppInner() {
           rows by design, and this page is reached from Platform's Feature flags
           zone by a literal link, which the reachability walk counts. */}
       <Route path="/admin/platform/switches" element={guard(['admin'], hqOnly(<HqPlatformSwitchesPage />))} />
+      <Route path="/admin/platform/topology" element={guard(['admin'], hqOnly(<HqPlatformTopologyPage />))} />
       <Route path="/admin/hq-support" element={guard(['admin'], hqOnly(<HqSupportPage />))} />
       <Route path="/admin/security" element={guard(['admin'], hqOnly(<HqSecurityPage />))} />
       <Route path="/admin/network-profiles" element={guard(['admin'], <AdminNetworkProfiles />)} />

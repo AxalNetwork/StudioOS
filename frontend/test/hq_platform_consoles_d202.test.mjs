@@ -31,8 +31,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { codeOnly } from './_codeOnly.mjs';
 import {
   BroadcastConsole, SwitchList, SWITCH_TONE, CHANNEL_STATE, UNAVAILABLE,
-  workersStat, triggersStat, dlqStat, incidentsStat, perMinute, liveChip,
+  workersStat, triggersStat, dlqStat, incidentsStat, perMinute,
 } from '../src/pages/hq/PlatformPage.jsx';
+// D209 moved liveChip to the lib when Platform → Topology became its second
+// reader. The assertions below are unchanged: they pin the chip, wherever it lives.
+import { liveChip } from '../src/lib/deployTimeline.js';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = raw('frontend/src/pages/hq/PlatformPage.jsx');
