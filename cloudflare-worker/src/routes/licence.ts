@@ -77,6 +77,8 @@ type BranchLicenceRow = {
   signatory_title: string | null;
   term_years: number | null;
   terminated_at: string | null;
+  // Migration 284 (D206) — which kind of licence this is, as HQ pushed it.
+  kind: string | null;
   pushed_at: string;
 };
 
@@ -102,7 +104,7 @@ async function branchLicencePayload(env: Env, code: string) {
               revenue_share_bps, token_split_bps, annual_fee_cents, currency, term_start, term_end,
               renewal_at, template_version, suspended_at, suspended_note,
               registered_address, signatory_name, signatory_title, term_years, terminated_at,
-              pushed_at
+              kind, pushed_at
          FROM branch_licence WHERE id = 1`,
     ).first<BranchLicenceRow>();
   } catch (e) {
@@ -241,6 +243,10 @@ async function branchLicencePayload(env: Env, code: string) {
       suspended_at: row.suspended_at,
       terminated_at: row.terminated_at,
       template_version: row.template_version,
+      // D206 — `LicenceRow`'s own key, like every field above, so the tier
+      // parity D137 asserts holds for this one too. Null when HQ's push
+      // predates migration 284: unknown, never a guessed 'subsidiary'.
+      kind: row.kind ?? null,
       admin_role: 'principal',
       // D197 — THE HOST REGISTER IS HQ'S AND A BRANCH HAS NO READ OF IT, so
       // this is "unknown", never "no host bound". HQ's `hydrate` sends the same

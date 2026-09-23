@@ -261,13 +261,22 @@ export default function ContentPage() {
                   takes a decision (brand approval). What still does not exist
                   is a LINK saying which piece a submission localises — so this
                   lane counts submissions, and the refusal below says that
-                  rather than being deleted. */}
+                  rather than being deleted.
+
+                  D206 — THE KIND IS SETTLED WHERE THE ESCALATION IS RECORDED,
+                  NOT HERE. This note used to say the lane did not filter on
+                  kind yet, because reaching it from a branch code is two joins.
+                  D206 makes that join at the write instead: `recordEscalation`
+                  reads the kind from HQ's own ledger and refuses a white-label's
+                  `content` escalation without recording it, and nothing changes
+                  a licence's kind after it is issued. So no white-label row can
+                  reach this lane to be filtered out, and a filter here would be
+                  a second copy of a rule that already has one home. */}
               <p className="mb-3 text-[12px] leading-relaxed text-axal-muted" data-testid="hq-brand-desk-scope">
-                Brand approval is for Axal subsidiaries. A white-label has no HQ brand desk.
-                The ledger records which kind a licence is (D196), so this lane no longer shows every
-                submission for want of a column — but it does not filter on that yet: an escalation
-                carries a branch code, and reaching the kind means joining it through the deployment
-                row to its licence. Until it does, a white-label submission would still appear here.
+                Brand approval is for Axal subsidiaries. A white-label has no HQ brand desk, so HQ refuses
+                a white-label&rsquo;s content escalation before recording it, reading the kind from its
+                own licence ledger. Nothing here filters by kind because no white-label submission can
+                reach this lane.
               </p>
               {lane === UNAVAILABLE && (
                 <Unreadable

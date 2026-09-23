@@ -198,16 +198,34 @@ test('the brand kit is drawn only for a white-label, and still says whose mark i
     'the brand kit became a numbered step, which renumbers the flow per licence');
 });
 
-test('the brand-desk refusal is NARROWED, not deleted', () => {
-  // D111's pattern, and both halves are load-bearing. Drop the first and HQ
-  // looks like it approves a white-label's brand; drop the second and the lane
-  // looks like it already filters, which it does not — an escalation carries a
-  // branch code, and the kind is two joins away.
+test('the brand-desk note says what D206 made true, and the gate it cites is in the code', () => {
+  // RE-AIMED IN D206, NOT RELAXED. This pinned "does not filter on that yet",
+  // which was true while an escalation reached HQ's lane with only a branch
+  // code and the kind two joins away. D206 moved the kind check to the write:
+  // HQ refuses a white-label's content escalation before recording it, so the
+  // old sentence became false and must be gone. The first half stays for its
+  // original reason — drop it and HQ reads as approving a white-label's brand.
   const at = CONTENT.indexOf('data-testid="hq-brand-desk-scope"');
   assert.ok(at > 0, 'the brand-desk scope note is gone');
   const scope = CONTENT.slice(at, CONTENT.indexOf('</p>', at));
   assert.match(scope, /A white-label has no HQ brand desk/,
     'the refusal is gone, so HQ reads as approving a white-label brand');
-  assert.match(scope, /does not filter on that yet/,
-    'the lane now claims to filter by kind, which nothing in it does');
+  assert.doesNotMatch(scope, /does not filter on that yet/,
+    'the note still says white-label content reaches this lane — D206 refuses it at the write');
+  assert.match(scope, /HQ refuses\s+a white-label&rsquo;s content escalation before recording it/,
+    'the note no longer says where a white-label submission is stopped');
+
+  // THE COPY CLAIMS A GATE, SO THE GATE IS CHECKED. A sentence that outlived
+  // its refusal is the class this note has now been corrected for twice; this
+  // makes the third time fail here instead of being found by a reader.
+  const HQ_OPS = codeOnly(read('cloudflare-worker/src/rpc/hqOps.ts'));
+  const start = HQ_OPS.indexOf('export async function recordEscalation');
+  assert.ok(start > 0, 'recordEscalation is gone');
+  const end = HQ_OPS.indexOf('\nexport ', start + 1);
+  const rec = HQ_OPS.slice(start, end > 0 ? end : undefined);
+  const refusedAt = rec.indexOf("refused: 'kind_not_available'");
+  const insertAt = rec.indexOf('INSERT INTO hq_escalations');
+  assert.ok(refusedAt > 0, 'recordEscalation no longer refuses a hidden kind, so the note claims a gate that does not exist');
+  assert.ok(insertAt > 0, 'recordEscalation no longer records an escalation');
+  assert.ok(refusedAt < insertAt, 'the refusal sits after the INSERT, so a refused escalation is recorded anyway');
 });

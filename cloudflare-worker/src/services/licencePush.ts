@@ -88,11 +88,55 @@ export function licenceRecord(
     signatory_title: licence.signatory_title,
     term_years: licence.term_years,
     terminated_at: licence.terminated_at,
+    // D206 — migration 284. Which KIND of licence the branch runs under, so
+    // it can tell its own drawer which escalation kinds exist for it (H30).
+    // Absent on a ledger that predates migration 279 — `SELECT *` simply has
+    // no such key — and the copy stores that as unknown rather than guessing.
+    kind: licence.kind ?? null,
     // HQ's clock, not the branch's: `pushed_at` is the moment HQ ASSERTED the
     // content, which migration 256 says is the whole value of the column — a
     // retry keeps the age of the fact rather than resetting it.
     pushed_at: pushedAt,
   };
+}
+
+/**
+ * The whole copy of one licence, read fresh from HQ's ledger — the record the
+ * push SENDS and the pull RETURNS (D206).
+ *
+ * WHY THERE IS ONE ASSEMBLER. The two used to build their records apart:
+ * `pushLicenceToBranch` read `SELECT *` plus the latest contract's template
+ * version, while `licenceForBranch` (the pull, `rpc/hqOps.ts`) named its own
+ * column list — migration 187's — so it never carried migration 265's five
+ * fields, sent `template_version: null` under a comment claiming HQ holds no
+ * template version (the contract ledger does, and the push already read it),
+ * and listed territories in whatever order the join returned. Two emitters of
+ * one record disagreeing is the drift D137 fixed on the READ side of the copy;
+ * this is the same defect on the write side, and `kind` would have been the
+ * next field to reach one emitter and not the other.
+ *
+ * Throws when a read fails. A partial record is worse than a late one — a copy
+ * without its territory would tell the branch it holds no country — so the
+ * caller decides what a failure means for it.
+ */
+export async function assembleLicenceRecord(
+  env: Env, licence: Row, pushedAt: string,
+): Promise<Record<string, unknown>> {
+  const licenceId = Number(licence.id);
+  const t = await env.DB.prepare(
+    'SELECT country_code FROM licence_territories WHERE licence_id = ? ORDER BY country_code',
+  ).bind(licenceId).all<{ country_code: string }>();
+  const territories = (t.results || []).map((r) => String(r.country_code));
+  const seats: Record<string, number> = {};
+  const s = await env.DB.prepare(
+    'SELECT seat_type, seats_licensed FROM licence_seats WHERE licence_id = ?',
+  ).bind(licenceId).all<{ seat_type: string; seats_licensed: number }>();
+  for (const row of s.results || []) seats[String(row.seat_type)] = Number(row.seats_licensed) || 0;
+  const ct = await env.DB.prepare(
+    'SELECT template_version FROM licence_contracts WHERE licence_uid = ? ORDER BY id DESC LIMIT 1',
+  ).bind(String(licence.uid)).first<{ template_version: number }>();
+  const templateVersion = ct ? Number(ct.template_version) : null;
+  return licenceRecord(licence, territories, seats, templateVersion, pushedAt);
 }
 
 /**
@@ -152,22 +196,9 @@ export async function pushLicenceToBranch(
     };
   }
 
-  let territories: string[] = [];
-  const seats: Record<string, number> = {};
-  let templateVersion: number | null = null;
+  let record: Record<string, unknown>;
   try {
-    const t = await env.DB.prepare(
-      'SELECT country_code FROM licence_territories WHERE licence_id = ? ORDER BY country_code',
-    ).bind(licenceId).all<{ country_code: string }>();
-    territories = (t.results || []).map((r) => String(r.country_code));
-    const s = await env.DB.prepare(
-      'SELECT seat_type, seats_licensed FROM licence_seats WHERE licence_id = ?',
-    ).bind(licenceId).all<{ seat_type: string; seats_licensed: number }>();
-    for (const row of s.results || []) seats[String(row.seat_type)] = Number(row.seats_licensed) || 0;
-    const ct = await env.DB.prepare(
-      'SELECT template_version FROM licence_contracts WHERE licence_uid = ? ORDER BY id DESC LIMIT 1',
-    ).bind(String(licence.uid)).first<{ template_version: number }>();
-    templateVersion = ct ? Number(ct.template_version) : null;
+    record = await assembleLicenceRecord(env, licence, pushedAt);
   } catch (e) {
     // A partial record is worse than a late one: a copy pushed without its
     // territory would tell the branch it holds no country.
@@ -176,9 +207,7 @@ export async function pushLicenceToBranch(
   }
 
   try {
-    const res = await binding.stub.applyLicence(
-      licenceRecord(licence, territories, seats, templateVersion, pushedAt),
-    );
+    const res = await binding.stub.applyLicence(record);
     // The branch answers with its own object. `{ok:false, reason}` from there is
     // a real state — a branch that refused the copy — and an operator should
     // read the branch's own sentence rather than a generic success.

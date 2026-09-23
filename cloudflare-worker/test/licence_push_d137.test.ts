@@ -47,7 +47,8 @@ const SCHEMA = `
     registered_address TEXT, signatory_name TEXT, signatory_title TEXT, status TEXT,
     term_years INTEGER, annual_fee_cents INTEGER, currency TEXT,
     revenue_share_bps INTEGER, token_split_bps INTEGER,
-    starts_on TEXT, renews_on TEXT, suspended_at TEXT, terminated_at TEXT, status_note TEXT);
+    starts_on TEXT, renews_on TEXT, suspended_at TEXT, terminated_at TEXT, status_note TEXT,
+    kind TEXT NOT NULL DEFAULT 'subsidiary' CHECK (kind IN ('subsidiary', 'white_label')));
   CREATE TABLE licence_deployments (id INTEGER PRIMARY KEY, licence_uid TEXT, code TEXT);
   CREATE TABLE licence_territories (licence_id INTEGER, country_code TEXT);
   CREATE TABLE licence_seats (licence_id INTEGER, seat_type TEXT, seats_licensed INTEGER);

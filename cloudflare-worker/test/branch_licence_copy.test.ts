@@ -73,6 +73,9 @@ const SCHEMA = `
     -- (No backticks in here: this comment lives inside a JS template literal.)
     registered_address TEXT, signatory_name TEXT, signatory_title TEXT,
     term_years INTEGER, terminated_at TEXT,
+    -- Migration 284 (D206), for the same reason as 265 above: the payload's
+    -- SELECT names it, so a fixture without it degrades to licence_not_pushed.
+    kind TEXT,
     pushed_at TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')));
 `;
 

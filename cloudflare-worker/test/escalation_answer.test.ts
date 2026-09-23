@@ -78,6 +78,10 @@ const DEPLOYMENTS = `
   CREATE TABLE licence_deployments (id INTEGER PRIMARY KEY AUTOINCREMENT, licence_uid TEXT NOT NULL UNIQUE,
     code TEXT NOT NULL UNIQUE, hostname TEXT NOT NULL, worker_name TEXT NOT NULL, d1_name TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'live', rpc_secret_hash TEXT);
+  -- D206 — a content escalation makes HQ read the licence's kind, and a read
+  -- it cannot make is a refusal (fail closed). Migration 279's column as it is.
+  CREATE TABLE territory_licences (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'subsidiary' CHECK (kind IN ('subsidiary', 'white_label')));
 `;
 
 function seedUsers(db: InstanceType<typeof DatabaseSync>) {
@@ -96,6 +100,7 @@ function hqDb() {
     `INSERT INTO licence_deployments (licence_uid, code, hostname, worker_name, d1_name)
      VALUES (?,?,?,?,?)`,
   ).run('lic_fr', 'fr', 'fr.axal.vc', 'studioos-fr', 'studioos-fr');
+  db.prepare('INSERT INTO territory_licences (uid) VALUES (?)').run('lic_fr');
   return db;
 }
 

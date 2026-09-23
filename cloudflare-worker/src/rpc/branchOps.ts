@@ -315,13 +315,18 @@ export async function applyLicenceCopy(
     // pushes. `registered_address`, `signatory_name`, `signatory_title`,
     // `term_years` and `terminated_at` are the five `MyLicencePage` reads and
     // the copy never carried.
+    //
+    // D206 — and `kind` (migration 284), for the same reason: the branch's
+    // escalation drawer and route read it to know which kinds exist for this
+    // licence. Stored as HQ sent it, with no default and no check — a value
+    // this build does not recognise reads as unknown, not as a refusal.
     `INSERT INTO branch_licence
        (id, licence_uid, licence_ref, legal_entity, brand_name, territory, status, seats_json,
         revenue_share_bps, token_split_bps, annual_fee_cents, currency, term_start, term_end,
         renewal_at, template_version, suspended_at, suspended_note,
         registered_address, signatory_name, signatory_title, term_years, terminated_at,
-        pushed_at, updated_at)
-     VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        kind, pushed_at, updated_at)
+     VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
      ON CONFLICT(id) DO UPDATE SET
        licence_uid = excluded.licence_uid, licence_ref = excluded.licence_ref,
        legal_entity = excluded.legal_entity, brand_name = excluded.brand_name,
@@ -334,6 +339,7 @@ export async function applyLicenceCopy(
        registered_address = excluded.registered_address,
        signatory_name = excluded.signatory_name, signatory_title = excluded.signatory_title,
        term_years = excluded.term_years, terminated_at = excluded.terminated_at,
+       kind = excluded.kind,
        pushed_at = excluded.pushed_at, updated_at = datetime('now')`,
   ).bind(
     s('licence_uid') ?? '', s('licence_ref'), s('legal_entity'), s('brand_name'),
@@ -342,9 +348,32 @@ export async function applyLicenceCopy(
     s('term_start'), s('term_end'), s('renewal_at'), s('template_version'),
     s('suspended_at'), s('suspended_note'),
     s('registered_address'), s('signatory_name'), s('signatory_title'),
-    n('term_years'), s('terminated_at'), pushedAt,
+    n('term_years'), s('terminated_at'), s('kind'), pushedAt,
   ).run();
   return { applied: true, branch, as_of: pushedAt };
+}
+
+/**
+ * D206 — the kind of licence this branch runs under, as its own copy says
+ * (migration 284), or null when the copy does not say.
+ *
+ * FAILS OPEN, where HQ's read of the same fact fails closed, and the two are
+ * the same rule seen from each end. HQ's ledger is the authority and checks
+ * every gated escalation itself before it records one, so a branch that cannot
+ * read its copy — no row yet, a database without 284, a pushed value it does
+ * not recognise — loses nothing by offering every kind and letting HQ decide.
+ * Failing closed HERE would take a kind away from a branch on the strength of
+ * a read that proves nothing about its licence.
+ */
+export async function branchLicenceKind(env: Env): Promise<string | null> {
+  try {
+    const row = await env.DB.prepare('SELECT kind FROM branch_licence WHERE id = 1')
+      .first<{ kind: string | null }>();
+    const kind = typeof row?.kind === 'string' ? row.kind.trim().toLowerCase() : '';
+    return kind || null;
+  } catch {
+    return null;
+  }
 }
 
 /* ------------------------------------------------------------------ *
