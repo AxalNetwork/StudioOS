@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, Unrecorded, Unreadable } from '../../ui';
@@ -136,6 +137,18 @@ export default function BranchInsights({ user }) {
         <p className="text-sm text-gray-600 mt-1 dark:text-gray-400">
           What this territory measures about itself, and where it sits against the anonymised
           platform median.
+        </p>
+        {/* D210 — S15 hangs under this row (its artboard lights Insights), and the
+            branch sidebar is the canvas's eight rows, so Analytics is reached by
+            this link rather than a ninth row. */}
+        <p className="mt-2 text-sm">
+          <Link
+            to="/branch/insights/analytics"
+            className="font-semibold text-axal-ink underline"
+            data-testid="branch-insights-analytics-link"
+          >
+            Analytics: this territory week by week →
+          </Link>
         </p>
       </header>
 

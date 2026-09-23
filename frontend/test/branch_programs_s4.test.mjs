@@ -29,7 +29,7 @@ import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 
 import { inZone, dateInZone } from '../src/lib/zoneTime.js';
-import { cycleLabel, statusesByWeek } from '../src/pages/branch/BranchPrograms.jsx';
+import { cycleLabel, statusesByWeek } from '../src/lib/cohortTimeline.js';
 import { COMMUNITY_CONSOLES } from '../src/pages/branch/BranchCommunity.jsx';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');

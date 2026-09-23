@@ -22,10 +22,19 @@
  * the programme clock, this one formats an instant for a reader who is not and
  * must be told which clock it is. Two behaviours, and D117's `money` lesson is
  * that two behaviours under one name is the trap, not the saving.
+ *
+ * BOTH STAMP FORMATS ARE READ AS UTC (D210). The cohort tables write SQL
+ * `YYYY-MM-DD HH:MM:SS` (`cohortTiming.ts`'s `iso()`), which is UTC with no
+ * zone written down, and a bare `Date.parse` of that shape reads it as the
+ * READER'S local time in V8 and as NaN elsewhere — so S4's "closes 5 Oct,
+ * 00:00" was out by the admin's own offset, on the one line a deadline is
+ * read from. `toUtcInstant` is the normaliser D136 wrote for the same shape
+ * one table over; an ISO instant passes through it unchanged.
  */
+import { toUtcInstant } from './notices';
 
 /**
- * @param {string|null|undefined} iso  an ISO instant
+ * @param {string|null|undefined} iso  an instant: ISO, or SQL `YYYY-MM-DD HH:MM:SS` UTC
  * @param {string|null|undefined} zone an IANA zone — REQUIRED; no default
  * @returns {string|null} `"23 Sep, 00:00"` in that zone, or null when either
  *   argument is missing or the instant cannot be parsed. Null is what lets a
@@ -33,7 +42,7 @@
  */
 export function inZone(iso, zone) {
   if (!iso || !zone) return null;
-  const ms = Date.parse(iso);
+  const ms = Date.parse(toUtcInstant(iso));
   if (!Number.isFinite(ms)) return null;
   try {
     return new Intl.DateTimeFormat('en-GB', {
@@ -53,7 +62,7 @@ export function inZone(iso, zone) {
  */
 export function dateInZone(iso, zone) {
   if (!iso || !zone) return null;
-  const ms = Date.parse(iso);
+  const ms = Date.parse(toUtcInstant(iso));
   if (!Number.isFinite(ms)) return null;
   try {
     return new Intl.DateTimeFormat('en-GB', {

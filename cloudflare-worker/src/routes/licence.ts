@@ -96,7 +96,11 @@ type BranchLicenceRow = {
  * from HQ shows its age (S6, D.10). A screen that renders this without the
  * stamp is showing a copy as though it were live.
  */
-async function branchLicencePayload(env: Env, code: string) {
+// D210 — exported because the branch's Analytics page reads the same seats and
+// the same revenue-share rate this page shows. One payload, two readers: a
+// second query for "seats licensed" is how the two screens would come to
+// disagree about it.
+export async function branchLicencePayload(env: Env, code: string) {
   let row: BranchLicenceRow | null = null;
   try {
     row = await env.DB.prepare(

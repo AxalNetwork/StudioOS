@@ -64,6 +64,8 @@
 import type { Env } from '../types';
 import { fanOut, type BranchResult } from './branches';
 import { branchOf } from '../util/branch';
+import type { BranchOverview } from '../rpc/branchOps';
+import { weekAxis } from './activeAccounts';
 
 /**
  * The smallest number of answering branches a median may be published over.
@@ -73,11 +75,16 @@ import { branchOf } from '../util/branch';
  */
 export const MIN_BRANCHES = 3;
 
-type Overview = {
-  accounts?: { total?: number };
-  seats_used?: number;
-  backlog?: Array<{ count?: number }> | { count?: number } | null;
-};
+/**
+ * D210 — THE OVERVIEW IS THE TYPE `branchOverview()` RETURNS, not a shape
+ * written here from memory. The hand-written one said `backlog` was an array of
+ * lanes; the producer returns `{ count, oldest_at } | null`. So the backlog
+ * metric's reader tested `Array.isArray` on an object, returned `null` for
+ * every branch, and `approvals_backlog` could never be published — while its
+ * test passed, because the test's fixture was written to the same wrong shape.
+ * `Partial` because an answer crosses a binding and is read defensively.
+ */
+type Overview = Partial<BranchOverview>;
 
 export type BenchmarkRow = {
   metric_key: string;
@@ -98,6 +105,14 @@ export type BenchmarkRow = {
  */
 export const METRICS: Array<{
   key: string; label: string; unit: string; of: (o: Overview) => number | null;
+  /**
+   * D210 — a metric measured over a WEEK names the Monday it measured. A median
+   * is only taken over branches that report the same Monday, and the published
+   * row's period is that Monday rather than the quarter: two branches' "last
+   * week" differ for an hour a week around midnight UTC on Monday, and a median
+   * across two different weeks is not a figure about either.
+   */
+  weekOf?: (o: Overview) => string | null;
 }> = [
   {
     key: 'accounts_total',
@@ -115,20 +130,33 @@ export const METRICS: Array<{
     key: 'approvals_backlog',
     label: 'Items awaiting a decision',
     unit: 'count',
-    // `backlog` is the four-lane list D130 returns, or null when no lane could
-    // be read. A branch whose backlog is unreadable contributes nothing to THIS
-    // metric while still counting toward the others — the same per-lane
-    // isolation `backlogOf` applies one level down.
+    // `backlog` is `{ count, oldest_at }` — the four local lanes summed by
+    // `backlogOf` (D130) — or null when it could not be read. A branch whose
+    // backlog is unreadable contributes nothing to THIS metric while still
+    // counting toward the others, the same per-lane isolation `backlogOf`
+    // applies one level down.
     of: (o) => {
-      if (!Array.isArray(o?.backlog)) return null;
-      let total = 0;
-      for (const lane of o.backlog) total += Math.max(0, Math.trunc(Number(lane?.count) || 0));
-      return total;
+      const b = o?.backlog;
+      if (!b || typeof b !== 'object') return null;
+      const n = num(b.count);
+      return n === null ? null : Math.max(0, Math.trunc(n));
     },
+  },
+  {
+    key: 'active_accounts_week',
+    label: 'Active accounts · last week',
+    unit: 'count',
+    // D210 — the branch counts its own week from `activity_logs` under the
+    // rule HQ's Analytics page reads Analytics Engine by, so the median and
+    // HQ's lines describe the same requests. `null` when the branch's log
+    // began inside the week: four days are not a week's figure.
+    of: (o) => num(o?.active_accounts_week),
+    weekOf: (o) => (typeof o?.active_accounts_week_of === 'string' ? o.active_accounts_week_of : null),
   },
 ];
 
 function num(v: unknown): number | null {
+  if (v === null || v === undefined || v === '') return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
@@ -186,11 +214,17 @@ export async function publishBenchmarks(env: Env, period: string): Promise<Bench
     };
   }
 
+  // The week every weekly metric is taken over: the last complete one, by
+  // HQ's clock. A branch reporting any other Monday is left out of that
+  // metric's median rather than mixed into it.
+  const week = weekAxis(new Date().toISOString(), 2).last_complete;
   const rows: BenchmarkRow[] = [];
   for (const m of METRICS) {
     const values: number[] = [];
     for (const a of ok) {
-      const v = m.of(a.data as Overview);
+      const o = a.data as Overview;
+      if (m.weekOf && m.weekOf(o) !== week) continue;
+      const v = m.of(o);
       if (v !== null) values.push(v);
     }
     // THE THRESHOLD IS PER METRIC, not per fan-out. A branch can answer and
@@ -203,7 +237,7 @@ export async function publishBenchmarks(env: Env, period: string): Promise<Bench
       median_value: median(values),
       unit: m.unit,
       n_branches: values.length,
-      period,
+      period: m.weekOf ? week : period,
     });
   }
 

@@ -104,7 +104,10 @@ export const SIDEBAR_GROUPS = {
   //           row away under Team, and in the admin group the holder keeps.
   super_admin: [
     { key: 'hq', label: 'HQ', items: [
-      { to: '/hq', icon: Shield, label: 'Home' },
+      // D210 — H15 lights this row (its artboard's own nav). The row's own `to`
+      // still matches exactly (SidebarNav), so `match` adds only the page it
+      // reaches by the Accounts tile's link.
+      { to: '/hq', icon: Shield, label: 'Home', match: ['/admin/analytics'] },
       // The one row this tier exists for. Every route behind it is
       // super-admin-only server-side (routes/admin_licences.ts).
       { to: '/admin/licences', icon: Map, label: 'Licences' },
@@ -161,7 +164,9 @@ export const SIDEBAR_GROUPS = {
       { to: '/branch/programs', icon: Calendar, label: 'Programs' },
       { to: '/branch/community', icon: Network, label: 'Community' },
       { to: '/branch/contracts', icon: FileText, label: 'Contracts' },
-      { to: '/branch/insights', icon: TrendingUp, label: 'Insights' },
+      // D210 — S15 (/branch/insights/analytics) lights this row, per its
+      // artboard; `match` covers the row's subtree, which `end` alone does not.
+      { to: '/branch/insights', icon: TrendingUp, label: 'Insights', match: ['/branch/insights'] },
       { to: '/branch/settings', icon: UserCog, label: 'Settings' },
     ]},
   ],

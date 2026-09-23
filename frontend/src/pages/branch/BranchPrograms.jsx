@@ -5,6 +5,7 @@ import { api, adminAssessment } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { COHORT_TZ } from '../../lib/spinoutLab';
 import { inZone, dateInZone } from '../../lib/zoneTime';
+import { cycleLabel, statusesByWeek } from '../../lib/cohortTimeline';
 import { Card, Unrecorded, Unreadable } from '../../ui';
 import BranchZone from './BranchZone';
 
@@ -56,50 +57,6 @@ import BranchZone from './BranchZone';
  */
 
 const UNAVAILABLE = Symbol('unavailable');
-
-const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
-
-/**
- * A cycle's human name. `month` is 1-based in `cohort_cycles`.
- *
- * THE EMPTY VALUES ARE REJECTED BEFORE THE NUMERIC CHECK, and that ordering is
- * the whole guard: `Number(null)` is `0` and `Number('')` is `0`, both finite,
- * so a `Number.isFinite` test alone lets a missing year through and the page
- * renders "October null". Caught by its own test before it shipped.
- */
-export function cycleLabel(year, month) {
-  if (year === null || year === undefined || year === '') return null;
-  const y = Number(year);
-  const m = Number(month);
-  if (!Number.isFinite(y) || !Number.isInteger(m)) return null;
-  const name = MONTHS[m - 1];
-  if (!name) return null;
-  return `${name} ${y}`;
-}
-
-/**
- * The per-week status counts, folded from the payload's flat rows.
- *
- * EXPORTED so the test reads the fold rather than restating it. `status_counts`
- * arrives as `[{week_number, status, n}]` — one row per (week, status) pair —
- * and a week with no rows at all is a week nobody has been judged in, which is
- * different from a week where everyone passed. It returns `null` for that week
- * rather than an object of zeroes.
- */
-export function statusesByWeek(rows) {
-  const out = new Map();
-  for (const r of rows || []) {
-    const wk = Number(r.week_number);
-    if (!Number.isFinite(wk)) continue;
-    const bucket = out.get(wk) || {};
-    bucket[String(r.status)] = Number(r.n) || 0;
-    out.set(wk, bucket);
-  }
-  return out;
-}
 
 export default function BranchPrograms({ user }) {
   const [timeline, setTimeline] = useState(null);

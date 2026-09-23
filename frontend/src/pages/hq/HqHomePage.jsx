@@ -307,7 +307,14 @@ export default function HqHomePage() {
         {data === UNAVAILABLE && <div className="mt-4"><Unreadable what="The HQ overview" claim="This is not a claim that none exist." onRetry={load} /></div>}
 
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
-          <Tile label="Accounts" value={ready ? accountsTotal : null} note="active, platform-wide" />
+          {/* D210 — H15 is reached from here. Its own nav lights Home, and the HQ
+              group is eleven rows by design (D146), so the page is a link on the
+              tile whose figure it draws over time, not a twelfth row. */}
+          <Tile
+            label="Accounts"
+            value={ready ? accountsTotal : null}
+            note={<>active, platform-wide · <Link to="/admin/analytics" className="underline">weekly activity, by branch</Link></>}
+          />
           <Tile label="Seats licensed" value={ready ? num(data.seats_licensed) : null} note={<>utilised: <Unrecorded /></>} />
           <Tile label="MTD revenue" value={null} note="no subsidiary attribution" />
           <Tile

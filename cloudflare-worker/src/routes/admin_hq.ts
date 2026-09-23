@@ -42,6 +42,11 @@ import type { BranchOverview, BranchAccountHit } from '../rpc/branchOps';
 import { FREEZING_STATUSES } from '../util/authErrors';
 import { ensureLastActiveColumn } from '../middleware/lastActive';
 import { ticketBacklog } from '../services/supportQueues';
+import {
+  ACTIVE_ACCOUNT_BASIS, ANALYTICS_RANGES, GAP_SENTENCES, parseAnalyticsRange, seriesValues,
+  weekAxis, weeklyKpi,
+} from '../services/activeAccounts';
+import { loadActiveAccountsByBranchWeek } from '../services/analyticsReports';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -509,6 +514,181 @@ r.get('/admins', async (c) => {
     searched: q.length > 0,
     branches,
     branches_coverage: coverage(branches),
+  });
+});
+
+/**
+ * H15's four tiles that no store can fill, each with the measurement that
+ * says so. Sent on the payload, not written into the page (D131).
+ */
+const HQ_ANALYTICS_NOT_RECORDED = [
+  {
+    key: 'activation',
+    label: 'Activation',
+    reason:
+      'H15 draws a funnel — invited, signed in, agreement signed, active in week two. No step of it is '
+      + 'recorded as an event HQ can count across branches, and each branch keeps its own accounts in '
+      + 'its own database.',
+  },
+  {
+    key: 'approval_age',
+    label: 'Median approval age',
+    reason:
+      'A branch\'s approval queues live in that branch\'s database, and no branch pushes a decision '
+      + 'time to HQ. Each branch\'s Analytics page times the queues it can.',
+  },
+  {
+    key: 'token_spend',
+    label: 'Token spend against limit',
+    reason:
+      'AI Gateway calls carry no branch metadata (#358), so spend cannot be split by branch, and no '
+      + 'licence carries a token limit to set it against.',
+  },
+  {
+    key: 'revenue_by_stream',
+    label: 'Revenue by stream',
+    reason:
+      'No branch reports usage to HQ yet — reportUsage has no caller (#354). The canvas also draws '
+      + 'programme fees and perks as streams; neither is income this platform records.',
+  },
+] as const;
+
+/**
+ * Every deployment HQ provisioned, with the licence it trades under.
+ *
+ * ITS OWN READ, NOT `deployedBranches()`, because that one answers `[]` when
+ * the registry cannot be read — which is right for a fan-out that has nothing
+ * to call and wrong here, where "no branch" and "the list could not be read"
+ * put different lines on a chart.
+ */
+async function registryForAnalytics(env: Env): Promise<
+  | { readable: true; rows: Array<{ code: string; deploy_status: string; brand_name: string | null; licence_status: string | null; suspended_at: string | null }> }
+  | { readable: false; reason: string }
+> {
+  try {
+    const q = await env.DB.prepare(
+      `SELECT d.code, d.status AS deploy_status, l.brand_name, l.status AS licence_status, l.suspended_at
+         FROM licence_deployments d
+         LEFT JOIN territory_licences l ON l.uid = d.licence_uid
+        ORDER BY d.code`,
+    ).all<{ code: string; deploy_status: string; brand_name: string | null; licence_status: string | null; suspended_at: string | null }>();
+    return { readable: true, rows: q.results || [] };
+  } catch (e) {
+    return {
+      readable: false,
+      reason:
+        'The deployment registry could not be read (migration 258), so branches with no traffic cannot '
+        + `be listed and only codes the metrics store recorded are drawn: ${(e as Error)?.message || 'unknown'}.`,
+    };
+  }
+}
+
+// GET /api/admin/hq/analytics?range=8w|quarter|year
+//
+// H15. One line per branch, and one for HQ's own deployment, of distinct
+// signed-in accounts per week — read from Analytics Engine, the one store
+// every Worker writes to. Aggregates, never records: no account id leaves
+// this handler. Not scoped by H12's overlay: a per-branch chart already
+// separates every branch, and narrowing it to one would hide the comparison
+// the page is for.
+r.get('/analytics', async (c) => {
+  await requireSuperAdmin(c);
+  const env = c.env;
+  const range = parseAnalyticsRange(c.req.query('range'));
+  if (!range) {
+    return c.json({
+      error: 'bad_range',
+      message: `range must be one of ${Object.keys(ANALYTICS_RANGES).join(', ')}.`,
+    }, 400);
+  }
+  const axis = weekAxis(new Date().toISOString(), ANALYTICS_RANGES[range]);
+  const [registry, read] = await Promise.all([
+    registryForAnalytics(env),
+    loadActiveAccountsByBranchWeek(env, axis),
+  ]);
+
+  let active_accounts: Record<string, unknown>;
+  if (!read.available) {
+    active_accounts = { available: false, reason: read.reason, as_of: read.as_of };
+  } else {
+    // HQ's own deployment first, then every registered branch — including one
+    // with no traffic, whose line is blank with its reason — then any code the
+    // store recorded that the registry does not know, flagged as such.
+    const known = registry.readable ? registry.rows : [];
+    type Drawn = {
+      code: string; label: string; kind: 'hq' | 'branch' | 'unregistered';
+      status: string | null; suspended_at: string | null;
+    };
+    const drawn: Drawn[] = [
+      { code: 'hq', label: 'HQ-held', kind: 'hq', status: null, suspended_at: null },
+      ...known.map((row): Drawn => ({
+        code: row.code,
+        label: row.brand_name || row.code,
+        kind: 'branch',
+        status: row.licence_status || row.deploy_status,
+        suspended_at: row.suspended_at,
+      })),
+    ];
+    // A code the store recorded that the registry lacks is only "unregistered"
+    // when the registry was READ. Unreadable, nobody checked, so the line is
+    // drawn as a branch and the registry's own reason says why the list is
+    // the store's alone.
+    const listed = new Set(drawn.map((d) => d.code));
+    for (const code of [...read.fold.firstDay.keys()].sort()) {
+      if (listed.has(code)) continue;
+      drawn.push({
+        code, label: code, kind: registry.readable ? 'unregistered' : 'branch', status: null, suspended_at: null,
+      });
+      listed.add(code);
+    }
+    const series = drawn.map((d) => {
+      const v = seriesValues(read.fold, axis, d.code, read.cap_day);
+      return {
+        ...d,
+        values: v.values,
+        gap: v.gap,
+        ...(v.gap ? { gap_reason: GAP_SENTENCES[v.gap] } : {}),
+        first_day: v.first_day,
+        ...(d.kind === 'unregistered'
+          ? { note: 'The metrics store recorded this code and the deployment registry has no row for it.' }
+          : {}),
+      };
+    });
+    active_accounts = {
+      available: true,
+      as_of: read.as_of,
+      series,
+      kpi: weeklyKpi(axis, series),
+      complete: read.cap_day === null,
+      row_cap: read.row_cap,
+      store_first_day: read.fold.floorDay,
+      sampled: read.fold.sampled,
+      ...(read.fold.sampled
+        ? {
+          sampled_note:
+            'Analytics Engine sampled some of these rows, so each count is a floor: an account seen only '
+            + 'in rows the store dropped is not counted.',
+        }
+        : {}),
+    };
+  }
+
+  return c.json({
+    range,
+    weeks: axis.weeks,
+    current_week: axis.current,
+    last_complete_week: axis.last_complete,
+    as_of: new Date().toISOString(),
+    basis: ACTIVE_ACCOUNT_BASIS,
+    source:
+      'Analytics Engine: one row per metered request from every Worker, read here as counts. No '
+      + 'account identifier leaves this read.',
+    registry: registry.readable
+      ? { readable: true, count: registry.rows.length }
+      : { readable: false, reason: registry.reason },
+    active_accounts,
+    not_recorded: HQ_ANALYTICS_NOT_RECORDED,
+    foot: 'Aggregates, never records.',
   });
 });
 

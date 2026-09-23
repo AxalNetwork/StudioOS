@@ -182,7 +182,8 @@ async function programmeClock(env: Env, nowMs: number): Promise<ProgrammeClock> 
  */
 async function revenueShare(env: Env): Promise<BranchHome['revenue']> {
   const reason =
-    'Your share is a licence term and it is shown. The amount it applies to is not totalled on a '
+    'The share is a licence term and it is shown: the part of this territory\'s revenue owed to '
+    + 'HQ, with the rest kept here. The amount it applies to is not totalled on a '
     + 'branch: subscription charges live in Stripe with no amount in this database, a subsidiary '
     + 'charges no onward licence fee, and the AI figure is a cost rather than revenue. HQ enters '
     + 'the gross on the statement, so the statement is where a euro figure exists.';

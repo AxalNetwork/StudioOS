@@ -190,6 +190,25 @@ test('the revenue block shows a rate and refuses an amount', () => {
   );
 });
 
+test('the rate is named as HQ\'s cut, and what the branch keeps is its complement (D210)', () => {
+  // The statement computes what is owed TO HQ as gross times this rate, so the
+  // rate is HQ's part. "Your share" on this card told a branch it kept the part
+  // it pays, on the tier the licence is about; nothing guarded the label, and
+  // D210's mutation run is what found that out.
+  const at = PAGE_CODE.indexOf('data-testid="branch-home-revenue-rate"');
+  assert.ok(at > 0, 'the rate line must be its own element');
+  const line = PAGE_CODE.slice(at, PAGE_CODE.indexOf('</div>', at));
+  assert.ok(line.includes('owed to HQ'), 'the rate must say whose it is');
+  assert.ok(line.includes('you keep {pctFromBps(10000 - Number(rev.share_bps))}%'),
+    'the branch\'s own part is the complement of HQ\'s, computed from the same rate');
+  assert.ok(!/your share/i.test(PAGE_CODE), 'the rate is HQ\'s share, not the branch\'s');
+  // The server's reason for the absent amount names the same thing the same way.
+  // Its sentence is wrapped across `' + '` joins, so they are mended before reading.
+  const joined = SERVICE.replace(/'\s*\+\s*'/g, '');
+  assert.ok(!/your share/i.test(joined), 'the service\'s sentence says whose share it is, too');
+  assert.ok(joined.includes('owed to HQ'), 'the service names the share as what is owed to HQ');
+});
+
 test('queue pressure reads the server\'s order and does not re-sort', () => {
   // THE ORDER IS THE SERVER'S ONE CLAIM. A `.sort()` here would be a second
   // definition of "worst", and the two would disagree the first time either

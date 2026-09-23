@@ -316,8 +316,17 @@ test('all eight branch routes render through the frame', () => {
   // PR is ending — and it would be invisible, because a missing rail looks like
   // a page that simply has none.
   const app = codeOnlyJsx(read('frontend/src/App.jsx'));
-  const routes = [...app.matchAll(/<Route path="(\/branch(?:\/[a-z-]+)?)" element=\{([\s\S]*?)\)\} \/>/g)];
-  assert.equal(routes.length, 8, `expected eight /branch/* routes, found ${routes.length}`);
+  // ANY DEPTH, AND THE COUNT IS DERIVED (D210). The pattern read one segment
+  // below `/branch` and the count was typed as eight, so `/branch/insights/
+  // analytics` — S15, two segments deep — matched nothing and the frame check
+  // below never saw it: a nested page could have shipped with no rail and this
+  // test would still have counted eight and passed. Every `path="/branch…"` the
+  // router declares must now be one this pattern reads, or the count differs.
+  const routes = [...app.matchAll(/<Route path="(\/branch(?:\/[a-z-]+)*)" element=\{([\s\S]*?)\)\} \/>/g)];
+  const declared = app.split('path="/branch').length - 1;
+  assert.ok(declared >= 9, `expected at least nine /branch routes, found ${declared}`);
+  assert.equal(routes.length, declared,
+    `${declared} /branch routes are declared and ${routes.length} were read, so one is outside the frame check`);
   const bare = routes
     .filter(([, , el]) => !el.includes('<BranchZone '))
     .map(([, path, el]) => ({ path, el }));
@@ -413,6 +422,7 @@ test('the real-coverage rule reaches the BRANCH tier, not only HQ (D151)', () =>
     ['frontend/src/pages/branch/BranchPrograms.jsx', 'Programs'],
     ['frontend/src/pages/branch/BranchContracts.jsx', 'Contracts'],
     ['frontend/src/pages/branch/BranchInsights.jsx', 'Insights'],
+    ['frontend/src/pages/branch/BranchAnalytics.jsx', 'Analytics'],
   ]) {
     const src = codeOnlyJsx(read(file));
     assert.ok(src.includes(`workspace="${workspace}"`), `${file}: the frame must name its zone`);
@@ -474,7 +484,7 @@ test('every branch zone can NAME its branch, which is S12 rule 1 (D151)', () => 
   const app = codeOnlyJsx(read('frontend/src/App.jsx'));
   for (const path of [
     '/branch', '/branch/accounts', '/branch/approvals', '/branch/programs',
-    '/branch/community', '/branch/contracts', '/branch/insights',
+    '/branch/community', '/branch/contracts', '/branch/insights', '/branch/insights/analytics',
   ]) {
     const at = app.indexOf(`path="${path}"`);
     assert.ok(at > 0, `${path} is no longer a registered route`);
@@ -484,7 +494,7 @@ test('every branch zone can NAME its branch, which is S12 rule 1 (D151)', () => 
   }
   for (const file of [
     'BranchHome', 'BranchAccounts', 'BranchApprovals', 'BranchPrograms',
-    'BranchCommunity', 'BranchContracts', 'BranchInsights',
+    'BranchCommunity', 'BranchContracts', 'BranchInsights', 'BranchAnalytics',
   ]) {
     const src = codeOnlyJsx(read(`frontend/src/pages/branch/${file}.jsx`));
     assert.match(src, /user=\{user\}/, `${file} must forward the user to its frame`);

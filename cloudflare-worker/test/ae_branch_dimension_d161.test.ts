@@ -56,7 +56,10 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import { observabilityMiddleware } from '../src/middleware/observability.ts';
-import { loadTrafficByBranch, loadTechnical, parseRange } from '../src/services/analyticsReports.ts';
+import {
+  loadTrafficByBranch, loadTechnical, parseRange, loadActiveAccountsByBranchWeek,
+} from '../src/services/analyticsReports.ts';
+import { aeLoggedRequestPredicate, SKIP_ACTIVITY_LOG_PATHS, weekAxis } from '../src/services/activeAccounts.ts';
 import { BRANCH_CODE_RE } from '../src/util/branch.ts';
 import monitoringAnalytics from '../src/routes/monitoring_analytics.ts';
 
@@ -379,12 +382,13 @@ test('the platform-wide aggregate gains no branch attribution', async () => {
   } finally { s.restore(); }
 });
 
-test('nothing a caller supplies reaches the text/plain SQL', () => {
+test('nothing a caller supplies reaches the text/plain SQL', async () => {
   // The AE SQL API takes `text/plain` and has no binding mechanism, so every
   // value in these queries is interpolated. Enumerate the interpolation surface
-  // and pin it: only the dataset name (a config var, not a request value) and
-  // the parsed range reach it. An optional branch predicate was written here
-  // first, had no caller, and was removed — this keeps it from coming back as a
+  // and pin it: only the dataset name (a config var, not a request value), the
+  // parsed range, the week bounds the server's own clock builds, and module
+  // constants reach it. An optional branch predicate was written here first,
+  // had no caller, and was removed — this keeps it from coming back as a
   // request-fed one.
   //
   // The scan is scoped to what actually leaves as `text/plain`: the literals
@@ -393,30 +397,31 @@ test('nothing a caller supplies reaches the text/plain SQL', () => {
   // `${...}` become BOUND parameters, and flagging them would be the guard
   // misreading a safe idiom as the unsafe one.
   const literals = [...REPORTS_SRC.matchAll(/const sqlText = `([^`]*)`/g)].map(m => m[1]);
-  // THREE SINCE D163, AND THE COUNT DOING ITS JOB IS WHY. It was pinned at two
-  // with the note that "a third would have to be read by this rule rather than
-  // the rule quietly skipping it" — D163 added the branch-action mirror's
-  // reader and this failed, which is the guard working. The third query is
-  // read by the same enumeration below; what it adds to the interpolation
-  // surface is `MIRROR_KIND`, a module constant, never a request value.
-  assert.equal(literals.length, 3,
-    'three AE queries: the platform aggregate, the branch split and the action mirror. A fourth '
-    + 'would have to be read by this rule, so the count stays pinned.');
-  assert.equal((REPORTS_SRC.match(/aeSql\(env, sqlText\)/g) || []).length, 3,
-    'and all three go through the one fetch helper, so there is a single place where SQL text is sent');
+  // FOUR SINCE D210 — the count doing its job for the second time. It was
+  // pinned at two, and D163's action-mirror reader moved it to three by failing
+  // it first. D210's weekly active-accounts reader failed it again, before any
+  // other check noticed the new query: that is the guard working, not a number
+  // to bump. What the fourth query adds to the surface is four names, and each
+  // is PROVED below to be out of a caller's reach rather than merely listed.
+  assert.equal(literals.length, 4,
+    'four AE queries: the platform aggregate, the branch split, the action mirror and the weekly '
+    + 'active accounts. A fifth would have to be read by this rule, so the count stays pinned.');
+  assert.equal((REPORTS_SRC.match(/aeSql\(env, sqlText\)/g) || []).length, 4,
+    'and all four go through the one fetch helper, so there is a single place where SQL text is sent');
 
   const interpolations = new Set<string>();
   for (const lit of literals) {
     for (const m of lit.matchAll(/\$\{([^}]*)\}/g)) interpolations.add(m[1].trim());
   }
   assert.deepEqual([...interpolations].sort(),
-    ['HTTP_ROWS_ONLY', 'MIRROR_KIND', 'aeDataset(env)', 'range.fromIso', 'range.toIso'],
-    'only the configured dataset name, the parsed range, the row-kind sentinel and the '
-    + 'row-kind predicate may be interpolated into AE SQL');
-  // And BOTH new entries are MODULE CONSTANTS, not values a caller can reach.
+    [
+      'AE_ACTIVE_ROW_CAP', 'HTTP_ROWS_ONLY', 'MIRROR_KIND', 'aeDataset(env)', 'aeLoggedRequestPredicate()',
+      'axis.from', 'axis.to', 'range.fromIso', 'range.toIso',
+    ],
+    'only the configured dataset name, the parsed range, the server-built week bounds and module '
+    + 'constants may be interpolated into AE SQL');
   // An allowlist entry a request could influence would be the hole this whole
-  // rule exists to keep shut, so each one is proved to be a fixed literal
-  // rather than merely named here.
+  // rule exists to keep shut, so each entry is proved, not named.
   assert.match(
     readFileSync(resolve(root, 'cloudflare-worker/src/services/auditMirror.ts'), 'utf8'),
     /export const MIRROR_KIND = '[a-z:_]+';/,
@@ -424,6 +429,51 @@ test('nothing a caller supplies reaches the text/plain SQL', () => {
   );
   assert.match(REPORTS_SRC, /const HTTP_ROWS_ONLY = "blob1 LIKE '\/%'";/,
     'HTTP_ROWS_ONLY is a fixed literal predicate, not built from anything');
+  assert.match(REPORTS_SRC, /export const AE_ACTIVE_ROW_CAP = \d+;/,
+    'the row cap is a fixed number, not a limit a caller chooses');
+
+  // The activity predicate takes no argument, and every value it quotes is one
+  // of the module's own skip paths — so what it interpolates is a constant list,
+  // checked against a LIKE-safe shape before it is ever joined.
+  const ACTIVE_SRC = readFileSync(resolve(root, 'cloudflare-worker/src/services/activeAccounts.ts'), 'utf8');
+  assert.match(ACTIVE_SRC, /export function aeLoggedRequestPredicate\(\): string \{/,
+    'the predicate has no parameter a caller could fill');
+  assert.deepEqual(
+    [...aeLoggedRequestPredicate().matchAll(/'([^']*)'/g)].map((m) => m[1]),
+    ['/api/%', ...SKIP_ACTIVITY_LOG_PATHS.map((p) => `${p}%`)],
+    'every quoted value in the predicate is the module\'s own path prefix or skip list',
+  );
+
+  // The week bounds come from `weekAxis`, which builds them off the server's
+  // clock. The reader re-checks their shape anyway, so a caller that passes
+  // anything else is refused BEFORE a byte of SQL leaves — proved here by a
+  // fetch that fails the test if it is ever reached.
+  const realFetch = globalThis.fetch;
+  let fetched = 0;
+  globalThis.fetch = (async () => {
+    fetched += 1;
+    return new Response(JSON.stringify({ data: [] }), { headers: { 'content-type': 'application/json' } });
+  }) as typeof fetch;
+  try {
+    const env = { ...AE_CREDS } as any;
+    const good = weekAxis('2026-09-23T12:00:00Z', 8);
+    await assert.rejects(
+      loadActiveAccountsByBranchWeek(env, { ...good, from: "2026-08-03 00:00:00' OR 1=1 --" }),
+      /takes the bounds weekAxis builds/,
+      'a bound that is not the axis shape is refused, not quoted',
+    );
+    await assert.rejects(
+      loadActiveAccountsByBranchWeek(env, { ...good, to: '2026-09-28T00:00:00Z' }),
+      /takes the bounds weekAxis builds/,
+      'the check is on both bounds, and on the exact SQL-stamp shape',
+    );
+    assert.equal(fetched, 0, 'a refused bound never reaches the SQL API');
+    const read = await loadActiveAccountsByBranchWeek(env, good);
+    assert.equal(fetched, 1, 'the bounds weekAxis builds pass the same check');
+    assert.equal(read.available, true);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
