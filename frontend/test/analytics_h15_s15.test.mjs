@@ -63,7 +63,6 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 
 const html = (el, props) => renderToStaticMarkup(createElement(el, props));
-const text = (el, props) => renderedText(html(el, props));
 
 /**
  * The markup of the element carrying `attr`, from its opening tag to the first
