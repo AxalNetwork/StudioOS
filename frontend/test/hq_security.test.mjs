@@ -1,12 +1,16 @@
 /**
- * HQ · Security (canvas Y2) — four real zones, four named absences, one write.
+ * HQ · Security (canvas Y2, completed by H23) — the zones read their stores,
+ * one half-card stays a stated absence, one write.
  *
- * The canvas draws eight zones. The store answers four: the admin action
- * audit, sessions and impersonations, KYC, deletion-request clocks. The other
- * four — security events, AI safety, sanctions, backup and DR — have no store
- * and the page says so in their zones, never from the canvas's sample rows.
- * The one action, force re-auth, carries the impersonation write bar and a
- * stored reason. These pin that shape.
+ * This header used to say four zones had no store. D152 found the AI-safety
+ * one was false; D200 found two more were: `sanctions_screenings` has been
+ * written by `screenUser` since migration 035, and the backup half of
+ * "Backup / DR" reads the heartbeat the nightly export writes to R2. The
+ * security_events ledger is built (migration 282). What is still genuinely
+ * absent is the restore drill's outcome — written nowhere the platform can
+ * read — and the page says so in its card, never from the canvas's sample
+ * rows. The one action, force re-auth, carries the impersonation write bar
+ * and a stored reason. These pin that shape.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -60,7 +64,7 @@ test('the page reads two endpoints and writes through two, and nothing else', ()
   assert.deepEqual(calls, ['hqCloseDsrRequest', 'hqGovernance', 'hqSecurityForceReauth', 'hqSecurityOverview']);
 });
 
-test('the three zones with no store render Not recorded in their own zone, from the payload\'s reason', () => {
+test('D200 — only the restore drill is still a stated absence; the ledger and sanctions read their stores', () => {
   // D152 — IT WAS FOUR, AND `ai_safety` DID NOT BELONG IN THE LIST. Its
   // refusal claimed no guardrail, flagged-output or token-anomaly counter was
   // stored; two of those three clauses were false, and the verdict rollup was
@@ -70,15 +74,29 @@ test('the three zones with no store render Not recorded in their own zone, from 
   // true. The zone's own assertions moved to `hq_governance_h7.test.mjs`,
   // which owns H7's guardrail panel; what stays here is the THREE that are
   // still genuinely absent, and the proof AI safety is not among them.
-  for (const key of ['security_events', 'sanctions', 'backup_dr']) {
-    assert.match(ROUTE, new RegExp(`${key}: absent\\(`), `${key} must come back { available: false, reason }`);
+  //
+  // D200 RE-AIMED THIS A SECOND TIME, and for the same reason D152 did: two
+  // more of the three were refusals denying stores the platform has. The
+  // thirteenth and fourteenth instances of a guard pinning a refusal that had
+  // to move the day it stopped being true. What stays absent is ONE HALF-CARD,
+  // and the proof the other three are real is that none of them may go back.
+  for (const key of ['security_events', 'sanctions', 'backup_dr', 'ai_safety']) {
+    assert.doesNotMatch(ROUTE, new RegExp(`\\b${key}: absent\\(`),
+      `${key} went back to refusing a store the platform has`);
   }
-  assert.doesNotMatch(ROUTE, /ai_safety: absent\(/,
-    'the AI-safety zone went back to refusing a store the platform has');
-  assert.match(PAGE, /<Absent block=\{ready \? data\.security_events : null\}/);
-  assert.match(PAGE, /<Absent block=\{ready \? data\.backup_dr : null\}/);
-  assert.match(PAGE, /label="Sanctions review" value=\{null\}/);
-  assert.match(PAGE, /label="Failed sign-ins" value=\{null\}/, 'no security_events means no failed-sign-in count');
+  assert.match(ROUTE, /security_events: await securityEventsBlock\(env\)/, 'the ledger block is not read');
+  assert.match(ROUTE, /sanctions: await screeningSummary\(env\)/, 'the sanctions card is not read from its store');
+  assert.match(ROUTE, /backup: await readBackupHeartbeat\(env, 'd1'\)/, 'the backup half is not read from the heartbeat');
+  assert.match(ROUTE, /drill: absent\(RESTORE_DRILL_REASON\)/,
+    'the restore drill must stay a stated absence, with the reason from its one home');
+  // The drill half renders the server's reason in its own card — never a
+  // green light inferred from a healthy backup half.
+  assert.match(PAGE, /<Absent block=\{block\.drill\} fallback="no drill record is kept\." \/>/);
+  // The tile that was `value={null}` under "no security_events" reads the
+  // ledger — and ONLY under its availability, with the reason otherwise.
+  assert.match(PAGE,
+    /label="Failed sign-ins" value=\{se\?\.available \? num\(se\.failed_signins_24h\) : null\} note=\{se\?\.available \? '[^']+' : \(se\?\.reason \|\| 'unreadable'\)\}/,
+    'the failed sign-ins tile must read the ledger under its availability and say why when it cannot');
   // No default turns an absent figure into a zero.
   assert.doesNotMatch(PAGE, /\|\|\s*0\b/);
   assert.match(PAGE, /const num = \(v\) => \(v === null \|\| v === undefined \|\| !Number\.isFinite\(Number\(v\)\) \? null/);
@@ -216,8 +234,27 @@ test('no note asserts a security fact while the overview is unreadable', () => {
   // 'not run' for sanctions. An unreadable overview says so, in every zone.
   const src = codeOnly(read('frontend/src/pages/hq/SecurityPage.jsx'));
   assert.match(src, /note=\{withoutMfa === null \? 'unreadable' :/, 'MFA: unreadable before enrolled');
-  assert.match(src, /label="Sanctions review" value=\{null\} note=\{ready \? \(data\.sanctions\?\.reason \|\| 'not recorded'\) : 'unreadable'\}/,
-    'sanctions: the payload reason when read, unreadable when not, never a hardcoded state');
+  // D200 — the sanctions note became a card of the store's own figures. The
+  // property this assertion carried is unchanged: under a FAILED overview
+  // read the card must not state anything — and the new trap is "Loading…",
+  // which would say an answer is on its way. Both new cards take the page's
+  // unreadable state and check it before they say they are loading.
+  assert.match(src, /<Sanctions block=\{ready \? data\.sanctions : null\} unreadable=\{data === UNAVAILABLE\} \/>/,
+    'sanctions: the card is not told when the overview failed');
+  assert.match(src, /<BackupDr block=\{ready \? data\.backup_dr : null\} unreadable=\{data === UNAVAILABLE\} \/>/,
+    'backup / DR: the card is not told when the overview failed');
+  for (const fn of ['function Sanctions(', 'function BackupDr(']) {
+    const at = src.indexOf(fn);
+    assert.ok(at > 0, `${fn} is gone`);
+    const body = src.slice(at, src.indexOf('\n}\n', at));
+    const guard = body.indexOf('if (!block)');
+    assert.ok(guard > 0, `${fn} has no branch for a missing block`);
+    const branch = body.slice(guard, body.indexOf('}', body.indexOf('return', guard)) + 1);
+    assert.ok(/return unreadable\s*\?/.test(branch),
+      `${fn} says "Loading…" under a failed read — the unreadable state must be checked first`);
+  }
+  // And when the store itself could not be read, the card says the server's reason.
+  assert.match(src, /<Unrecorded \/> — \{block\.reason\}/, 'an unreadable sanctions store is not given its reason');
   // The rail's entries are [title, detail] pairs, the shape WorkerRail destructures.
   const m = /unavailable=\{\[([\s\S]*?)\]\}/.exec(src);
   assert.ok(m, 'the rail lists what is unavailable');

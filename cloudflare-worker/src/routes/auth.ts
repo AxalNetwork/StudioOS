@@ -11,6 +11,7 @@ import { ensureAuthBlockersSchema } from '../services/authBlockersSchema';
 import { verifyTurnstile } from '../services/turnstile';
 import { persistNewTotpEnrolment, loadTotp, updateRecoveryHashes, markTotpUsed, hasTotpConfigured, clearTotp } from '../services/authTotp';
 import { setUserFactor } from '../services/authSms';
+import { recordSecurityEvent, ipPrefix } from '../services/securityEvents';
 import smsRoutes from './auth_sms';
 
 const auth = new Hono<{ Bindings: Env }>();
@@ -305,11 +306,7 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
       const emailHash = await hashEmail(email);
       // /24 for IPv4, /48 for IPv6 — coarse enough for abuse clustering, fine
       // enough to drop unique-host info.
-      let ipBucket = 'unknown';
-      if (clientIp) {
-        if (clientIp.includes(':')) ipBucket = clientIp.split(':').slice(0, 3).join(':') + '::/48';
-        else ipBucket = clientIp.split('.').slice(0, 3).join('.') + '.0/24';
-      }
+      const ipBucket = ipPrefix(clientIp);
       const sql = getSQL(c.env);
       await sql`INSERT INTO activity_logs (action, details, actor)
                 VALUES ('turnstile_failed',
@@ -722,11 +719,7 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
   if (!turnstileOk) {
     try {
       const emailHash = await hashEmail(email);
-      let ipBucket = 'unknown';
-      if (clientIp) {
-        if (clientIp.includes(':')) ipBucket = clientIp.split(':').slice(0, 3).join(':') + '::/48';
-        else ipBucket = clientIp.split('.').slice(0, 3).join('.') + '.0/24';
-      }
+      const ipBucket = ipPrefix(clientIp);
       const sql = getSQL(c.env);
       await sql`INSERT INTO activity_logs (action, details, actor)
                 VALUES ('turnstile_failed',
@@ -745,19 +738,28 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
   );
   if (loginGate) return loginGate;
 
+  // D200 — every refusal below is recorded in security_events, with the
+  // subject hashed and the network bucketed, BEFORE the status it already
+  // answered. The write never throws (services/securityEvents.ts), so the
+  // refusal's own status is unchanged by it; a successful sign-in is NOT
+  // recorded here — activity_logs already holds those.
+  const refuse = (detail: string, userId?: number) =>
+    recordSecurityEvent(c.env, { kind: 'signin', factor: 'totp', outcome: 'refused', detail, userId, email, ip: clientIp });
+
   const sql = getSQL(c.env);
   const users = await sql`SELECT * FROM users WHERE email = ${email}`;
-  if (users.length === 0) { await sql.end(); return c.json({ error: 'Invalid credentials' }, 401); }
+  if (users.length === 0) { await sql.end(); await refuse('unknown_account'); return c.json({ error: 'Invalid credentials' }, 401); }
 
   const user = users[0];
-  if (!user.email_verified) { await sql.end(); return c.json({ error: 'Please verify your email before logging in.' }, 403); }
-  if (!user.is_active) { await sql.end(); return c.json({ error: 'Account is inactive' }, 403); }
+  if (!user.email_verified) { await sql.end(); await refuse('email_unverified', user.id); return c.json({ error: 'Please verify your email before logging in.' }, 403); }
+  if (!user.is_active) { await sql.end(); await refuse('inactive', user.id); return c.json({ error: 'Account is inactive' }, 403); }
   // Task #1 — "TOTP configured?" is sourced from `auth_totp` row presence
   // (with a fallback to a legacy base32 secret pending migration). We no
   // longer gate on `users.password_hash`: that column is reserved for
   // future real-credential storage and must not double as a 2FA flag.
   if (!(await hasTotpConfigured(c.env, user.id))) {
     await sql.end();
+    await refuse('totp_not_configured', user.id);
     return c.json({ error: 'Account not set up for TOTP authentication' }, 401);
   }
 
@@ -769,7 +771,7 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
   // is set to 1; we surface that flag to the SPA AND fire a forced
   // password-reset email so the user re-establishes a clean credential.
   const totpRow = await loadTotp(c.env, user.id, user.password_hash, user.totp_recovery_codes);
-  if (!totpRow) { await sql.end(); return c.json({ error: 'Account not set up for TOTP authentication' }, 401); }
+  if (!totpRow) { await sql.end(); await refuse('totp_not_configured', user.id); return c.json({ error: 'Account not set up for TOTP authentication' }, 401); }
   const totp = new TOTP({ secret: Secret.fromBase32(totpRow.secret) });
   const delta = totp.validate({ token: totp_code, window: 1 });
   let usedRecoveryCode = false;
@@ -779,7 +781,7 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
     // is in tryConsumeRecoveryCode (atomic UPDATE removes the hash).
     await sql.end();
     usedRecoveryCode = await tryConsumeRecoveryCode(c.env, user.id, totp_code);
-    if (!usedRecoveryCode) return c.json({ error: 'Invalid TOTP code' }, 401);
+    if (!usedRecoveryCode) { await refuse('invalid_code', user.id); return c.json({ error: 'Invalid TOTP code' }, 401); }
   } else {
     // Best-effort audit field on auth_totp.last_used_at — non-fatal if it fails.
     await markTotpUsed(c.env, user.id);
@@ -1156,12 +1158,16 @@ auth.post('/verify-totp', safe('verify-totp', 'Could not verify your code. Pleas
   const users = await sql`SELECT * FROM users WHERE email = ${email}`;
   await sql.end();
 
-  if (users.length === 0) return c.json({ error: 'Invalid credentials' }, 401);
+  // D200 — a refused verification is recorded; the answer is unchanged.
+  const verifyRefuse = (detail: string, userId?: number) =>
+    recordSecurityEvent(c.env, { kind: 'signin', factor: 'totp', outcome: 'refused', detail, userId, email, ip: c.req.header('cf-connecting-ip') });
+  if (users.length === 0) { await verifyRefuse('unknown_account'); return c.json({ error: 'Invalid credentials' }, 401); }
   // Task #33 — read TOTP via authTotp (auth_totp table → fallback legacy column).
   const totpRow = await loadTotp(c.env, users[0].id, users[0].password_hash, users[0].totp_recovery_codes);
-  if (!totpRow) return c.json({ error: 'Invalid credentials' }, 401);
+  if (!totpRow) { await verifyRefuse('totp_not_configured', users[0].id); return c.json({ error: 'Invalid credentials' }, 401); }
   const totp = new TOTP({ secret: Secret.fromBase32(totpRow.secret) });
   const valid = totp.validate({ token: totp_code, window: 1 }) !== null;
+  if (!valid) await verifyRefuse('invalid_code', users[0].id);
   return c.json({ valid });
 }));
 
@@ -1243,6 +1249,12 @@ auth.get('/magic/verify', safe('magic-verify', 'Could not complete your sign-in 
   await ensureAuthBlockersSchema(c.env);
   const base = publicBase(c.env);
   const fail = (code: string) => c.redirect(`${base}/login?magic_error=${code}`, 302);
+  // D200 — the two refusals that answer a presented credential are recorded
+  // (a token that no longer claims, an account that is inactive). A request
+  // with no token at all is not an attempt, and a claim whose UPDATE threw is
+  // an unreadable store rather than a refusal; neither is written.
+  const magicRefuse = (detail: string, subject?: { email?: string; userId?: number }) =>
+    recordSecurityEvent(c.env, { kind: 'signin', factor: 'magic', outcome: 'refused', detail, ip: c.req.header('cf-connecting-ip'), ...subject });
   const token = String(c.req.query('token') || '');
   if (!token) return fail('invalid');
   const ip = (c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '').split(',')[0].trim().slice(0, 64);
@@ -1267,7 +1279,7 @@ auth.get('/magic/verify', safe('magic-verify', 'Could not complete your sign-in 
     console.error('[AUTH:magic-verify] claim failed', e);
     return fail('invalid');
   }
-  if (!claimed) return fail('expired');
+  if (!claimed) { await magicRefuse('expired'); return fail('expired'); }
   const email = String(claimed.email).toLowerCase().trim();
 
   const sql = getSQL(c.env);
@@ -1277,7 +1289,7 @@ auth.get('/magic/verify', safe('magic-verify', 'Could not complete your sign-in 
     const existing = await sql`SELECT * FROM users WHERE email = ${email}`;
     if (existing.length) {
       user = existing[0];
-      if (Number(user.is_active ?? 1) === 0) { await sql.end(); return fail('inactive'); }
+      if (Number(user.is_active ?? 1) === 0) { await sql.end(); await magicRefuse('inactive', { email, userId: Number(user.id) }); return fail('inactive'); }
       if (!user.email_verified) {
         await sql`UPDATE users SET email_verified = true WHERE id = ${user.id}`;
         user.email_verified = true;
@@ -1428,6 +1440,11 @@ auth.post('/support/redeem', safe('support-redeem', 'Could not open the support 
 auth.post('/step-up', safe('step-up', 'Could not verify your code. Please try again.', async (c) => {
   await ensureAuthBlockersSchema(c.env);
   const user = await requireAuth(c);
+  // D200 — a step-up is the one event this ledger records in BOTH outcomes:
+  // the stamp below overwrites a single column and would otherwise leave no
+  // trail of a fresh authenticator check having been asked for, or refused.
+  const stepUp = (outcome: 'ok' | 'refused', detail?: string) =>
+    recordSecurityEvent(c.env, { kind: 'step_up', factor: 'totp', outcome, detail, userId: user.id, email: user.email, ip: c.req.header('cf-connecting-ip') });
   const parsed = await readJson(c);
   if (!parsed.ok) return parsed.res;
   const code = String(parsed.body?.totp_code || '').trim();
@@ -1442,9 +1459,10 @@ auth.post('/step-up', safe('step-up', 'Could not verify your code. Please try ag
   if (!jti) return c.json({ error: 'No active session' }, 401);
 
   const totpRow = await loadTotp(c.env, user.id, (user as any).password_hash, (user as any).totp_recovery_codes);
-  if (!totpRow) return c.json({ error: 'No authenticator is set up on this account.', code: 'totp_not_configured' }, 400);
+  if (!totpRow) { await stepUp('refused', 'totp_not_configured'); return c.json({ error: 'No authenticator is set up on this account.', code: 'totp_not_configured' }, 400); }
   const totp = new TOTP({ secret: Secret.fromBase32(totpRow.secret) });
   if (totp.validate({ token: code, window: 1 }) === null) {
+    await stepUp('refused', 'invalid_code');
     return c.json({ error: 'Invalid authenticator code' }, 401);
   }
   await markTotpUsed(c.env, user.id);
@@ -1457,6 +1475,7 @@ auth.post('/step-up', safe('step-up', 'Could not verify your code. Please try ag
     console.error('[AUTH:step-up] stamp failed', e);
     return c.json({ error: 'Could not record step-up. Please try again.' }, 500);
   }
+  await stepUp('ok');
   return c.json({ ok: true, stepped_up_at: now, ttl_minutes: STEP_UP_TTL_MINUTES });
 }));
 

@@ -4,6 +4,7 @@ import type { Env, User, JWTPayload } from './types';
 import { getSQL } from './db';
 import { branchOf, authCookieName, csrfCookieName, HQ_ONLY, HQ_AUTHORING_ONLY, BRANCH_SUSPENDED } from './util/branch';
 import { ADMIN_FROZEN, FREEZING_STATUSES } from './util/authErrors';
+import { recordSecurityEvent } from './services/securityEvents';
 
 const JWT_ALGORITHM = 'HS256';
 const JWT_EXPIRY_HOURS = 24;
@@ -865,23 +866,56 @@ export async function requireFactor(
   factor: 'totp',
 ): Promise<User> {
   const user = await requireAuth(c);
-  // Task #4 — share the same selection logic getCurrentUser used so a stale
-  // cross-identity Bearer can't step up via its own jti.
-  const sel = await selectJwt(c);
-  if (!sel) throw new Error('TOTP required');
-  const jti = sel.payload?.jti as string | undefined;
-  if (!jti) throw new Error('TOTP required');
   try {
-    const row = await c.env.DB.prepare(
-      'SELECT factor FROM user_sessions WHERE jti = ? AND user_id = ?'
-    ).bind(jti, user.id).first<{ factor: string | null }>();
-    if (!row || row.factor !== factor) throw new Error('TOTP required');
+    // Task #4 — share the same selection logic getCurrentUser used so a stale
+    // cross-identity Bearer can't step up via its own jti.
+    const sel = await selectJwt(c);
+    if (!sel) throw new Error('TOTP required');
+    const jti = sel.payload?.jti as string | undefined;
+    if (!jti) throw new Error('TOTP required');
+    try {
+      const row = await c.env.DB.prepare(
+        'SELECT factor FROM user_sessions WHERE jti = ? AND user_id = ?'
+      ).bind(jti, user.id).first<{ factor: string | null }>();
+      if (!row || row.factor !== factor) throw new Error('TOTP required');
+    } catch (e) {
+      if ((e as Error).message === 'TOTP required') throw e;
+      // user_sessions table missing or query failure → fail closed.
+      throw new Error('TOTP required');
+    }
+    return user;
   } catch (e) {
-    if ((e as Error).message === 'TOTP required') throw e;
-    // user_sessions table missing or query failure → fail closed.
-    throw new Error('TOTP required');
+    // D200 — a privileged gate turning an AUTHENTICATED caller away is
+    // recorded, and then the refusal stands exactly as before. The wrap sits
+    // below requireAuth on purpose: a caller with no session is not a gate
+    // refusal, it is a sign-in that never happened.
+    await recordGateRefusal(c, user, factor, 'factor_required');
+    throw e;
   }
-  return user;
+}
+
+/**
+ * D200 — record a privileged gate refusing an authenticated caller in
+ * security_events. Never throws: the refusal it sits beside must reach the
+ * caller unchanged whatever the ledger does.
+ */
+async function recordGateRefusal(
+  c: Context<{ Bindings: Env }>,
+  user: User,
+  factor: string,
+  detail: string,
+): Promise<void> {
+  let ip: string | undefined;
+  try { ip = c.req.header('cf-connecting-ip') || undefined; } catch { ip = undefined; }
+  await recordSecurityEvent(c.env, {
+    kind: 'gate',
+    factor,
+    outcome: 'refused',
+    detail,
+    userId: Number(user.id),
+    email: user.email,
+    ip,
+  });
 }
 
 // ─────────────────────────────────────── BLOCK-AUTH-03 — step-up auth ──
@@ -914,36 +948,42 @@ export async function requireStepUp(
     e.ttlMinutes = ttlMinutes;
     throw e;
   };
-  const sel = await selectJwt(c);
-  const jti = sel?.payload?.jti as string | undefined;
-  if (!jti) deny();
-
-  let row: { factor: string | null; created_at: string | null; last_step_up_at?: string | null } | null = null;
   try {
-    row = await c.env.DB.prepare(
-      'SELECT factor, created_at, last_step_up_at FROM user_sessions WHERE jti = ? AND user_id = ?'
-    ).bind(jti, user.id).first<{ factor: string | null; created_at: string | null; last_step_up_at: string | null }>();
-  } catch {
-    // last_step_up_at column not migrated yet — fall back to factor+created_at.
+    const sel = await selectJwt(c);
+    const jti = sel?.payload?.jti as string | undefined;
+    if (!jti) deny();
+
+    let row: { factor: string | null; created_at: string | null; last_step_up_at?: string | null } | null = null;
     try {
       row = await c.env.DB.prepare(
-        'SELECT factor, created_at FROM user_sessions WHERE jti = ? AND user_id = ?'
-      ).bind(jti, user.id).first<{ factor: string | null; created_at: string | null }>();
-    } catch { row = null; }
+        'SELECT factor, created_at, last_step_up_at FROM user_sessions WHERE jti = ? AND user_id = ?'
+      ).bind(jti, user.id).first<{ factor: string | null; created_at: string | null; last_step_up_at: string | null }>();
+    } catch {
+      // last_step_up_at column not migrated yet — fall back to factor+created_at.
+      try {
+        row = await c.env.DB.prepare(
+          'SELECT factor, created_at FROM user_sessions WHERE jti = ? AND user_id = ?'
+        ).bind(jti, user.id).first<{ factor: string | null; created_at: string | null }>();
+      } catch { row = null; }
+    }
+    if (!row) deny();
+
+    const strong = row!.factor === 'totp' || row!.factor === 'passkey';
+    const candidates: number[] = [];
+    // A fresh strong-factor login counts as a step-up for its first ttl window.
+    if (strong) { const t = parseSqlTs(row!.created_at); if (!Number.isNaN(t)) candidates.push(t); }
+    // An explicit /step-up always counts, regardless of the original factor.
+    const stamped = parseSqlTs(row!.last_step_up_at);
+    if (!Number.isNaN(stamped)) candidates.push(stamped);
+
+    const mostRecent = candidates.length ? Math.max(...candidates) : 0;
+    if (!mostRecent || Date.now() - mostRecent > ttlMinutes * 60 * 1000) deny();
+    return user;
+  } catch (e) {
+    // D200 — see requireFactor: recorded below requireAuth, refusal unchanged.
+    await recordGateRefusal(c, user, 'step_up', 'step_up_required');
+    throw e;
   }
-  if (!row) deny();
-
-  const strong = row!.factor === 'totp' || row!.factor === 'passkey';
-  const candidates: number[] = [];
-  // A fresh strong-factor login counts as a step-up for its first ttl window.
-  if (strong) { const t = parseSqlTs(row!.created_at); if (!Number.isNaN(t)) candidates.push(t); }
-  // An explicit /step-up always counts, regardless of the original factor.
-  const stamped = parseSqlTs(row!.last_step_up_at);
-  if (!Number.isNaN(stamped)) candidates.push(stamped);
-
-  const mostRecent = candidates.length ? Math.max(...candidates) : 0;
-  if (!mostRecent || Date.now() - mostRecent > ttlMinutes * 60 * 1000) deny();
-  return user;
 }
 
 /**

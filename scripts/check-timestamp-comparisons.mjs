@@ -55,7 +55,11 @@ const problems = [];
 // `created_at` and `updated_at` on the SAME row default to `datetime('now')`, so
 // one table carries both formats and a bare comparison against the clock is
 // wrong in a way that only shows when a UTC date rolls over.
-const TTL_COLUMN = '(?:expires_at|valid_until|confirm_expires_at|starts_at|start_at|respond_by|due_at)';
+// `occurred_at` joined with D200, in the commit that creates
+// `security_events.occurred_at` (migration 282). The retention sweep, the
+// WHEN-guarded delete seal and both counts on the Security page compare it
+// against the clock, so it belongs on the list the day it has a comparison.
+const TTL_COLUMN = '(?:expires_at|valid_until|confirm_expires_at|starts_at|start_at|respond_by|due_at|occurred_at)';
 // A bare column on the left of a comparison against the clock. The negative
 // lookbehind lets `datetime(expires_at)` through and nothing else.
 const BARE_TTL = new RegExp(

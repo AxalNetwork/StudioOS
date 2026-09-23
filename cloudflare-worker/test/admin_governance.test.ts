@@ -78,14 +78,25 @@ function ddl(name: string): string {
 const ALL_TABLES = [
   'users', 'super_admins', 'admin_audit_log', 'activity_logs',
   'impersonation_sessions', 'licence_events', 'territory_licences',
+  // D200 — the fifth store. It is post-cutoff, so it is NOT in the baseline:
+  // `freshDb` builds it from migration 282 read off disk, seal and all, so the
+  // table the route reads is the one that ships.
+  'security_events',
 ];
+
+const SECURITY_EVENTS_MIGRATION = readFileSync(
+  resolve(process.cwd(), 'cloudflare-worker/sql/migrations/282_security_events.sql'), 'utf8',
+);
 
 function freshDb(tables: string[] = ALL_TABLES) {
   const db = new DatabaseSync(':memory:', {
     enableForeignKeyConstraints: false,
     enableDoubleQuotedStringLiterals: true,
   });
-  for (const t of tables) db.exec(ddl(t));
+  for (const t of tables) {
+    if (t === 'security_events') db.exec(SECURITY_EVENTS_MIGRATION);
+    else db.exec(ddl(t));
+  }
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)');
   u.run(SUPER, 'admin', 'T. Okafor', 'okafor@example.test');
   u.run(PLAIN_ADMIN, 'admin', 'Plain Admin', 'admin@example.test');
@@ -120,6 +131,19 @@ const licenceEvent = (db: any, licenceId: number, event: string, at: string, not
     'INSERT INTO licence_events (licence_id, event, note, actor_user_id, created_at) VALUES (?, ?, ?, ?, ?)',
   ).run(licenceId, event, note, SUPER, at);
 
+/** D200 — one ledger row, stamped in the writer's own SQLite format. */
+const securityEvent = (
+  db: any, kind: string, factor: string, outcome: string, at: string,
+  extra: { userId?: number | null; ip?: string; detail?: string | null; branch?: string } = {},
+) =>
+  db.prepare(
+    `INSERT INTO security_events (kind, factor, outcome, detail, user_id, subject_key, ip_prefix, branch_code, minute, occurred_at)
+     VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, ?)`,
+  ).run(
+    kind, factor, outcome, extra.detail ?? null, extra.userId ?? null,
+    extra.ip ?? '203.0.113.0/24', extra.branch ?? 'hq', at.slice(0, 16), at,
+  );
+
 const impersonation = (db: any, started: string, ended: string | null, context: string | null) =>
   db.prepare(
     'INSERT INTO impersonation_sessions (admin_user_id, target_user_id, context, started_at, ended_at) VALUES (?, ?, ?, ?, ?)',
@@ -151,8 +175,12 @@ test('a plain admin cannot read the governance feed', async () => {
   assert.equal(r.body.rows, undefined, 'the feed leaked to a plain admin');
 });
 
-test('the feed is a union of four stores, not one table', async () => {
+test('the feed is a union of five stores, not one table', async () => {
   const db = freshDb();
+  // D200 — the fifth store, and the OLDEST row, so the ordering assertions
+  // below keep their meaning: rows[0] is still the licence event and rows[3]
+  // is still the audit row, with the ledger row fifth.
+  securityEvent(db, 'signin', 'totp', 'refused', agoSql(60), { detail: 'unknown_account' });
   audit(db, 'analytics_export', agoSql(50), { report_type: 'users', format: 'csv' });
   activity(db, 'role_changed', agoSql(40), SUPER, 'Admin T. Okafor changed G. Lauzier\'s role');
   impersonation(db, agoSql(30), agoSql(20), 'cap table export failure, ticket #4192');
@@ -164,12 +192,18 @@ test('the feed is a union of four stores, not one table', async () => {
   const sources = new Set(r.body.rows.map((x: any) => x.source));
   assert.deepEqual(
     [...sources].sort(),
-    ['activity_logs', 'admin_audit_log', 'impersonation_sessions', 'licence_events'],
-    'the feed dropped a store — three of H7\'s five filters live outside admin_audit_log',
+    ['activity_logs', 'admin_audit_log', 'impersonation_sessions', 'licence_events', 'security_events'],
+    'the feed dropped a store — three of H7\'s five filters live outside admin_audit_log, and H23\'s ledger is the fifth',
   );
   // Newest first, across the stores rather than within each.
   assert.equal(r.body.rows[0].source, 'licence_events');
   assert.equal(r.body.rows[3].source, 'admin_audit_log');
+  assert.equal(r.body.rows[4].source, 'security_events');
+  // H23's fifth column: stored for the ledger, derived for the others — and a
+  // refusal is never rendered as `ok`.
+  assert.equal(r.body.rows[4].outcome, 'refused');
+  assert.equal(r.body.rows[0].outcome, 'ok', 'a licence event is written after its act, so its outcome is ok');
+  assert.equal(r.body.rows[1].outcome, 'ended', 'an impersonation with an end is ended, not ok');
 });
 
 test('the subject-side twin is never read as the actor', async () => {
@@ -244,6 +278,9 @@ test('each filter reads only the stores that hold its rows', async () => {
   const lic = licence(db, 'AXL-004', 'Axal VC Iberia');
   licenceEvent(db, lic, 'suspended', agoSql(4), 'payment default');
   licenceEvent(db, lic, 'renewed', agoSql(3), 'term 3 renewal');
+  // D200 — a ledger row in the SAME fixture, so every filter below that must
+  // exclude it is proved to, not merely assumed to.
+  securityEvent(db, 'step_up', 'totp', 'refused', agoSql(2), { userId: SUPER, detail: 'invalid_code' });
 
   const sourcesOf = async (f: string) => {
     const r = await call(db, SUPER, f);
@@ -273,6 +310,14 @@ test('each filter reads only the stores that hold its rows', async () => {
   assert.deepEqual([...new Set(ex.body.rows.map((x: any) => x.source))], ['admin_audit_log']);
   assert.equal(ex.body.rows.length, 1, 'a publication is not an export');
   assert.equal(ex.body.rows[0].action, 'analytics_export');
+
+  // D200 — the ledger's own filter reads the ledger and nothing else.
+  const auth = await sourcesOf('auth');
+  assert.deepEqual([...new Set(auth.body.rows.map((x: any) => x.source))], ['security_events']);
+  assert.deepEqual(auth.body.sources.map((x: any) => x.table), ['security_events'],
+    'the auth filter read a store it does not need');
+  assert.equal(auth.body.rows[0].action, 'step_up.totp');
+  assert.equal(auth.body.rows[0].actor, 'T. Okafor', 'a subject that resolved to an account is named');
 });
 
 test('an unknown filter falls back to the whole feed rather than to nothing', async () => {
@@ -284,7 +329,7 @@ test('an unknown filter falls back to the whole feed rather than to nothing', as
   assert.equal(r.body.rows.length, 1);
 });
 
-test('one unreadable store does not silence the other three', async () => {
+test('one unreadable store does not silence the other four', async () => {
   // `impersonation_sessions` is created lazily, so a database that has never
   // impersonated has no table at all. That is unreadable, not "no sessions".
   const db = freshDb(ALL_TABLES.filter((t) => t !== 'impersonation_sessions'));
@@ -545,12 +590,12 @@ test('no read in this file interpolates into its own query text', () => {
   }
 });
 
-test('every filter is one the artboard draws, and the payload names what each reads', async () => {
+test('every filter is one the artboards draw — H7\'s five and H23\'s ledger — and the payload names what each reads', async () => {
   const db = freshDb();
   const r = await call(db, SUPER);
   assert.deepEqual(
     r.body.filters.map((f: any) => f.label),
-    ['All actions', 'Impersonations', 'Licence changes', 'Suspensions', 'Exports'],
+    ['All actions', 'Impersonations', 'Licence changes', 'Suspensions', 'Exports', 'Sign-ins and step-ups'],
   );
   for (const f of r.body.filters) assert.ok(f.reads, `${f.key} does not say which store it reads`);
 });

@@ -5,55 +5,50 @@ import { reportError } from '../../lib/log';
 import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 
 /**
- * HQ · Security (Support Security · Super canvas, Y2; the row Governance
- * became under decision A4).
+ * HQ · Security — canvas H23 (Admin · Super), which "completes Y2/H7".
  *
- * Eight zones in the canvas's order, over `GET /api/admin/security/overview`.
- * Five are real — sessions and access (with the platform-wide force re-auth),
- * data subject requests, KYC, the admin action audit, and AI safety — and
- * three are named as not recorded in the zone the canvas draws for them:
- * security events, sanctions, backup and DR. The canvas calls the
- * `security_events` ledger "the one real backend build"; it is not built, and
- * this page says so where the feed would be rather than rendering the canvas's
- * sample rows.
+ * ONE LEDGER, FIVE STORES, AND IT IS DELIBERATELY NOT PRETTY. H23's own
+ * subtitle says so. The feed that used to be H7's "Privileged action log" —
+ * four stores merged newest-first — is now H23's `security_events` ledger:
+ * the same union with a fifth store, the `security_events` table migration
+ * 282 created (D200), rendered as a MONOSPACE five-column ledger in the
+ * canvas's columns (`ts · actor · branch · event · outcome`). H7 still draws
+ * `Time · Actor · Tenant · Action · Target and reason` and five filters; H23
+ * draws these five and says it completes H7, so H23 wins for this page and
+ * D200 records the disagreement rather than picking silently.
  *
- * AI SAFETY MOVED FROM THE SECOND LIST TO THE FIRST IN D152, AND IT SHOULD
- * NEVER HAVE BEEN IN THE SECOND. The zone rendered "No guardrail-hit,
- * flagged-output or token-anomaly counter is stored" — a sentence that was
- * false on two of its three clauses about a rollup `AiUsageTab` was already
- * drawing one click away. It now reads real counters from two stores and keeps
- * a narrowed list of what they still cannot say (the D111 pattern).
+ * WHAT WAS "NOT RECORDED" AND IS NOT ANY MORE. This page used to name three
+ * absences in the zones the canvas draws for them: the security ledger, a
+ * sanctions screen, and backup / DR status. Measured, two of the three were
+ * refusals denying stores the platform has — `sanctions_screenings` has been
+ * written by `screenUser` since migration 035 (on request, never on a
+ * schedule) and the nightly export writes a heartbeat to R2 the Worker can
+ * read. So: the ledger is real (rows today, refused sign-ins in 24 hours, the
+ * feed), the Sanctions card carries the store's own figures with the sentence
+ * that a count of zero is a measured zero, and Backup / DR is two halves with
+ * their own states — the export's heartbeat, and a restore drill whose outcome
+ * is genuinely written nowhere the platform can read. H23 itself draws
+ * Sanctions and the drill as "Not recorded"; the canvas's sentence "a list
+ * check happens inside KYC at the branch" is false for this repo, and the
+ * card says what is true instead.
  *
  * ABSENT IS NOT ZERO. `num` returns null for a missing figure, a failed
  * request is unreadable rather than a quiet platform, and each `available:
- * false` block carries its reason onto the screen.
- *
- * CANVAS H7 IS RECONCILED INTO THIS PAGE, NOT DRAWN BESIDE IT. H7 is the
- * older "Governance" artboard the A4 rename folded into Security, and most
- * of it is Y2's zones under other names. Three things were genuinely missing
- * and are here now:
- *
- *   The feed is a UNION, not one table. Y2's audit zone read
- *   `admin_audit_log` alone; three of H7's five filters have no rows in it.
- *   The feed now merges four stores server-side — see routes/admin_security.ts.
- *   TENANT is a real column for licence rows only, and unrecorded elsewhere
- *   because no account names its licence (U1).
- *   DATA ACCESS is H7's own zone: impersonations and exports together,
- *   because the question is not "what changed" but "who read someone else's
- *   rows".
+ * false` block carries its reason onto the screen. A `security_events` count
+ * that could not be read renders its reason in the bar, never `0 rows today`.
  *
  * AND H7'S RULE FOR ITSELF IS KEPT: "no cards, no summary tiles, no chart —
  * an audit log that has been made attractive is an audit log someone has
- * edited for legibility." No tile sits above the feed. The tiles this page
- * does carry belong to Y2's own zones, which are not the log.
+ * edited for legibility." No tile sits above the ledger. The tiles this page
+ * does carry belong to H23's own cards, which are not the log.
  *
  * H7'S "Viewing as: Axal VC France · Return to HQ view" OVERLAY IS BUILT
  * (D153), and this page describes it rather than drawing it: the bar lives in
  * the shell, above every other bar, so it frames Home and Team rather than one
  * page. What this page carries is the sentence, and it comes from the payload
- * rather than from here so there is one copy of it. This zone's own figures
- * stay HQ-wide — the governance feed is HQ's record of what HQ did, which is
- * not a branch's to show.
+ * rather than from here so there is one copy of it. This page's own figures
+ * stay HQ-wide — the ledger is HQ's record of what happened at HQ's door and
+ * what HQ did, which is not a branch's to show.
  */
 const UNAVAILABLE = Symbol('unavailable');
 
@@ -63,9 +58,10 @@ const num = (v) => (v === null || v === undefined || !Number.isFinite(Number(v))
 const titleCase = (s) => String(s || '').replaceAll('_', ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
 
 /**
- * H7's five filters, in its order — the fallback while the feed is still in
- * flight so the bar does not pop into existence. The server sends the same
- * list with what each one reads, and that copy wins once it arrives.
+ * The six filters, in the server's order — the fallback while the feed is
+ * still in flight so the bar does not pop into existence. The server sends
+ * the same list with what each one reads, and that copy wins once it arrives.
+ * The sixth is H23's: the ledger of refusals and step-ups (D200).
  */
 const GOV_FILTERS = [
   { key: 'all', label: 'All actions' },
@@ -73,13 +69,14 @@ const GOV_FILTERS = [
   { key: 'licence_changes', label: 'Licence changes' },
   { key: 'suspensions', label: 'Suspensions' },
   { key: 'exports', label: 'Exports' },
+  { key: 'auth', label: 'Sign-ins and step-ups' },
 ];
 
 /**
  * The artboard's one piece of decoration: "Rows involving impersonation or a
  * licence suspension carry a tint — the only decoration on the page, and it
  * is there to be scanned for." Three tones, and `note` is deliberately no
- * tint at all rather than a fourth colour.
+ * tint at all rather than a fourth colour. A refused sign-in is `alert` too.
  */
 const ROW_TINT = {
   alert: 'bg-red-50/40 dark:bg-red-950/20',
@@ -90,6 +87,18 @@ const ACTION_INK = {
   alert: 'text-red-700 dark:text-red-300',
   warn: 'text-amber-800 dark:text-amber-300',
   note: 'text-axal-ink dark:text-white',
+};
+/**
+ * H23's fifth column. `refused` and `not closed` are the two that want
+ * finding; `live` is a state worth a second look; `ok` and `ended` are the
+ * quiet majority.
+ */
+const OUTCOME_INK = {
+  refused: 'text-red-700 dark:text-red-300',
+  'not closed': 'text-red-700 dark:text-red-300',
+  live: 'text-amber-800 dark:text-amber-300',
+  ok: 'text-axal-muted',
+  ended: 'text-axal-muted',
 };
 
 function Zone({ title, sub, children, tone = '' }) {
@@ -231,6 +240,119 @@ function Stat({ label, value, note, tone = 'text-axal-ink dark:text-white' }) {
       <div className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</div>
       <div className={`mt-1 text-lg font-extrabold tracking-tight tabular-nums ${tone}`}>{value ?? <Unrecorded />}</div>
       {note && <div className="mt-0.5 text-[10px] text-axal-faint">{note}</div>}
+    </div>
+  );
+}
+
+/**
+ * D200 — H23's bar: `security_events · append-only · N rows today`.
+ *
+ * Three states, and only one of them is a figure. Before the overview answers
+ * the slot says it is waiting; under a FAILED overview read it says the ledger
+ * is unreadable rather than keeping the ellipsis, which would claim an answer
+ * is on its way; and an unreadable ledger inside a readable overview carries
+ * the server's own reason. None of the three is ever `0 rows today`.
+ */
+export function securityEventsBar(ready, se, overviewUnreadable) {
+  if (!ready) {
+    return overviewUnreadable ? 'security_events · unreadable · the security overview could not be read' : 'security_events · …';
+  }
+  if (se?.available) return `security_events · append-only · ${num(se.today)} rows today`;
+  return `security_events · unreadable · ${se?.reason || 'the ledger could not be read'}`;
+}
+
+/**
+ * D200 — why the DSR grouping has one group. The count of bound branches is
+ * the server's; `null` means the env could not be scanned, which is not "no
+ * branch is bound" and so gets a sentence of its own.
+ */
+export function dsrBranchesSentence(branches) {
+  if (branches.bound === 0) return 'No branch is bound; every open request is HQ-held.';
+  if (branches.bound === null) return `Whether a branch is bound could not be read. ${branches.reason}`;
+  return `${num(branches.bound)} branch${branches.bound === 1 ? ' is' : 'es are'} bound. ${branches.reason}`;
+}
+
+/**
+ * D200 — H23's Sanctions card, from the store's own figures.
+ *
+ * The card this replaced was one `<Stat value={null}>` reading the server's
+ * refusal, and that refusal — "No sanctions screening runs on the platform" —
+ * was false: `sanctions_screenings` has existed since migration 035 and
+ * `screenUser` writes one row per on-request run. Four figures now, plus the
+ * server's sentence about HOW a run happens, because a count of zero on a
+ * store nothing schedules is a measured zero and must not read as a store
+ * that does not exist. Unreadable is its own state, with the reason.
+ */
+export function Sanctions({ block, unreadable }) {
+  // `!block` is loading OR a failed overview read, and those are different
+  // claims: under a failed read "Loading…" would say an answer is coming.
+  if (!block) {
+    return unreadable
+      ? <p className="text-[12.5px] text-axal-muted"><Unrecorded /> — the security overview could not be read.</p>
+      : <p className="text-[12px] text-axal-faint">Loading…</p>;
+  }
+  if (!block.available) {
+    return (
+      <p className="text-[12.5px] leading-relaxed text-axal-muted" data-testid="hq-sanctions-unreadable">
+        <Unrecorded /> — {block.reason}
+      </p>
+    );
+  }
+  return (
+    <div data-testid="hq-sanctions">
+      <div className="grid grid-cols-2 gap-2">
+        <Stat label="Screening runs" value={num(block.runs_total)} note={block.runs_total === 0 ? 'none has been asked for' : 'recorded, one row per run'} />
+        <Stat label="Last run" value={block.last_run_at ? day(block.last_run_at) : 'never'} note="on request, never scheduled" />
+        <Stat label="Hits" value={num(block.hits_total)} note="runs that matched a list" tone={block.hits_total ? 'text-red-700 dark:text-red-300' : 'text-axal-ink dark:text-white'} />
+        <Stat label="Unreviewed hits" value={num(block.unreviewed_hits)} note="awaiting a reviewer's note" tone={block.unreviewed_hits ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
+      </div>
+      <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
+        {block.how} <a href={block.path} className="underline">Open the Trust Center →</a>
+      </p>
+    </div>
+  );
+}
+
+/**
+ * D200 — H23's Backup / DR card, as TWO facts with their own states.
+ *
+ * The backup half reads the heartbeat the nightly export writes to R2: absent
+ * with its reason when the binding is unbound or nothing was ever written,
+ * present with the export's own stamp otherwise. The drill half is a stated
+ * absence — the restore drill writes its outcome nowhere the platform can
+ * read — and it stays one however green the backup half is. The canvas's own
+ * words: "stated in words rather than a green light."
+ */
+export function BackupDr({ block, unreadable }) {
+  // Same rule as Sanctions: a failed overview read is not a load in progress.
+  if (!block) {
+    return unreadable
+      ? <p className="text-[12.5px] text-axal-muted"><Unrecorded /> — the security overview could not be read.</p>
+      : <p className="text-[12px] text-axal-faint">Loading…</p>;
+  }
+  const b = block.backup;
+  return (
+    <div className="space-y-2" data-testid="hq-backup-dr">
+      <div>
+        <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">Nightly export</div>
+        {b?.available ? (
+          <p className="mt-0.5 text-[12px] text-axal-muted" data-testid="hq-backup-heartbeat">
+            Last {b.kind === 'd1' ? 'D1' : 'KV'} export <b className="font-mono">{day(b.at) || <Unrecorded>unstamped</Unrecorded>}</b>
+            {b.source ? ` · ${b.source}` : ''}
+            {b.size_bytes !== null && b.size_bytes !== undefined ? ` · ${num(b.size_bytes)} bytes` : ''}
+          </p>
+        ) : (
+          <p className="mt-0.5 text-[12.5px] leading-relaxed text-axal-muted" data-testid="hq-backup-unreadable">
+            <Unrecorded /> — {b?.reason || 'the heartbeat could not be read.'}
+          </p>
+        )}
+      </div>
+      <div>
+        <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">Restore drill</div>
+        <div className="mt-0.5" data-testid="hq-restore-drill">
+          <Absent block={block.drill} fallback="no drill record is kept." />
+        </div>
+      </div>
     </div>
   );
 }
@@ -399,8 +521,8 @@ export default function HqSecurityPage() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  // H7's feed, its own request. The filter is applied SERVER-side because
-  // the feed is a merged page of sixty rows across four stores: filtering
+  // H23's ledger, its own request. The filter is applied SERVER-side because
+  // the feed is a merged page of sixty rows across five stores: filtering
   // that page in the browser would show whichever few of the sixty matched
   // and read as "that is all there is".
   const [feed, setFeed] = useState(null);
@@ -423,8 +545,14 @@ export default function HqSecurityPage() {
   const mfa = ready ? data.mfa : null;
   const kyc = ready ? data.kyc || {} : {};
   const dsr = ready ? data.dsr?.rows || [] : [];
+  const dsrGroups = ready ? data.dsr?.by_branch || [] : [];
+  const dsrBranches = ready ? data.dsr?.branches : null;
   const dsrDue = dsr.filter((d) => d.days_left !== null && d.days_left <= 14).length;
   const withoutMfa = mfa ? mfa.admins_total - mfa.admins_with_mfa : null;
+  // D200 — the ledger's own block: rows today and refused sign-ins, or the
+  // reason neither could be read. `se.available === false` is a state the
+  // bar and the Sessions tile each render as such, never as a zero.
+  const se = ready ? data.security_events : null;
   // D152 — the rail's AI-safety row, built from the SERVER's list rather than
   // retyped, but kept to ONE literal pair. Spreading the mapped rows straight
   // into `unavailable` was the first shape and it was wrong: two guards read
@@ -441,14 +569,31 @@ export default function HqSecurityPage() {
     : (aiGaps.length
       ? `Guardrail verdicts and enforcement ARE counted — the zone above reads them. Not counted: ${aiGaps.join(' · ')}, each with its reason there.`
       : 'Counted, with nothing named as still missing.');
+  // D200 — the same shape for the ledger: what it deliberately does not
+  // record comes from the server's list, and the rail names it in one pair.
+  const seGaps = ready ? (se?.not_counted || []).map((n) => n.what) : [];
+  const securityGapsDetail = !ready ? 'unreadable'
+    : (seGaps.length
+      ? `Refusals and step-ups ARE recorded — the ledger above reads them. Not recorded: ${seGaps.join(' · ')}, each with its reason there.`
+      : 'Recorded, with nothing named as still missing.');
+  const sanctionsDetail = !ready ? 'unreadable'
+    : (data.sanctions?.available
+      ? `Read from sanctions_screenings — ${num(data.sanctions.runs_total)} run${data.sanctions.runs_total === 1 ? '' : 's'} recorded. Runs happen on request from the Trust Center; nothing schedules one.`
+      : (data.sanctions?.reason || 'unreadable'));
+  const backupDetail = !ready ? 'unreadable'
+    : (data.backup_dr?.backup?.available
+      ? `Read from the export heartbeat — last ${day(data.backup_dr.backup.at) || 'unstamped'}.`
+      : (data.backup_dr?.backup?.reason || 'unreadable'));
+  const drillDetail = !ready ? 'unreadable' : (data.backup_dr?.drill?.reason || 'not recorded');
 
   const rail = (
     <WorkerRail
       workspace="Security"
       role="super_admin"
       stance="Read-only, except force re-auth"
-      note="Audit, sessions, KYC and deletion clocks are read from their stores. The one action here signs everyone out and is recorded."
+      note="The security ledger, the admin action log, sessions, KYC, deletion clocks, the sanctions runs and the backup heartbeat are read from their stores. The one action here signs everyone out and is recorded."
       coverage={ready ? [
+        se?.available ? `${num(se.today)} security event${se.today === 1 ? '' : 's'} recorded today` : 'Security events: unreadable',
         `${num(data.audit?.total) ?? 'an unrecorded number of'} admin actions on record`,
         imp?.available ? `${num(imp.active)} impersonation${imp.active === 1 ? '' : 's'} live` : 'Impersonations: unreadable',
         `${num(dsr.length)} deletion request${dsr.length === 1 ? '' : 's'} open`,
@@ -457,7 +602,11 @@ export default function HqSecurityPage() {
       unavailable={[
         // [title, detail] pairs: WorkerRail destructures each entry, so a bare
         // string would render as its first two characters.
-        ['Security events', 'No security_events ledger exists yet.'],
+        // D200 — THE ROW THAT SAID "No security_events ledger exists yet." IS
+        // GONE, because the ledger exists (migration 282). What replaces it is
+        // named by the SERVER: the events the ledger deliberately does not
+        // count, each with its reason in the zone.
+        ['Security events not counted', securityGapsDetail],
         // D152 — THIS ROW SAID "Nothing aggregates guardrail verdicts" AND IT
         // WAS FALSE. Something did: `aiRouter.loadAiUsageReport` had rolled
         // them up all along and `AiUsageTab` rendered them. Correcting it is
@@ -466,15 +615,22 @@ export default function HqSecurityPage() {
         // SERVER rather than retyped here, so the zone and the rail cannot
         // disagree about what is missing.
         ['AI safety counters', aiSafetyDetail],
-        ['Sanctions screening', 'Not run on the platform.'],
-        ['Backup and restore-drill status', 'Not recorded where the platform can read it.'],
-        ['Per-tenant anything', 'No account names its licence yet (U1) — except a licence event, which is about one.'],
+        // D200 — "Not run on the platform." was FALSE: screenUser has written
+        // sanctions_screenings since migration 035. The row now says what the
+        // store holds and how a run happens.
+        ['Sanctions screening', sanctionsDetail],
+        // D200 — one absence became two facts. The backup half reads the
+        // export's heartbeat; the drill half is still written nowhere the
+        // platform can read, and says so in the server's own words.
+        ['Backup heartbeat', backupDetail],
+        ['Restore drill', drillDetail],
+        ['Per-tenant anything', 'No account names its licence yet (U1) — except a licence event, which is about one, and a security event, which names the deployment that recorded it.'],
         // D153 — THIS ROW IS GONE, not reworded: the overlay is built, so a
         // rail row saying it is not would be the stale-refusal defect this
         // programme keeps deleting. What the overlay does NOT cover is this
         // page, and that is a fact about scope rather than about a gap:
         // governance is HQ's own record of HQ's own acts.
-        ['The governance feed under the overlay', 'Out of scope. Viewing as a branch scopes Home and Team; this feed is HQ\'s record of what HQ did, which no branch holds.'],
+        ['The security ledger under the overlay', 'Out of scope. Viewing as a branch scopes Home and Team; this ledger is HQ\'s record of what happened at HQ\'s door and what HQ did, which no branch holds.'],
       ]}
       data-testid="hq-security-rail"
     />
@@ -485,8 +641,13 @@ export default function HqSecurityPage() {
       <div className="min-w-0">
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#881337] px-4 py-2.5 text-white">
           <span className="text-[12.5px] font-bold">All subsidiaries</span>
-          <span className="text-[11px] opacity-80 tabular-nums">
-            {ready ? `${num(dsrDue)} deletion request${dsrDue === 1 ? '' : 's'} inside deadline pressure` : '…'}
+          <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] opacity-80 tabular-nums">
+            <span>{ready ? `${num(dsrDue)} deletion request${dsrDue === 1 ? '' : 's'} inside deadline pressure` : '…'}</span>
+            {/* H23's bar: `security_events · append-only · N rows today`. An
+                unreadable ledger says so here, in the same slot, never `0`. */}
+            <span className="font-mono" data-testid="hq-security-events-bar">
+              {securityEventsBar(ready, se, data === UNAVAILABLE)}
+            </span>
           </span>
         </div>
 
@@ -496,117 +657,28 @@ export default function HqSecurityPage() {
           </div>
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">Security</h1>
           <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
-            Was Governance, which described the audit log and nothing else. That log is here as one zone of
-            eight, reading the four stores a privileged action actually lands in rather than the one. Five
-            zones read their stores; three say what is not recorded and why. Only a licence event names a
-            subsidiary — nothing else here is scoped per subsidiary yet, the guardrail counters included.
+            Was Governance, which described the audit log and nothing else. The ledger here is H23&apos;s: five
+            stores — the security_events ledger of refusals and step-ups, the admin action log, the activity log,
+            impersonation sessions and licence events — merged newest-first into one monospace feed. Sanctions and
+            backup read their own stores; the restore drill says what is not recorded and why. Only a licence
+            event names a subsidiary and only a security event names its deployment — nothing else here is
+            scoped per subsidiary yet, the guardrail counters included.
           </p>
         </header>
 
         {data === UNAVAILABLE && <div className="mt-4"><Unreadable what="The security overview" claim="This is not a claim that nothing happened." onRetry={load} /></div>}
 
         <div className="mt-4 space-y-4">
-          <Zone title="Security events and auth anomalies" sub="the canvas's one real backend build" tone="border-red-200 dark:border-red-900/50">
-            <Absent block={ready ? data.security_events : null} fallback="no security_events ledger exists." />
-          </Zone>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <Zone title="Sessions and access" sub="Revoke is recorded">
-              <div className="grid grid-cols-2 gap-2">
-                <Stat label="Active sessions" value={sessions?.available ? num(sessions.active) : null} note={sessions?.available ? `seen in ${sessions.window_days} days, not revoked` : (sessions?.reason || 'unreadable')} />
-                <Stat label="Impersonations live" value={imp?.available ? num(imp.active) : null} note={imp?.available ? 'no ended_at yet' : (imp?.reason || 'unreadable')} tone={imp?.available && imp.active ? 'text-red-700 dark:text-red-300' : 'text-axal-ink dark:text-white'} />
-                <Stat label="Admins with MFA" value={mfa ? `${num(mfa.admins_with_mfa)} of ${num(mfa.admins_total)}` : null} note={withoutMfa === null ? 'unreadable' : withoutMfa > 0 ? `${num(withoutMfa)} without` : 'every admin enrolled'} tone={withoutMfa ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
-                <Stat label="Failed sign-ins" value={null} note="not recorded — no security_events" />
-              </div>
-              {imp?.available && imp.recent.length > 0 && (
-                <ul className="mt-3 space-y-1.5" data-testid="hq-impersonations">
-                  {imp.recent.slice(0, 5).map((s) => (
-                    <li key={s.id} className={`rounded-lg border px-3 py-2 text-[11.5px] ${s.ended_at ? 'border-axal-hairline bg-axal-ground' : 'border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/20'}`}>
-                      <b>{s.admin_name || s.admin_email}</b> as <b>{s.target_name || s.target_email}</b>
-                      <span className="ml-2 font-mono text-[10px] text-axal-faint">{day(s.started_at)}{s.ended_at ? ` → ${day(s.ended_at)}` : ' · live'}</span>
-                      {s.context && <span className="ml-2 text-axal-faint">· {s.context}</span>}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <ForceReauth onDone={load} />
-              <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
-                An impersonation is a session like any other, which is why it sits here. Per-device revocation stays
-                with each account under Settings; the platform-wide action above bumps every account&apos;s token floor.
-              </p>
-            </Zone>
-
-            <Zone title="AI safety" sub="guardrail hits · Advisor-AI outputs the screen caught">
-              <AiSafety block={ready ? data.ai_safety : null} />
-            </Zone>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <Zone title="Data subject requests" sub={`${ready ? data.dsr?.clock_days : 30}-day clock from receipt`} tone="border-amber-200 bg-amber-50/30 dark:border-amber-900 dark:bg-amber-950/20">
-              {ready && dsr.length === 0 && <p className="text-[12px] text-axal-faint">No deletion request is open.</p>}
-              {ready && dsr.length > 0 && (
-                <ul className="space-y-1.5" data-testid="hq-dsr">
-                  {dsr.map((d) => (
-                    <li key={d.id} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-[12px] dark:border-amber-900 dark:bg-gray-900">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="min-w-0 truncate"><b>{d.name || d.email}</b> <span className="text-axal-faint">· {titleCase(d.role)} · erasure</span></span>
-                        <span className={`shrink-0 font-bold tabular-nums ${d.days_left === null ? 'text-axal-faint' : d.days_left < 0 ? 'text-red-700 dark:text-red-300' : d.days_left <= 14 ? 'text-amber-800 dark:text-amber-300' : 'text-axal-ink dark:text-white'}`}>
-                          {d.days_left === null ? <Unrecorded>clock unknown</Unrecorded> : d.days_left < 0 ? `${num(-d.days_left)}d overdue` : `${num(d.days_left)}d left`}
-                        </span>
-                      </div>
-                      {/* D168 — HAS THIS SUBJECT ASKED BEFORE? `prior_requests` is
-                          null, never 0, when the ledger could not be read: "never
-                          asked before" is a claim, and an unreadable store has not
-                          made it. A third ask read as a first is the thing this
-                          line exists to prevent. */}
-                      {d.prior_requests === null ? (
-                        <p className="mt-0.5 text-[11px] text-axal-faint" data-testid="hq-dsr-history-unreadable">
-                          <Unrecorded>earlier requests unknown</Unrecorded>
-                        </p>
-                      ) : d.prior_requests > 0 ? (
-                        <p className="mt-0.5 text-[11px] text-axal-faint" data-testid="hq-dsr-history">
-                          {num(d.prior_requests)} earlier request{d.prior_requests === 1 ? '' : 's'}
-                          {d.last_outcome ? ` · last ${d.last_outcome}` : ''}
-                          {d.last_outcome_at ? ` on ${String(d.last_outcome_at).slice(0, 10)}` : ''}
-                        </p>
-                      ) : null}
-                      <DsrClose row={d} onDone={load} />
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {!ready && data !== UNAVAILABLE && <p className="text-[12px] text-axal-faint">Loading…</p>}
-              <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
-                The clock is statutory — one month from receipt, not from triage. Requests come from each account&apos;s own
-                Settings; <b>erasure itself is still a manual act</b>, and closing a request here records that act rather
-                than performing one. A withdrawal is the subject&apos;s own and is recorded when they cancel.
-              </p>
-            </Zone>
-
-            <div className="space-y-4">
-              <Zone title="Sanctions and KYC" sub="the review queue">
-                <div className="grid grid-cols-2 gap-2">
-                  <Stat label="KYC pending" value={ready ? num(kyc.pending) ?? '0' : null} note="documents submitted, unverified" tone={kyc.pending ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
-                  <Stat label="KYC approved" value={ready ? num(kyc.approved) ?? '0' : null} note="active accounts" />
-                  <Stat label="KYC rejected" value={ready ? num(kyc.rejected) ?? '0' : null} note="active accounts" />
-                  <Stat label="Sanctions review" value={null} note={ready ? (data.sanctions?.reason || 'not recorded') : 'unreadable'} />
-                </div>
-              </Zone>
-              <Zone title="Backup and DR" sub="drill status, not just backup status">
-                <Absent block={ready ? data.backup_dr : null} fallback="no drill record is kept." />
-              </Zone>
-            </div>
-          </div>
-
-          {/* Canvas H7's feed. Time · Actor · Tenant · Action · Target and
-              reason, one filter bar, and NO tile above it — the artboard is
-              explicit that a summary tile over an audit log is a dashboard,
-              and that legibility is not the property you want from a log. */}
+          {/* Canvas H23's ledger. ts · actor · branch · event · outcome, one
+              filter bar, monospace on every cell, and NO tile above it — H7's
+              rule, which H23 restates: a summary tile over an audit log is a
+              dashboard, and legibility is not the property you want from a
+              log. */}
           <Zone
-            title="Privileged action log"
+            title="Security events"
             sub={feedReady
               ? `${feed.rows.length} newest${feed.more ? ' of more' : ''} · ${feed.sources.filter((x) => x.available).length} of ${feed.sources.length} stores read`
-              : 'four stores, one feed'}
+              : 'five stores, one ledger · append-only'}
           >
             <div className="flex flex-wrap items-center gap-2" data-testid="hq-gov-filters">
               {(feedReady ? feed.filters : GOV_FILTERS).map((f) => (
@@ -630,7 +702,7 @@ export default function HqSecurityPage() {
             {feed === UNAVAILABLE && (
               <div className="mt-3">
                 <Unreadable
-                  what="The privileged action log"
+                  what="The security ledger"
                   claim="This is not a claim that nobody did anything."
                   onRetry={() => setFilter((f) => f)}
                 />
@@ -640,21 +712,21 @@ export default function HqSecurityPage() {
 
             {feedReady && feed.rows.length === 0 && (
               <p className="mt-3 text-[12px] text-axal-faint" data-testid="hq-gov-empty">
-                No privileged action matches this filter. Every store below was read and none held a row —
+                No event matches this filter. Every store below was read and none held a row —
                 which is a different fact from a store that could not be read.
               </p>
             )}
 
             {feedReady && feed.rows.length > 0 && (
               <div className="mt-3 overflow-x-auto">
-                <table className="w-full text-[11.5px]" data-testid="hq-gov-feed">
+                <table className="w-full font-mono text-[11px]" data-testid="hq-gov-feed">
                   <thead>
                     <tr className="text-left text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">
-                      <th className="py-1 pr-3">Time</th>
-                      <th className="py-1 pr-3">Actor</th>
-                      <th className="py-1 pr-3">Tenant</th>
-                      <th className="py-1 pr-3">Action</th>
-                      <th className="py-1">Target and reason</th>
+                      <th className="py-1 pr-3">ts</th>
+                      <th className="py-1 pr-3">actor</th>
+                      <th className="py-1 pr-3">branch</th>
+                      <th className="py-1 pr-3">event</th>
+                      <th className="py-1">outcome</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -663,10 +735,15 @@ export default function HqSecurityPage() {
                         <td className="py-1.5 pr-3 font-mono text-[10.5px] text-axal-faint">
                           {day(r.at) || <Unrecorded>no timestamp</Unrecorded>}
                         </td>
-                        <td className="py-1.5 pr-3 font-semibold">{r.actor || <Unrecorded>unnamed</Unrecorded>}</td>
-                        <td className="py-1.5 pr-3 text-axal-muted">{r.tenant || <Unrecorded />}</td>
-                        <td className={`py-1.5 pr-3 font-bold ${ACTION_INK[r.tone] || ACTION_INK.note}`}>{r.action}</td>
-                        <td className="py-1.5 text-axal-muted">{r.target || <Unrecorded>no detail</Unrecorded>}</td>
+                        <td className="py-1.5 pr-3 font-mono font-semibold">{r.actor || <Unrecorded>unnamed</Unrecorded>}</td>
+                        <td className="py-1.5 pr-3 font-mono text-axal-muted">{r.tenant || <Unrecorded />}</td>
+                        <td className={`py-1.5 pr-3 font-mono font-bold ${ACTION_INK[r.tone] || ACTION_INK.note}`}>
+                          {r.action}
+                          {r.target ? <span className="ml-2 font-normal text-axal-muted">{r.target}</span> : null}
+                        </td>
+                        <td className={`py-1.5 font-mono font-semibold ${OUTCOME_INK[r.outcome] || 'text-axal-muted'}`}>
+                          {r.outcome || <Unrecorded />}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -677,7 +754,7 @@ export default function HqSecurityPage() {
             {feedReady && (
               <>
                 <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-gov-tenant-reason">
-                  <b>Tenant.</b> {feed.tenant_reason}
+                  <b>Branch.</b> {feed.tenant_reason}
                 </p>
                 <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10.5px] text-axal-faint" data-testid="hq-gov-sources">
                   {feed.sources.map((src) => (
@@ -689,16 +766,149 @@ export default function HqSecurityPage() {
                 </ul>
                 <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
                   Newest first, no pagination above the fold, and no summary tile over it: the first question of
-                  an audit log is what just happened, never page four, and a count of suspensions is a dashboard
-                  where the suspensions themselves are the record. Impersonations and suspensions carry a tint —
-                  the only decoration here, and it is there to be scanned for.
+                  an audit log is what just happened, never page four, and a count of refusals is a dashboard
+                  where the refusals themselves are the record. Refused sign-ins, impersonations and suspensions
+                  carry a tint — the only decoration here, and it is there to be scanned for. A refusal is one row
+                  per minute per email address and network, carrying the first reason in that minute: the ledger records
+                  that someone was refused, not how many times. Whether an HQ act landed on its branch is on
+                  Platform → Deployments, which reads the audit mirror.
                 </p>
                 <p className="mt-2 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-gov-tenant-view">
                   <b>Viewing as a branch.</b> {feed.tenant_view_reason}
                 </p>
               </>
             )}
+            {(se?.not_counted || []).length > 0 && (
+              <ul className="mt-3 space-y-1.5" data-testid="hq-security-events-not-counted">
+                {se.not_counted.map((n) => (
+                  <li key={n.what} className="text-[11px] leading-relaxed text-axal-faint">
+                    <b className="text-axal-muted">{n.what}</b> — <Unrecorded />. {n.reason}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {se && !se.available && (
+              <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-security-events-unreadable">
+                The ledger&apos;s counts could not be read: {se.reason} The feed above still shows what the other
+                stores hold; a security_events row absent from it is a store that answered nothing, not a quiet day.
+              </p>
+            )}
+            {se?.available && (
+              <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-security-events-retention">
+                Kept for {se.retention_days} days, and the ledger&apos;s own seal refuses any delete inside that window.
+              </p>
+            )}
           </Zone>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <Zone title="Sanctions review" sub="from the store's own runs">
+              <Sanctions block={ready ? data.sanctions : null} unreadable={data === UNAVAILABLE} />
+            </Zone>
+            <Zone title="Backup / DR drill" sub="two facts, each its own state">
+              <BackupDr block={ready ? data.backup_dr : null} unreadable={data === UNAVAILABLE} />
+            </Zone>
+            <Zone title="Sessions and access" sub="Revoke is recorded">
+              <div className="grid grid-cols-2 gap-2">
+                <Stat label="Active sessions" value={sessions?.available ? num(sessions.active) : null} note={sessions?.available ? `seen in ${sessions.window_days} days, not revoked` : (sessions?.reason || 'unreadable')} />
+                <Stat label="Impersonations live" value={imp?.available ? num(imp.active) : null} note={imp?.available ? 'no ended_at yet' : (imp?.reason || 'unreadable')} tone={imp?.available && imp.active ? 'text-red-700 dark:text-red-300' : 'text-axal-ink dark:text-white'} />
+                <Stat label="Admins with MFA" value={mfa ? `${num(mfa.admins_with_mfa)} of ${num(mfa.admins_total)}` : null} note={withoutMfa === null ? 'unreadable' : withoutMfa > 0 ? `${num(withoutMfa)} without` : 'every admin enrolled'} tone={withoutMfa ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
+                {/* D200 — this tile was `value={null}` under "no security_events".
+                    It reads the ledger now: refused sign-ins in the last 24
+                    hours, and its reason when the ledger could not be read. */}
+                <Stat label="Failed sign-ins" value={se?.available ? num(se.failed_signins_24h) : null} note={se?.available ? 'refused in 24 hours, from security_events' : (se?.reason || 'unreadable')} tone={se?.available && se.failed_signins_24h ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
+              </div>
+              {imp?.available && imp.recent.length > 0 && (
+                <ul className="mt-3 space-y-1.5" data-testid="hq-impersonations">
+                  {imp.recent.slice(0, 5).map((s) => (
+                    <li key={s.id} className={`rounded-lg border px-3 py-2 text-[11.5px] ${s.ended_at ? 'border-axal-hairline bg-axal-ground' : 'border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/20'}`}>
+                      <b>{s.admin_name || s.admin_email}</b> as <b>{s.target_name || s.target_email}</b>
+                      <span className="ml-2 font-mono text-[10px] text-axal-faint">{day(s.started_at)}{s.ended_at ? ` → ${day(s.ended_at)}` : ' · live'}</span>
+                      {s.context && <span className="ml-2 text-axal-faint">· {s.context}</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <ForceReauth onDone={load} />
+              <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
+                An impersonation is a session like any other, which is why it sits here. Per-device revocation stays
+                with each account under Settings; the platform-wide action above bumps every account&apos;s token floor.
+              </p>
+            </Zone>
+          </div>
+
+          <Zone title="Data subject requests" sub={`${ready ? data.dsr?.clock_days : 30}-day clock from receipt · by territory`} tone="border-amber-200 bg-amber-50/30 dark:border-amber-900 dark:bg-amber-950/20">
+            {/* D200 — H23 draws the DSR clocks "by territory · runs against the
+                holding branch". Every request this database holds is HQ-held
+                by construction, so the grouping has one group and the sentence
+                below says why there is not a second, from the server. */}
+            {ready && dsrGroups.length > 0 && (
+              <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-semibold text-axal-muted" data-testid="hq-dsr-groups">
+                {dsrGroups.map((g) => (
+                  <span key={g.branch} className="font-mono">{g.branch} · {num(g.open)} open</span>
+                ))}
+              </div>
+            )}
+            {ready && dsr.length === 0 && <p className="text-[12px] text-axal-faint">No deletion request is open.</p>}
+            {ready && dsr.length > 0 && (
+              <ul className="space-y-1.5" data-testid="hq-dsr">
+                {dsr.map((d) => (
+                  <li key={d.id} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-[12px] dark:border-amber-900 dark:bg-gray-900">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="min-w-0 truncate"><b>{d.name || d.email}</b> <span className="text-axal-faint">· {titleCase(d.role)} · erasure</span></span>
+                      <span className={`shrink-0 font-bold tabular-nums ${d.days_left === null ? 'text-axal-faint' : d.days_left < 0 ? 'text-red-700 dark:text-red-300' : d.days_left <= 14 ? 'text-amber-800 dark:text-amber-300' : 'text-axal-ink dark:text-white'}`}>
+                        {d.days_left === null ? <Unrecorded>clock unknown</Unrecorded> : d.days_left < 0 ? `${num(-d.days_left)}d overdue` : `${num(d.days_left)}d left`}
+                      </span>
+                    </div>
+                    {/* D168 — HAS THIS SUBJECT ASKED BEFORE? `prior_requests` is
+                        null, never 0, when the ledger could not be read: "never
+                        asked before" is a claim, and an unreadable store has not
+                        made it. A third ask read as a first is the thing this
+                        line exists to prevent. */}
+                    {d.prior_requests === null ? (
+                      <p className="mt-0.5 text-[11px] text-axal-faint" data-testid="hq-dsr-history-unreadable">
+                        <Unrecorded>earlier requests unknown</Unrecorded>
+                      </p>
+                    ) : d.prior_requests > 0 ? (
+                      <p className="mt-0.5 text-[11px] text-axal-faint" data-testid="hq-dsr-history">
+                        {num(d.prior_requests)} earlier request{d.prior_requests === 1 ? '' : 's'}
+                        {d.last_outcome ? ` · last ${d.last_outcome}` : ''}
+                        {d.last_outcome_at ? ` on ${String(d.last_outcome_at).slice(0, 10)}` : ''}
+                      </p>
+                    ) : null}
+                    <DsrClose row={d} onDone={load} />
+                  </li>
+                ))}
+              </ul>
+            )}
+            {!ready && data !== UNAVAILABLE && <p className="text-[12px] text-axal-faint">Loading…</p>}
+            {ready && dsrBranches && (
+              <p className="mt-2 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-dsr-branches">
+                {dsrBranchesSentence(dsrBranches)}
+              </p>
+            )}
+            <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
+              The clock is statutory — one month from receipt, not from triage. Requests come from each account&apos;s own
+              Settings; <b>erasure itself is still a manual act</b>, and closing a request here records that act rather
+              than performing one. A withdrawal is the subject&apos;s own and is recorded when they cancel.
+            </p>
+          </Zone>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Zone title="AI safety" sub="guardrail hits · Advisor-AI outputs the screen caught">
+              <AiSafety block={ready ? data.ai_safety : null} />
+            </Zone>
+            <Zone title="KYC" sub="the review queue">
+              <div className="grid grid-cols-2 gap-2">
+                <Stat label="KYC pending" value={ready ? num(kyc.pending) ?? '0' : null} note="documents submitted, unverified" tone={kyc.pending ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
+                <Stat label="KYC approved" value={ready ? num(kyc.approved) ?? '0' : null} note="active accounts" />
+                <Stat label="KYC rejected" value={ready ? num(kyc.rejected) ?? '0' : null} note="active accounts" />
+              </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
+                KYC status is one trust fact; sanctions screening is another and has its own card above, because the
+                two are different stores that fail apart.
+              </p>
+            </Zone>
+          </div>
 
           {/* H7's own zone. Not "what changed" — who read rows they do not
               own. The two halves are separate blocks so one unreadable store
@@ -706,7 +916,7 @@ export default function HqSecurityPage() {
           <Zone title="Data access" sub="impersonations and exports">
             {feed === UNAVAILABLE && (
               <p className="text-[12.5px] text-axal-muted">
-                <Unrecorded /> — the privileged action log could not be read, so neither half of this zone can be shown.
+                <Unrecorded /> — the security ledger could not be read, so neither half of this zone can be shown.
               </p>
             )}
             {feed === null && <p className="text-[12px] text-axal-faint">Loading…</p>}

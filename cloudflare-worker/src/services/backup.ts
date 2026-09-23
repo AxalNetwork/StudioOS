@@ -52,8 +52,79 @@ function resolveBackupNamespaces(env: Env): string[] {
 const EPHEMERAL_EXCLUDE = new Set(['TOKENS', 'RATE_LIMITS']);
 
 function resolveBucket(env: Env): R2BackupBucket | null {
-  const cast = env as unknown as Record<string, R2BackupBucket | undefined>;
-  return cast.BACKUPS || null;
+  // D200 — `BACKUPS` is a typed field on Env now (it always was a declared
+  // binding in both wrangler.toml tables); the cast this used to reach it
+  // through is gone.
+  return env.BACKUPS || null;
+}
+
+/**
+ * D200 — why the restore-drill half of HQ's "Backup / DR" card is a STATED
+ * ABSENCE rather than a status. `scripts/dr-drill.sh` lists and fetches
+ * backups and writes no marker on success or failure, and
+ * `.github/workflows/dr-drill.yml` records nothing either; its outcome lives
+ * only in GitHub Actions, which the Worker cannot read. Until a drill writes
+ * a marker the platform can read, the honest card says so. (The count of
+ * failed drill runs is a plan-time measurement and deliberately NOT in this
+ * string, where it would go stale.)
+ */
+export const RESTORE_DRILL_REASON =
+  'No restore drill outcome is written anywhere the platform can read: the drill script fetches a backup and '
+  + 'records nothing, and its workflow writes no marker. Whether a restore has ever been rehearsed is visible '
+  + 'only in the workflow\'s own run history.';
+
+export type BackupHeartbeat =
+  | {
+      available: true;
+      kind: 'd1' | 'kv';
+      at: string | null;
+      source: string | null;
+      key: string | null;
+      size_bytes: number | null;
+    }
+  | { available: false; reason: string };
+
+/**
+ * D200 — the READ half of the heartbeat `writeBackupHeartbeat` documents.
+ * `heartbeat-d1.json` is written by .github/workflows/backup-d1.yml after a
+ * successful R2 put (at, source, kind, key, size_bytes); `heartbeat-kv.json`
+ * by the 02:00 worker cron. Three states, each its own claim: the binding is
+ * absent (this deployment cannot read backups at all), the object has never
+ * been written (no export has recorded a run), or the object is there and
+ * says when. Never a zero, never a green light inferred from nothing.
+ */
+export async function readBackupHeartbeat(env: Env, kind: 'd1' | 'kv' = 'd1'): Promise<BackupHeartbeat> {
+  const bucket = env.BACKUPS;
+  if (!bucket) {
+    return {
+      available: false,
+      reason: 'The BACKUPS R2 binding is not bound on this deployment, so the backup heartbeat cannot be read here.',
+    };
+  }
+  const key = kind === 'd1' ? 'heartbeat-d1.json' : 'heartbeat-kv.json';
+  try {
+    const obj = await bucket.get(key);
+    if (!obj) {
+      return {
+        available: false,
+        reason: `No ${key} has ever been written to the backups bucket, so no export has recorded a run.`,
+      };
+    }
+    const body = (await obj.json<Record<string, unknown>>()) || {};
+    return {
+      available: true,
+      kind,
+      at: typeof body.at === 'string' ? body.at : null,
+      source: typeof body.source === 'string' ? body.source : null,
+      key: typeof body.key === 'string' ? body.key : null,
+      size_bytes: typeof body.size_bytes === 'number' ? body.size_bytes : null,
+    };
+  } catch (e) {
+    return {
+      available: false,
+      reason: `The backup heartbeat could not be read (${e instanceof Error ? e.message : String(e)}).`,
+    };
+  }
 }
 
 function isoDateUTC(): string {

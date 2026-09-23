@@ -425,3 +425,63 @@ export async function listScreenings(
   ).bind(...binds, limit).all();
   return (rows?.results || []) as any[];
 }
+
+// ---------------------------------------------------------------------------
+// D200 — the figures HQ's Security page draws for the Sanctions card.
+//
+// The page used to answer `sanctions: absent('No sanctions screening runs on
+// the platform; KYC status is the only trust fact recorded.')` — false on
+// both clauses: `screenUser` above is a real screen (OFAC, EU and UK HMT
+// lists, one row per run), reachable from POST /api/trust/sanctions/screen
+// and rendered on the Trust Center's Sanctions tab. What is true is that
+// nothing SCHEDULES it, so a count of zero is a measured zero, not an absent
+// store — and the sentence below says which.
+//
+// DELIBERATELY NOT `ensureSanctionsSchema` FIRST. A read that bootstraps the
+// table it reads cannot tell "no run has happened" from "the table did not
+// exist until this read created it" — and creating a store as a side effect
+// of a Security page load is the wrong direction. A missing table answers
+// `available: false` with the reason, which is the honest state.
+// ---------------------------------------------------------------------------
+export const SANCTIONS_SCREENING_HOW =
+  'Screening runs on request from the Trust Center Sanctions tab, one row per run against the OFAC, EU and UK '
+  + 'HMT lists. Nothing schedules it, so a count of zero is a measured zero.';
+
+export type ScreeningSummary =
+  | {
+      available: true;
+      runs_total: number;
+      last_run_at: string | null;
+      hits_total: number;
+      unreviewed_hits: number;
+      path: '/trust';
+      how: string;
+    }
+  | { available: false; reason: string };
+
+export async function screeningSummary(env: Env): Promise<ScreeningSummary> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) AS runs_total,
+              MAX(run_at) AS last_run_at,
+              COALESCE(SUM(CASE WHEN hit = 1 THEN 1 ELSE 0 END), 0) AS hits_total,
+              COALESCE(SUM(CASE WHEN hit = 1 AND reviewed_at IS NULL THEN 1 ELSE 0 END), 0) AS unreviewed_hits
+         FROM sanctions_screenings`,
+    ).first<{ runs_total: number; last_run_at: string | null; hits_total: number; unreviewed_hits: number }>();
+    if (!row) return { available: false, reason: 'The sanctions_screenings table answered no row.' };
+    return {
+      available: true,
+      runs_total: Number(row.runs_total ?? 0),
+      last_run_at: row.last_run_at ?? null,
+      hits_total: Number(row.hits_total ?? 0),
+      unreviewed_hits: Number(row.unreviewed_hits ?? 0),
+      path: '/trust',
+      how: SANCTIONS_SCREENING_HOW,
+    };
+  } catch (e) {
+    return {
+      available: false,
+      reason: `The sanctions_screenings table could not be read (${e instanceof Error ? e.message : String(e)}).`,
+    };
+  }
+}
