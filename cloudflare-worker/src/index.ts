@@ -268,7 +268,7 @@ import orders from './routes/orders';
 // checkout reuse /api/catalog + /api/payments above).
 import products from './routes/products';
 import { Jobs } from './models/jobs';
-import { writeCronRunHistory } from './util/cronHistory';
+import { leaseHolderValue, recordLeaseHeldFire, writeCronRunHistory } from './util/cronHistory';
 import { branchOf, assertBranchAppUrl } from './util/branch';
 // D110 — one table of which thrown sentence is which status, shared with
 // `routes/_t13t14t15_helpers.ts`'s `mapError`. The two used to disagree.
@@ -1393,32 +1393,49 @@ export default {
   },
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     const work = (async () => {
+      // The raw cron expression is stored as trigger_name, so the record is
+      // keyed by expression: the key CRON_TRIGGERS (util/cronHistory) reads
+      // it by. The display name is resolved at read time.
+      const triggerKey = event.cron || '* * * * *';
       const LEASE_KEY = 'cron:queue:lease';
-      const leaseHolder = crypto.randomUUID();
+      // D201 — the lease names the minute and expression it is running, so a
+      // tick that finds it held can record WHICH tick holds it.
+      const leaseHolder = leaseHolderValue(crypto.randomUUID(), event.scheduledTime, triggerKey);
+      let heldBy: string | null = null;
       try {
         const existing = await env.RATE_LIMITS.get(LEASE_KEY);
-        if (existing) {
-          // Epic 11 — `console.info` (vs `console.log`) survives the CI
-          // grep that bans `console.log` from worker source. Wrangler tail
-          // surfaces info-level logs identically.
-          console.info('[cron] drain skipped — lease held');
-          return;
-        }
-        await env.RATE_LIMITS.put(LEASE_KEY, leaseHolder, { expirationTtl: 90 });
+        if (existing) heldBy = existing;
+        else await env.RATE_LIMITS.put(LEASE_KEY, leaseHolder, { expirationTtl: 90 });
       } catch (e) {
         console.error('[cron] lease acquire failed', e);
+      }
+      if (heldBy) {
+        // Epic 11 — `console.info` (vs `console.log`) survives the CI
+        // grep that bans `console.log` from worker source. Wrangler tail
+        // surfaces info-level logs identically.
+        console.info('[cron] drain skipped — lease held');
+        // D201 — A TICK THAT RUNS NOTHING STILL LEAVES A ROW. It used to
+        // return without one, so when two expressions fired in one minute
+        // the record showed which won the lease, not whether the work ran,
+        // and five of the six declared triggers read as silent on HQ while
+        // their minute's work ran under the every-minute ticker's name. The
+        // row says `deduped` when the holder was scheduled for this same
+        // minute and `skipped` when it was not. This is outside the lease
+        // try/catch on purpose: a failure recording the row must never fall
+        // through into running the batch beside the tick that holds the
+        // lease. The helper never throws.
+        await recordLeaseHeldFire(env, {
+          triggerName: triggerKey,
+          scheduledTime: event.scheduledTime,
+          holder: heldBy,
+        });
+        return;
       }
 
       // Task #7 (IE) — record cron run start in D1 for observability dashboard.
       const cronStartedAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
       let cronSummary: string[] = [];
       let cronError: string | null = null;
-
-      const eventCron = (event as any).cron || '* * * * *';
-      // We store the raw cron expression as trigger_name so the DB last-run
-      // map can be keyed by expr (consistent across the cron-history endpoint
-      // and the CRON_TRIGGERS array). The display name is resolved at read time.
-      const triggerKey = eventCron;
 
       try {
         const r = await processQueueBatch(env, 25);

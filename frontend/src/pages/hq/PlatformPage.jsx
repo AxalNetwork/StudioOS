@@ -9,9 +9,13 @@
  *          re-hide after thirty seconds" belongs to the console that owns
  *          key material, not to a read-only HQ summary. Revocation likewise:
  *          it is instant and irreversible, so it stays where it is audited.
- *   Jobs   `cron_run_history` records every scheduled run, so a trigger that
- *          failed, one that is still running and one that has gone silent
- *          are three different states and are drawn as three.
+ *   Jobs   `cron_run_history` records every scheduled tick, and since D201
+ *          that includes the tick that found the lease held and ran nothing.
+ *          Each DECLARED trigger is read against its own schedule, so a
+ *          trigger that never recorded a run, one that went silent, one whose
+ *          last run failed and one that is fine are four states, drawn as
+ *          four. There is no "running": every row is written as its tick
+ *          ends, so no row can say a tick is still going.
  *   Flags  No store. What the codebase calls flags is per-user settings — a
  *          person's own preference, not a switch an operator throws. A flags
  *          panel over that would claim a control room the product lacks.
@@ -43,13 +47,30 @@ function actionsForBranch(rows, code) {
     .sort((a, b) => (a.outcome === 'ok' ? 1 : 0) - (b.outcome === 'ok' ? 1 : 0));
 }
 
-/** The four job states, and the one colour each earns. */
+/**
+ * The four job states the platform summary can return (D201), and the one
+ * colour each earns. `util/cronHistory.ts` exports the same four as
+ * TRIGGER_STATES, and `hq_content_platform_h6.test.mjs` fails when the two
+ * lists differ: a tone for a state nothing produces is decoration. A state
+ * with no tone here falls back to amber, never to the healthy tone, because
+ * a state this page does not know is not one it can vouch for.
+ */
 const JOB_TONE = {
-  failed: 'border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/20',
+  never: 'border-amber-200 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20',
   stale: 'border-amber-200 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20',
-  running: 'border-axal-hairline bg-axal-ground',
+  failed: 'border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/20',
   ok: 'border-axal-hairline bg-axal-ground',
 };
+
+/**
+ * One sentence for the jobs figures, said the same way on the bar and in the
+ * rail. The denominator is the declared triggers, which is what makes "0
+ * silent" a statement about every one of them.
+ */
+function jobsLine(jobs) {
+  return `${num(jobs.failing)} failing · ${num(jobs.stale)} silent · ${num(jobs.never)} never recorded, `
+    + `of ${num(jobs.triggers.length)} declared triggers`;
+}
 
 function Zone({ title, sub, children }) {
   return (
@@ -128,8 +149,7 @@ export default function PlatformPage() {
   const coverage = [
     integrations?.available && num(integrations.total) !== null
       ? `${num(integrations.total)} connections across ${integrations.providers.length} providers` : null,
-    jobs?.available && num(jobs.failing) !== null
-      ? `${num(jobs.failing)} failing jobs · ${num(jobs.stale)} silent over ${jobs.stale_after_hours}h` : null,
+    jobs?.available && num(jobs.failing) !== null ? jobsLine(jobs) : null,
     depsReady
       ? `${(deps.deployments || []).length} branch ${(deps.deployments || []).length === 1 ? 'deployment' : 'deployments'} in the registry` : null,
   ].filter(Boolean);
@@ -160,9 +180,7 @@ export default function PlatformPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#3730a3] px-4 py-2.5 text-white">
           <span className="text-[12.5px] font-bold">All subsidiaries</span>
           <span className="text-[11px] opacity-80 tabular-nums">
-            {jobs?.available
-              ? `${num(jobs.failing)} failing · ${num(jobs.stale)} silent over ${jobs.stale_after_hours}h`
-              : '…'}
+            {jobs?.available ? jobsLine(jobs) : '…'}
           </span>
         </div>
 
@@ -225,30 +243,41 @@ export default function PlatformPage() {
           </Zone>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <Zone title="Scheduled jobs" sub="failed, silent and running are three things">
+            <Zone
+              title="Scheduled jobs"
+              sub={jobs?.available
+                ? `each declared trigger against its own schedule, allowing ${num(jobs.grace_minutes)} minutes for a run to finish`
+                : 'each declared trigger against its own schedule'}
+            >
               {jobs?.available ? (
-                jobs.triggers.length === 0 ? (
-                  <p className="text-[12.5px] text-axal-muted">
-                    No scheduled run has been recorded yet. The history is readable and empty, which is not the
-                    same as a job that never ran.
-                  </p>
-                ) : (
+                <>
+                  {jobs.triggers.every((j) => j.state === 'never') && (
+                    <p className="mb-2 text-[12.5px] text-axal-muted">
+                      No scheduled run has been recorded yet. The history is readable and empty, which is not the
+                      same as a job that never ran.
+                    </p>
+                  )}
                   <ul className="space-y-1.5" data-testid="hq-platform-jobs">
                     {jobs.triggers.map((j) => (
-                      <li key={j.trigger_name} className={`rounded-lg border px-3 py-2 text-[11.5px] ${JOB_TONE[j.state] || JOB_TONE.ok}`}>
+                      <li key={j.trigger_name} className={`rounded-lg border px-3 py-2 text-[11.5px] ${JOB_TONE[j.state] || JOB_TONE.never}`}>
                         <div className="flex items-baseline justify-between gap-3">
-                          <span className="truncate font-medium">{j.trigger_name}</span>
+                          <span className="min-w-0 truncate">
+                            <span className="font-medium">{j.name}</span>
+                            <span className="ml-1.5 font-mono text-[10px] text-axal-faint">{j.trigger_name}</span>
+                          </span>
                           <span className="shrink-0 font-mono text-[10px] uppercase text-axal-faint">{j.state}</span>
                         </div>
                         <div className="mt-0.5 font-mono text-[10px] text-axal-faint">
-                          {day(j.last_started_at) || 'never started'}
-                          {j.last_finished_at ? ` → ${day(j.last_finished_at)}` : ' · not finished'}
+                          {j.last_started_at
+                            ? `last run ${day(j.last_started_at)}${j.status ? ` · ${j.status}` : ''}`
+                            : 'no run recorded'}
+                          {j.expected_at ? ` · last due ${day(j.expected_at)}` : ''}
                         </div>
                         {j.error && <div className="mt-1 text-[11px] text-red-700 dark:text-red-300">{j.error}</div>}
                       </li>
                     ))}
                   </ul>
-                )
+                </>
               ) : (
                 <Absent reason={jobs?.reason || 'The platform summary could not be read.'} />
               )}

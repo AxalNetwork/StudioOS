@@ -354,6 +354,19 @@ binding = "BROWSER"
 # cron lines here is for dashboard observability + Cloudflare's "next run"
 # UI rather than for new behaviour. Task #9 (AO) declares the canonical
 # set so operators can see all cadences at a glance.
+#
+# D201 — every firing now leaves a row in cron_run_history, including the
+# one that finds the lease held (`deduped`, or `skipped` when an earlier
+# tick overran), so HQ · Platform can tell a trigger that fired from one
+# that stopped. The list is mirrored in CRON_TRIGGERS
+# (cloudflare-worker/src/util/cronHistory.ts), and cron_record_d201.test.ts
+# fails when that list and either table here disagree.
+#
+# WEEKDAYS ARE CLOUDFLARE'S NUMBERING: 1 = Sunday … 7 = Saturday, not the
+# 0 = Sunday most cron systems use. The weekly line was "0 9 * * 1" until
+# D201 and fired on SUNDAYS (production's last row before D201: 2026-08-23
+# 09:00:24, a Sunday). "2" is Monday. No digest ever moved: the digests gate
+# on the wall clock inside the handler, never on which expression fired.
 [triggers]
 crons = [
   "* * * * *",     # queue drain + sub-minute internal dispatch
@@ -361,7 +374,7 @@ crons = [
   "0 */6 * * *",   # market-intel free connectors refresh
   "0 4 * * *",     # market-intel composite + daily snapshot window
   "0 9 * * *",     # daily digest emails
-  "0 9 * * 1",     # weekly digest emails (Monday)
+  "0 9 * * 2",     # weekly digest emails (Monday — Cloudflare's 2)
 ]
 
 # ---------- Market-Intelligence free connectors ----------
@@ -558,13 +571,14 @@ service = "studioos-tail"
 
 [env.production.triggers]
 # Mirror of top-level [triggers] — Wrangler envs do not inherit cron tables.
+# Weekday 2 is Monday on Cloudflare (1 = Sunday); see the note above [triggers].
 crons = [
   "* * * * *",
   "0 3 * * *",
   "0 */6 * * *",
   "0 4 * * *",
   "0 9 * * *",
-  "0 9 * * 1",
+  "0 9 * * 2",
 ]
 
 # ===========================================================================

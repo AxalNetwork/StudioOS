@@ -17,7 +17,8 @@ belongs in `../services/`.
 | `paymentMode.ts` | Live vs test mode resolution. |
 | `marketIntelTier.ts` | Market-intel entitlement helper. |
 | `useOfFunds.ts` | `normalizeUseOfFunds` — validates the split sums to 100. |
-| `cronHistory.ts` | Records scheduled-run outcomes. |
+| `cronHistory.ts` | Everything `cron_run_history` means, in one module (D201): the two writers (`writeCronRunHistory` for a tick that ran, `recordLeaseHeldFire` for one that found the lease held and wrote a `deduped` or `skipped` row instead of nothing), the one indexed reader (`latestRunPerTrigger`), `CRON_TRIGGERS` (the six declared expressions, asserted equal to both `wrangler.toml` tables) and `triggerState` (never → stale → failed → ok, each trigger against its own schedule). |
+| `cronSchedule.ts` | `nextCronRun` / `prevCronRun` — five-field cron matching over UTC minutes in **Cloudflare's** dialect, where the weekday field runs 1 = Sunday to 7 = Saturday. Refuses (returns null) anything it does not read — names, `L`, `W`, `#`, `?`, a bare `a/n`, and an expression restricting both day fields — rather than guessing. Answers in `cron_run_history`'s own `YYYY-MM-DD HH:MM:SS`. |
 | `reembedSweep.ts` | Re-embedding sweep for vector search. |
 | `supportSessionSweep.ts` | `closeExpiredSupportSessions` — stamps `ended_at` on the audit row an HQ support session leaves on a branch. Written because nothing could: the branch writes that row with `admin_user_id = 0` and the repo's only `SET ended_at` is an HQ route whose predicate binds an id AUTOINCREMENT guarantees is never 0, so every branch session read as an open impersonation for ever. The end time is `started_at + SUPPORT_SESSION_MINUTES`, the instant the token died, not whenever the sweep ran. Ordinary impersonations are excluded on purpose — they can be extended, so their expiry is not derivable from this table. |
 | `usersRoleRebuild.ts` | Role recomputation. |
