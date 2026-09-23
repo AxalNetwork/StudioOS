@@ -18969,9 +18969,11 @@ before the scheduled minute — which must read stale, and now does, asserted.
 
 **And the first root build was wrong in a way no guard noticed.** A local
 retention ledger left by earlier sessions made the build keep those builds
-and prune every one of the 510 assets `main`'s committed shell references,
-while `check-docs-assets-closure` and `check-docs-fresh` both passed — each
-checks the committed tree's own closure, not that the previous live
-generation survived. Committed, the deploy would have 404'd every open tab's
-lazy chunks. The ledger was moved aside and `docs/` rebuilt on CI's no-ledger
-path, which kept all 510; the build-script gap is filed as #333.
+and prune 510 of the 604 assets `main`'s committed shells reach (the other 94
+survived only because the new build emitted the same hashes), while
+`check-docs-assets-closure` and `check-docs-fresh` both passed — each checks
+the committed tree's own closure, not that the previous live generation
+survived. Committed, the deploy would have 404'd every open tab's lazy chunks.
+The ledger was moved aside and `docs/` rebuilt on CI's no-ledger path: all
+604 of `main`'s committed assets are present, checked file by file. The
+build-script gap is filed as #333.
