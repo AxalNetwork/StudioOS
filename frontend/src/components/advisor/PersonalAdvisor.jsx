@@ -47,7 +47,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { safeExternalUrl } from '../../lib/url';
 import { Link } from 'react-router-dom';
 import {
-  Sparkles, Send, X, Maximize2, Minimize2, LayoutDashboard, HelpCircle,
+  Send, X, Maximize2, Minimize2, LayoutDashboard, HelpCircle,
   Loader2, CheckCircle2, ArrowRight, MessageSquare, SkipForward, BookOpen,
   Mic, MicOff, Ticket,
 } from 'lucide-react';
@@ -904,9 +904,7 @@ function Header({ persona, progress, onMaximize, onOpenTicket, ticketOpen }) {
   return (
     <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800 bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-950/30 dark:to-indigo-950/30">
       <div className="flex items-center gap-3 min-w-0">
-        <div className="w-8 h-8 rounded-lg bg-violet-600 text-white flex items-center justify-center flex-shrink-0">
-          <Sparkles size={16} />
-        </div>
+        <img src="/eadwyn-ai.png" alt="" aria-hidden="true" className="w-8 h-8 object-contain flex-shrink-0" />
         <div className="min-w-0">
           <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Eadwyn AI</div>
           <div className="text-[11px] text-gray-600 dark:text-gray-400 truncate">
@@ -1025,9 +1023,7 @@ function FullscreenHeader({ persona, progress, onExit, onOpenTicket, ticketOpen 
   return (
     <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 border-b border-gray-100 dark:border-gray-800 bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-950/30 dark:to-indigo-950/30">
       <div className="flex items-center gap-3 min-w-0">
-        <div className="w-9 h-9 rounded-lg bg-violet-600 text-white flex items-center justify-center flex-shrink-0">
-          <Sparkles size={18} />
-        </div>
+        <img src="/eadwyn-ai.png" alt="" aria-hidden="true" className="w-9 h-9 object-contain flex-shrink-0" />
         <div className="min-w-0">
           <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Eadwyn AI</div>
           <div className="text-[11px] text-gray-600 dark:text-gray-400 truncate">
