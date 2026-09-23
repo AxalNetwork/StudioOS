@@ -19808,3 +19808,292 @@ production is serving — filed as #351 rather than folded in.
 read for this entry: the Cloudflare connector is not authorized in this
 session, and nothing here needs it — the page calls a route that has existed
 since D112.
+
+## D206
+
+**A branch now knows which kind of licence it runs under, and a white-label's
+`content` escalation is refused at both ends. Migration 284 gives the
+branch's licence copy a `kind`. One rule, `escalationKindsFor`, says which
+escalation kinds a licence offers, and HQ, the branch route and the branch's
+drawer all ask it. A white-label has no HQ brand desk, so `content` is refused
+before anything records it — and a refusal writes no row anywhere, because an
+`undelivered` row reads as retryable.**
+
+PR 3 of #311 (canvas H30). **Migration 284**, one nullable column. **No new
+route and no new `api.js` method**: the kind rides the escalation lane's
+existing read and the branch's existing licence payload. **Nothing retires.**
+
+### WHAT WAS WRONG
+
+1. **A branch could not know its licence kind.** Migration 279 gave HQ's
+   ledger a `kind` (D196), but `branch_licence` (256) had no column for it and
+   neither emitter sent it. The To-HQ drawer drew all four kinds from its own
+   `KINDS` list and never read the `kinds` the lane already returned. So a
+   white-label's admins were offered *Content for brand approval* — an
+   escalation they could raise and nobody could answer, because H30's
+   white-label has no HQ brand desk.
+2. **A gate at HQ alone would reach the branch as a throw.** The branch stores
+   a throw from HQ as an `undelivered` row with its reason (D112), and
+   `undelivered` is the one state the page styles as retryable. A refusal is a
+   decision, and retrying it gets the same decision. So the gate stands at
+   both ends, and neither end writes a row when it refuses.
+3. **ContentPage's brand-desk note said a white-label submission "would still
+   appear here".** It said the lane "does not filter on that yet", because
+   reaching the kind from an escalation's branch code takes two joins. True —
+   and a filter on the read was the wrong remedy: it would hide a refused
+   thing that had still been recorded.
+4. **The pull had drifted from the push.** `licenceForBranch` built its record
+   from its own column list, migration 187's, so it never carried migration
+   265's five fields. It listed territories in whatever order the join
+   returned, and sent `template_version: null` under a comment saying HQ holds
+   no template version — the contract ledger does, and the push already read
+   it from there. `kind` would have been the next field to reach one emitter
+   and not the other.
+5. **The To-HQ header said the four local queues "are the rest of S3 and are
+   not here yet".** True when D112 wrote it, false since D130 put the board on
+   the page beneath it. It also counted "the four things this territory cannot
+   decide" — four kinds, which a white-label is not offered.
+
+### WHAT SHIPPED
+
+- **Migration 284**: `ALTER TABLE branch_licence ADD COLUMN kind TEXT`. Its
+  header says why for each of three choices:
+  - **nullable with no default** — a copy pushed before it has nothing to
+    backfill from, and defaulting to `'subsidiary'` would be the copy
+    asserting what HQ never said (257's and 265's rule);
+  - **no CHECK, unlike 279** — the vocabulary is closed where it is authored;
+    a CHECK on the copy would make a push from an HQ one migration ahead fail
+    whole, and a push can be carrying a suspension (D137);
+  - **no `BEGIN`/`COMMIT`** (#26).
+- **One rule, three readers.** `escalationKindsFor(kind)` in `rpc/hqOps.ts`,
+  beside `ESCALATION_KINDS`:
+  - `white_label` → three kinds offered, `content` hidden with canvas H30's
+    sentence verbatim, `WHITE_LABEL_CONTENT_HIDDEN`: *"Hidden for this kind —
+    there is no brand desk to send it to."*;
+  - `subsidiary` → all four;
+  - anything else — null, blank, or a value this build does not recognise →
+    all four with `known: false`, the value carried through as itself rather
+    than erased.
+
+  Only `white_label` hides anything. Hiding on "is not a subsidiary" would
+  take `content` away from every branch whose copy merely predates 284.
+- **HQ's gate, in `recordEscalation`, before the INSERT.**
+  - It reads the ledger **only for a gated kind**. `KIND_GATED_ESCALATIONS =
+    ['content']`, and a test holds it equal to every kind the rule can hide
+    for every licence kind migration 279 admits. An ungated kind never
+    touches the ledger. That matters for `other`, which is how a suspended
+    branch appeals (D107): an appeal that failed because HQ could not read a
+    licence would lock the one door out of a freeze.
+  - The read is `deploymentOf` — `knownBranch`, now returning the licence uid
+    rather than a boolean — then `licenceKindOf`. **It fails closed**: an
+    unreadable ledger throws, and so does an orphan, a deployment naming a
+    licence HQ's ledger does not hold. `knownBranch` already stated the rule:
+    a missing table is a refusal, not a pass.
+  - A white-label's `content` is **returned** as `{refused:
+    'kind_not_available', kind, licence_kind, reason}`, and nothing is
+    inserted.
+- **The branch route** (`routes/branch_escalations.ts`):
+  - `GET /escalations` adds `licence_kind`, `licence_kind_known`,
+    `kinds_available`, `kinds_hidden`, and `kind_basis`, a sentence saying
+    where the answer came from. `kinds` stays the whole vocabulary, because a
+    raise is validated against it. The gate is computed from the licence copy
+    apart from the lane's own read, so a lane whose table could not be read
+    still says what is hidden.
+  - `POST /escalations` checks the local gate after validation and **answers
+    400 `kind_not_available` with the reason before HQ is called**, writing
+    nothing.
+  - **HQ's refusal gets the same 400 and no row.** An HQ that throws still
+    leaves an `undelivered` row: a throw means HQ may not have heard; a
+    refusal means it heard and said no.
+- **`branchLicenceKind`** (`rpc/branchOps.ts`) reads the copy and **fails
+  open**: no row, no column, or an unrecognised value all read as unknown, and
+  every kind is offered. HQ checks every gated kind itself before recording,
+  so a branch that cannot read its copy loses nothing by letting HQ decide —
+  and failing closed there would take a kind away on a read that proves
+  nothing about the licence.
+- **The copy carries it, from one assembler.**
+  - `licenceRecord` (`services/licencePush.ts`) sends `kind`.
+  - **`assembleLicenceRecord`** is extracted from `pushLicenceToBranch`, and
+    both emitters now call it: the push sends its record, and the pull
+    (`licenceForBranch`) reads the row whole and returns it. That fixes the
+    pull's three drifts at once — 265's five fields, territories in order,
+    and the contract ledger's latest template version. A test holds the two
+    records equal, field for field.
+  - `applyLicenceCopy` binds `kind`, and `branchLicencePayload` emits it under
+    `LicenceRow`'s own key, so D137's tier parity holds for this field too.
+- **The drawer** (`BranchApprovals.jsx`):
+  - `kindsOffered(lane)` reads the payload. While loading, after a failed
+    read, or against a payload older than the kind fields, **every kind is
+    offered**: the route and HQ both refuse a hidden kind anyway, so offering
+    it costs one refusal in words, where hiding a kind this page merely failed
+    to read would take a door away for nothing. Only kinds this file can name
+    are drawn, and a kind listed hidden is never also offered.
+  - `chosenKind(offered, picked)` derives the kind the form sends: the pick
+    while it is still offered, otherwise `other`, the form's default, and
+    `null` only when nothing is offered, which disables the submit. **Derived,
+    not reset in an effect**, so a kind picked while loading that turns out to
+    be hidden is replaced rather than sent.
+  - `KindPicker` draws an offered kind as a radio and a hidden kind as a
+    stated row: the kind's name, the server's reason, a *Hidden* pill, and
+    **no input**. It steps down with a dashed edge and a background, never
+    opacity — H30's own note: opacity multiplies against the ground and would
+    take the reason below 3:1. The provenance sentence appears only where it
+    explains something on screen: a hidden row, or a copy that does not say
+    its kind.
+  - A refusal renders `err.data.message` first: `request()` puts the string
+    code into `err.message`, which would have printed `kind_not_available`
+    (#343's shape).
+  - The header says what the page is now: *"What this territory cannot decide
+    for itself goes to HQ, and HQ's decision comes back here. Below it, the
+    four local queues this territory does decide, as one board."*
+- **ContentPage's brand-desk note** says what is true: HQ refuses a
+  white-label's content escalation before recording it, reading the kind from
+  its own ledger, so nothing here filters by kind because no white-label
+  submission can reach the lane. Three facts in the code make that sentence
+  hold, each checked:
+  - a licence's `kind` is written once, when the licence is issued, and no
+    UPDATE anywhere sets it;
+  - a deployment's licence is fixed at its INSERT, with no upsert;
+  - `recordEscalation` is the only INSERT into `hq_escalations`, and it is
+    gated.
+
+  `licence_kind_ui_d196.test.mjs`'s assertion on the note is re-aimed, and it
+  now proves the code behind the sentence too: inside `recordEscalation`, the
+  refusal precedes `INSERT INTO hq_escalations`.
+- **Four worker fixtures widened** — `branch_rpc_fanout`, `escalation_answer`,
+  `branch_licence_copy`, `licence_push_d137` — each with `kind` on its copy,
+  and a seeded `territory_licences` row where the fail-closed read needs one.
+  They add no tests.
+
+### THE JUDGEMENT CALLS, EACH CHEAP TO STRIKE
+
+1. **HQ fails closed.** *Strike it and it fails open: the unreadable-ledger
+   and orphan tests flip direction, and the fixture seeds become
+   unnecessary.*
+2. **The branch fails open.** *Strike it and `content` is taken away from any
+   branch whose copy predates 284, or that has no copy yet (#342).*
+3. **No CHECK on the copy.** *Strike it and a push from an HQ one migration
+   ahead fails whole, possibly while carrying a suspension (D137).*
+4. **A refusal writes no row.** *Strike it and migration 261's status CHECK
+   has to widen to admit a `refused` state.*
+5. **A hidden kind is a stated row, not a disabled radio.** *Strike it and it
+   becomes a greyed choice, which reads as unavailable right now — where this
+   kind does not exist for this licence.*
+
+### CORRECTIONS MADE WHILE BUILDING, RECORDED RATHER THAN QUIETLY DONE
+
+- **`licence_kind_known` was added to the payload.** An unrecognised kind is
+  carried through as its own string, so the page could not tell known from
+  unknown by reading `licence_kind`.
+- **`chosenKind` was added**, because a kind picked while loading could
+  otherwise be sent after it turned out to be hidden.
+- **The available kinds' blurbs moved from faint to muted ink**, on H30's
+  contrast argument.
+- **The basis sentence is shown only where it explains something on screen.**
+- **H30's per-kind notes on the available rows were not adopted**; S3's
+  blurbs stay.
+- **The stub HQ in the worker tests minted one uid for every raise**, which
+  collided on `branch_escalations.hq_uid UNIQUE` (261) at the second raise.
+  That was a fixture artefact, not a defect: the stub now mints one per call,
+  as HQ does.
+- **The plan re-aimed the D196 assertion at "`hqOps.ts` contains
+  `kind_not_available`".** A contains-check passes on a refusal placed after
+  the INSERT, so it was strengthened: the refusal must come before `INSERT
+  INTO hq_escalations` inside `recordEscalation`. The mutation that moves the
+  gate after the INSERT is caught by it, and by the worker test that counts
+  rows.
+- **ROUTE_MAP's row-40 block first said the header had been stale "since
+  D112".** D112 wrote the sentence while it was true; it went false with D130,
+  and the block says so.
+- **A mutation escaped, and the assertion was fixed rather than the code.**
+  Dropping `|| !chosen` from the submit handler's own guard changed nothing
+  any test could see: the test pinned the button's `disabled` and not the
+  handler beside it. In a browser the guard is the second lock — a disabled
+  default button also blocks Enter-to-submit — but a lock nothing checks is
+  one edit from gone, so the test pins it now.
+
+### DELIBERATELY NOT BUILT
+
+- **H30's card 1** — Content with a tenant switcher on a white-label — **and a
+  per-item kind flag** on the lane (#346).
+- **`/me.branch` and the badge carry no kind.** Nothing on the shell reads it.
+- **A fresh branch has no licence copy until HQ's next licence transition
+  (#342).** On a newly provisioned branch the kind is therefore unknown and
+  all four kinds are offered; HQ's gate is what stops `content` there. That is
+  the practical reason the two ends fail in opposite directions.
+- **A retry for `undelivered` rows (#341).**
+
+### VERIFIED
+
+`npm run test:drift` exit 0, read as the exit code from a redirected log:
+frontend 2959 → **2976** (the 17 tests of
+`escalation_kind_gate_d206.test.mjs`), worker 3850 → **3872** (3869 pass plus
+the same 3 pre-existing environment-gated skips; the 22 tests of
+`escalation_kind_gate_d206.test.ts`), retention **41**, zero `not ok`. The
+D196 file stays at 7 tests, because it was re-aimed rather than extended, and
+the four widened fixtures add none. Every test in the seven files this PR adds
+or changes — 17, 22, 7, 30, 21, 9 and 12, 118 in all — was confirmed to run
+**by name**, parsed out of the files and matched against the log rather than
+inferred from the counts. Both typechecks, `lint:undef`, `check-api-drift`
+(no new method), `check-decision-ids` (D1 → **D206**), `check-folder-docs`,
+`check-sql-migrations` (287 files), `check-sqlite-dialect`,
+`check-sql-prepare`, `check-unused-imports`, `check-react-hook-imports`,
+`check-frontend-logging` and `check-dark-mode` exit 0.
+
+**29 mutations applied, 29 caught**, on the bytes this commit carries: the
+harness ran again after the last edit. It is D205's harness with three
+additions:
+
+- a baseline run first, which must be clean, or every mutation would read as
+  caught;
+- **both** suites run for every mutation, because a worker edit can be caught
+  by a frontend scan — moving the gate after the INSERT was caught by each;
+- every anchor asserted unique against a snapshot before anything was
+  written.
+
+A mutation counts as caught only if a suite exits non-zero **and** prints
+`not ok`, and every restore was verified by sha256. The shapes:
+
+- **HQ's gate**: gating on "is not a subsidiary"; a null kind read as
+  white-label; every kind gated; every licence read as white-label; an
+  unreadable ledger failing open; an orphan deployment allowed; the INSERT
+  moved before the check; nothing in the gated list.
+- **The branch route and the copy**: HQ called before the local gate; HQ's
+  refusal stored as `undelivered`; `licence_kind_known` always true; the
+  branch's read failing closed; the copy dropping `kind`; the branch payload
+  dropping it; the push record dropping it; the pull re-adding
+  `template_version: null`; territories unordered.
+- **The drawer and the notes**: opacity on the hidden row; a disabled radio
+  inside it; the error code preferred to its sentence; the raw pick sent
+  instead of the derived kind; a loading lane offering no kinds; the basis
+  sentence always shown; the submit button not gated on a kind; the handler's
+  own guard not gated on one; a hidden kind also offered; a kind this page
+  cannot name drawn as hidden; ContentPage's old claim restored; the stale
+  header restored.
+
+The first run caught 28. The handler's guard escaped, and the assertion was
+fixed rather than the code (see CORRECTIONS).
+
+**The root build ran on CI's no-ledger path.** The local retention ledger was
+moved aside first (#333), and the build emitted 606 fresh assets and retained
+359. It ran after the branch was cut from `main`, so the shells in the tree
+were `main`'s own generation (`c66100297`), which is what #351 needs. Every
+file those 31 shells reach is still present — **606 of 606**, walked through
+that tree's own chunk graph. `docs/.build-source` equals the hash of
+`frontend/src`. `check-docs-fresh --strict`, `prerender-og.mjs --check` (31
+routes) and `check-docs-assets-closure` (9,212 references across 921 chunks)
+exit 0.
+
+**Production was not read for this entry.** The Cloudflare connector is not
+authorized in this session, so migration 284 cannot be read back from
+`schema_migrations` here. The deploy's *Apply pending D1 migrations* step and
+its step 9 rebuild of production's schema will stand in for that read. Nothing
+depends on a row count:
+
+- On HQ's D1, `branch_licence` is empty by construction: `applyLicenceCopy`
+  calls `requireBranch`, which throws on HQ.
+- No branch has been provisioned — `infra/branches/` holds only
+  `_example.json`.
+
+So the ALTER adds a nullable column to a table with no rows. **285 is the next
+free migration, and D207 the next decision.**

@@ -56,6 +56,7 @@ const BRANCH_SCHEMA = `
     renewal_at TEXT, template_version TEXT, suspended_at TEXT, suspended_note TEXT,
     registered_address TEXT, signatory_name TEXT, signatory_title TEXT,
     term_years INTEGER, terminated_at TEXT,
+    kind TEXT,
     pushed_at TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')));
   CREATE TABLE lp_applications (id INTEGER PRIMARY KEY, status TEXT, created_at TEXT);
   CREATE TABLE referral_submissions (id INTEGER PRIMARY KEY, status TEXT, created_at TEXT);
@@ -73,6 +74,12 @@ const HQ_SCHEMA = `
     raised_by_name TEXT, raised_by_branch_user_id INTEGER, status TEXT NOT NULL DEFAULT 'open',
     due_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), answer TEXT,
     answered_by_user_id INTEGER, answered_at TEXT, updated_at TEXT NOT NULL DEFAULT (datetime('now')));
+  -- D206 — HQ reads a licence's kind before it records a content escalation,
+  -- and FAILS CLOSED when it cannot: a fixture without this table would have
+  -- every content escalation refused as unreadable. Migration 279's column,
+  -- constraint and default, copied rather than relaxed.
+  CREATE TABLE territory_licences (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'subsidiary' CHECK (kind IN ('subsidiary', 'white_label')));
 `;
 
 function branchDb(seed = '') {
@@ -448,6 +455,7 @@ test('applyLicence keeps HQ\'s pushed_at rather than stamping its own', async ()
 const DEPLOYED = `
   INSERT INTO licence_deployments (licence_uid, code, hostname, worker_name, d1_name, status)
   VALUES ('lic_fr', 'fr', 'fr.axal.vc', 'studioos-fr', 'studioos-fr', 'worker_live');
+  INSERT INTO territory_licences (uid) VALUES ('lic_fr');
 `;
 
 test('an escalation is filed under the CALLER\'s code, and only a provisioned one', async () => {

@@ -30,6 +30,7 @@ import type { Env } from '../types';
 import { branchOf, BRANCH_CODE_RE } from '../util/branch';
 import { PERIOD_RE } from '../services/statements';
 import { verifySecret } from './secret';
+import { assembleLicenceRecord } from '../services/licencePush';
 
 /** The four things a branch cannot decide for itself (migration 259). */
 export const ESCALATION_KINDS = ['moderation', 'content', 'seat_increase', 'other'] as const;
@@ -41,6 +42,76 @@ const SLA_HOURS: Record<EscalationKind, number> = {
   content: 72,
   seat_increase: 72,
   other: 72,
+};
+
+/**
+ * D206 — the one sentence for the one kind a licence can hide (canvas H30,
+ * verbatim). A white-label's admins have no HQ brand desk, so "content for
+ * brand approval" is an escalation they could raise and nobody could answer.
+ */
+export const WHITE_LABEL_CONTENT_HIDDEN =
+  'Hidden for this kind — there is no brand desk to send it to.';
+
+export type EscalationKindAvailability = {
+  /** What the licence says it is, or null when nothing says. */
+  licence_kind: string | null;
+  /** Whether that kind is one this rule recognises. */
+  known: boolean;
+  available: EscalationKind[];
+  hidden: { kind: EscalationKind; reason: string }[];
+};
+
+/**
+ * D206 — which escalation kinds a branch may raise, by the KIND of licence it
+ * runs under (migration 279).
+ *
+ * ONE RULE, THREE READERS. HQ's `recordEscalation` refuses what this hides,
+ * the branch's route refuses it before it calls HQ, and the branch's drawer
+ * draws it as hidden with the reason. Each asks this function rather than
+ * restating "a white-label has no brand desk", because three copies of one
+ * rule is how three surfaces come to disagree about which kind is hidden.
+ *
+ * ONLY `white_label` HIDES ANYTHING. A subsidiary gets all four. Anything else
+ * — null, because a branch's copy predates migration 284, or a value this
+ * build does not recognise — gets all four with `known: false`: the branch
+ * cannot tell, so it offers everything, and HQ, which can tell, decides.
+ * Hiding on "is not a subsidiary" instead would take `content` away from every
+ * branch whose copy is merely old, which is a refusal nobody decided.
+ */
+export function escalationKindsFor(licenceKind: unknown): EscalationKindAvailability {
+  const k = typeof licenceKind === 'string' ? licenceKind.trim().toLowerCase() : '';
+  if (k === 'white_label') {
+    return {
+      licence_kind: 'white_label',
+      known: true,
+      available: ESCALATION_KINDS.filter((x) => x !== 'content'),
+      hidden: [{ kind: 'content', reason: WHITE_LABEL_CONTENT_HIDDEN }],
+    };
+  }
+  if (k === 'subsidiary') {
+    return { licence_kind: 'subsidiary', known: true, available: [...ESCALATION_KINDS], hidden: [] };
+  }
+  return { licence_kind: k || null, known: false, available: [...ESCALATION_KINDS], hidden: [] };
+}
+
+/**
+ * The escalation kinds some licence kind can hide — the ONLY kinds HQ reads
+ * its ledger for. An ungated kind never depends on that read, and that matters
+ * for one of them in particular: `other` is how a suspended branch appeals
+ * (D107), and an appeal that failed because HQ could not read a licence's kind
+ * would lock the one door out of the freeze. A test holds this list equal to
+ * every kind `escalationKindsFor` can hide, so a kind that becomes hideable
+ * without joining it — hidden on the branch, unchecked at HQ — fails the
+ * build rather than being recorded.
+ */
+export const KIND_GATED_ESCALATIONS: readonly EscalationKind[] = ['content'];
+
+/** HQ refused an escalation for its kind — a decision, returned, never thrown. */
+export type EscalationRefusal = {
+  refused: 'kind_not_available';
+  kind: EscalationKind;
+  licence_kind: string | null;
+  reason: string;
 };
 
 export type EscalationInput = {
@@ -64,17 +135,44 @@ function requireHq(env: Env): void {
 }
 
 /**
- * Is this a branch HQ has actually provisioned?
+ * Is this a branch HQ has actually provisioned — and if so, which licence
+ * does it run under?
  *
  * A MISSING TABLE IS A REFUSAL, NOT A PASS. Before migration 258 runs there is
  * no deployment registry, and treating "cannot check" as "allowed" would make
  * the attribution check disappear exactly when the schema is in flux. The
  * escalation is rejected with a reason the caller can act on instead.
+ *
+ * D206 — it returns the licence uid rather than a boolean, because the kind
+ * gate needs exactly that and a second read of the same row would be a second
+ * question asked of one fact.
  */
-async function knownBranch(env: Env, code: string): Promise<boolean> {
-  const row = await env.DB.prepare('SELECT 1 AS x FROM licence_deployments WHERE code = ?')
-    .bind(code).first<{ x: number }>();
-  return !!row;
+async function deploymentOf(env: Env, code: string): Promise<{ licence_uid: string } | null> {
+  return await env.DB.prepare('SELECT licence_uid FROM licence_deployments WHERE code = ?')
+    .bind(code).first<{ licence_uid: string }>();
+}
+
+/**
+ * The kind of licence a provisioned branch runs under (migration 279).
+ *
+ * FAILS CLOSED, on `deploymentOf`'s rule above and H30's: a white-label row
+ * appearing in HQ's brand lane IS the gate failing, so "could not read the
+ * kind" must never become "allowed". An unreadable ledger throws, and so does
+ * an ORPHAN — a deployment naming a licence HQ's ledger does not hold — which
+ * is a registry fault an operator should see, not a pass. A throw reaches the
+ * branch as an undelivered escalation with this sentence, which is the honest
+ * state: HQ did not record it, and could not say why beyond this.
+ */
+async function licenceKindOf(env: Env, code: string, licenceUid: string): Promise<string> {
+  const row = await env.DB.prepare('SELECT kind FROM territory_licences WHERE uid = ?')
+    .bind(licenceUid).first<{ kind: string | null }>();
+  if (!row) {
+    throw new Error(
+      `escalate: ${code}'s deployment names licence ${licenceUid}, which HQ's ledger does not hold, `
+      + 'so the kind of licence it runs under cannot be read',
+    );
+  }
+  return String(row.kind ?? '');
 }
 
 function newUid(): string {
@@ -87,14 +185,15 @@ function newUid(): string {
  */
 export async function recordEscalation(
   env: Env, callerCode: string, item: EscalationInput,
-): Promise<{ uid: string; due_at: string; status: 'open' }> {
+): Promise<{ uid: string; due_at: string; status: 'open' } | EscalationRefusal> {
   requireHq(env);
 
   const code = String(callerCode ?? '').trim().toLowerCase();
   if (!BRANCH_CODE_RE.test(code)) {
     throw new Error('escalate: the caller must name a valid branch code');
   }
-  if (!(await knownBranch(env, code))) {
+  const deployment = await deploymentOf(env, code);
+  if (!deployment) {
     throw new Error(`escalate: ${code} is not a provisioned branch`);
   }
 
@@ -104,6 +203,21 @@ export async function recordEscalation(
   }
   const subject = String(item?.subject ?? '').trim().slice(0, 300);
   if (!subject) throw new Error('escalate: a subject is required');
+
+  // D206 — THE KIND GATE, AT THE DOOR THAT RECORDS. The branch refuses a
+  // hidden kind before it calls, but a branch's copy can be stale or missing,
+  // and it is HQ's ledger that knows which licence this branch runs under — so
+  // HQ checks too, and nothing is inserted when it refuses. A refusal is
+  // RETURNED, not thrown: a throw reaches the branch as "HQ did not accept the
+  // escalation", which the branch stores as `undelivered` and which reads as
+  // retryable. A refusal is a decision, and retrying it would be refused again.
+  if (KIND_GATED_ESCALATIONS.includes(kind)) {
+    const gate = escalationKindsFor(await licenceKindOf(env, code, deployment.licence_uid));
+    const hidden = gate.hidden.find((h) => h.kind === kind);
+    if (hidden) {
+      return { refused: 'kind_not_available', kind, licence_kind: gate.licence_kind, reason: hidden.reason };
+    }
+  }
 
   const uid = newUid();
   // The due date, not a band: a band stored at write time is wrong an hour
@@ -205,6 +319,14 @@ export async function openEscalations(env: Env, limit = 50): Promise<OpenEscalat
  * propagates; the pull is how a freshly provisioned branch gets its first copy
  * without waiting for HQ to notice it exists. Both write the same row through
  * `applyLicenceCopy`, so there is one shape and one `pushed_at` rule.
+ *
+ * D206 — AND ONE ASSEMBLER. This used to build its record from its own column
+ * list, and the two emitters drifted: the pull never carried migration 265's
+ * five fields, listed territories in join order, and sent `template_version:
+ * null` under a comment saying HQ holds no template version — the contract
+ * ledger does, and the push already read it from there. It now reads the row
+ * whole and hands it to `assembleLicenceRecord`, the function the push uses, so
+ * the two cannot send different records again. A test asserts they are equal.
  */
 export async function licenceForBranch(
   env: Env, callerCode: string,
@@ -213,63 +335,16 @@ export async function licenceForBranch(
   const code = String(callerCode ?? '').trim().toLowerCase();
   if (!BRANCH_CODE_RE.test(code)) throw new Error('licence: the caller must name a valid branch code');
 
-  const dep = await env.DB.prepare('SELECT licence_uid FROM licence_deployments WHERE code = ?')
-    .bind(code).first<{ licence_uid: string }>();
+  const dep = await deploymentOf(env, code);
   if (!dep) return { error: 'no_licence_for_branch' };
 
-  // THE COLUMN LIST IS MIGRATION 187'S, not the branch copy's. The two tables
-  // do not have the same columns and assuming they did is how the first draft
-  // of this query named `term_start`, `term_end`, `template_version` and
-  // `token_margin_split_bps` — of which only a renamed `token_split_bps`
-  // exists. D1 would have thrown on every pull.
-  const row = await env.DB.prepare(
-    `SELECT uid, licence_ref, legal_entity_name, brand_name, status, annual_fee_cents, currency,
-            revenue_share_bps, token_split_bps, term_years, starts_on, renews_on,
-            suspended_at, status_note
-       FROM territory_licences WHERE uid = ?`,
-  ).bind(dep.licence_uid).first<Record<string, unknown>>();
+  const row = await env.DB.prepare('SELECT * FROM territory_licences WHERE uid = ?')
+    .bind(dep.licence_uid).first<Record<string, unknown>>();
   if (!row) return { error: 'no_licence_for_branch' };
 
-  const terr = await env.DB.prepare(
-    'SELECT country_code FROM licence_territories lt JOIN territory_licences l ON l.id = lt.licence_id WHERE l.uid = ?',
-  ).bind(dep.licence_uid).all<{ country_code: string }>();
-  const seats = await env.DB.prepare(
-    'SELECT seat_type, seats_licensed FROM licence_seats ls JOIN territory_licences l ON l.id = ls.licence_id WHERE l.uid = ?',
-  ).bind(dep.licence_uid).all<{ seat_type: string; seats_licensed: number }>();
-
-  const seatsMap: Record<string, number> = {};
-  for (const s of seats.results || []) seatsMap[String(s.seat_type)] = Number(s.seats_licensed) || 0;
-
-  // Shaped for `applyLicenceCopy` — the branch writes what HQ sends without
-  // renaming anything, which is the lesson migration 257 came from.
-  return {
-    licence_uid: row.uid,
-    licence_ref: row.licence_ref,
-    legal_entity: row.legal_entity_name,
-    brand_name: row.brand_name,
-    territory: (terr.results || []).map((t) => t.country_code).join(','),
-    status: row.status,
-    seats_json: JSON.stringify(seatsMap),
-    revenue_share_bps: row.revenue_share_bps,
-    token_split_bps: row.token_split_bps,
-    annual_fee_cents: row.annual_fee_cents,
-    currency: row.currency,
-    term_start: row.starts_on,
-    // `term_end` AND `template_version` ARE NULL BECAUSE HQ DOES NOT HOLD
-    // THEM. The ledger stores `term_years` beside `starts_on` and no end date,
-    // and it carries no template version at all — contracts do (they already
-    // travel with the version they were cut from). Computing an end date from
-    // `starts_on + term_years` here would invent a fact HQ never asserted, and
-    // the copy's job is to carry what HQ said, not to derive around it.
-    term_end: null,
-    renewal_at: row.renews_on,
-    template_version: null,
-    suspended_at: row.suspended_at,
-    suspended_note: row.status_note,
-    // Stamped by HQ at the moment it asserts the content — the branch stores
-    // this verbatim rather than the moment its own write lands.
-    pushed_at: new Date().toISOString(),
-  };
+  // Stamped by HQ at the moment it asserts the content — the branch stores
+  // this verbatim rather than the moment its own write lands.
+  return assembleLicenceRecord(env, row, new Date().toISOString());
 }
 
 /* ------------------------------------------------------------------ *

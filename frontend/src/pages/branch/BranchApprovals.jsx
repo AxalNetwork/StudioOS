@@ -31,6 +31,16 @@
  * and the appeal is an escalation, so this form stays live while every other
  * branch write answers 423. Reading the board is likewise never gated: a frozen
  * branch can still see what is waiting, which is what the banner tells it to do.
+ *
+ * D206 — WHICH KINDS THIS BRANCH MAY RAISE IS THE SERVER'S ANSWER, NOT THIS
+ * FILE'S. A white-label has no HQ brand desk, so `content` is a kind its admins
+ * could raise and nobody could answer (canvas H30). The lane read carries
+ * `kinds_available` and `kinds_hidden`, from the licence copy HQ pushed, and
+ * `KindPicker` draws exactly that: the offered kinds as choices, a hidden kind
+ * as a stated row with the reason and no control. While the read is loading or
+ * has failed, every kind is offered — the route and HQ both refuse a hidden
+ * kind anyway, so offering it costs one refusal in words, where hiding a kind
+ * this page merely failed to read would take a door away for nothing.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -45,6 +55,10 @@ const UNAVAILABLE = Symbol('unavailable');
 /**
  * The four things a branch cannot decide for itself, with the words the
  * subsidiary canvas uses. A fifth is a product decision, not a new option.
+ *
+ * THE VOCABULARY, NOT THE OFFER (D206). Which of the four a branch may use
+ * depends on the kind of licence it runs under, and `kindsOffered` reads that
+ * from the server. This list only names and describes them.
  */
 const KINDS = [
   ['moderation', 'Moderation', 'A case you want HQ to take rather than decide here.'],
@@ -52,8 +66,137 @@ const KINDS = [
   ['seat_increase', 'Seat increase', 'Seats are set by HQ, so this is a request to make.'],
   ['other', 'Other', 'Anything the three above do not cover.'],
 ];
+const KIND_VALUES = KINDS.map(([value]) => value);
+const KIND_LABEL = Object.fromEntries(KINDS.map(([value, label]) => [value, label]));
 
 const PILL = 'shrink-0 rounded-full px-2 py-0.5 text-[9.5px] font-extrabold uppercase tracking-[.08em]';
+
+/**
+ * Which kinds the raise form offers, read off the lane payload (D206).
+ *
+ * THE SERVER DECIDES WHEN IT HAS ANSWERED; OTHERWISE EVERYTHING IS OFFERED.
+ * `lane` is null while loading and a Symbol when the read failed, and in both
+ * cases — and against a payload that predates the kind fields — all four kinds
+ * come back, because the route refuses a hidden kind before calling HQ and HQ
+ * refuses it again. A kind this page could not read is not a kind it may take
+ * away.
+ *
+ * Only kinds this file can name are drawn: a kind a newer server sends that
+ * `KINDS` does not know would otherwise render as an unlabelled choice.
+ */
+export function kindsOffered(lane) {
+  const payload = lane && typeof lane === 'object' ? lane : null;
+  if (!payload || !Array.isArray(payload.kinds_available)) {
+    return { available: [...KIND_VALUES], hidden: [], known: false, basis: null };
+  }
+  const hidden = (Array.isArray(payload.kinds_hidden) ? payload.kinds_hidden : [])
+    .filter((h) => h && KIND_VALUES.includes(h.kind))
+    .map((h) => ({
+      kind: h.kind,
+      reason: String(h.reason || '').trim()
+        || 'HQ does not take this kind of escalation from this branch.',
+    }));
+  const hiddenKinds = new Set(hidden.map((h) => h.kind));
+  const offered = new Set(payload.kinds_available);
+  return {
+    available: KIND_VALUES.filter((k) => offered.has(k) && !hiddenKinds.has(k)),
+    hidden,
+    known: payload.licence_kind_known === true,
+    basis: typeof payload.kind_basis === 'string' && payload.kind_basis.trim()
+      ? payload.kind_basis
+      : null,
+  };
+}
+
+/**
+ * The kind the form sends: the one picked, while it is still offered.
+ *
+ * DERIVED, NOT RESET IN AN EFFECT. A kind picked while the lane was loading —
+ * when every kind is offered — can turn out to be hidden once the read
+ * arrives, and the form must then send an offered one rather than a choice it
+ * no longer draws. `other` first, because it is the form's own default and
+ * the one kind that covers anything; `null` only if nothing is offered, which
+ * disables the submit rather than sending a kind the route would refuse.
+ */
+export function chosenKind(offered, picked) {
+  if (offered.available.includes(picked)) return picked;
+  if (offered.available.includes('other')) return 'other';
+  return offered.available[0] || null;
+}
+
+/**
+ * A HIDDEN KIND STEPS DOWN WITH ITS BACKGROUND AND A DASHED EDGE, NEVER WITH
+ * OPACITY. Canvas H30's own note: opacity multiplies against the ground and
+ * would take the reason below 3:1, and the reason is the one sentence on the
+ * row that must be read — it is what tells an admin the kind is not missing by
+ * accident. So the row keeps full-strength muted ink on a stepped-down ground.
+ */
+const HIDDEN_ROW = 'flex items-start justify-between gap-2 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-2.5 dark:border-zinc-600 dark:bg-zinc-800/40';
+const HIDDEN_PILL = `${PILL} bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200`;
+
+/**
+ * The raise form's kind choices (D206).
+ *
+ * An offered kind is a radio. A hidden kind is a stated row with the server's
+ * reason and a "Hidden" pill — and NO input, so there is nothing to select and
+ * nothing to submit. Drawing it disabled would be the other available shape,
+ * and it is refused on purpose: a greyed radio reads as a kind that is merely
+ * unavailable right now, where this one does not exist for this licence.
+ *
+ * The provenance sentence (`basis`) is drawn only when it explains something
+ * on screen: a hidden row, or a copy that does not say which kind of licence
+ * this is — in which case every kind is offered and HQ decides.
+ */
+export function KindPicker({ offered, chosen, onChoose }) {
+  const showBasis = Boolean(offered.basis) && (offered.hidden.length > 0 || !offered.known);
+  return (
+    <div data-testid="branch-escalate-kinds">
+      <div className="grid gap-2 sm:grid-cols-2">
+        {KINDS.filter(([value]) => offered.available.includes(value)).map(([value, label, blurb]) => (
+          <label
+            key={value}
+            className={`flex cursor-pointer gap-2 rounded-xl border p-2.5 text-left ${
+              chosen === value
+                ? 'border-slate-700 bg-axal-ground dark:border-slate-300'
+                : 'border-axal-hairline'
+            }`}
+          >
+            <input
+              type="radio"
+              name="escalation-kind"
+              value={value}
+              checked={chosen === value}
+              onChange={() => onChoose(value)}
+              className="mt-0.5"
+            />
+            <span className="min-w-0">
+              <span className="block text-[12px] font-bold">{label}</span>
+              <span className="mt-0.5 block text-[10.5px] text-axal-muted">{blurb}</span>
+            </span>
+          </label>
+        ))}
+        {offered.hidden.map((h) => (
+          <div
+            key={h.kind}
+            className={HIDDEN_ROW}
+            data-testid={`branch-escalate-hidden-${h.kind}`}
+          >
+            <span className="min-w-0">
+              <span className="block text-[12px] font-bold text-axal-muted">{KIND_LABEL[h.kind]}</span>
+              <span className="mt-0.5 block text-[10.5px] text-axal-muted">{h.reason}</span>
+            </span>
+            <span className={HIDDEN_PILL}>Hidden</span>
+          </div>
+        ))}
+      </div>
+      {showBasis && (
+        <p className="mt-2 text-[11px] leading-relaxed text-axal-muted" data-testid="branch-escalate-kind-basis">
+          {offered.basis}
+        </p>
+      )}
+    </div>
+  );
+}
 /**
  * `undelivered` IS NOT AN ERROR STYLE BY ACCIDENT. It is the one state a person
  * can act on — retry — and the only one where the branch holds a row HQ does
@@ -130,19 +273,26 @@ export default function BranchApprovals({ user }) {
   }, []);
   useEffect(() => { loadBoard(); }, [loadBoard]);
 
+  // D206 — the kinds the licence offers, and the one the form will send.
+  const offered = kindsOffered(lane);
+  const chosen = chosenKind(offered, kind);
+
   const submit = async (e) => {
     e.preventDefault();
-    if (!subject.trim() || sending) return;
+    if (!subject.trim() || sending || !chosen) return;
     setSending(true);
     setSendError('');
     try {
-      await api.branchEscalate({ kind, subject: subject.trim(), detail: detail.trim() || undefined });
+      await api.branchEscalate({ kind: chosen, subject: subject.trim(), detail: detail.trim() || undefined });
       setSubject('');
       setDetail('');
       load();
     } catch (err) {
       reportError('branch-escalate', err);
-      setSendError(err?.message || 'The escalation could not be raised.');
+      // THE SENTENCE BEFORE THE CODE. `request()` puts a string `error` into
+      // `err.message` — here `kind_not_available` — and keeps the whole body
+      // on `err.data`, whose `message` is the reason written for a person.
+      setSendError(err?.data?.message || err?.message || 'The escalation could not be raised.');
     } finally {
       setSending(false);
     }
@@ -205,39 +355,15 @@ export default function BranchApprovals({ user }) {
           To HQ
         </h1>
         <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
-          The outbound lane of the approvals board: the four things this territory cannot decide for
-          itself, and what HQ decided. The four local queues are the rest of S3 and are not here yet.
+          What this territory cannot decide for itself goes to HQ, and HQ&rsquo;s decision comes back
+          here. Below it, the four local queues this territory does decide, as one board.
         </p>
       </header>
 
       <Card className="p-4">
         <h2 className="text-[14.5px] font-extrabold tracking-tight">Raise one</h2>
         <form className="mt-3 space-y-3" onSubmit={submit} data-testid="branch-escalate-form">
-          <div className="grid gap-2 sm:grid-cols-2">
-            {KINDS.map(([value, label, blurb]) => (
-              <label
-                key={value}
-                className={`flex cursor-pointer gap-2 rounded-xl border p-2.5 text-left ${
-                  kind === value
-                    ? 'border-slate-700 bg-axal-ground dark:border-slate-300'
-                    : 'border-axal-hairline'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="escalation-kind"
-                  value={value}
-                  checked={kind === value}
-                  onChange={() => setKind(value)}
-                  className="mt-0.5"
-                />
-                <span className="min-w-0">
-                  <span className="block text-[12px] font-bold">{label}</span>
-                  <span className="mt-0.5 block text-[10.5px] text-axal-faint">{blurb}</span>
-                </span>
-              </label>
-            ))}
-          </div>
+          <KindPicker offered={offered} chosen={chosen} onChoose={setKind} />
           <input
             className="w-full rounded-xl border border-axal-hairline bg-axal-ground p-2.5 text-[12.5px]"
             placeholder="What is this about?"
@@ -257,7 +383,7 @@ export default function BranchApprovals({ user }) {
           <div className="flex items-center gap-3">
             <button
               type="submit"
-              disabled={!subject.trim() || sending}
+              disabled={!subject.trim() || sending || !chosen}
               className="rounded-xl bg-slate-700 px-3 py-2 text-[12px] font-bold text-white disabled:opacity-50 dark:bg-slate-300 dark:text-slate-900"
             >
               {sending ? 'Raising…' : 'Raise to HQ'}
