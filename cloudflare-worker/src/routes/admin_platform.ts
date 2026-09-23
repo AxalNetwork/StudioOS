@@ -15,10 +15,15 @@
  *          counts and states, it does not reveal. The artboard's "reveal on
  *          click, re-hide after thirty seconds" belongs to the console that
  *          owns key material, not to a read-only HQ summary.
- *   Jobs   `cron_run_history` records every scheduled run with its status
- *          and error, so "last run 03:14 · 2 retries · Degraded" is
- *          computable: a trigger whose most recent run failed is degraded,
- *          and one that has not run inside its window is stale.
+ *   Jobs   `cron_run_history` records every scheduled tick, including,
+ *          since D201, the tick that found the lease held and ran nothing.
+ *          Each DECLARED trigger is read against its own schedule
+ *          (util/cronHistory `triggerState`): never recorded, stale past
+ *          the last time it was due, failed, or ok. Before D201 this read
+ *          one row per trigger name via a GROUP BY over the whole table,
+ *          aged every cadence against one 26-hour window, and compared an
+ *          ISO cutoff to rows stored as `YYYY-MM-DD HH:MM:SS`. Five of the
+ *          six triggers read as silent while their work ran.
  *   Flags  NOT RECORDED. There is no feature-flag store. What exists under
  *          that name is per-user settings (`services/userSettings.ts`), which
  *          is a different thing: a user's own preference, not a platform
@@ -35,11 +40,11 @@ import { ensureAdminAuditLogTable } from './admin';
 import {
   DEFAULT_TAKE_RATE_BPS, MAX_TAKE_RATE_BPS, TAKE_RATE_KEY, settlementMode, takeRate,
 } from '../services/advisorMoney';
+import {
+  CRON_TRIGGERS, STALE_GRACE_MINUTES, latestRunPerTrigger, triggerState,
+} from '../util/cronHistory';
 
 const r = new Hono<{ Bindings: Env }>();
-
-/** How far back a scheduled trigger may go silent before it is stale. */
-const STALE_AFTER_HOURS = 26;
 
 r.get('/summary', async (c) => {
   await requireSuperAdmin(c);
@@ -78,41 +83,36 @@ r.get('/summary', async (c) => {
   }
 
   // ── Scheduled jobs ────────────────────────────────────────────────────
+  // THE LIST IS THE DECLARED TRIGGERS, NOT WHATEVER NAMES THE TABLE HOLDS.
+  // A trigger that has never recorded a run is the finding, so it has to be
+  // on the list to be seen, and a row under a name nobody declares is not a
+  // job HQ runs. One indexed read per trigger, in place of a GROUP BY that
+  // read the whole table on every load.
   let jobs: unknown;
   try {
-    // The latest run per trigger. `MAX(started_at)` with a GROUP BY picks the
-    // row it came from in SQLite's bare-column rule, which is exactly what is
-    // wanted here and is why the query is written this way rather than with a
-    // window function D1 would also accept but that reads worse.
-    const rows = await env.DB.prepare(
-      `SELECT trigger_name, MAX(started_at) AS started_at, status, finished_at, error
-         FROM cron_run_history GROUP BY trigger_name ORDER BY trigger_name`,
-    ).all<Record<string, unknown>>();
-    const cutoff = new Date(Date.now() - STALE_AFTER_HOURS * 3600_000).toISOString();
-    const list = (rows.results || []).map((row) => {
-      const started = String(row.started_at || '');
-      const status = String(row.status || '');
-      // A run that never finished is not the same as one that failed, and
-      // neither is the same as a trigger that stopped firing. Three states,
-      // not one "unhealthy" bucket.
-      const state = status === 'error' || status === 'failed'
-        ? 'failed'
-        : (started && started < cutoff ? 'stale' : (row.finished_at ? 'ok' : 'running'));
+    const now = new Date();
+    const latest = await latestRunPerTrigger(env, CRON_TRIGGERS.map((t) => t.expr), now);
+    const list = CRON_TRIGGERS.map((t) => {
+      const row = latest.get(t.expr) ?? null;
+      const { state, expected_at } = triggerState(t.expr, row, now, STALE_GRACE_MINUTES);
       return {
-        trigger_name: String(row.trigger_name || ''),
-        last_started_at: started || null,
-        last_finished_at: (row.finished_at as string) || null,
-        status: status || null,
-        error: (row.error as string) || null,
+        name: t.name,
+        trigger_name: t.expr,
+        expected_at,
+        last_started_at: row?.started_at || null,
+        last_finished_at: row?.finished_at || null,
+        status: row?.status || null,
+        error: row?.error || null,
         state,
       };
     });
     jobs = {
       available: true,
-      stale_after_hours: STALE_AFTER_HOURS,
+      grace_minutes: STALE_GRACE_MINUTES,
       triggers: list,
       failing: list.filter((j) => j.state === 'failed').length,
       stale: list.filter((j) => j.state === 'stale').length,
+      never: list.filter((j) => j.state === 'never').length,
     };
   } catch {
     jobs = { available: false, reason: 'The scheduled-run history could not be read.' };

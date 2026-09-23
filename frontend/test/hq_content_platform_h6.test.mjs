@@ -20,6 +20,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { TRIGGER_STATES } from '../../cloudflare-worker/src/util/cronHistory.ts';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const CONTENT = raw('frontend/src/pages/hq/ContentPage.jsx');
@@ -119,13 +120,35 @@ test('Platform never carries key material', () => {
 });
 
 test('a job that went silent is not reported as healthy', () => {
-  // Three states, not two. A trigger whose last run succeeded but which
-  // stopped firing a week ago is the failure mode a naive status column
-  // hides completely.
-  assert.match(PROUTE, /const STALE_AFTER_HOURS = 26;/, 'the staleness window is gone');
-  assert.match(PROUTE, /started < cutoff \? 'stale'/, 'a silent trigger is no longer detected');
-  assert.match(PROUTE, /row\.finished_at \? 'ok' : 'running'/, 'an unfinished run is no longer distinguished');
-  assert.match(P, /JOB_TONE/, 'the page renders every job state the same');
+  // D201 — RE-AIMED FROM SPELLING TO BEHAVIOUR. This test pinned three
+  // literals: a 26-hour window, an ISO cutoff comparison and a `running`
+  // state. All three were the defect. One window aged every cadence alike
+  // (a dead every-minute scheduler unnoticed for a day, a healthy weekly
+  // trigger stale six days in seven); the ISO cutoff misread rows stored as
+  // `YYYY-MM-DD HH:MM:SS`; and no writer can leave a row that reads as
+  // running. What must stay true is that the route reads each DECLARED
+  // trigger against its own schedule, through the one module that owns the
+  // table, and that the page draws exactly the states the route can return.
+  // The states themselves are asserted, at fixed clocks and against real
+  // SQLite, in cloudflare-worker/test/cron_record_d201.test.ts.
+  assert.match(PROUTE, /triggerState\(t\.expr, row, now, STALE_GRACE_MINUTES\)/,
+    'the route no longer reads each trigger against its own schedule');
+  assert.match(PROUTE, /latestRunPerTrigger\(env, CRON_TRIGGERS\.map/,
+    'the route no longer reads the declared triggers');
+  assert.match(PROUTE, /grace_minutes: STALE_GRACE_MINUTES/, 'the grace is not stated in the payload');
+  assert.doesNotMatch(PROUTE, /GROUP BY trigger_name/, 'the whole-table read came back');
+  assert.doesNotMatch(PROUTE, /STALE_AFTER_HOURS/, 'the one window for every cadence came back');
+
+  // THE PAGE'S TONES ARE EXACTLY THE ROUTE'S STATES. A tone for a state
+  // nothing returns is decoration, and a state with no tone would draw as
+  // whatever the fallback is.
+  const open = PLATFORM.indexOf('const JOB_TONE = {');
+  assert.ok(open >= 0, 'the page renders every job state the same');
+  const body = PLATFORM.slice(open, PLATFORM.indexOf('};', open));
+  const tones = [...body.matchAll(/^\s+(\w+):/gm)].map((m) => m[1]).sort();
+  assert.deepEqual(tones, [...TRIGGER_STATES].sort(), 'the page and the route disagree about the job states');
+  assert.match(P, /JOB_TONE\[j\.state\] \|\| JOB_TONE\.never/,
+    'an unknown state falls back to the healthy tone');
 });
 
 test('no absent figure is defaulted to a number, on either page', () => {

@@ -4,9 +4,19 @@ import { api } from '../lib/api';
 
 const PAGE_SIZE = 50;
 
+/**
+ * D201 — two statuses a tick writes when it finds the queue lease held:
+ * `deduped` (a tick scheduled for the same minute holds the lease and runs the
+ * minute) reads as done, and `skipped` (the holder was scheduled for another
+ * minute, so this minute's work ran nowhere) reads as failed. One table of
+ * statuses, read by the icon and the label alike, so the two cannot disagree.
+ */
+const DONE = new Set(['completed', 'ok', 'deduped']);
+const NOT_DONE = new Set(['failed', 'error', 'skipped']);
+
 function StatusIcon({ status }) {
-  if (status === 'completed' || status === 'ok') return <CheckCircle size={14} className="text-emerald-600" />;
-  if (status === 'failed' || status === 'error') return <XCircle size={14} className="text-red-600" />;
+  if (DONE.has(status)) return <CheckCircle size={14} className="text-emerald-600" />;
+  if (NOT_DONE.has(status)) return <XCircle size={14} className="text-red-600" />;
   return <AlertCircle size={14} className="text-amber-600" />;
 }
 
@@ -174,7 +184,7 @@ export default function CronTab() {
                     <td>
                       <span className="inline-flex items-center gap-1">
                         <StatusIcon status={it.status} />
-                        <span className={it.status === 'completed' ? 'text-emerald-700' : it.status === 'failed' ? 'text-red-700' : 'text-amber-700'}>
+                        <span className={DONE.has(it.status) ? 'text-emerald-700' : NOT_DONE.has(it.status) ? 'text-red-700' : 'text-amber-700'}>
                           {it.status}
                         </span>
                       </span>

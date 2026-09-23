@@ -18749,3 +18749,231 @@ rows topping at `281_licence_brand_kits.sql`, `security_events` does not
 exist, and `sanctions_screenings` holds **0** rows. So 282 creates one table,
 two indexes and two triggers and moves no rows. **283 is the next free
 number.**
+
+## D201
+
+**HQ · Platform read five of the six scheduled triggers as silent while their
+work ran. The record said which expression won a lease, not whether the minute
+ran — and the "Monday" weekly trigger had been firing on Sundays.**
+
+Task #310 asked for H17's three Platform consoles. Its Monitoring console
+leads with a *cron triggers firing* stat, and reading the record that stat
+would stand on found it false before anything was built on it. So #310 ships
+in three PRs: this one makes the record true, D202 draws the consoles on it,
+and D203 builds the operator switch store.
+
+### THE DEFECT, MEASURED
+
+Production, read-only and aggregates only, on 2026-09-23 at 08:35Z — the
+newest `cron_run_history` row per declared trigger:
+
+| trigger | newest row | what it meant |
+| --- | --- | --- |
+| `* * * * *` | 09-23 08:35 | fresh |
+| `0 */6 * * *` | 09-22 18:00 | lost the 00:00 and 06:00 lease races |
+| `0 3 * * *` | 09-22 03:00 | lost today's 03:00 race |
+| `0 4 * * *` | 09-06 | seventeen days of lost races |
+| `0 9 * * *` | 08-31 | twenty-three days |
+| `0 9 * * 1` | 08-23 | every weekly fire since |
+
+Every one of those minutes' work ran. Five causes, each measured:
+
+1. **The lease race wrote nothing.** When two expressions fire in one minute,
+   the tick that finds `cron:queue:lease` held returned without a row. The
+   winner ran the minute's wall-clock-gated work under **its own** name, so
+   at 03:00 and 06:00 that day, and at 09:00 the day before, the only row
+   was `* * * * *`'s. The history recorded which expression won, not whether
+   the work ran.
+2. **Two timestamp formats met in one comparison.** The writer stores
+   `YYYY-MM-DD HH:MM:SS`; the reader's cutoff was an ISO string. On the same
+   date `' '` sorts below `'T'`, so a daily run from twenty-two hours ago read
+   as stale for part of every day. **The test agreed with the bug**: it aged
+   its fixtures as ISO strings, which is not the writer's format.
+3. **One 26-hour window for every cadence.** A dead every-minute scheduler
+   went unnoticed for a day, and a healthy weekly trigger read stale six days
+   in seven.
+4. **The read scanned the whole table**: a `GROUP BY trigger_name` over
+   **150,444 rows on every Platform load**, written twice — once for HQ ·
+   Platform and once for the Admin Console's Cron tab.
+5. **The denominator was a comment.** `CRON_TRIGGERS` said it *"must be kept
+   in sync with the deployed config"*, and nothing checked it.
+
+### THE FINDING THE BUILD MADE: CLOUDFLARE NUMBERS WEEKDAYS 1 = SUNDAY
+
+Cloudflare's own cron-triggers page says so in a note: *"Days of the week go
+from 1 = Sunday to 7 = Saturday, which is different on some other cron systems
+(where 0 = Sunday and 6 = Saturday)."* (Read from the docs repository's
+source: `developers.cloudflare.com` is refused by this environment's proxy.)
+Production agrees — the weekly trigger's last row before D201,
+**2026-08-23 09:00:24, is a Sunday**. The line declared `0 9 * * 1` and
+commented *"weekly digest emails (Monday)"* had been firing on Sundays.
+
+This corrected the approved plan, which assumed the familiar dialect. A
+matcher speaking it would expect Monday, and would call a trigger that fired
+on time silent six days in seven. The matcher speaks Cloudflare's.
+
+**No email ever moved, and none moves now.** The watchlist digest gates on
+`now.getUTCDay() === 1` and the notification digest on each user's own local
+09:00, both inside the handler; nothing reads `event.cron` except to key the
+trigger's row. So the expression only decides which day's row the weekly
+trigger leaves, and what the dashboard calls its next run.
+
+### WHAT SHIPPED
+
+- **`util/cronSchedule.ts`** (new) — `parseCron`, `nextCronRun` (strictly
+  after the minute), `prevCronRun` (at or before it) and `sqlStamp`, in
+  Cloudflare's dialect and the store's format. It reads `*`, `n`, `a-b`,
+  stepped stars and ranges, and lists of those, and **refuses everything
+  else rather than guessing**: names, `L`, `W`, `#`, `?`, a bare `a/n`, a zero
+  step, reversed or out-of-range values, and an expression restricting both
+  day fields. The copy that lived in `infra.ts` read `1-5` as `1` through
+  `parseInt` and spoke the familiar weekday dialect, so the Cron tab's "next
+  run" was wrong for the weekly line.
+- **`util/cronHistory.ts`** now owns every write, every read and every rule
+  of the table: `writeCronRunHistory` for a tick that ran;
+  **`recordLeaseHeldFire`** for one that found the lease held — `deduped` when
+  the holder was scheduled for the same minute (that tick runs this minute's
+  work under its own row), `skipped` when it was not (an overrun, or a late
+  delivery: this tick ran nothing, and no tick ran this minute's gated work),
+  each with a sentence saying which tick held it — which **never throws**, and
+  dates its row at the scheduled minute; `latestRunPerTrigger`, one indexed
+  read per trigger (`idx_crh_trigger_time`) in place of both whole-table
+  scans; `CRON_TRIGGERS`; and **`triggerState`**: `never` → `stale` →
+  `failed` → `ok`, in that precedence, each trigger against its own last
+  scheduled minute, compared at minute granularity in the store's format.
+- **The handler** writes `<uuid>|<scheduledTime>|<cron>` as the lease value,
+  so a tick that finds it held can say which tick holds it. The `finally`
+  still compares the whole string, so the id alone decides who releases it.
+  A bare UUID left by the previous deploy reads as `skipped` with *"whose
+  scheduled time was not recorded"* — possible only within the lease's
+  ninety seconds after this deploy.
+- **HQ · Platform** lists the six declared triggers, each with its display
+  name, its expression, when it was last due and its last run. Its banner,
+  coverage line and rail read *N failing · N silent · N never recorded, of
+  six declared triggers*; *"readable and empty"* moved to the case where
+  every trigger is `never`, which is where it is now true.
+- **The Cron tab** colours `deduped` as done and `skipped` as not done; its
+  not-done set is asserted equal to the `FAILED_STATUSES` that `triggerState`
+  reads, so the two screens cannot disagree about what failed.
+- **`wrangler.toml`**: the weekly line is `0 9 * * 2` in both tables, with the
+  weekday numbering stated above `[triggers]`.
+
+### THE JUDGEMENT CALLS, EACH STATED SO IT IS CHEAP TO STRIKE
+
+1. **The weekly line moves to `0 9 * * 2`.** Nothing depends on it, as above,
+   so this changes a label and a row's weekday. *Strike it and `CRON_TRIGGERS`
+   carries `0 9 * * 1` relabelled as Sunday's, and the toml comment says
+   Sunday.*
+2. **`POST /api/infra/cron-log` is deleted.** Nothing called it: no `api.js`
+   method, no script, test or workflow, and its comment's claim that the
+   handler calls it was false. It let any admin insert a row with any status
+   and an unvalidated `started_at`, into the table this PR makes the
+   authority. *Strike it and the route returns; the reader's future-row
+   ceiling below is then what keeps a forged row from reading `ok` for ever.*
+3. **A row dated after the next minute is not a run.** No tick can write
+   one, and the retired route could. `latestRunPerTrigger` skips it
+   (`datetime(started_at) <= datetime(?)`, bound to the reader's clock plus a
+   minute of skew), so one forged row cannot keep a stopped trigger reading
+   `ok`. *Strike it and the newest row wins whatever its date.*
+4. **The grace is sixteen minutes.** A scheduled invocation may run for up to
+   fifteen (Cloudflare's documented "Duration" limit), its row is written
+   when it ends, and production ticks start up to fifty-two seconds after
+   their minute — the 06:00 tick started at 06:00:52. *Strike it and any
+   shorter grace calls a long-running daily tick silent while it works.*
+5. **There is no `running` state.** Every write sets `finished_at`, so no
+   writer can leave a row that would read that way.
+
+### WHERE THE BUILD CORRECTED THE PLAN
+
+- **Cloudflare's weekday dialect**, above.
+- **The grace is 16, not the plan's 15** (or its first draft's 10): the
+  fifteen-minute limit alone ignores dispatch lag, which production measured.
+- **Both day fields restricted is refused, not read by cron's OR rule** as
+  the plan said. Cloudflare's syntax is Quartz-like, Quartz forbids setting
+  both, and Cloudflare documents no rule for combining them — so the OR rule
+  would be an assumption, which is the defect this matcher replaces. No
+  declared trigger restricts both, and a test fails the day one does not
+  parse.
+- **`CRON_TRIGGERS` and `triggerState` live in `util/cronHistory.ts`**, not
+  in `infra.ts` and `admin_platform.ts` as planned, so `admin_platform` does
+  not import a route module and one module owns the table's rules.
+- **The lease value carries the expression**, not only the minute, so the
+  `skipped` sentence can name the tick that held it.
+- **Two more documents carried the retired model**:
+  `frontend/src/pages/hq/README.md` still described a "still-running" state,
+  and `CODEBASE_MAP.md` §5.5 still described a lease holder that returns
+  without a row, at line numbers nearly two hundred lines out of date, under
+  a cross-reference pointing at the wrong section.
+
+### NOT FIXED, EACH STATED
+
+- **A block that throws inside a tick is logged, not recorded.** The row says
+  `completed` when one of its blocks failed: each block has its own
+  `try/catch`, and the row records whether the batch threw.
+- **`/api/infra/cron-history`'s own count and list still read the table
+  unfiltered.** Bounded by #327 (retention), not by this PR.
+- **On a branch, the Cron tab lists HQ's six triggers** while a branch
+  declares two. Filed as #332; HQ · Platform answers "HQ only" there.
+- **After deploy, the triggers that lost their races keep reading silent**
+  until their next scheduled fire writes a `deduped` row — within six hours
+  for `0 */6 * * *`, a day for the dailies — and the weekly reads `never`
+  until **2026-09-28 09:00 UTC**, its first Monday, because no row has ever
+  carried `0 9 * * 2`.
+- **Gated work can skip a minute** when a drain crosses the minute boundary,
+  because `now` is taken after the drain (#326).
+
+### PRODUCTION, AND WHAT COULD NOT BE READ
+
+The table above and the 150,444-row count were read at planning time. The
+reads planned for build time — the row total, rows dated in the future, rows
+carrying an ISO `T`, and trigger names outside the six — **could not be
+taken**: the Cloudflare connector needs re-authorisation in this session and
+no API token is in the environment. So whether `/cron-log` was ever used is
+unmeasured. The future-row ceiling makes the reader correct either way; an
+ISO row, if one exists, can only read early on its own date. After deploy,
+`SELECT COUNT(*) FROM cron_run_history WHERE started_at > datetime('now')`
+should read 0, and the next 03:00 fire should leave a `deduped` row.
+
+### VERIFIED
+
+`npm run test:drift` exit 0, read as the exit code from a redirected log:
+frontend **2888** (unchanged — the H6 guard was re-aimed, not added to),
+worker 3764 → **3787** (3784 pass plus the same 3 pre-existing
+environment-gated skips; the 23 tests of `cron_record_d201.test.ts`),
+retention **41**, zero `not ok`, and the new tests confirmed to run **by
+name**. Both typechecks, `lint:undef`, `check-api-drift` (one route removed,
+none added), `check-timestamp-comparisons`, `check-sql-prepare`,
+`check-folder-docs`, `check-unused-imports` and `check-decision-ids`
+(D1 → **D201**) exit 0; after the root build, `check-docs-fresh --strict`,
+`prerender-og.mjs --check` (31 routes) and `check-docs-assets-closure`
+(9,438 references across 1,071 chunks) exit 0.
+
+**21 mutations applied, 21 caught**, every anchor asserted unique before
+anything was written and every restore verified by sha256: the ISO cutoff put
+back; the lease-held record dropped, and separately moved inside the lease
+`try`; every held lease recorded as `deduped`; `/cron-log` restored; the grace
+at 15; `running` back in the page's tones, and an unknown tone falling back to
+`ok`; the weekday mapped the familiar way; the future-row ceiling dropped; the
+Cron tab no longer colouring `skipped`; `CRON_TRIGGERS` and, separately, the
+production cron table drifting; `failed` outranking `stale`; the ISO
+normalisation dropped; `nextCronRun` no longer strictly after; both day fields
+accepted; the lease-held record able to throw; its row dated at now instead of
+its minute; the `skipped` sentence written nowhere; and `never` counted as
+silent.
+
+**One escaped first, and the assertion was at fault, not the code.** The
+stray-ISO-row check used a row timed after the scheduled minute, which reads
+fresh with or without the normalisation, because on the same date `'T'` sorts
+above `' '` anyway. The normalisation only matters for an ISO row timed
+before the scheduled minute — which must read stale, and now does, asserted.
+
+**And the first root build was wrong in a way no guard noticed.** A local
+retention ledger left by earlier sessions made the build keep those builds
+and prune 510 of the 604 assets `main`'s committed shells reach (the other 94
+survived only because the new build emitted the same hashes), while
+`check-docs-assets-closure` and `check-docs-fresh` both passed — each checks
+the committed tree's own closure, not that the previous live generation
+survived. Committed, the deploy would have 404'd every open tab's lazy chunks.
+The ledger was moved aside and `docs/` rebuilt on CI's no-ledger path: all
+604 of `main`'s committed assets are present, checked file by file. The
+build-script gap is filed as #333.

@@ -9,6 +9,8 @@ import { enqueueJob } from '../services/queue';
 import { processQueueBatch } from '../services/queueWorker';
 import { getRealtimeStats } from '../services/realtime';
 import { bindingKey } from '../util/schemaBootstrap';
+import { CRON_TRIGGERS, latestRunPerTrigger } from '../util/cronHistory';
+import { nextCronRun } from '../util/cronSchedule';
 
 const infra = new Hono<{ Bindings: Env }>();
 
@@ -321,57 +323,6 @@ infra.delete('/dlq/:id', async (c) => {
   return c.json({ ok: true, deleted: true });
 });
 
-// Canonical cron expressions declared in wrangler.toml [triggers].
-// Must be kept in sync with the deployed config. Each entry is used for
-// computing `next_run_at` in the cron-history endpoint.
-export const CRON_TRIGGERS: { name: string; expr: string }[] = [
-  { name: 'scheduled', expr: '* * * * *' },
-  { name: 'cleanup', expr: '0 3 * * *' },
-  { name: 'mi_refresh', expr: '0 */6 * * *' },
-  { name: 'mi_snapshot', expr: '0 4 * * *' },
-  { name: 'daily_digest', expr: '0 9 * * *' },
-  { name: 'weekly_digest', expr: '0 9 * * 1' },
-];
-
-/** Compute next run timestamp for a simple cron expression (no month-day or year). */
-function nextCronRun(expr: string, from: Date = new Date()): string | null {
-  const parts = expr.trim().split(/\s+/);
-  if (parts.length !== 5) return null;
-  const [mStr, hStr, dStr, moStr, wdStr] = parts;
-  const parseField = (s: string, min: number, max: number): number[] => {
-    if (s === '*') return [];
-    if (s.includes('/')) {
-      const [, step] = s.split('/');
-      const vals: number[] = [];
-      for (let v = min; v <= max; v += parseInt(step, 10)) vals.push(v);
-      return vals;
-    }
-    if (s.includes(',')) return s.split(',').map(v => parseInt(v, 10)).filter(Number.isFinite);
-    const n = parseInt(s, 10);
-    return Number.isFinite(n) ? [n] : [];
-  };
-  const minutes = parseField(mStr, 0, 59);
-  const hours = parseField(hStr, 0, 23);
-  const days = parseField(dStr, 1, 31);
-  const months = parseField(moStr, 1, 12);
-  const weekdays = parseField(wdStr, 0, 6);
-
-  const d = new Date(from.getTime());
-  d.setUTCSeconds(0, 0);
-  for (let safety = 0; safety < 366 * 24 * 60; safety++) {
-    d.setUTCMinutes(d.getUTCMinutes() + 1);
-    const okMin = minutes.length === 0 || minutes.includes(d.getUTCMinutes());
-    const okHour = hours.length === 0 || hours.includes(d.getUTCHours());
-    const okDay = days.length === 0 || days.includes(d.getUTCDate());
-    const okMonth = months.length === 0 || months.includes(d.getUTCMonth() + 1);
-    const okWD = weekdays.length === 0 || weekdays.includes(d.getUTCDay());
-    if (okMin && okHour && okDay && okMonth && okWD) {
-      return d.toISOString().replace('T', ' ').slice(0, 19);
-    }
-  }
-  return null;
-}
-
 // GET /api/infra/cron-history — list recent cron run history + trigger metadata.
 infra.get('/cron-history', async (c) => {
   await ensureInfraSchema(c.env);
@@ -392,20 +343,17 @@ infra.get('/cron-history', async (c) => {
     .bind(...(trigger ? [trigger, limit, offset] : [limit, offset]))
     .all();
 
-  // Compute last_run_at and next_run_at per trigger from the DB.
-  // The DB stores the raw cron expression as trigger_name (e.g. '* * * * *'),
-  // so we map by expr rather than display name.
-  const lastRuns = await c.env.DB.prepare(
-    `SELECT trigger_name, MAX(started_at) AS last_run_at FROM cron_run_history GROUP BY trigger_name`
-  ).all<{ trigger_name: string; last_run_at: string }>();
-
-  const lastRunMap: Record<string, string> = {};
-  for (const r of (lastRuns.results || [])) lastRunMap[r.trigger_name] = r.last_run_at;
-
+  // Last run and next run per DECLARED trigger. The store keys rows by the
+  // raw expression the scheduled handler received, so the map is by expr
+  // rather than display name. D201 — one indexed read per trigger through the
+  // helper HQ · Platform also reads, in place of a GROUP BY over the whole
+  // table; and the next run comes from the matcher that speaks Cloudflare's
+  // weekday numbering (1 = Sunday), which the copy that lived here did not.
+  const latest = await latestRunPerTrigger(c.env, CRON_TRIGGERS.map((t) => t.expr));
   const triggers = CRON_TRIGGERS.map(t => ({
     name: t.name,
     expr: t.expr,
-    last_run_at: lastRunMap[t.expr] || null,
+    last_run_at: latest.get(t.expr)?.started_at || null,
     next_run_at: nextCronRun(t.expr) || null,
   }));
 
@@ -444,31 +392,6 @@ infra.get('/reembed-metrics', async (c) => {
   ).bind(since).all();
 
   return c.json({ ok: true, hours, items: rows.results || [] });
-});
-
-// POST /api/infra/cron-log — internal endpoint for the cron handler to record runs.
-// Not a public admin surface; called from index.ts scheduled().
-// Task #7 (IE) — requireAdmin so perimeter-only users cannot write synthetic audit rows.
-infra.post('/cron-log', async (c) => {
-  await ensureInfraSchema(c.env);
-  await requireAdmin(c);
-  const body = await c.req.json<{ trigger_name: string; status: string; started_at?: string; finished_at?: string; summary?: string; error?: string }>();
-  if (!body?.trigger_name) return c.json({ error: 'trigger_name required' }, 400);
-
-  const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-  await c.env.DB.prepare(
-    `INSERT INTO cron_run_history (trigger_name, started_at, finished_at, status, summary, error)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  ).bind(
-    body.trigger_name,
-    body.started_at || now,
-    body.finished_at || now,
-    body.status || 'completed',
-    body.summary || null,
-    body.error || null,
-  ).run();
-
-  return c.json({ ok: true });
 });
 
 // GET /api/infra/ws-check — real authenticated WebSocket upgrade spot-check.

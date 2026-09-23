@@ -98,7 +98,10 @@ test('a branch runs its own crons, not the platform-content cadences', () => {
   const crons = parseToml(src).sections.find((s) => s.name === 'triggers').kv.get('crons');
   assert.equal(crons, JSON.stringify(BRANCH_CRONS).replaceAll('","', '", "'));
   assert.ok(!src.includes('0 */6 * * *'), 'the market-intel connector cadence is HQ\'s alone');
-  assert.ok(!src.includes('0 9 * * 1'), 'the weekly digest cadence is HQ\'s alone');
+  // `2`, not `1`: Cloudflare numbers weekdays 1 = Sunday, and D201 moved the
+  // weekly line to the Monday it was always commented as. Asserting the old
+  // expression's absence would pass for ever and guard nothing.
+  assert.ok(!src.includes('0 9 * * 2'), 'the weekly digest cadence is HQ\'s alone');
 });
 
 test('a binding added to HQ reaches the branch config with no code change', () => {

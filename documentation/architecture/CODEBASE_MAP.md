@@ -179,10 +179,18 @@ Six, byte-identical in both tables:
 0 */6 * * *    market-intel free connectors refresh
 0 4 * * *      market-intel composite + daily snapshot
 0 9 * * *      daily digest emails
-0 9 * * 1      weekly digest emails (Monday)
+0 9 * * 2      weekly digest emails (Monday)
 ```
 
-Per-minute lease dedupe is real — see §5.4.
+Weekdays are Cloudflare's numbering, 1 = Sunday … 7 = Saturday. The weekly
+line was `0 9 * * 1` until D201 and fired on Sundays; no digest moved, because
+the digests gate on the wall clock inside the handler. `CRON_TRIGGERS`
+(`cloudflare-worker/src/util/cronHistory.ts`) mirrors this list, and
+`cron_record_d201.test.ts` fails when they disagree.
+
+Per-minute lease dedupe is real — see §5.5. Since D201 the tick that finds the
+lease held records a row of its own (`deduped` or `skipped`) rather than
+returning without one.
 
 ### 2.3 The one `[vars]` asymmetry
 
@@ -375,15 +383,20 @@ column is cents — check the DDL.
 
 ### 5.5 Cron lease dedupe
 
-`cloudflare-worker/src/index.ts:1217-1230` — the scheduled handler takes a lease
-in the `RATE_LIMITS` KV namespace under key `cron:queue:lease` with a
-`crypto.randomUUID()` holder token and `expirationTtl: 90`. If the key is
-already held it logs `[cron] drain skipped — lease held` and returns; at the end
-of the run (line 1823) it deletes the key only if it still owns it. This is what
-keeps the `* * * * *` trigger from colliding with the daily/weekly triggers on
-a shared wall-clock minute. All per-cadence routing is internal time gating
-(`now.getUTCHours()` / `getUTCMinutes()`), so extra cron lines are for dashboard
-observability, not new behaviour.
+`cloudflare-worker/src/index.ts:1399-1433` — the scheduled handler takes a lease
+in the `RATE_LIMITS` KV namespace under key `cron:queue:lease`, with
+`expirationTtl: 90`. The value is `leaseHolderValue(uuid, event.scheduledTime,
+event.cron)` — an id only this tick knows, the minute it was scheduled for, and
+the expression that fired it (D201). If the key is already held it logs
+`[cron] drain skipped — lease held`, writes its own `cron_run_history` row
+through `recordLeaseHeldFire` — `deduped` when the holder was scheduled for the
+same minute, `skipped` when it was not — and returns. At the end of the run
+(`:2197-2198`) it deletes the key only if it still owns it, comparing the whole
+value. This is what keeps the `* * * * *` trigger from colliding with the
+daily/weekly triggers on a shared wall-clock minute. All per-cadence routing is
+internal time gating (`now.getUTCHours()` / `getUTCMinutes()`), so extra cron
+lines are for dashboard observability, not new behaviour — and, since D201,
+for the per-trigger record HQ · Platform reads.
 
 ### 5.6 API ↔ Worker parity
 
