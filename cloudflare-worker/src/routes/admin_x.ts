@@ -41,6 +41,7 @@ import { encryptString, decryptString } from '../services/cryptoBox';
 import {
   XError,
   XConfigMissing,
+  xClientConfigured,
   generatePkcePair,
   buildAuthorizeUrl,
   exchangeCodeForToken,
@@ -255,7 +256,7 @@ r.get('/accounts', async (c) => {
   return c.json({
     accounts,
     daily_cap: dailyCap(c.env),
-    config_ok: !!(c.env.X_CLIENT_ID && c.env.X_CLIENT_SECRET),
+    config_ok: xClientConfigured(c.env),
   });
 });
 
@@ -356,7 +357,7 @@ function xRedirectUri(env: Env): string {
 const oauthStart = async (c: any) => {
   const admin = await requireAdmin(c);
   await ensureXSchema(c.env);
-  if (!c.env.X_CLIENT_ID || !c.env.X_CLIENT_SECRET) {
+  if (!xClientConfigured(c.env)) {
     return c.json({ error: 'x_config_missing', message: 'X_CLIENT_ID / X_CLIENT_SECRET not set.' }, 503);
   }
   const accountId = Number(c.req.query('account_id'));

@@ -102,21 +102,24 @@ export default {
     },
     {
       id: 'feature-flags',
-      title: 'Feature flags & rollout',
+      title: 'Feature flags and platform switches',
+      // D202 — this article used to describe a flags console (per-cohort and
+      // per-role scopes, saved cohorts, "off for new sessions") that has never
+      // existed. It now says what does.
       overview:
-        "Feature flags let admins switch new modules on per-cohort, per-role, or globally. Use them to canary-release new features, A/B test pricing, or gate experimental tools to internal-only users.",
+        "There is no feature-flag console. Nothing in the product turns a module on for one cohort, one role or one territory, and no screen stages a rollout. What the platform does have is a handful of switches set when it is deployed — Eadwyn off, question reranking off, session charging, Stripe Tax, the Cloudflare queue, live market sources and live diligence connectors — and one the AI router throws by itself when the monthly AI budget runs out. Your own settings are yours alone and switch nothing for anyone else.",
       howto: [
-        'Open Admin Console → Settings → Feature flags.',
-        'Pick a flag and set its scope (off / cohort / role / on).',
-        'Cohorts are picked from the Users list; you can save reusable cohorts.',
+        'The Super Admin sees every switch, read-only, under HQ → Platform → Feature flags: whether it is on, whether a deployment or the platform set it, and what is true while it is on.',
+        'Changing a switch set at deploy is an engineering change — a Worker variable, then a deployment. Nothing in the product changes one.',
+        'The AI budget trip clears when its key expires. Nothing in the product clears it sooner.',
       ],
       tips: [
-        'Roll out to a 5% cohort first; monitor errors and audit before expanding.',
-        'Document each flag in the description field — future admins will thank you.',
+        'Each switch is read the way the code that obeys it reads it, so what HQ → Platform shows is what the platform is doing.',
+        'A switch shown as unreadable means its store did not answer. It does not mean the switch is off.',
       ],
       pitfalls: [
-        'Toggling a flag off mid-flow can leave users with broken state — prefer "off for new sessions" where available.',
-        'Flags are not a substitute for proper migration; some changes need data backfill before the flag flips.',
+        'Every switch is platform-wide. There is no per-cohort, per-role or per-territory setting, so there is nothing to canary — plan a risky change as its own deployment.',
+        'A market source is live only when its setting is exactly "live". "1" or "on" leaves it serving sample data.',
       ],
       related: [
         { label: 'Audit log', href: '#admin/audit' },
@@ -141,13 +144,13 @@ export default {
         'Use the type field deliberately — "demo_day" is what gates the Demo Day Presenter badge and steers founder/investor event suggestions.',
       ],
       pitfalls: [
-        'Adding a new top-level app route for events needs both wrangler route blocks updated and a fresh deploy — see the apex-routing notes.',
+        'A new events page needs no routing change in wrangler.toml: the Worker answers every page path from the app shell, and a path-scoped route there would take those URLs away from it. Add the route to the app and deploy.',
         'Event-participation badges live in migration 112; if you stand up a fresh prod D1, apply it (and redeploy) or the badges silently never appear.',
         'Suggestions are an enhancement layer — an empty list usually means too few assessed members, not a bug.',
       ],
       related: [
         { label: 'Assessment & archetypes ops', href: '#admin/assessment-ops' },
-        { label: 'Feature flags & rollout', href: '#admin/feature-flags' },
+        { label: 'Feature flags and platform switches', href: '#admin/feature-flags' },
       ],
     },
     {

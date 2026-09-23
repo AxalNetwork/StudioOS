@@ -14,8 +14,11 @@
  *   - The master template library the artboard draws in this zone already
  *     exists at `/admin/contracts`. Two pages over one store drift apart, so
  *     this one points rather than rebuilds.
- *   - Feature flags have no store at all. What is called flags is per-user
- *     settings, which is a preference and not an operator switch.
+ *   - Feature flags have no store at all. This header used to add that what
+ *     is called flags is per-user settings; D202 found that false — the
+ *     codebase also calls MI_FLAG_* and DD_FLAG_* flags, and those are
+ *     platform switches set at deploy. The switches and the H17 consoles are
+ *     held by platform_consoles_d202.test.ts.
  *
  * So most of what follows asserts a figure is ABSENT with its reason, or
  * that a count is computed from the store rather than assumed — the two

@@ -5,7 +5,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAdmin, createJWT } from '../auth';
 import { Jobs, JobType } from '../models/jobs';
-import { enqueueJob } from '../services/queue';
+import { cfQueueEnabled, enqueueJob } from '../services/queue';
 import { processQueueBatch } from '../services/queueWorker';
 import { getRealtimeStats } from '../services/realtime';
 import { bindingKey } from '../util/schemaBootstrap';
@@ -119,7 +119,9 @@ infra.get('/queue', async (c) => {
 
   return c.json({
     ok: true,
-    transport_active: c.env.USE_CF_QUEUE === 'true' && !!c.env.JOB_QUEUE ? 'cf_queue' : 'd1',
+    // The transport enqueueJob actually uses, asked of the function that
+    // decides it rather than restated here (D202).
+    transport_active: cfQueueEnabled(c.env) ? 'cf_queue' : 'd1',
     use_cf_queue_flag: c.env.USE_CF_QUEUE === 'true',
     cf_queue_binding_present: !!c.env.JOB_QUEUE,
     cf_queue_1h: cfWindow.results || [],

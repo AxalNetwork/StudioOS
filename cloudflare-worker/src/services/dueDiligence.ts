@@ -253,7 +253,7 @@ interface ConnectorResult {
   error_message?: string;
 }
 
-function isFlagged(env: Env, flag: string): boolean {
+export function isFlagged(env: Env, flag: string): boolean {
   const v = (env as unknown as Record<string, string | undefined>)[flag];
   return Boolean(v && /^(1|true|on|yes)$/i.test(String(v)));
 }

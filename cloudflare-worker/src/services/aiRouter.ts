@@ -510,15 +510,42 @@ async function bumpSpend(store: MinimalKV, key: string, delta: number, ttlSec: n
   return next;
 }
 
-async function killSwitchOn(store: MinimalKV): Promise<boolean> {
+const ORG_KILL_SWITCH_KEY = 'ai_killswitch:org';
+
+/**
+ * The organisation-wide budget trip, read as one of three answers.
+ *
+ * ONE READING OF THE KEY, TWO USES. The router gates on it and HQ Platform
+ * reports it (D202), and the two must agree about what "tripped" means — so
+ * the truthiness rule lives here once rather than in each reader.
+ */
+async function killSwitchState(store: MinimalKV): Promise<'on' | 'off' | 'unreadable'> {
   try {
-    const v = await store.get('ai_killswitch:org');
-    return v === '1' || v === 'true';
-  } catch { return false; }
+    const v = await store.get(ORG_KILL_SWITCH_KEY);
+    return v === '1' || v === 'true' ? 'on' : 'off';
+  } catch { return 'unreadable'; }
+}
+
+async function killSwitchOn(store: MinimalKV): Promise<boolean> {
+  // FAILS OPEN, deliberately and unchanged: a KV hiccup must not refuse every
+  // AI call on the platform. A reader that REPORTS rather than gates keeps the
+  // unreadable case — `aiOrgKillSwitchState` below.
+  return (await killSwitchState(store)) === 'on';
+}
+
+/**
+ * Whether the router is refusing AI calls platform-wide, for a reader that
+ * reports it. `no_store` is a deployment with neither AI_SPEND nor TOKENS
+ * bound, where the router cannot budget at all and so never trips.
+ */
+export async function aiOrgKillSwitchState(env: Env): Promise<'on' | 'off' | 'unreadable' | 'no_store'> {
+  const store = kv(env);
+  if (!store) return 'no_store';
+  return killSwitchState(store);
 }
 
 async function setKillSwitch(store: MinimalKV, ttlSec: number): Promise<void> {
-  try { await store.put('ai_killswitch:org', '1', { expirationTtl: ttlSec }); } catch {}
+  try { await store.put(ORG_KILL_SWITCH_KEY, '1', { expirationTtl: ttlSec }); } catch {}
 }
 
 // ---------------------------------------------------------------------------
