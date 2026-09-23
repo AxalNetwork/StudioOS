@@ -156,14 +156,18 @@ test('no absent figure is defaulted to a number, on either page', () => {
     assert.doesNotMatch(src, /\|\|\s*0\b/, `${name}: an absent figure falls back to 0`);
     assert.doesNotMatch(src, /\?\?\s*0\b/, `${name}: an absent figure falls back to 0`);
   }
-  // THREE STATS THAT MUST STAY PERMANENTLY BLANK, down from four in D112 —
-  // and "Awaiting brand approval" left this list because it acquired a store,
-  // not because the assertion was inconvenient. A content escalation carries
-  // the branch that submitted it and takes an approve / request-changes
-  // decision, so the count is real and is asserted in its own test below.
+  // ONE STAT THAT MUST STAY PERMANENTLY BLANK, down from four in D112 and
+  // three in D202 — and each left this list because it acquired a store, not
+  // because the assertion was inconvenient. "Awaiting brand approval" went in
+  // D112: a content escalation carries the branch that submitted it and takes
+  // an approve / request-changes decision. "Flags" and "Overrides" went in
+  // D203: `platform_switches` (migration 283) is the operator store they
+  // counted the absence of, so they now count what it holds — asserted below
+  // and rendered in hq_platform_switches_d203.test.mjs, where an unreadable
+  // store must draw as unreadable and never as none thrown.
   // "Localised" STAYS, for the one part of H6's refusal that did not change:
   // nothing records that one piece is a localisation of another.
-  for (const [src, label] of [[C, 'Localised'], [P, 'Flags'], [P, 'Overrides']]) {
+  for (const [src, label] of [[C, 'Localised']]) {
     const at = src.indexOf(`label="${label}"`);
     assert.ok(at >= 0, `the ${label} stat is gone`);
     // BOUNDED TO THE ELEMENT, not to a character count. `at + 160` ran past
@@ -174,6 +178,16 @@ test('no absent figure is defaulted to a number, on either page', () => {
     assert.ok(end > at, `the ${label} stat is not a self-closing element any more`);
     assert.match(src.slice(at, end), /value=\{null\}/,
       `the ${label} stat acquired a value — there is no source for one`);
+  }
+  // …and the two that left read their figure from ONE builder each, over the
+  // registry payload, rather than a literal. Bounded to the element for the
+  // same reason as above.
+  for (const [label, builder] of [['Flags', 'flagsStat'], ['Overrides', 'overridesStat']]) {
+    const at = P.indexOf(`label="${label}"`);
+    assert.ok(at >= 0, `the ${label} stat is gone`);
+    const end = P.indexOf('/>', at);
+    assert.ok(P.slice(at, end).includes(`{...${builder}(data, switches)}`),
+      `the ${label} stat no longer reads its figure through ${builder}`);
   }
 });
 

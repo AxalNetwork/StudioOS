@@ -106,19 +106,27 @@ export default {
       // D202 — this article used to describe a flags console (per-cohort and
       // per-role scopes, saved cohorts, "off for new sessions") that has never
       // existed. It now says what does.
+      //
+      // D203 — and it said there was no operator switch at all, which stopped
+      // being true when HQ · Platform → Switches shipped. It moves with the
+      // store, in the same change, rather than a PR later.
       overview:
-        "There is no feature-flag console. Nothing in the product turns a module on for one cohort, one role or one territory, and no screen stages a rollout. What the platform does have is a handful of switches set when it is deployed — Eadwyn off, question reranking off, session charging, Stripe Tax, the Cloudflare queue, live market sources and live diligence connectors — and one the AI router throws by itself when the monthly AI budget runs out. Your own settings are yours alone and switch nothing for anyone else.",
+        "There is no feature-flag console that stages a module to one cohort, one role or one territory. What the platform has is switches: a handful set when it is deployed — question reranking off, session charging, Stripe Tax, the Cloudflare queue, live market sources and live diligence connectors — one the AI router throws by itself when the monthly AI budget runs out, and one the Super Admin can also throw from the product: Eadwyn off. Your own settings are yours alone and switch nothing for anyone else.",
       howto: [
-        'The Super Admin sees every switch, read-only, under HQ → Platform → Feature flags: whether it is on, whether a deployment or the platform set it, and what is true while it is on.',
-        'Changing a switch set at deploy is an engineering change — a Worker variable, then a deployment. Nothing in the product changes one.',
+        'The Super Admin sees every switch, read-only, under HQ → Platform → Feature flags: whether it is on, what set it, and what is true while it is on.',
+        'To switch Eadwyn off without a deployment, open HQ → Platform → Switches, give a reason, confirm, and throw it. Releasing it works the same way. Both are recorded in the audit log with who did it and why.',
+        'A throw takes effect at once on the instance that recorded it and on every other instance within 30 seconds. From then on, every conversation with Eadwyn on HQ answers with a notice that it is unavailable.',
+        'Changing any other switch is an engineering change — a Worker variable, then a deployment. Nothing in the product changes one.',
         'The AI budget trip clears when its key expires. Nothing in the product clears it sooner.',
       ],
       tips: [
         'Each switch is read the way the code that obeys it reads it, so what HQ → Platform shows is what the platform is doing.',
-        'A switch shown as unreadable means its store did not answer. It does not mean the switch is off.',
+        'A switch shown as unreadable means its store did not answer; it is not a claim the switch is off. For Eadwyn off, an unreadable store fails open: Eadwyn keeps answering, and only a deployment can switch it off until the store answers again.',
+        'A switch thrown from Switches can only switch something off. Releasing it never lifts the deployment\'s own switch: if the deployment holds Eadwyn off, it stays off until the deployment changes.',
       ],
       pitfalls: [
-        'Every switch is platform-wide. There is no per-cohort, per-role or per-territory setting, so there is nothing to canary — plan a risky change as its own deployment.',
+        'Every switch is deployment-wide. There is no per-cohort, per-role or per-territory setting, so there is nothing to canary — plan a risky change as its own deployment.',
+        'A switch thrown from Switches reaches HQ\'s own deployment only. A branch runs on its own database, so its Eadwyn keeps answering; pushing a switch to the branches is not built.',
         'A market source is live only when its setting is exactly "live". "1" or "on" leaves it serving sample data.',
       ],
       related: [

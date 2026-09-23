@@ -101,7 +101,7 @@ import {
 import { run as aiRouterRun, audioMinutesFromBytes } from '../services/aiRouter';
 // Advisor kill switch (Task #5 staged rollout retired in Task #7 — only
 // ADVISOR_V2_DISABLED / ADVISOR_DISABLED env flags remain).
-import { isAdvisorDisabled, ADVISOR_DISABLED_MESSAGE } from '../services/advisor/rollout';
+import { advisorKillState, ADVISOR_DISABLED_MESSAGE } from '../services/advisor/rollout';
 import { pickNextQuestion } from '../services/advisor/rerank';
 import {
   nextTurn as smNextTurn,
@@ -572,6 +572,20 @@ async function refreshCounts(env: Env, conversationId: number, currentQid: strin
 }
 
 // ---------------------------------------------------------------------------
+// D203 — THE KILL CHECK EVERY DOOR MAKES, written once. It asks
+// `advisorKillState`, the predicate HQ Platform reports the switch through, so
+// the console and the refusal cannot disagree. The deploy variables are read
+// first and, when they switch Eadwyn off, nothing touches D1; otherwise the
+// operator store is asked through its thirty-second reading and fails open.
+// Four copies of this 503 used to sit in this file, each asking only the deploy
+// half — which is why an operator's switch needs them to be one.
+// ---------------------------------------------------------------------------
+async function refuseWhenKilled(c: Context<{ Bindings: Env }>): Promise<Response | null> {
+  if (!(await advisorKillState(c.env)).off) return null;
+  return c.json({ error: ADVISOR_DISABLED_MESSAGE, status: 'unavailable', reason: 'disabled' }, 503);
+}
+
+// ---------------------------------------------------------------------------
 // Shared advisor gate — runs the Task #5 staged-rollout decision FIRST
 // (before any D1 schema probe) and the Task #4 (AW) kill-switch /
 // per-user lock SECOND. Returns null when the request may proceed,
@@ -585,9 +599,8 @@ async function refreshCounts(env: Env, conversationId: number, currentQid: strin
 // `ADVISOR_V2_DISABLED=1` actually shuts every door, not just three.
 // ---------------------------------------------------------------------------
 async function applyAdvisorGate(c: Context<{ Bindings: Env }>, user: User): Promise<Response | null> {
-  if (isAdvisorDisabled(c.env)) {
-    return c.json({ error: ADVISOR_DISABLED_MESSAGE, status: 'unavailable', reason: 'disabled' }, 503);
-  }
+  const killed = await refuseWhenKilled(c);
+  if (killed) return killed;
   await ensureGuardrailColumns(c.env);
   const ks = await checkKillSwitch(c.env, user);
   if (ks.blocked) {
@@ -602,10 +615,10 @@ async function applyAdvisorGate(c: Context<{ Bindings: Env }>, user: User): Prom
 advisor.post('/start', async (c) => {
   const user = await advisorUser(c);
   // Kill switch runs FIRST, before any D1 schema probe / column-ensure
-  // call, so a disabled advisor short-circuits without touching the DB.
-  if (isAdvisorDisabled(c.env)) {
-    return c.json({ error: ADVISOR_DISABLED_MESSAGE, status: 'unavailable', reason: 'disabled' }, 503);
-  }
+  // call. A deploy kill short-circuits without touching the DB at all; an
+  // operator's kill costs one cached read of platform_switches (D203).
+  const killedStart = await refuseWhenKilled(c);
+  if (killedStart) return killedStart;
   await ensureSchema(c.env);
   await ensureAdvisorWeekColumn(c.env);
   // Task #4 (AW) L7 — kill switch (env + per-user advisor_locked).
@@ -808,10 +821,10 @@ interface AnswerEnvelope {
 }
 advisor.post('/answer', async (c) => {
   const user = await advisorUser(c);
-  // Kill switch (Task #5 → Task #7) runs FIRST, before any D1 work.
-  if (isAdvisorDisabled(c.env)) {
-    return c.json({ error: ADVISOR_DISABLED_MESSAGE, status: 'unavailable', reason: 'disabled' }, 503);
-  }
+  // Kill switch (Task #5 → Task #7 → D203) runs FIRST, before any schema
+  // work: the deploy half with no database, then the operator store.
+  const killed = await refuseWhenKilled(c);
+  if (killed) return killed;
   await ensureSchema(c.env);
   await ensureGuardrailColumns(c.env);
   // Task #4 (AW) L7 — per-user kill switch (advisor_locked).
@@ -1865,10 +1878,10 @@ function sseEvent(event: string, data: unknown): string {
 
 advisor.post('/explain', async (c) => {
   const user = await advisorUser(c);
-  // Kill switch (Task #5 → Task #7) runs FIRST, before any D1 work.
-  if (isAdvisorDisabled(c.env)) {
-    return c.json({ error: ADVISOR_DISABLED_MESSAGE, status: 'unavailable', reason: 'disabled' }, 503);
-  }
+  // Kill switch (Task #5 → Task #7 → D203) runs FIRST, before any schema
+  // work: the deploy half with no database, then the operator store.
+  const killed = await refuseWhenKilled(c);
+  if (killed) return killed;
   await ensureSchema(c.env);
   await ensureGuardrailColumns(c.env);
   // Task #4 (AW) L7 — per-user kill switch (advisor_locked).

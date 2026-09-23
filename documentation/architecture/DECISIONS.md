@@ -19215,3 +19215,230 @@ by a stubbed read — the one stub in a file that otherwise refuses them, with
 the reason written beside it.
 
 **Migration 283 is still the next free number** — this PR needs none.
+
+## D203
+
+**HQ can switch Eadwyn off without a deploy. The store is kill-only: a row can
+switch a capability off and release its own kill, and it can never lift a
+deployment's kill or switch anything on.**
+
+PR C of #310, and the last of it. D201 made the scheduler's record true, D202
+drew H17's three consoles and said in words that there was no store an
+operator could throw a switch from; this is that store. **Nothing retires**:
+every `/admin/*` route stays reachable from the sidebar, and
+`admin_route_reachability.test.mjs` is not re-aimed.
+
+### THE GAP, AS D202 LEFT IT
+
+Every switch on the platform was a Worker variable. Switching Eadwyn off meant
+editing `ADVISOR_DISABLED` (or `ADVISOR_V2_DISABLED`) and redeploying — a
+push, a CI run, and a migration step ahead of the deploy — before the refusal
+reached anyone. In an incident that is the slowest possible lever, and the one
+that needs an engineer rather than the operator who noticed.
+
+The switch was also read in **four places that each restated it**:
+`applyAdvisorGate` and the three inline copies in `/start`, `/answer` and
+`/explain` (`routes/advisor.ts`), plus `checkKillSwitch`'s own copy in
+`guardrails.ts`. None of them was ever exercised with the switch on — no test
+called an advisor route with it set, so the 503 had never been asserted end
+to end. And the message it gave, *"The Personal Advisor is temporarily
+unavailable while we ship an update"*, broke the Eadwyn voice rule and was
+untrue of an operator's kill, which is not an update.
+
+### WHAT SHIPPED
+
+- **Migration 283, `platform_switches`** — `switch_key` (primary key),
+  `thrown` (`CHECK IN (0, 1)`), `reason` (NOT NULL: every write carries one),
+  `set_by_user_id`, `set_at` (SQLite's clock). No seed rows, no
+  `BEGIN`/`COMMIT`, `CREATE TABLE IF NOT EXISTS`. **No CHECK on the key**, on
+  purpose: SQLite cannot alter one, and D139 had to rebuild `licence_events`
+  to widen exactly that kind of list; the worker admits the keys it knows and
+  refuses every other before it writes. **No history column**: every change
+  is one `admin_audit_log` row through `logAdminAction`, append-only since
+  migration 269, so a second ledger here would be D128's tile-versus-table
+  disagreement one store over.
+- **`services/operatorSwitches.ts`** (new) — `OPERATOR_SWITCH_KEYS =
+  ['eadwyn_off']`; `readOperatorSwitches`, one SELECT of every row held as a
+  thirty-second reading per database in a `WeakMap` keyed on `bindingKey(env)`
+  (never a module variable — the #203 bug); `setOperatorSwitch`, one
+  **conditional** statement whose state test is inside the write, so two
+  operators pressing at once cannot both record a change. It creates no
+  table: a read that finds none says so, and a write that finds none fails.
+- **`advisorKillState`** (`services/advisor/rollout.ts`) — the one predicate.
+  It reads the deploy variables first and, when they hold Eadwyn off, returns
+  without touching D1, so the break-glass works when the database does not.
+  Only then does it ask the store. `isAdvisorDisabled` stays exported as the
+  deploy half and is no longer a gate by itself.
+- **Every door asks it.** The four copies in `routes/advisor.ts` became one
+  `refuseWhenKilled`, and `checkKillSwitch` asks the whole switch too — asking
+  only the deploy half there would let a caller that reached the per-user gate
+  without the route's own check serve Eadwyn while an operator had switched it
+  off. HQ Platform's registry reports the switch through the same function,
+  so the D202 WIRING guard's row moved from `isAdvisorDisabled` to
+  `advisorKillState`: the property — one predicate for the console and the
+  refusal — is unchanged, only its name.
+- **The message**: *"Eadwyn is unavailable right now. Please try again
+  later."* True of both halves, in Eadwyn's voice. `REFUSAL.disabled` — a
+  second wording, *"the advisor is temporarily offline for maintenance"* — is
+  deleted; it was never in the system prompt, only in `checkKillSwitch`'s
+  answer. That answer's `reason` became `disabled` rather than `env_disabled`,
+  because it is no longer only the environment; the column it lands in,
+  `advisor_turn_audit.refusal_reason`, is free text, and nothing matches on
+  the old value.
+- **Two routes** (`routes/admin_platform.ts`). `GET /switches` on
+  `requireSuperAdmin`: each switch an operator can throw with both halves,
+  `reason_min`, `propagation_seconds` and the reach sentence. `POST
+  /switches/:key` on `requireSuperAdminWriteBar`, in force-reauth's shape:
+  key (404 `unknown_switch`; a registry key an operator cannot throw is 409
+  `not_operator_switch`, and says what does change it) → action (400
+  `invalid_action`) → reason of ten characters, trimmed (400
+  `reason_required`) → the conditional write (503 `store_unavailable`,
+  nothing changed) → 409 `no_change` → one audit row, `platform_switch_thrown`
+  or `platform_switch_released`, details `{reason, switch_key}` and **no
+  `user_id` key** (D159: the switch is nobody's account). On a branch both
+  answer *HQ only* before anything is read (D106).
+- **The page, `/admin/platform/switches`** (`PlatformSwitchesPage.jsx`,
+  `guard(['admin'], hqOnly(…))`). Per switch: its state as the gate decides
+  it, the deploy half, and the operator half — thrown or released, by whom,
+  when and why, or unreadable with the reason. A switch nobody threw offers a
+  throw; a thrown one offers a release. The form takes `RevokeForm`'s shape:
+  a reason, an acknowledgement that says what the act does, the submit
+  disabled until both are there, and the server's refusals in words.
+  **An unreadable store draws no form**: the page cannot tell a throw from a
+  release, and the write would fail on the same store — a control the server
+  can only refuse is not drawn.
+- **Platform, still without a control.** `hq_content_platform_h6.test.mjs`
+  bans `onClick=`, `onSubmit=` and `<form` in `PlatformPage.jsx`, and a
+  twelfth sidebar row breaks `super_admin_shell.test.mjs`. So the Feature
+  flags zone reaches Switches through **one literal `<Link>`**, which the
+  reachability walk counts and neither ban trips. `Flags` and `Overrides`
+  stopped being `value={null}`: Flags counts the switches HQ can throw,
+  Overrides the ones it has, amber above zero — and Overrides reads
+  unreadable, never 0, when any writable switch's stored half cannot be read.
+  Canvas P7 draws that panel empty on purpose, so these two figures are the
+  page's own, defined by the store.
+- **The summary's `flags_available` / `flags_reason` pair is gone, not
+  flipped.** Nothing read it once the switch list carried the store's own
+  state, and a refusal nothing reads is a producer with no reader.
+- **The Help Center's flags article** now tells an admin to throw Eadwyn's
+  switch from HQ → Platform → Switches, says it takes effect within thirty
+  seconds, that unreadable is not off, and that a throw only switches off and
+  never lifts the deployment's switch.
+
+### THE CALLS, EACH STATED SO IT IS CHEAP TO STRIKE
+
+1. **Kill-only.** Effective = deploy OR operator. The store adds a kill and
+   releases its own; it cannot release a deployment's and cannot switch a
+   capability on. *Strike it and the store goes two-way, which is how
+   charging, tax or the queue could be switched on at runtime by a row nobody
+   reviewed.*
+2. **One key, `eadwyn_off`.** The table takes more keys; each is one reader
+   and one list entry. *Strike it and `eadwyn_rerank_off` joins in this PR —
+   same shape.*
+3. **HQ-only reach.** A branch runs on its own database, where no operator
+   switch is set, so HQ's switch does not stop a branch's Eadwyn — and the
+   page says so beside the control. Pushing a switch to the branches is
+   filed, on D198's precedent.
+4. **Fail open, keeping the last good reading.** An unreadable store lets
+   Eadwyn run; a store read once keeps its last good reading through a
+   failure, so a thrown kill stays thrown. The deploy variables stay the
+   break-glass. *Strike it and the gate fails closed: a D1 blip switches
+   Eadwyn off for everyone with nobody having decided to.*
+5. **Thirty seconds per isolate.** The writing isolate clears its own reading
+   and refuses at once; every other isolate follows within thirty seconds; a
+   failed read is retried after the same thirty seconds and never latched.
+   The page states the delay rather than implying the change is instant.
+6. **History is `admin_audit_log`**, as above.
+7. **The console reads fresh.** `inspect` — the console's mode and nobody
+   else's — reads the store even when the deploy half already decided, and
+   reads it now rather than from the isolate's reading, so an operator sees
+   both halves as stored. The verdict it reports is computed exactly as the
+   gate computes it.
+
+### WHERE THE BUILD CORRECTED THE PLAN
+
+- **The D1 reads could not live in `platformSwitches.ts`.** D202's guard
+  bans that file reading `env.` at all, and the ban is right — it is what
+  keeps the registry from growing a parser. So the store has its own module,
+  and the registry reaches it only through `advisorKillState`.
+- **`flags_available` was not reworded, it was removed** (above). The plan
+  said the pair would *"say what is true now"*; what was true is that nothing
+  needed it.
+- **Four guards were re-aimed, none loosened.** The h6 test's blank-stat list
+  loses Flags and Overrides — they acquired a store — and gains an assertion
+  that each reads through its builder. D202's frontend test moves its WIRING
+  row and its rail-row text. The worker's `platform_consoles_d202` test gives
+  its fixture migration 283 off disk, admits `set_by: 'operator'`, and turns
+  *"the flags refusal"* into *"the pair is gone"*.
+  `admin_content_platform.test.ts`, whose fixture has no 283, now asserts the
+  **unreadable** operator half — which is the honest state for that database.
+- **Three pieces of copy on the new page were wrong before they shipped.** A
+  success line carried a warning icon. The throw acknowledgement promised an
+  effect the deployment already had when the deploy half held Eadwyn off, so
+  it branches on that now. And passing the server's reason as the unreadable
+  claim would have printed two sentences that said the same thing; the page
+  says it once.
+
+### FILED, NOT FOLDED IN
+
+- **Pushing a switch to the branches** — HQ's kill does not reach a branch's
+  Eadwyn today (call 3).
+- **A second key**, `eadwyn_rerank_off`, if one is wanted (call 2).
+
+**Production was not read for this entry.** The planned read — the top
+`schema_migrations` row and that `platform_switches` does not yet exist —
+needs the Cloudflare connector, which is not authorized in this session.
+Migration 283 creates one table and moves no rows, so the read is a record,
+not a gate; the deploy workflow applies migrations before *Deploy*, and step
+9 checks the repo can still rebuild production's schema.
+
+### VERIFIED
+
+`npm run test:drift` exit 0, read as the exit code from a redirected log:
+frontend 2907 → **2922** (the 15 tests of `hq_platform_switches_d203.test.mjs`),
+worker 3813 → **3830** (3827 pass plus the same 3 pre-existing
+environment-gated skips; the 17 tests of `operator_switches_d203.test.ts`),
+retention **41**, zero `not ok` — and all 32 new tests confirmed to run **by
+name**, parsed out of the two files and matched against the log rather than
+inferred from the counts. Both typechecks, `lint:undef`, `check-api-drift`
+(two methods, each with its mounted route; no new drift), `check-sql-migrations`
+(286 files), `check-schema-readiness`, `check-schema-pair-drift` (283 is
+defined in SQL only — there is no runtime `CREATE` to drift from it),
+`check-migration-declarations`, `check-timestamp-comparisons`,
+`check-decision-ids` (D1 → **D203**), `check-folder-docs`,
+`check-unused-imports`, `check-react-hook-imports` and `check-dark-mode` exit 0.
+
+**The root build ran on CI's no-ledger path** — the local retention ledger
+moved aside first, the #333 trap. Every file `main`'s 31 committed shells
+reach is still present, **604 of 604**, walked through `main`'s own chunk
+graph rather than trusting either guard; then `check-docs-fresh --strict`,
+`prerender-og.mjs --check` (31 routes) and `check-docs-assets-closure` (9,224
+references across 929 chunks) exit 0.
+
+**25 mutations applied, 25 caught**, each by the test named for it, every
+anchor asserted unique before anything was written, and every restore
+verified by sha256. Worker: the deploy-first short-circuit dropped; an
+operator release lifting a deploy kill; a failed read latched; the reading
+keyed on a module object instead of the binding; the writer's own reading
+left in place; the write bar reduced to `requireSuperAdmin`; a deploy-only key
+admitted; the audit call dropped; the gate failing closed; `user_id` in the
+audit details; `checkKillSwitch` asking only the deploy half; the reason floor
+measured before trimming; the refusal back in the old voice; a throw of a
+thrown switch reported as a change; and the registry keeping a private,
+deploy-only copy of the kill. Frontend: a form drawn over an unreadable store;
+a throw offered on a thrown switch; Overrides reading 0 when blind; the one
+link removed (which also fails the reachability walk); an identical copy of
+`SWITCH_TONE` declared in Platform; the submit no longer waiting for the
+acknowledgement; an unreadable half read as never thrown; a release under a
+deploy kill worded as restoring Eadwyn; Flags counting every switch; and
+Flags back to a blank stat.
+
+**Two of my anchors failed the pre-flight, and nothing had been written** —
+the Platform link spans two lines, and so does `flagsStat`'s return. And one
+assertion was added after the first full run: the test named *a deploy kill
+survives an operator release* read the console only after a re-throw, so an
+operator release lifting the deploy kill was caught only incidentally, by the
+no-database test. It now reads the console after the release too, and the
+mutation fails the test that names it. The suite was re-run on those bytes.
+
+**Migration 284 is the next free number.**

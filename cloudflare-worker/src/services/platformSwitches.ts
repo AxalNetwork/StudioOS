@@ -1,13 +1,15 @@
 /**
  * The platform's switches, read the way the code that obeys them reads them.
  *
- * THERE IS STILL NO FEATURE-FLAG STORE. No table, no panel, nothing an
- * operator can throw from the product or stage to one territory. What the
- * platform does have is a handful of switches set at deploy — Worker
- * variables — and one the AI router throws by itself. HQ Platform's Feature
- * flags console lists them read-only, so an operator can see what is on
- * without reading the deploy configuration (D202, H17 P7). The store that
- * would let HQ throw one is D203's.
+ * ONE OF THEM AN OPERATOR CAN THROW (D203). Most of the platform's switches
+ * are set at deploy — Worker variables — and one the AI router throws by
+ * itself. Eadwyn's kill has a second half since D203: a row in
+ * `platform_switches` that HQ throws and releases from Platform → Switches,
+ * with a reason and an audit entry, without a deploy
+ * (services/operatorSwitches.ts). That entry is marked `writable` and carries
+ * both halves; every other entry is still read-only, and nothing stages a
+ * switch to one territory. HQ Platform's Feature flags console lists them all
+ * (D202, H17 P7).
  *
  * EACH SWITCH ASKS ITS READER'S OWN PREDICATE. The predicates disagree about
  * what "on" means, and each disagreement is somebody's shipped decision:
@@ -29,7 +31,8 @@
  * sets each switch is written here, for engineers, and in D202:
  *
  *   key                          reader                        variable(s)
- *   eadwyn_off                   advisor/rollout isAdvisorDisabled   ADVISOR_V2_DISABLED, ADVISOR_DISABLED
+ *   eadwyn_off                   advisor/rollout advisorKillState    ADVISOR_V2_DISABLED, ADVISOR_DISABLED
+ *                                                                      + the platform_switches row (D203)
  *   eadwyn_rerank_off            advisor/rerank rerankDisabled       ADVISOR_RERANK_DISABLED
  *   ai_budget_trip               aiRouter aiOrgKillSwitchState       (KV key, set by the router)
  *   session_charging             advisorMoney settlementMode         ADVISOR_CHARGING_ENABLED + STRIPE_SECRET_KEY
@@ -43,7 +46,8 @@
  * with the values the predicates disagree on.
  */
 import type { Env } from '../types';
-import { isAdvisorDisabled } from './advisor/rollout';
+import { advisorKillState, type AdvisorKillState } from './advisor/rollout';
+import { operatorSwitchActorName } from './operatorSwitches';
 import { rerankDisabled } from './advisor/rerank';
 import { aiOrgKillSwitchState } from './aiRouter';
 import { settlementMode } from './advisorMoney';
@@ -65,12 +69,50 @@ import { CONNECTORS, isFlagged } from './dueDiligence';
 export const SWITCH_STATES = ['on', 'off', 'unreadable'] as const;
 export type SwitchState = typeof SWITCH_STATES[number];
 
+/**
+ * Every switch the registry reports, in the order it reports them. The throw
+ * route reads this to tell a switch an operator cannot throw (409) from a key
+ * that names nothing (404), and the worker test fails when the list and what
+ * readPlatformSwitches returns differ.
+ */
+export const PLATFORM_SWITCH_KEYS = [
+  'eadwyn_off', 'eadwyn_rerank_off', 'ai_budget_trip', 'session_charging',
+  'stripe_tax', 'cf_queue', 'market_sources_live', 'diligence_connectors_live',
+] as const;
+
+/**
+ * An operator switch's stored half, as the console reads it. `available:
+ * false` is a store that could not be read, which is never the same claim as
+ * a switch nobody threw.
+ */
+export type OperatorHalf =
+  | {
+    available: true;
+    thrown: boolean;
+    /** Why it was last thrown or released; null while nobody ever has. */
+    reason: string | null;
+    set_by_user_id: number | null;
+    /** The account's name, or its email; null when it cannot be named. */
+    set_by_name: string | null;
+    /** SQLite's clock, `YYYY-MM-DD HH:MM:SS`; null while nobody ever has. */
+    set_at: string | null;
+    /** When this reading was taken from the store, ISO. */
+    read_at: string;
+    /** Set when the latest read failed and this is the last good reading. */
+    stale_reason?: string;
+  }
+  | { available: false; reason: string };
+
 export interface PlatformSwitch {
   key: string;
   label: string;
   state: SwitchState;
-  /** `deploy`: a Worker variable, changed by a deployment. `runtime`: thrown by the platform itself. */
-  set_by: 'deploy' | 'runtime';
+  /**
+   * `deploy`: a Worker variable, changed by a deployment. `runtime`: thrown by
+   * the platform itself. `operator`: HQ can throw it from Platform → Switches,
+   * beside the deploy variable that can also hold it on.
+   */
+  set_by: 'deploy' | 'runtime' | 'operator';
   /** What is true while the switch is on. */
   effect: string;
   /** A family's count, or a mode. Never a variable's value. */
@@ -79,6 +121,12 @@ export interface PlatformSwitch {
   count?: { on: number; of: number };
   /** Why the state is what it is, where the state alone would mislead. */
   reason?: string;
+  /** Present, and true, only on a switch an operator can throw (D203). */
+  writable?: true;
+  /** An operator switch's deploy half: is the Worker variable holding it on. */
+  deploy?: 'on' | 'off';
+  /** An operator switch's stored half. */
+  operator?: OperatorHalf;
 }
 
 const onOff = (b: boolean): SwitchState => (b ? 'on' : 'off');
@@ -89,8 +137,79 @@ function names(list: string[], max = 6): string {
   return `${list.slice(0, max).join(', ')} and ${list.length - max} more`;
 }
 
+/**
+ * Eadwyn's kill as the console reports it — the verdict `advisorKillState`
+ * reaches, which is the verdict every advisor route refuses by, plus both
+ * halves so an operator can see what holds it.
+ *
+ * THE STATE IS THE GATE'S, never recomputed here: `on` when the gate refuses,
+ * `unreadable` when the store could not be read and nothing else decided —
+ * the gate fails open on exactly that, so Eadwyn is answering while the
+ * console cannot say whether an operator meant it to stop.
+ */
+async function eadwynSwitch(env: Env, kill: AdvisorKillState): Promise<PlatformSwitch> {
+  const read = kill.operator;
+  let operator: OperatorHalf;
+  if (!read) {
+    // Only the gate's own mode leaves the store unread; the console asks in
+    // `inspect`, which always reads it. Said rather than assumed.
+    operator = { available: false, reason: 'The operator switch store was not read.' };
+  } else if (!read.readable) {
+    operator = { available: false, reason: read.reason };
+  } else {
+    const row = read.rows.get('eadwyn_off') || null;
+    operator = {
+      available: true,
+      thrown: row?.thrown === true,
+      reason: row ? row.reason : null,
+      set_by_user_id: row ? row.set_by_user_id : null,
+      set_by_name: row ? await operatorSwitchActorName(env, row.set_by_user_id) : null,
+      set_at: row ? row.set_at : null,
+      read_at: read.read_at,
+      ...(read.stale_reason ? { stale_reason: read.stale_reason } : {}),
+    };
+  }
+
+  const state: SwitchState = kill.off ? 'on' : operator.available ? 'off' : 'unreadable';
+  let reason: string | undefined;
+  if (kill.by === 'deploy') {
+    reason = 'Held on by the deployment. Releasing an operator switch does not turn Eadwyn back on; '
+      + 'only a deployment does.';
+  } else if (state === 'unreadable') {
+    reason = 'The operator switch store could not be read, so whether an operator has thrown this '
+      + 'is unknown. Eadwyn fails open on the same error and keeps answering; the deployment can '
+      + 'still switch it off.';
+  } else if (operator.available && operator.stale_reason) {
+    reason = 'The latest read of the operator switch store failed. This is the last reading that '
+      + 'answered, and it is the one the gate here is using.';
+  }
+
+  return {
+    key: 'eadwyn_off',
+    label: 'Eadwyn off',
+    state,
+    set_by: 'operator',
+    effect: 'Eadwyn answers every message with a notice that it is unavailable.',
+    ...(reason ? { reason } : {}),
+    writable: true,
+    deploy: kill.deploy ? 'on' : 'off',
+    operator,
+  };
+}
+
+/**
+ * The switches an operator can throw, as the console reports them — one entry
+ * per OPERATOR_SWITCH_KEYS key, each built from the predicate that obeys it.
+ * `inspect`: both halves, the store read now; the verdict is computed exactly
+ * as the gate computes it (services/advisor/rollout.ts).
+ */
+export async function readOperatorSwitchEntries(env: Env): Promise<PlatformSwitch[]> {
+  return [await eadwynSwitch(env, await advisorKillState(env, { inspect: true }))];
+}
+
 export async function readPlatformSwitches(env: Env): Promise<PlatformSwitch[]> {
   const settlement = settlementMode(env);
+  const [eadwyn] = await readOperatorSwitchEntries(env);
   const trip = await aiOrgKillSwitchState(env);
 
   const sources = listSources();
@@ -117,13 +236,7 @@ export async function readPlatformSwitches(env: Env): Promise<PlatformSwitch[]> 
   };
 
   return [
-    {
-      key: 'eadwyn_off',
-      label: 'Eadwyn off',
-      state: onOff(isAdvisorDisabled(env)),
-      set_by: 'deploy',
-      effect: 'Eadwyn answers every message with a notice that it is unavailable.',
-    },
+    eadwyn,
     {
       key: 'eadwyn_rerank_off',
       label: 'Eadwyn question reranking off',

@@ -26,10 +26,14 @@
  *   Broadcast (D202, H17 P6) — Telegram channels and X, as they stand. No
  *          chat id reaches this page, and no member count is drawn, because
  *          nothing asks Telegram for one.
- *   Flags  No store; D203 builds one. What the platform has is switches set
- *          at deploy, and one the AI router throws by itself. They are listed
- *          read-only, each as the code that obeys it reads it. The page has
- *          no handler of its own, and a test holds it to that.
+ *   Flags  (D203) Every switch the platform has is listed read-only, each as
+ *          the code that obeys it reads it: most are set at deploy, one the AI
+ *          router throws by itself, and one — Eadwyn off — HQ can throw from
+ *          `platform_switches` (migration 283). THROWING ONE IS NOT DONE HERE.
+ *          It is Platform → Switches, reached by one link in this zone,
+ *          because this page has no handler of its own and a test holds it to
+ *          that. Flags and Overrides count what that store holds, and an
+ *          unreadable store reads as unreadable, never as none thrown.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -37,6 +41,11 @@ import { SlidersHorizontal } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import { SWITCH_TONE, setByLabel, operatorLine } from '../../lib/platformSwitches';
+
+// Re-exported, not redeclared: Platform → Switches draws the same tones, and
+// the list lives once in lib/platformSwitches.js (D203).
+export { SWITCH_TONE };
 
 export const UNAVAILABLE = Symbol('unavailable');
 const num = (v) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Number(v).toLocaleString());
@@ -188,6 +197,44 @@ export function incidentsStat(data, incidents) {
 }
 
 /**
+ * D203 — "Flags": the switches an operator can throw, which is what the store
+ * behind this zone holds. The registry lists every switch whatever the store
+ * says, so this figure stands even when the store is unreadable; the note says
+ * how many the platform has in all, so the one is not read as the whole.
+ */
+export function flagsStat(data, switches) {
+  if (data === null) return LOADING;
+  if (data === UNAVAILABLE) return unreadable('The platform summary could not be read.');
+  if (!switches?.available) return unreadable(switches?.reason || 'The platform switches were not reported.');
+  const writable = switches.items.filter((sw) => sw.writable);
+  return {
+    value: num(writable.length),
+    note: `HQ can throw · of ${num(switches.items.length)} switches in all`,
+  };
+}
+
+/**
+ * D203 — "Overrides": the operator switches HQ has thrown, read from the
+ * store. If any operator half could not be read, the count is not known, and
+ * that is what it says — a zero here would claim no kill is thrown, which is
+ * the one thing an unreadable store cannot vouch for.
+ */
+export function overridesStat(data, switches) {
+  if (data === null) return LOADING;
+  if (data === UNAVAILABLE) return unreadable('The platform summary could not be read.');
+  if (!switches?.available) return unreadable(switches?.reason || 'The platform switches were not reported.');
+  const writable = switches.items.filter((sw) => sw.writable);
+  const blind = writable.find((sw) => !sw.operator?.available);
+  if (blind) return unreadable(blind.operator?.reason || 'The operator switch store could not be read.');
+  const thrown = writable.filter((sw) => sw.operator.thrown).length;
+  return {
+    value: num(thrown),
+    note: thrown ? 'thrown by HQ now' : 'none thrown by HQ',
+    tone: thrown > 0 ? AMBER_INK : undefined,
+  };
+}
+
+/**
  * HQ's own dead-letter depth, for HQ's row of the traffic table. No branch
  * reports its backlog to HQ, so a branch row never borrows this figure.
  */
@@ -237,19 +284,6 @@ export const CHANNEL_STATE = {
   ready: ['Ready', 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300'],
   unbound: ['No chat bound', 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'],
   disabled: ['Disabled', 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'],
-};
-
-/**
- * One tone per state the switch registry can return. `services/platformSwitches`
- * exports the same three as SWITCH_STATES, and `hq_platform_consoles_d202`
- * fails when the lists differ. An unknown state falls back to the unreadable
- * tone, never to "on" or "off", because a state this page does not know is
- * not one it can report.
- */
-export const SWITCH_TONE = {
-  on: 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900',
-  off: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
-  unreadable: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
 };
 
 /**
@@ -362,6 +396,11 @@ export function BroadcastConsole({ loading, unreadable, telegram, xStatus }) {
  * component so the test renders it: every state the registry returns gets
  * its tone, and a state it does not know draws as unreadable, never as on or
  * off. The list throws nothing, and there is nothing here to click.
+ *
+ * D203 — a switch HQ can throw carries two halves, and both are drawn: what
+ * the deployment holds, and what HQ's store holds. The state is the two
+ * combined the way the gate combines them, so a reader who sees "on" can tell
+ * from the halves whether releasing HQ's would turn it off.
  */
 export function SwitchList({ switches }) {
   if (!switches?.available) {
@@ -375,8 +414,8 @@ export function SwitchList({ switches }) {
     <>
       <p className="mt-3 text-[11.5px] leading-relaxed text-axal-muted">
         Read-only. A switch set at deploy changes with a deployment; one set at runtime is thrown by
-        the platform itself. Each is read the way the code that obeys it reads it, and nothing here
-        throws one.
+        the platform itself; one HQ can throw is thrown on Switches, with a reason, and recorded. Each
+        is read the way the code that obeys it reads it, and nothing here throws one.
       </p>
       <ul className="mt-2 space-y-1.5" data-testid="hq-platform-switches">
         {switches.items.map((sw) => (
@@ -385,7 +424,7 @@ export function SwitchList({ switches }) {
               <span className="min-w-0 truncate font-medium">{sw.label}</span>
               <span className="shrink-0 space-x-1.5">
                 <span className="font-mono text-[10px] text-axal-faint">
-                  {sw.set_by === 'runtime' ? 'set at runtime' : 'set at deploy'}
+                  {setByLabel(sw.set_by)}
                 </span>
                 <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase ${SWITCH_TONE[sw.state] || SWITCH_TONE.unreadable}`}>
                   {sw.state}
@@ -394,6 +433,11 @@ export function SwitchList({ switches }) {
             </div>
             <div className="mt-0.5 text-[11px] leading-snug text-axal-muted">{sw.effect}</div>
             {sw.detail && <div className="mt-0.5 font-mono text-[10px] text-axal-faint">{sw.detail}</div>}
+            {sw.writable && (
+              <div className="mt-0.5 text-[11px] leading-snug text-axal-faint" data-testid={`hq-switch-halves-${sw.key}`}>
+                Deployment: {sw.deploy === 'on' ? 'holds it on' : 'does not hold it'} · HQ: {operatorLine(sw)}
+              </div>
+            )}
             {sw.reason && <div className="mt-0.5 text-[11px] leading-snug text-axal-faint">{sw.reason}</div>}
           </li>
         ))}
@@ -478,7 +522,8 @@ export default function PlatformPage() {
           ? 'Neither read answered, so there is nothing to read back — this is not a claim that nothing is connected.'
           : 'Loading the platform summary…')}
       unavailable={[
-        ['Feature flags', 'No operator flag store exists; the switches listed are set at deploy and read-only here.'],
+        ['Staged switches', 'A switch is on or off for a whole deployment; none can be staged to one territory or a share of accounts.'],
+        ['Branch reach', 'A switch HQ throws stops Eadwyn on HQ\'s own deployment; pushing one to the branches is not built.'],
         ['Key material', 'Never read by this page. Reveal and revoke live where they are audited.'],
         ['Channel member counts', 'Never asked of Telegram, so not recorded.'],
         ['Dead letters per branch', 'No branch reports its backlog to HQ; the figure here is HQ\'s own.'],
@@ -504,9 +549,9 @@ export default function PlatformPage() {
           </div>
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">Platform</h1>
           <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
-            Keys, jobs, deployments, monitoring and broadcast, each read from its own store. Feature flags
-            have none, and the switches the platform does have are listed read-only. No key material and no
-            chat id reaches this page, and nothing on it changes a setting.
+            Keys, jobs, deployments, monitoring, broadcast and switches, each read from its own store. The
+            switches are listed read-only here; the ones HQ can throw are thrown on Switches. No key material
+            and no chat id reaches this page, and nothing on it changes a setting.
           </p>
         </header>
 
@@ -826,17 +871,31 @@ export default function PlatformPage() {
               </ul>
             </Zone>
 
-            <Zone title="Feature flags" sub="no operator store — the switches that exist, read-only">
+            <Zone title="Feature flags" sub="every switch, read-only — HQ throws its own on Switches">
               {/* Loading is its own state. This zone used to say the summary
                   "could not be read" for as long as it was still being read. */}
               {data === null
                 ? <p className="text-[12.5px] text-axal-muted">Reading the platform summary…</p>
-                : <Absent reason={ready ? data.flags_reason : 'The platform summary could not be read.'} />}
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <Stat label="Flags" value={null} note="no flag store exists" />
-                <Stat label="Overrides" value={null} note="no operator switch exists" />
+                : !ready && <Absent reason={'The platform summary could not be read.'} />}
+              <div className="mt-3 grid grid-cols-2 gap-2" data-testid="hq-flags-stats">
+                <Stat label="Flags" {...flagsStat(data, switches)} />
+                <Stat label="Overrides" {...overridesStat(data, switches)} />
               </div>
               {ready && <SwitchList switches={switches} />}
+              {/* D203 — THE ONE DOOR TO THE CONTROL, and a link rather than a
+                  button: this page holds no handler, and the Switches page is
+                  where a throw is confirmed, reasoned and recorded. A literal
+                  `to` so the reachability walk counts it. */}
+              <Link
+                to="/admin/platform/switches"
+                className="mt-3 block rounded-xl border border-axal-hairline bg-axal-ground px-3 py-2 hover:border-axal-violet dark:hover:border-violet-700"
+                data-testid="hq-flags-switches-link"
+              >
+                <div className="text-[12.5px] font-bold text-axal-ink dark:text-white">Switches</div>
+                <div className="mt-0.5 text-[11px] leading-relaxed text-axal-faint">
+                  Throw or release the switches HQ owns, with a reason. Each change is recorded in the audit log.
+                </div>
+              </Link>
             </Zone>
           </div>
         </div>

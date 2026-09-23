@@ -12,15 +12,19 @@
  *               a boolean in SQL and never reaches the payload; the bot token
  *               and the X client are reported as present or absent, never as
  *               values.
- *   Flags       there is still no store, and the reason says why without the
- *               sentence D202 found false. The switches that DO exist are each
- *               read through the predicate the code that obeys them uses —
- *               which is why each test below drives a switch with the value
- *               its predicate disagrees with the others about.
+ *   Flags       every switch is read through the predicate the code that
+ *               obeys it uses — which is why each test below drives a switch
+ *               with the value its predicate disagrees with the others about.
+ *               D203 gave one of them an operator half (`platform_switches`,
+ *               migration 283) and retired the `flags_available` refusal that
+ *               said no such store existed; the store's own behaviour is held
+ *               by operator_switches_d203.test.ts.
  *
  * Every table is created from schema_baseline.sql verbatim, for the reason
  * admin_content_platform.test.ts gives: a fixture that invents a schema only
- * confirms its own assumptions.
+ * confirms its own assumptions. The one table the baseline does not carry,
+ * `platform_switches`, is created from its migration file the same way —
+ * read off disk, never retyped.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -79,6 +83,11 @@ const CONSOLE_TABLES = [
   'telegram_channels', 'telegram_posts', 'x_accounts',
 ];
 
+/** Migration 283, off disk — the operator switch store post-dates the baseline. */
+const SWITCHES_MIGRATION = readFileSync(
+  resolve(process.cwd(), 'cloudflare-worker/sql/migrations/283_platform_switches.sql'), 'utf8',
+);
+
 function freshDb() {
   const db = new DatabaseSync(':memory:', {
     enableForeignKeyConstraints: false,
@@ -87,6 +96,7 @@ function freshDb() {
   for (const t of ['users', 'super_admins', 'integrations', 'cron_run_history', ...CONSOLE_TABLES]) {
     db.exec(ddl(t));
   }
+  db.exec(SWITCHES_MIGRATION);
   db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)')
     .run(SUPER, 'admin', 'The Holder', 'holder@example.test');
   db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(SUPER);
@@ -370,10 +380,13 @@ test('the switches are listed in one order, each in a state the page has a tone 
   ]);
   for (const s of items) {
     assert.ok((SWITCH_STATES as readonly string[]).includes(s.state), `${s.key} is in an unknown state: ${s.state}`);
-    assert.ok(['deploy', 'runtime'].includes(s.set_by), `${s.key} does not say what sets it`);
+    // 'operator' since D203: a switch HQ can throw from the product as well as
+    // at deploy. Exactly the keys the store admits carry it — asserted in
+    // operator_switches_d203.test.ts against OPERATOR_SWITCH_KEYS.
+    assert.ok(['deploy', 'runtime', 'operator'].includes(s.set_by), `${s.key} does not say what sets it`);
     assert.ok(typeof s.effect === 'string' && s.effect.length > 10, `${s.key} does not say what "on" does`);
   }
-  // A bare deployment: nothing is thrown.
+  // A bare deployment with an empty operator store: nothing is thrown.
   for (const s of items) assert.equal(s.state, 'off', `${s.key} reads on with no variable set`);
 });
 
@@ -505,16 +518,23 @@ test('the payload carries switch states, never a variable value or a variable na
 
 /* ── Feature flags · the reason ───────────────────────────────────────── */
 
-test('the flags refusal no longer says the only flags are per-user settings', async () => {
-  // THE SENTENCE D202 FOUND FALSE. It said "what the codebase calls flags is
-  // per-user settings" — and the codebase also calls MI_FLAG_* and DD_FLAG_*
-  // flags, which are platform switches, set at deploy.
+test('the flags refusal is gone, not reworded, now the operator store exists (D203)', async () => {
+  // D202 corrected this refusal once — it said "what the codebase calls flags
+  // is per-user settings", and MI_FLAG_* and DD_FLAG_* are platform switches.
+  // D203 retired it: `flags_available: false` said there was no operator store,
+  // and migration 283 is one. Nothing on the page read the pair once the
+  // switches block could say the same thing switch by switch, so the pair went
+  // rather than being reworded into a second copy of that block.
   const r = await summary(freshDb());
-  assert.equal(r.body.flags_available, false);
-  assert.doesNotMatch(String(r.body.flags_reason), /what the codebase calls flags is per-user settings/i);
-  assert.match(String(r.body.flags_reason), /set at deploy/);
-  assert.match(String(r.body.flags_reason), /listed below read-only/);
-  assert.equal(r.body.flags, undefined, 'a flags list appeared beside the refusal');
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.body.flags_available, undefined, 'the retired flags pair came back');
+  assert.equal(r.body.flags_reason, undefined, 'the retired flags pair came back');
+  assert.equal(r.body.flags, undefined, 'a flags list appeared beside the switches');
+  assert.doesNotMatch(r.text, /per-user settings/i, 'the sentence D202 found false is back in the payload');
+  assert.doesNotMatch(r.text, /no feature-flag store/i, 'the payload still says no operator store exists');
+  const eadwyn = switchOf(r.body, 'eadwyn_off');
+  assert.equal(eadwyn.writable, true, 'the switch HQ can throw is not marked as one');
+  assert.equal(eadwyn.set_by, 'operator');
 });
 
 /* ── Isolation ────────────────────────────────────────────────────────── */
