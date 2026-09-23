@@ -34,6 +34,19 @@
  * 400 with the reason — never an `undelivered` row, which is what a throw from
  * HQ becomes, and which reads as retryable. A refusal is a decision; sending it
  * again would be refused again.
+ *
+ * D208 — A CONTENT ESCALATION NAMES WHAT IT CONCERNS, IN THE BRANCH'S OWN
+ * WORDS. The GET carries `concerns`: every item a content raise can name — HQ's
+ * template library as pushed here, and this branch's own articles — each with
+ * the label `services/escalationConcerns.ts` builds. The POST takes a pick as
+ * `concerns: { type, id }`, reads that row again, and sends its label as
+ * `subject_ref`: to HQ, to the local row, and back in the 201. The label is a
+ * name, not a link — HQ cannot open this database — and the payload says so.
+ * A content raise names its item only by picking it: a typed `subject_ref` is
+ * refused, so there is one label format, not the list's and a typed one. Every
+ * other kind keeps the free-text passthrough migration 259 gave it. Naming is
+ * optional, and all of it happens before HQ is called, so a pick that no longer
+ * resolves sends nothing and stores nothing.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -42,6 +55,9 @@ import { requireBranchTier } from '../util/branch';
 import { mapError, nowIso } from './_t13t14t15_helpers';
 import { branchEscalations, branchLicenceKind } from '../rpc/branchOps';
 import { ESCALATION_KINDS, escalationKindsFor } from '../rpc/hqOps';
+import {
+  CONCERN_KIND, BAD_CONCERN, listConcerns, parseConcern, resolveConcern,
+} from '../services/escalationConcerns';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -77,6 +93,12 @@ r.get('/escalations', async (c) => {
     // fields beside it say which of those this branch can use, and why not.
     const gate = escalationKindsFor(await branchLicenceKind(c.env));
 
+    // D208 — what a content escalation can name. OUTSIDE the lane's own try,
+    // and it cannot throw: each source answers for itself, so a branch that
+    // cannot read its templates or its articles still reads its lane, and the
+    // lane's `available` stays about the lane.
+    const concerns = await listConcerns(c.env);
+
     return c.json({
       available,
       ...(available ? (payload as object) : {
@@ -94,6 +116,7 @@ r.get('/escalations', async (c) => {
         ? 'Read from the licence copy HQ pushed to this branch.'
         : 'This branch\'s licence copy does not say which kind of licence it runs under, so every '
           + 'kind is offered here and HQ, which holds the licence, decides.',
+      concerns,
       // SAID ON THE PAYLOAD, not left for each screen to remember: the answer
       // is one decision, so a surface must not draw a reply box.
       answer_shape: 'single_decision',
@@ -104,7 +127,7 @@ r.get('/escalations', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
-// POST /api/branch/escalations  { kind, subject, subject_ref?, detail? }
+// POST /api/branch/escalations  { kind, subject, subject_ref?, concerns?, detail? }
 r.post('/escalations', async (c) => {
   try {
     const admin = await requireAdmin(c);
@@ -145,7 +168,55 @@ r.post('/escalations', async (c) => {
       }, 400);
     }
 
-    const subjectRef = str(b?.subject_ref, 300) || null;
+    // D208 — WHAT THIS ESCALATION CONCERNS, settled before HQ is called.
+    //
+    // CONTENT NAMES ITS ITEM ONLY BY PICKING IT. The label is built from the
+    // row this branch holds, by the one function that also built the list the
+    // drawer showed, so the words picked are the words HQ reads. A typed
+    // `subject_ref` on content is REFUSED rather than ignored: a field dropped
+    // in silence reads as stored, and a typed label would be a second format
+    // beside the listed one. Every other kind keeps the free-text passthrough.
+    //
+    // A PICK THAT NO LONGER RESOLVES SENDS NOTHING AND STORES NOTHING — the
+    // D206 rule for a refusal, applied to a lookup. An unreadable source is a
+    // 503, because it says nothing about the item; a missing row is a 400.
+    const typedRef = str(b?.subject_ref, 300);
+    const namesItem = b?.concerns !== undefined && b?.concerns !== null;
+    let subjectRef: string | null;
+    if (kind === CONCERN_KIND) {
+      if (typedRef) {
+        return c.json({
+          error: 'subject_ref_not_accepted',
+          message: 'A content escalation names its item by picking it from the list, so the label is '
+            + 'the one this branch holds. Pick the item, or put what it concerns in the subject.',
+        }, 400);
+      }
+      if (namesItem) {
+        const parsed = parseConcern(b.concerns);
+        if (!parsed) return c.json({ error: 'bad_concern', message: BAD_CONCERN }, 400);
+        const resolved = await resolveConcern(c.env, parsed);
+        if (!resolved.ok) {
+          return c.json(
+            { error: resolved.error, message: resolved.message },
+            resolved.error === 'concerns_unreadable' ? 503 : 400,
+          );
+        }
+        subjectRef = resolved.label;
+      } else {
+        subjectRef = null;
+      }
+    } else {
+      if (namesItem) {
+        return c.json({
+          error: 'concerns_not_for_kind',
+          message: 'Only a content escalation names an item from the list. Describe what this '
+            + 'concerns in the subject instead.',
+          kind,
+        }, 400);
+      }
+      subjectRef = typedRef || null;
+    }
+
     const detail = str(b?.detail, 4000) || null;
     const raisedBy = str((admin as { name?: string }).name, 200) || null;
     const now = nowIso();
@@ -205,6 +276,7 @@ r.post('/escalations', async (c) => {
       hq_uid: hqUid,
       kind,
       subject,
+      subject_ref: subjectRef,
       due_at: dueAt,
       status: hqUid ? 'open' : 'undelivered',
       ...(deliveryError ? { delivery_error: deliveryError } : {}),

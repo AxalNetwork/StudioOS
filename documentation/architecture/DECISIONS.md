@@ -20277,3 +20277,203 @@ file by sha256:
 and no branch has been provisioned (`infra/branches/` holds only
 `_example.json`). **285 is still the next free migration, and D208 the next
 decision.**
+
+## D208
+
+**A content escalation can now name the item it concerns: one of HQ's
+templates as pushed to the branch, or one of the branch's own articles. The
+name travels as a label the branch builds from its own row, in the
+`subject_ref` field migration 259 already defined, and it is the same bytes in
+the list the drawer shows, in HQ's ledger, on the branch's row and in the 201.
+HQ's Localised count stays unrecorded, for a narrower reason: a name says which
+item a submission is about, not what the submission is to that item.**
+
+The second PR of #312; D207 was the first, and made sure the label could reach
+HQ at all. **No migration, no new route and no new `api.js` method**: the list
+rides the lane's existing GET, and the pick rides the existing raise.
+`frontend/src` changes, so `docs/` is rebuilt. **Nothing retires.**
+
+### WHAT WAS WRONG
+
+1. **Nothing recorded which item a content submission was about.** D112 gave
+   HQ's Content page a localisation lane over escalations of kind `content`.
+   It closed two of the three parts of the old refusal and left one standing:
+   nothing linked a submission to the piece it concerned. The items live on
+   the branch — its own articles, and HQ's template library as pushed there
+   (D147) — in a database HQ cannot read (D.2). So a foreign key was never an
+   option.
+2. **The field for it already existed, and nothing wrote it.** Migration 259
+   defines `subject_ref` on both escalation tables as free text on purpose:
+   *"a label a person can act on"*. `recordEscalation` stores it, every HQ read
+   selects it, and HQ Support renders it as *"About …"*. But no screen sent
+   one. The drawer's raise carried a kind, a subject and a detail, so every
+   stored value was null apart from one written by a hand-made API call.
+
+### WHAT SHIPPED
+
+- **`services/escalationConcerns.ts`, new.**
+  - **`concernLabel`, the one label format**: `HQ template · {title} ·
+    v{version} · {slug}` or `Article · {title} · {slug}`. It builds both what
+    the drawer lists and what the route stores and sends, so the words picked
+    are the words HQ reads. It carries no status, because a status is stale
+    the moment the item moves and the escalation's own `created_at` already
+    dates the label. A version that is not a positive whole number is left out
+    rather than written as `v1`.
+  - **The label fits the 300 characters both tables keep.** The branch route
+    and `recordEscalation` each clip `subject_ref` to 300, so a longer label
+    would be stored as something other than what was listed. A long title
+    gives way, with an ellipsis; the slug never does, because it is the part a
+    person acts on and the part that tells two same-titled items apart.
+  - **`listConcerns` never throws.** It lists HQ's whole library (small, and
+    pushed whole) by title with case ignored, then the branch's newest hundred
+    articles, reading one more than the cap so a cut list says it was cut. Each
+    source reads in its own try and answers for itself. An unreadable source is
+    its own state with its reason, never `listed: 0`, which would claim the
+    branch holds nothing to name. Only when both fail is the whole block
+    unavailable.
+  - **`parseConcern` and `resolveConcern`.** A pick is `{ type, id }`: a
+    template by its slug, an article by its number, from a number or the
+    string a form sends. The pick is read again at the raise, never taken from
+    the client: an item HQ's next push withdrew, or the branch deleted, in the
+    minute since the list was read is refused rather than sent under a stale
+    name. The refusals are typed — `concerns_not_found`, `concerns_unreadable`
+    — and neither is ever stored as a guess.
+- **`routes/branch_escalations.ts`.**
+  - **The GET carries `concerns`**, built outside the lane's own try. A branch
+    without migration 268 still reads its lane, and the lane's `available`
+    stays about the lane. The block carries its own note, on `answer_note`'s
+    precedent, so no screen has to remember it: HQ receives a name, not a link.
+  - **The POST settles the label after D206's kind gate and before HQ is
+    called**, in this order. A typed `subject_ref` on content is a 400
+    `subject_ref_not_accepted`. `concerns` on any other kind is a 400
+    `concerns_not_for_kind`. A malformed pick is a 400 `bad_concern`. An item
+    that no longer resolves is a 400, and one whose source cannot be read is a
+    503, because that says nothing about the item. None of them calls HQ or
+    writes a row. A resolved label goes to HQ, into the local row and back in
+    the 201. A content raise with no pick sends null. Every other kind keeps
+    the free-text passthrough it had.
+- **`BranchApprovals.jsx`**, three exported pieces and one line per row.
+  - **`concernsOffered`** reads the lane payload into five states. Only
+    `ready` draws a control; `loading`, `unreadable`, `unavailable` and `empty`
+    each draw a sentence instead, because a list the page could not read, or
+    one with nothing in it, is not something to choose from.
+  - **`ConcernsPicker`** is a select whose option text is the worker's label,
+    grouped by source in the worker's order, with *"No item — this is about
+    something else"* first and chosen by default. A source that could not be
+    read says so beside the list, a cut list says how many it shows, and the
+    payload's note is drawn under it. It is mounted for `content` only.
+  - **`concernToSend`**, derived at send time like D206's `chosenKind`. It
+    sends `{ type, id }` only for content, only while the list still offers the
+    pick, and never a label. A pick held from before a switch of kind is
+    therefore not sent, and the pick clears after a raise.
+  - **Each raised row says what it was "About"**, the word HQ Support already
+    uses for this field, so one field has one word. A row with no label draws
+    no line at all.
+- **`ContentPage.jsx`**: `LocalisationRow` renders each lane item's label as
+  *"About {label}"*, or states that no item was named and why — never a blank
+  "About", which would read as a label that failed to load. A note under the
+  lane says the label is the branch's own name for an item in a database HQ
+  cannot open. The *Localisation link* rail row and the Localised stat's note
+  are narrowed to match.
+- **`admin_content.ts`**: `localisation_reason` is **narrowed again, not
+  deleted** — D111's pattern, and D112's comment stays beside the new one.
+  Brand approval, per-subsidiary attribution and the item a submission
+  concerns now exist. What is still not recorded is the relation.
+- **`services/README.md`** gains the new file's row.
+
+### THE JUDGEMENT CALLS, EACH CHEAP TO STRIKE
+
+1. **`subject_ref`, not a new column.** The task asked for the label *"beside
+   `subject_ref`"*; migration 259's own header defines `subject_ref` as exactly
+   this field, and every read already selects it. *Strike it and migration 285
+   adds `subject_label` to both tables, and every read gains a column.*
+2. **Naming is optional.** A content question about nothing in particular is
+   still a legitimate question, and a branch with no articles and an empty
+   library must still be able to raise one. *Strike it and a content raise
+   requires a pick.*
+3. **Two sources, and not publications.** A publication is a digest of
+   articles, so naming the article names what the digest carries. *Strike it
+   and the source list gains one entry, and the drawer one group.*
+4. **Content only.** S9 draws *Concerns* for moderation too, over a different
+   store. *Strike it and moderation gains its own source.*
+5. **A typed `subject_ref` on content is refused, not ignored.** A field
+   dropped in silence reads as stored, and a typed label would be a second
+   format beside the listed one. *Strike it and the field is ignored, with a
+   test that it never reaches the row.*
+
+### THE LOCALISED CHECK — "STAYS NULL, NARROWER", AS THE TASK PREDICTED
+
+The task said to check, before building, whether the Localised stat could be
+computed honestly once a submission names its item. It cannot. A French
+version of template X, and *"please fix clause 4 of template X"*, are both
+content escalations naming X; counting them as localisations would still be
+counting submissions. So the refusal narrows, in D111's pattern, from *"no link
+at all"* to *"no record of what the link means"*, and the page, the rail and the
+route all say the narrower thing.
+
+### DELIBERATELY NOT BUILT
+
+- **A link HQ can open.** The item lives in the branch's database (D.2).
+- **Templates resolved at HQ.** HQ could look up its own template by slug,
+  but the lane renders one label for both sources under one rule, and a
+  second path for one source is how two formats start.
+- **Labels for old rows.** Nothing exists to push them from; the lane states
+  the absence.
+- **The relation** — whether a submission localises the item it names or
+  asks for a change to it. That is what would make the Localised count
+  honest, and deciding it is a product call about what a localisation is.
+  Filed as its own task (#355) rather than guessed.
+
+### VERIFIED
+
+`npm run test:drift` exits **0**, read as the exit code from a redirected log.
+Counts:
+
+- frontend 2976 → **2994**: the eighteen tests in
+  `escalation_concerns_d208.test.mjs`;
+- worker 3872 → **3897** — 3894 pass plus the same 3 pre-existing
+  environment-gated skips: the twenty-five tests in
+  `escalation_concerns_d208.test.ts`, seven of them one refusal loop;
+- retention **47**, unchanged;
+- zero `not ok`.
+
+All forty-three new tests were confirmed **by name** in the log, the seven
+refusal cases by their expanded names. Both typechecks, `lint:undef`,
+`check-api-drift` (no new method), `check-decision-ids` (D1 → **D208**),
+`check-folder-docs`, `check-sql-prepare`, `check-sqlite-columns`,
+`check-unused-imports`, `check-react-hook-imports`, `check-frontend-logging`
+and `check-dark-mode` all exit 0.
+
+`docs/` was rebuilt on the no-ledger path: the local retention ledger was
+moved aside first, so a stale one could not decide the window (#333).
+`check-docs-fresh --strict`, `prerender-og --check` (31 routes) and
+`check-docs-assets-closure` (9,212 references across 921 chunks) all exit 0.
+A walk of every asset `main`'s committed shells reach found **606 of 606**
+still on disk.
+
+**26 mutations applied, 26 caught.** The harness pre-flighted every anchor as
+unique before writing anything, counting a two-edit mutation's second anchor
+against the text its first edit leaves. It ran a clean baseline first, ran
+both suites for every mutation, and restored every file by sha256:
+
+- **the route**: the resolver dropped, so no label is stored; the client's
+  own label used; a typed `subject_ref` accepted on content; the label
+  settled *after* HQ is called, the whole block moved in two edits; D206's
+  kind gate disabled; `concerns` passed through on another kind; an
+  unreadable source answered 400 instead of 503;
+- **the service**: a second label format at resolve time; the slug giving
+  way instead of the title; the final 300 clip removed; `COLLATE NOCASE`
+  dropped; the cap read without its `+ 1`; an unreadable source reported as
+  `listed: 0`; a source failure rethrown; an unsafe article id accepted;
+  nothing readable still reading as available;
+- **the SPA and the reason**: the picker drawn for any kind;
+  `concernToSend` ignoring the kind; an unreadable list drawn as a control;
+  a second label format in the menu; an item with no label drawn; the pick
+  not cleared after a raise; the row's *About* line dropped;
+  `LocalisationRow` drawing an empty *About*; the Localised stat given a
+  value; *"localisation of another"* dropped from the route's reason.
+
+**No production read is owed**: nothing here adds a migration. The label
+rides `subject_ref`, which migrations 259 and 261 already declare on both
+escalation tables. **285 is still the next free migration, and D209 the next
+decision.**
