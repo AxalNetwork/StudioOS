@@ -103,7 +103,7 @@ import { readRecentSyncAttempts, readTicketSync } from '../services/supportQueue
 import {
   getPublishableKey, maskPublishableKey, publishableKeyMode, readCatalogMirrorSummary,
 } from '../services/catalog';
-import { promoState } from '../services/promos';
+import { promoState, readProductIds } from '../services/promos';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -509,13 +509,10 @@ r.get('/summary', async (c) => {
       const redeemed = countOf(row.times_redeemed, 'times redeemed');
       const state = promoState(row, redeemed, nowMs);
       counts[state] += 1;
-      let productCount: number | null;
-      try {
-        const ids = JSON.parse(String(row.product_ids_json ?? '[]'));
-        productCount = Array.isArray(ids) ? ids.length : null;
-      } catch {
-        productCount = null;
-      }
+      // null in the column is the migration default, an empty list: every product.
+      // A value that is not a JSON array of strings did not parse.
+      const products = readProductIds(row.product_ids_json ?? '[]');
+      const productCount = products.ok ? products.ids.length : null;
       return {
         code: String(row.code),
         state,

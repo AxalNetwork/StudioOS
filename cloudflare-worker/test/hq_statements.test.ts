@@ -521,3 +521,47 @@ test('the ceiling routes need the elevation too', async () => {
   const read = await call('/promo-ceilings', {}, PLAIN);
   assert.equal(read.status, 403);
 });
+
+/* ------------------------------------------------------------------ *
+ * D228 — the editor's route refuses a ceiling it cannot read          *
+ * ------------------------------------------------------------------ */
+
+test('D228 — a missing, fractional, negative or non-numeric ceiling is refused, never stored as 0', async () => {
+  const { call, db } = statementsApp();
+  for (const ceiling_cents of [undefined, null, '500', 'lots', -1, 12.5, Number.NaN]) {
+    const body: Record<string, unknown> = { period: '2026-Q3' };
+    if (ceiling_cents !== undefined) body.ceiling_cents = ceiling_cents;
+    const r = await call('/promo-ceilings/lic_fr', { method: 'PUT', body: JSON.stringify(body) });
+    assert.equal(r.status, 400, `ceiling ${String(ceiling_cents)} was accepted`);
+    assert.equal(r.body.error, 'bad_ceiling');
+  }
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM licence_promo_ceilings').get() as any).n, 0,
+    'a refused ceiling was written');
+});
+
+test('D228 — zero is a real ceiling and is stored as one', async () => {
+  const { call, db } = statementsApp();
+  const r = await call('/promo-ceilings/lic_fr', {
+    method: 'PUT', body: JSON.stringify({ period: '2026-Q3', ceiling_cents: 0 }),
+  });
+  assert.equal(r.status, 200);
+  const row = db.prepare('SELECT ceiling_cents FROM licence_promo_ceilings').get() as any;
+  assert.equal(row.ceiling_cents, 0);
+});
+
+test('D228 — a currency that is not three letters is refused', async () => {
+  const { call, db } = statementsApp();
+  for (const currency of ['E', 'EU1', '€€€']) {
+    const r = await call('/promo-ceilings/lic_fr', {
+      method: 'PUT', body: JSON.stringify({ period: '2026-Q3', ceiling_cents: 100, currency }),
+    });
+    assert.equal(r.status, 400, `currency ${currency} was accepted`);
+    assert.equal(r.body.error, 'bad_currency');
+  }
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM licence_promo_ceilings').get() as any).n, 0);
+  const ok = await call('/promo-ceilings/lic_fr', {
+    method: 'PUT', body: JSON.stringify({ period: '2026-Q3', ceiling_cents: 100, currency: 'usd' }),
+  });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.currency, 'USD');
+});

@@ -10,11 +10,17 @@ import { useEscapeClose } from '../components/useEscapeClose';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useAuth } from '../hooks/useAuthSync';
 import { Unrecorded } from '../ui';
+import { PromoProductScope } from './PromoProductScope';
 // D128 — the scope caption is fed from `/me.branch` through the same reader
 // the territory badge uses, so the two cannot disagree about which
 // deployment this is.
 import { branchOfUser } from '../lib/shellRole';
+// D223 — the elevation the secret-writing consoles gate on; its own line so
+// the `branchOfUser` import D128's test pins stays exactly as it was.
+import { isSuperAdminUser } from '../lib/shellRole';
+import { REFUND_REASON_MIN, refundReasonOk } from '../lib/refundReason';
 import TrustScoreBadge from '../components/TrustScoreBadge';
+import SecretWriteGate from '../components/SecretWriteGate';
 // Task #1 — embedded as a tab inside Admin Console so admins land on
 // the network roster via /admin?tab=network-profiles. The standalone
 // /admin/network-profiles route stays wired for direct deep-links.
@@ -3895,6 +3901,8 @@ function PaymentsPanel() {
 
   const [webhooks, setWebhooks] = useState(null);
   const [webhookBusy, setWebhookBusy] = useState(false);
+  // D223 — registering writes STRIPE_WEBHOOK_SECRET onto the production Worker.
+  const holdsSecretWrites = isSuperAdminUser(useAuth().user);
 
   const loadConfig = useCallback(async () => {
     try { setConfig(await api.adminStripeGetConfig()); } catch { /* unconfigured */ }
@@ -4431,13 +4439,15 @@ function PaymentsPanel() {
               {webhooks.endpoints?.length === 0 ? (
                 <div>
                   <p className="text-sm text-amber-600 dark:text-amber-400 mb-2">No webhook endpoints found in Stripe.</p>
-                  <button
-                    onClick={registerWebhook}
-                    disabled={webhookBusy}
-                    className="px-3 py-1.5 text-sm font-medium bg-violet-600 text-white rounded-md hover:bg-violet-700 disabled:opacity-50"
-                  >
-                    {webhookBusy ? 'Registering…' : 'Register Webhook'}
-                  </button>
+                  <SecretWriteGate holds={holdsSecretWrites} what="Registering a webhook" testid="stripe-webhook-holder-only">
+                    <button
+                      onClick={registerWebhook}
+                      disabled={webhookBusy}
+                      className="px-3 py-1.5 text-sm font-medium bg-violet-600 text-white rounded-md hover:bg-violet-700 disabled:opacity-50"
+                    >
+                      {webhookBusy ? 'Registering…' : 'Register Webhook'}
+                    </button>
+                  </SecretWriteGate>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -4480,18 +4490,20 @@ function PaymentsPanel() {
                       )}
                     </div>
                   ))}
-                  <div className="flex items-center gap-3 flex-wrap pt-1">
-                    <button
-                      onClick={registerWebhook}
-                      disabled={webhookBusy}
-                      className="px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
-                    >
-                      {webhookBusy ? 'Working…' : 'Register New Endpoint'}
-                    </button>
-                    <p className="text-[10px] text-gray-400 dark:text-gray-500">
-                      New registration automatically captures and stores the signing secret.
-                    </p>
-                  </div>
+                  <SecretWriteGate holds={holdsSecretWrites} what="Registering a new endpoint" testid="stripe-webhook-holder-only">
+                    <div className="flex items-center gap-3 flex-wrap pt-1">
+                      <button
+                        onClick={registerWebhook}
+                        disabled={webhookBusy}
+                        className="px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+                      >
+                        {webhookBusy ? 'Working…' : 'Register New Endpoint'}
+                      </button>
+                      <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                        New registration automatically captures and stores the signing secret.
+                      </p>
+                    </div>
+                  </SecretWriteGate>
                 </div>
               )}
             </div>
@@ -4512,7 +4524,7 @@ function BillingPanel() {
   const headerCls = 'px-4 py-3 border-b border-gray-200 flex items-center gap-2 flex-wrap dark:border-gray-800';
 
   // --- Refund state ---
-  const [refForm, setRefForm] = useState({ target: '', amount: '', reason: '', target_user_id: '', override: false });
+  const [refForm, setRefForm] = useState({ target: '', amount: '', reason: '', stripe_reason: '', target_user_id: '', override: false });
   const [refBusy, setRefBusy] = useState(false);
   const [refResult, setRefResult] = useState(null);
   const setRef = (k, v) => setRefForm((f) => ({ ...f, [k]: v }));
@@ -4522,13 +4534,15 @@ function BillingPanel() {
     if (refBusy) return;
     const target = refForm.target.trim();
     if (!target) { showToast({ kind: 'err', msg: 'Enter a PaymentIntent (pi_…) or Charge (ch_…) id' }); return; }
+    if (!refundReasonOk(refForm.reason)) { showToast({ kind: 'err', msg: `Write the reason for this refund (at least ${REFUND_REASON_MIN} characters)` }); return; }
     setRefBusy(true);
     setRefResult(null);
     try {
       const body = {};
       if (target.startsWith('ch_')) body.charge = target; else body.payment_intent = target;
       if (refForm.amount) body.amount = Math.round(Number(refForm.amount) * 100);
-      if (refForm.reason) body.reason = refForm.reason;
+      body.reason = refForm.reason.trim();
+      if (refForm.stripe_reason) body.stripe_reason = refForm.stripe_reason;
       if (refForm.target_user_id) body.target_user_id = Number(refForm.target_user_id);
       if (refForm.override) body.override_policy = true;
       const r = await api.adminBillingRefund(body);
@@ -4623,7 +4637,7 @@ function BillingPanel() {
         <div className={headerCls}>
           <RefreshCw size={16} className="text-gray-600" />
           <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Issue Refund</h3>
-          <span className="text-xs text-gray-500">Reverses the referral commission automatically</span>
+          <span className="text-xs text-gray-500">Reverses the referral commission automatically · HQ's super admin only, after a step-up</span>
         </div>
         <form onSubmit={issueRefund} className="p-4 grid gap-3 sm:grid-cols-2">
           <label className="text-xs text-gray-600 dark:text-gray-400 sm:col-span-2">
@@ -4634,9 +4648,16 @@ function BillingPanel() {
             Amount (leave blank for full)
             <input className={inputCls} type="number" step="0.01" min="0" placeholder="e.g. 49.00" value={refForm.amount} onChange={(e) => setRef('amount', e.target.value)} data-testid="refund-amount" />
           </label>
+          {/* D224 — the written reason is required, and the Stripe category is
+              separate from it: "duplicate" says what Stripe files the refund
+              under, not why HQ issued it. */}
+          <label className="text-xs text-gray-600 dark:text-gray-400 sm:col-span-2">
+            Reason (required, at least {REFUND_REASON_MIN} characters)
+            <textarea className={inputCls} rows={2} required minLength={REFUND_REASON_MIN} placeholder="Why this money goes back" value={refForm.reason} onChange={(e) => setRef('reason', e.target.value)} data-testid="refund-reason" />
+          </label>
           <label className="text-xs text-gray-600 dark:text-gray-400">
-            Reason
-            <select className={inputCls} value={refForm.reason} onChange={(e) => setRef('reason', e.target.value)}>
+            Stripe category (optional)
+            <select className={inputCls} value={refForm.stripe_reason} onChange={(e) => setRef('stripe_reason', e.target.value)}>
               <option value="">—</option>
               <option value="requested_by_customer">Requested by customer</option>
               <option value="duplicate">Duplicate</option>
@@ -5049,9 +5070,7 @@ function PromoCodesPanel() {
                     <td className="px-4 py-3 font-mono font-medium text-gray-900 dark:text-gray-100">{p.code}</td>
                     <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{discountLabel(p)}</td>
                     <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-400 max-w-[18rem]">
-                      {(!p.product_ids || p.product_ids.length === 0)
-                        ? <span className="text-gray-400">All products</span>
-                        : p.product_ids.map(productName).join(', ')}
+                      <PromoProductScope promo={p} productName={productName} />
                     </td>
                     <td className="px-4 py-3 text-center text-gray-700 dark:text-gray-300">{p.times_redeemed ?? 0}{limit}</td>
                     <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-400">
@@ -5303,6 +5322,9 @@ function GithubSyncPanel() {
   const [repo, setRepo] = useState('');
   const [revealedSecret, setRevealedSecret] = useState(null);
   const { toast, showToast } = useToast(3500);
+  // D223 — saving writes GITHUB_ACCESS_TOKEN (the branch-deploy dispatcher's
+  // token too) and its siblings onto the production Worker.
+  const holdsSecretWrites = isSuperAdminUser(useAuth().user);
 
   const refresh = async () => {
     setLoading(true);
@@ -5404,34 +5426,46 @@ function GithubSyncPanel() {
         </p>
 
         <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-          GitHub token {cfg?.has_token && <span className="text-emerald-600">· configured{cfg?.token_preview ? ` (${cfg.token_preview})` : ''}</span>}
+          {/* D223 — whether a token is set, and nothing else about it. */}
+          GitHub token {cfg?.has_token
+            ? <span className="text-emerald-600">· configured</span>
+            : <span className="text-gray-500 dark:text-gray-400">· not set</span>}
         </label>
-        <input
-          type="password"
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          autoComplete="off"
-          placeholder={cfg?.has_token ? 'Leave blank to keep the current token' : 'Fine-grained PAT with Issues read/write'}
-          className={`${inputClass} mb-1`}
-        />
-        <p className="text-[11px] text-gray-500 mb-3">Needs <strong>Issues: Read and write</strong> on the target repo. Stored encrypted; never shown again after saving.</p>
+        <SecretWriteGate holds={holdsSecretWrites} what="Changing the token or the repository" testid="github-sync-holder-only">
+          <input
+            type="password"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            autoComplete="off"
+            placeholder={cfg?.has_token ? 'Leave blank to keep the current token' : 'Fine-grained PAT with Issues read/write'}
+            className={`${inputClass} mb-1`}
+          />
+          <p className="text-[11px] text-gray-500 mb-3">Needs <strong>Issues: Read and write</strong> on the target repo. Stored encrypted; never shown again after saving.</p>
 
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Repo owner</label>
-            <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder={cfg?.default_repo_owner} className={inputClass} />
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Repo owner</label>
+              <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder={cfg?.default_repo_owner} className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Repo name</label>
+              <input value={repo} onChange={(e) => setRepo(e.target.value)} placeholder={cfg?.default_repo_name} className={inputClass} />
+            </div>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Repo name</label>
-            <input value={repo} onChange={(e) => setRepo(e.target.value)} placeholder={cfg?.default_repo_name} className={inputClass} />
-          </div>
-        </div>
+        </SecretWriteGate>
+        {!holdsSecretWrites && (
+          <p className="text-xs text-gray-600 dark:text-gray-400 my-3" data-testid="github-sync-repo-readonly">
+            Repository: <code className="text-[11px]">{cfg?.repo_owner}/{cfg?.repo_name}</code>
+          </p>
+        )}
 
         <div className="flex gap-2 flex-wrap">
-          <button onClick={onSave} disabled={saving}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 inline-flex items-center gap-1.5">
-            {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Save
-          </button>
+          {holdsSecretWrites && (
+            <button onClick={onSave} disabled={saving}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 inline-flex items-center gap-1.5">
+              {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Save
+            </button>
+          )}
           <button onClick={() => onTest(false)} disabled={testing || !cfg?.has_token}
             title={cfg?.has_token ? 'Reach the repo and read its issues — does NOT prove the token can create one' : 'Configure a token first'}
             className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 disabled:opacity-50 inline-flex items-center gap-1.5">
@@ -5489,12 +5523,14 @@ function GithubSyncPanel() {
             </button>
           </div>
         ) : (
-          <div className="flex gap-2 mb-2 flex-wrap">
-            <button onClick={onRotateSecret}
-              className="px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 inline-flex items-center gap-1.5">
-              <RefreshCw size={12} /> {cfg?.has_webhook_secret ? 'Rotate secret' : 'Generate secret'}
-            </button>
-          </div>
+          <SecretWriteGate holds={holdsSecretWrites} what={cfg?.has_webhook_secret ? 'Rotating the webhook secret' : 'Generating a webhook secret'} testid="github-webhook-holder-only">
+            <div className="flex gap-2 mb-2 flex-wrap">
+              <button onClick={onRotateSecret}
+                className="px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 inline-flex items-center gap-1.5">
+                <RefreshCw size={12} /> {cfg?.has_webhook_secret ? 'Rotate secret' : 'Generate secret'}
+              </button>
+            </div>
+          </SecretWriteGate>
         )}
         <p className="text-[11px] text-amber-700 dark:text-amber-300">
           The secret is shown only once — when generated or rotated. Copy it into GitHub immediately; if you lose it, rotate to get a new one (and update GitHub to match).
@@ -5510,6 +5546,8 @@ function IntegrationKeysPanel() {
   const [editing, setEditing] = useState(null);
   const [testing, setTesting] = useState(null); // Task #3 — provider_key currently being tested
   const { toast, showToast } = useToast(3500);
+  // D223 — save, rotate and remove each write Worker secrets on production.
+  const holdsSecretWrites = isSuperAdminUser(useAuth().user);
 
   // Task #3 — Dry-run probe of provider OAuth credentials.
   const onTest = async (provider) => {
@@ -5580,6 +5618,12 @@ function IntegrationKeysPanel() {
         </div>
       </div>
 
+      {!holdsSecretWrites && (
+        <div className="mb-5">
+          <SecretWriteGate holds={false} what="Saving, rotating or removing a provider's keys" testid="integration-keys-holder-only" />
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center gap-2 text-gray-500 text-sm py-8 justify-center">
           <Loader2 size={16} className="animate-spin" /> Loading providers…
@@ -5626,13 +5670,15 @@ function IntegrationKeysPanel() {
                   <div className="text-xs text-gray-600 dark:text-gray-400 mb-3">{PROVIDER_HINTS[row.provider_key]}</div>
                 )}
                 <div className="flex gap-2 flex-wrap">
-                  <button
-                    onClick={() => setEditing({ provider: row.provider_key, mode: row.source === 'db' ? 'rotate' : 'configure' })}
-                    disabled={row.source === 'env'}
-                    title={row.source === 'env' ? 'Configured via env var — edit the worker secret instead' : ''}
-                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
-                    {row.source === 'db' ? 'Rotate keys' : 'Configure'}
-                  </button>
+                  {holdsSecretWrites && (
+                    <button
+                      onClick={() => setEditing({ provider: row.provider_key, mode: row.source === 'db' ? 'rotate' : 'configure' })}
+                      disabled={row.source === 'env'}
+                      title={row.source === 'env' ? 'Configured via env var — edit the worker secret instead' : ''}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
+                      {row.source === 'db' ? 'Rotate keys' : 'Configure'}
+                    </button>
+                  )}
                   {/* Task #3 — Test button: dry-runs a provider auth call. */}
                   <button
                     onClick={() => onTest(row.provider_key)}
@@ -5642,7 +5688,7 @@ function IntegrationKeysPanel() {
                     {testing === row.provider_key ? <Loader2 size={12} className="animate-spin" /> : null}
                     Test
                   </button>
-                  {row.source === 'db' && (
+                  {holdsSecretWrites && row.source === 'db' && (
                     <button
                       onClick={() => onDelete(row.provider_key)}
                       className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-gray-700 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 inline-flex items-center gap-1.5">

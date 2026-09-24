@@ -22431,3 +22431,551 @@ A row that existed only in `cf_dlq_mirror` was counted on Platform and missing o
 - `npm run test:drift` exits 1. Frontend: **3088** tests, **3088** pass, including `ok 903` through `ok 906`. Worker: **4015** tests, **4011** pass, **1** fail, **3** skipped. The new worker tests are `ok 1485` through `ok 1488`. The only `not ok` is `capital_call_ledger.test.ts:204`, "a retry after a partial write fills only the gap": expected 1, actual 0. That file is not in this change. The same assertion failed on the D219 run. npm stops there, so the later drift steps were run on their own and exited 0.
 
 **285 is still the next free migration.**
+
+## D222
+
+**A promo code whose product list cannot be read does not apply to every product.**
+
+`parseProductIds` turned bad JSON, a non-array, and a mixed array into `[]`, and checkout treats `[]` as every product (migration 099). `'{}'` and `'[123]'` both became allow-all. Creating a code did the same: a non-array `product_ids` was stored as `[]`, and non-string entries were dropped, including in Stripe's `applies_to`. Platform counted `'[123]'` as one product while checkout treated it as every product. The admin list rendered a missing or empty list as "All products".
+
+This is latent. The SPA always sends an array of strings, so it needs a direct API call or a hand-written row. It is not a live incident.
+
+**What shipped.** `readProductIds` in `services/promos.ts` is the one rule: a JSON array of strings is readable, and `[]` still means every product. Anything else is not. `validatePromoForProduct` refuses that state with `product_list_unreadable` before the redemption count, so no Stripe call is made. `rowToView` returns `product_ids: []` and `product_ids_readable: false`. The admin list renders Unreadable for that state. Platform uses the same rule, so `'[123]'` is `product_count: null`. A null column is still read as `'[]'`. Creating a code with `product_ids` present but malformed answers 400 `invalid_product_ids`. An absent `product_ids` still means every product. The three shopper maps name the new reason, and CheckoutPage also names `currency_mismatch`, which it had been missing. A frontend guard reads `PromoRejectReason` and fails if any map omits a reason.
+
+**No migration. No new `/api/*` method.**
+
+### VERIFIED
+
+- Node is **v22.14.0**. `npm run test:worker` on this tree before the promo change: **4052** tests, **4048** pass, **1** fail, **3** skipped. The only failure is `capital_call_ledger.test.ts:204`, expected 1, actual 0 ("the LP whose row already existed was told again"). CI's full drift passed on Node 22 for D219 and for D220's head `71313ec97`. The same assertion still fails on this 22.14.0. Not folded in.
+- `cloudflare-worker/test/promo_product_list_d222.test.ts`: **6** tests, exit 0. In the drift log they are `ok 3125` through `ok 3130`.
+- `frontend/test/promo_product_list_d222.test.mjs`: **3** tests, exit 0 (`ok 2281` through `ok 2283`).
+- Three mutations, restored from saved copies. `readProductIds` dropping non-strings: exit 1 (`not ok` 1, 2, 4, 5, 6). An unreadable list treated as `[]`: exit 1 (`not ok` 2). CheckoutPage's `product_list_unreadable` sentence removed: exit 1 (`not ok` 1).
+- `npm run test:drift` exits 1. Frontend **3126** pass, **0** fail. Worker **4058** tests, **4054** pass, **1** fail, **3** skipped. The only `not ok` is the capital-call assertion above. The drift steps after the worker suite, run on their own, exit 0. `tsc`, `check-docs-fresh --strict`, asset closure, and `prerender-og --check` exit 0. `check-decision-ids` reports 221 decisions, D1 through D222.
+
+## D223
+
+**The three consoles that write Worker secrets now take the holder's bar.
+Integration keys, GitHub Sync and the Stripe webhook registration each write
+onto production's own `studioos` script, and each was `requireAdmin`. Every
+secret write is now `requireSuperAdminWriteBar`, audited once through
+`logAdminAction`. `GET /api/admin/github` no longer carries `token_preview`.**
+
+This is the class D133 and D165 closed: a write that changes a credential,
+open to anyone who can read the screen. **No migration**, so **285 is still
+free**. **No new route and no `api.js` method.**
+
+### THE DEFECT
+
+`setSecret` has three callers, and with `deleteSecret` there were six handlers
+that write or delete a Worker secret. All six were behind plain `requireAdmin`:
+
+| Route | Writes |
+| --- | --- |
+| `PUT /api/admin/integration-keys/:provider` | a provider's OAuth client id and secret |
+| `POST /api/admin/integration-keys/:provider/rotate` | the client secret |
+| `DELETE /api/admin/integration-keys/:provider` | deletes both |
+| `PUT /api/admin/github` | `GITHUB_ACCESS_TOKEN`, the repo owner and name, `GITHUB_WEBHOOK_SECRET` |
+| `DELETE /api/admin/github` | deletes all four |
+| `POST /api/admin/stripe/webhook` (`register`) | `STRIPE_WEBHOOK_SECRET`, and a live endpoint on the Stripe account |
+
+Every admin could run them, branch admins included, since they all live on
+HQ's database today. `GITHUB_ACCESS_TOKEN` is also the token that dispatches a
+branch deploy, and that dispatch (`POST /api/admin/licences/:uid/deploy`) is
+itself `requireSuperAdminWriteBar`. So the gated act ran on a credential any
+admin could replace.
+
+Separately, `GET /api/admin/github` returned `token_preview`, which was
+`maskClientId(GITHUB_ACCESS_TOKEN)`: eight characters of a whole credential,
+shown to any admin. That mask was written for OAuth client ids, which are the
+public half of a pair. A token has no public half.
+
+### WHAT CHANGED
+
+- **All six handlers open with `requireSuperAdminWriteBar`**: a TOTP-minted
+  session, a step-up within its window, then the elevation. It is the bar
+  D134, D135 and D168 use. On a branch, `hydrateSuperAdmin` answers 0, so a
+  branch refuses even a holder's token. The Stripe route parses the action
+  first and gates `register` before its "Stripe is not configured" check, so a
+  plain admin is refused for who they are.
+- **Each write is audited once through `logAdminAction` (D159).** That gives one
+  `activity_logs` row and one `admin_audit_log` row per request, naming secrets
+  and never values. It replaced two hand-written INSERT pairs in
+  `admin_integration_keys.ts` (which wrote the same act under two different
+  action names) and one in `admin_stripe.ts`. GitHub Sync wrote no audit at
+  all. It now writes `github_sync_secrets_set` and `github_sync_secrets_delete`,
+  and a push that fails part-way records which secrets had already landed.
+  - The integration-keys rows keep their action names and their `provider` /
+    `outcome` keys, which is what D213's "last set" read matches.
+  - The rotate's database fallback now writes one row for the request, not a
+    refusal followed by a success.
+  - The `report_type` values the old INSERTs set (`integration_keys`,
+    `billing`) were read by nothing.
+- **`token_preview` is gone.** `has_token` is the whole answer. D213's Platform
+  payload test already refuses the name, and the new route test refuses any
+  eight-character window of the token.
+- **GitHub `DELETE` says when nothing was deleted.** A missing Cloudflare API
+  token used to skip every delete and answer `{ ok: true }`. The response now
+  carries `cf_token_missing`, and the audit row records `outcome: 'failed'`.
+
+### WHICH READS STAY `requireAdmin`, AND WHY
+
+- **`GET /integration-keys`**: where each key lives, the client-id preview
+  (the public half) and a count of connected users. No secret leaves.
+- **`POST /integration-keys/:provider/test` and `POST /github/test`**: these
+  exercise the configured credential and change no secret. GitHub's write
+  probe opens one fixed-text issue and closes it. An admin triaging a broken
+  connection needs both. The integration-keys test is now also recorded
+  through `logAdminAction`, because a probe with production's credentials is a
+  privileged act.
+- **`GET /github`**: booleans, the repository it names, and the webhook URL.
+- **Stripe `GET /webhook`, `GET /config`, `POST /webhook` `update` and
+  `PUT /config`.** `update` adds the route's own fixed event set to an existing
+  endpoint and writes no secret; it is the repair the drift list points at.
+  The publishable key is printed on every checkout page and is not a secret.
+  Whether a wrong publishable key deserves a stronger gate is a separate
+  question, and this entry does not answer it.
+
+### THE PAGE
+
+`components/SecretWriteGate.jsx` draws its children for the holder. For anyone
+else it draws, in the same place, what the control would do and who can do it:
+"…writes a secret onto the production Worker, so only the Super Admin can do
+it, after a fresh TOTP step-up." It is used on:
+
+- **Integration keys:** Configure, Rotate and Remove.
+- **GitHub Sync:** the token and repository fields, Save, and the webhook
+  secret's Generate or Rotate button. A non-holder reads the repository as
+  text instead.
+- **Payments:** Register Webhook and Register New Endpoint. The events repair
+  stays, because the server keeps it open.
+
+This follows D134's `still_an_admin` rule: never draw a control that can only
+refuse. The probes stay for everyone. A holder whose step-up has lapsed meets
+the existing StepUp modal, because `api.js` already turns a 403
+`step_up_required` into it.
+
+### VERIFIED
+
+- **`npm run test:drift` exits 0** on Node 22 (`EXIT=0` read from the redirected
+  log): frontend **3130**, worker **4073** pass with the same **3**
+  environment-gated skips, retention **48**, zero `not ok`. D220 recorded 3088
+  and 4011. `docs/` was rebuilt with the root `npm run build` (retention ledger
+  moved aside), and `check-docs-fresh --strict` exits 0.
+- `frontend/test/admin_user_search_d128.test.mjs` pins the exact line
+  `import { branchOfUser } from '../lib/shellRole'`. `isSuperAdminUser` is
+  imported on its own line so that pin stays as it was; the assertion is not
+  re-aimed.
+- `cloudflare-worker/test/secret_consoles_d223.test.ts` drives each of the six
+  writes through the real router, over a real sqlite database cut from the
+  baseline. `fetch` is stubbed and every outbound call is counted. For each
+  write:
+  - a plain admin gets 403 `Super admin required`;
+  - the holder with a two-day-old TOTP session gets 403 `step_up_required`;
+  - in both of those cases nothing reaches Cloudflare or Stripe, and no audit
+    row lands;
+  - the holder with a fresh session writes, with exactly one `admin_audit_log`
+    row and one `activity_logs` row under the named action, and no secret value
+    in either.
+
+  The same file checks once each that:
+  - a branch refuses the holder;
+  - the reads stay open;
+  - the GitHub read carries no preview;
+  - the Stripe events update stays open;
+  - every `setSecret` or `deleteSecret` handler opens with the bar;
+  - none of the three routes writes an audit row by hand.
+- **Mutation checks, each gate on its own.** Reverting any one of the six gates
+  to `requireAdmin` fails that route's two refusal tests by name, plus the
+  source check. Restoring from the saved copy passes. Putting `token_preview`
+  back fails the preview test. A second audit write on a save fails the
+  exactly-once test.
+- `frontend/test/secret_consoles_d223.test.mjs` renders both halves of the gate
+  and checks that every secret-writing control in the three panels sits behind
+  it, while the probes and the events repair do not. Each of these fails a
+  named test:
+  - removing a guard from Save, Configure or Remove;
+  - forcing the gate open on the Stripe register or the webhook secret;
+  - making the gate always draw its children;
+  - reading `token_preview` again.
+
+**285 is still the next free migration.**
+
+## D224
+
+**H21 on HQ · Revenue: billing exceptions, the refund as HQ's governed action,
+and an LTV that says it is not recorded. `POST /api/admin/billing/refund` asked
+for a TOTP session, a fresh step-up and `requireAdmin`, so every admin could
+refund any charge on HQ's Stripe account. That is the D133 class: a power that
+belongs to the one holder, reachable by every admin. It now asks for
+`requireSuperAdminWriteBar` and a written reason, and writes its audit through
+`logAdminAction`.**
+
+**No migration**, so 286 is not used. One new route, `GET
+/api/admin/billing/refunds`, and its `api.js` method `adminBillingRefunds`,
+land in the same commit.
+
+### THE REFUND
+
+- **Gate: `requireSuperAdminWriteBar`.** It keeps the two checks the route
+  already had (a TOTP-minted session, a step-up inside its window) and adds the
+  elevation last, in the order `POST /impersonate` checks them. A plain admin
+  gets 403 `Super admin required`. On a branch it is 403 `HQ only`, because the
+  Stripe account this route drives is HQ's.
+- **The reason is required text, at least `REFUND_REASON_MIN` (12)
+  characters.** It is checked before the product-policy read and before Stripe
+  is called, so a refused request moves nothing and writes nothing. A bare
+  Stripe category is not a reason: "duplicate" is nine characters and is
+  refused. The canvas says why: "customer request" explains nothing to the
+  auditor reading it a year later. Stripe's own closed-enum `reason` now
+  arrives as `stripe_reason`. The old shape, an enum value sent as `reason`,
+  still reaches Stripe when it is also long enough, so no caller breaks. The
+  written reason always goes to Stripe metadata (`admin_reason`).
+- **Audit through `logAdminAction` (D159).** The route used to insert its own
+  `admin_audit_log` row with `report_type = 'billing'`. Nothing reads that
+  column for this action. It now makes one `logAdminAction` call, which writes
+  one `admin_audit_log` row (the target account on `viewed_user_id`) and one
+  hashed-actor `activity_logs` row. Both writes are best-effort, because the
+  money has already moved.
+- **Unchanged:** the product refund policy and its override, the idempotency
+  key, the referral-commission clawback, and the recovery cool-off in
+  `index.ts`.
+- **Both refund forms require the reason:** the new one on Revenue and the
+  Billing tab's. The Billing tab's reason `<select>` of Stripe categories
+  becomes a required text field, with the category beside it as an optional
+  `stripe_reason`. `frontend/src/lib/refundReason.js` holds the SPA's copy of
+  the floor, and a test pins it to the worker's.
+
+### THE BLOCK ON REVENUE
+
+`BillingExceptions`, between Statements and Promotions. It has two
+independent reads, and one failing does not blank the other:
+
+- **Refunds (30d)** come from the new `GET /api/admin/billing/refunds` (super
+  admin). It reads the `billing_refund` audit rows from the last 30 days
+  (compared through `datetime()`), per currency, in integer cents, never summed
+  across currencies. A row whose amount or currency cannot be read is counted in
+  `unreadable_rows` and kept out of every total. A failed read answers
+  `available: false` with its reason and carries no count. The payload says
+  what it is not: a refund made in the Stripe dashboard never passes through
+  this route and is not listed.
+- **Disputes open** come from the existing `GET /api/admin/billing/disputes`
+  (Stripe). Open means Stripe has not closed it (not `won`, not `lost`).
+  Overdue means `due_by` has passed with no evidence on file.
+- **LTV** and **token margin per branch** render Not recorded with the canvas's
+  own reasons: "no store reconciles revenue to account lifetime" and "gateway
+  cost is an estimate, not a ledger". No margin is derived from
+  `ai_usage_logs.est_cost_usd`. It is a cost with no price beside it, and this
+  screen has refused that figure three times (D111, D149, D213). The per-user
+  `/api/admin/billing/ltv` lookup on the Billing tab is unchanged. It totals one
+  customer's Stripe charges and is not the lifetime value the canvas draws.
+- **The branch column** is Not recorded on every row, because no charge names
+  the licence it was earned under (U1).
+- Each block has its own loading, empty and unreadable state. An empty block
+  says nothing was refunded and nothing is disputed. A failed block says "This
+  is not a claim that none were issued".
+
+### THE BILLING TAB STAYS
+
+H21's changelog says it "retires /admin Billing". It does not retire here.
+Dispute evidence and the policy override are filed there, and nothing
+retires. Revenue links to `/admin?tab=billing`, and the tab says a refund is
+HQ's super admin's, after a step-up.
+
+### WHAT IS LEFT, FOR A DECISION
+
+- **Dispute reads and dispute evidence** still use `requireAdmin`.
+  `/disputes` and `/disputes/:id` read HQ's Stripe account, and `POST
+  /disputes/:id/evidence` writes to it. They are the same class as the refund,
+  and this PR does not decide them.
+- **A branch's own refunds.** `requireSuperAdminWriteBar` refuses on every
+  branch. If a branch deployment ever bills through its own Stripe account, its
+  refund gate is a separate decision.
+
+### HOW IT IS HELD
+
+- `cloudflare-worker/test/billing_refund_governed_d224.test.ts` (new, 8 tests):
+  - The holder refunds and exactly one `admin_audit_log` row and one
+    `activity_logs` row are written.
+  - A plain admin with TOTP and a fresh step-up is refused, and Stripe is never
+    called.
+  - The holder with a stale step-up is refused.
+  - On a branch the refusal is "HQ only".
+  - A missing, blank, enum-only or 11-character reason is refused before
+    Stripe, and exactly 12 characters is accepted.
+  - `stripe_reason` reaches Stripe, and the written reason stays in metadata.
+  - The refunds read is gated, windowed and per currency, and keeps the
+    unreadable row out of the totals.
+  - An empty ledger is an empty list, and a failed read carries no count.
+- `frontend/test/revenue_billing_exceptions_d224.test.mjs` (new, 12 tests)
+  renders `BillingExceptions` readable, empty, loading, refunds-unreadable and
+  disputes-unreadable. It holds the LTV and margin tiles to the canvas's
+  reasons in every state, pins the reason floor across the worker and the SPA,
+  and checks that the Billing tab is still mounted and linked from Revenue.
+
+Every new assertion was mutation-checked both ways: the code was broken, a
+named test failed, the code was restored from a saved copy, and the test
+passed. That covers 8 mutations on the route (gate, step-up, reason, a double
+audit, the unreadable row, the read's gate, the window, a failed read shown as
+empty) and 8 on the page.
+
+## D225
+
+**A failed roster read is not an empty roster.** `loadNetworkProfiles`
+(`cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts`) fed the Demo
+Day deck's Team & Network slide. It first ran
+`ensureNetworkProfilesSchema` on every read — turning "no table" into
+"empty table" in development/preview — and then swallowed any other error
+behind a bare `catch { return [] }`. So an unreadable `network_profiles`
+table drew the same "no advisors" state as a genuinely empty roster, on a
+deck founders show investors, with no way to tell the two apart.
+
+**What shipped.** `loadNetworkProfiles` now answers
+`{ rows, available, reason }` — the same shape `services/supportQueues.ts`
+and `services/operatorSwitches.ts` already use for "a store that could not
+be read reports itself instead of reading as empty." It no longer calls
+`ensureNetworkProfilesSchema`: that stays a write-path bootstrap only
+(`routes/admin_network_profiles.ts` and `routes/network_public.ts` already
+call it on their own paths), so a read never silently creates the table it
+failed to read. `fillAxalSpinoutDemoDay`'s `mentor_network.body` now says
+*"Network roster unreadable: \<reason\>"* instead of falling through to the
+zero-roster copy; every other reader of the roster (`profiles`,
+`skill_coverage`, `network`, `mentors`) is unchanged — they already treated
+`[]` correctly, and `rows` is `[]` in both the empty and the unreadable
+case, so only the body copy tells them apart.
+
+**Left alone.** `DECK_ROSTER_PROFILES` / `DECK_ROSTER_NAMES`
+(`deckRoster.ts`) and every other deck section. `network_public.ts`'s own
+`ensureNetworkProfilesSchema` call, which is a write-adjacent public route,
+not this read path.
+
+**No migration.** No `/api/*` method and no `frontend/src` change, so
+`check-api-drift` has nothing to say and `docs/` is not rebuilt.
+
+### VERIFIED
+
+- `cloudflare-worker/test/network_roster_read_d225.test.ts`: **5** tests
+  against real `node:sqlite` (schema from `schema_baseline.sql`, not a
+  hand-written fixture) plus one fake-env pipeline test, exit 0. Table
+  present: rows in display order, `available: true`, no `reason`. Table
+  present but empty: `available: true`, `rows: []` — the empty case, not
+  the unreadable one. Table dropped: `available: false`, `rows: []`, a
+  reason naming the table. A dropped table stays dropped across the read —
+  no `CREATE TABLE` is ever prepared or exec'd by `loadNetworkProfiles`, and
+  the table is still missing afterward. The full `fillAxalSpinoutDemoDay`
+  pipeline, given an env that throws "no such table" on `network_profiles`,
+  produces `mentor_network.body` naming the roster unreadable, not the
+  empty-roster copy.
+- `cloudflare-worker/test/content_studio_d214.test.ts`'s two direct callers
+  of `loadNetworkProfiles` were updated to the new `{ rows }` shape and
+  still pass (32/32); `content_studio_d214.test.ts`'s own roster reader in
+  `admin_content.ts` is a separate SELECT with its own `available`/`reason`
+  handling and needed no change.
+- `cd cloudflare-worker && npx --no-install tsc --noEmit` exits 0.
+- Two mutations, each restored byte-identical from a saved copy: (1)
+  reinstating the `ensureNetworkProfilesSchema` call and swallowing the
+  error back into `{ rows: [], available: true }` — caught by two of the
+  five new tests failing. Restored, all five pass again.
+
+**285 is still the next free migration.**
+
+## D228
+
+**A screen sets a promo ceiling now. `api.promoCeilingSet` and its route, `PUT
+/api/admin/promo-ceilings/:uid` (D111), existed with no caller, so a ceiling
+could only be set by a hand-written request. Revenue now has the editor, on the
+route's existing gate (super admin) and audit (the `promo_ceiling_pushed`
+branch-action mirror row). The route now refuses a ceiling it cannot read
+instead of storing 0. The editor states that nothing at checkout enforces a
+ceiling.**
+
+**No migration.** No new route and no new `api.js` method: `promoCeilingSet`,
+`promoCeilings` and `licences` already existed, so `check-api-drift` has nothing
+new to match.
+
+### THE EDITOR
+
+`CeilingEditor` sits in Revenue's Promotions zone, under the ceilings list.
+
+- **Fields.** A licence, picked from `GET /api/admin/licences` (a non-active
+  licence is labelled with its status). A period, defaulting to the ceilings
+  payload's `current_period`. A currency, defaulting to the licence's own. An
+  amount.
+- **What it sends.** `ceilingPayload` turns the form into integer minor units
+  (`Math.round(amount × 100)`, so 19.99 is 1999 and not 1998.99…). A blank,
+  negative or unreadable amount is refused before any call. It is never sent as
+  0, because 0 is a real ceiling: "no promotions this period". A period that is
+  not `YYYY-Qn` is refused, and so is a currency that is not three letters.
+- **The result is two facts.** Whether the ceiling was saved, and whether the
+  push reached the branch: "Not pushed", with the route's own reason. After a
+  save the ceilings list is read again.
+- **Its own states for the licence list.** While loading it says so. If the
+  read fails, it shows Unreadable and draws no form. If there are no licences,
+  it says there is nothing to set a ceiling for.
+
+### THE ROUTE REFUSES WHAT IT CANNOT READ
+
+`ceiling_cents` went through `cents()`, which clamps and coerces. A missing,
+fractional or mistyped figure was stored as a ceiling of 0 (the branch told it
+may issue nothing) and the route answered 200. It now takes only a whole number
+of minor units, 0 or more, and otherwise returns 400 `bad_ceiling`. A currency
+that is not three letters returns 400 `bad_currency`. `cents()` still serves the
+statement fields it was written for.
+
+### NOT ENFORCED AT CHECKOUT, AND SAID SO
+
+Nothing at checkout compares a promo code against its branch's ceiling. The
+editor says: "Setting a ceiling records it at HQ and pushes it to the branch.
+Nothing at checkout checks a code against it yet: a branch can issue past its
+ceiling and no payment is refused because of it." Whether checkout should
+enforce it is a **decision for the owner**, not built here.
+`services/promos.ts` and the checkout reason maps are Session 6's, and neither
+is touched.
+
+### THE SENTENCE THAT STOPPED BEING TRUE
+
+`PlatformPage.jsx` said "Ceilings are listed on Revenue; no screen sets one
+yet." It now says "Ceilings are set and listed on Revenue; checkout does not
+check codes against them yet." A grep found no other live copy. The phrase in
+D213's own entry is a dated record and is left as it was.
+
+### HOW IT IS HELD
+
+- `cloudflare-worker/test/hq_statements.test.ts` gains 3 tests:
+  - A missing, null, string, non-numeric, negative, fractional or NaN ceiling
+    is refused, and nothing is written.
+  - 0 is stored as 0.
+  - A bad currency is refused, and a lowercase one is upper-cased.
+- `frontend/test/revenue_ceiling_editor_d228.test.mjs` (new, 8 tests) covers:
+  - The payload, including amounts whose float product is not an integer.
+  - Blank and negative amounts refused.
+  - The enforcement sentence in every state.
+  - The licence list loading, empty, unreadable and readable.
+  - The page's wiring, including the re-read after a save.
+  - Saved and pushed reported apart.
+  - The Platform sentence.
+
+**Mutation checks**, each run both ways (break the code, a named test fails,
+restore from a saved copy, it passes):
+
+- **Route (3):** the ceiling check, zero refused, and the currency check each
+  failed a named test. A fourth change, `cents(rawCeiling)`, is equivalent on a
+  value already validated as a non-negative integer, so it changes nothing to
+  catch.
+- **Page (6):** a blank sent as 0, the enforcement sentence dropped, a failed
+  licence read that still draws the form, no re-read after a save, and saved
+  and pushed merged into one fact each failed a named test. The sixth, dropping
+  `Math.round`, first survived because 0.1 × 100 is exact. The test was
+  tightened with 0.29 and 19.99, and it now fails.
+
+## D229
+
+**`network_profiles.kind` was validated two different ways.** POST
+(`routes/admin_network_profiles.ts`) silently rewrote an unrecognized kind
+to `'mentor'` — `sanitizeKind(body.kind) || 'mentor'` — while PUT refused
+the identical input with 400 `invalid_kind`. A client typo or a retired
+value sent to POST read back as if the operator had deliberately chosen
+`'mentor'`: a silently rewritten field reading as stored. Two more spots
+still named the retired role: `NETWORK_KINDS`
+(`services/networkProfilesSchema.ts`) listed `'mentor'` as if it were
+current, although the role was renamed `advisor`, and `loadNetworkProfiles`
+(`services/decks/axalSpinoutDemoDay.ts`, D225) defaulted a missing kind to
+`'mentor'` too.
+
+**What shipped.** POST now matches PUT: an explicitly-given, unrecognized
+kind is refused with 400 `invalid_kind`, the same as PUT, and a blank
+string is treated as an omission rather than a client error. A genuinely
+omitted kind gets `NETWORK_KIND_DEFAULT` — a new export, `'advisor'` — not
+`'mentor'`. `loadNetworkProfiles`'s own defensive fallback (the DB column is
+`NOT NULL DEFAULT 'mentor'`, so this rarely fires) changed the same way.
+
+`'mentor'` is **not removed** from `NETWORK_KINDS` and PUT still accepts it:
+existing rows carry it, and refusing to save an unrelated field on a
+legacy row (the admin form always resends the full `kind` on every save)
+would be a regression for no gain. Instead `displayNetworkKind` (also new,
+`networkProfilesSchema.ts`) maps `'mentor'` to `'advisor'` for read-only
+display and is applied where the deck labels a roster row: each profile
+card's `kind` and the network-breakdown bucket count
+(`services/decks/axalSpinoutDemoDay.ts`). It is deliberately **not** applied
+to `admin_network_profiles.ts`'s own LIST/GET response, which stays the raw
+stored value — running a row's kind through the alias before it round-trips
+into the admin edit form would convert a legacy `'mentor'` row to
+`'advisor'` on the next unrelated save, the same silent-rewrite failure
+this fixes on POST. **No migration**: nothing rewrites a stored `'mentor'`
+row; converting them, if ever wanted, is the owner's call.
+
+### VERIFIED
+
+- `cloudflare-worker/test/admin_network_profiles_d229.test.ts`: **7** tests
+  against the real Hono route and real `node:sqlite`, plus `displayNetworkKind`
+  and a `fillAxalSpinoutDemoDay` pipeline check, exit 0. An explicitly
+  unrecognized POST kind is refused and inserts no row. An omitted kind
+  stores `'advisor'`. An explicit valid kind stores as given. A
+  blank-string kind is treated as an omission. PUT's existing refusal is
+  unchanged, held as the reference. `displayNetworkKind('mentor')` is
+  `'advisor'`; every other known kind reads as itself. A legacy `'mentor'`
+  row read through the full deck pipeline shows `kind: 'advisor'` on its
+  profile card and buckets under `Advisors`, not `Mentors`, in the network
+  breakdown.
+- Two mutations, each restored byte-identical from a saved copy: reverting
+  POST to `sanitizeKind(body.kind) || 'mentor'` fails 3 of the 7 tests;
+  reverting the deck's two `displayNetworkKind` call sites to the raw
+  `np.kind` fails the pipeline test. Both restored, all 7 pass again.
+- `cd cloudflare-worker && npx --no-install tsc --noEmit` exits 0.
+- `node scripts/check-decision-ids.mjs` exits 0 (D1 through D229).
+
+**285 is still the next free migration.**
+
+## D233
+
+**A timed-out write told the user "Nothing was changed" — a guess dressed
+as a fact.** `timeoutError(path, ms)` (`frontend/src/lib/api.js`) built one
+message for every request that hit the client deadline: *"The server did
+not respond within Ns. Nothing was changed."* A GET or HEAD that times out
+really did change nothing — there was nothing to change — but a write
+(POST/PUT/PATCH/DELETE) may have committed on the server and simply
+answered late; the client cannot tell from an aborted `fetch`. Saying
+"nothing changed" there invited exactly the retry that duplicates the
+write.
+
+**What shipped.** `timeoutError` takes a third argument, `method`. GET and
+HEAD (the default, when no method is given) keep the sentence unchanged. A
+write instead gets *"Whether this was saved is not known. Reload before
+trying again."* — the model is `HqSupportPage.jsx`'s `decisionError()`,
+which already says a failure with no status is "not known" rather than a
+refusal, and already ignored `timeoutError`'s "Nothing was changed"
+regardless of wording (its own docblock says as much). The one call site
+(`request()`'s catch block) passes `options.method` through. The three
+shape rules protecting existing consumers — `name` is not `AbortError`,
+the message never matches a chunk-load phrase, `code`/`status` stay
+machine-readable — hold for both wordings.
+
+**Grepped, not touched.** Three forms fall back to their own
+"…Nothing was changed." sentence only when `err?.message` is falsy
+(`AdvisorCohortAssignments.jsx`, `ProfileZone.jsx`, `SessionsZone.jsx`):
+none of them matches or depends on `timeoutError`'s string, so none needed
+a change. `HqSupportPage.jsx`'s `decisionError()` overrides the message
+entirely by status, also independent of the wording — confirmed by
+`hq_support_answer_d205.test.mjs`, which builds its own synthetic timeout
+error rather than importing `timeoutError` and still passes unchanged.
+
+**No migration. No new route or `api.js` method** — `timeoutError`'s
+signature gained a parameter, not a new export.
+
+### VERIFIED
+
+- `frontend/test/api_request_timeout.test.mjs`: **12** tests, exit 0 (was
+  9; three added, none loosened). The pre-existing "cannot be mistaken"
+  test now runs for a read and a write method, unchanged otherwise. New:
+  `timeoutError` keeps "Nothing was changed." for `undefined`/`GET`/`get`/
+  `HEAD`/`head` and never says it for `POST`/`post`/`PUT`/`PATCH`/`DELETE`,
+  which instead say the outcome is not known and to reload. A hung
+  `request('/tickets', { method: 'POST' })` rejects with the write wording,
+  driven through the real deadline/abort path, not a direct call to
+  `timeoutError`.
+- One mutation, restored byte-identical from a saved copy: reverting
+  `timeoutError` to the single old message fails 2 of the 12 tests.
+  Restored, all 12 pass again.
+- `npx --no-install tsc --noEmit -p frontend/tsconfig.json` exits 0.
+- `node scripts/check-decision-ids.mjs` exits 0 (D1 through D233).
+
+**285 is still the next free migration.**
