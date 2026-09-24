@@ -235,7 +235,11 @@ test('the mirror strip shows two counts and a lag it says it does not have', () 
   assert.ok(t.includes(LAG), 'the lag’s reason is not shown on the page');
   assert.match(t, /1 attempt found no GitHub token configured\./);
   assert.match(html, /href="\/admin\?tab=github"/);
-  assert.match(t, /P2 console is not built/);
+  // D213 — H16's P2 is built: Platform's GitHub Sync panel lists the mirror's
+  // latest attempts. The strip links it by a literal path and no longer says
+  // the console is missing.
+  assert.match(html, /href="\/admin\/platform"/, 'the strip does not link the P2 panel on Platform');
+  assert.doesNotMatch(t, /not built/, 'the strip still says the P2 console is not built');
   const missing = text(render(SyncStrip, { sync: { available: false, reason: 'The mirror status could not be read on this database. Its columns arrive with migration 273.' } }));
   assert.match(missing, /migration 273/);
   assert.doesNotMatch(missing, /Synced/);

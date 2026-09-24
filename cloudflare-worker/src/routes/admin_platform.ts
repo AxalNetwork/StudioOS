@@ -21,8 +21,10 @@
  *          artboard's Slack and Telegram rows are. The **secret itself is
  *          never read here** and never leaves the worker — this endpoint
  *          counts and states, it does not reveal. The artboard's "reveal on
- *          click, re-hide after thirty seconds" belongs to the console that
- *          owns key material, not to a read-only HQ summary.
+ *          click, re-hide after thirty seconds" exists on NO screen (D213):
+ *          a saved key is write-only, promoted to a Worker secret and never
+ *          read back (D.10). Removing one does exist, on the Integration
+ *          keys console, and that is where this page links.
  *   Jobs   `cron_run_history` records every scheduled tick, including,
  *          since D201, the tick that found the lease held and ran nothing.
  *          Each DECLARED trigger is read against its own schedule
@@ -50,6 +52,25 @@
  *          /switches routes below read and write it. Everything else is
  *          still set at deploy or by the platform itself.
  *
+ * H16's four consoles (D213) — four read-only summaries, each of its console's
+ * own store. The page links each to its console with a literal path, so the
+ * link stands even when a block is unreadable, and no path travels in here. No
+ * console retires; no Stripe or GitHub call is made on this load; no schema is
+ * created by reading it.
+ *   Integration keys  where each managed provider's key lives (a Worker secret,
+ *          the database, neither, or unknown because the table did not
+ *          answer), and when the console last saved it. NO client id, masked
+ *          or not: this page promises no key material, and half a pair is some.
+ *   GitHub sync  the mirror's target by the mirror's own rule, the 24-hour
+ *          window Support already draws (one reader, D204), and the latest
+ *          attempts, one per ticket, with no ticket title.
+ *   Payments catalog  the publishable key checkout is served, masked; the
+ *          mirror's products and prices counted from the mirror itself, never
+ *          through the read that falls back to Stripe; the webhook's deliveries
+ *          from the request log.
+ *   Promo codes  every code's terms, cap, redemptions and one state, by the
+ *          rule checkout itself applies (services/promos `promoState`).
+ *
  * Mounted at /api/admin/platform BEFORE the catch-all /api/admin in index.ts.
  */
 import { Hono } from 'hono';
@@ -74,6 +95,15 @@ import { logAdminAction } from '../services/adminAudit';
 import { telegramTokenConfigured } from '../services/telegramClient';
 import { xClientConfigured } from '../services/xClient';
 import { describeTopology } from '../services/topology';
+import {
+  MANAGED_PROVIDERS, keyStateOf, readProviderKeyLastSet, readProviderKeyStatus,
+} from '../services/providerOauthKeys';
+import { githubMirrorTarget } from '../services/githubSync';
+import { readRecentSyncAttempts, readTicketSync } from '../services/supportQueues';
+import {
+  getPublishableKey, maskPublishableKey, publishableKeyMode, readCatalogMirrorSummary,
+} from '../services/catalog';
+import { promoState } from '../services/promos';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -95,6 +125,60 @@ const INCIDENT_BASIS =
 const MEMBERS_REASON =
   'Member counts are not recorded: the platform never asks Telegram how many people are in a '
   + 'channel, so any number here would be invented.';
+
+// ── H16 (D213) ─────────────────────────────────────────────────────────────
+
+/** P1's two notes: the keys this list does not hold, and where they are. */
+const KEY_NOTES = [
+  'Google sign-in is set at deploy and no console manages it, so it is not on this list.',
+  'The GitHub token belongs to the ticket mirror and is reported under GitHub sync, not here.',
+];
+
+/** Why a key's date is what it is, so the page never has to guess. */
+const LAST_SET_BASIS_NOTE =
+  'A key held as a Worker secret is dated by the last save or rotation the Integration keys '
+  + 'console recorded; one set at deploy, or saved again at deploy after being removed from the '
+  + 'console, has no date here. A key held in the database is dated by its row.';
+
+/** P2's note: what the recent list is, and is not. */
+const SYNC_RECENT_NOTE =
+  'A ticket keeps only its latest mirror attempt, so this is the latest attempt per ticket, not '
+  + 'a log of failures: a ticket that failed and later synced shows the sync.';
+
+/**
+ * The path Stripe delivers to. `billing` is mounted at /api/billing in
+ * index.ts and its handler is `/stripe/webhook` in routes/billing.ts; a test
+ * reads both files and holds this equal, so a moved route cannot leave P3
+ * counting a path nothing is served at.
+ */
+export const STRIPE_WEBHOOK_PATH = '/api/billing/stripe/webhook';
+
+/** P3's webhook window. */
+export const WEBHOOK_WINDOW_HOURS = 24;
+
+const WEBHOOK_BASIS =
+  'Read from the request log: the time this Worker took to handle each delivery, not the round '
+  + 'trip Stripe measures. A delivery refused for rate is not logged, and nothing turns a failed '
+  + 'delivery into an incident.';
+
+const STOREFRONT_NOTE =
+  'Each deployment reads its own mirror of its own Stripe catalog. A sync on this deployment '
+  + 'changes what this storefront sells and no branch\'s.';
+
+/** P4 lists this many codes, newest first, and says when there are more. */
+export const PROMO_LIST_LIMIT = 50;
+
+/** P4's caveats, each a thing the panel's figures cannot say. */
+const PROMO_CAVEATS = [
+  'Redemptions are the ones this platform recorded. Stripe counts subscription redemptions and '
+  + 'nothing mirrors them, so a figure here is a lower bound, and a code is called exhausted '
+  + 'only when the recorded count alone reaches its cap.',
+  'A code names no licence and no cohort: any buyer can apply it, to the products it lists or '
+  + 'to every product when it lists none.',
+  'A promo ceiling is not checked against these codes: nothing enforces one at checkout, and no '
+  + 'screen sets one yet.',
+  'For a code that repeats, the number of months is kept by Stripe, not here.',
+];
 
 /**
  * A count read back from SQL, or a throw. Every console block below catches
@@ -288,11 +372,190 @@ r.get('/summary', async (c) => {
     switches = { available: false, reason: 'The platform switches could not be read.' };
   }
 
+  // ── Integration keys (D213, H16 P1) ──────────────────────────────────
+  // The read lives in services/providerOauthKeys, beside the table it reads:
+  // this file never names that table's columns. `readProviderKeyStatus`
+  // creates nothing and reports a failed read, and only four fields per key
+  // leave this block.
+  let integrationKeys: unknown;
+  try {
+    const status = await readProviderKeyStatus(env);
+    const lastSet = await readProviderKeyLastSet(env);
+    const items = status.items.map((item) => {
+      const state = keyStateOf(item, status.db_readable);
+      let lastSetAt: string | null = null;
+      let lastSetBasis: 'console_audit' | 'd1_row' | 'no_record' | 'unreadable' | null = null;
+      if (state === 'env') {
+        if (!lastSet.available) {
+          lastSetBasis = 'unreadable';
+        } else {
+          lastSetAt = lastSet.byProvider.get(item.provider_key) ?? null;
+          lastSetBasis = lastSetAt ? 'console_audit' : 'no_record';
+        }
+      } else if (state === 'db') {
+        lastSetAt = item.updated_at ?? null;
+        lastSetBasis = lastSetAt ? 'd1_row' : 'no_record';
+      }
+      return { provider_key: item.provider_key, state, last_set_at: lastSetAt, last_set_basis: lastSetBasis };
+    });
+    const count = (st: string) => items.filter((it) => it.state === st).length;
+    integrationKeys = {
+      available: true,
+      managed: MANAGED_PROVIDERS.length,
+      db_readable: status.db_readable,
+      db_reason: status.db_readable
+        ? null
+        : 'The key table could not be read, so a key not set as a Worker secret may or may not be '
+          + 'held there. Those rows say unknown rather than unset.',
+      counts: { env: count('env'), db: count('db'), unset: count('unset'), unreadable: count('unreadable') },
+      items,
+      last_set_available: lastSet.available,
+      last_set_reason: lastSet.available
+        ? LAST_SET_BASIS_NOTE
+        : 'The audit log could not be read, so when a key held as a Worker secret was last saved is unknown.',
+      notes: KEY_NOTES,
+    };
+  } catch {
+    integrationKeys = {
+      available: false,
+      reason: 'The managed keys could not be read.',
+    };
+  }
+
+  // ── GitHub sync (D213, H16 P2) ────────────────────────────────────────
+  // Three reads, three states. The target is an env fact and cannot fail; the
+  // window is Support's own reader, reused rather than restated; the recent
+  // list is its own read. None of them creates a column.
+  const githubSync = {
+    target: githubMirrorTarget(env),
+    window: await readTicketSync(env),
+    recent: await readRecentSyncAttempts(env),
+    recent_note: SYNC_RECENT_NOTE,
+  };
+
+  // ── Payments catalog (D213, H16 P3) ───────────────────────────────────
+  // The publishable key is one KV read, the same answer checkout is given.
+  // Masked by the Payments console's own mask; its mode comes from its own
+  // prefix, never from anything secret.
+  const pk = await getPublishableKey(env);
+  const publishable = { configured: !!pk, masked: maskPublishableKey(pk), mode: publishableKeyMode(pk) };
+  const catalog = await readCatalogMirrorSummary(env);
+  let webhook: unknown;
+  try {
+    // The last delivery rides idx_activity_endpoint and the rowid within it.
+    const last = await env.DB.prepare(
+      `SELECT status_code, latency_ms, created_at FROM activity_logs
+        WHERE endpoint = ? ORDER BY id DESC LIMIT 1`,
+    ).bind(STRIPE_WEBHOOK_PATH).first<{ status_code: number | null; latency_ms: number | null; created_at: string }>();
+    // datetime() on both sides: `created_at` is written by datetime('now').
+    // A row with no recorded status is a delivery, not a refusal: only a
+    // status that was written and is outside 2xx counts as not-2xx.
+    const day = await env.DB.prepare(
+      `SELECT COUNT(*) AS deliveries,
+              COALESCE(SUM(CASE WHEN status_code IS NOT NULL
+                                 AND (status_code < 200 OR status_code >= 300) THEN 1 ELSE 0 END), 0) AS refused
+         FROM activity_logs
+        WHERE endpoint = ?
+          AND datetime(created_at) > datetime('now', ?)`,
+    ).bind(STRIPE_WEBHOOK_PATH, `-${WEBHOOK_WINDOW_HOURS} hours`).first<{ deliveries: number; refused: number }>();
+    webhook = {
+      available: true,
+      window_hours: WEBHOOK_WINDOW_HOURS,
+      last: last
+        ? {
+            status_code: last.status_code == null ? null : Number(last.status_code),
+            latency_ms: last.latency_ms == null ? null : Number(last.latency_ms),
+            at: String(last.created_at),
+          }
+        : null,
+      deliveries: countOf(day?.deliveries, 'webhook delivery count'),
+      not_2xx: countOf(day?.refused, 'webhook non-2xx count'),
+      basis: WEBHOOK_BASIS,
+    };
+  } catch {
+    webhook = {
+      available: false,
+      window_hours: WEBHOOK_WINDOW_HOURS,
+      reason: 'The request log could not be read, so the webhook\'s deliveries are unknown rather than none.',
+    };
+  }
+  const paymentsCatalog = {
+    publishable,
+    catalog,
+    webhook,
+    storefront_note: STOREFRONT_NOTE,
+  };
+
+  // ── Promo codes (D213, H16 P4) ────────────────────────────────────────
+  // No schema bootstrap: migration 099 is in the baseline, and a database
+  // without it answers unreadable rather than being altered by a read. The
+  // state of every code is counted, not only the listed fifty.
+  let promoCodes: unknown;
+  try {
+    const res = await env.DB.prepare(
+      `SELECT id, code, percent_off, amount_off, currency, duration, product_ids_json,
+              max_redemptions, times_redeemed, active, expires_at, created_at
+         FROM promo_codes
+        ORDER BY datetime(created_at) DESC, id DESC`,
+    ).all<{
+      id: string; code: string; percent_off: number | null; amount_off: number | null;
+      currency: string | null; duration: string; product_ids_json: string | null;
+      max_redemptions: number | null; times_redeemed: number; active: number;
+      expires_at: string | null; created_at: string;
+    }>();
+    const nowMs = Date.now();
+    const counts = { active: 0, inactive: 0, expired: 0, exhausted: 0 };
+    const all = (res.results || []).map((row) => {
+      const redeemed = countOf(row.times_redeemed, 'times redeemed');
+      const state = promoState(row, redeemed, nowMs);
+      counts[state] += 1;
+      let productCount: number | null;
+      try {
+        const ids = JSON.parse(String(row.product_ids_json ?? '[]'));
+        productCount = Array.isArray(ids) ? ids.length : null;
+      } catch {
+        productCount = null;
+      }
+      return {
+        code: String(row.code),
+        state,
+        percent_off: row.percent_off == null ? null : Number(row.percent_off),
+        amount_off: row.amount_off == null ? null : Number(row.amount_off),
+        currency: row.currency ? String(row.currency) : null,
+        duration: String(row.duration),
+        // null is "the list did not parse", which is not "all products" (0).
+        product_count: productCount,
+        max_redemptions: row.max_redemptions == null ? null : Number(row.max_redemptions),
+        times_redeemed: redeemed,
+        expires_at: row.expires_at || null,
+      };
+    });
+    promoCodes = {
+      available: true,
+      total: all.length,
+      counts,
+      items: all.slice(0, PROMO_LIST_LIMIT),
+      listed_limit: PROMO_LIST_LIMIT,
+      truncated: all.length > PROMO_LIST_LIMIT,
+      caveats: PROMO_CAVEATS,
+    };
+  } catch {
+    promoCodes = {
+      available: false,
+      reason: 'The promo code mirror could not be read, so no code is listed rather than none existing.',
+    };
+  }
+
   return c.json({
     integrations,
     jobs,
     monitoring: { dlq, incidents },
     broadcast: { telegram, x },
+    // D213 — H16's four consoles, summarised, each block its own state.
+    integration_keys: integrationKeys,
+    github_sync: githubSync,
+    payments_catalog: paymentsCatalog,
+    promo_codes: promoCodes,
     // D203 — the switches block is the whole answer now. It used to travel
     // with `flags_available: false` and a sentence saying no operator store
     // existed; the store exists, and the writable entry in `switches` says
