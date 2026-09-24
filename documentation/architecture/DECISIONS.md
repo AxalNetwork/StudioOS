@@ -24710,3 +24710,10 @@ snapshot, and the tests passed again.
    by `migrate_d1_plan`.
 
 None escaped.
+
+**A process slip, recorded.** When this branch was restarted from main after
+#772 merged, the remote tip (`03b22044`) was replaced by force-with-lease
+before the pre-push `git diff --name-only origin/main origin/<branch>` had
+been read as zero; it listed 15 files. They were all main moving on (#776,
+merged after the restart); `03b22044` was byte-identical to #772's squash on
+main, so nothing was lost. The check is now read before the push, not after.
