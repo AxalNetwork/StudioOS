@@ -1673,6 +1673,20 @@ export default {
             else if (p.deleted) console.info(`[cron] security_events pruned=${p.deleted}`);
           } catch (e) { console.error('[cron] security_events prune failed', e); }
         }
+        // D237 — cron_run_history keeps 30 days, and always each trigger's
+        // newest row (the reasons and the batch cap are in
+        // util/cronHistory.ts). NOT GATED ON `hqCadences`, on the D122
+        // precedent: every deployment writes its own table, so every tier
+        // prunes its own. `branch_licence_copy.test.ts` pins it in the
+        // ungated list. DAILY at 03:45, a minute no other block uses.
+        if (now.getUTCHours() === 3 && now.getUTCMinutes() === 45) {
+          try {
+            const { pruneCronRunHistory } = await import('./util/cronHistory');
+            const p = await pruneCronRunHistory(env);
+            if (!p.readable) console.warn('[cron] cron_run_history prune could not read the table');
+            else if (p.deleted || p.capped) console.info(`[cron] cron_run_history pruned=${p.deleted} batches=${p.batches} kept=${p.kept}${p.capped ? ' capped' : ''}`);
+          } catch (e) { console.error('[cron] cron_run_history prune failed', e); }
+        }
         // D148 — the anonymised platform median, computed at HQ and pushed to
         // every branch. `branch_benchmarks` was created by migration 256 and
         // had no writer at all (#252); this is it.

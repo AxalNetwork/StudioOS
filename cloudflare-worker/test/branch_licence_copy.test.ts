@@ -414,4 +414,19 @@ test('the three platform-content cadences are gated on HQ in the scheduled handl
     !/hqCadences\s*&&[^\n]*\n[\s\S]{0,200}$/.test(pruneBlock),
     'the security_events prune was gated on hqCadences — a branch would then keep its ledger forever',
   );
+
+  // D237 — the cron_run_history prune joins the ungated list, for the same
+  // reason: every deployment writes its own table, so every tier prunes it.
+  // Anchored on the import, as above.
+  const crh = src.indexOf("await import('./util/cronHistory')");
+  assert.ok(crh > 0, 'the cron_run_history prune is no longer wired into the cron');
+  assert.match(src.slice(crh, crh + 200), /pruneCronRunHistory\(env\)/,
+    'the cron_run_history prune is imported but never called with env');
+  const crhBlock = src.slice(Math.max(0, crh - 400), crh);
+  assert.match(crhBlock, /if \(now\.getUTCHours\(\) === 3 && now\.getUTCMinutes\(\) === 45\) \{/,
+    'the cron_run_history prune lost its daily 03:45 cadence');
+  assert.ok(
+    !/hqCadences\s*&&[^\n]*\n[\s\S]{0,200}$/.test(crhBlock),
+    'the cron_run_history prune was gated on hqCadences — a branch would then keep its history forever',
+  );
 });

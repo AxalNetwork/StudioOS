@@ -9,7 +9,7 @@ import { cfQueueEnabled, enqueueJob } from '../services/queue';
 import { processQueueBatch } from '../services/queueWorker';
 import { getRealtimeStats } from '../services/realtime';
 import { bindingKey } from '../util/schemaBootstrap';
-import { CRON_TRIGGERS, latestRunPerTrigger } from '../util/cronHistory';
+import { CRON_TRIGGERS, CRON_HISTORY_RETENTION_DAYS, latestRunPerTrigger } from '../util/cronHistory';
 import { nextCronRun } from '../util/cronSchedule';
 
 const infra = new Hono<{ Bindings: Env }>();
@@ -363,6 +363,11 @@ infra.get('/cron-history', async (c) => {
     ok: true,
     items: rows.results || [],
     total: Number(count?.c ?? 0),
+    // D237 — `total` counts what the table holds, and since the retention
+    // sweep that is the last RETENTION days plus each trigger's newest row,
+    // not every tick ever recorded. Sent beside it so no screen can present
+    // the figure as all-time.
+    retention_days: CRON_HISTORY_RETENTION_DAYS,
     limit,
     offset,
     triggers,
