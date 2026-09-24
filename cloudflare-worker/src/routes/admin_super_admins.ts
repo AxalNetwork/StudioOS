@@ -24,8 +24,10 @@
  *   POST   /:userId     grant — the target must already be an admin, because
  *                       the Super Admin is an elevation on admin, not a role;
  *                       with `?transfer=1` the holder hands the platform on,
- *                       both writes in one batch (D133). Either way the body
- *                       carries a typed `reason` of ten characters or more (D221)
+ *                       both writes in one batch (D133), each conditioned on
+ *                       the set at the write so a lost race moves nothing
+ *                       (D240). Either way the body carries a typed `reason`
+ *                       of ten characters or more (D221)
  *   DELETE /:userId     revoke — never yourself, never the last active holder
  *
  * Every write lands in admin_audit_log as `super_admin_grant` /
@@ -223,16 +225,20 @@ r.post('/:userId', async (c) => {
   // TWO holders fails the length test and gets the 409 — which is the right
   // answer, since it should be reduced to one before anything is handed on.
   //
-  // D221 CORRECTS THE CLAIM THIS COMMENT USED TO MAKE, that the caller is the
+  // D221 CORRECTED THE CLAIM THIS COMMENT USED TO MAKE, that the caller is the
   // holder "necessarily". It is not under two OVERLAPPING transfers: the gate
   // and `holders()` are separate reads, and the batch below is a third, so a
-  // second transfer by the same holder can pass the gate before the first one
-  // lands and then write its successor beside the first one's — two holders,
-  // which is the thing the ceiling exists to prevent. Re-adding the id
-  // conjunct would narrow that and not close it (both requests can read the
-  // set before either writes), so it is not re-added here. The fix is the
-  // write refusing to grant unless the caller still holds the elevation AT
-  // THE WRITE, and it is its own change, recorded in D221.
+  // second transfer by the same holder can pass both reads before the first
+  // one lands. Re-adding the id conjunct here would narrow that and not close
+  // it (both requests can read the set before either writes), so it is not
+  // re-added.
+  //
+  // D240 — THE WRITE NOW ENFORCES THE CEILING. The batch below grants only
+  // while the caller still holds the elevation AT THE WRITE, and gives the
+  // caller's row up only when the successor holds; a request that lost the
+  // race moves nothing and is told so (`holder_changed`). The reads above
+  // remain what they are — early, legible refusals — and are no longer what
+  // keeps the set at one.
   const wantsTransfer = String(c.req.query('transfer') || '') === '1';
   if (!(wantsTransfer && held.length === 1)) {
     return c.json({
@@ -249,13 +255,72 @@ r.post('/:userId', async (c) => {
   // nothing.
   const reason = await readReason(c);
   if (reason.length < HOLDER_REASON_MIN) return reasonRefusal(c);
-  await c.env.DB.batch([
+  // D240 — BOTH WRITES ARE CONDITIONED ON THE SET AS IT IS AT THE WRITE.
+  //
+  //   1. The grant happens only while the caller still holds the elevation.
+  //      A second transfer that passed the reads before a first one landed
+  //      finds the caller gone here and grants nobody.
+  //   2. The caller's row goes only when the successor now holds. A batch is
+  //      one transaction whose statements run in order, so this one reads the
+  //      table after the grant — but it cannot branch on the grant's RESULT,
+  //      so it re-derives it from the table. Without the condition, a grant
+  //      that did not happen (the caller already gone, or the successor no
+  //      longer an admin) would still take the caller's row, and a lost race
+  //      would empty the set instead of moving nothing.
+  //
+  // The two therefore move together or not at all, and `meta.changes` says
+  // which: 1 and 1 is a transfer, 0 and 0 is a request the set outran.
+  const results = await c.env.DB.batch([
     c.env.DB.prepare(
       `INSERT OR IGNORE INTO super_admins (user_id, granted_by_user_id, note)
-       SELECT id, ?, ? FROM users WHERE id = ? AND LOWER(role) = 'admin'`,
-    ).bind(actor.id, `Transferred from user ${actor.id} through /api/admin/super-admins.`, id),
-    c.env.DB.prepare('DELETE FROM super_admins WHERE user_id = ?').bind(actor.id),
+       SELECT id, ?, ? FROM users
+        WHERE id = ? AND LOWER(role) = 'admin'
+          AND EXISTS (SELECT 1 FROM super_admins WHERE user_id = ?)`,
+    ).bind(actor.id, `Transferred from user ${actor.id} through /api/admin/super-admins.`, id, actor.id),
+    c.env.DB.prepare(
+      `DELETE FROM super_admins
+        WHERE user_id = ?
+          AND EXISTS (SELECT 1 FROM super_admins WHERE user_id = ?)`,
+    ).bind(actor.id, id),
   ]);
+  const granted = Number(results?.[0]?.meta?.changes ?? NaN);
+  const released = Number(results?.[1]?.meta?.changes ?? NaN);
+  if (!(granted === 1 && released === 1)) {
+    // NOTHING IS RECORDED ON THIS PATH. An audit row says the elevation moved;
+    // here it did not, so the rows are written only after the check above.
+    const now = await holders(c.env);
+    const callerHolds = now.some((h) => h.id === actor.id);
+    const successorHolds = now.some((h) => h.id === id);
+    // THE DOUBLE-CLICK, ANSWERED ON PURPOSE. The same transfer sent twice: the
+    // second finds the caller gone and the successor holding, which is the end
+    // state the operator asked for. It gets the same answer as a transfer to
+    // someone who already holds, not a 409 that would read as a failure of an
+    // act that succeeded.
+    if (granted === 0 && released === 0 && !callerHolds && successorHolds) {
+      const holder = await userById(c.env, id);
+      return c.json({ ok: true, already: true, holder });
+    }
+    // THE HOLDER DID NOT CHANGE, THE SUCCESSOR DID. The caller still holds and
+    // nothing was granted: the successor stopped being an administrator between
+    // the checks above and the write. It is the case that proves the DELETE's
+    // condition — without it the caller's row would have gone and the set would
+    // be empty — and it gets its own code, because "the holder changed" would
+    // be untrue.
+    if (granted === 0 && released === 0 && callerHolds) {
+      return c.json({
+        error: 'The administrator you named stopped being eligible while this request was in flight, so nothing was moved. You still hold the elevation.',
+        code: 'successor_changed',
+        holders: now.map((h) => h.id),
+      }, 409);
+    }
+    return c.json({
+      error: granted === 0 && released === 0
+        ? 'The elevation changed hands while this request was in flight, so nothing was moved. Reload to see who holds it now.'
+        : 'The elevation changed hands while this request was in flight. Reload to see who holds it now.',
+      code: 'holder_changed',
+      holders: now.map((h) => h.id),
+    }, 409);
+  }
   await audit(c.env, actor, 'super_admin_grant', target, { reason, transfer: true });
   await audit(c.env, actor, 'super_admin_revoke', actor, { reason, transfer: true, transferred_to: target.id });
   return c.json({
